@@ -1,0 +1,1444 @@
+# MovieCut 요구사항 문서
+
+작성일: 2026-06-02  
+대상: macOS 14.0+, iOS 17.0+  
+언어/프레임워크: Swift 6, SwiftUI, AppKit, AVFoundation, Metal, Core Media, Core Video  
+프로젝트 성격: 개인용 로컬 우선 CapCut 스타일 비디오 에디터
+
+---
+
+## 1. 프로젝트 개요
+
+MovieCut은 macOS와 iOS에서 사용할 개인용 네이티브 비디오 에디터이다. 목표는 CapCut처럼 빠르게 클립을 가져오고, 자르고, 텍스트와 음악을 얹고, 모바일/소셜 포맷으로 내보낼 수 있는 편집 경험을 제공하는 것이다. 초기 버전은 전문 NLE 전체를 복제하기보다 개인 제작자가 자주 쓰는 짧은 영상 편집 워크플로에 집중한다.
+
+### 1.1 제품 목표
+
+- macOS를 1차 플랫폼으로 하는 창 기반 네이티브 편집 앱을 만든다.
+- iOS를 2차 플랫폼으로 지원하되, 동일한 편집 엔진과 프로젝트 포맷을 공유한다.
+- Swift/SwiftUI 기반으로 Apple 플랫폼 기능을 최대한 활용한다.
+- 모든 기본 편집은 로컬에서 동작해야 한다.
+- CapCut의 빠른 조작감, 접근성, 소셜 영상 친화성을 벤치마크한다.
+- OpenCut의 Editor API 추상화, 플러그인 우선 구조, 공유 코어 전략을 참고한다.
+
+### 1.2 핵심 사용자
+
+- 개인 영상 제작자
+- Shorts/Reels/TikTok 스타일 세로 영상 제작자
+- 간단한 튜토리얼, 화면 녹화, 브이로그, 발표 영상 편집 사용자
+- 클라우드 서비스보다 로컬 파일 기반 편집과 개인정보 보호를 선호하는 사용자
+
+### 1.3 주요 사용 시나리오
+
+1. 사용자가 macOS에서 새 프로젝트를 만들고 비디오, 오디오, 이미지를 가져온다.
+2. 클립을 타임라인에 배치하고 자르기, 분할, 이동, 삭제를 수행한다.
+3. 텍스트 오버레이, 기본 전환, 필터, 볼륨 조절을 적용한다.
+4. 실시간 프리뷰로 결과를 확인한다.
+5. MP4/H.264로 1080p 또는 4K 파일을 내보낸다.
+6. 같은 프로젝트를 iOS에서 열어 짧은 수정 또는 모바일용 세로 비율 편집을 수행한다.
+
+### 1.4 제품 원칙
+
+- **로컬 우선**: 프로젝트, 미디어 인덱스, 썸네일, 파형, 내보내기는 기본적으로 로컬에서 처리한다.
+- **비파괴 편집**: 원본 미디어 파일은 변경하지 않고 프로젝트 파일에 편집 의도만 저장한다.
+- **프레임 정확도**: 컷, 전환, 텍스트, 자막은 프로젝트 프레임레이트 기준으로 일관되게 계산한다.
+- **공유 코어**: macOS와 iOS UI는 다르지만 편집 모델, 렌더링 규칙, 저장 포맷은 공유한다.
+- **확장 가능성**: Phase 3 이후 AI 기능과 플러그인을 붙일 수 있도록 초기 모델과 API 경계를 보존한다.
+
+### 1.5 비목표
+
+- Phase 1에서 DaVinci Resolve, Final Cut Pro 수준의 색보정, 멀티캠, 고급 오디오 믹싱은 목표로 하지 않는다.
+- Phase 1에서 협업 편집, 실시간 클라우드 동기화, 계정 시스템은 구현하지 않는다.
+- Phase 1에서 모든 코덱을 직접 구현하지 않는다. AVFoundation을 기본으로 사용하고, 필요한 경우 ffmpeg를 보조 도구로 사용한다.
+
+---
+
+## 2. CapCut 핵심 기능 분석
+
+CapCut은 데스크톱, 모바일, 웹을 모두 지원하는 소셜 영상 중심 편집기다. 공개 기능 설명 기준으로 기본 컷 편집, 텍스트, 스티커, 필터, 전환, 오디오, 자동 자막, 키프레임, 크로마키, 배경 제거, 템플릿, AI 보조 기능을 제공한다. MovieCut은 CapCut의 기능 폭을 그대로 복제하기보다 개인용 로컬 에디터에 필요한 기능을 단계별로 흡수한다.
+
+### 2.1 데스크톱 CapCut 벤치마크
+
+데스크톱 CapCut에서 참고할 UI/기능 특성:
+
+- 좌측 미디어/스톡/오디오/텍스트/스티커/효과 패널
+- 중앙 프리뷰 모니터
+- 우측 인스펙터 속성 패널
+- 하단 멀티트랙 타임라인
+- 드래그 앤 드롭 기반 클립 배치
+- 텍스트 스타일, 애니메이션, 자막 편집
+- 필터, 조정, LUT 스타일 색보정
+- 오디오 볼륨, 페이드, 배경음악, 음성 기능
+- 다양한 소셜 비율과 해상도 내보내기
+- 자동 자막, 배경 제거, AI 보조 도구
+
+MovieCut macOS 버전은 이 구조를 네이티브 창 앱으로 재해석한다. 특히 타임라인 정밀 조작, 단축키, 마우스/트랙패드 편집, 파일 기반 프로젝트 관리를 macOS에 맞게 강화한다.
+
+### 2.2 모바일 CapCut 벤치마크
+
+모바일 CapCut에서 참고할 UI/기능 특성:
+
+- 화면 상단 큰 프리뷰
+- 하단 타임라인과 컨텍스트별 도구 바
+- 선택한 클립에 따라 편집 도구가 전환되는 방식
+- 손가락 제스처 기반 트림, 분할, 확대/축소, 이동
+- 세로 영상 중심 워크플로
+- 텍스트, 자막, 스티커, 효과를 빠르게 추가하는 흐름
+- 자동 자막과 템플릿 중심의 빠른 제작 경험
+
+MovieCut iOS 버전은 모든 기능을 한 번에 노출하지 않고, 선택한 객체에 맞는 하단 시트와 오버레이 툴바를 중심으로 구성한다.
+
+### 2.3 기능 우선순위
+
+#### Must Have: Phase 1
+
+| 기능 | 요구사항 | 수용 기준 |
+| --- | --- | --- |
+| 비디오/오디오/이미지 클립 가져오기 | Finder/Photos/Files에서 미디어를 가져와 프로젝트 에셋으로 등록한다. | MP4/MOV, M4A/WAV/MP3, PNG/JPEG를 가져오고 미디어 라이브러리에 표시한다. |
+| 멀티트랙 타임라인 | video, audio, text 트랙을 지원한다. | 최소 3개 타입 트랙을 생성/삭제/정렬하고 클립을 배치할 수 있다. |
+| 클립 자르기/분할/삭제/이동 | 타임라인에서 기본 편집 조작을 제공한다. | 선택 클립의 앞/뒤 트림, playhead 기준 분할, 삭제, 드래그 이동이 가능하다. |
+| 재생 미리보기 | 편집 상태를 실시간 또는 준실시간으로 확인한다. | play/pause, scrub, frame step, loop playback을 제공한다. |
+| 텍스트 오버레이 | 타임라인에 텍스트 클립을 추가한다. | 텍스트 내용, 글꼴 크기, 색상, 정렬, 위치, 지속 시간을 조정한다. |
+| 전환 효과 | 기본 페이드/디졸브를 지원한다. | 인접한 비디오 클립 사이에 cross dissolve를 적용하고 duration을 조정한다. |
+| 비디오 필터/색보정 | 기본 밝기/대비/채도/온도/노출 조정을 지원한다. | 프리뷰와 내보내기 결과가 동일한 파라미터를 반영한다. |
+| 오디오 볼륨/페이드 | 클립 단위 볼륨과 fade in/out을 지원한다. | 오디오 파형 표시, 볼륨 슬라이더, 페이드 핸들을 제공한다. |
+| 내보내기 | MP4/H.264 내보내기와 해상도 선택을 제공한다. | 720p/1080p/4K, 24/30/60fps 중 선택해 파일로 저장한다. |
+
+#### Should Have: Phase 2
+
+| 기능 | 요구사항 | 구현 방향 |
+| --- | --- | --- |
+| 자막 자동 생성 | WhisperKit 또는 Qwen3-ASR 계열 로컬/반로컬 ASR 연동 가능성을 열어둔다. | 오디오 추출, ASR 실행, segment를 text track으로 변환한다. |
+| 속도 조절 | 클립 playbackRate와 speed ramp를 지원한다. | 일정 속도 변경을 먼저 구현하고, 이후 곡선 기반 ramp로 확장한다. |
+| 키프레임 애니메이션 | 위치, 크기, 회전, 투명도, 필터 값을 시간에 따라 변경한다. | property path 기반 keyframe store와 interpolation을 구현한다. |
+| 스티커/이모지 | 이미지/이모지 오버레이 클립을 추가한다. | sticker track 또는 overlay clip으로 저장한다. |
+| 배경음악 라이브러리 | 로컬 폴더 기반 BGM 라이브러리를 제공한다. | 저작권 관리는 사용자 책임으로 명시하고 앱은 로컬 탐색 기능만 제공한다. |
+| 크로마키/그린스크린 | 색상 키 기반 배경 제거를 제공한다. | Metal/Core Image 필터로 key color, tolerance, feather를 조정한다. |
+| 화면 비율 변경 | 9:16, 16:9, 1:1 등 캔버스 프리셋을 제공한다. | 프로젝트 canvas preset과 export preset을 분리한다. |
+
+#### Nice to Have: Phase 3
+
+| 기능 | 요구사항 | 구현 방향 |
+| --- | --- | --- |
+| AI 편집 보조 | auto cut, scene detection, silence removal을 제공한다. | 로컬 분석 작업 큐와 suggestion layer를 둔다. |
+| 음성 해설 녹음 | 타임라인에 voiceover를 직접 녹음한다. | AVAudioEngine 녹음 후 audio asset으로 등록한다. |
+| 플러그인 시스템 | OpenCut의 plugin-first 방향을 참고한다. | effect, transition, importer, exporter, automation plugin interface를 정의한다. |
+| 템플릿 시스템 | 반복 가능한 프로젝트 구조를 저장한다. | timeline fragment, text style, export preset을 template bundle로 저장한다. |
+| 클라우드 동기화 | 프로젝트와 프록시/저해상도 미디어를 동기화한다. | iCloud Drive 기반 파일 동기화를 우선 검토한다. |
+
+### 2.4 MovieCut 기능 범위 판단
+
+초기 MovieCut은 다음 차별점에 집중한다.
+
+- CapCut의 쉬운 조작감을 유지하되, 계정/클라우드/과금 의존성을 제거한다.
+- macOS에서 파일 기반 워크플로와 단축키 중심 편집을 강화한다.
+- iOS는 전체 기능 복제보다 빠른 터치 편집과 텍스트/자막 수정에 집중한다.
+- AI 기능은 Phase 1의 핵심 경로에 넣지 않고, Core Engine의 분석/작업 큐 구조로 확장 가능하게 둔다.
+
+---
+
+## 3. 기술 아키텍처
+
+MovieCut은 Swift Package 기반 공유 코어와 플랫폼별 앱 타깃으로 구성한다. Core Engine은 프로젝트 모델, 타임라인 계산, 미디어 분석, 프리뷰 렌더링, 내보내기 파이프라인을 담당한다. UI Layer는 macOS와 iOS 각각의 입력 방식과 화면 구성을 담당한다.
+
+### 3.1 전체 구조
+
+```mermaid
+flowchart TB
+    subgraph Apps["Platform Apps"]
+        Mac["MovieCutMac\nSwiftUI + AppKit"]
+        iOS["MovieCutiOS\nSwiftUI + UIKit bridge where needed"]
+    end
+
+    subgraph Core["MovieCutCore Swift Package"]
+        EditorAPI["Editor API\nCommands / Queries / Undo"]
+        ProjectStore["Project Store\nJSON Bundle / Autosave"]
+        TimelineEngine["Timeline Engine\nTracks / Clips / Time Mapping"]
+        PlaybackEngine["Playback Engine\nAVFoundation + Metal Preview"]
+        RenderEngine["Render Engine\nAVAssetReader/Writer"]
+        Effects["Effects System\nFilters / Transitions / Text"]
+        MediaIO["Media IO\nImport / Probe / Transcode Assist"]
+        Analysis["Analysis Jobs\nThumbnails / Waveforms / ASR"]
+    end
+
+    subgraph Apple["Apple Media Stack"]
+        AVF["AVFoundation"]
+        Metal["Metal"]
+        CM["Core Media"]
+        CV["Core Video"]
+        CI["Core Image"]
+    end
+
+    subgraph External["Optional Local Tools"]
+        FFMPEG["ffmpeg\nprobe/transcode/fallback"]
+        ASR["WhisperKit / Qwen3-ASR\nPhase 2+"]
+    end
+
+    Mac --> EditorAPI
+    iOS --> EditorAPI
+    EditorAPI --> ProjectStore
+    EditorAPI --> TimelineEngine
+    TimelineEngine --> PlaybackEngine
+    TimelineEngine --> RenderEngine
+    TimelineEngine --> Effects
+    MediaIO --> ProjectStore
+    PlaybackEngine --> AVF
+    PlaybackEngine --> Metal
+    RenderEngine --> AVF
+    RenderEngine --> Metal
+    Effects --> Metal
+    Effects --> CI
+    MediaIO --> AVF
+    MediaIO --> CM
+    MediaIO --> CV
+    MediaIO -. fallback .-> FFMPEG
+    Analysis --> CI
+    Analysis -. ASR .-> ASR
+```
+
+### 3.2 Core Engine
+
+Core Engine은 플랫폼 독립 Swift 코드로 구현한다. UI 프레임워크에 의존하지 않아야 하며, Swift Package `MovieCutCore`로 macOS/iOS 타깃에서 공유한다.
+
+주요 책임:
+
+- 프로젝트 파일 읽기/쓰기
+- 미디어 에셋 등록과 메타데이터 분석
+- 타임라인 시간 계산
+- 트랙/클립 편집 명령 처리
+- Undo/Redo 가능한 명령 모델
+- 실시간 프리뷰용 frame graph 구성
+- 내보내기용 render graph 구성
+- 효과/전환/텍스트 합성
+- 썸네일, 파형, 프록시, 자막 분석 작업 관리
+
+### 3.3 Editor API 추상화
+
+OpenCut의 Editor API 방향을 참고해 UI가 타임라인 내부 구조를 직접 수정하지 않도록 한다. 모든 편집 동작은 명령 객체 또는 명령 함수로 들어가고, UI는 조회 API를 통해 상태를 읽는다.
+
+예상 API 형태:
+
+```swift
+public protocol EditorCommand: Sendable {
+    var id: UUID { get }
+    func apply(to project: inout Project) throws -> CommandResult
+    func invert(from result: CommandResult) throws -> any EditorCommand
+}
+
+public actor EditorSession {
+    public func dispatch(_ command: any EditorCommand) async throws
+    public func snapshot() async -> ProjectSnapshot
+    public func undo() async throws
+    public func redo() async throws
+}
+```
+
+필수 명령:
+
+- `ImportMediaCommand`
+- `CreateTrackCommand`
+- `AddClipCommand`
+- `MoveClipCommand`
+- `TrimClipCommand`
+- `SplitClipCommand`
+- `DeleteClipCommand`
+- `SetClipPropertyCommand`
+- `AddEffectCommand`
+- `SetTransitionCommand`
+- `SetExportSettingsCommand`
+
+### 3.4 Swift 6 strict concurrency 전략
+
+Swift 6 strict concurrency를 전제로 다음 원칙을 적용한다.
+
+- UI 상태 갱신은 `@MainActor` ViewModel에서만 수행한다.
+- 프로젝트 변경은 `EditorSession` actor를 통해 직렬화한다.
+- 미디어 분석과 렌더링은 별도 actor 또는 task group으로 분리한다.
+- `Project`, `Timeline`, `Track`, `Clip`, `Effect` 등 데이터 모델은 가능한 한 value type + `Sendable`로 설계한다.
+- AVFoundation 객체 중 `Sendable`이 아닌 타입은 actor 내부에 캡슐화하거나 명시적 wrapper를 둔다.
+- 긴 작업은 `Progress` 또는 custom `AsyncSequence`로 진행률을 보고한다.
+- 취소 가능한 작업은 `Task.checkCancellation()`을 주기적으로 호출한다.
+
+### 3.5 AVFoundation 역할
+
+AVFoundation은 기본 미디어 입출력과 내보내기의 중심이다.
+
+- `AVAsset`: 원본 미디어 로딩과 duration/track metadata 확인
+- `AVAssetReader`: export/render 시 원본 프레임/오디오 샘플 읽기
+- `AVAssetWriter`: MP4/H.264/AAC 파일 쓰기
+- `AVPlayer` 또는 custom playback clock: 프리뷰 재생 타이밍
+- `AVMutableComposition`: Phase 1의 단순 export fallback 또는 오디오 믹싱에 활용 가능
+- `AVAudioEngine`: Phase 3 voiceover 녹음 및 오디오 처리
+
+### 3.6 Metal 렌더링/합성
+
+Metal은 실시간 프리뷰와 최종 export의 시각 결과를 맞추기 위한 GPU 합성 레이어다.
+
+초기 Metal 파이프라인:
+
+1. 현재 playhead time 기준으로 활성 clip 목록을 계산한다.
+2. 각 video/image/text clip을 source texture 또는 generated texture로 준비한다.
+3. clip transform, opacity, crop, mask를 적용한다.
+4. track z-order에 따라 compositing한다.
+5. filter chain을 적용한다.
+6. transition region이면 두 clip texture를 transition shader로 합성한다.
+7. preview drawable 또는 export pixel buffer에 출력한다.
+
+Phase 1에서는 복잡한 노드 그래프보다 고정 pipeline으로 시작하고, Phase 2 이후 effect graph로 확장한다.
+
+### 3.7 Core Media / Core Video 역할
+
+- `CMTime`: 프로젝트 전체 시간 표현의 표준 타입
+- `CMTimeRange`: clip source range와 timeline range 표현
+- `CVPixelBuffer`: AVFoundation과 Metal/Core Image 사이의 프레임 교환
+- `CVMetalTextureCache`: pixel buffer를 Metal texture로 연결
+- `CMSampleBuffer`: 오디오/비디오 샘플 타이밍 처리
+
+### 3.8 Rendering Pipeline
+
+#### Real-time Preview
+
+- 입력: project snapshot, playhead time, preview resolution
+- 출력: `MTKView` 또는 SwiftUI bridge view
+- 목표: 1080p 기준 30fps 이상 준실시간 프리뷰
+- 전략:
+  - 썸네일/파형은 사전 계산
+  - 해상도 downscale preview 사용
+  - 비디오 decoding과 compositing 분리
+  - 재생 중 무거운 분석 작업 제한
+  - cache 가능한 text/sticker layer는 texture cache 사용
+
+#### Export
+
+- 입력: project snapshot, export settings
+- 출력: MP4/H.264 + AAC
+- 목표:
+  - Phase 1: 정확한 결과 우선
+  - Phase 2+: 하드웨어 인코딩, 프리셋 최적화
+- 전략:
+  - `AVAssetWriter`를 기본 writer로 사용
+  - 비디오 프레임은 render graph를 통해 `CVPixelBuffer`로 생성
+  - 오디오는 track mixdown 후 AAC로 작성
+  - AVFoundation이 처리하지 못하는 입력은 ffmpeg로 mezzanine/proxy 변환
+
+### 3.9 ffmpeg 보조 활용
+
+시스템에 ffmpeg가 있다는 전제를 활용하되, 앱의 핵심 런타임이 ffmpeg에만 의존하지 않도록 한다.
+
+사용 후보:
+
+- 미디어 probe fallback
+- AVFoundation이 열지 못하는 코덱을 ProRes/H.264 proxy로 변환
+- audio waveform 생성을 위한 PCM 추출 fallback
+- export 실패 시 diagnostic command 제공
+- 개발 단계에서 golden output 비교
+
+제약:
+
+- macOS 앱 번들에 ffmpeg를 포함할지, 시스템 설치를 요구할지 정책을 별도로 결정해야 한다.
+- iOS에서는 외부 ffmpeg 바이너리 실행이 불가능하므로 동일 기능을 AVFoundation 또는 라이브러리로 대체해야 한다.
+
+### 3.10 모듈 구성
+
+예상 Swift Package 모듈:
+
+| 모듈 | 책임 |
+| --- | --- |
+| `MovieCutCore` | 공통 타입, Editor API, 프로젝트 모델 |
+| `MovieCutMedia` | 미디어 import/probe/cache |
+| `MovieCutTimeline` | timeline 계산, edit commands |
+| `MovieCutPlayback` | preview clock, frame scheduling |
+| `MovieCutRendering` | Metal compositor, export renderer |
+| `MovieCutEffects` | filter, transition, text rendering |
+| `MovieCutAnalysis` | thumbnail, waveform, ASR job |
+| `MovieCutPlatform` | platform adapter protocol |
+
+초기에는 과분한 모듈 분리를 피하기 위해 `MovieCutCore` 하나로 시작하고, 경계가 안정되면 별도 target으로 분리해도 된다.
+
+---
+
+## 4. 데이터 모델
+
+MovieCut 프로젝트는 비파괴 편집 모델을 사용한다. 원본 미디어는 프로젝트 안에 복사하거나 외부 참조로 유지할 수 있으며, 타임라인은 원본의 어느 구간을 어느 시간에 어떤 효과로 재생할지를 저장한다.
+
+### 4.1 데이터 모델 다이어그램
+
+```mermaid
+classDiagram
+    class Project {
+        UUID id
+        String name
+        ProjectMetadata metadata
+        MediaLibrary mediaLibrary
+        Timeline timeline
+        ExportSettings exportSettings
+    }
+
+    class MediaLibrary {
+        MediaAsset[] assets
+    }
+
+    class MediaAsset {
+        UUID id
+        URL originalURL
+        MediaKind kind
+        CMTime duration
+        MediaMetadata metadata
+        ProxyInfo? proxy
+    }
+
+    class Timeline {
+        UUID id
+        Rational frameRate
+        CGSize canvasSize
+        AspectRatio aspectRatio
+        Track[] tracks
+        Marker[] markers
+    }
+
+    class Track {
+        UUID id
+        TrackKind kind
+        String name
+        Bool isMuted
+        Bool isLocked
+        Int zIndex
+        Clip[] clips
+    }
+
+    class Clip {
+        UUID id
+        UUID assetId
+        ClipKind kind
+        CMTimeRange sourceRange
+        CMTimeRange timelineRange
+        Transform transform
+        Double opacity
+        SpeedMap speedMap
+        Effect[] effects
+        Keyframe[] keyframes
+    }
+
+    class TextClip {
+        String text
+        TextStyle style
+        TextLayout layout
+    }
+
+    class Effect {
+        UUID id
+        String type
+        EffectParameter[] parameters
+    }
+
+    class Transition {
+        UUID id
+        String type
+        CMTime duration
+        EffectParameter[] parameters
+    }
+
+    Project --> MediaLibrary
+    Project --> Timeline
+    Project --> ExportSettings
+    MediaLibrary --> MediaAsset
+    Timeline --> Track
+    Track --> Clip
+    Clip --> Effect
+    Clip --> Transition
+    Clip <|-- TextClip
+```
+
+### 4.2 Project
+
+`Project`는 저장 파일의 최상위 단위다.
+
+필드:
+
+- `id`: 프로젝트 고유 ID
+- `name`: 사용자 표시 이름
+- `createdAt`, `updatedAt`
+- `appVersion`, `schemaVersion`
+- `mediaLibrary`
+- `timeline`
+- `exportSettings`
+- `analysisCacheIndex`
+
+요구사항:
+
+- schema version을 반드시 포함한다.
+- 저장 시 atomic write를 사용한다.
+- autosave와 명시적 save를 구분한다.
+- 깨진 외부 미디어 링크를 복구할 수 있어야 한다.
+
+### 4.3 Timeline
+
+`Timeline`은 편집 시간축이다.
+
+필드:
+
+- `frameRate`: 24, 30, 60 등
+- `timebase`: 내부 계산용 timescale
+- `canvasSize`: 렌더링 캔버스 크기
+- `aspectRatio`: 16:9, 9:16, 1:1 등
+- `tracks`: video/audio/text track 목록
+- `duration`: clip 배치에서 계산되는 값
+- `markers`: 사용자 marker 또는 분석 marker
+
+규칙:
+
+- frame snapping은 프로젝트 frameRate 기준으로 수행한다.
+- audio sample timing은 원본 sample rate를 보존하되 timeline mapping에서 보정한다.
+- track z-order는 video/text/sticker compositing 순서에 반영한다.
+
+### 4.4 Track
+
+Track은 같은 타입의 clip을 담는 레이어다.
+
+Track kind:
+
+- `video`
+- `audio`
+- `text`
+- `sticker`
+- `effect`
+
+Phase 1 필수:
+
+- video
+- audio
+- text
+
+속성:
+
+- name
+- mute/solo
+- lock
+- height
+- zIndex
+- color label
+
+### 4.5 Clip
+
+Clip은 원본 media asset 또는 generated content의 timeline 배치다.
+
+공통 속성:
+
+- `assetId`
+- `sourceRange`: 원본에서 사용할 구간
+- `timelineRange`: 타임라인에서 놓이는 구간
+- `transform`: position, scale, rotation, anchor
+- `crop`
+- `opacity`
+- `speedMap`
+- `effects`
+- `keyframes`
+- `linkedClipIds`: 영상/오디오 분리 후 재연결용
+
+Clip 종류:
+
+- `videoClip`
+- `audioClip`
+- `imageClip`
+- `textClip`
+- `stickerClip`
+- `generatorClip`
+
+### 4.6 Effect
+
+Effect는 clip 또는 track에 적용 가능한 파라미터 집합이다.
+
+Phase 1 effect:
+
+- brightness
+- contrast
+- saturation
+- temperature
+- exposure
+- fade in/out
+- cross dissolve
+- text shadow/background
+
+Phase 2 effect:
+
+- chroma key
+- blur
+- sharpen
+- LUT
+- speed ramp
+- keyframe interpolation
+
+### 4.7 Project Bundle 저장 형식
+
+권장 구조:
+
+```text
+MyProject.moviecut/
+  project.json
+  Media/
+    Originals/        # 선택: 프로젝트 내부 복사 시
+    Proxies/
+  Cache/
+    Thumbnails/
+    Waveforms/
+    Analysis/
+  Exports/
+```
+
+`project.json` 원칙:
+
+- 사람이 읽을 수 있는 JSON
+- `schemaVersion` 포함
+- URL은 security-scoped bookmark 또는 상대 경로 우선
+- 대용량 binary cache는 JSON에 직접 넣지 않음
+- cache는 재생성 가능해야 함
+
+---
+
+## 5. UI/UX 설계
+
+MovieCut UI는 CapCut의 빠른 탐색 구조를 참고하되, macOS와 iOS의 입력 방식 차이를 명확히 반영한다.
+
+### 5.1 macOS Layout
+
+macOS는 CapCut desktop과 유사한 4분할 편집 레이아웃을 사용한다.
+
+```mermaid
+flowchart TB
+    Toolbar["상단 툴바\nImport / Undo / Redo / Split / Export"]
+    subgraph Workspace["Editor Workspace"]
+        Media["좌측 패널\n미디어 라이브러리\n오디오/텍스트/효과 탭"]
+        Preview["중앙 상단\n프리뷰 모니터\n재생 컨트롤"]
+        Inspector["우측 패널\n인스펙터/속성\n클립/텍스트/효과"]
+        Timeline["하단 전체\n멀티트랙 타임라인"]
+    end
+    Toolbar --> Workspace
+    Media --- Preview
+    Preview --- Inspector
+    Media --- Timeline
+    Preview --- Timeline
+    Inspector --- Timeline
+```
+
+#### 5.1.1 상단 툴바
+
+필수 요소:
+
+- 프로젝트 이름
+- Import 버튼
+- Undo/Redo
+- Split
+- Delete
+- 재생/정지
+- Export
+- 현재 시간code
+- zoom slider
+
+macOS 단축키:
+
+- Space: play/pause
+- Command+Z: undo
+- Shift+Command+Z: redo
+- Command+I: import
+- B 또는 Command+B: split
+- Delete: selected clip delete
+- Command+E: export
+- Arrow Left/Right: frame step 또는 clip navigation
+
+#### 5.1.2 좌측 미디어 라이브러리
+
+탭:
+
+- Media
+- Audio
+- Text
+- Effects
+- Transitions
+
+Phase 1 표시:
+
+- imported media grid/list
+- media type icon
+- duration
+- thumbnail
+- drag to timeline
+- search/filter
+
+#### 5.1.3 프리뷰 모니터
+
+기능:
+
+- 현재 타임라인 프레임 표시
+- play/pause
+- scrubber
+- fit/fill/100% zoom
+- safe area overlay
+- canvas background 설정
+- selected clip bounding box 표시
+- 텍스트/이미지 overlay 직접 이동
+
+#### 5.1.4 우측 인스펙터
+
+선택 상태별 패널:
+
+- Project selected: canvas size, frameRate, background
+- Video clip selected: transform, crop, opacity, speed, color adjustment
+- Audio clip selected: volume, pan, fade in/out
+- Text clip selected: text, font, size, color, alignment, background, shadow
+- Transition selected: type, duration
+- Multiple selection: 공통 속성만 표시
+
+#### 5.1.5 하단 타임라인
+
+기능:
+
+- video/audio/text track 표시
+- playhead
+- clip drag/drop
+- trim handles
+- split
+- snapping
+- zoom in/out
+- waveform
+- thumbnails
+- track mute/lock
+- clip selection
+- context menu
+- marquee selection
+
+Phase 1에서는 ripple edit, slip/slide edit, J/L cut은 필수에서 제외한다. 단, 데이터 모델은 이후 확장을 막지 않도록 설계한다.
+
+### 5.2 iOS Layout
+
+iOS는 터치 중심으로 단순화한다.
+
+```mermaid
+flowchart TB
+    Preview["상단 약 60%\n프리뷰"]
+    OverlayToolbar["프리뷰 오버레이\nPlay / Undo / Export"]
+    Timeline["하단 약 40%\n타임라인"]
+    BottomTools["하단 도구 바\nEdit / Text / Audio / Effects"]
+    InspectorSheet["하단 시트\n선택 항목 속성"]
+
+    Preview --> OverlayToolbar
+    Preview --> Timeline
+    Timeline --> BottomTools
+    BottomTools --> InspectorSheet
+```
+
+#### 5.2.1 iOS 기본 화면
+
+- 상단 60%: 프리뷰
+- 하단 40%: 타임라인
+- 프리뷰 위 오버레이: 뒤로가기, play/pause, export
+- 하단 도구 바: 편집, 텍스트, 오디오, 효과, 비율
+- 선택 시 하단 시트: 클립 속성
+
+#### 5.2.2 터치 제스처
+
+- pinch: timeline zoom 또는 preview zoom
+- drag clip: 이동
+- drag clip edge: trim
+- tap: select
+- long press: context menu
+- double tap text: text edit
+- two-finger tap: undo 후보
+
+#### 5.2.3 iOS 제한 사항
+
+- 작은 화면에서 모든 트랙을 항상 노출하지 않는다.
+- 고급 인스펙터는 하단 sheet로 단계적으로 표시한다.
+- 파일 시스템 접근은 Photos/Files picker 권한 정책을 따른다.
+- 긴 export는 background task 제한을 고려한다.
+
+### 5.3 공통 UX 요구사항
+
+- 편집 조작은 즉시 시각적 피드백을 제공한다.
+- 재생 중에도 playhead와 timeline scroll이 부드럽게 유지되어야 한다.
+- 내보내기 중 진행률, 남은 시간 추정, 취소 버튼을 제공한다.
+- 미디어 링크가 끊긴 경우 명확한 복구 UI를 제공한다.
+- export 실패 시 원인과 해결 방법을 표시한다.
+- 프로젝트 저장/자동 저장 상태를 UI에 표시한다.
+
+### 5.4 접근성
+
+- macOS VoiceOver label
+- 키보드 중심 조작
+- 충분한 contrast
+- iOS Dynamic Type 일부 지원
+- 터치 target 최소 44pt
+- timeline clip의 색상만으로 상태를 구분하지 않음
+
+---
+
+## 6. 크로스 플랫폼 전략
+
+MovieCut은 공유 Swift Package와 플랫폼별 앱 타깃으로 구성한다.
+
+### 6.1 타깃 구성
+
+```text
+MovieCut/
+  project.yml
+  Package.swift
+  Sources/
+    MovieCutCore/
+    MovieCutRendering/
+    MovieCutAnalysis/
+  Apps/
+    MovieCutMac/
+    MovieCutiOS/
+  Tests/
+    MovieCutCoreTests/
+    MovieCutRenderingTests/
+  docs/
+    REQUIREMENTS.md
+```
+
+타깃:
+
+- `MovieCutCore`: 플랫폼 독립 편집 엔진
+- `MovieCutMac`: macOS 14.0+ 앱
+- `MovieCutiOS`: iOS 17.0+ 앱
+- `MovieCutCoreTests`: 데이터 모델/명령/타임라인 테스트
+- `MovieCutRenderingTests`: 렌더링/효과 golden test 후보
+
+### 6.2 XcodeGen 관리
+
+`project.yml`로 다음을 관리한다.
+
+- macOS/iOS deployment target
+- Swift 6 language mode
+- strict concurrency settings
+- SPM dependencies
+- app capabilities
+- Info.plist
+- entitlements
+- test targets
+
+권장 설정:
+
+- `SWIFT_VERSION: 6.0`
+- `SWIFT_STRICT_CONCURRENCY: complete`
+- `MACOSX_DEPLOYMENT_TARGET: 14.0`
+- `IPHONEOS_DEPLOYMENT_TARGET: 17.0`
+- `ENABLE_USER_SCRIPT_SANDBOXING: YES`
+
+### 6.3 공유/플랫폼 분리 기준
+
+공유해야 하는 것:
+
+- Project schema
+- Timeline math
+- Editor commands
+- Undo/redo
+- Media metadata model
+- Render graph description
+- Effect parameter model
+- Export settings
+
+플랫폼별로 분리해야 하는 것:
+
+- 파일 선택 UI
+- Photos 권한
+- drag/drop 구현
+- menu commands
+- keyboard shortcuts
+- touch gestures
+- window management
+- background task handling
+- security-scoped bookmark 처리
+
+### 6.4 플랫폼 어댑터
+
+Core가 AppKit/UIKit에 의존하지 않도록 adapter protocol을 둔다.
+
+```swift
+public protocol PlatformFileAccess: Sendable {
+    func bookmark(for url: URL) async throws -> Data
+    func resolveBookmark(_ data: Data) async throws -> URL
+}
+
+public protocol MediaPermissionProvider: Sendable {
+    func requestPhotoAccess() async throws
+    func requestMicrophoneAccess() async throws
+}
+```
+
+### 6.5 프로젝트 호환성
+
+- macOS에서 만든 `.moviecut` bundle을 iOS에서 열 수 있어야 한다.
+- 외부 경로 기반 프로젝트는 iOS에서 링크가 깨질 수 있으므로 package 내부 복사 모드를 제공한다.
+- cache는 플랫폼마다 재생성 가능해야 한다.
+- schema migration 테스트를 유지한다.
+
+---
+
+## 7. 개발 로드맵
+
+로드맵은 기능 완성보다 편집 루프가 실제로 닫히는 순서를 기준으로 한다. 각 Phase는 사용자가 프로젝트를 만들고 결과물을 export할 수 있는지를 중심으로 검증한다.
+
+### Phase 0: 프로젝트 셋업
+
+목표: 빌드 가능한 macOS/iOS 프로젝트와 Core 패키지 골격을 만든다.
+
+기간 후보: 1-2주
+
+작업:
+
+- XcodeGen `project.yml` 작성
+- SPM `Package.swift` 작성
+- `MovieCutCore` 기본 모듈 생성
+- macOS app target 생성
+- iOS app target 생성
+- Swift 6 strict concurrency 빌드 설정
+- 기본 SwiftLint/format 정책 검토
+- 테스트 타깃 추가
+- CI 후보 스크립트 작성
+- 샘플 미디어를 사용한 개발 fixture 준비
+
+산출물:
+
+- Xcode에서 열리고 빌드되는 프로젝트
+- 빈 editor shell 화면
+- Core model unit test 1개 이상
+
+수용 기준:
+
+- `xcodegen generate` 후 macOS/iOS scheme 빌드 성공
+- Swift 6 strict concurrency warning을 초기부터 관리
+- `MovieCutCoreTests` 실행 성공
+
+### Phase 1: 기본 편집 MVP
+
+목표: 가져오기, 타임라인 편집, 프리뷰, 텍스트, 기본 효과, MP4 export까지 한 사이클을 완성한다.
+
+기간 후보: 6-10주
+
+#### 1. 프로젝트/미디어
+
+작업:
+
+- `.moviecut` bundle 저장/열기
+- `project.json` schema v1
+- media import
+- media metadata probe
+- thumbnail generation
+- waveform generation
+- missing media recovery UI
+
+수용 기준:
+
+- 새 프로젝트 생성/저장/다시 열기 가능
+- 비디오/오디오/이미지 파일을 library에 추가 가능
+- 썸네일과 duration 표시
+
+#### 2. 타임라인 모델/명령
+
+작업:
+
+- Project/Timeline/Track/Clip model
+- EditorSession actor
+- command dispatch
+- undo/redo stack
+- add/move/trim/split/delete clip
+- track mute/lock
+- snapping
+
+수용 기준:
+
+- 편집 조작이 프로젝트 모델에 반영됨
+- undo/redo로 편집 상태가 복원됨
+- frame boundary 기준으로 trim/split이 일관됨
+
+#### 3. macOS 에디터 UI
+
+작업:
+
+- 4분할 layout
+- media library panel
+- preview monitor
+- inspector panel
+- timeline view
+- toolbar/menu/shortcut
+- drag/drop import
+- drag/drop to timeline
+
+수용 기준:
+
+- 마우스/트랙패드로 기본 컷 편집 가능
+- 선택한 clip 속성이 inspector에 표시됨
+- 단축키로 play/split/delete/undo/export 가능
+
+#### 4. 프리뷰
+
+작업:
+
+- playback clock
+- AVFoundation decode path
+- Metal/Core Image preview compositor
+- play/pause/scrub/frame step
+- text overlay preview
+- basic transition preview
+
+수용 기준:
+
+- 1080p 30fps 단순 프로젝트가 끊김 없이 재생되는 것을 목표로 함
+- 프리뷰와 export의 시각 결과가 큰 차이 없이 일치함
+
+#### 5. 효과/전환/오디오
+
+작업:
+
+- text overlay
+- cross dissolve/fade
+- brightness/contrast/saturation/temperature
+- clip opacity
+- audio volume
+- audio fade in/out
+
+수용 기준:
+
+- 각 속성을 inspector에서 조정 가능
+- 값 변경 후 프리뷰가 즉시 갱신됨
+- export 결과에 동일하게 반영됨
+
+#### 6. Export
+
+작업:
+
+- export settings UI
+- H.264 MP4 writer
+- AAC audio
+- resolution preset
+- frameRate preset
+- progress/cancel
+- error reporting
+
+수용 기준:
+
+- 720p/1080p/4K MP4 export 가능
+- export 파일이 QuickTime Player에서 재생됨
+- cancel 시 부분 파일 정리
+
+#### 7. iOS 기본 편집
+
+작업:
+
+- iOS shell
+- project open/save
+- media import from Photos/Files
+- simplified timeline
+- preview
+- text edit
+- export
+
+수용 기준:
+
+- macOS 프로젝트를 iOS에서 열 수 있음
+- iOS에서 간단한 trim/text/export 가능
+
+### Phase 2: 고급 편집
+
+목표: CapCut 스타일의 생산성 기능을 확장한다.
+
+기간 후보: 8-12주
+
+작업:
+
+- 자동 자막 생성
+- ASR job pipeline
+- subtitle text track 변환
+- caption style preset
+- speed control
+- speed ramp editor
+- keyframe model
+- keyframe UI
+- sticker/emoji overlay
+- local BGM library
+- chroma key
+- aspect ratio presets
+- proxy media generation
+- performance profiling
+
+수용 기준:
+
+- 10분 이하 영상에서 자동 자막 생성 후 편집 가능
+- 위치/크기/투명도 keyframe animation 가능
+- 9:16/16:9/1:1 캔버스 전환 가능
+- 크로마키 기본 결과가 프리뷰/export에 반영됨
+
+### Phase 3: AI/플러그인
+
+목표: 개인용 자동화와 확장성을 제공한다.
+
+기간 후보: 10-16주
+
+작업:
+
+- scene detection
+- silence detection/removal
+- auto cut suggestion
+- voiceover recording
+- plugin manifest 초안
+- plugin sandbox 정책 검토
+- effect plugin API
+- transition plugin API
+- exporter plugin API
+- template bundle
+- iCloud Drive sync 검토
+- headless render CLI 후보
+
+수용 기준:
+
+- 분석 결과를 사용자에게 suggestion으로 제시하고 적용/취소 가능
+- 최소 하나의 internal plugin 형태 effect가 등록/실행됨
+- template에서 새 프로젝트를 생성 가능
+
+---
+
+## 8. 오픈소스 참조
+
+### 8.1 OpenCut
+
+참조 위치:
+
+- 로컬: `~/MyDev/automation/source/OpenCut`
+- GitHub: `https://github.com/opencut-app/opencut`
+
+OpenCut에서 참고할 결정:
+
+- Editor API를 두어 UI와 편집 엔진을 분리한다.
+- plugin-first architecture를 장기 목표로 둔다.
+- Rust core로 desktop/mobile/browser 공유 코어를 지향한다.
+- 웹 UI는 React, TanStack Router, Vite, Tailwind, shadcn/ui를 사용한다.
+- resizable panel, timeline, preview, media panel 같은 편집 UI 컴포넌트 구성을 참고할 수 있다.
+- headless mode, MCP server, scripting tab 같은 자동화 방향은 MovieCut Phase 3 이후 참고 대상이다.
+
+MovieCut 적용 방식:
+
+- Rust core 대신 Swift Package `MovieCutCore`를 공유 코어로 사용한다.
+- OpenCut의 plugin-first 개념은 Phase 3의 Swift plugin/extension architecture로 옮긴다.
+- OpenCut의 웹 패널 구조는 macOS SwiftUI/AppKit split view와 iOS sheet 구조로 재해석한다.
+- Editor API abstraction은 Phase 1부터 구현해 UI와 모델의 결합을 낮춘다.
+
+### 8.2 OpenCut Classic
+
+OpenCut README는 현재 rewrite가 진행 중이며 실제 편집 기능은 classic 버전을 참고하라고 안내한다. MovieCut은 classic의 구체 구현을 직접 의존하지 않되, 다음 범주의 기능 검증 기준으로 삼는다.
+
+- 브라우저 기반 timeline 편집
+- drag/drop media import
+- 클립 trim/split/move/delete
+- export workflow
+- 간단한 CapCut 대체 사용성
+
+### 8.3 CapCut
+
+CapCut은 MovieCut의 UX 벤치마크다.
+
+참고할 점:
+
+- 초보자도 빠르게 이해하는 도구 배치
+- 텍스트/자막/스티커 중심의 소셜 영상 편집
+- 기본 기능과 AI 기능이 같은 편집 흐름 안에 통합됨
+- 모바일에서 하단 도구 바와 context sheet를 적극 활용
+- 데스크톱에서 media/preview/inspector/timeline 4분할 구조 사용
+
+참고하지 않을 점:
+
+- 클라우드/계정/구독 중심 기능을 초기 핵심 경로로 두지 않는다.
+- 스톡 에셋/온라인 템플릿 마켓플레이스는 Phase 1 범위에서 제외한다.
+- 서버 의존 AI 기능은 로컬 우선 원칙과 충돌하므로 선택 기능으로 둔다.
+
+### 8.4 다른 오픈소스 NLE 프로젝트
+
+#### Kdenlive
+
+참고할 점:
+
+- 비선형 편집 모델
+- 멀티트랙 timeline
+- track lock/mute
+- effect stack
+- keyframe 기반 effect interpolation
+
+MovieCut 적용:
+
+- effect stack과 keyframe 개념은 Phase 2 이후 모델 설계에 반영한다.
+- UI 복잡도는 Kdenlive보다 낮게 유지한다.
+
+#### Shotcut
+
+참고할 점:
+
+- 다양한 포맷 지원
+- native timeline editing
+- cross-platform desktop editor 구조
+- export preset 관리
+
+MovieCut 적용:
+
+- export preset과 format fallback 정책에 참고한다.
+- 모든 포맷을 직접 지원하기보다 AVFoundation + ffmpeg 보조 전략을 사용한다.
+
+#### OpenShot
+
+참고할 점:
+
+- 쉬운 timeline 기반 편집
+- drag/drop, zoom, snap
+- keyframe animation
+- waveform/timeline 표시
+
+MovieCut 적용:
+
+- 초보자 친화적 timeline UX와 단순한 keyframe 개념을 참고한다.
+
+#### LosslessCut
+
+참고할 점:
+
+- 빠른 컷 편집
+- ffmpeg 활용
+- 원본 손실 최소화
+
+MovieCut 적용:
+
+- 단순 trim/export 최적화와 ffmpeg diagnostic 흐름에 참고한다.
+
+---
+
+## 9. 제약사항 및 리스크
+
+### 9.1 Swift 6 strict concurrency
+
+리스크:
+
+- AVFoundation/AppKit/UIKit 객체가 strict concurrency와 자연스럽게 맞지 않을 수 있다.
+- `Sendable` 경고와 actor isolation 문제가 초기 생산성을 낮출 수 있다.
+- UI와 render pipeline 사이의 상태 동기화가 복잡해질 수 있다.
+
+대응:
+
+- 초기부터 actor 경계를 명확히 한다.
+- core data model은 value type + `Sendable` 위주로 설계한다.
+- UI ViewModel은 `@MainActor`로 제한한다.
+- AVFoundation 객체는 actor 내부 소유로 캡슐화한다.
+- concurrency warning을 미루지 않고 Phase 0부터 해결한다.
+
+### 9.2 실시간 프리뷰 성능
+
+리스크:
+
+- 고해상도 H.264/HEVC 디코딩과 Metal 합성이 동시에 발생한다.
+- iOS 기기 성능 편차가 크다.
+- 텍스트/필터/전환이 늘어나면 preview frame drop이 발생한다.
+
+대응:
+
+- preview resolution downscale
+- proxy media
+- texture cache
+- render invalidation 최소화
+- playback 중 heavy analysis 중지
+- performance measurement fixture 유지
+
+### 9.3 프리뷰와 export 결과 불일치
+
+리스크:
+
+- preview는 Metal/Core Image, export는 AVAssetWriter path를 타며 결과가 달라질 수 있다.
+- 색공간, alpha premultiplication, frame timing 차이가 발생할 수 있다.
+
+대응:
+
+- preview/export가 같은 render graph와 effect parameter를 공유한다.
+- 색공간 정책을 명시한다.
+- golden frame snapshot test를 둔다.
+- transition/effect별 테스트 프로젝트를 유지한다.
+
+### 9.4 미디어 포맷 다양성
+
+리스크:
+
+- AVFoundation이 모든 입력을 안정적으로 처리하지 못한다.
+- variable frame rate 영상에서 timing drift가 생길 수 있다.
+- 외부 오디오 sample rate 차이로 sync 문제가 생길 수 있다.
+
+대응:
+
+- import 시 metadata probe와 compatibility check 수행
+- 문제가 있는 파일은 proxy/transcode 제안
+- VFR 파일은 constant frame rate proxy 생성 옵션 제공
+- export 전 timeline validation 수행
+
+### 9.5 iOS 파일/권한 제약
+
+리스크:
+
+- Photos/Files 권한과 sandbox로 인해 macOS 프로젝트의 외부 링크가 깨질 수 있다.
+- background export 시간이 제한될 수 있다.
+- 외부 ffmpeg 바이너리 사용이 불가능하다.
+
+대응:
+
+- 프로젝트 내부 복사 모드 제공
+- iOS에서는 AVFoundation 기반 path 우선
+- 긴 export는 화면 켜짐/진행률 안내
+- iCloud Drive 호환 bundle 구조 검토
+
+### 9.6 로컬 전 처리 비용
+
+리스크:
+
+- 썸네일, 파형, 자막 분석, 프록시 생성은 CPU/GPU/스토리지를 많이 사용한다.
+- 대용량 미디어 프로젝트에서 cache가 급증할 수 있다.
+
+대응:
+
+- 분석 작업 큐와 우선순위 도입
+- cache size limit
+- cache 재생성 가능 설계
+- background analysis pause/resume
+- 프로젝트별 cache cleanup UI
+
+### 9.7 개인 사용 목적
+
+리스크:
+
+- 개인용 프로젝트이므로 과도한 범위 확장이 유지보수를 어렵게 만들 수 있다.
+- CapCut 전체 기능을 따라가려 하면 MVP가 지연된다.
+
+대응:
+
+- Phase 1은 “가져오기 -> 컷 편집 -> 텍스트/오디오 -> export” 루프에 집중한다.
+- 기능 추가는 project schema와 render graph에 맞는지 확인한 뒤 진행한다.
+- AI/플러그인/클라우드는 Phase 3 이전에 핵심 경로로 끌어오지 않는다.
+
+### 9.8 법적/라이선스/배포 리스크
+
+리스크:
+
+- ffmpeg를 앱에 번들링할 경우 라이선스와 코덱 특허 검토가 필요하다.
+- 스티커/음악 라이브러리를 제공하면 저작권 문제가 생길 수 있다.
+- App Store 배포 시 private API, background processing, external executable 제약을 확인해야 한다.
+
+대응:
+
+- Phase 1은 사용자가 직접 가져온 로컬 미디어만 사용한다.
+- ffmpeg는 개발/시스템 의존 보조 도구로 시작한다.
+- 번들링 전 라이선스 정책을 별도 문서로 검토한다.
+- 음악 라이브러리는 로컬 폴더 인덱싱부터 시작한다.
+
+---
+
+## 10. 품질 요구사항
+
+### 10.1 기능 품질
+
+- 편집 조작은 undo/redo 가능해야 한다.
+- 프로젝트 저장 후 다시 열어도 timeline 결과가 보존되어야 한다.
+- export 결과는 preview와 실질적으로 일치해야 한다.
+- 실패 상태는 사용자에게 복구 가능한 메시지로 표시해야 한다.
+
+### 10.2 성능 목표
+
+초기 목표:
+
+- 1080p 30fps 단순 프로젝트 preview: 실시간에 근접
+- 10분 이하 프로젝트 열기: 3초 이내에 UI 표시, 분석은 백그라운드
+- thumbnail generation: UI block 없이 진행
+- export: 실시간 이하 속도여도 정확성 우선
+
+향후 목표:
+
+- 4K 30fps preview는 proxy 사용 시 원활
+- export hardware encoding 최적화
+- timeline 100개 clip까지 기본 조작 지연 최소화
+
+### 10.3 테스트 전략
+
+Unit test:
+
+- time mapping
+- clip trim/split
+- track ordering
+- command undo/redo
+- project JSON migration
+
+Integration test:
+
+- media import
+- thumbnail generation
+- waveform generation
+- simple export
+- missing media recovery
+
+Rendering test:
+
+- fixed test project에서 golden frame 비교
+- transition boundary frame 비교
+- text overlay rasterization 비교
+- color adjustment parameter 비교
+
+UI test:
+
+- macOS import -> timeline -> split -> export smoke test
+- iOS open project -> trim -> text edit smoke test
+
+### 10.4 진단/로그
+
+- export log를 파일로 저장할 수 있어야 한다.
+- media compatibility warning을 프로젝트 단위로 표시한다.
+- render/export 실패 시 원인, 입력 파일, codec, frame time을 기록한다.
+- 개발 모드에서 render graph debug overlay를 제공한다.
+
+---
+
+## 11. 의존성 후보
+
+### 11.1 Apple Frameworks
+
+- SwiftUI
+- AppKit
+- UIKit
+- AVFoundation
+- AVKit
+- Metal
+- MetalKit
+- Core Image
+- Core Media
+- Core Video
+- UniformTypeIdentifiers
+- PhotosUI
+
+### 11.2 SPM 후보
+
+초기에는 외부 의존성을 최소화한다.
+
+검토 후보:
+
+- swift-argument-parser: headless/export CLI가 필요할 때
+- swift-log: 구조적 로그가 필요할 때
+- SnapshotTesting 계열: UI/render snapshot test가 필요할 때
+- WhisperKit: Phase 2 자동 자막 후보
+
+### 11.3 외부 도구
+
+- ffmpeg: probe/transcode/fallback/export comparison
+- ffprobe: metadata inspection
+
+---
+
+## 12. 참고 링크
+
+- OpenCut GitHub: https://github.com/opencut-app/opencut
+- OpenCut Classic: https://github.com/opencut-app/opencut-classic
+- CapCut 공식 사이트: https://www.capcut.com/
+- CapCut Desktop: https://www.capcut.com/tools/desktop-video-editor
+- CapCut App Store: https://apps.apple.com/us/app/capcut-video-editor/id1500855883
+- CapCut Google Play: https://play.google.com/store/apps/details?id=com.lemon.lvoverseas
+- Kdenlive Manual: https://docs.kdenlive.org/
+- Shotcut Features: https://www.shotcut.com/features/
+- OpenShot Features: https://www.openshot.org/features/
+- OpenShot Timeline Documentation: https://www.openshot.org/static/files/user-guide/timeline.html
+

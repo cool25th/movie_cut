@@ -1,0 +1,61 @@
+name: MovieCut
+options:
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  MovieCut:
+    path: .
+targets:
+  MovieCutMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: App/MovieCutMac
+    info:
+      path: App/MovieCutMac/Info.plist
+    dependencies:
+      - package: MovieCut
+        product: MovieCutCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.mac
+        INFOPLIST_FILE: App/MovieCutMac/Info.plist
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+  MovieCutiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/MovieCutiOS
+    info:
+      path: App/MovieCutiOS/Info.plist
+    dependencies:
+      - package: MovieCut
+        product: MovieCutCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.ios
+        INFOPLIST_FILE: App/MovieCutiOS/Info.plist
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+  MovieCutCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests/MovieCutCoreTests
+    dependencies:
+      - package: MovieCut
+        product: MovieCutCore
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete

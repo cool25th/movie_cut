@@ -8,7 +8,7 @@ final class EditorViewModel {
     var currentProject: Project
     var selectedClipId: UUID?
     var selectedAssetId: UUID?
-    var isPlaying = false
+    var playbackEngine: PlaybackEngine
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
@@ -19,6 +19,7 @@ final class EditorViewModel {
     init(project: Project = EditorViewModel.defaultProject()) {
         let project = EditorViewModel.ensureDefaultTracks(in: project)
         self.currentProject = project
+        self.playbackEngine = PlaybackEngine()
         self.session = EditorSession(project: project)
     }
 
@@ -57,7 +58,7 @@ final class EditorViewModel {
         currentProject = project
         selectedClipId = nil
         selectedAssetId = nil
-        isPlaying = false
+        playbackEngine.clear()
         playheadTime = 0
         lastErrorMessage = nil
     }
@@ -70,6 +71,7 @@ final class EditorViewModel {
             currentProject = project
             selectedClipId = nil
             selectedAssetId = nil
+            playbackEngine.clear()
             playheadTime = 0
             lastErrorMessage = nil
         } catch {
@@ -204,7 +206,7 @@ final class EditorViewModel {
     private func refreshFromSession() async throws {
         currentProject = await session.snapshot()
 
-        if let selectedClipId, selectedClip == nil {
+        if selectedClipId != nil, selectedClip == nil {
             self.selectedClipId = nil
         }
 

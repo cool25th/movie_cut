@@ -8,11 +8,14 @@ public struct TrimClipCommand: EditorCommand {
     /// The clip to trim.
     public var clipId: UUID
 
+    /// The track expected to contain the clip.
+    public var trackId: UUID?
+
     /// The new source range.
-    public var sourceRange: TimeRange
+    public var newSourceRange: TimeRange
 
     /// The new timeline range.
-    public var timelineRange: TimeRange
+    public var newTimelineRange: TimeRange
 
     /// Optional prior source range used when constructing an inverse command.
     public var previousSourceRange: TimeRange?
@@ -20,7 +23,38 @@ public struct TrimClipCommand: EditorCommand {
     /// Optional prior timeline range used when constructing an inverse command.
     public var previousTimelineRange: TimeRange?
 
+    /// Phase 0 compatibility alias for the new source range.
+    public var sourceRange: TimeRange {
+        get { newSourceRange }
+        set { newSourceRange = newValue }
+    }
+
+    /// Phase 0 compatibility alias for the new timeline range.
+    public var timelineRange: TimeRange {
+        get { newTimelineRange }
+        set { newTimelineRange = newValue }
+    }
+
     /// Creates a trim command.
+    public init(
+        id: UUID = UUID(),
+        clipId: UUID,
+        trackId: UUID? = nil,
+        newSourceRange: TimeRange,
+        newTimelineRange: TimeRange,
+        previousSourceRange: TimeRange? = nil,
+        previousTimelineRange: TimeRange? = nil
+    ) {
+        self.id = id
+        self.clipId = clipId
+        self.trackId = trackId
+        self.newSourceRange = newSourceRange
+        self.newTimelineRange = newTimelineRange
+        self.previousSourceRange = previousSourceRange
+        self.previousTimelineRange = previousTimelineRange
+    }
+
+    /// Creates a trim command using Phase 0 argument labels.
     public init(
         id: UUID = UUID(),
         clipId: UUID,
@@ -29,30 +63,66 @@ public struct TrimClipCommand: EditorCommand {
         previousSourceRange: TimeRange? = nil,
         previousTimelineRange: TimeRange? = nil
     ) {
-        self.id = id
-        self.clipId = clipId
-        self.sourceRange = sourceRange
-        self.timelineRange = timelineRange
-        self.previousSourceRange = previousSourceRange
-        self.previousTimelineRange = previousTimelineRange
+        self.init(
+            id: id,
+            clipId: clipId,
+            trackId: nil,
+            newSourceRange: sourceRange,
+            newTimelineRange: timelineRange,
+            previousSourceRange: previousSourceRange,
+            previousTimelineRange: previousTimelineRange
+        )
     }
 
     public func apply(to project: inout Project) throws -> CommandResult {
-        let location = try project.clipLocation(for: clipId)
+        let location = if let trackId {
+            try project.clipLocation(for: clipId, in: trackId)
+        } else {
+            try project.clipLocation(for: clipId)
+        }
         try project.ensureTrackIsEditable(at: location.trackIndex)
-        project.timeline.tracks[location.trackIndex].clips[location.clipIndex].sourceRange = sourceRange
-        project.timeline.tracks[location.trackIndex].clips[location.clipIndex].timelineRange = timelineRange
-        return CommandResult(affectedClipIds: [clipId], description: "Trimmed clip \(clipId)")
+
+        guard newSourceRange.duration >= 0, newTimelineRange.duration >= 0 else {
+            throw EditorCommandError.invalidCommand("Trim ranges cannot have negative durations.")
+        }
+
+        let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
+        project.timeline.tracks[location.trackIndex].clips[location.clipIndex].sourceRange = newSourceRange
+        project.timeline.tracks[location.trackIndex].clips[location.clipIndex].timelineRange = newTimelineRange
+
+        return CommandResult(
+            affectedClipIds: [clipId],
+            description: "Trimmed clip \(clipId)",
+            undoValues: [
+                "trackId": .uuid(project.timeline.tracks[location.trackIndex].id),
+                "sourceRange": .timeRange(previousClip.sourceRange),
+                "timelineRange": .timeRange(previousClip.timelineRange)
+            ]
+        )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if
+            case .uuid(let trackId)? = result.undoValues["trackId"],
+            case .timeRange(let sourceRange)? = result.undoValues["sourceRange"],
+            case .timeRange(let timelineRange)? = result.undoValues["timelineRange"]
+        {
+            return TrimClipCommand(
+                clipId: clipId,
+                trackId: trackId,
+                newSourceRange: sourceRange,
+                newTimelineRange: timelineRange
+            )
+        }
+
         guard let previousSourceRange, let previousTimelineRange else {
             return NoOpCommand(description: "Missing previous trim ranges for inverse")
         }
         return TrimClipCommand(
             clipId: clipId,
-            sourceRange: previousSourceRange,
-            timelineRange: previousTimelineRange
+            trackId: trackId,
+            newSourceRange: previousSourceRange,
+            newTimelineRange: previousTimelineRange
         )
     }
 }

@@ -8,6 +8,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces the clip opacity.
     case opacity(Double)
 
+    /// Replaces editable text content for a text clip.
+    case textContent(TextClipContent?)
+
     /// Replaces the clip effects list.
     case effects([Effect])
 }
@@ -43,19 +46,34 @@ public struct SetClipPropertyCommand: EditorCommand {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
+        let previousProperty: ClipProperty
         switch property {
         case .transform(let transform):
+            previousProperty = .transform(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transform)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transform = transform
         case .opacity(let opacity):
+            previousProperty = .opacity(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].opacity)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].opacity = opacity
+        case .textContent(let textContent):
+            previousProperty = .textContent(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent = textContent
         case .effects(let effects):
+            previousProperty = .effects(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects = effects
         }
 
-        return CommandResult(affectedClipIds: [clipId], description: "Set clip property for \(clipId)")
+        return CommandResult(
+            affectedClipIds: [clipId],
+            description: "Set clip property for \(clipId)",
+            undoValues: ["property": .clipProperty(previousProperty)]
+        )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .clipProperty(let property)? = result.undoValues["property"] {
+            return SetClipPropertyCommand(clipId: clipId, property: property)
+        }
+
         guard let previousProperty else {
             return NoOpCommand(description: "Missing previous clip property for inverse")
         }

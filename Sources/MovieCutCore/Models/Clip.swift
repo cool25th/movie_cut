@@ -38,6 +38,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// The clip opacity from 0.0 to 1.0.
     public var opacity: Double
 
+    /// Text payload for generated text clips.
+    public var textContent: TextClipContent?
+
     /// Effects applied to the clip.
     public var effects: [Effect]
 
@@ -50,6 +53,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         timelineRange: TimeRange,
         transform: ClipTransform = ClipTransform(),
         opacity: Double = 1.0,
+        textContent: TextClipContent? = nil,
         effects: [Effect] = []
     ) {
         self.id = id
@@ -59,6 +63,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.timelineRange = timelineRange
         self.transform = transform
         self.opacity = opacity
+        self.textContent = textContent
         self.effects = effects
     }
 }

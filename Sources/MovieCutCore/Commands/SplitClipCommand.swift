@@ -8,6 +8,9 @@ public struct SplitClipCommand: EditorCommand {
     /// The clip to split.
     public var clipId: UUID
 
+    /// The track expected to contain the clip.
+    public var trackId: UUID?
+
     /// The timeline split time in seconds.
     public var splitTime: TimeInterval
 
@@ -15,15 +18,26 @@ public struct SplitClipCommand: EditorCommand {
     public var newClipId: UUID
 
     /// Creates a split command.
-    public init(id: UUID = UUID(), clipId: UUID, splitTime: TimeInterval, newClipId: UUID = UUID()) {
+    public init(
+        id: UUID = UUID(),
+        clipId: UUID,
+        trackId: UUID? = nil,
+        splitTime: TimeInterval,
+        newClipId: UUID = UUID()
+    ) {
         self.id = id
         self.clipId = clipId
+        self.trackId = trackId
         self.splitTime = splitTime
         self.newClipId = newClipId
     }
 
     public func apply(to project: inout Project) throws -> CommandResult {
-        let location = try project.clipLocation(for: clipId)
+        let location = if let trackId {
+            try project.clipLocation(for: clipId, in: trackId)
+        } else {
+            try project.clipLocation(for: clipId)
+        }
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
         let clip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
@@ -33,6 +47,11 @@ public struct SplitClipCommand: EditorCommand {
 
         let firstDuration = splitTime - clip.timelineRange.start
         let secondDuration = clip.timelineRange.end - splitTime
+        let secondSourceDuration = clip.sourceRange.duration - firstDuration
+        guard secondSourceDuration >= 0 else {
+            throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
+        }
+
         var firstClip = clip
         firstClip.timelineRange.duration = firstDuration
         firstClip.sourceRange.duration = firstDuration
@@ -42,7 +61,7 @@ public struct SplitClipCommand: EditorCommand {
         secondClip.timelineRange = TimeRange(start: splitTime, duration: secondDuration)
         secondClip.sourceRange = TimeRange(
             start: clip.sourceRange.start + firstDuration,
-            duration: secondDuration
+            duration: secondSourceDuration
         )
 
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex] = firstClip
@@ -50,12 +69,39 @@ public struct SplitClipCommand: EditorCommand {
 
         return CommandResult(
             affectedClipIds: [clipId, newClipId],
-            description: "Split clip \(clipId)"
+            description: "Split clip \(clipId)",
+            undoValues: [
+                "trackId": .uuid(project.timeline.tracks[location.trackIndex].id),
+                "clipIndex": .int(location.clipIndex),
+                "clip": .clip(clip)
+            ]
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
-        MergeSplitClipCommand(originalClipId: clipId, splitClipId: newClipId)
+        if
+            case .uuid(let trackId)? = result.undoValues["trackId"],
+            case .int(let clipIndex)? = result.undoValues["clipIndex"],
+            case .clip(let clip)? = result.undoValues["clip"]
+        {
+            return MergeSplitClipCommand(
+                originalClipId: clipId,
+                splitClipId: newClipId,
+                trackId: trackId,
+                originalClipIndex: clipIndex,
+                originalClip: clip,
+                splitTime: splitTime
+            )
+        }
+
+        return MergeSplitClipCommand(
+            originalClipId: clipId,
+            splitClipId: newClipId,
+            trackId: trackId,
+            originalClipIndex: nil,
+            originalClip: nil,
+            splitTime: splitTime
+        )
     }
 }
 
@@ -63,24 +109,64 @@ struct MergeSplitClipCommand: EditorCommand {
     let id: UUID
     let originalClipId: UUID
     let splitClipId: UUID
+    let trackId: UUID?
+    let originalClipIndex: Int?
+    let originalClip: Clip?
+    let splitTime: TimeInterval
 
-    init(id: UUID = UUID(), originalClipId: UUID, splitClipId: UUID) {
+    init(
+        id: UUID = UUID(),
+        originalClipId: UUID,
+        splitClipId: UUID,
+        trackId: UUID?,
+        originalClipIndex: Int?,
+        originalClip: Clip?,
+        splitTime: TimeInterval
+    ) {
         self.id = id
         self.originalClipId = originalClipId
         self.splitClipId = splitClipId
+        self.trackId = trackId
+        self.originalClipIndex = originalClipIndex
+        self.originalClip = originalClip
+        self.splitTime = splitTime
     }
 
     func apply(to project: inout Project) throws -> CommandResult {
-        let originalLocation = try project.clipLocation(for: originalClipId)
-        let splitLocation = try project.clipLocation(for: splitClipId)
+        let originalLocation = if let trackId {
+            try project.clipLocation(for: originalClipId, in: trackId)
+        } else {
+            try project.clipLocation(for: originalClipId)
+        }
+        let splitLocation = if let trackId {
+            try project.clipLocation(for: splitClipId, in: trackId)
+        } else {
+            try project.clipLocation(for: splitClipId)
+        }
         guard originalLocation.trackIndex == splitLocation.trackIndex else {
             throw EditorCommandError.invalidCommand("Split clips must be on the same track to merge.")
         }
         try project.ensureTrackIsEditable(at: originalLocation.trackIndex)
 
-        let splitClip = project.timeline.tracks[splitLocation.trackIndex].clips.remove(at: splitLocation.clipIndex)
-        project.timeline.tracks[originalLocation.trackIndex].clips[originalLocation.clipIndex].timelineRange.duration += splitClip.timelineRange.duration
-        project.timeline.tracks[originalLocation.trackIndex].clips[originalLocation.clipIndex].sourceRange.duration += splitClip.sourceRange.duration
+        guard abs(originalLocation.clipIndex - splitLocation.clipIndex) == 1 else {
+            throw EditorCommandError.invalidCommand("Split clips must be adjacent to merge.")
+        }
+
+        let firstIndex = min(originalLocation.clipIndex, splitLocation.clipIndex)
+        let secondIndex = max(originalLocation.clipIndex, splitLocation.clipIndex)
+        project.timeline.tracks[originalLocation.trackIndex].clips.remove(at: secondIndex)
+
+        if let originalClip {
+            project.timeline.tracks[originalLocation.trackIndex].clips[firstIndex] = originalClip
+        } else {
+            let remainingClip = project.timeline.tracks[originalLocation.trackIndex].clips[firstIndex]
+            let mergedTimelineStart = min(remainingClip.timelineRange.start, splitTime)
+            let mergedTimelineEnd = max(remainingClip.timelineRange.end, splitTime)
+            project.timeline.tracks[originalLocation.trackIndex].clips[firstIndex].timelineRange = TimeRange(
+                start: mergedTimelineStart,
+                duration: mergedTimelineEnd - mergedTimelineStart
+            )
+        }
 
         return CommandResult(
             affectedClipIds: [originalClipId, splitClipId],
@@ -89,6 +175,6 @@ struct MergeSplitClipCommand: EditorCommand {
     }
 
     func invert(from result: CommandResult) throws -> any EditorCommand {
-        NoOpCommand(description: "Split merge inverse requires the original split time")
+        SplitClipCommand(clipId: originalClipId, trackId: trackId, splitTime: splitTime, newClipId: splitClipId)
     }
 }

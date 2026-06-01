@@ -1,19 +1,51 @@
 import SwiftUI
+import MovieCutCore
 
-/// The initial macOS editor shell shown before a project is opened.
 struct ContentView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("No Project Open")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("Create or open a MovieCut project to begin editing.")
-                .foregroundStyle(.secondary)
-        }
-        .frame(minWidth: 960, minHeight: 640)
-    }
-}
+    @State private var viewModel = EditorViewModel()
 
-#Preview {
-    ContentView()
+    var body: some View {
+        VStack(spacing: 0) {
+            HSplitView {
+                MediaLibraryPanel(viewModel: viewModel)
+                    .frame(minWidth: 200, maxWidth: 300)
+
+                PreviewPanel(viewModel: viewModel)
+                    .frame(minWidth: 400)
+
+                InspectorPanel(viewModel: viewModel)
+                    .frame(minWidth: 240, maxWidth: 320)
+            }
+
+            Divider()
+
+            TimelineView(viewModel: viewModel)
+        }
+        .frame(minWidth: 1024, minHeight: 640)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { Task { await viewModel.undo() } }) {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .keyboardShortcut("z", modifiers: .command)
+
+                Button(action: { Task { await viewModel.redo() } }) {
+                    Label("Redo", systemImage: "arrow.uturn.forward")
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button(action: { Task { await viewModel.splitClip() } }) {
+                    Label("Split", systemImage: "scissors")
+                }
+                .keyboardShortcut("b", modifiers: .command)
+
+                Button(action: { Task { await viewModel.deleteClip() } }) {
+                    Label("Delete", systemImage: "trash")
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+            }
+        }
+    }
 }

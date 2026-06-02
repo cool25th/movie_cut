@@ -548,6 +548,15 @@ final class EditorViewModel {
 
     var analysisResult: AnalysisResult?
 
+    /// Available analysis providers (silence detection, scene change detection).
+    let analysisProviders: [any AnalysisProvider] = [
+        SilenceDetectionProvider(),
+        SceneChangeProvider()
+    ]
+
+    /// Currently selected analysis provider index.
+    var selectedAnalysisProviderIndex: Int = 0
+
     func sessionSnapshot() async -> Project {
         await session.snapshot()
     }
@@ -567,7 +576,10 @@ final class EditorViewModel {
             return
         }
 
-        let provider = StubAnalysisProvider()
+        let provider = analysisProviders.indices.contains(selectedAnalysisProviderIndex)
+            ? analysisProviders[selectedAnalysisProviderIndex]
+            : analysisProviders[0]
+
         do {
             let snapshot = await session.snapshot()
             let result = try await provider.analyze(asset: asset, in: snapshot)

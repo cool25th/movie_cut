@@ -20,9 +20,13 @@ public struct AnalysisResult: Sendable, Codable {
     /// The source media asset identifier.
     public let sourceAssetID: String
 
+    /// User-visible name of the provider that produced the result.
+    public let providerName: String
+
     /// Creates an analysis result.
-    public init(suggestions: [AnalysisSuggestion], sourceAssetID: String) {
+    public init(suggestions: [AnalysisSuggestion], sourceAssetID: String, providerName: String = "Unknown") {
         self.suggestions = suggestions
         self.sourceAssetID = sourceAssetID
+        self.providerName = providerName
     }
 }

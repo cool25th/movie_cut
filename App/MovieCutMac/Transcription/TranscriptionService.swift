@@ -12,8 +12,9 @@ final class TranscriptionService {
 
     init() {
         let stubProvider = StubTranscriptionProvider()
-        self.currentProvider = stubProvider
-        self.availableProviders = [stubProvider]
+        let speechProvider = SpeechTranscriptionProvider()
+        self.availableProviders = [speechProvider, stubProvider]
+        self.currentProvider = speechProvider
     }
 
     func transcribe(asset: MediaAsset) async throws -> TranscriptionResult {

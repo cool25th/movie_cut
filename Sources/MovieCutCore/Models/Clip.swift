@@ -68,6 +68,12 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Effects applied to the clip.
     public var effects: [Effect]
 
+    /// Whether the clip should be played in reverse.
+    public var isReversed: Bool
+
+    /// Optional color correction adjustments.
+    public var colorCorrection: ColorCorrection?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -86,6 +92,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case textContent
         case chromaKey
         case effects
+        case isReversed
+        case colorCorrection
     }
 
     /// Creates a clip.
@@ -106,7 +114,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         transition: Transition? = nil,
         textContent: TextClipContent? = nil,
         chromaKey: ChromaKeySettings? = nil,
-        effects: [Effect] = []
+        effects: [Effect] = [],
+        isReversed: Bool = false,
+        colorCorrection: ColorCorrection? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -125,6 +135,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.textContent = textContent
         self.chromaKey = chromaKey
         self.effects = effects
+        self.isReversed = isReversed
+        self.colorCorrection = colorCorrection
     }
 
     public init(from decoder: any Decoder) throws {
@@ -146,6 +158,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         textContent = try container.decodeIfPresent(TextClipContent.self, forKey: .textContent)
         chromaKey = try container.decodeIfPresent(ChromaKeySettings.self, forKey: .chromaKey)
         effects = try container.decodeIfPresent([Effect].self, forKey: .effects) ?? []
+        isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
+        colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -167,5 +181,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encodeIfPresent(textContent, forKey: .textContent)
         try container.encodeIfPresent(chromaKey, forKey: .chromaKey)
         try container.encode(effects, forKey: .effects)
+        try container.encode(isReversed, forKey: .isReversed)
+        try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
     }
 }

@@ -1,3 +1,6 @@
+# CI
+*.xcresult
+
 .build/
 .swiftpm/
 DerivedData/

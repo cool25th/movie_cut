@@ -29,6 +29,9 @@ public struct Track: Codable, Sendable, Equatable, Identifiable {
     /// Whether edit commands should avoid modifying this track.
     public var isLocked: Bool
 
+    /// Whether this track should be hidden from preview/export visuals.
+    public var isHidden: Bool
+
     /// The compositing or ordering index.
     public var zIndex: Int
 
@@ -42,6 +45,7 @@ public struct Track: Codable, Sendable, Equatable, Identifiable {
         name: String,
         isMuted: Bool = false,
         isLocked: Bool = false,
+        isHidden: Bool = false,
         zIndex: Int = 0,
         clips: [Clip] = []
     ) {
@@ -50,6 +54,7 @@ public struct Track: Codable, Sendable, Equatable, Identifiable {
         self.name = name
         self.isMuted = isMuted
         self.isLocked = isLocked
+        self.isHidden = isHidden
         self.zIndex = zIndex
         self.clips = clips
     }

@@ -3,9 +3,11 @@ import MovieCutCore
 
 @main
 struct MovieCutMacApp: App {
+    @State private var viewModel = EditorViewModel()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: viewModel)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -18,6 +20,11 @@ struct MovieCutMacApp: App {
                 Divider()
                 Button("Import Media...") {}
                     .keyboardShortcut("i", modifiers: [.command, .shift])
+                Divider()
+                Button("Export...") {
+                    Task { await viewModel.exportProject() }
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
             }
         }
     }

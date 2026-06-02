@@ -3,6 +3,7 @@ import MovieCutCore
 
 struct InspectorPanel: View {
     var viewModel: EditorViewModel
+    @State private var isTransitionExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -54,6 +55,27 @@ struct InspectorPanel: View {
                             }
                         }
 
+                        // Volume
+                        if clip.kind.supportsVolume {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Volume")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                HStack {
+                                    Slider(value: Binding(
+                                        get: { clip.volume },
+                                        set: { newValue in
+                                            Task { await viewModel.updateSelectedVolume(newValue) }
+                                        }
+                                    ), in: 0 ... 2)
+                                    Text(String(format: "%.0f%%", clip.volume * 100))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 44)
+                                }
+                            }
+                        }
+
                         // Text Content
                         if let textContent = clip.textContent {
                             VStack(alignment: .leading, spacing: 6) {
@@ -74,29 +96,100 @@ struct InspectorPanel: View {
 
                         // Effects
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Effects")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                            HStack {
+                                Text("Effects")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                Menu {
+                                    ForEach(EffectType.allCases, id: \.self) { type in
+                                        Button(type.displayName) {
+                                            addEffect(type, to: clip)
+                                        }
+                                    }
+                                } label: {
+                                    Label("Add Effect", systemImage: "plus")
+                                }
+                                .menuStyle(.button)
+                                .controlSize(.small)
+                            }
                             if clip.effects.isEmpty {
                                 Text("No effects")
                                     .foregroundStyle(.secondary)
                                     .font(.caption)
                             }
                             ForEach(clip.effects) { effect in
-                                HStack {
-                                    Text(effect.type.rawValue)
-                                        .font(.caption)
-                                    Spacer()
-                                    ForEach(
-                                        Array(effect.parameters.sorted(by: { $0.key < $1.key })),
-                                        id: \.key
-                                    ) { key, value in
-                                        Text("\(key): \(String(format: "%.2f", value))")
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(effect.type.displayName)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                        Spacer()
+                                        Button {
+                                            removeEffect(effect.id, from: clip)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundStyle(.secondary)
+                                    }
+
+                                    ForEach(parameterDefinitions(for: effect.type)) { definition in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack {
+                                                Text(definition.title)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                Spacer()
+                                                Text(String(format: definition.valueFormat, effect.parameters[definition.key] ?? definition.defaultValue))
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Slider(value: Binding(
+                                                get: { effect.parameters[definition.key] ?? definition.defaultValue },
+                                                set: { newValue in
+                                                    updateEffect(effect.id, parameter: definition.key, value: newValue, in: clip)
+                                                }
+                                            ), in: definition.range)
+                                        }
+                                    }
+                                }
+                                .padding(8)
+                                .background(Color(nsColor: .separatorColor).opacity(0.12))
+                                .cornerRadius(6)
+                            }
+                        }
+
+                        // Transition
+                        DisclosureGroup("Transition", isExpanded: $isTransitionExpanded) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Picker("Type", selection: Binding(
+                                    get: { clip.transition?.type ?? .none },
+                                    set: { type in
+                                        updateTransitionType(type, for: clip)
+                                    }
+                                )) {
+                                    ForEach(TransitionType.allCases, id: \.self) { type in
+                                        Text(type.displayName).tag(type)
+                                    }
+                                }
+
+                                if let transition = clip.transition {
+                                    HStack {
+                                        Slider(value: Binding(
+                                            get: { transition.duration },
+                                            set: { duration in
+                                                updateTransitionDuration(duration, for: clip)
+                                            }
+                                        ), in: 0.1 ... 3)
+                                        Text(String(format: "%.1fs", transition.duration))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
+                                            .frame(width: 44)
                                     }
                                 }
                             }
+                            .padding(.top, 4)
                         }
                     }
                     .padding(12)
@@ -115,5 +208,109 @@ struct InspectorPanel: View {
         }
         .frame(minWidth: 240)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func addEffect(_ type: EffectType, to clip: Clip) {
+        var effects = clip.effects
+        let parameters = Dictionary(
+            uniqueKeysWithValues: parameterDefinitions(for: type).map { ($0.key, $0.defaultValue) }
+        )
+        effects.append(Effect(type: type, parameters: parameters))
+        Task { await viewModel.updateSelectedEffects(effects) }
+    }
+
+    private func removeEffect(_ effectId: UUID, from clip: Clip) {
+        let effects = clip.effects.filter { $0.id != effectId }
+        Task { await viewModel.updateSelectedEffects(effects) }
+    }
+
+    private func updateEffect(_ effectId: UUID, parameter: String, value: Double, in clip: Clip) {
+        var effects = clip.effects
+        guard let index = effects.firstIndex(where: { $0.id == effectId }) else { return }
+        effects[index].parameters[parameter] = value
+        Task { await viewModel.updateSelectedEffects(effects) }
+    }
+
+    private func updateTransitionType(_ type: TransitionType, for clip: Clip) {
+        let transition: MovieCutCore.Transition?
+        if type == .none {
+            transition = nil
+        } else {
+            transition = MovieCutCore.Transition(
+                id: clip.transition?.id ?? UUID(),
+                type: type,
+                duration: clip.transition?.duration ?? 0.5
+            )
+        }
+        Task { await viewModel.updateSelectedTransition(transition) }
+    }
+
+    private func updateTransitionDuration(_ duration: Double, for clip: Clip) {
+        guard var transition = clip.transition else { return }
+        transition.duration = duration
+        Task { await viewModel.updateSelectedTransition(transition) }
+    }
+
+    private func parameterDefinitions(for type: EffectType) -> [EffectParameterDefinition] {
+        switch type {
+        case .brightness:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -1 ... 1, defaultValue: 0)]
+        case .contrast:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: 0 ... 2, defaultValue: 1)]
+        case .saturation:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: 0 ... 2, defaultValue: 1)]
+        case .temperature:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -1 ... 1, defaultValue: 0)]
+        case .exposure:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -2 ... 2, defaultValue: 0)]
+        case .fadeIn, .fadeOut, .crossDissolve:
+            return [EffectParameterDefinition(key: "duration", title: "Duration", range: 0.1 ... 3, defaultValue: 0.5, valueFormat: "%.1fs")]
+        }
+    }
+}
+
+private struct EffectParameterDefinition: Identifiable {
+    var id: String { key }
+    var key: String
+    var title: String
+    var range: ClosedRange<Double>
+    var defaultValue: Double
+    var valueFormat: String = "%.2f"
+}
+
+private extension ClipKind {
+    var supportsVolume: Bool {
+        switch self {
+        case .video, .audio:
+            return true
+        case .image, .text:
+            return false
+        }
+    }
+}
+
+private extension EffectType {
+    var displayName: String {
+        switch self {
+        case .brightness: return "Brightness"
+        case .contrast: return "Contrast"
+        case .saturation: return "Saturation"
+        case .temperature: return "Temperature"
+        case .exposure: return "Exposure"
+        case .fadeIn: return "Fade In"
+        case .fadeOut: return "Fade Out"
+        case .crossDissolve: return "Cross Dissolve"
+        }
+    }
+}
+
+private extension TransitionType {
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .crossDissolve: return "Cross Dissolve"
+        case .fadeThroughBlack: return "Fade Through Black"
+        case .wipeRight: return "Wipe Right"
+        }
     }
 }

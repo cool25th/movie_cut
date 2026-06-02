@@ -2,7 +2,7 @@ import SwiftUI
 import MovieCutCore
 
 struct ContentView: View {
-    @State private var viewModel = EditorViewModel()
+    var viewModel: EditorViewModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,7 +45,42 @@ struct ContentView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 .keyboardShortcut(.delete, modifiers: .command)
+
+                Divider()
+
+                Button(action: { Task { await viewModel.exportProject() } }) {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
             }
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.exportEngine.isExporting },
+            set: { _ in }
+        )) {
+            ExportSheet(exportEngine: viewModel.exportEngine)
+        }
+    }
+}
+
+struct ExportSheet: View {
+    var exportEngine: ExportEngine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Exporting")
+                .font(.headline)
+            ProgressView(value: exportEngine.exportProgress)
+                .frame(width: 280)
+            Text(String(format: "%.0f%%", exportEngine.exportProgress * 100))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let exportError = exportEngine.exportError {
+                Text(exportError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(16)
     }
 }

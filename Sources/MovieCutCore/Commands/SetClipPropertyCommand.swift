@@ -8,6 +8,12 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces the clip opacity.
     case opacity(Double)
 
+    /// Replaces the clip audio volume multiplier.
+    case volume(Double)
+
+    /// Replaces the clip transition.
+    case transition(Transition?)
+
     /// Replaces editable text content for a text clip.
     case textContent(TextClipContent?)
 
@@ -54,6 +60,12 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .opacity(let opacity):
             previousProperty = .opacity(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].opacity)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].opacity = opacity
+        case .volume(let volume):
+            previousProperty = .volume(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume = volume
+        case .transition(let transition):
+            previousProperty = .transition(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transition)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transition = transition
         case .textContent(let textContent):
             previousProperty = .textContent(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent = textContent

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Built-in effect identifiers for Phase 1 editing.
-public enum EffectType: String, Codable, Sendable, Equatable, Hashable {
+public enum EffectType: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// Brightness adjustment.
     case brightness
 

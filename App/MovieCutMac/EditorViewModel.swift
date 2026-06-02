@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import MovieCutCore
 import Observation
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -9,6 +11,7 @@ final class EditorViewModel {
     var selectedClipId: UUID?
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
+    var exportEngine: ExportEngine
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
@@ -20,6 +23,7 @@ final class EditorViewModel {
         let project = EditorViewModel.ensureDefaultTracks(in: project)
         self.currentProject = project
         self.playbackEngine = PlaybackEngine()
+        self.exportEngine = ExportEngine()
         self.session = EditorSession(project: project)
     }
 
@@ -89,8 +93,23 @@ final class EditorViewModel {
         }
     }
 
-    func exportProject() {
-        lastErrorMessage = "Export is not implemented in Phase 1."
+    func exportProject() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).mp4"
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            let snapshot = await session.snapshot()
+            try await exportEngine.export(project: snapshot, to: url)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     func importMedia(_ urls: [URL]) async {
@@ -126,6 +145,31 @@ final class EditorViewModel {
             try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
             selectedClipId = clip.id
             playheadTime = clip.timelineRange.start
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func addTextClip(text: String) async {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        do {
+            let track = try await ensureTrack(for: .text)
+            let duration: TimeInterval = 5
+            let start = playheadTime
+            let content = TextClipContent(text: trimmedText)
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: start, duration: duration),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -189,9 +233,24 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .opacity(opacity)))
     }
 
+    func updateSelectedVolume(_ volume: Double) async {
+        guard let selectedClipId else { return }
+        await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
+    }
+
+    func updateSelectedTransition(_ transition: Transition?) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
+    }
+
     func updateSelectedTextContent(_ textContent: TextClipContent?) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
+    }
+
+    func updateSelectedEffects(_ effects: [Effect]) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
     }
 
     private func apply(_ command: any EditorCommand) async {

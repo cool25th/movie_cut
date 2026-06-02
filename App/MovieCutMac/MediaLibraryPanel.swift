@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 struct MediaLibraryPanel: View {
     var viewModel: EditorViewModel
+    @State private var isAddingText = false
+    @State private var textClipText = "Text"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -13,6 +15,10 @@ struct MediaLibraryPanel: View {
                 Spacer()
                 Button(action: openImportPanel) {
                     Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                Button(action: openTextSheet) {
+                    Image(systemName: "textformat")
                 }
                 .buttonStyle(.borderless)
             }
@@ -83,6 +89,34 @@ struct MediaLibraryPanel: View {
             handleDrop(providers)
             return true
         }
+        .sheet(isPresented: $isAddingText) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add Text")
+                    .font(.headline)
+                TextField("Text", text: $textClipText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 260)
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        isAddingText = false
+                    }
+                    Button("Add") {
+                        let text = textClipText
+                        isAddingText = false
+                        Task { await viewModel.addTextClip(text: text) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private func openTextSheet() {
+        textClipText = "Text"
+        isAddingText = true
     }
 
     private func openImportPanel() {

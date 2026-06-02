@@ -38,6 +38,12 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// The clip opacity from 0.0 to 1.0.
     public var opacity: Double
 
+    /// The clip audio volume multiplier from 0.0 to 2.0.
+    public var volume: Double
+
+    /// Optional transition applied at this clip boundary.
+    public var transition: Transition?
+
     /// Text payload for generated text clips.
     public var textContent: TextClipContent?
 
@@ -53,6 +59,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         timelineRange: TimeRange,
         transform: ClipTransform = ClipTransform(),
         opacity: Double = 1.0,
+        volume: Double = 1.0,
+        transition: Transition? = nil,
         textContent: TextClipContent? = nil,
         effects: [Effect] = []
     ) {
@@ -63,6 +71,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.timelineRange = timelineRange
         self.transform = transform
         self.opacity = opacity
+        self.volume = volume
+        self.transition = transition
         self.textContent = textContent
         self.effects = effects
     }

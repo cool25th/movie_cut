@@ -12,6 +12,10 @@ final class EditorViewModel {
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
     var exportEngine: ExportEngine
+    var musicLibrary: MusicLibrary
+    var transcriptionService: TranscriptionService
+    var generatedSubtitleSegments: [TranscriptionSegment] = []
+    var pendingSubtitleClips: [Clip] = []
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
@@ -24,6 +28,8 @@ final class EditorViewModel {
         self.currentProject = project
         self.playbackEngine = PlaybackEngine()
         self.exportEngine = ExportEngine()
+        self.musicLibrary = MusicLibrary.placeholder()
+        self.transcriptionService = TranscriptionService()
         self.session = EditorSession(project: project)
     }
 
@@ -45,6 +51,27 @@ final class EditorViewModel {
             .first { $0.id == selectedClipId }
     }
 
+    var selectedTranscribableAsset: MediaAsset? {
+        if
+            let selectedClip,
+            let assetId = selectedClip.assetId,
+            let asset = currentProject.mediaLibrary.assets[assetId],
+            asset.kind == .audio || asset.kind == .video
+        {
+            return asset
+        }
+
+        if let selectedAsset, selectedAsset.kind == .audio || selectedAsset.kind == .video {
+            return selectedAsset
+        }
+
+        return nil
+    }
+
+    var canGenerateSubtitles: Bool {
+        selectedTranscribableAsset != nil
+    }
+
     var selectedClipTrackId: UUID? {
         guard let selectedClipId else { return nil }
         return currentProject.timeline.tracks.first { track in
@@ -64,6 +91,7 @@ final class EditorViewModel {
         selectedAssetId = nil
         playbackEngine.clear()
         playheadTime = 0
+        clearGeneratedSubtitles()
         lastErrorMessage = nil
     }
 
@@ -77,6 +105,7 @@ final class EditorViewModel {
             selectedAssetId = nil
             playbackEngine.clear()
             playheadTime = 0
+            clearGeneratedSubtitles()
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -145,6 +174,35 @@ final class EditorViewModel {
             try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
             selectedClipId = clip.id
             playheadTime = clip.timelineRange.start
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func addMusicTrack(_ track: MusicTrack) async {
+        do {
+            let duration = track.duration > 0 ? track.duration : 5
+            let asset = MediaAsset(
+                originalURL: track.fileURL,
+                kind: .audio,
+                duration: duration,
+                metadata: MediaMetadata(fileSize: fileSize(for: track.fileURL))
+            )
+
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedAssetId = asset.id
+            selectedClipId = clip.id
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -268,9 +326,54 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
     }
 
+    func updateSelectedChromaKey(_ chromaKey: ChromaKeySettings?) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .chromaKey(chromaKey)))
+    }
+
     func updateSelectedEffects(_ effects: [Effect]) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+    }
+
+    func prepareSubtitles() async {
+        guard let asset = selectedTranscribableAsset else {
+            lastErrorMessage = "Select an audio or video clip to generate subtitles."
+            return
+        }
+
+        clearGeneratedSubtitles()
+
+        do {
+            let result = try await transcriptionService.transcribe(asset: asset)
+            generatedSubtitleSegments = result.segments
+            pendingSubtitleClips = transcriptionService.subtitles(from: result, in: currentProject)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func applyGeneratedSubtitles() async {
+        let clips = pendingSubtitleClips
+        guard !clips.isEmpty else { return }
+
+        do {
+            let textTrack = try await ensureTrack(for: .text)
+            for clip in clips {
+                try await session.dispatch(AddClipCommand(trackId: textTrack.id, clip: clip))
+            }
+            pendingSubtitleClips = []
+            selectedClipId = clips.first?.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func generateSubtitles() async {
+        await prepareSubtitles()
+        await applyGeneratedSubtitles()
     }
 
     func addSticker(_ sticker: StickerAsset) async {
@@ -330,6 +433,11 @@ final class EditorViewModel {
         lastErrorMessage = nil
     }
 
+    private func clearGeneratedSubtitles() {
+        generatedSubtitleSegments = []
+        pendingSubtitleClips = []
+    }
+
     private func ensureTrack(for kind: TrackKind) async throws -> Track {
         let snapshot = await session.snapshot()
         if let track = snapshot.timeline.tracks.first(where: { $0.kind == kind }) {
@@ -370,6 +478,13 @@ final class EditorViewModel {
             return duration
         }
         return asset.kind == .image ? 5 : 5
+    }
+
+    private func fileSize(for url: URL) -> Int64? {
+        guard let value = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            return nil
+        }
+        return Int64(value)
     }
 
     private func defaultTrackName(for kind: TrackKind, index: Int) -> String {

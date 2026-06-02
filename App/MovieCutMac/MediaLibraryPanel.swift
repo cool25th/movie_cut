@@ -36,7 +36,8 @@ struct MediaLibraryPanel: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 8)
 
-            if selectedLibraryTab == .media {
+            switch selectedLibraryTab {
+            case .media:
                 mediaContent
 
                 if viewModel.selectedAsset != nil {
@@ -48,10 +49,12 @@ struct MediaLibraryPanel: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
                 }
-            } else {
+            case .stickers:
                 StickerPickerView { sticker in
                     Task { await viewModel.addSticker(sticker) }
                 }
+            case .music:
+                MusicLibraryView(viewModel: viewModel)
             }
         }
         .frame(minWidth: 200)
@@ -179,6 +182,7 @@ struct MediaLibraryPanel: View {
 private enum LibraryTab: String, CaseIterable, Identifiable {
     case media = "Media"
     case stickers = "Stickers"
+    case music = "Music"
 
     var id: String { rawValue }
 }

@@ -26,6 +26,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces editable text content for a text clip.
     case textContent(TextClipContent?)
 
+    /// Replaces the clip chroma key settings.
+    case chromaKey(ChromaKeySettings?)
+
     /// Replaces the clip effects list.
     case effects([Effect])
 }
@@ -87,6 +90,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .textContent(let textContent):
             previousProperty = .textContent(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].textContent = textContent
+        case .chromaKey(let chromaKey):
+            previousProperty = .chromaKey(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].chromaKey)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].chromaKey = chromaKey
         case .effects(let effects):
             previousProperty = .effects(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects = effects

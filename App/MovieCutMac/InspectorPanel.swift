@@ -129,6 +129,13 @@ struct InspectorPanel: View {
                             }
                         }
 
+                        // Chroma Key
+                        if clip.kind == .video {
+                            ChromaKeyView(clip: clip) { chromaKey in
+                                Task { await viewModel.updateSelectedChromaKey(chromaKey) }
+                            }
+                        }
+
                         // Effects
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
@@ -192,6 +199,16 @@ struct InspectorPanel: View {
                                 .padding(8)
                                 .background(Color(nsColor: .separatorColor).opacity(0.12))
                                 .cornerRadius(6)
+                            }
+                        }
+
+                        // Subtitles
+                        if clip.kind.supportsSubtitles {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Subtitles")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                AutoSubtitlesView(viewModel: viewModel)
                             }
                         }
 
@@ -359,6 +376,15 @@ private extension ClipKind {
     }
 
     var supportsSpeed: Bool {
+        switch self {
+        case .video, .audio:
+            return true
+        case .image, .text:
+            return false
+        }
+    }
+
+    var supportsSubtitles: Bool {
         switch self {
         case .video, .audio:
             return true

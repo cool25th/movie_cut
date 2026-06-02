@@ -2,9 +2,9 @@
 
 ## 요약
 - 전체 CapCut 기능: 88개
-- 완전 구현: 24개 (27.3%)
-- 부분 구현: 23개 (26.1%)
-- 미구현: 41개 (46.6%)
+- 완전 구현: 41개 (46.6%)
+- 부분 구현: 17개 (19.3%)
+- 미구현: 30개 (34.1%)
 
 > 판정 기준: `✅완료`는 요약상 모델, 편집 흐름, UI 또는 렌더링 경로가 명확히 구현된 기능입니다. `🟡부분`은 데이터 모델, 프로토콜, 일부 UI, 또는 제한된 구현은 있으나 CapCut 수준의 사용 경험이나 내보내기 반영이 불완전한 기능입니다. `❌없음`은 요약에 구현 근거가 없거나 명시적으로 stub인 기능입니다.
 
@@ -15,7 +15,7 @@
 |------|------|------|
 | 카메라롤 가져오기 | ✅완료 | iOS `MediaBrowserView(PhotosPicker)`로 사진 보관함 가져오기 흐름이 구현되어 있음 |
 | 드래그앤드롭 가져오기 | ❌없음 | macOS 드래그앤드롭 가져오기 구현이 요약에 없음 |
-| 썸네일 생성 | ❌없음 | `ThumbnailGenerator.generate()`가 항상 `nil`을 반환하는 stub 상태 |
+| 썸네일 생성 | ✅완료 | `ThumbnailGenerator`가 `AVAssetImageGenerator` 기반 썸네일 추출을 구현 |
 | 다중 선택 가져오기 | ❌없음 | 다중 선택 import 흐름이 명시되어 있지 않음 |
 | 폴더 정리 | ❌없음 | 미디어 폴더, 앨범, 컬렉션 기반 정리 기능 없음 |
 
@@ -26,36 +26,36 @@
 | 분할 | ✅완료 | `SplitClip` 명령 구현 |
 | 삭제 | ✅완료 | `DeleteClip` 명령 구현 |
 | 이동 | ✅완료 | `MoveClip` 명령 구현 |
-| 복사/붙여넣기 | ❌없음 | 복사 버퍼 또는 붙여넣기 명령 없음 |
-| 중복 | ❌없음 | Duplicate 명령 없음 |
-| 리플 편집 | ❌없음 | 삭제/트림 후 간격을 자동으로 닫는 리플 편집 없음 |
+| 복사/붙여넣기 | ✅완료 | `CopyClipCommand` 구현 |
+| 중복 | ✅완료 | `DuplicateClipCommand` 구현 |
+| 리플 편집 | ✅완료 | `RippleDeleteCommand` 구현 |
 | 스냅 | ❌없음 | 클립 경계, 재생 헤드, 마커 기준 스냅 기능 없음 |
 | 타임라인 줌 | ❌없음 | 줌 레벨 또는 타임 스케일 조절 기능 없음 |
-| 트랙 잠금 | ❌없음 | 트랙 잠금 상태 및 명령 없음 |
-| 트랙 음소거 | ❌없음 | 클립 볼륨은 있으나 트랙 단위 mute는 없음 |
-| 트랙 숨기기 | ❌없음 | 트랙 visibility 제어 없음 |
+| 트랙 잠금 | ✅완료 | `SetTrackPropertyCommand`의 `isLocked` 제어 구현 |
+| 트랙 음소거 | ✅완료 | `SetTrackPropertyCommand`의 `isMuted` 제어 구현 |
+| 트랙 숨기기 | ✅완료 | `SetTrackPropertyCommand`의 `isHidden` 제어 구현 |
 | 실행취소/다시실행 | ✅완료 | `EditorSession(actor)` 기반 undo/redo 구현 |
 
 ### C. 비디오 이펙트/필터
 | 기능 | 상태 | 비고 |
 |------|------|------|
-| 필터 프리셋 | 🟡부분 | `Effect` 모델 11종과 Grayscale/Sepia/Blur 내장 이펙트는 있으나 CapCut 수준의 프리셋 라이브러리는 제한적 |
+| 필터 프리셋 | ✅완료 | `Effect` 모델과 Grayscale/Sepia/Blur 등 내장 필터 프리셋 구현 |
 | 필터 강도 | 🟡부분 | 이펙트 모델과 Inspector는 있으나 전용 강도 조절 UX/렌더 적용 범위가 명확하지 않음 |
-| 색보정(밝기/대비/채도/색온도) | ❌없음 | 요약에 색보정 컨트롤 구현 근거가 없음 |
+| 색보정(밝기/대비/채도/색온도) | ✅완료 | `SetColorCorrectionCommand`로 brightness/contrast/saturation/warmth/tint 제어 구현 |
 | 블러(배경/방사형) | 🟡부분 | Blur 이펙트는 있으나 배경 블러, 방사형 블러 같은 세부 모드는 없음 |
 | 속도 램핑 | 🟡부분 | `SpeedRampPoint` 모델은 있으나 실제 편집 UX와 내보내기 적용이 명확하지 않음 |
-| 역재생 | ❌없음 | Reverse playback/export 기능 없음 |
-| 정지 프레임 | ❌없음 | Freeze frame 생성 기능 없음 |
+| 역재생 | ✅완료 | `ReverseClipCommand`와 `isReversed` 상태 구현 |
+| 정지 프레임 | ✅완료 | `FreezeFrameCommand` 구현 |
 | PIP(화중화) | ✅완료 | 다중 트랙, `ClipTransform`, 위치/크기 조절을 통해 오버레이 편집 가능 |
 | 마스킹 | ❌없음 | 도형/브러시/선형 마스크 기능 없음 |
 
 ### D. 전환
 | 기능 | 상태 | 비고 |
 |------|------|------|
-| 페이드 전환 | 🟡부분 | `Transition` 모델과 Inspector는 있으나 `TransitionPlugin` 구현체가 없음 |
-| 디졸브 전환 | 🟡부분 | 모델 수준 지원으로 보이며 실제 플러그인/렌더 구현은 불완전 |
-| 슬라이드 전환 | 🟡부분 | 모델 수준 지원으로 보이며 실제 플러그인/렌더 구현은 불완전 |
-| 와이프 전환 | 🟡부분 | 모델 수준 지원으로 보이며 실제 플러그인/렌더 구현은 불완전 |
+| 페이드 전환 | ✅완료 | `BuiltinTransitionPlugins`의 Fade 전환과 CoreImage 렌더링 구현 |
+| 디졸브 전환 | ✅완료 | `BuiltinTransitionPlugins`의 Dissolve 전환과 CoreImage 렌더링 구현 |
+| 슬라이드 전환 | ✅완료 | `BuiltinTransitionPlugins`의 Slide 전환과 CoreImage 렌더링 구현 |
+| 와이프 전환 | ✅완료 | `BuiltinTransitionPlugins`의 Wipe 전환과 CoreImage 렌더링 구현 |
 | 줌 전환 | ❌없음 | 전환 4종 외 확장 프리셋 구현 없음 |
 | 글리치 전환 | ❌없음 | 전환 4종 외 확장 프리셋 구현 없음 |
 | 전환 지속시간 | 🟡부분 | 전환 모델에 포함될 가능성은 있으나 렌더 적용이 확실하지 않음 |
@@ -76,7 +76,7 @@
 | 기능 | 상태 | 비고 |
 |------|------|------|
 | 클립별 볼륨 | ✅완료 | `SetVolume` 명령과 Inspector 볼륨 제어 구현 |
-| 페이드인/아웃 | ❌없음 | 오디오 fade in/out 명령 또는 envelope 없음 |
+| 페이드인/아웃 | ✅완료 | `AudioFadeCommand`로 `fadeInDuration`/`fadeOutDuration` 제어 구현 |
 | 배경음악 라이브러리 | ✅완료 | `MusicLibrary`와 `MusicLibraryView` 구현 |
 | 비디오에서 오디오 추출 | ❌없음 | Extract audio 기능 없음 |
 | 음성해설 녹음 | ✅완료 | `VoiceoverRecorder(AVAudioEngine)`와 녹음 UI 구현 |
@@ -91,7 +91,7 @@
 | 이모지 스티커 | ✅완료 | `StickerAsset` 16개 이모지와 `StickerPickerView` 구현 |
 | 애니메이션 스티커/GIF | ❌없음 | Animated sticker 또는 GIF 지원 없음 |
 | 커스텀 이미지 오버레이 | 🟡부분 | 미디어 자산과 다중 트랙으로 유사 구현 가능하나 전용 스티커/오버레이 흐름은 명확하지 않음 |
-| 크로마키 | 🟡부분 | `ChromaKeySettings`와 `ChromaKeyView`는 있으나 Export 렌더링에 미적용 |
+| 크로마키 | ✅완료 | `ChromaKeySettings`, `ChromaKeyView`, `ChromaKeyCompositor(AVVideoCompositing)` 기반 Export 렌더링 구현 |
 | 제스처 리사이즈/회전 | 🟡부분 | `ClipTransform`은 있으나 iOS 제스처 기반 resize/rotate 구현은 명시되지 않음 |
 
 ### H. 내보내기
@@ -153,16 +153,16 @@
 ## 우선순위 권장사항
 
 ### Critical (앱이 정상 동작하지 않음)
-1. `ThumbnailGenerator.generate()` 구현: 미디어 라이브러리와 타임라인에서 클립 식별성이 크게 떨어지므로 AVAsset 기반 썸네일 추출을 먼저 구현.
-2. `WaveformGenerator.generate()` 구현: 오디오 컷, 자막 싱크, 음성해설 편집의 기본 피드백을 제공하기 위해 파형 데이터 생성 필요.
-3. 크로마키 Export 렌더링 적용: UI에서 설정한 결과가 최종 영상에 반영되지 않는 현재 불일치를 해소.
+1. 신규 구현으로 `ThumbnailGenerator`가 `AVAssetImageGenerator` 기반 썸네일 추출을 제공.
+2. 신규 구현으로 `WaveformGenerator`가 `AVAssetReader` 기반 파형 데이터 생성을 제공.
+3. 신규 구현으로 크로마키 Export 렌더링이 `ChromaKeyCompositor(AVVideoCompositing)`에 반영됨.
 
 ### High (핵심 편집 경험)
-1. 타임라인 생산성 기능 추가: 복사/붙여넣기, 중복, 리플 편집, 스냅, 줌, 트랙 잠금/음소거/숨기기.
-2. 전환 렌더링 구현: 페이드/디졸브/슬라이드/와이프의 실제 Export 적용과 전환 지속시간 제어 완성.
-3. 오디오 기본 편집 확장: 페이드인/아웃, 비디오 오디오 추출, 오디오 더킹을 우선 구현.
+1. 타임라인 생산성 기능 추가: 스냅, 줌.
+2. 전환 보강: 줌/글리치 전환 같은 확장 프리셋과 전환 지속시간 제어 완성.
+3. 오디오 기본 편집 확장: 비디오 오디오 추출, 오디오 더킹을 우선 구현.
 4. Export UX 보강: 진행률, 취소, 해상도/프레임레이트/코덱/비트레이트 프리셋 UI를 명확히 제공.
-5. 색보정 및 속도 기능 보강: 밝기/대비/채도/색온도, 필터 강도, 속도 램핑 렌더 적용, 역재생, 정지 프레임.
+5. 색보정 및 속도 기능 보강: 필터 강도, 속도 램핑 렌더 적용.
 
 ### Medium (완성도)
 1. 텍스트 기능 확장: 폰트 선택, 자막 스타일링, 텍스트 애니메이션, 텍스트 템플릿.

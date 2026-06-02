@@ -11,6 +11,15 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces the clip audio volume multiplier.
     case volume(Double)
 
+    /// Replaces the constant clip playback rate.
+    case playbackRate(Double)
+
+    /// Replaces the clip speed-ramp points.
+    case speedRampPoints([SpeedRampPoint])
+
+    /// Replaces the clip animation keyframes.
+    case keyframes([Keyframe])
+
     /// Replaces the clip transition.
     case transition(Transition?)
 
@@ -63,6 +72,15 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .volume(let volume):
             previousProperty = .volume(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume = volume
+        case .playbackRate(let playbackRate):
+            previousProperty = .playbackRate(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].playbackRate)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].playbackRate = min(max(playbackRate, 0.25), 4.0)
+        case .speedRampPoints(let speedRampPoints):
+            previousProperty = .speedRampPoints(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].speedRampPoints)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].speedRampPoints = speedRampPoints
+        case .keyframes(let keyframes):
+            previousProperty = .keyframes(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].keyframes)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].keyframes = keyframes
         case .transition(let transition):
             previousProperty = .transition(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transition)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].transition = transition

@@ -16,6 +16,9 @@ public enum CommandResultValue: Sendable, Equatable {
 
     /// A clip property snapshot.
     case clipProperty(ClipProperty)
+
+    /// A canvas preset snapshot.
+    case canvasPreset(CanvasPreset)
 }
 
 /// The observable result of applying an editor command.

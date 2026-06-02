@@ -18,7 +18,7 @@ struct PreviewPanel: View {
 
                 if let clip = viewModel.selectedClip {
                     VideoPreviewView(player: playbackEngine.player)
-                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .aspectRatio(canvasAspectRatio, contentMode: .fit)
                         .overlay {
                             if clip.assetId == nil {
                                 clipPlaceholder(for: clip)
@@ -36,6 +36,9 @@ struct PreviewPanel: View {
             }
             .onChange(of: viewModel.selectedClipId) { _, _ in
                 loadSelectedClipAsset()
+            }
+            .onChange(of: viewModel.selectedClip?.playbackRate) { _, playbackRate in
+                playbackEngine.setRate(Float(playbackRate ?? 1))
             }
             .onChange(of: playbackEngine.currentTime) { _, currentTime in
                 syncTimelinePlayhead(to: currentTime)
@@ -84,6 +87,11 @@ struct PreviewPanel: View {
         }
     }
 
+    private var canvasAspectRatio: CGFloat {
+        let size = viewModel.currentProject.canvas.size
+        return size.width / max(size.height, 1)
+    }
+
     private func clipPlaceholder(for clip: Clip) -> some View {
         VStack(spacing: 4) {
             Image(systemName: "play.rectangle")
@@ -111,6 +119,7 @@ struct PreviewPanel: View {
             loadedAssetId = asset.id
         }
 
+        playbackEngine.setRate(Float(clip.playbackRate))
         playbackEngine.seek(to: clip.sourceRange.start)
         syncTimelinePlayhead(to: clip.sourceRange.start)
     }
@@ -129,7 +138,8 @@ struct PreviewPanel: View {
         }
 
         let sourceOffset = max(0, playbackTime - clip.sourceRange.start)
-        let timelineTime = clip.timelineRange.start + sourceOffset
+        let timelineOffset = sourceOffset / max(clip.playbackRate, 0.25)
+        let timelineTime = clip.timelineRange.start + timelineOffset
         viewModel.playheadTime = min(timelineTime, clip.timelineRange.end)
     }
 

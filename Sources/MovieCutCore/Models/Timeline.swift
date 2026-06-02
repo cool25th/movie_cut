@@ -1,20 +1,5 @@
 import Foundation
 
-/// A canvas aspect-ratio preset for the editable timeline.
-public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable {
-    /// Landscape 16:9.
-    case ratio16x9
-
-    /// Portrait 9:16.
-    case ratio9x16
-
-    /// Square 1:1.
-    case ratio1x1
-
-    /// A custom canvas ratio.
-    case custom
-}
-
 /// The editable timeline for a MovieCut project.
 public struct Timeline: Codable, Sendable, Equatable, Identifiable {
     /// The timeline identifier.
@@ -40,7 +25,7 @@ public struct Timeline: Codable, Sendable, Equatable, Identifiable {
         id: UUID = UUID(),
         frameRate: Rational = Rational(numerator: 30, denominator: 1),
         canvasSize: CGSize = CGSize(width: 1920, height: 1080),
-        aspectRatio: AspectRatio = .ratio16x9,
+        aspectRatio: AspectRatio = .landscape16x9,
         tracks: [Track] = [],
         markers: [Marker] = []
     ) {

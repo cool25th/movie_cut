@@ -99,6 +99,13 @@ final class ExportEngine {
                 let destinationTime = CMTime(seconds: clip.timelineRange.start, preferredTimescale: 600)
                 try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
 
+                let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
+                if playbackRate != 1 {
+                    let scaledDuration = CMTime(seconds: clip.sourceRange.duration / playbackRate, preferredTimescale: 600)
+                    let insertedRange = CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration)
+                    compositionTrack.scaleTimeRange(insertedRange, toDuration: scaledDuration)
+                }
+
                 if mediaType == .audio {
                     audioParameters.setVolume(Float(clip.volume), at: destinationTime)
                 }
@@ -112,7 +119,7 @@ final class ExportEngine {
         let videoComposition = makeVideoComposition(
             tracks: videoCompositionTracks,
             duration: composition.duration,
-            settings: project.exportSettings
+            canvas: project.canvas
         )
         let audioMix = makeAudioMix(parameters: audioMixInputParameters)
 
@@ -126,13 +133,13 @@ final class ExportEngine {
     private func makeVideoComposition(
         tracks: [AVCompositionTrack],
         duration: CMTime,
-        settings: ExportSettings
+        canvas: CanvasPreset
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
 
         let videoComposition = AVMutableVideoComposition()
-        videoComposition.renderSize = settings.resolution.renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.frameRate.framesPerSecond))
+        videoComposition.renderSize = canvas.size
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
 
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)

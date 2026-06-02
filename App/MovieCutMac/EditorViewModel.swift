@@ -238,6 +238,26 @@ final class EditorViewModel {
         await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
     }
 
+    func updateSelectedPlaybackRate(_ rate: Double) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
+        playbackEngine.setRate(Float(rate))
+    }
+
+    func updateSelectedSpeedRampPoints(_ points: [SpeedRampPoint]) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .speedRampPoints(points)))
+    }
+
+    func updateSelectedKeyframes(_ keyframes: [Keyframe]) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .keyframes(keyframes)))
+    }
+
+    func updateCanvas(_ canvas: CanvasPreset) async {
+        await apply(SetProjectCanvasCommand(canvas: canvas))
+    }
+
     func updateSelectedTransition(_ transition: Transition?) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
@@ -251,6 +271,39 @@ final class EditorViewModel {
     func updateSelectedEffects(_ effects: [Effect]) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+    }
+
+    func addSticker(_ sticker: StickerAsset) async {
+        do {
+            let imageURL: URL
+            if let stickerImageURL = sticker.imageURL {
+                imageURL = stickerImageURL
+            } else if let emoji = sticker.emoji {
+                imageURL = try renderEmojiSticker(emoji, id: sticker.id)
+            } else {
+                return
+            }
+
+            let asset = MediaImporter.probe(url: imageURL)
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let track = try await ensureTrack(for: .video)
+            let duration: TimeInterval = 3
+            let start = playheadTime
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .image,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: start, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedAssetId = asset.id
+            selectedClipId = clip.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     private func apply(_ command: any EditorCommand) async {
@@ -328,6 +381,46 @@ final class EditorViewModel {
         case .text:
             return "Text \(index)"
         }
+    }
+
+    private func renderEmojiSticker(_ emoji: String, id: UUID) throws -> URL {
+        let folderURL = FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutStickers", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+
+        let fileURL = folderURL.appendingPathComponent("\(id.uuidString).png")
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return fileURL
+        }
+
+        let size = CGSize(width: 512, height: 512)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: size).fill()
+
+        let font = NSFont.systemFont(ofSize: 280)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font
+        ]
+        let attributedEmoji = NSAttributedString(string: emoji, attributes: attributes)
+        let textSize = attributedEmoji.size()
+        let origin = CGPoint(
+            x: (size.width - textSize.width) / 2,
+            y: (size.height - textSize.height) / 2
+        )
+        attributedEmoji.draw(at: origin)
+        image.unlockFocus()
+
+        guard
+            let tiffData = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffData),
+            let pngData = bitmap.representation(using: .png, properties: [:])
+        else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        try pngData.write(to: fileURL, options: .atomic)
+        return fileURL
     }
 
     private static func defaultProject() -> Project {

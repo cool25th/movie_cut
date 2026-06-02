@@ -3,6 +3,7 @@ import MovieCutCore
 
 struct ContentView: View {
     var viewModel: EditorViewModel
+    @State private var isCanvasSettingsPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +17,10 @@ struct ContentView: View {
                 InspectorPanel(viewModel: viewModel)
                     .frame(minWidth: 240, maxWidth: 320)
             }
+
+            Divider()
+
+            statusBar
 
             Divider()
 
@@ -48,6 +53,17 @@ struct ContentView: View {
 
                 Divider()
 
+                Button(action: { isCanvasSettingsPresented.toggle() }) {
+                    Label("Canvas", systemImage: "rectangle.dashed")
+                }
+                .popover(isPresented: $isCanvasSettingsPresented) {
+                    CanvasSettingsView(canvas: viewModel.currentProject.canvas) { canvas in
+                        Task { await viewModel.updateCanvas(canvas) }
+                    }
+                }
+
+                Divider()
+
                 Button(action: { Task { await viewModel.exportProject() } }) {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
@@ -60,6 +76,29 @@ struct ContentView: View {
         )) {
             ExportSheet(exportEngine: viewModel.exportEngine)
         }
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 12) {
+            Label(canvasSizeText, systemImage: "rectangle")
+            Text(viewModel.currentProject.canvas.frameRate.statusDisplayName)
+            Spacer()
+            if let error = viewModel.lastErrorMessage {
+                Text(error)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var canvasSizeText: String {
+        let size = viewModel.currentProject.canvas.size
+        return "\(Int(size.width)) x \(Int(size.height))"
     }
 }
 
@@ -82,5 +121,18 @@ struct ExportSheet: View {
             }
         }
         .padding(16)
+    }
+}
+
+private extension ExportFrameRate {
+    var statusDisplayName: String {
+        switch self {
+        case .fps24:
+            return "24 fps"
+        case .fps30:
+            return "30 fps"
+        case .fps60:
+            return "60 fps"
+        }
     }
 }

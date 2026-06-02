@@ -4,6 +4,10 @@ import MovieCutCore
 struct InspectorPanel: View {
     var viewModel: EditorViewModel
     @State private var isTransitionExpanded = false
+    @State private var isAnimationExpanded = false
+    @State private var selectedKeyframeId: UUID?
+
+    private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -72,6 +76,37 @@ struct InspectorPanel: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .frame(width: 44)
+                                }
+                            }
+                        }
+
+                        // Speed
+                        if clip.kind.supportsSpeed {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Speed")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                    Text(String(format: "%.0f%%", clip.playbackRate * 100))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Slider(value: Binding(
+                                    get: { clip.playbackRate },
+                                    set: { newValue in
+                                        Task { await viewModel.updateSelectedPlaybackRate(newValue) }
+                                    }
+                                ), in: 0.25 ... 4.0)
+
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 6)], spacing: 6) {
+                                    ForEach(speedPresets, id: \.self) { preset in
+                                        Button(speedPresetLabel(preset)) {
+                                            Task { await viewModel.updateSelectedPlaybackRate(preset) }
+                                        }
+                                        .controlSize(.small)
+                                    }
                                 }
                             }
                         }
@@ -160,6 +195,31 @@ struct InspectorPanel: View {
                             }
                         }
 
+                        // Keyframes
+                        DisclosureGroup("Animation", isExpanded: $isAnimationExpanded) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                KeyframeEditorView(
+                                    clip: clip,
+                                    playheadTime: viewModel.playheadTime,
+                                    selectedKeyframeId: selectedKeyframeId,
+                                    onSelect: { selectedKeyframeId = $0 },
+                                    onChange: { keyframes in
+                                        Task { await viewModel.updateSelectedKeyframes(keyframes) }
+                                    }
+                                )
+
+                                KeyframeListView(
+                                    clip: clip,
+                                    selectedKeyframeId: selectedKeyframeId,
+                                    onSelect: { selectedKeyframeId = $0 },
+                                    onChange: { keyframes in
+                                        Task { await viewModel.updateSelectedKeyframes(keyframes) }
+                                    }
+                                )
+                            }
+                            .padding(.top, 4)
+                        }
+
                         // Transition
                         DisclosureGroup("Transition", isExpanded: $isTransitionExpanded) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -208,6 +268,16 @@ struct InspectorPanel: View {
         }
         .frame(minWidth: 240)
         .background(Color(nsColor: .controlBackgroundColor))
+        .onChange(of: viewModel.selectedClipId) { _, _ in
+            selectedKeyframeId = nil
+        }
+    }
+
+    private func speedPresetLabel(_ rate: Double) -> String {
+        if rate.rounded() == rate {
+            return String(format: "%.0fx", rate)
+        }
+        return String(format: "%.2gx", rate)
     }
 
     private func addEffect(_ type: EffectType, to clip: Clip) {
@@ -280,6 +350,15 @@ private struct EffectParameterDefinition: Identifiable {
 
 private extension ClipKind {
     var supportsVolume: Bool {
+        switch self {
+        case .video, .audio:
+            return true
+        case .image, .text:
+            return false
+        }
+    }
+
+    var supportsSpeed: Bool {
         switch self {
         case .video, .audio:
             return true

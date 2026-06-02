@@ -6,81 +6,52 @@ struct MediaLibraryPanel: View {
     var viewModel: EditorViewModel
     @State private var isAddingText = false
     @State private var textClipText = "Text"
+    @State private var selectedLibraryTab: LibraryTab = .media
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Media")
+                Text("Library")
                     .font(.headline)
                 Spacer()
-                Button(action: openImportPanel) {
-                    Image(systemName: "plus")
+                if selectedLibraryTab == .media {
+                    Button(action: openImportPanel) {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    Button(action: openTextSheet) {
+                        Image(systemName: "textformat")
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
-                Button(action: openTextSheet) {
-                    Image(systemName: "textformat")
-                }
-                .buttonStyle(.borderless)
             }
             .padding(.horizontal, 8)
             .padding(.top, 8)
 
-            if viewModel.mediaAssets.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("Drop media files here")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        ForEach(viewModel.mediaAssets) { asset in
-                            HStack(spacing: 8) {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.secondary.opacity(0.2))
-                                    .frame(width: 48, height: 36)
-                                    .overlay {
-                                        Image(systemName: iconForKind(asset.kind))
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(asset.originalURL.lastPathComponent)
-                                        .lineLimit(1)
-                                        .font(.caption)
-                                    if let duration = asset.duration {
-                                        Text(String(format: "%.1fs", duration))
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                            }
-                            .padding(6)
-                            .background(asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.2) : Color.clear)
-                            .cornerRadius(6)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                viewModel.selectedAssetId = asset.id
-                            }
-                        }
-                    }
-                    .padding(4)
+            Picker("Library", selection: $selectedLibraryTab) {
+                ForEach(LibraryTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
                 }
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 8)
 
-            if viewModel.selectedAsset != nil {
-                Button("Add to Timeline") {
-                    Task { await viewModel.addClipToTimeline() }
+            if selectedLibraryTab == .media {
+                mediaContent
+
+                if viewModel.selectedAsset != nil {
+                    Button("Add to Timeline") {
+                        Task { await viewModel.addClipToTimeline() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+            } else {
+                StickerPickerView { sticker in
+                    Task { await viewModel.addSticker(sticker) }
+                }
             }
         }
         .frame(minWidth: 200)
@@ -111,6 +82,57 @@ struct MediaLibraryPanel: View {
                 }
             }
             .padding(16)
+        }
+    }
+
+    @ViewBuilder
+    private var mediaContent: some View {
+        if viewModel.mediaAssets.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Drop media files here")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(viewModel.mediaAssets) { asset in
+                        HStack(spacing: 8) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.secondary.opacity(0.2))
+                                .frame(width: 48, height: 36)
+                                .overlay {
+                                    Image(systemName: iconForKind(asset.kind))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(asset.originalURL.lastPathComponent)
+                                    .lineLimit(1)
+                                    .font(.caption)
+                                if let duration = asset.duration {
+                                    Text(String(format: "%.1fs", duration))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(6)
+                        .background(asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.2) : Color.clear)
+                        .cornerRadius(6)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewModel.selectedAssetId = asset.id
+                        }
+                    }
+                }
+                .padding(4)
+            }
         }
     }
 
@@ -152,4 +174,11 @@ struct MediaLibraryPanel: View {
         case .image: return "photo"
         }
     }
+}
+
+private enum LibraryTab: String, CaseIterable, Identifiable {
+    case media = "Media"
+    case stickers = "Stickers"
+
+    var id: String { rawValue }
 }

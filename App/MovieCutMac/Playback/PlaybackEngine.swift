@@ -11,6 +11,7 @@ final class PlaybackEngine {
     var currentTime: TimeInterval
     var duration: TimeInterval
     var playerItem: AVPlayerItem?
+    var playbackRate: Float
 
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
@@ -21,6 +22,7 @@ final class PlaybackEngine {
         self.currentTime = 0
         self.duration = 0
         self.playerItem = nil
+        self.playbackRate = 1
     }
 
     func load(asset: MediaAsset) {
@@ -46,6 +48,7 @@ final class PlaybackEngine {
         playerItem = nil
         currentTime = 0
         duration = 0
+        playbackRate = 1
     }
 
     func play() {
@@ -53,7 +56,7 @@ final class PlaybackEngine {
         if duration > 0, currentTime >= duration {
             seek(to: 0)
         }
-        player.play()
+        player.rate = playbackRate
         isPlaying = true
         startPlaybackTimer()
     }
@@ -70,6 +73,13 @@ final class PlaybackEngine {
             pause()
         } else {
             play()
+        }
+    }
+
+    func setRate(_ rate: Float) {
+        playbackRate = min(max(rate, 0.25), 4.0)
+        if isPlaying {
+            player.rate = playbackRate
         }
     }
 

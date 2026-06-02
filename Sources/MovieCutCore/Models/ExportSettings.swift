@@ -13,7 +13,7 @@ public enum ExportResolution: String, Codable, Sendable, Equatable, Hashable {
 }
 
 /// Export frame-rate presets.
-public enum ExportFrameRate: String, Codable, Sendable, Equatable, Hashable {
+public enum ExportFrameRate: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// 24 frames per second.
     case fps24
 

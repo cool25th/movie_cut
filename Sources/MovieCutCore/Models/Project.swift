@@ -26,8 +26,24 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// The editable timeline.
     public var timeline: Timeline
 
+    /// The project's editing canvas.
+    public var canvas: CanvasPreset
+
     /// Default export settings for the project.
     public var exportSettings: ExportSettings
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case createdAt
+        case updatedAt
+        case appVersion
+        case schemaVersion
+        case mediaLibrary
+        case timeline
+        case canvas
+        case exportSettings
+    }
 
     /// Creates a project with Phase 0 defaults.
     public init(
@@ -39,6 +55,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         schemaVersion: Int = 1,
         mediaLibrary: MediaLibrary = MediaLibrary(),
         timeline: Timeline = Timeline(),
+        canvas: CanvasPreset = CanvasPreset.defaultPreset(),
         exportSettings: ExportSettings = ExportSettings()
     ) {
         self.id = id
@@ -49,6 +66,35 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.schemaVersion = schemaVersion
         self.mediaLibrary = mediaLibrary
         self.timeline = timeline
+        self.canvas = canvas
         self.exportSettings = exportSettings
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        mediaLibrary = try container.decode(MediaLibrary.self, forKey: .mediaLibrary)
+        timeline = try container.decode(Timeline.self, forKey: .timeline)
+        canvas = try container.decodeIfPresent(CanvasPreset.self, forKey: .canvas) ?? CanvasPreset.defaultPreset()
+        exportSettings = try container.decode(ExportSettings.self, forKey: .exportSettings)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(appVersion, forKey: .appVersion)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(mediaLibrary, forKey: .mediaLibrary)
+        try container.encode(timeline, forKey: .timeline)
+        try container.encode(canvas, forKey: .canvas)
+        try container.encode(exportSettings, forKey: .exportSettings)
     }
 }

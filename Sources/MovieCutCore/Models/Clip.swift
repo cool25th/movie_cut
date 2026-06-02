@@ -41,6 +41,15 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// The clip audio volume multiplier from 0.0 to 2.0.
     public var volume: Double
 
+    /// Constant playback speed multiplier from 0.25x to 4.0x.
+    public var playbackRate: Double
+
+    /// Optional speed-ramp points. Empty means the clip uses `playbackRate`.
+    public var speedRampPoints: [SpeedRampPoint]
+
+    /// Source-relative animation keyframes.
+    public var keyframes: [Keyframe]
+
     /// Optional transition applied at this clip boundary.
     public var transition: Transition?
 
@@ -49,6 +58,23 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
 
     /// Effects applied to the clip.
     public var effects: [Effect]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case assetId
+        case kind
+        case sourceRange
+        case timelineRange
+        case transform
+        case opacity
+        case volume
+        case playbackRate
+        case speedRampPoints
+        case keyframes
+        case transition
+        case textContent
+        case effects
+    }
 
     /// Creates a clip.
     public init(
@@ -60,6 +86,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         transform: ClipTransform = ClipTransform(),
         opacity: Double = 1.0,
         volume: Double = 1.0,
+        playbackRate: Double = 1.0,
+        speedRampPoints: [SpeedRampPoint] = [],
+        keyframes: [Keyframe] = [],
         transition: Transition? = nil,
         textContent: TextClipContent? = nil,
         effects: [Effect] = []
@@ -72,8 +101,47 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.transform = transform
         self.opacity = opacity
         self.volume = volume
+        self.playbackRate = playbackRate
+        self.speedRampPoints = speedRampPoints
+        self.keyframes = keyframes
         self.transition = transition
         self.textContent = textContent
         self.effects = effects
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        assetId = try container.decodeIfPresent(UUID.self, forKey: .assetId)
+        kind = try container.decode(ClipKind.self, forKey: .kind)
+        sourceRange = try container.decode(TimeRange.self, forKey: .sourceRange)
+        timelineRange = try container.decode(TimeRange.self, forKey: .timelineRange)
+        transform = try container.decode(ClipTransform.self, forKey: .transform)
+        opacity = try container.decode(Double.self, forKey: .opacity)
+        volume = try container.decode(Double.self, forKey: .volume)
+        playbackRate = try container.decodeIfPresent(Double.self, forKey: .playbackRate) ?? 1.0
+        speedRampPoints = try container.decodeIfPresent([SpeedRampPoint].self, forKey: .speedRampPoints) ?? []
+        keyframes = try container.decodeIfPresent([Keyframe].self, forKey: .keyframes) ?? []
+        transition = try container.decodeIfPresent(Transition.self, forKey: .transition)
+        textContent = try container.decodeIfPresent(TextClipContent.self, forKey: .textContent)
+        effects = try container.decodeIfPresent([Effect].self, forKey: .effects) ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(assetId, forKey: .assetId)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(sourceRange, forKey: .sourceRange)
+        try container.encode(timelineRange, forKey: .timelineRange)
+        try container.encode(transform, forKey: .transform)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(volume, forKey: .volume)
+        try container.encode(playbackRate, forKey: .playbackRate)
+        try container.encode(speedRampPoints, forKey: .speedRampPoints)
+        try container.encode(keyframes, forKey: .keyframes)
+        try container.encodeIfPresent(transition, forKey: .transition)
+        try container.encodeIfPresent(textContent, forKey: .textContent)
+        try container.encode(effects, forKey: .effects)
     }
 }

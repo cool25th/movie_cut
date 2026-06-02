@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The editable timeline for a MovieCut project.

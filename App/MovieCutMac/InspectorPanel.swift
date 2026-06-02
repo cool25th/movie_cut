@@ -352,6 +352,10 @@ struct InspectorPanel: View {
             return [EffectParameterDefinition(key: "amount", title: "Amount", range: -2 ... 2, defaultValue: 0)]
         case .fadeIn, .fadeOut, .crossDissolve:
             return [EffectParameterDefinition(key: "duration", title: "Duration", range: 0.1 ... 3, defaultValue: 0.5, valueFormat: "%.1fs")]
+        case .grayscale, .sepia:
+            return []
+        case .blur:
+            return [EffectParameterDefinition(key: "radius", title: "Radius", range: 1 ... 12, defaultValue: 1, valueFormat: "%.0f")]
         }
     }
 }
@@ -405,6 +409,9 @@ private extension EffectType {
         case .fadeIn: return "Fade In"
         case .fadeOut: return "Fade Out"
         case .crossDissolve: return "Cross Dissolve"
+        case .grayscale: return "Grayscale"
+        case .sepia: return "Sepia"
+        case .blur: return "Blur"
         }
     }
 }

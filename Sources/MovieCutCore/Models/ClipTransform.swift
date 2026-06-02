@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Position, scale, and rotation settings applied to a timeline clip.

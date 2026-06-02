@@ -4,6 +4,7 @@ import MovieCutCore
 struct ContentView: View {
     var viewModel: EditorViewModel
     @State private var isCanvasSettingsPresented = false
+    @State private var isTemplatePickerPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,6 +63,10 @@ struct ContentView: View {
                     }
                 }
 
+                Button(action: { isTemplatePickerPresented.toggle() }) {
+                    Label("Templates", systemImage: "rectangle.stack.badge.plus")
+                }
+
                 Divider()
 
                 Button(action: { Task { await viewModel.exportProject() } }) {
@@ -75,6 +80,9 @@ struct ContentView: View {
             set: { _ in }
         )) {
             ExportSheet(exportEngine: viewModel.exportEngine)
+        }
+        .sheet(isPresented: $isTemplatePickerPresented) {
+            TemplatePickerView(viewModel: viewModel)
         }
     }
 

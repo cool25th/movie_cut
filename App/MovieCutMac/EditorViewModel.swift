@@ -14,6 +14,7 @@ final class EditorViewModel {
     var exportEngine: ExportEngine
     var musicLibrary: MusicLibrary
     var transcriptionService: TranscriptionService
+    var templateStore: TemplateStore
     var generatedSubtitleSegments: [TranscriptionSegment] = []
     var pendingSubtitleClips: [Clip] = []
     var playheadTime: TimeInterval = 0
@@ -30,7 +31,12 @@ final class EditorViewModel {
         self.exportEngine = ExportEngine()
         self.musicLibrary = MusicLibrary.placeholder()
         self.transcriptionService = TranscriptionService()
+        self.templateStore = TemplateStore()
         self.session = EditorSession(project: project)
+
+        for bundle in TemplateStore.builtInTemplates() {
+            self.templateStore.add(bundle)
+        }
     }
 
     var mediaAssets: [MediaAsset] {
@@ -536,6 +542,96 @@ final class EditorViewModel {
 
         try pngData.write(to: fileURL, options: .atomic)
         return fileURL
+    }
+
+    // MARK: - Phase 3-1: AI Analysis & Voiceover
+
+    var analysisResult: AnalysisResult?
+
+    func sessionSnapshot() async -> Project {
+        await session.snapshot()
+    }
+
+    func applyAnalysisSuggestion(_ suggestion: AnalysisSuggestion) async throws -> [any EditorCommand] {
+        try AutoCutEngine.apply(suggestions: [suggestion], to: session)
+    }
+
+    func dispatchCommand(_ command: any EditorCommand) async throws {
+        try await session.dispatch(command)
+        try await refreshFromSession()
+    }
+
+    func runAnalysis() async {
+        guard let asset = selectedTranscribableAsset else {
+            lastErrorMessage = "Select an audio or video clip to analyze."
+            return
+        }
+
+        let provider = StubAnalysisProvider()
+        do {
+            let snapshot = await session.snapshot()
+            let result = try await provider.analyze(asset: asset, in: snapshot)
+            analysisResult = result
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func applyAllSuggestions() async {
+        guard let result = analysisResult else { return }
+        do {
+            let commands = try AutoCutEngine.apply(suggestions: result.suggestions, to: session)
+            for command in commands {
+                try await session.dispatch(command)
+            }
+            analysisResult = nil
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func addVoiceoverAudio(from url: URL) async {
+        do {
+            let asset = MediaImporter.probe(url: url)
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let duration = asset.duration ?? 5
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedAssetId = asset.id
+            selectedClipId = clip.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Phase 3-2: Templates
+
+    func createProject(from bundle: TemplateBundle) async {
+        let project = templateStore.createProject(from: bundle)
+        session = EditorSession(project: project)
+        currentProject = project
+        selectedClipId = nil
+        selectedAssetId = nil
+        playbackEngine.clear()
+        playheadTime = 0
+        clearGeneratedSubtitles()
+        analysisResult = nil
+        lastErrorMessage = nil
+    }
+
+    func createProjectFromTemplate(_ bundle: TemplateBundle) async {
+        await createProject(from: bundle)
     }
 
     private static func defaultProject() -> Project {

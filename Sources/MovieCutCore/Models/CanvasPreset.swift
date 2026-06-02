@@ -8,11 +8,17 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
     /// Portrait 9:16 canvas.
     case portrait9x16
 
+    /// Portrait 4:5 canvas.
+    case portrait4x5
+
     /// Square 1:1 canvas.
     case square1x1
 
     /// Wide 21:9 cinema canvas.
     case wide21x9
+
+    /// Ultrawide 21:9 canvas.
+    case ultrawide21x9
 
     /// User-defined canvas dimensions.
     case custom
@@ -26,10 +32,14 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
             self = .landscape16x9
         case Self.portrait9x16.rawValue, "ratio9x16":
             self = .portrait9x16
+        case Self.portrait4x5.rawValue, "ratio4x5":
+            self = .portrait4x5
         case Self.square1x1.rawValue, "ratio1x1":
             self = .square1x1
         case Self.wide21x9.rawValue:
             self = .wide21x9
+        case Self.ultrawide21x9.rawValue:
+            self = .ultrawide21x9
         case Self.custom.rawValue:
             self = .custom
         default:
@@ -52,10 +62,14 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
             return CGSize(width: 1920, height: 1080)
         case .portrait9x16:
             return CGSize(width: 1080, height: 1920)
+        case .portrait4x5:
+            return CGSize(width: 1080, height: 1350)
         case .square1x1:
             return CGSize(width: 1080, height: 1080)
         case .wide21x9:
             return CGSize(width: 2560, height: 1080)
+        case .ultrawide21x9:
+            return CGSize(width: 2520, height: 1080)
         case .custom:
             return .zero
         }
@@ -68,10 +82,14 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
             return "16:9 Landscape"
         case .portrait9x16:
             return "9:16 Portrait"
+        case .portrait4x5:
+            return "4:5 Portrait"
         case .square1x1:
             return "1:1 Square"
         case .wide21x9:
             return "21:9 Wide"
+        case .ultrawide21x9:
+            return "21:9 Ultrawide"
         case .custom:
             return "Custom"
         }

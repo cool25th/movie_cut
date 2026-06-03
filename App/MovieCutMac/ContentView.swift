@@ -47,6 +47,11 @@ struct ContentView: View {
                 }
                 .keyboardShortcut("b", modifiers: .command)
 
+                Button(action: { viewModel.addMarkerAtPlayhead() }) {
+                    Label("Add Marker", systemImage: "flag.fill")
+                }
+                .keyboardShortcut("m", modifiers: .command)
+
                 Button(action: { Task { await viewModel.deleteClip() } }) {
                     Label("Delete", systemImage: "trash")
                 }

@@ -6,6 +6,7 @@ struct InspectorPanel: View {
     @State private var isTransitionExpanded = false
     @State private var isAnimationExpanded = false
     @State private var selectedKeyframeId: UUID?
+    @State private var showStickerPicker = false
 
     private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
 
@@ -27,6 +28,18 @@ struct InspectorPanel: View {
                                 .fontWeight(.semibold)
                             LabeledContent("Type", value: clip.kind.rawValue)
                             LabeledContent("Duration", value: String(format: "%.2fs", clip.timelineRange.duration))
+                        }
+
+                        Section("AI Assistant") {
+                            Button("Auto Enhance") {
+                                Task { await viewModel.autoEnhance() }
+                            }
+                            Button("Suggest Cuts") {
+                                Task { try? await viewModel.suggestCuts() }
+                            }
+                            Button("Auto Color Correct") {
+                                Task { await viewModel.autoColorCorrect() }
+                            }
                         }
 
                         // Transform
@@ -92,6 +105,23 @@ struct InspectorPanel: View {
                                     Task {
                                         await viewModel.updateSelectedAudioFade(fadeOutDuration: newValue)
                                     }
+                                }
+
+                                HStack {
+                                    Button("Noise Reduction") {
+                                        if let clipId = viewModel.selectedClipId {
+                                            Task { try? await viewModel.applyNoiseReduction(for: clipId) }
+                                        }
+                                    }
+                                    .controlSize(.small)
+
+                                    Button("Extract Audio") {
+                                        if let clipId = viewModel.selectedClipId {
+                                            Task { try? await viewModel.extractAudio(from: clipId) }
+                                        }
+                                    }
+                                    .controlSize(.small)
+                                    .disabled(clip.kind != .video)
                                 }
                             }
                         }
@@ -169,6 +199,32 @@ struct InspectorPanel: View {
 
                         reverseFreezeSection(for: clip)
 
+                        Section("Text Templates") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack {
+                                    ForEach(EditorViewModel.textTemplates) { template in
+                                        Button(template.name) {
+                                            Task { await viewModel.addTextFromTemplate(template) }
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+                                }
+                            }
+                        }
+
+                        Section("Stickers") {
+                            Button("Add Sticker") {
+                                showStickerPicker = true
+                            }
+                            .popover(isPresented: $showStickerPicker) {
+                                StickerPickerView { sticker in
+                                    Task { await viewModel.addSticker(sticker) }
+                                    showStickerPicker = false
+                                }
+                                .frame(width: 300, height: 400)
+                            }
+                        }
+
                         // Text Content
                         if let textContent = clip.textContent {
                             VStack(alignment: .leading, spacing: 6) {
@@ -191,6 +247,22 @@ struct InspectorPanel: View {
                         if clip.kind == .video {
                             ChromaKeyView(clip: clip) { chromaKey in
                                 Task { await viewModel.updateSelectedChromaKey(chromaKey) }
+                            }
+                        }
+
+                        if clip.kind == .video {
+                            Section("Automation") {
+                                HStack {
+                                    Button("Detect Scenes") {
+                                        runDetectScenes(for: clip.id)
+                                    }
+                                    .controlSize(.small)
+
+                                    Button("Auto Reframe") {
+                                        runAutoReframe(for: clip.id)
+                                    }
+                                    .controlSize(.small)
+                                }
                             }
                         }
 
@@ -266,6 +338,21 @@ struct InspectorPanel: View {
                                 Text("Subtitles")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
+                                HStack {
+                                    Button {
+                                        runAutoSubtitles(for: clip.id)
+                                    } label: {
+                                        Label("Auto Subtitles", systemImage: "captions.bubble")
+                                    }
+                                    .controlSize(.small)
+
+                                    Button {
+                                        runAutoCutSilence(for: clip.id)
+                                    } label: {
+                                        Label("Auto Cut Silence", systemImage: "speaker.slash")
+                                    }
+                                    .controlSize(.small)
+                                }
                                 AutoSubtitlesView(viewModel: viewModel)
                             }
                         }
@@ -370,6 +457,46 @@ struct InspectorPanel: View {
             return String(format: "%.0fx", rate)
         }
         return String(format: "%.2gx", rate)
+    }
+
+    private func runAutoSubtitles(for clipId: UUID) {
+        Task {
+            do {
+                try await viewModel.prepareSubtitles(for: clipId)
+            } catch {
+                viewModel.lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func runAutoCutSilence(for clipId: UUID) {
+        Task {
+            do {
+                try await viewModel.autoCutSilence(for: clipId)
+            } catch {
+                viewModel.lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func runDetectScenes(for clipId: UUID) {
+        Task {
+            do {
+                try await viewModel.detectAndSplitScenes(for: clipId)
+            } catch {
+                viewModel.lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func runAutoReframe(for clipId: UUID) {
+        Task {
+            do {
+                try await viewModel.autoReframe(for: clipId, targetAspect: 9.0 / 16.0)
+            } catch {
+                viewModel.lastErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func colorCorrectionSection(for clip: Clip) -> some View {

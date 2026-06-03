@@ -18,7 +18,26 @@ public enum ConflictStrategy: Sendable {
     case merge
 }
 
-/// Mock cloud synchronization service.
+/// Lightweight metadata for a synced project document.
+public struct CloudProjectInfo: Sendable, Equatable {
+    /// Project name without the `.moviecut` extension.
+    public var name: String
+
+    /// Last known modification date from the backing file.
+    public var modifiedDate: Date
+
+    /// Backing file size in bytes.
+    public var size: Int
+
+    /// Creates cloud project metadata.
+    public init(name: String, modifiedDate: Date, size: Int) {
+        self.name = name
+        self.modifiedDate = modifiedDate
+        self.size = size
+    }
+}
+
+/// iCloud Drive-backed project synchronization service with local fallback storage.
 public final class CloudSyncService: ObservableObject, @unchecked Sendable {
     /// Current synchronization state.
     @Published public private(set) var status: SyncStatus
@@ -26,21 +45,94 @@ public final class CloudSyncService: ObservableObject, @unchecked Sendable {
     /// Date of the most recent successful sync.
     @Published public private(set) var lastSyncDate: Date?
 
+    private let fileManager: FileManager
+    private let projectStore: ProjectStore
+
     /// Creates a cloud synchronization service.
-    public init(status: SyncStatus = .idle, lastSyncDate: Date? = nil) {
+    public init(
+        status: SyncStatus = .idle,
+        lastSyncDate: Date? = nil,
+        projectStore: ProjectStore = ProjectStore(),
+        fileManager: FileManager = .default
+    ) {
         self.status = status
         self.lastSyncDate = lastSyncDate
+        self.projectStore = projectStore
+        self.fileManager = fileManager
     }
 
-    /// Performs a mock project sync.
+    /// Returns whether iCloud Drive storage is currently available.
+    public func isCloudAvailable() -> Bool {
+        fileManager.ubiquityIdentityToken != nil && iCloudDocumentStorageURL() != nil
+    }
+
+    /// Serializes and writes a project to iCloud Drive, or Application Support when iCloud is unavailable.
     public func sync(project: Project) async throws {
-        _ = project.id
         status = .syncing
 
         do {
-            try await Task.sleep(nanoseconds: 1_000_000_000)
+            let fileURL = try projectFileURL(name: project.name, createDirectory: true)
+            try await projectStore.save(project, to: fileURL)
             lastSyncDate = Date()
             status = .synced
+        } catch {
+            status = .failed(error)
+            throw error
+        }
+    }
+
+    /// Lists synced project documents from iCloud Drive, or local fallback storage.
+    public func listRemoteProjects() async throws -> [CloudProjectInfo] {
+        do {
+            let directoryURL = try movieCutDirectoryURL(create: false)
+            guard fileManager.fileExists(atPath: directoryURL.path) else {
+                return []
+            }
+
+            let fileURLs = try fileManager.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            return try fileURLs.compactMap { fileURL in
+                guard fileURL.pathExtension == "moviecut" else {
+                    return nil
+                }
+
+                let resourceValues = try fileURL.resourceValues(forKeys: [
+                    .contentModificationDateKey,
+                    .fileSizeKey,
+                    .isRegularFileKey
+                ])
+
+                guard resourceValues.isRegularFile ?? true else {
+                    return nil
+                }
+
+                return CloudProjectInfo(
+                    name: fileURL.deletingPathExtension().lastPathComponent,
+                    modifiedDate: resourceValues.contentModificationDate ?? .distantPast,
+                    size: resourceValues.fileSize ?? 0
+                )
+            }
+            .sorted { $0.modifiedDate > $1.modifiedDate }
+        } catch {
+            status = .failed(error)
+            throw error
+        }
+    }
+
+    /// Downloads and deserializes a synced project document.
+    public func download(name: String) async throws -> Project {
+        status = .syncing
+
+        do {
+            let fileURL = try projectFileURL(name: name, createDirectory: false)
+            let project = try await projectStore.load(from: fileURL)
+            lastSyncDate = Date()
+            status = .synced
+            return project
         } catch {
             status = .failed(error)
             throw error
@@ -57,6 +149,48 @@ public final class CloudSyncService: ObservableObject, @unchecked Sendable {
         case .merge:
             return mergedProject(local: local, remote: remote)
         }
+    }
+
+    private func projectFileURL(name: String, createDirectory: Bool) throws -> URL {
+        try movieCutDirectoryURL(create: createDirectory)
+            .appendingPathComponent(name, isDirectory: false)
+            .appendingPathExtension("moviecut")
+    }
+
+    private func movieCutDirectoryURL(create: Bool) throws -> URL {
+        let directoryURL = try documentStorageURL(create: create)
+            .appendingPathComponent("MovieCut", isDirectory: true)
+
+        if create {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+
+        return directoryURL
+    }
+
+    private func documentStorageURL(create: Bool) throws -> URL {
+        if let iCloudURL = iCloudDocumentStorageURL() {
+            if create {
+                try fileManager.createDirectory(at: iCloudURL, withIntermediateDirectories: true)
+            }
+            return iCloudURL
+        }
+
+        return try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: create
+        )
+    }
+
+    private func iCloudDocumentStorageURL() -> URL? {
+        guard fileManager.ubiquityIdentityToken != nil,
+              let containerURL = fileManager.url(forUbiquityContainerIdentifier: nil) else {
+            return nil
+        }
+
+        return containerURL.appendingPathComponent("Documents", isDirectory: true)
     }
 
     private func mergedProject(local: Project, remote: Project) -> Project {

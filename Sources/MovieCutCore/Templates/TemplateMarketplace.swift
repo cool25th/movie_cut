@@ -23,6 +23,20 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
     /// The template payload returned on download.
     public var bundle: TemplateBundle
 
+    /// Catalog tags used for lightweight filtering such as featured placement.
+    public var tags: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case author
+        case description
+        case category
+        case previewImageName
+        case bundle
+        case tags
+    }
+
     /// Creates a marketplace item.
     public init(
         id: UUID = UUID(),
@@ -31,7 +45,8 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         description: String,
         category: String,
         previewImageName: String? = nil,
-        bundle: TemplateBundle
+        bundle: TemplateBundle,
+        tags: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -40,148 +55,81 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         self.category = category
         self.previewImageName = previewImageName
         self.bundle = bundle
+        self.tags = tags
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        author = try container.decode(String.self, forKey: .author)
+        description = try container.decode(String.self, forKey: .description)
+        category = try container.decode(String.self, forKey: .category)
+        previewImageName = try container.decodeIfPresent(String.self, forKey: .previewImageName)
+        bundle = try container.decode(TemplateBundle.self, forKey: .bundle)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(author, forKey: .author)
+        try container.encode(description, forKey: .description)
+        try container.encode(category, forKey: .category)
+        try container.encodeIfPresent(previewImageName, forKey: .previewImageName)
+        try container.encode(bundle, forKey: .bundle)
+        try container.encode(tags, forKey: .tags)
     }
 }
 
-/// In-memory template marketplace facade.
+/// Local JSON-backed template marketplace facade.
 public final class TemplateMarketplace: @unchecked Sendable {
-    /// Featured marketplace items.
-    public private(set) var featured: [TemplateMarketplaceItem]
+    private static let featuredTag = "featured"
+
+    private let catalogURL: URL
+    private let store = TemplateStore()
+    private var cachedItems: [TemplateMarketplaceItem] = []
+
+    /// Featured marketplace items from the cached catalog.
+    public var featured: [TemplateMarketplaceItem] {
+        cachedItems.filter { item in
+            item.tags.contains { tag in
+                tag.caseInsensitiveCompare(Self.featuredTag) == .orderedSame
+            }
+        }
+    }
 
     /// Marketplace items grouped by category.
-    public private(set) var categories: [String: [TemplateMarketplaceItem]]
-
-    /// Static mock marketplace items.
-    public static var mockItems: [TemplateMarketplaceItem] {
-        [
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "9E59F4F0-9D5F-4D9C-85C8-60464DE22E90") ?? UUID(),
-                name: "Vertical Launch Reel",
-                author: "MovieCut",
-                description: "Fast portrait edit for product launches and announcements.",
-                category: "Social",
-                previewImageName: "marketplace_vertical_launch_reel",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.vertical-launch-reel",
-                    name: "Vertical Launch Reel",
-                    description: "Fast portrait edit for product launches and announcements.",
-                    author: "MovieCut",
-                    aspectRatio: .portrait9x16,
-                    text: "Launch day",
-                    textPosition: CGPoint(x: 540, y: 1460),
-                    duration: 9
-                )
-            ),
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "862940D6-3041-4E64-9179-FD0346DB53F7") ?? UUID(),
-                name: "Square Promo",
-                author: "MovieCut",
-                description: "Square social promo with headline and visual placeholders.",
-                category: "Social",
-                previewImageName: "marketplace_square_promo",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.square-promo",
-                    name: "Square Promo",
-                    description: "Square social promo with headline and visual placeholders.",
-                    author: "MovieCut",
-                    aspectRatio: .square1x1,
-                    text: "New drop",
-                    textPosition: CGPoint(x: 540, y: 900),
-                    duration: 7
-                )
-            ),
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "D10A9913-65FC-4B38-901D-9EAAB58703DC") ?? UUID(),
-                name: "Investor Update",
-                author: "MovieCut",
-                description: "Clean 16:9 business update with title and narration tracks.",
-                category: "Business",
-                previewImageName: "marketplace_investor_update",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.investor-update",
-                    name: "Investor Update",
-                    description: "Clean 16:9 business update with title and narration tracks.",
-                    author: "MovieCut",
-                    aspectRatio: .landscape16x9,
-                    text: "Quarterly update",
-                    textPosition: CGPoint(x: 180, y: 860),
-                    duration: 14
-                )
-            ),
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "84C74883-3C66-47C5-B6E1-485EBBC49C55") ?? UUID(),
-                name: "Client Case Study",
-                author: "MovieCut",
-                description: "Structured business story template for customer outcomes.",
-                category: "Business",
-                previewImageName: "marketplace_client_case_study",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.client-case-study",
-                    name: "Client Case Study",
-                    description: "Structured business story template for customer outcomes.",
-                    author: "MovieCut",
-                    aspectRatio: .landscape16x9,
-                    text: "Customer story",
-                    textPosition: CGPoint(x: 180, y: 850),
-                    duration: 18
-                )
-            ),
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "14053C90-0A55-4615-B32B-09FB371B789F") ?? UUID(),
-                name: "Weekend Travel Recap",
-                author: "MovieCut",
-                description: "Energetic travel recap with image, video, and caption tracks.",
-                category: "Travel",
-                previewImageName: "marketplace_weekend_travel_recap",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.weekend-travel-recap",
-                    name: "Weekend Travel Recap",
-                    description: "Energetic travel recap with image, video, and caption tracks.",
-                    author: "MovieCut",
-                    aspectRatio: .portrait9x16,
-                    text: "Weekend away",
-                    textPosition: CGPoint(x: 540, y: 1500),
-                    duration: 12
-                )
-            ),
-            TemplateMarketplaceItem(
-                id: UUID(uuidString: "196715DA-96E6-4E6F-B2B5-C7D04B676E27") ?? UUID(),
-                name: "City Guide",
-                author: "MovieCut",
-                description: "Wide travel guide layout with lower-third chapter titles.",
-                category: "Travel",
-                previewImageName: "marketplace_city_guide",
-                bundle: mockBundle(
-                    identifier: "com.moviecut.marketplace.city-guide",
-                    name: "City Guide",
-                    description: "Wide travel guide layout with lower-third chapter titles.",
-                    author: "MovieCut",
-                    aspectRatio: .landscape16x9,
-                    text: "City guide",
-                    textPosition: CGPoint(x: 180, y: 880),
-                    duration: 16
-                )
-            )
-        ]
+    public var categories: [String: [TemplateMarketplaceItem]] {
+        Dictionary(grouping: cachedItems, by: \.category)
     }
 
-    /// Creates an in-memory marketplace.
-    public init(featured: [TemplateMarketplaceItem]? = nil) {
-        let items = featured ?? Self.mockItems
-        self.featured = items
-        self.categories = Dictionary(grouping: items, by: \.category)
+    /// Creates a marketplace backed by the local template catalog.
+    public init() {
+        catalogURL = Self.defaultCatalogURL()
+        TemplateStore.builtInTemplates().forEach { store.add($0) }
+
+        if FileManager.default.fileExists(atPath: catalogURL.path) {
+            do {
+                try loadCatalog()
+            } catch {
+                generateCatalog()
+            }
+        } else {
+            generateCatalog()
+        }
     }
 
-    /// Searches featured items by name, author, description, or category.
+    /// Searches catalog items by name, description, or category.
     public func search(query: String) -> [TemplateMarketplaceItem] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalizedQuery.isEmpty else {
-            return featured
+            return cachedItems
         }
 
-        return featured.filter { item in
+        return cachedItems.filter { item in
             item.name.lowercased().contains(normalizedQuery)
-                || item.author.lowercased().contains(normalizedQuery)
                 || item.description.lowercased().contains(normalizedQuery)
                 || item.category.lowercased().contains(normalizedQuery)
         }
@@ -192,49 +140,135 @@ public final class TemplateMarketplace: @unchecked Sendable {
         item.bundle
     }
 
-    private static func mockBundle(
-        identifier: String,
-        name: String,
-        description: String,
-        author: String,
-        aspectRatio: AspectRatio,
-        text: String,
-        textPosition: CGPoint,
-        duration: TimeInterval
-    ) -> TemplateBundle {
-        let textDefaults = TextClipContent(
-            text: text,
-            fontSize: 48,
-            fontColor: "#FFFFFF",
-            alignment: .center,
-            backgroundColor: "#111111CC",
-            position: textPosition
-        )
-
-        return TemplateBundle(
-            identifier: identifier,
-            name: name,
-            description: description,
-            author: author,
-            canvasPreset: CanvasPreset(aspectRatio: aspectRatio, frameRate: .fps30),
-            tracks: [
-                TemplateTrack(
-                    kind: .video,
-                    name: "Video 1",
-                    placeholderClips: [
-                        TemplateClip(kind: .video, duration: duration)
-                    ]
-                ),
-                TemplateTrack(
-                    kind: .text,
-                    name: "Text 1",
-                    placeholderClips: [
-                        TemplateClip(kind: .text, duration: min(duration, 8), textContent: textDefaults)
-                    ]
-                )
-            ],
-            textStyleDefaults: textDefaults,
-            exportPreset: ExportSettings(resolution: .p1080, frameRate: .fps30)
-        )
+    /// Simulates refreshing the remote marketplace by reloading the local catalog.
+    public func refreshCatalog() async throws {
+        if FileManager.default.fileExists(atPath: catalogURL.path) {
+            try loadCatalog()
+        } else {
+            generateCatalog()
+        }
     }
+
+    private func loadCatalog() throws {
+        let data = try Data(contentsOf: catalogURL)
+        let decoder = JSONDecoder()
+        let items = try decoder.decode([TemplateMarketplaceItem].self, from: data)
+        cachedItems = items
+        items.map(\.bundle).forEach { store.add($0) }
+    }
+
+    private func saveCatalog(_ items: [TemplateMarketplaceItem]) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        let directoryURL = catalogURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let data = try encoder.encode(items)
+        try data.write(to: catalogURL, options: [.atomic])
+    }
+
+    private func generateCatalog() {
+        let items = Self.generatedCatalogItems(from: store.bundles)
+        cachedItems = items
+        items.map(\.bundle).forEach { store.add($0) }
+        try? saveCatalog(items)
+    }
+
+    private static func defaultCatalogURL() -> URL {
+        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+
+        return baseURL
+            .appendingPathComponent("MovieCut", isDirectory: true)
+            .appendingPathComponent("template-catalog.json", isDirectory: false)
+    }
+
+    private static func generatedCatalogItems(from builtInTemplates: [TemplateBundle]) -> [TemplateMarketplaceItem] {
+        let variations = [
+            CatalogVariation(
+                suffix: "Creator Spotlight",
+                category: "Social",
+                descriptionPrefix: "A creator-ready edit for short-form posts.",
+                tags: ["featured", "social", "creator"]
+            ),
+            CatalogVariation(
+                suffix: "Product Drop",
+                category: "Business",
+                descriptionPrefix: "A concise launch edit for announcements and promos.",
+                tags: ["featured", "business", "launch"]
+            ),
+            CatalogVariation(
+                suffix: "Travel Recap",
+                category: "Travel",
+                descriptionPrefix: "A fast-paced story layout for trips and location highlights.",
+                tags: ["travel", "recap"]
+            ),
+            CatalogVariation(
+                suffix: "Course Clip",
+                category: "Education",
+                descriptionPrefix: "A structured teaching cut for lessons and explainers.",
+                tags: ["education", "tutorial"]
+            )
+        ]
+
+        let identifiers = [
+            "2AA52E09-B6AB-4D24-99B8-F27E456A8E7A",
+            "0E95AE41-C1AF-4B4C-A872-9A6223E49431",
+            "D501DC5D-7C17-4F5E-A3B1-0822FA236F49",
+            "469953B5-0624-4E6F-9382-A2130828E25C",
+            "29FEA18B-725F-4BF3-B77E-08B2CF8F4B65",
+            "B3E027DD-4AF1-4C0F-962C-95755B06719D",
+            "D5854C3D-084E-4F39-9542-B6CE91E7D5C5",
+            "86A26582-B4BD-4985-A1BC-33E21DDA746B",
+            "89E5E74D-552A-4E8E-A7EE-1FAD059FC26A",
+            "72D54513-C74F-4600-B575-7B31DC90218E",
+            "246D93A9-68DE-4C00-8CB2-84D4C1E86E1A",
+            "6394816D-FF47-4483-A6CC-49C17E310079"
+        ]
+
+        var items: [TemplateMarketplaceItem] = []
+
+        for (templateIndex, template) in builtInTemplates.prefix(3).enumerated() {
+            for (variationIndex, variation) in variations.enumerated() {
+                let itemIndex = templateIndex * variations.count + variationIndex
+                let name = "\(template.name) \(variation.suffix)"
+                let slugStr = slug(for: name)
+                var bundle = template
+                bundle.identifier = "\(template.identifier).marketplace.\(slug(for: variation.suffix))"
+                bundle.name = name
+                bundle.description = "\(variation.descriptionPrefix) Based on \(template.description)"
+
+                items.append(
+                    TemplateMarketplaceItem(
+                        id: UUID(uuidString: identifiers[itemIndex]) ?? UUID(),
+                        name: name,
+                        author: template.author,
+                        description: bundle.description,
+                        category: variation.category,
+                        previewImageName: "marketplace_\(slugStr.replacingOccurrences(of: "-", with: "_"))",
+                        bundle: bundle,
+                        tags: variation.tags
+                    )
+                )
+            }
+        }
+
+        return items
+    }
+
+    private static func slug(for value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+    }
+}
+
+private struct CatalogVariation {
+    var suffix: String
+    var category: String
+    var descriptionPrefix: String
+    var tags: [String]
 }

@@ -111,3 +111,30 @@ Core 파일 검증으로 기존 Part 1 상태를 아래처럼 보정한다. 다�
 - #23 색보정은 기존 🟡 부분 유지. `StyleTransferProvider`는 Core Image 스타일 필터이며 Part 1의 밝기/대비/채도 색보정 완료 근거로 보기는 어렵다.
 - #38 협업 편집은 기존 ❌ 미구현 유지. `CloudSyncService`의 conflict strategy는 파일 동기화 보조 기능이지 실시간 협업 편집 구현은 아니다.
 - Template marketplace는 Part 1 표에 별도 기능 항목이 없으므로 상태 보정 대상이 아니다.
+
+## v4.1 수정 사항 (Critical+High 해결)
+
+1. Export 취소: `cancelExport()` 메서드를 추가하고 `ContentView` Cancel 버튼에서 호출하도록 연결했다.
+2. 다중 선택: `selectedClipIds: Set<UUID>`를 추가하고 Cmd+click 토글 선택, 배치 delete/duplicate를 지원한다.
+3. 오디오 fade: `PlaybackEngine`과 `ExportEngine`에 `setVolumeRamp`를 적용해 `fadeInDuration`/`fadeOutDuration`을 반영한다.
+4. 오디오 파형: `TimelineView`에 Canvas 기반 waveform 오버레이를 추가했다.
+5. 역재생 preview: `PlaybackEngine`에서 `ReverseRenderService`로 임시 역재생 에셋을 생성한 뒤 composition에 삽입한다.
+6. Undo/Redo: 이미 `EditorSession`에 구현되어 있었다. GAP_V4가 파일 3개만 읽어서 누락한 항목이다.
+7. split/delete/duplicate/ripple: 이미 `session.dispatch`로 동작하고 있었다. GAP_V4가 파일 3개만 읽어서 누락한 항목이다.
+
+### v4.1 요약표 보정
+
+기존 표는 보존한다. 아래 표는 v4.1 기준으로 Critical/High 해결 항목만 append-only 방식으로 보정한 요약이다.
+
+| # | 기능 | v4.1 상태 | 비고 |
+|---|------|---:|------|
+| 2 | 클립 분할/split | ✅ 완료 | `session.dispatch` 경로로 실제 분할 mutation이 동작하는 것으로 확인되어 기존 🟡 부분 판정을 보정한다. |
+| 4 | 클립 복사/duplicate | ✅ 완료 | `session.dispatch` 경로로 duplicate가 동작하며, v4.1에서 다중 선택 배치 duplicate도 지원한다. |
+| 5 | 클립 삭제 | ✅ 완료 | `session.dispatch` 경로로 delete가 동작하며, v4.1에서 다중 선택 배치 delete도 지원한다. |
+| 6 | Ripple delete | ✅ 완료 | `session.dispatch` 경로로 ripple delete가 동작하는 것으로 확인되어 기존 🟡 부분 판정을 보정한다. |
+| 10 | 다중 선택 | ✅ 완료 | `selectedClipIds: Set<UUID>`와 Cmd+click 토글 선택을 추가했고 배치 delete/duplicate에 연결했다. |
+| 11 | Undo/Redo | ✅ 완료 | `EditorSession`에 이미 구현되어 있었으며, 기존 GAP_V4의 제한된 파일 검토로 누락된 항목이다. |
+| 13 | 오디오 페이드 | ✅ 완료 | `PlaybackEngine`/`ExportEngine` 모두 `setVolumeRamp`로 `fadeInDuration`/`fadeOutDuration`을 반영한다. |
+| 19 | 오디오 파형 표시 | ✅ 완료 | `TimelineView`에 Canvas 기반 waveform 오버레이를 추가했다. |
+| 29 | 역재생 | ✅ 완료 | export 경로뿐 아니라 preview에서도 `ReverseRenderService`로 임시 역재생 에셋을 만들어 composition에 삽입한다. |
+| 33 | Export 취소 | ✅ 완료 | `ExportEngine.cancelExport()` API와 `ContentView` Cancel 버튼 연결을 추가했다. |

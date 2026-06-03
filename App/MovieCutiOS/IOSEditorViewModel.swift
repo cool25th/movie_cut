@@ -129,6 +129,11 @@ final class IOSEditorViewModel {
         isPlaying.toggle()
     }
 
+    func exportProject() async {
+        // Export is not wired in the iOS target yet. The toolbar calls through here
+        // so the UI contract is in place when the export pipeline is connected.
+    }
+
     private var selectedClipTrackId: UUID? {
         guard let selectedClipId else { return nil }
         return currentProject.timeline.tracks.first { track in

@@ -111,6 +111,12 @@ struct InspectorPanel: View {
                             }
                         }
 
+                        colorCorrectionSection(for: clip)
+
+                        maskSection(for: clip)
+
+                        reverseFreezeSection(for: clip)
+
                         // Text Content
                         if let textContent = clip.textContent {
                             VStack(alignment: .leading, spacing: 6) {
@@ -297,6 +303,191 @@ struct InspectorPanel: View {
         return String(format: "%.2gx", rate)
     }
 
+    private func colorCorrectionSection(for clip: Clip) -> some View {
+        let colorCorrection = clip.colorCorrection ?? ColorCorrection()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Color Correction")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button("Reset") {
+                    Task { await viewModel.updateSelectedColorCorrection(nil) }
+                }
+                .controlSize(.small)
+                .disabled(clip.colorCorrection == nil)
+            }
+
+            inspectorSlider(
+                title: "Brightness",
+                value: colorCorrection.brightness,
+                range: -1 ... 1,
+                binding: colorCorrectionBinding(for: clip, keyPath: \.brightness)
+            )
+
+            inspectorSlider(
+                title: "Contrast",
+                value: colorCorrection.contrast,
+                range: 0 ... 2,
+                binding: colorCorrectionBinding(for: clip, keyPath: \.contrast)
+            )
+
+            inspectorSlider(
+                title: "Saturation",
+                value: colorCorrection.saturation,
+                range: 0 ... 2,
+                binding: colorCorrectionBinding(for: clip, keyPath: \.saturation)
+            )
+
+            inspectorSlider(
+                title: "Color Temperature",
+                value: colorCorrection.warmth,
+                range: -1 ... 1,
+                binding: colorCorrectionBinding(for: clip, keyPath: \.warmth)
+            )
+
+            inspectorSlider(
+                title: "Tint",
+                value: colorCorrection.tint,
+                range: -1 ... 1,
+                binding: colorCorrectionBinding(for: clip, keyPath: \.tint)
+            )
+        }
+    }
+
+    private func maskSection(for clip: Clip) -> some View {
+        let mask = clip.mask ?? defaultMask()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Mask")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button("Clear Mask") {
+                    Task { await viewModel.updateSelectedMask(nil) }
+                }
+                .controlSize(.small)
+                .disabled(clip.mask == nil)
+            }
+
+            Picker("Shape", selection: Binding(
+                get: { mask.shape },
+                set: { shape in
+                    var updatedMask = clip.mask ?? defaultMask(shape: shape)
+                    updatedMask.shape = shape
+                    Task { await viewModel.updateSelectedMask(updatedMask) }
+                }
+            )) {
+                ForEach(MaskShape.allCases, id: \.self) { shape in
+                    Text(shape.displayName).tag(shape)
+                }
+            }
+            .pickerStyle(.menu)
+
+            inspectorSlider(
+                title: "Feather",
+                value: mask.feather,
+                range: 0 ... 1,
+                binding: maskFeatherBinding(for: clip)
+            )
+
+            Toggle("Inverted", isOn: Binding(
+                get: { mask.inverted },
+                set: { inverted in
+                    var updatedMask = clip.mask ?? defaultMask()
+                    updatedMask.inverted = inverted
+                    Task { await viewModel.updateSelectedMask(updatedMask) }
+                }
+            ))
+        }
+    }
+
+    private func reverseFreezeSection(for clip: Clip) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Reverse & Freeze")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Toggle("Reverse playback", isOn: Binding(
+                get: { clip.isReversed },
+                set: { isReversed in
+                    Task { await viewModel.updateSelectedReversePlayback(isReversed) }
+                }
+            ))
+
+            Button("Freeze Frame") {
+                Task { await viewModel.freezeSelectedFrame() }
+            }
+            .controlSize(.small)
+            .disabled(!canFreezeFrame(clip))
+        }
+    }
+
+    private func inspectorSlider(
+        title: String,
+        value: Double,
+        range: ClosedRange<Double>,
+        binding: Binding<Double>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: "%.2f", value))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .trailing)
+            }
+            Slider(value: binding, in: range, step: 0.01)
+        }
+    }
+
+    private func colorCorrectionBinding(
+        for clip: Clip,
+        keyPath: WritableKeyPath<ColorCorrection, Double>
+    ) -> Binding<Double> {
+        Binding(
+            get: {
+                let colorCorrection = clip.colorCorrection ?? ColorCorrection()
+                return colorCorrection[keyPath: keyPath]
+            },
+            set: { newValue in
+                var colorCorrection = clip.colorCorrection ?? ColorCorrection()
+                colorCorrection[keyPath: keyPath] = newValue
+                Task { await viewModel.updateSelectedColorCorrection(colorCorrection) }
+            }
+        )
+    }
+
+    private func maskFeatherBinding(for clip: Clip) -> Binding<Double> {
+        Binding(
+            get: { (clip.mask ?? defaultMask()).feather },
+            set: { feather in
+                var mask = clip.mask ?? defaultMask()
+                mask.feather = feather
+                Task { await viewModel.updateSelectedMask(mask) }
+            }
+        )
+    }
+
+    private func defaultMask(shape: MaskShape = .rectangle) -> Mask {
+        let canvasSize = viewModel.currentProject.canvas.size
+        return Mask(
+            shape: shape,
+            position: CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5),
+            size: CGSize(width: canvasSize.width * 0.5, height: canvasSize.height * 0.5)
+        )
+    }
+
+    private func canFreezeFrame(_ clip: Clip) -> Bool {
+        let freezeTime = viewModel.playheadTime - clip.timelineRange.start
+        return freezeTime > 0 && freezeTime < clip.timelineRange.duration
+    }
+
     private func addEffect(_ type: EffectType, to clip: Clip) {
         var effects = clip.effects
         let parameters = Dictionary(
@@ -412,6 +603,19 @@ private extension EffectType {
         case .grayscale: return "Grayscale"
         case .sepia: return "Sepia"
         case .blur: return "Blur"
+        }
+    }
+}
+
+private extension MaskShape {
+    var displayName: String {
+        switch self {
+        case .rectangle: return "Rectangle"
+        case .ellipse: return "Ellipse"
+        case .triangle: return "Triangle"
+        case .diamond: return "Diamond"
+        case .linear: return "Linear"
+        case .brush: return "Brush"
         }
     }
 }

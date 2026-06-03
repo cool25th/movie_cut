@@ -128,6 +128,19 @@ final class EditorViewModel {
         }
     }
 
+    func saveProject() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).moviecut"
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        await saveProject(to: url)
+    }
+
     func exportProject() async {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
@@ -287,6 +300,24 @@ final class EditorViewModel {
         }
     }
 
+    func togglePlayPause() {
+        playbackEngine.togglePlayPause()
+    }
+
+    func seekByFrames(_ frameCount: Int) {
+        let frameDuration = 1.0 / 30.0
+
+        if playbackEngine.playerItem != nil {
+            let nextPlaybackTime = playbackEngine.currentTime + Double(frameCount) * frameDuration
+            playbackEngine.seek(to: nextPlaybackTime)
+            syncTimelinePlayhead(to: playbackEngine.currentTime)
+            return
+        }
+
+        let duration = max(0, currentProject.timeline.duration)
+        playheadTime = min(max(0, playheadTime + Double(frameCount) * frameDuration), duration)
+    }
+
     func updateSelectedTransform(_ transform: ClipTransform) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transform(transform)))
@@ -335,6 +366,33 @@ final class EditorViewModel {
     func updateSelectedChromaKey(_ chromaKey: ChromaKeySettings?) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .chromaKey(chromaKey)))
+    }
+
+    func updateSelectedColorCorrection(_ colorCorrection: ColorCorrection?) async {
+        guard let selectedClipId else { return }
+        await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: colorCorrection))
+    }
+
+    func updateSelectedMask(_ mask: Mask?) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipMaskCommand(clipId: selectedClipId, mask: mask))
+    }
+
+    func updateSelectedReversePlayback(_ isReversed: Bool) async {
+        guard let selectedClipId, let selectedClip, selectedClip.isReversed != isReversed else { return }
+        await apply(ReverseClipCommand(clipId: selectedClipId))
+    }
+
+    func freezeSelectedFrame(freezeDuration: TimeInterval = 2.0) async {
+        guard let selectedClipId, let selectedClip else { return }
+
+        let freezeTime = playheadTime - selectedClip.timelineRange.start
+        guard freezeTime > 0, freezeTime < selectedClip.timelineRange.duration else {
+            lastErrorMessage = "Move the playhead inside the selected clip to freeze a frame."
+            return
+        }
+
+        await apply(FreezeFrameCommand(clipId: selectedClipId, freezeTime: freezeTime, freezeDuration: freezeDuration))
     }
 
     func updateSelectedEffects(_ effects: [Effect]) async {
@@ -442,6 +500,18 @@ final class EditorViewModel {
     private func clearGeneratedSubtitles() {
         generatedSubtitleSegments = []
         pendingSubtitleClips = []
+    }
+
+    private func syncTimelinePlayhead(to playbackTime: TimeInterval) {
+        guard let clip = selectedClip else {
+            playheadTime = min(max(0, playbackTime), max(0, currentProject.timeline.duration))
+            return
+        }
+
+        let sourceOffset = max(0, playbackTime - clip.sourceRange.start)
+        let timelineOffset = sourceOffset / max(clip.playbackRate, 0.25)
+        let timelineTime = clip.timelineRange.start + timelineOffset
+        playheadTime = min(max(0, timelineTime), clip.timelineRange.end)
     }
 
     private func ensureTrack(for kind: TrackKind) async throws -> Track {

@@ -72,9 +72,10 @@ struct ContentView: View {
                 Button(action: { Task { await viewModel.exportProject() } }) {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .keyboardShortcut("e", modifiers: .command)
             }
         }
+        .background(shortcutButtons)
         .sheet(isPresented: Binding(
             get: { viewModel.exportEngine.isExporting },
             set: { _ in }
@@ -107,6 +108,43 @@ struct ContentView: View {
     private var canvasSizeText: String {
         let size = viewModel.currentProject.canvas.size
         return "\(Int(size.width)) x \(Int(size.height))"
+    }
+
+    private var shortcutButtons: some View {
+        Group {
+            Button("Play/Pause") {
+                viewModel.togglePlayPause()
+            }
+            .keyboardShortcut(.space, modifiers: .command)
+
+            Button("Save Project") {
+                Task { await viewModel.saveProject() }
+            }
+            .keyboardShortcut("s", modifiers: .command)
+
+            Button("Delete Selected Clip") {
+                Task { await viewModel.deleteClip() }
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+
+            Button("Forward Delete Selected Clip") {
+                Task { await viewModel.deleteClip() }
+            }
+            .keyboardShortcut(.deleteForward, modifiers: [])
+
+            Button("Seek Back One Frame") {
+                viewModel.seekByFrames(-1)
+            }
+            .keyboardShortcut(.leftArrow, modifiers: [])
+
+            Button("Seek Forward One Frame") {
+                viewModel.seekByFrames(1)
+            }
+            .keyboardShortcut(.rightArrow, modifiers: [])
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 }
 

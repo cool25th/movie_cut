@@ -15,7 +15,9 @@ struct MovieCutMacApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Open...") {}
                     .keyboardShortcut("o", modifiers: .command)
-                Button("Save...") {}
+                Button("Save...") {
+                    Task { await viewModel.saveProject() }
+                }
                     .keyboardShortcut("s", modifiers: .command)
                 Divider()
                 Button("Import Media...") {}
@@ -24,7 +26,7 @@ struct MovieCutMacApp: App {
                 Button("Export...") {
                     Task { await viewModel.exportProject() }
                 }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .keyboardShortcut("e", modifiers: .command)
             }
         }
     }

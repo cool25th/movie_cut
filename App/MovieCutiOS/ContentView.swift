@@ -60,11 +60,19 @@ struct ContentView: View {
                     .accessibilityLabel("Import Video")
 
                     Button {
-                        isExportUnavailablePresented = true
+                        Task {
+                            await viewModel.exportProject()
+                            isExportUnavailablePresented = true
+                        }
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Export")
+
+                    ShareLink(item: sharePlaceholderText) {
+                        Image(systemName: "square.and.arrow.up.on.square")
+                    }
+                    .accessibilityLabel("Share")
                 }
             }
             .sheet(isPresented: $isMediaBrowserPresented) {
@@ -137,6 +145,10 @@ struct ContentView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
         .background(.bar)
+    }
+
+    private var sharePlaceholderText: String {
+        "MovieCut project: \(viewModel.currentProject.name)"
     }
 
     private func toolbarButton(

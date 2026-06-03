@@ -38,7 +38,8 @@ public struct CloudProjectInfo: Sendable, Equatable {
 }
 
 /// iCloud Drive-backed project synchronization service with local fallback storage.
-public final class CloudSyncService: ObservableObject, @unchecked Sendable {
+@MainActor
+public final class CloudSyncService: ObservableObject, Sendable {
     /// Current synchronization state.
     @Published public private(set) var status: SyncStatus
 

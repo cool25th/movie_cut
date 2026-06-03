@@ -4,7 +4,8 @@ import Foundation
 import AVFoundation
 
 /// Applies five-band equalizer presets to audio files or live AVAudioEngine playback.
-public final class AudioEqualizerService: @unchecked Sendable {
+@MainActor
+public final class AudioEqualizerService: Sendable {
     private let engine = AVAudioEngine()
     private let eqNode = AVAudioUnitEQ(numberOfBands: 5)
 
@@ -151,7 +152,8 @@ public final class AudioEqualizerService: @unchecked Sendable {
 #else
 
 /// Applies five-band equalizer presets to audio files or live AVAudioEngine playback.
-public final class AudioEqualizerService: @unchecked Sendable {
+@MainActor
+public final class AudioEqualizerService: Sendable {
     /// Creates an audio equalizer service.
     public init() {}
 

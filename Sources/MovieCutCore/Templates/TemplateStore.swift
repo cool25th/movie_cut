@@ -1,46 +1,41 @@
 import Foundation
+import os
 
 /// In-memory store for available project templates.
-public final class TemplateStore: @unchecked Sendable {
-    private let lock = NSLock()
-    private var bundleStorage: [TemplateBundle]
+public final class TemplateStore: Sendable {
+    private let bundleStorage: OSAllocatedUnfairLock<[TemplateBundle]>
 
     /// Available template bundles.
     public private(set) var bundles: [TemplateBundle] {
         get {
-            lock.lock()
-            defer { lock.unlock() }
-            return bundleStorage
+            bundleStorage.withLock { $0 }
         }
         set {
-            lock.lock()
-            defer { lock.unlock() }
-            bundleStorage = newValue
+            bundleStorage.withLock { $0 = newValue }
         }
     }
 
     /// Creates a template store.
     public init(bundles: [TemplateBundle] = []) {
-        bundleStorage = bundles
+        bundleStorage = OSAllocatedUnfairLock(initialState: bundles)
     }
 
     /// Adds or replaces a template bundle.
     public func add(_ bundle: TemplateBundle) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let index = bundleStorage.firstIndex(where: { $0.identifier == bundle.identifier }) {
-            bundleStorage[index] = bundle
-        } else {
-            bundleStorage.append(bundle)
+        bundleStorage.withLock { bundleStorage in
+            if let index = bundleStorage.firstIndex(where: { $0.identifier == bundle.identifier }) {
+                bundleStorage[index] = bundle
+            } else {
+                bundleStorage.append(bundle)
+            }
         }
     }
 
     /// Removes a template bundle by identifier.
     public func remove(id: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        bundleStorage.removeAll { $0.identifier == id }
+        bundleStorage.withLock { bundleStorage in
+            bundleStorage.removeAll { $0.identifier == id }
+        }
     }
 
     /// Creates a new project from a template bundle.

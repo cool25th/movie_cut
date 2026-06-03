@@ -94,7 +94,8 @@ public struct ProjectChangeEvent: Codable, Sendable, Identifiable {
 }
 
 /// Multi-user collaboration service backed by file-friendly change events.
-public class CollaborationService: ObservableObject, @unchecked Sendable {
+@MainActor
+public class CollaborationService: ObservableObject, Sendable {
     /// Collaborators currently active in the project.
     @Published public private(set) var activeCollaborators: [Collaborator]
 

@@ -5,7 +5,7 @@ import CoreImage
 #endif
 
 /// Applies Core Image filter chains that simulate common visual styles.
-public final class StyleTransferProvider: AnalysisProvider, @unchecked Sendable {
+public final class StyleTransferProvider: AnalysisProvider {
     /// The supported style identifiers.
     public let availableStyles = ["comic", "noir", "vintage", "cyberpunk", "watercolor"]
 

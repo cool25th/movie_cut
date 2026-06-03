@@ -8,6 +8,8 @@ import Testing
 import AudioToolbox
 #endif
 
+@MainActor
+
 @Suite("Critical/high commands and providers")
 struct CriticalHighCommandTests {
     @Test("Reverse clip command toggles reverse playback")

@@ -3,6 +3,8 @@ import Testing
 import XCTest
 @testable import MovieCutCore
 
+@MainActor
+
 @Suite("SpeedRampCurve critical and high coverage")
 struct SpeedRampCurveCriticalHighTests {
     @Test("Linear speed ramp curve is identity")
@@ -46,6 +48,7 @@ struct SpeedRampCurveCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("SnapEngine critical and high coverage")
 struct SnapEngineCriticalHighTests {
     @Test("Snap engine snaps to nearest clip boundary")
@@ -73,6 +76,7 @@ struct SnapEngineCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("TimelineZoomLevel critical and high coverage")
 struct TimelineZoomLevelCriticalHighTests {
     @Test("Timeline zoom presets exist with correct names")
@@ -89,6 +93,7 @@ struct TimelineZoomLevelCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("ExportProgress critical and high coverage")
 struct ExportProgressCriticalHighTests {
     @MainActor
@@ -120,6 +125,7 @@ struct ExportProgressCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("CloudSyncService critical and high coverage")
 struct CloudSyncServiceCriticalHighTests {
     @Test("Cloud sync service initial state is idle")
@@ -158,6 +164,7 @@ struct CloudSyncServiceCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("CollaborationService critical and high coverage")
 struct CollaborationServiceCriticalHighTests {
     @Test("Collaboration service initializer sets local user")
@@ -199,6 +206,7 @@ struct CollaborationServiceCriticalHighTests {
     }
 }
 
+@MainActor
 @Suite("TemplateMarketplace critical and high coverage")
 struct TemplateMarketplaceCriticalHighTests {
     @Test("Template marketplace featured items are not empty")

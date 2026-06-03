@@ -6,7 +6,7 @@ import Vision
 #endif
 
 /// Removes video backgrounds by generating a Vision person-segmentation mask.
-public final class BackgroundRemovalProvider: AnalysisProvider, @unchecked Sendable {
+public final class BackgroundRemovalProvider: AnalysisProvider {
     private let context = CIContext()
 
     /// Whether Vision-backed background removal can run on this platform.

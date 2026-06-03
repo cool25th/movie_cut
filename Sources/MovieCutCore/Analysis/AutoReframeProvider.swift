@@ -22,7 +22,7 @@ public struct CropFrame: Sendable {
 }
 
 /// Detects subjects in frames and calculates crop rectangles for a target aspect ratio.
-public final class AutoReframeProvider: AnalysisProvider, @unchecked Sendable {
+public final class AutoReframeProvider: AnalysisProvider {
     /// Whether Vision-backed auto reframe can run on this platform.
     public var isAvailable: Bool {
         #if canImport(Vision)

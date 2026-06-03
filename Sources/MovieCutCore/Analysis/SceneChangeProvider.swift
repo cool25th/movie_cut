@@ -1,25 +1,47 @@
 import Foundation
 import AVFoundation
 import CoreImage
+import os
+
+private struct SceneChangeConfiguration: Sendable {
+    var samplingFPS: Double
+    var changeThreshold: Float
+}
 
 /// Detects scene changes in a video asset by comparing consecutive frames.
-public final class SceneChangeProvider: AnalysisProvider, @unchecked Sendable {
+public final class SceneChangeProvider: AnalysisProvider {
+    private let configuration: OSAllocatedUnfairLock<SceneChangeConfiguration>
+    private let context = CIContext()
 
     /// Frames per second to sample for comparison (default: 2).
-    public var samplingFPS: Double
+    public var samplingFPS: Double {
+        get {
+            configuration.withLock { $0.samplingFPS }
+        }
+        set {
+            configuration.withLock { $0.samplingFPS = newValue }
+        }
+    }
 
     /// Difference ratio threshold for scene change (0.0–1.0, default: 0.3).
-    public var changeThreshold: Float
-
-    private let context = CIContext()
+    public var changeThreshold: Float {
+        get {
+            configuration.withLock { $0.changeThreshold }
+        }
+        set {
+            configuration.withLock { $0.changeThreshold = newValue }
+        }
+    }
 
     /// Creates a scene change detection provider.
     public init(
         samplingFPS: Double = 2.0,
         changeThreshold: Float = 0.3
     ) {
-        self.samplingFPS = samplingFPS
-        self.changeThreshold = changeThreshold
+        self.configuration = OSAllocatedUnfairLock(initialState: SceneChangeConfiguration(
+            samplingFPS: samplingFPS,
+            changeThreshold: changeThreshold
+        ))
     }
 
     /// Analyzes the asset video track and returns scene-change timestamps.
@@ -59,7 +81,8 @@ public final class SceneChangeProvider: AnalysisProvider, @unchecked Sendable {
         generator.appliesPreferredTrackTransform = true
 
         let totalDuration = duration.seconds
-        let interval = 1.0 / samplingFPS
+        let configuration = configuration.withLock { $0 }
+        let interval = 1.0 / configuration.samplingFPS
         var times: [NSValue] = []
         var t = interval
         while t < totalDuration {
@@ -84,7 +107,7 @@ public final class SceneChangeProvider: AnalysisProvider, @unchecked Sendable {
 
             if let prev = previousHistogram {
                 let difference = histogramDifference(prev, histogram)
-                if difference > changeThreshold {
+                if difference > configuration.changeThreshold {
                     changeTimes.append(cmTime.seconds)
                 }
             }

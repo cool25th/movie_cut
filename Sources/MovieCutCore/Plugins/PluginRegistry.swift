@@ -1,31 +1,25 @@
 import Foundation
+import os
 
 /// Registry for installed and built-in plugins.
-public final class PluginRegistry: @unchecked Sendable {
+public final class PluginRegistry: Sendable {
     /// Shared process-wide plugin registry.
     public static let shared = PluginRegistry()
 
-    private let lock = NSLock()
-    private var pluginStorage: [PluginManifest]
+    private let pluginStorage = OSAllocatedUnfairLock(initialState: [PluginManifest]())
 
     /// Registered plugin manifests.
     public private(set) var plugins: [PluginManifest] {
         get {
-            lock.lock()
-            defer { lock.unlock() }
-            return pluginStorage
+            pluginStorage.withLock { $0 }
         }
         set {
-            lock.lock()
-            defer { lock.unlock() }
-            pluginStorage = newValue
+            pluginStorage.withLock { $0 = newValue }
         }
     }
 
     /// Creates an empty plugin registry.
-    public init() {
-        pluginStorage = []
-    }
+    public init() {}
 
     /// Registers an effect plugin.
     public func register(plugin: any EffectPlugin) {
@@ -44,19 +38,18 @@ public final class PluginRegistry: @unchecked Sendable {
 
     /// Returns plugin manifests matching a plugin type.
     public func plugins(ofType type: PluginType) -> [PluginManifest] {
-        lock.lock()
-        defer { lock.unlock() }
-        return pluginStorage.filter { $0.pluginTypes.contains(type) }
+        pluginStorage.withLock { pluginStorage in
+            pluginStorage.filter { $0.pluginTypes.contains(type) }
+        }
     }
 
     private func register(manifest: PluginManifest) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let index = pluginStorage.firstIndex(where: { $0.identifier == manifest.identifier }) {
-            pluginStorage[index] = manifest
-        } else {
-            pluginStorage.append(manifest)
+        pluginStorage.withLock { pluginStorage in
+            if let index = pluginStorage.firstIndex(where: { $0.identifier == manifest.identifier }) {
+                pluginStorage[index] = manifest
+            } else {
+                pluginStorage.append(manifest)
+            }
         }
     }
 }

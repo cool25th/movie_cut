@@ -1,7 +1,7 @@
 import Foundation
 
 /// Placeholder analysis provider used before a real analysis backend is wired in.
-public final class StubAnalysisProvider: AnalysisProvider, @unchecked Sendable {
+public final class StubAnalysisProvider: AnalysisProvider {
     /// Whether this provider can be used in the current environment.
     public let isAvailable = false
 

@@ -1,17 +1,46 @@
 import Foundation
 import AVFoundation
+import os
+
+private struct SilenceDetectionConfiguration: Sendable {
+    var silenceThresholdDB: Float
+    var minimumSilenceDuration: TimeInterval
+    var chunkDuration: TimeInterval
+}
 
 /// Detects silent ranges in a media asset by analysing RMS audio power.
-public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendable {
+public final class SilenceDetectionProvider: AnalysisProvider {
+    private let configuration: OSAllocatedUnfairLock<SilenceDetectionConfiguration>
 
     /// Minimum RMS power in dB to consider non-silent (default: -40 dB).
-    public var silenceThresholdDB: Float
+    public var silenceThresholdDB: Float {
+        get {
+            configuration.withLock { $0.silenceThresholdDB }
+        }
+        set {
+            configuration.withLock { $0.silenceThresholdDB = newValue }
+        }
+    }
 
     /// Minimum duration in seconds for a silence range to be reported (default: 0.5 s).
-    public var minimumSilenceDuration: TimeInterval
+    public var minimumSilenceDuration: TimeInterval {
+        get {
+            configuration.withLock { $0.minimumSilenceDuration }
+        }
+        set {
+            configuration.withLock { $0.minimumSilenceDuration = newValue }
+        }
+    }
 
     /// Audio chunk duration used for RMS measurement (default: 0.1 s).
-    public var chunkDuration: TimeInterval
+    public var chunkDuration: TimeInterval {
+        get {
+            configuration.withLock { $0.chunkDuration }
+        }
+        set {
+            configuration.withLock { $0.chunkDuration = newValue }
+        }
+    }
 
     /// Whether this provider can run on the current platform (always true for AVFoundation).
 
@@ -21,9 +50,11 @@ public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendab
         minimumSilenceDuration: TimeInterval = 0.5,
         chunkDuration: TimeInterval = 0.1
     ) {
-        self.silenceThresholdDB = silenceThresholdDB
-        self.minimumSilenceDuration = minimumSilenceDuration
-        self.chunkDuration = chunkDuration
+        self.configuration = OSAllocatedUnfairLock(initialState: SilenceDetectionConfiguration(
+            silenceThresholdDB: silenceThresholdDB,
+            minimumSilenceDuration: minimumSilenceDuration,
+            chunkDuration: chunkDuration
+        ))
     }
 
     /// Analyzes the asset audio track and returns silence-removal suggestions.
@@ -82,7 +113,8 @@ public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendab
         guard reader.startReading() else { return [] }
 
         let sampleRate: Double = 44100
-        let samplesPerChunk = Int(sampleRate * chunkDuration)
+        let configuration = configuration.withLock { $0 }
+        let samplesPerChunk = Int(sampleRate * configuration.chunkDuration)
         let bytesPerSample = 2 // 16-bit PCM
         let bytesPerChunk = samplesPerChunk * bytesPerSample
 
@@ -105,8 +137,8 @@ public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendab
                 let chunkData = data[offset..<(offset + bytesPerChunk)]
                 let rms = computeRMS(chunkData)
 
-                let chunkStartTime = Double(chunkIndex) * chunkDuration
-                let isSilent = rms < silenceThresholdDB
+                let chunkStartTime = Double(chunkIndex) * configuration.chunkDuration
+                let isSilent = rms < configuration.silenceThresholdDB
 
                 if isSilent {
                     if currentSilenceStart == nil {
@@ -115,7 +147,7 @@ public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendab
                 } else {
                     if let start = currentSilenceStart {
                         let silenceDuration = chunkStartTime - start
-                        if silenceDuration >= minimumSilenceDuration {
+                        if silenceDuration >= configuration.minimumSilenceDuration {
                             silentRanges.append(TimeRange(start: start, duration: silenceDuration))
                         }
                         currentSilenceStart = nil
@@ -130,7 +162,7 @@ public final class SilenceDetectionProvider: AnalysisProvider, @unchecked Sendab
         // Handle trailing silence
         if let start = currentSilenceStart {
             let silenceDuration = totalDuration - start
-            if silenceDuration >= minimumSilenceDuration {
+            if silenceDuration >= configuration.minimumSilenceDuration {
                 silentRanges.append(TimeRange(start: start, duration: silenceDuration))
             }
         }

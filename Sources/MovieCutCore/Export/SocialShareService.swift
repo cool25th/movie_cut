@@ -22,7 +22,7 @@ public enum SocialShareTarget: String, Codable, Sendable, CaseIterable {
 }
 
 /// Presents platform-native sharing services for exported videos.
-public final class SocialShareService: @unchecked Sendable {
+public final class SocialShareService: Sendable {
     /// Shares a video URL using the current platform's sharing UI.
     public static func share(videoURL: URL, target: SocialShareTarget) async throws {
         #if canImport(UIKit)

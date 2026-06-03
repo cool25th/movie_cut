@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Marketplace metadata for a downloadable template.
 public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatable {
@@ -84,16 +85,16 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
 }
 
 /// Local JSON-backed template marketplace facade.
-public final class TemplateMarketplace: @unchecked Sendable {
+public final class TemplateMarketplace: Sendable {
     private static let featuredTag = "featured"
 
     private let catalogURL: URL
     private let store = TemplateStore()
-    private var cachedItems: [TemplateMarketplaceItem] = []
+    private let cachedItems = OSAllocatedUnfairLock(initialState: [TemplateMarketplaceItem]())
 
     /// Featured marketplace items from the cached catalog.
     public var featured: [TemplateMarketplaceItem] {
-        cachedItems.filter { item in
+        cachedItems.withLock { $0 }.filter { item in
             item.tags.contains { tag in
                 tag.caseInsensitiveCompare(Self.featuredTag) == .orderedSame
             }
@@ -102,7 +103,7 @@ public final class TemplateMarketplace: @unchecked Sendable {
 
     /// Marketplace items grouped by category.
     public var categories: [String: [TemplateMarketplaceItem]] {
-        Dictionary(grouping: cachedItems, by: \.category)
+        Dictionary(grouping: cachedItems.withLock { $0 }, by: \.category)
     }
 
     /// Creates a marketplace backed by the local template catalog.
@@ -124,6 +125,7 @@ public final class TemplateMarketplace: @unchecked Sendable {
     /// Searches catalog items by name, description, or category.
     public func search(query: String) -> [TemplateMarketplaceItem] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cachedItems = cachedItems.withLock { $0 }
         guard !normalizedQuery.isEmpty else {
             return cachedItems
         }
@@ -153,7 +155,7 @@ public final class TemplateMarketplace: @unchecked Sendable {
         let data = try Data(contentsOf: catalogURL)
         let decoder = JSONDecoder()
         let items = try decoder.decode([TemplateMarketplaceItem].self, from: data)
-        cachedItems = items
+        cachedItems.withLock { $0 = items }
         items.map(\.bundle).forEach { store.add($0) }
     }
 
@@ -170,7 +172,7 @@ public final class TemplateMarketplace: @unchecked Sendable {
 
     private func generateCatalog() {
         let items = Self.generatedCatalogItems(from: store.bundles)
-        cachedItems = items
+        cachedItems.withLock { $0 = items }
         items.map(\.bundle).forEach { store.add($0) }
         try? saveCatalog(items)
     }

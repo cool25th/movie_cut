@@ -10,7 +10,7 @@ public protocol ExportEngine: Sendable {
 
 /// Observable export progress state backed by an `AVAssetExportSession`.
 @MainActor
-public final class ExportProgress: ObservableObject, @unchecked Sendable {
+public final class ExportProgress: ObservableObject, Sendable {
     /// Export lifecycle state.
     public enum ExportState: Sendable {
         case idle

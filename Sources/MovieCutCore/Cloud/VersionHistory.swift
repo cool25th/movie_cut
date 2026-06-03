@@ -29,7 +29,7 @@ public struct ProjectVersion: Codable, Sendable, Identifiable, Equatable {
 }
 
 /// In-memory project version history.
-public final class VersionHistory: @unchecked Sendable {
+public actor VersionHistory {
     /// Stored project versions.
     public private(set) var versions: [ProjectVersion]
 

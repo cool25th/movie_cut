@@ -1,13 +1,15 @@
+@preconcurrency import AVFoundation
 import Combine
 import Foundation
 
-/// Minimal export engine interface used by `ExportProgress`.
+/// Minimal export engine interface kept for clients that still abstract export execution.
 public protocol ExportEngine: Sendable {
     /// Exports using the supplied settings and returns the written file URL.
     func export(settings: ExportSettings) async throws -> URL
 }
 
-/// Observable export progress state.
+/// Observable export progress state backed by an `AVAssetExportSession`.
+@MainActor
 public final class ExportProgress: ObservableObject, @unchecked Sendable {
     /// Export lifecycle state.
     public enum ExportState: Sendable {
@@ -24,111 +26,85 @@ public final class ExportProgress: ObservableObject, @unchecked Sendable {
     /// Current export state.
     @Published public private(set) var state: ExportState
 
-    private let lock = NSLock()
-    private var isCancelled = false
-    private var exportTask: Task<URL, Error>?
+    private var exportSession: AVAssetExportSession?
     private var progressTask: Task<Void, Never>?
 
     /// Creates an export progress tracker.
     public init(progress: Double = 0, state: ExportState = .idle) {
-        self.progress = min(max(progress, 0), 1)
+        self.progress = Self.clamped(progress)
         self.state = state
     }
 
     deinit {
-        exportTask?.cancel()
         progressTask?.cancel()
     }
 
-    /// Starts an export and periodically advances progress until the engine completes.
-    public func start(exportEngine: any ExportEngine, settings: ExportSettings) async throws -> URL {
-        setCancelled(false)
+    /// Starts observing an export session's real progress.
+    public func start(session: AVAssetExportSession) {
         progressTask?.cancel()
-        progress = 0
+        exportSession = session
+        progress = Self.clamped(Double(session.progress))
         state = .exporting
 
-        progressTask = Task { [weak self] in
+        progressTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                guard !self.cancelled else { return }
-
-                await self.advanceProgress()
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                guard self.update(from: session) == false else { return }
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
-        }
-
-        do {
-            try Task.checkCancellation()
-            guard !cancelled else {
-                throw CancellationError()
-            }
-
-            let task = Task {
-                try Task.checkCancellation()
-                return try await exportEngine.export(settings: settings)
-            }
-            exportTask = task
-
-            let url = try await task.value
-
-            try Task.checkCancellation()
-            guard !cancelled else {
-                throw CancellationError()
-            }
-
-            exportTask = nil
-            progressTask?.cancel()
-            progressTask = nil
-            progress = 1
-            state = .completed
-            return url
-        } catch is CancellationError {
-            exportTask?.cancel()
-            exportTask = nil
-            progressTask?.cancel()
-            progressTask = nil
-            state = .cancelled
-            throw CancellationError()
-        } catch {
-            exportTask = nil
-            progressTask?.cancel()
-            progressTask = nil
-            state = .failed(error)
-            throw error
         }
     }
 
-    /// Cancels the tracked export.
+    /// Cancels the tracked export session.
     public func cancel() {
-        setCancelled(true)
-        exportTask?.cancel()
-        exportTask = nil
         progressTask?.cancel()
         progressTask = nil
+        exportSession?.cancelExport()
+        exportSession = nil
         state = .cancelled
     }
 
-    private var cancelled: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return isCancelled
-    }
+    @discardableResult
+    private func update(from session: AVAssetExportSession) -> Bool {
+        progress = Self.clamped(Double(session.progress))
 
-    private func setCancelled(_ value: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
-        isCancelled = value
-    }
-
-    private func advanceProgress() async {
-        guard !cancelled, stateIsExporting else { return }
-        progress = min(progress + 0.02, 0.95)
-    }
-
-    private var stateIsExporting: Bool {
-        if case .exporting = state {
+        switch session.status {
+        case .completed:
+            progress = 1
+            state = .completed
+            stopTracking()
             return true
+        case .failed:
+            state = .failed(session.error ?? ExportProgressError.failedWithoutError)
+            stopTracking()
+            return true
+        case .cancelled:
+            state = .cancelled
+            stopTracking()
+            return true
+        default:
+            return false
         }
-        return false
+    }
+
+    private func stopTracking() {
+        progressTask?.cancel()
+        progressTask = nil
+        exportSession = nil
+    }
+
+    private static func clamped(_ value: Double) -> Double {
+        min(max(value, 0), 1)
+    }
+}
+
+private enum ExportProgressError: LocalizedError, Sendable {
+    case failedWithoutError
+
+    var errorDescription: String? {
+        switch self {
+        case .failedWithoutError:
+            return "The export failed without an AVAssetExportSession error."
+        }
     }
 }

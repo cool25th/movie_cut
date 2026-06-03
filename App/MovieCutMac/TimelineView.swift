@@ -1,11 +1,20 @@
 import SwiftUI
 import MovieCutCore
+import UniformTypeIdentifiers
 
 struct TimelineView: View {
     var viewModel: EditorViewModel
 
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging: Bool = false
+    @State private var draggedClipId: UUID? = nil
+    @State private var dragInitialTimelineRange: TimeRange?
+    @State private var dragInitialSourceRange: TimeRange?
+
     private let trackHeight: CGFloat = 50
     private let rulerHeight: CGFloat = 24
+    private let trimHandleWidth: CGFloat = 8
+    private let minimumClipDuration: TimeInterval = 0.1
 
     private var pixelsPerSecond: Double {
         viewModel.timelineZoom
@@ -125,6 +134,20 @@ struct TimelineView: View {
                     .frame(width: 2)
                     .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond))
             }
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                for provider in providers {
+                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { data, _ in
+                        guard let data = data as? Data,
+                              let url = URL(dataRepresentation: data, relativeTo: nil)
+                        else { return }
+
+                        Task { @MainActor in
+                            await viewModel.importMedia([url])
+                        }
+                    }
+                }
+                return true
+            }
         }
         .frame(height: trackHeight)
         .overlay(alignment: .bottom) { Divider() }
@@ -135,22 +158,236 @@ struct TimelineView: View {
         let x = CGFloat(clip.timelineRange.start) * CGFloat(pixelsPerSecond)
         let width = CGFloat(clip.timelineRange.duration) * CGFloat(pixelsPerSecond)
         let isSelected = clip.id == viewModel.selectedClipId
+        let isActiveDrag = isDragging && draggedClipId == clip.id
 
-        return RoundedRectangle(cornerRadius: 4)
-            .fill(colorForClip(trackKind: trackKind, selected: isSelected))
+        return ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(colorForClip(trackKind: trackKind, selected: isSelected))
+                .overlay(alignment: .leading) {
+                    Text(clipLabel(clip))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 4)
+                }
+                .contentShape(Rectangle())
+                .gesture(moveGesture(for: clip))
+
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: trimHandleWidth)
+                    .contentShape(Rectangle())
+                    .gesture(leftTrimGesture(for: clip))
+
+                Spacer(minLength: 0)
+
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: trimHandleWidth)
+                    .contentShape(Rectangle())
+                    .gesture(rightTrimGesture(for: clip))
+            }
+        }
             .frame(width: max(2, width), height: trackHeight - 8)
             .offset(x: x, y: 4)
-            .overlay(alignment: .leading) {
-                Text(clipLabel(clip))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 4)
-            }
+            .zIndex(isActiveDrag || isSelected ? 1 : 0)
             .contentShape(Rectangle())
             .onTapGesture {
                 viewModel.selectedClipId = clip.id
             }
+            .contextMenu {
+                Button("Split") {
+                    viewModel.selectedClipId = clip.id
+                    Task { await viewModel.splitClip() }
+                }
+                Button("Delete") {
+                    viewModel.selectedClipId = clip.id
+                    Task { await viewModel.deleteClip() }
+                }
+                Button("Duplicate") {
+                    viewModel.selectedClipId = clip.id
+                    Task { await viewModel.duplicateClip(clipId: clip.id) }
+                }
+                Divider()
+                Button("Ripple Delete") {
+                    viewModel.selectedClipId = clip.id
+                    Task { await viewModel.rippleDeleteClip(clipId: clip.id) }
+                }
+            }
+    }
+
+    private func moveGesture(for clip: Clip) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                beginClipDrag(clip)
+                dragOffset = value.translation.width
+
+                guard let initialRange = dragInitialTimelineRange else { return }
+                let rawStart = max(0, initialRange.start + Double(value.translation.width) / pixelsPerSecond)
+                let newStart = max(0, snappedTime(rawStart, allClips: allClips(excluding: clip.id)))
+
+                updateClip(
+                    clip.id,
+                    timelineRange: TimeRange(start: newStart, duration: initialRange.duration)
+                )
+            }
+            .onEnded { _ in
+                commitMove(for: clip.id)
+                endClipDrag()
+            }
+    }
+
+    private func leftTrimGesture(for clip: Clip) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                beginClipDrag(clip)
+                dragOffset = value.translation.width
+
+                guard let initialTimelineRange = dragInitialTimelineRange,
+                      let initialSourceRange = dragInitialSourceRange
+                else { return }
+
+                let minimumStart = max(0, initialTimelineRange.start - initialSourceRange.start)
+                let maximumStart = max(minimumStart, initialTimelineRange.end - minimumClipDuration)
+                let rawStart = initialTimelineRange.start + Double(value.translation.width) / pixelsPerSecond
+                let snappedStart = snappedTime(rawStart, allClips: allClips(excluding: clip.id))
+                let newStart = min(maximumStart, max(minimumStart, snappedStart))
+                let newDuration = max(minimumClipDuration, initialTimelineRange.end - newStart)
+                let sourceDelta = newStart - initialTimelineRange.start
+                let newSourceRange = TimeRange(
+                    start: max(0, initialSourceRange.start + sourceDelta),
+                    duration: newDuration
+                )
+
+                updateClip(
+                    clip.id,
+                    sourceRange: newSourceRange,
+                    timelineRange: TimeRange(start: newStart, duration: newDuration)
+                )
+            }
+            .onEnded { _ in
+                commitTrim(for: clip.id)
+                endClipDrag()
+            }
+    }
+
+    private func rightTrimGesture(for clip: Clip) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                beginClipDrag(clip)
+                dragOffset = value.translation.width
+
+                guard let initialTimelineRange = dragInitialTimelineRange,
+                      let initialSourceRange = dragInitialSourceRange
+                else { return }
+
+                let rawEnd = initialTimelineRange.end + Double(value.translation.width) / pixelsPerSecond
+                let snappedEnd = snappedTime(rawEnd, allClips: allClips(excluding: clip.id))
+                let newEnd = max(initialTimelineRange.start + minimumClipDuration, snappedEnd)
+                let newDuration = newEnd - initialTimelineRange.start
+                let newSourceRange = TimeRange(start: initialSourceRange.start, duration: newDuration)
+
+                updateClip(
+                    clip.id,
+                    sourceRange: newSourceRange,
+                    timelineRange: TimeRange(start: initialTimelineRange.start, duration: newDuration)
+                )
+            }
+            .onEnded { _ in
+                commitTrim(for: clip.id)
+                endClipDrag()
+            }
+    }
+
+    private func beginClipDrag(_ clip: Clip) {
+        if draggedClipId != clip.id {
+            dragInitialTimelineRange = clip.timelineRange
+            dragInitialSourceRange = clip.sourceRange
+        }
+        isDragging = true
+        draggedClipId = clip.id
+        viewModel.selectedClipId = clip.id
+    }
+
+    private func endClipDrag() {
+        dragOffset = 0
+        isDragging = false
+        draggedClipId = nil
+        dragInitialTimelineRange = nil
+        dragInitialSourceRange = nil
+    }
+
+    private func commitMove(for clipId: UUID) {
+        guard let clip = clip(for: clipId) else { return }
+        let trackId = trackId(containing: clipId)
+
+        Task {
+            await viewModel.moveClip(
+                clipId: clipId,
+                sourceTrackId: trackId,
+                targetTrackId: trackId,
+                timelineRange: clip.timelineRange
+            )
+        }
+    }
+
+    private func commitTrim(for clipId: UUID) {
+        guard let clip = clip(for: clipId) else { return }
+        let trackId = trackId(containing: clipId)
+
+        Task {
+            await viewModel.trimClip(
+                clipId: clipId,
+                trackId: trackId,
+                sourceRange: clip.sourceRange,
+                timelineRange: clip.timelineRange
+            )
+        }
+    }
+
+    private func updateClip(_ clipId: UUID, sourceRange: TimeRange? = nil, timelineRange: TimeRange) {
+        for trackIndex in viewModel.currentProject.timeline.tracks.indices {
+            guard let clipIndex = viewModel.currentProject.timeline.tracks[trackIndex].clips.firstIndex(where: { $0.id == clipId }) else {
+                continue
+            }
+
+            if let sourceRange {
+                viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].sourceRange = sourceRange
+            }
+            viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].timelineRange = timelineRange
+            return
+        }
+    }
+
+    private func clip(for clipId: UUID) -> Clip? {
+        viewModel.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first { $0.id == clipId }
+    }
+
+    private func trackId(containing clipId: UUID) -> UUID? {
+        viewModel.currentProject.timeline.tracks.first { track in
+            track.clips.contains { $0.id == clipId }
+        }?.id
+    }
+
+    private func allClips(excluding clipId: UUID) -> [Clip] {
+        viewModel.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .filter { $0.id != clipId }
+    }
+
+    private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
+        let snapPoints = allClips.flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
+            + [viewModel.playheadTime, 0.0]
+        let thresholdTime = threshold / pixelsPerSecond
+        for point in snapPoints {
+            if abs(rawTime - point) < thresholdTime {
+                return point
+            }
+        }
+        return rawTime
     }
 
     private func colorForClip(trackKind: TrackKind, selected: Bool) -> Color {

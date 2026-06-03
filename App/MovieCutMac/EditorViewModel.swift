@@ -270,6 +270,64 @@ final class EditorViewModel {
         }
     }
 
+    func trimClip(
+        clipId: UUID,
+        trackId: UUID?,
+        sourceRange: TimeRange,
+        timelineRange: TimeRange
+    ) async {
+        selectedClipId = clipId
+        await apply(
+            TrimClipCommand(
+                clipId: clipId,
+                trackId: trackId,
+                newSourceRange: sourceRange,
+                newTimelineRange: timelineRange
+            )
+        )
+    }
+
+    func moveClip(
+        clipId: UUID,
+        sourceTrackId: UUID?,
+        targetTrackId: UUID?,
+        timelineRange: TimeRange
+    ) async {
+        selectedClipId = clipId
+        await apply(
+            MoveClipCommand(
+                clipId: clipId,
+                sourceTrackId: sourceTrackId,
+                targetTrackId: targetTrackId,
+                newTimelineRange: timelineRange
+            )
+        )
+    }
+
+    func rippleDeleteClip(clipId: UUID) async {
+        selectedClipId = clipId
+        await apply(RippleDeleteCommand(clipId: clipId))
+        if selectedClipId == clipId {
+            selectedClipId = nil
+        }
+    }
+
+    func duplicateClip(clipId: UUID) async {
+        selectedClipId = clipId
+        await apply(DuplicateClipCommand(clipId: clipId))
+    }
+
+    func copyClip(clipId: UUID, targetTrackId: UUID, targetStartTime: TimeInterval) async {
+        selectedClipId = clipId
+        await apply(
+            CopyClipCommand(
+                clipId: clipId,
+                targetTrackId: targetTrackId,
+                targetStartTime: max(0, targetStartTime)
+            )
+        )
+    }
+
     func deleteClip() async {
         guard let selectedClipId else { return }
 

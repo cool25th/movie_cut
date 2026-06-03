@@ -1,4 +1,3 @@
-import AVFoundation
 import CoreImage
 import Foundation
 
@@ -29,11 +28,11 @@ public final class BackgroundRemovalProvider: AnalysisProvider, @unchecked Senda
         AnalysisResult(suggestions: [], sourceAssetID: asset.id.uuidString, providerName: providerName)
     }
 
-    /// Applies a person mask to a frame and returns a BGRA pixel buffer with transparent background.
+    /// Applies a Vision person mask to a frame and returns a BGRA buffer with transparent background.
     public func removeBackground(from pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         #if canImport(Vision)
         let request = VNGeneratePersonSegmentationRequest()
-        request.qualityLevel = .balanced
+        request.qualityLevel = .accurate
         request.outputPixelFormat = kCVPixelFormatType_OneComponent8
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
@@ -54,47 +53,48 @@ public final class BackgroundRemovalProvider: AnalysisProvider, @unchecked Senda
         #endif
     }
 
+    #if canImport(Vision)
     private func applyAlphaMask(_ maskPixelBuffer: CVPixelBuffer, to sourcePixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         let sourceImage = CIImage(cvPixelBuffer: sourcePixelBuffer)
         let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
+        let sourceExtent = sourceImage.extent
 
-        guard sourceImage.extent.width > 0, sourceImage.extent.height > 0,
-              maskImage.extent.width > 0, maskImage.extent.height > 0 else {
+        guard !sourceExtent.isEmpty, !maskImage.extent.isEmpty else {
             return nil
         }
 
-        let scaledMask = maskImage.transformed(by: CGAffineTransform(
-            scaleX: sourceImage.extent.width / maskImage.extent.width,
-            y: sourceImage.extent.height / maskImage.extent.height
-        ))
-        .cropped(to: sourceImage.extent)
+        let scaledMask = maskImage
+            .transformed(by: CGAffineTransform(
+                scaleX: sourceExtent.width / maskImage.extent.width,
+                y: sourceExtent.height / maskImage.extent.height
+            ))
+            .cropped(to: sourceExtent)
 
         let transparentBackground = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: sourceImage.extent)
+            .cropped(to: sourceExtent)
 
-        guard let outputImage = CIFilter(
+        guard let compositedImage = CIFilter(
             name: "CIBlendWithAlphaMask",
             parameters: [
                 kCIInputImageKey: sourceImage,
                 kCIInputBackgroundImageKey: transparentBackground,
                 kCIInputMaskImageKey: scaledMask
             ]
-        )?.outputImage else {
+        )?.outputImage?.cropped(to: sourceExtent) else {
             return nil
         }
 
         var outputPixelBuffer: CVPixelBuffer?
         let attributes: [String: Any] = [
             kCVPixelBufferCGImageCompatibilityKey as String: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
         ]
 
-        let width = CVPixelBufferGetWidth(sourcePixelBuffer)
-        let height = CVPixelBufferGetHeight(sourcePixelBuffer)
         let status = CVPixelBufferCreate(
             nil,
-            width,
-            height,
+            CVPixelBufferGetWidth(sourcePixelBuffer),
+            CVPixelBufferGetHeight(sourcePixelBuffer),
             kCVPixelFormatType_32BGRA,
             attributes as CFDictionary,
             &outputPixelBuffer
@@ -104,7 +104,8 @@ public final class BackgroundRemovalProvider: AnalysisProvider, @unchecked Senda
             return nil
         }
 
-        context.render(outputImage.cropped(to: sourceImage.extent), to: outputPixelBuffer)
+        context.render(compositedImage, to: outputPixelBuffer)
         return outputPixelBuffer
     }
+    #endif
 }

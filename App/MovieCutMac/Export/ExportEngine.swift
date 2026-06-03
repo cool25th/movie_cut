@@ -123,7 +123,8 @@ final class ExportEngine {
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
-                        textContent: textContent
+                        textContent: textContent,
+                        keyframes: clip.keyframes
                     ))
                 }
 
@@ -233,7 +234,8 @@ final class ExportEngine {
                         colorCorrection: clip.colorCorrection,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
-                        effects: clip.effects
+                        effects: clip.effects,
+                        keyframes: clip.keyframes
                     ))
                 }
 
@@ -280,7 +282,10 @@ final class ExportEngine {
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
 
         let usesCustomVideoCompositor = clips.contains { clip in
-            clip.colorCorrection != nil || clip.chromaKeyColor != nil || clip.mask != nil
+            clip.colorCorrection != nil
+                || clip.chromaKeyColor != nil
+                || clip.mask != nil
+                || !clip.keyframes.isEmpty
         }
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -337,7 +342,7 @@ final class ExportEngine {
             }
 
             if clip.requiresCustomVideoCompositorMetadata {
-                // Color correction, chroma key, and analysis effects need a CIImage-backed custom compositor.
+                // Color correction, chroma key, keyframes, and analysis effects need CIImage-backed metadata.
                 customCompositorClips.append(clip)
             }
         }
@@ -352,6 +357,7 @@ final class ExportEngine {
                         CustomCompositionClipEffect(
                             trackID: clip.trackID,
                             timeRange: clip.timeRange,
+                            keyframes: clip.keyframes,
                             colorCorrection: clip.colorCorrection,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
@@ -671,9 +677,15 @@ private struct ExportClipInstructionMetadata {
     var chromaKeyThreshold: Float = 0.3
     var effects: [Effect]
     var textContent: TextClipContent?
+    var keyframes: [Keyframe]
 
     var requiresCustomVideoCompositorMetadata: Bool {
-        textContent != nil || mask != nil || colorCorrection != nil || chromaKeyColor != nil || !effects.isEmpty
+        textContent != nil
+            || mask != nil
+            || colorCorrection != nil
+            || chromaKeyColor != nil
+            || !effects.isEmpty
+            || !keyframes.isEmpty
     }
 }
 

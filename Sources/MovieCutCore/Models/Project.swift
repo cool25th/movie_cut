@@ -26,6 +26,9 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// The editable timeline.
     public var timeline: Timeline
 
+    /// User-defined project timeline markers.
+    public var markers: [Marker] = []
+
     /// The project's editing canvas.
     public var canvas: CanvasPreset
 
@@ -41,6 +44,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case schemaVersion
         case mediaLibrary
         case timeline
+        case markers
         case canvas
         case exportSettings
     }
@@ -55,6 +59,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         schemaVersion: Int = 1,
         mediaLibrary: MediaLibrary = MediaLibrary(),
         timeline: Timeline = Timeline(),
+        markers: [Marker] = [],
         canvas: CanvasPreset = CanvasPreset.defaultPreset(),
         exportSettings: ExportSettings = ExportSettings()
     ) {
@@ -66,6 +71,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.schemaVersion = schemaVersion
         self.mediaLibrary = mediaLibrary
         self.timeline = timeline
+        self.markers = markers
         self.canvas = canvas
         self.exportSettings = exportSettings
     }
@@ -80,6 +86,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
         mediaLibrary = try container.decode(MediaLibrary.self, forKey: .mediaLibrary)
         timeline = try container.decode(Timeline.self, forKey: .timeline)
+        markers = try container.decodeIfPresent([Marker].self, forKey: .markers) ?? []
         canvas = try container.decodeIfPresent(CanvasPreset.self, forKey: .canvas) ?? CanvasPreset.defaultPreset()
         exportSettings = try container.decode(ExportSettings.self, forKey: .exportSettings)
     }
@@ -94,6 +101,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         try container.encode(schemaVersion, forKey: .schemaVersion)
         try container.encode(mediaLibrary, forKey: .mediaLibrary)
         try container.encode(timeline, forKey: .timeline)
+        try container.encode(markers, forKey: .markers)
         try container.encode(canvas, forKey: .canvas)
         try container.encode(exportSettings, forKey: .exportSettings)
     }

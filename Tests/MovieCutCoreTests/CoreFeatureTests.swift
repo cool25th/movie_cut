@@ -150,6 +150,7 @@ struct CoreFeatureTests {
             "schemaVersion",
             "mediaLibrary",
             "timeline",
+            "markers",
             "canvas",
             "exportSettings"
         ])
@@ -278,6 +279,7 @@ struct CoreFeatureTests {
                 tracks: tracks,
                 markers: markers
             ),
+            markers: markers,
             canvas: CanvasPreset(aspectRatio: .landscape16x9, frameRate: .fps30),
             exportSettings: ExportSettings(resolution: .p1080, frameRate: .fps30, codec: .h264, audioCodec: .aac)
         )

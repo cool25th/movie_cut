@@ -2,7 +2,7 @@ import SwiftUI
 import MovieCutCore
 
 struct InspectorPanel: View {
-    var viewModel: EditorViewModel
+    @Bindable var viewModel: EditorViewModel
     @State private var isTransitionExpanded = false
     @State private var isAnimationExpanded = false
     @State private var selectedKeyframeId: UUID?
@@ -77,6 +77,37 @@ struct InspectorPanel: View {
                                         .foregroundStyle(.secondary)
                                         .frame(width: 44)
                                 }
+                                Slider(value: $viewModel.fadeInDuration, in: 0...5, step: 0.1) {
+                                    Text("Fade In")
+                                }
+                                .onChange(of: viewModel.fadeInDuration) { _, newValue in
+                                    Task {
+                                        await viewModel.updateSelectedAudioFade(fadeInDuration: newValue)
+                                    }
+                                }
+                                Slider(value: $viewModel.fadeOutDuration, in: 0...5, step: 0.1) {
+                                    Text("Fade Out")
+                                }
+                                .onChange(of: viewModel.fadeOutDuration) { _, newValue in
+                                    Task {
+                                        await viewModel.updateSelectedAudioFade(fadeOutDuration: newValue)
+                                    }
+                                }
+                            }
+                        }
+
+                        if clip.kind.supportsVolume {
+                            Section("Equalizer") {
+                                Picker("Preset", selection: $viewModel.selectedEQPreset) {
+                                    Text("Flat").tag("flat")
+                                    Text("Bass Boost").tag("bassBoost")
+                                    Text("Treble Boost").tag("trebleBoost")
+                                    Text("Voice").tag("voice")
+                                    Text("Cinema").tag("cinema")
+                                }
+                                .onChange(of: viewModel.selectedEQPreset) { _, newValue in
+                                    Task { await viewModel.applyEQPreset(newValue) }
+                                }
                             }
                         }
 
@@ -114,6 +145,27 @@ struct InspectorPanel: View {
                         colorCorrectionSection(for: clip)
 
                         maskSection(for: clip)
+
+                        Section("Background Removal") {
+                            Toggle("Remove Background", isOn: $viewModel.isBackgroundRemoved)
+                                .onChange(of: viewModel.isBackgroundRemoved) { _, newValue in
+                                    Task { await viewModel.toggleBackgroundRemoval(newValue) }
+                                }
+                        }
+
+                        Section("Style Transfer") {
+                            Picker("Style", selection: $viewModel.selectedStyle) {
+                                Text("None").tag("none")
+                                Text("Comic").tag("comic")
+                                Text("Noir").tag("noir")
+                                Text("Vintage").tag("vintage")
+                                Text("Cyberpunk").tag("cyberpunk")
+                                Text("Watercolor").tag("watercolor")
+                            }
+                            .onChange(of: viewModel.selectedStyle) { _, newValue in
+                                Task { await viewModel.applyStyleTransfer(newValue) }
+                            }
+                        }
 
                         reverseFreezeSection(for: clip)
 
@@ -288,6 +340,23 @@ struct InspectorPanel: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+
+            Divider()
+
+            Section("Export Settings") {
+                Picker("Resolution", selection: $viewModel.exportResolution) {
+                    Text("4K (3840x2160)").tag("4k")
+                    Text("1080p (1920x1080)").tag("1080p")
+                    Text("720p (1280x720)").tag("720p")
+                    Text("480p (854x480)").tag("480p")
+                }
+                Picker("Quality", selection: $viewModel.exportQuality) {
+                    Text("High").tag("high")
+                    Text("Medium").tag("medium")
+                    Text("Low").tag("low")
+                }
+            }
+            .padding(12)
         }
         .frame(minWidth: 240)
         .background(Color(nsColor: .controlBackgroundColor))

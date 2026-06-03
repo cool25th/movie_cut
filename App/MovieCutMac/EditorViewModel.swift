@@ -9,7 +9,11 @@ import UniformTypeIdentifiers
 final class EditorViewModel {
     var currentProject: Project
     var canvasSelection: AspectRatio = .landscape16x9
-    var selectedClipIds: Set<UUID> = []
+    var selectedClipIds: Set<UUID> = [] {
+        didSet {
+            loadSelectedClipProcessingState()
+        }
+    }
     var selectedClipId: UUID? {
         get {
             for track in currentProject.timeline.tracks {
@@ -27,6 +31,9 @@ final class EditorViewModel {
             }
         }
     }
+    var selectedEQPreset: String = "flat"
+    var isBackgroundRemoved: Bool = false
+    var selectedStyle: String = "none"
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
     var exportEngine: ExportEngine
@@ -45,6 +52,9 @@ final class EditorViewModel {
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
     @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
+    @ObservationIgnored private var clipEQPresets: [UUID: String] = [:]
+    @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
+    @ObservationIgnored private var clipStyles: [UUID: String] = [:]
 
     init(project: Project = EditorViewModel.defaultProject()) {
         let project = EditorViewModel.ensureDefaultTracks(in: project)
@@ -141,6 +151,7 @@ final class EditorViewModel {
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
+        clearClipProcessingState()
         lastErrorMessage = nil
         lastExportURL = nil
     }
@@ -157,6 +168,7 @@ final class EditorViewModel {
             playbackEngine.clear()
             playheadTime = 0
             clearGeneratedSubtitles()
+            clearClipProcessingState()
             lastErrorMessage = nil
             lastExportURL = nil
         } catch {
@@ -478,6 +490,43 @@ final class EditorViewModel {
         await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
     }
 
+    func applyEQPreset(_ preset: String) async {
+        guard let clipId = selectedClipId else { return }
+
+        selectedEQPreset = preset
+        if preset == "flat" {
+            clipEQPresets.removeValue(forKey: clipId)
+        } else {
+            clipEQPresets[clipId] = preset
+        }
+    }
+
+    func toggleBackgroundRemoval(_ enabled: Bool) async {
+        guard let clipId = selectedClipId else { return }
+
+        isBackgroundRemoved = enabled
+        if enabled {
+            backgroundRemovedClipIds.insert(clipId)
+        } else {
+            backgroundRemovedClipIds.remove(clipId)
+        }
+    }
+
+    func applyStyleTransfer(_ style: String) async {
+        guard let clipId = selectedClipId else { return }
+
+        selectedStyle = style
+        if style == "none" {
+            clipStyles.removeValue(forKey: clipId)
+        } else {
+            clipStyles[clipId] = style
+        }
+    }
+
+    func applyDucking(to clipId: UUID, duckLevel: Double = 0.3) async {
+        await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
+    }
+
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
@@ -644,6 +693,26 @@ final class EditorViewModel {
     private func clearGeneratedSubtitles() {
         generatedSubtitleSegments = []
         pendingSubtitleClips = []
+    }
+
+    private func clearClipProcessingState() {
+        clipEQPresets = [:]
+        backgroundRemovedClipIds = []
+        clipStyles = [:]
+        loadSelectedClipProcessingState()
+    }
+
+    private func loadSelectedClipProcessingState() {
+        guard let selectedClipId else {
+            selectedEQPreset = "flat"
+            isBackgroundRemoved = false
+            selectedStyle = "none"
+            return
+        }
+
+        selectedEQPreset = clipEQPresets[selectedClipId] ?? "flat"
+        isBackgroundRemoved = backgroundRemovedClipIds.contains(selectedClipId)
+        selectedStyle = clipStyles[selectedClipId] ?? "none"
     }
 
     private var currentClipIds: Set<UUID> {
@@ -867,6 +936,7 @@ final class EditorViewModel {
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
+        clearClipProcessingState()
         analysisResult = nil
         lastErrorMessage = nil
         lastExportURL = nil

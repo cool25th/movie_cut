@@ -177,6 +177,16 @@ final class PlaybackEngine {
             CMTimeRange(start: cmTime(range.start), duration: cmTime(range.duration))
         }
 
+        func isFreezeFrameClip(_ clip: Clip) -> Bool {
+            clip.sourceRange.duration < 0.1 && clip.timelineRange.duration > 0.5
+        }
+
+        func freezeFrameSourceTimeRange(for clip: Clip) -> CMTimeRange {
+            let sourceTime = CMTime(seconds: clip.sourceRange.start, preferredTimescale: 600)
+            let sourceDuration = CMTime(seconds: 0.04, preferredTimescale: 600)
+            return CMTimeRange(start: sourceTime, duration: sourceDuration)
+        }
+
         func scaledDuration(for clip: Clip, insertedDuration: CMTime) -> CMTime {
             let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
             guard playbackRate != 1 else { return insertedDuration }
@@ -342,6 +352,7 @@ final class PlaybackEngine {
                     let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
                     let destinationTime = cmTime(clip.timelineRange.start)
                     let sourceTimeRange = cmTimeRange(clip.sourceRange)
+                    let isFreezeFrame = isFreezeFrameClip(clip)
 
                     if let videoCompositionTrack,
                        let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .video).first {
@@ -350,8 +361,10 @@ final class PlaybackEngine {
                         }
 
                         var effectiveSourceTrack = sourceTrack
-                        var effectiveSourceTimeRange = sourceTimeRange
-                        if clip.isReversed {
+                        var effectiveSourceTimeRange = isFreezeFrame
+                            ? freezeFrameSourceTimeRange(for: clip)
+                            : sourceTimeRange
+                        if clip.isReversed && !isFreezeFrame {
                             let reversedOutputURL = temporaryReverseRenderURL(for: clip)
                             temporaryReverseRenderURLs.append(reversedOutputURL)
                             try await ReverseRenderService().renderReversed(
@@ -377,12 +390,21 @@ final class PlaybackEngine {
                         )
 
                         let insertedDuration = effectiveSourceTimeRange.duration
-                        let scaledDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
-                        if scaledDuration != insertedDuration {
+                        let scaledDuration: CMTime
+                        if isFreezeFrame {
+                            scaledDuration = cmTime(clip.timelineRange.duration)
                             videoCompositionTrack.scaleTimeRange(
                                 CMTimeRange(start: destinationTime, duration: insertedDuration),
                                 toDuration: scaledDuration
                             )
+                        } else {
+                            scaledDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
+                            if scaledDuration != insertedDuration {
+                                videoCompositionTrack.scaleTimeRange(
+                                    CMTimeRange(start: destinationTime, duration: insertedDuration),
+                                    toDuration: scaledDuration
+                                )
+                            }
                         }
 
                         let preferredTransform = try await sourceTrack.load(.preferredTransform)
@@ -404,8 +426,11 @@ final class PlaybackEngine {
                         ))
                     }
 
-                    if let audioCompositionTrack,
+                    if !isFreezeFrame,
+                       let audioCompositionTrack,
                        let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first {
+                        guard sourceTimeRange.duration > .zero else { continue }
+
                         try audioCompositionTrack.insertTimeRange(
                             sourceTimeRange,
                             of: sourceTrack,
@@ -452,6 +477,8 @@ final class PlaybackEngine {
 
                     let destinationTime = cmTime(clip.timelineRange.start)
                     let sourceTimeRange = cmTimeRange(clip.sourceRange)
+                    guard sourceTimeRange.duration > .zero else { continue }
+
                     try audioCompositionTrack.insertTimeRange(
                         sourceTimeRange,
                         of: sourceTrack,

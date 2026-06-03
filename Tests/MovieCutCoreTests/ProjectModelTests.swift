@@ -13,6 +13,7 @@ struct ProjectModelTests {
         #expect(project.appVersion == "0.1.0")
         #expect(project.mediaLibrary.assets.isEmpty)
         #expect(project.timeline.frameRate == Rational(numerator: 30, denominator: 1))
+        #expect(project.markers.isEmpty)
         #expect(project.exportSettings.resolution == .p1080)
     }
 
@@ -78,6 +79,7 @@ struct ProjectModelTests {
             updatedAt: Date(timeIntervalSince1970: 1_800_000_100),
             mediaLibrary: MediaLibrary(assets: [assetId: asset]),
             timeline: Timeline(tracks: [track]),
+            markers: [Marker(time: 1.5, name: "Marker")],
             exportSettings: ExportSettings(resolution: .p4K, frameRate: .fps60, codec: .hevc, audioCodec: .aac)
         )
 

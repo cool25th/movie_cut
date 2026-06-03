@@ -134,6 +134,13 @@ struct TimelineView: View {
                     .fill(Color.red)
                     .frame(width: 2)
                     .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond))
+
+                ForEach(viewModel.currentProject.markers) { marker in
+                    Rectangle()
+                        .fill(Color.yellow.opacity(0.7))
+                        .frame(width: 2, height: trackHeight)
+                        .offset(x: CGFloat(marker.time) * CGFloat(pixelsPerSecond))
+                }
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 for provider in providers {

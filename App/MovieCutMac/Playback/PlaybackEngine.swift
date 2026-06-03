@@ -1,7 +1,9 @@
 import AVFoundation
+import AppKit
 import Foundation
 import MovieCutCore
 import Observation
+import QuartzCore
 
 @MainActor
 @Observable
@@ -13,6 +15,7 @@ final class PlaybackEngine {
     var playerItem: AVPlayerItem?
     var playbackRate: Float
 
+    @ObservationIgnored private var textLayers: [CALayer] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
 
@@ -151,6 +154,8 @@ final class PlaybackEngine {
         AVMutableVideoComposition?,
         AVMutableAudioMix?
     ) {
+        textLayers = []
+
         func cmTime(_ seconds: TimeInterval) -> CMTime {
             CMTime(seconds: seconds, preferredTimescale: 600)
         }
@@ -208,6 +213,35 @@ final class PlaybackEngine {
             }
 
             return compositionTrack
+        }
+
+        func cgColor(hexRGB: String) -> CGColor {
+            let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+                return NSColor.white.cgColor
+            }
+
+            let red = CGFloat((value >> 16) & 0xFF) / 255.0
+            let green = CGFloat((value >> 8) & 0xFF) / 255.0
+            let blue = CGFloat(value & 0xFF) / 255.0
+            return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1).cgColor
+        }
+
+        func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
+            switch alignment {
+            case .leading:
+                return .left
+            case .center:
+                return .center
+            case .trailing:
+                return .right
+            case .justified:
+                return .justified
+            }
+        }
+
+        func isZeroPoint(_ point: CGPoint) -> Bool {
+            point.x == 0 && point.y == 0
         }
 
         let composition = AVMutableComposition()
@@ -347,7 +381,45 @@ final class PlaybackEngine {
 
                 audioMixInputParameters.append(audioParameters)
             case .text:
-                continue
+                guard !track.isHidden else { continue }
+
+                for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    guard let textContent = clip.textContent else { continue }
+
+                    let textLayer = CATextLayer()
+                    let fontSize = CGFloat(textContent.fontSize)
+                    let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
+                    let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
+                    let canvasSize = project.timeline.canvasSize
+                    let fallbackPosition = CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
+                    let position: CGPoint
+                    if !isZeroPoint(textContent.position) {
+                        position = textContent.position
+                    } else if !isZeroPoint(clip.transform.position) {
+                        position = clip.transform.position
+                    } else {
+                        position = fallbackPosition
+                    }
+
+                    textLayer.string = textContent.text
+                    textLayer.font = font
+                    textLayer.fontSize = fontSize
+                    textLayer.foregroundColor = cgColor(hexRGB: textContent.fontColor)
+                    textLayer.alignmentMode = textAlignmentMode(for: textContent.alignment)
+                    textLayer.contentsScale = 2.0
+                    textLayer.frame = CGRect(
+                        x: position.x - 100,
+                        y: canvasSize.height - position.y - fontSize,
+                        width: 200,
+                        height: fontSize + 20
+                    )
+
+                    let clipStart = cmTime(clip.timelineRange.start)
+                    let clipDuration = cmTime(clip.timelineRange.duration)
+                    textLayer.beginTime = AVCoreAnimationBeginTimeAtZero + clipStart.seconds
+                    textLayer.duration = clipDuration.seconds
+                    textLayers.append(textLayer)
+                }
             }
         }
 
@@ -400,6 +472,23 @@ final class PlaybackEngine {
             }
 
             mutableVideoComposition.instructions = [instruction]
+            if !textLayers.isEmpty {
+                let parentLayer = CALayer()
+                let videoLayer = CALayer()
+                parentLayer.frame = CGRect(
+                    origin: CGPoint(x: 0, y: 0),
+                    size: project.timeline.canvasSize
+                )
+                videoLayer.frame = parentLayer.bounds
+                parentLayer.addSublayer(videoLayer)
+                for layer in textLayers {
+                    parentLayer.addSublayer(layer)
+                }
+                mutableVideoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+                    postProcessingAsVideoLayer: videoLayer,
+                    in: parentLayer
+                )
+            }
             videoComposition = mutableVideoComposition
         }
 

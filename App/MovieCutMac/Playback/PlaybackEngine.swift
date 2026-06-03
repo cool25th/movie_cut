@@ -40,6 +40,31 @@ final class PlaybackEngine {
         observeStatus(for: item)
     }
 
+    func loadProject(_ project: Project) {
+        pause()
+        statusObservation?.invalidate()
+        statusObservation = nil
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                let (composition, videoComposition, audioMix) = try await buildComposition(from: project)
+                let item = AVPlayerItem(asset: composition)
+                item.videoComposition = videoComposition
+                item.audioMix = audioMix
+
+                playerItem = item
+                currentTime = 0
+                duration = composition.duration.seconds.isFinite ? composition.duration.seconds : 0
+                player.replaceCurrentItem(with: item)
+                observeStatus(for: item)
+            } catch {
+                clear()
+            }
+        }
+    }
+
     func clear() {
         pause()
         statusObservation?.invalidate()
@@ -119,6 +144,275 @@ final class PlaybackEngine {
                 self?.handlePlayerItemStatusChanged()
             }
         }
+    }
+
+    private func buildComposition(from project: Project) async throws -> (
+        AVMutableComposition,
+        AVMutableVideoComposition?,
+        AVMutableAudioMix?
+    ) {
+        func cmTime(_ seconds: TimeInterval) -> CMTime {
+            CMTime(seconds: seconds, preferredTimescale: 600)
+        }
+
+        func cmTimeRange(_ range: TimeRange) -> CMTimeRange {
+            CMTimeRange(start: cmTime(range.start), duration: cmTime(range.duration))
+        }
+
+        func scaledDuration(for clip: Clip, insertedDuration: CMTime) -> CMTime {
+            let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
+            guard playbackRate != 1 else { return insertedDuration }
+
+            return CMTime(seconds: insertedDuration.seconds / playbackRate, preferredTimescale: 600)
+        }
+
+        func affineTransform(
+            for transform: ClipTransform,
+            sourceSize: CGSize,
+            preferredTransform: CGAffineTransform
+        ) -> CGAffineTransform {
+            let anchorPoint = CGPoint(
+                x: sourceSize.width * transform.anchorPoint.x,
+                y: sourceSize.height * transform.anchorPoint.y
+            )
+            let radians = CGFloat(transform.rotation * .pi / 180)
+
+            var affineTransform = preferredTransform
+            affineTransform = affineTransform.translatedBy(
+                x: transform.position.x + transform.offset.x,
+                y: transform.position.y + transform.offset.y
+            )
+            affineTransform = affineTransform.translatedBy(x: anchorPoint.x, y: anchorPoint.y)
+            affineTransform = affineTransform.rotated(by: radians)
+            affineTransform = affineTransform.scaledBy(
+                x: transform.scale.width,
+                y: transform.scale.height
+            )
+            affineTransform = affineTransform.translatedBy(x: -anchorPoint.x, y: -anchorPoint.y)
+            return affineTransform
+        }
+
+        func makeCompositionTrack(
+            in composition: AVMutableComposition,
+            mediaType: AVMediaType
+        ) throws -> AVMutableCompositionTrack {
+            guard let compositionTrack = composition.addMutableTrack(
+                withMediaType: mediaType,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw NSError(
+                    domain: "MovieCutMac.PlaybackEngine",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not create a playback composition track."]
+                )
+            }
+
+            return compositionTrack
+        }
+
+        let composition = AVMutableComposition()
+        var videoCompositionTracks: [(track: AVMutableCompositionTrack, zIndex: Int)] = []
+        var videoClipInstructions: [(
+            trackID: CMPersistentTrackID,
+            timeRange: CMTimeRange,
+            transform: CGAffineTransform,
+            opacity: Float
+        )] = []
+        var audioMixInputParameters: [AVAudioMixInputParameters] = []
+
+        for track in project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex }) {
+            switch track.kind {
+            case .video:
+                let videoCompositionTrack = track.isHidden ? nil : try makeCompositionTrack(
+                    in: composition,
+                    mediaType: .video
+                )
+                let audioCompositionTrack = track.isMuted ? nil : try makeCompositionTrack(
+                    in: composition,
+                    mediaType: .audio
+                )
+                let audioParameters = AVMutableAudioMixInputParameters()
+
+                if let videoCompositionTrack {
+                    videoCompositionTracks.append((videoCompositionTrack, track.zIndex))
+                }
+
+                if let audioCompositionTrack {
+                    audioParameters.trackID = audioCompositionTrack.trackID
+                }
+
+                for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    guard let assetId = clip.assetId,
+                          let mediaAsset = project.mediaLibrary.assets[assetId] else {
+                        continue
+                    }
+
+                    let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    let destinationTime = cmTime(clip.timelineRange.start)
+                    let sourceTimeRange = cmTimeRange(clip.sourceRange)
+
+                    if let videoCompositionTrack,
+                       let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .video).first {
+                        if videoCompositionTrack.segments.isEmpty {
+                            videoCompositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+                        }
+
+                        try videoCompositionTrack.insertTimeRange(
+                            sourceTimeRange,
+                            of: sourceTrack,
+                            at: destinationTime
+                        )
+
+                        let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                        if scaledDuration != sourceTimeRange.duration {
+                            videoCompositionTrack.scaleTimeRange(
+                                CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                                toDuration: scaledDuration
+                            )
+                        }
+
+                        let preferredTransform = try await sourceTrack.load(.preferredTransform)
+                        let sourceSize = try await sourceTrack.load(.naturalSize)
+                        videoClipInstructions.append((
+                            videoCompositionTrack.trackID,
+                            CMTimeRange(start: destinationTime, duration: scaledDuration),
+                            affineTransform(
+                                for: clip.transform,
+                                sourceSize: sourceSize,
+                                preferredTransform: preferredTransform
+                            ),
+                            Float(min(max(clip.opacity, 0), 1))
+                        ))
+                    }
+
+                    if let audioCompositionTrack,
+                       let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first {
+                        try audioCompositionTrack.insertTimeRange(
+                            sourceTimeRange,
+                            of: sourceTrack,
+                            at: destinationTime
+                        )
+
+                        let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                        if scaledDuration != sourceTimeRange.duration {
+                            audioCompositionTrack.scaleTimeRange(
+                                CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                                toDuration: scaledDuration
+                            )
+                        }
+
+                        audioParameters.setVolume(Float(clip.volume), at: destinationTime)
+                    }
+                }
+
+                if audioCompositionTrack != nil {
+                    audioMixInputParameters.append(audioParameters)
+                }
+            case .audio:
+                guard !track.isMuted else { continue }
+
+                let audioCompositionTrack = try makeCompositionTrack(in: composition, mediaType: .audio)
+                let audioParameters = AVMutableAudioMixInputParameters()
+                audioParameters.trackID = audioCompositionTrack.trackID
+
+                for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    guard let assetId = clip.assetId,
+                          let mediaAsset = project.mediaLibrary.assets[assetId] else {
+                        continue
+                    }
+
+                    let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first else {
+                        continue
+                    }
+
+                    let destinationTime = cmTime(clip.timelineRange.start)
+                    let sourceTimeRange = cmTimeRange(clip.sourceRange)
+                    try audioCompositionTrack.insertTimeRange(
+                        sourceTimeRange,
+                        of: sourceTrack,
+                        at: destinationTime
+                    )
+
+                    let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                    if scaledDuration != sourceTimeRange.duration {
+                        audioCompositionTrack.scaleTimeRange(
+                            CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                            toDuration: scaledDuration
+                        )
+                    }
+
+                    audioParameters.setVolume(Float(clip.volume), at: destinationTime)
+                }
+
+                audioMixInputParameters.append(audioParameters)
+            case .text:
+                continue
+            }
+        }
+
+        let sortedVideoCompositionTracks = videoCompositionTracks.sorted { $0.zIndex > $1.zIndex }
+        let videoComposition: AVMutableVideoComposition?
+        if sortedVideoCompositionTracks.isEmpty {
+            videoComposition = nil
+        } else {
+            let mutableVideoComposition = AVMutableVideoComposition()
+            mutableVideoComposition.renderSize = project.timeline.canvasSize
+            mutableVideoComposition.frameDuration = CMTime(
+                seconds: 1 / max(project.timeline.frameRate.doubleValue, 1),
+                preferredTimescale: 600
+            )
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
+
+            let layerInstructions = sortedVideoCompositionTracks.map {
+                AVMutableVideoCompositionLayerInstruction(assetTrack: $0.track)
+            }
+            instruction.layerInstructions = layerInstructions
+
+            let layerInstructionsByTrackID = Dictionary(
+                uniqueKeysWithValues: zip(sortedVideoCompositionTracks.map { $0.track.trackID }, layerInstructions)
+            )
+
+            for clipInstruction in videoClipInstructions {
+                guard let layerInstruction = layerInstructionsByTrackID[clipInstruction.trackID] else {
+                    continue
+                }
+
+                layerInstruction.setTransform(clipInstruction.transform, at: clipInstruction.timeRange.start)
+                layerInstruction.setTransform(
+                    .identity,
+                    at: CMTimeAdd(clipInstruction.timeRange.start, clipInstruction.timeRange.duration)
+                )
+
+                if clipInstruction.opacity < 1 {
+                    layerInstruction.setOpacityRamp(
+                        fromStartOpacity: clipInstruction.opacity,
+                        toEndOpacity: clipInstruction.opacity,
+                        timeRange: clipInstruction.timeRange
+                    )
+                    layerInstruction.setOpacity(
+                        1,
+                        at: CMTimeAdd(clipInstruction.timeRange.start, clipInstruction.timeRange.duration)
+                    )
+                }
+            }
+
+            mutableVideoComposition.instructions = [instruction]
+            videoComposition = mutableVideoComposition
+        }
+
+        let audioMix: AVMutableAudioMix?
+        if audioMixInputParameters.isEmpty {
+            audioMix = nil
+        } else {
+            let mutableAudioMix = AVMutableAudioMix()
+            mutableAudioMix.inputParameters = audioMixInputParameters
+            audioMix = mutableAudioMix
+        }
+
+        return (composition, videoComposition, audioMix)
     }
 
     private func handlePlayerItemStatusChanged() {

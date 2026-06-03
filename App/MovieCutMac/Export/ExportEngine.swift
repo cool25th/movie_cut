@@ -52,6 +52,7 @@ final class ExportEngine {
     private func makeExportPackage(for project: Project) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
+        var videoClipInstructions: [ExportClipInstructionMetadata] = []
         var audioMixInputParameters: [AVAudioMixInputParameters] = []
 
         for track in project.timeline.tracks where !track.isMuted {
@@ -99,11 +100,64 @@ final class ExportEngine {
                 let destinationTime = CMTime(seconds: clip.timelineRange.start, preferredTimescale: 600)
                 try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
 
+                var effectiveSourceTrack = sourceTrack
+                var effectiveSourceTimeRange = sourceTimeRange
+                var clipCompositionDuration = sourceTimeRange.duration
+
+                if clip.isReversed, mediaType == .video {
+                    let reversedOutputURL = temporaryReverseRenderURL(for: clip)
+                    try await ReverseRenderService().renderReversed(
+                        clip: sourceAsset,
+                        timeRange: sourceTimeRange,
+                        outputURL: reversedOutputURL,
+                        progress: { _ in }
+                    )
+
+                    let reversedAsset = AVURLAsset(url: reversedOutputURL)
+                    guard let reversedTrack = try await reversedAsset.loadTracks(withMediaType: mediaType).first else {
+                        continue
+                    }
+
+                    compositionTrack.removeTimeRange(CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration))
+                    effectiveSourceTrack = reversedTrack
+                    effectiveSourceTimeRange = CMTimeRange(start: .zero, duration: sourceTimeRange.duration)
+                    clipCompositionDuration = effectiveSourceTimeRange.duration
+                    try compositionTrack.insertTimeRange(effectiveSourceTimeRange, of: effectiveSourceTrack, at: destinationTime)
+                }
+
+                var didApplySpeedRamp = false
+                if clip.speedRampPoints.count >= 2 {
+                    let curve = SpeedRampCurve(points: clip.speedRampPoints)
+                    clipCompositionDuration = try applySpeedRamp(
+                        curve,
+                        sourceTrack: effectiveSourceTrack,
+                        sourceTimeRange: effectiveSourceTimeRange,
+                        destinationTime: destinationTime,
+                        compositionTrack: compositionTrack
+                    )
+                    didApplySpeedRamp = true
+                }
+
                 let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
-                if playbackRate != 1 {
+                if playbackRate != 1, !didApplySpeedRamp {
                     let scaledDuration = CMTime(seconds: clip.sourceRange.duration / playbackRate, preferredTimescale: 600)
-                    let insertedRange = CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration)
+                    let insertedRange = CMTimeRange(start: destinationTime, duration: clipCompositionDuration)
                     compositionTrack.scaleTimeRange(insertedRange, toDuration: scaledDuration)
+                    clipCompositionDuration = scaledDuration
+                }
+
+                if mediaType == .video {
+                    // Masked clips are carried into the video-composition metadata for future compositing.
+                    videoClipInstructions.append(ExportClipInstructionMetadata(
+                        clipID: clip.id,
+                        trackID: compositionTrack.trackID,
+                        timeRange: CMTimeRange(start: destinationTime, duration: clipCompositionDuration),
+                        transform: clip.transform,
+                        opacity: clip.opacity,
+                        mask: clip.mask,
+                        colorCorrection: clip.colorCorrection,
+                        effects: clip.effects
+                    ))
                 }
 
                 if mediaType == .audio {
@@ -118,6 +172,7 @@ final class ExportEngine {
 
         let videoComposition = makeVideoComposition(
             tracks: videoCompositionTracks,
+            clips: videoClipInstructions,
             duration: composition.duration,
             canvas: project.canvas
         )
@@ -132,6 +187,7 @@ final class ExportEngine {
 
     private func makeVideoComposition(
         tracks: [AVCompositionTrack],
+        clips: [ExportClipInstructionMetadata],
         duration: CMTime,
         canvas: CanvasPreset
     ) -> AVMutableVideoComposition? {
@@ -143,10 +199,63 @@ final class ExportEngine {
 
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-        instruction.layerInstructions = tracks.map { AVMutableVideoCompositionLayerInstruction(assetTrack: $0) }
+        let layerInstructions = tracks.map { AVMutableVideoCompositionLayerInstruction(assetTrack: $0) }
+        instruction.layerInstructions = layerInstructions
+
+        let layerInstructionsByTrackID = Dictionary(
+            uniqueKeysWithValues: zip(tracks.map(\.trackID), layerInstructions)
+        )
+        var customCompositorClips: [ExportClipInstructionMetadata] = []
+
+        for clip in clips {
+            guard let layerInstruction = layerInstructionsByTrackID[clip.trackID] else {
+                continue
+            }
+
+            if !isIdentityTransform(clip.transform) {
+                layerInstruction.setTransform(
+                    affineTransform(for: clip.transform, canvasSize: canvas.size),
+                    at: clip.timeRange.start
+                )
+                layerInstruction.setTransform(.identity, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
+            }
+
+            let opacity = min(max(clip.opacity, 0), 1)
+            if opacity < 1 {
+                layerInstruction.setOpacityRamp(
+                    fromStartOpacity: Float(opacity),
+                    toEndOpacity: Float(opacity),
+                    timeRange: clip.timeRange
+                )
+                layerInstruction.setOpacity(1, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
+            }
+
+            if clip.requiresCustomVideoCompositorMetadata {
+                // Color correction and analysis effects need a CIImage-backed custom compositor.
+                customCompositorClips.append(clip)
+            }
+        }
+
         videoComposition.instructions = [instruction]
+        videoComposition.animationTool = makeCustomVideoCompositorInstruction(
+            tracks: tracks,
+            clips: customCompositorClips,
+            canvas: canvas
+        )
 
         return videoComposition
+    }
+
+    private func makeCustomVideoCompositorInstruction(
+        tracks: [AVCompositionTrack],
+        clips: [ExportClipInstructionMetadata],
+        canvas: CanvasPreset
+    ) -> AVVideoCompositionCoreAnimationTool? {
+        _ = tracks
+        _ = clips
+        _ = canvas
+        // Placeholder for CoreAnimation-based compositing with masks, text animations, and style effects.
+        return nil
     }
 
     private func makeAudioMix(parameters: [AVAudioMixInputParameters]) -> AVMutableAudioMix? {

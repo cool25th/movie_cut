@@ -250,7 +250,9 @@ final class PlaybackEngine {
             trackID: CMPersistentTrackID,
             timeRange: CMTimeRange,
             transform: CGAffineTransform,
-            opacity: Float
+            opacity: Float,
+            colorCorrection: ColorCorrection?,
+            mask: Mask?
         )] = []
         var audioMixInputParameters: [AVAudioMixInputParameters] = []
 
@@ -315,7 +317,9 @@ final class PlaybackEngine {
                                 sourceSize: sourceSize,
                                 preferredTransform: preferredTransform
                             ),
-                            Float(min(max(clip.opacity, 0), 1))
+                            Float(min(max(clip.opacity, 0), 1)),
+                            clip.colorCorrection,
+                            clip.mask
                         ))
                     }
 
@@ -435,6 +439,9 @@ final class PlaybackEngine {
                 preferredTimescale: 600
             )
 
+            let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
+                clipInstruction.colorCorrection != nil || clipInstruction.mask != nil
+            }
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
 
@@ -471,7 +478,25 @@ final class PlaybackEngine {
                 }
             }
 
-            mutableVideoComposition.instructions = [instruction]
+            if usesCustomVideoCompositor {
+                mutableVideoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+                mutableVideoComposition.instructions = [
+                    CustomCompositionInstruction(
+                        timeRange: CMTimeRange(start: .zero, duration: composition.duration),
+                        trackIDs: sortedVideoCompositionTracks.map { $0.track.trackID },
+                        clipEffects: videoClipInstructions.compactMap { clipInstruction in
+                            CustomCompositionClipEffect(
+                                trackID: clipInstruction.trackID,
+                                timeRange: clipInstruction.timeRange,
+                                colorCorrection: clipInstruction.colorCorrection,
+                                mask: clipInstruction.mask
+                            )
+                        }
+                    )
+                ]
+            } else {
+                mutableVideoComposition.instructions = [instruction]
+            }
             if !textLayers.isEmpty {
                 let parentLayer = CALayer()
                 let videoLayer = CALayer()

@@ -223,6 +223,9 @@ final class ExportEngine {
         videoComposition.renderSize = canvas.size
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
 
+        let usesCustomVideoCompositor = clips.contains { clip in
+            clip.colorCorrection != nil || clip.mask != nil
+        }
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
         let layerInstructions = tracks.map { AVMutableVideoCompositionLayerInstruction(assetTrack: $0) }
@@ -267,7 +270,25 @@ final class ExportEngine {
             }
         }
 
-        videoComposition.instructions = [instruction]
+        if usesCustomVideoCompositor {
+            videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+            videoComposition.instructions = [
+                CustomCompositionInstruction(
+                    timeRange: CMTimeRange(start: .zero, duration: duration),
+                    trackIDs: tracks.map(\.trackID),
+                    clipEffects: clips.compactMap { clip in
+                        CustomCompositionClipEffect(
+                            trackID: clip.trackID,
+                            timeRange: clip.timeRange,
+                            colorCorrection: clip.colorCorrection,
+                            mask: clip.mask
+                        )
+                    }
+                )
+            ]
+        } else {
+            videoComposition.instructions = [instruction]
+        }
         videoComposition.animationTool = makeCustomVideoCompositorInstruction(
             tracks: tracks,
             clips: customCompositorClips,

@@ -8,7 +8,24 @@ import UniformTypeIdentifiers
 @Observable
 final class EditorViewModel {
     var currentProject: Project
-    var selectedClipId: UUID?
+    var selectedClipIds: Set<UUID> = []
+    var selectedClipId: UUID? {
+        get {
+            for track in currentProject.timeline.tracks {
+                if let clipId = track.clips.first(where: { selectedClipIds.contains($0.id) })?.id {
+                    return clipId
+                }
+            }
+            return selectedClipIds.first
+        }
+        set {
+            if let newValue {
+                selectedClipIds = [newValue]
+            } else {
+                selectedClipIds = []
+            }
+        }
+    }
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
     var exportEngine: ExportEngine
@@ -23,6 +40,7 @@ final class EditorViewModel {
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
+    @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
 
     init(project: Project = EditorViewModel.defaultProject()) {
         let project = EditorViewModel.ensureDefaultTracks(in: project)
@@ -72,6 +90,25 @@ final class EditorViewModel {
         }
 
         return nil
+    }
+
+    func waveform(for clip: Clip) -> [CGFloat] {
+        if let cached = waveformCache[clip.id] { return cached }
+
+        guard
+            clip.kind == .video || clip.kind == .audio,
+            let assetId = clip.assetId,
+            let asset = currentProject.mediaLibrary.assets[assetId],
+            asset.kind == .video || asset.kind == .audio,
+            let waveformData = WaveformGenerator.generate(for: asset)
+        else {
+            waveformCache[clip.id] = []
+            return []
+        }
+
+        let samples = waveformData.samples.map { CGFloat($0) }
+        waveformCache[clip.id] = samples
+        return samples
     }
 
     var canGenerateSubtitles: Bool {
@@ -158,6 +195,10 @@ final class EditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    func cancelExport() {
+        exportEngine.cancelExport()
     }
 
     func importMedia(_ urls: [URL]) async {
@@ -314,7 +355,21 @@ final class EditorViewModel {
 
     func duplicateClip(clipId: UUID) async {
         selectedClipId = clipId
-        await apply(DuplicateClipCommand(clipId: clipId))
+        await duplicateClips([clipId])
+    }
+
+    func duplicateClips(_ clipIds: Set<UUID>) async {
+        let orderedClipIds = timelineOrderedClipIds(from: clipIds)
+        guard !orderedClipIds.isEmpty else { return }
+
+        do {
+            for clipId in orderedClipIds {
+                try await session.dispatch(DuplicateClipCommand(clipId: clipId))
+            }
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     func copyClip(clipId: UUID, targetTrackId: UUID, targetStartTime: TimeInterval) async {
@@ -329,11 +384,18 @@ final class EditorViewModel {
     }
 
     func deleteClip() async {
-        guard let selectedClipId else { return }
+        await deleteClips(selectedClipIds)
+    }
+
+    func deleteClips(_ clipIds: Set<UUID>) async {
+        let orderedClipIds = timelineOrderedClipIds(from: clipIds)
+        guard !orderedClipIds.isEmpty else { return }
 
         do {
-            try await session.dispatch(DeleteClipCommand(clipId: selectedClipId))
-            self.selectedClipId = nil
+            for clipId in orderedClipIds {
+                try await session.dispatch(DeleteClipCommand(clipId: clipId))
+            }
+            selectedClipIds.subtract(Set(orderedClipIds))
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -543,9 +605,7 @@ final class EditorViewModel {
     private func refreshFromSession() async throws {
         currentProject = await session.snapshot()
 
-        if selectedClipId != nil, selectedClip == nil {
-            self.selectedClipId = nil
-        }
+        selectedClipIds.formIntersection(currentClipIds)
 
         if let selectedAssetId, currentProject.mediaLibrary.assets[selectedAssetId] == nil {
             self.selectedAssetId = nil
@@ -558,6 +618,20 @@ final class EditorViewModel {
     private func clearGeneratedSubtitles() {
         generatedSubtitleSegments = []
         pendingSubtitleClips = []
+    }
+
+    private var currentClipIds: Set<UUID> {
+        Set(currentProject.timeline.tracks.flatMap(\.clips).map(\.id))
+    }
+
+    private func timelineOrderedClipIds(from clipIds: Set<UUID>) -> [UUID] {
+        var orderedClipIds: [UUID] = []
+        for track in currentProject.timeline.tracks {
+            for clip in track.clips where clipIds.contains(clip.id) {
+                orderedClipIds.append(clip.id)
+            }
+        }
+        return orderedClipIds
     }
 
     private func syncTimelinePlayhead(to playbackTime: TimeInterval) {
@@ -645,7 +719,7 @@ final class EditorViewModel {
         let image = NSImage(size: size)
         image.lockFocus()
         NSColor.clear.setFill()
-        NSRect(origin: .zero, size: size).fill()
+        NSRect(origin: NSPoint(x: 0, y: 0), size: size).fill()
 
         let font = NSFont.systemFont(ofSize: 280)
         let attributes: [NSAttributedString.Key: Any] = [
@@ -690,7 +764,7 @@ final class EditorViewModel {
     }
 
     func applyAnalysisSuggestion(_ suggestion: AnalysisSuggestion) async throws -> [any EditorCommand] {
-        try AutoCutEngine.apply(suggestions: [suggestion], to: session)
+        try await AutoCutEngine.apply(suggestions: [suggestion], to: session)
     }
 
     func dispatchCommand(_ command: any EditorCommand) async throws {
@@ -721,7 +795,7 @@ final class EditorViewModel {
     func applyAllSuggestions() async {
         guard let result = analysisResult else { return }
         do {
-            let commands = try AutoCutEngine.apply(suggestions: result.suggestions, to: session)
+            let commands = try await AutoCutEngine.apply(suggestions: result.suggestions, to: session)
             for command in commands {
                 try await session.dispatch(command)
             }

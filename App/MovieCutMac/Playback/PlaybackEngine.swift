@@ -18,6 +18,7 @@ final class PlaybackEngine {
     @ObservationIgnored private var textLayers: [CALayer] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
 
     init() {
         self.player = AVPlayer()
@@ -40,6 +41,7 @@ final class PlaybackEngine {
         currentTime = 0
         duration = asset.duration ?? 0
         player.replaceCurrentItem(with: item)
+        cleanupTemporaryReverseRenderURLs()
         observeStatus(for: item)
     }
 
@@ -52,7 +54,7 @@ final class PlaybackEngine {
             guard let self else { return }
 
             do {
-                let (composition, videoComposition, audioMix) = try await buildComposition(from: project)
+                let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project)
                 let item = AVPlayerItem(asset: composition)
                 item.videoComposition = videoComposition
                 item.audioMix = audioMix
@@ -61,6 +63,8 @@ final class PlaybackEngine {
                 currentTime = 0
                 duration = composition.duration.seconds.isFinite ? composition.duration.seconds : 0
                 player.replaceCurrentItem(with: item)
+                cleanupTemporaryReverseRenderURLs()
+                self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
             } catch {
                 clear()
@@ -73,6 +77,7 @@ final class PlaybackEngine {
         statusObservation?.invalidate()
         statusObservation = nil
         player.replaceCurrentItem(with: nil)
+        cleanupTemporaryReverseRenderURLs()
         playerItem = nil
         currentTime = 0
         duration = 0
@@ -152,9 +157,17 @@ final class PlaybackEngine {
     private func buildComposition(from project: Project) async throws -> (
         AVMutableComposition,
         AVMutableVideoComposition?,
-        AVMutableAudioMix?
+        AVMutableAudioMix?,
+        [URL]
     ) {
         textLayers = []
+        var temporaryReverseRenderURLs: [URL] = []
+        var shouldKeepTemporaryReverseRenderURLs = false
+        defer {
+            if !shouldKeepTemporaryReverseRenderURLs {
+                removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)
+            }
+        }
 
         func cmTime(_ seconds: TimeInterval) -> CMTime {
             CMTime(seconds: seconds, preferredTimescale: 600)
@@ -169,6 +182,46 @@ final class PlaybackEngine {
             guard playbackRate != 1 else { return insertedDuration }
 
             return CMTime(seconds: insertedDuration.seconds / playbackRate, preferredTimescale: 600)
+        }
+
+        func applyAudioVolumeAndFades(
+            for clip: Clip,
+            audioParameters: AVMutableAudioMixInputParameters,
+            destinationTime: CMTime,
+            clipDuration: CMTime
+        ) {
+            let volume = Float(clip.volume)
+            audioParameters.setVolume(volume, at: destinationTime)
+
+            guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
+
+            if clip.fadeInDuration > 0 {
+                let fadeInDuration = min(clip.fadeInDuration, clipDuration.seconds)
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: 0,
+                    toEndVolume: volume,
+                    timeRange: CMTimeRange(
+                        start: destinationTime,
+                        duration: CMTime(seconds: fadeInDuration, preferredTimescale: 600)
+                    )
+                )
+            }
+
+            if clip.fadeOutDuration > 0 {
+                let fadeOutDuration = min(clip.fadeOutDuration, clipDuration.seconds)
+                let fadeOutStart = CMTimeAdd(
+                    destinationTime,
+                    CMTime(seconds: clipDuration.seconds - fadeOutDuration, preferredTimescale: 600)
+                )
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: volume,
+                    toEndVolume: 0,
+                    timeRange: CMTimeRange(
+                        start: fadeOutStart,
+                        duration: CMTime(seconds: fadeOutDuration, preferredTimescale: 600)
+                    )
+                )
+            }
         }
 
         func affineTransform(
@@ -293,16 +346,38 @@ final class PlaybackEngine {
                             videoCompositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
                         }
 
+                        var effectiveSourceTrack = sourceTrack
+                        var effectiveSourceTimeRange = sourceTimeRange
+                        if clip.isReversed {
+                            let reversedOutputURL = temporaryReverseRenderURL(for: clip)
+                            temporaryReverseRenderURLs.append(reversedOutputURL)
+                            try await ReverseRenderService().renderReversed(
+                                clip: sourceAsset,
+                                timeRange: sourceTimeRange,
+                                outputURL: reversedOutputURL,
+                                progress: { _ in }
+                            )
+
+                            let reversedAsset = AVURLAsset(url: reversedOutputURL)
+                            guard let reversedTrack = try await reversedAsset.loadTracks(withMediaType: .video).first else {
+                                continue
+                            }
+
+                            effectiveSourceTrack = reversedTrack
+                            effectiveSourceTimeRange = CMTimeRange(start: .zero, duration: sourceTimeRange.duration)
+                        }
+
                         try videoCompositionTrack.insertTimeRange(
-                            sourceTimeRange,
-                            of: sourceTrack,
+                            effectiveSourceTimeRange,
+                            of: effectiveSourceTrack,
                             at: destinationTime
                         )
 
-                        let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
-                        if scaledDuration != sourceTimeRange.duration {
+                        let insertedDuration = effectiveSourceTimeRange.duration
+                        let scaledDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
+                        if scaledDuration != insertedDuration {
                             videoCompositionTrack.scaleTimeRange(
-                                CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                                CMTimeRange(start: destinationTime, duration: insertedDuration),
                                 toDuration: scaledDuration
                             )
                         }
@@ -339,7 +414,12 @@ final class PlaybackEngine {
                             )
                         }
 
-                        audioParameters.setVolume(Float(clip.volume), at: destinationTime)
+                        applyAudioVolumeAndFades(
+                            for: clip,
+                            audioParameters: audioParameters,
+                            destinationTime: destinationTime,
+                            clipDuration: scaledDuration
+                        )
                     }
                 }
 
@@ -380,7 +460,12 @@ final class PlaybackEngine {
                         )
                     }
 
-                    audioParameters.setVolume(Float(clip.volume), at: destinationTime)
+                    applyAudioVolumeAndFades(
+                        for: clip,
+                        audioParameters: audioParameters,
+                        destinationTime: destinationTime,
+                        clipDuration: scaledDuration
+                    )
                 }
 
                 audioMixInputParameters.append(audioParameters)
@@ -526,7 +611,26 @@ final class PlaybackEngine {
             audioMix = mutableAudioMix
         }
 
-        return (composition, videoComposition, audioMix)
+        shouldKeepTemporaryReverseRenderURLs = true
+        return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)
+    }
+
+    private func temporaryReverseRenderURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutPlaybackReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mov")
+    }
+
+    private func cleanupTemporaryReverseRenderURLs() {
+        removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)
+        temporaryReverseRenderURLs = []
+    }
+
+    private func removeTemporaryReverseRenderURLs(_ urls: [URL]) {
+        let fileManager = FileManager.default
+        for url in urls where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     private func handlePlayerItemStatusChanged() {

@@ -57,6 +57,46 @@ final class ExportEngine {
         var videoClipInstructions: [ExportClipInstructionMetadata] = []
         var audioMixInputParameters: [AVAudioMixInputParameters] = []
 
+        func applyAudioVolumeAndFades(
+            for clip: Clip,
+            audioParameters: AVMutableAudioMixInputParameters,
+            destinationTime: CMTime,
+            clipDuration: CMTime
+        ) {
+            let volume = Float(clip.volume)
+            audioParameters.setVolume(volume, at: destinationTime)
+
+            guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
+
+            if clip.fadeInDuration > 0 {
+                let fadeInDuration = min(clip.fadeInDuration, clipDuration.seconds)
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: 0,
+                    toEndVolume: volume,
+                    timeRange: CMTimeRange(
+                        start: destinationTime,
+                        duration: CMTime(seconds: fadeInDuration, preferredTimescale: 600)
+                    )
+                )
+            }
+
+            if clip.fadeOutDuration > 0 {
+                let fadeOutDuration = min(clip.fadeOutDuration, clipDuration.seconds)
+                let fadeOutStart = CMTimeAdd(
+                    destinationTime,
+                    CMTime(seconds: clipDuration.seconds - fadeOutDuration, preferredTimescale: 600)
+                )
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: volume,
+                    toEndVolume: 0,
+                    timeRange: CMTimeRange(
+                        start: fadeOutStart,
+                        duration: CMTime(seconds: fadeOutDuration, preferredTimescale: 600)
+                    )
+                )
+            }
+        }
+
         for track in project.timeline.tracks where !track.isMuted {
             if track.kind == .text {
                 for clip in track.clips {
@@ -187,7 +227,12 @@ final class ExportEngine {
                 }
 
                 if mediaType == .audio {
-                    audioParameters.setVolume(Float(clip.volume), at: destinationTime)
+                    applyAudioVolumeAndFades(
+                        for: clip,
+                        audioParameters: audioParameters,
+                        destinationTime: destinationTime,
+                        clipDuration: clipCompositionDuration
+                    )
                 }
             }
 
@@ -550,6 +595,14 @@ final class ExportEngine {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
+    }
+
+    func cancelExport() {
+        activeExportSession?.cancelExport()
+        progressTask?.cancel()
+        activeExportSession = nil
+        exportProgress = 0
+        isExporting = false
     }
 
     private func finishExport() {

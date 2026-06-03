@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
 import UniformTypeIdentifiers
@@ -157,12 +158,35 @@ struct TimelineView: View {
     private func clipView(_ clip: Clip, trackKind: TrackKind) -> some View {
         let x = CGFloat(clip.timelineRange.start) * CGFloat(pixelsPerSecond)
         let width = CGFloat(clip.timelineRange.duration) * CGFloat(pixelsPerSecond)
-        let isSelected = clip.id == viewModel.selectedClipId
+        let isSelected = viewModel.selectedClipIds.contains(clip.id)
         let isActiveDrag = isDragging && draggedClipId == clip.id
 
         return ZStack {
             RoundedRectangle(cornerRadius: 4)
                 .fill(colorForClip(trackKind: trackKind, selected: isSelected))
+                .overlay {
+                    if trackKind != .text {
+                        Canvas { context, size in
+                            let samples = viewModel.waveform(for: clip)
+                            guard !samples.isEmpty else { return }
+
+                            let barWidth = max(1, size.width / CGFloat(samples.count))
+                            let midY = size.height / 2
+
+                            for (index, sample) in samples.enumerated() {
+                                let barHeight = CGFloat(sample) * size.height * 0.8
+                                let rect = CGRect(
+                                    x: CGFloat(index) * barWidth,
+                                    y: midY - barHeight / 2,
+                                    width: max(1, barWidth - 0.5),
+                                    height: barHeight
+                                )
+                                context.fill(Path(rect), with: .color(.white.opacity(0.4)))
+                            }
+                        }
+                        .allowsHitTesting(false)
+                    }
+                }
                 .overlay(alignment: .leading) {
                     Text(clipLabel(clip))
                         .font(.system(size: 10))
@@ -194,27 +218,54 @@ struct TimelineView: View {
             .zIndex(isActiveDrag || isSelected ? 1 : 0)
             .contentShape(Rectangle())
             .onTapGesture {
-                viewModel.selectedClipId = clip.id
+                selectClip(clip.id, extendingSelection: isCommandModifierPressed)
             }
             .contextMenu {
                 Button("Split") {
-                    viewModel.selectedClipId = clip.id
+                    selectClip(clip.id, extendingSelection: false)
                     Task { await viewModel.splitClip() }
                 }
                 Button("Delete") {
-                    viewModel.selectedClipId = clip.id
-                    Task { await viewModel.deleteClip() }
+                    let clipIds = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.deleteClips(clipIds) }
                 }
                 Button("Duplicate") {
-                    viewModel.selectedClipId = clip.id
-                    Task { await viewModel.duplicateClip(clipId: clip.id) }
+                    let clipIds = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.duplicateClips(clipIds) }
                 }
                 Divider()
                 Button("Ripple Delete") {
-                    viewModel.selectedClipId = clip.id
+                    selectClip(clip.id, extendingSelection: false)
                     Task { await viewModel.rippleDeleteClip(clipId: clip.id) }
                 }
             }
+    }
+
+    private var isCommandModifierPressed: Bool {
+        NSApp.currentEvent?.modifierFlags.contains(.command) == true
+    }
+
+    @MainActor
+    private func selectClip(_ clipId: UUID, extendingSelection: Bool) {
+        if extendingSelection {
+            if viewModel.selectedClipIds.contains(clipId) {
+                viewModel.selectedClipIds.remove(clipId)
+            } else {
+                viewModel.selectedClipIds.insert(clipId)
+            }
+        } else {
+            viewModel.selectedClipIds = [clipId]
+        }
+    }
+
+    @MainActor
+    private func contextMenuClipIds(anchor clipId: UUID) -> Set<UUID> {
+        if viewModel.selectedClipIds.contains(clipId) {
+            return viewModel.selectedClipIds
+        }
+
+        viewModel.selectedClipIds = [clipId]
+        return [clipId]
     }
 
     private func moveGesture(for clip: Clip) -> some Gesture {

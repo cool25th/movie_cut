@@ -80,7 +80,7 @@ struct ContentView: View {
             get: { viewModel.exportEngine.isExporting },
             set: { _ in }
         )) {
-            ExportSheet(exportEngine: viewModel.exportEngine)
+            ExportSheet(viewModel: viewModel)
         }
         .sheet(isPresented: $isTemplatePickerPresented) {
             TemplatePickerView(viewModel: viewModel)
@@ -149,21 +149,24 @@ struct ContentView: View {
 }
 
 struct ExportSheet: View {
-    var exportEngine: ExportEngine
+    var viewModel: EditorViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Exporting")
                 .font(.headline)
-            ProgressView(value: exportEngine.exportProgress)
+            ProgressView(value: viewModel.exportEngine.exportProgress)
                 .frame(width: 280)
-            Text(String(format: "%.0f%%", exportEngine.exportProgress * 100))
+            Text(String(format: "%.0f%%", viewModel.exportEngine.exportProgress * 100))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let exportError = exportEngine.exportError {
+            if let exportError = viewModel.exportEngine.exportError {
                 Text(exportError)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+            Button("Cancel") {
+                viewModel.cancelExport()
             }
         }
         .padding(16)

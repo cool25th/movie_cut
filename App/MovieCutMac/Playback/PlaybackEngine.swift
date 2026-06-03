@@ -304,7 +304,10 @@ final class PlaybackEngine {
             timeRange: CMTimeRange,
             transform: CGAffineTransform,
             opacity: Float,
+            transition: Transition?,
             colorCorrection: ColorCorrection?,
+            chromaKeyColor: SIMD3<Float>?,
+            chromaKeyThreshold: Float,
             mask: Mask?
         )] = []
         var audioMixInputParameters: [AVAudioMixInputParameters] = []
@@ -393,7 +396,10 @@ final class PlaybackEngine {
                                 preferredTransform: preferredTransform
                             ),
                             Float(min(max(clip.opacity, 0), 1)),
+                            clip.transition,
                             clip.colorCorrection,
+                            clip.chromaKeyColor,
+                            clip.chromaKeyThreshold,
                             clip.mask
                         ))
                     }
@@ -507,6 +513,15 @@ final class PlaybackEngine {
                     let clipDuration = cmTime(clip.timelineRange.duration)
                     textLayer.beginTime = AVCoreAnimationBeginTimeAtZero + clipStart.seconds
                     textLayer.duration = clipDuration.seconds
+                    if let animation = textContent.animation {
+                        TextAnimationRenderer.applyCoreAnimation(
+                            animation,
+                            to: textLayer,
+                            canvasSize: canvasSize,
+                            fontSize: fontSize,
+                            text: textContent.text
+                        )
+                    }
                     textLayers.append(textLayer)
                 }
             }
@@ -525,7 +540,7 @@ final class PlaybackEngine {
             )
 
             let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
-                clipInstruction.colorCorrection != nil || clipInstruction.mask != nil
+                clipInstruction.colorCorrection != nil || clipInstruction.chromaKeyColor != nil || clipInstruction.mask != nil
             }
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
@@ -561,6 +576,22 @@ final class PlaybackEngine {
                         at: CMTimeAdd(clipInstruction.timeRange.start, clipInstruction.timeRange.duration)
                     )
                 }
+
+                if let transition = clipInstruction.transition, transition.type == .crossDissolve {
+                    let overlapDuration = transition.duration
+                    let overlapStart = CMTimeAdd(
+                        clipInstruction.timeRange.start,
+                        CMTime(seconds: clipInstruction.timeRange.duration.seconds - overlapDuration, preferredTimescale: 600)
+                    )
+                    layerInstruction.setOpacityRamp(
+                        fromStartOpacity: 1.0,
+                        toEndOpacity: 0.0,
+                        timeRange: CMTimeRange(
+                            start: overlapStart,
+                            duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
+                        )
+                    )
+                }
             }
 
             if usesCustomVideoCompositor {
@@ -574,6 +605,8 @@ final class PlaybackEngine {
                                 trackID: clipInstruction.trackID,
                                 timeRange: clipInstruction.timeRange,
                                 colorCorrection: clipInstruction.colorCorrection,
+                                chromaKeyColor: clipInstruction.chromaKeyColor,
+                                chromaKeyThreshold: clipInstruction.chromaKeyThreshold,
                                 mask: clipInstruction.mask
                             )
                         }

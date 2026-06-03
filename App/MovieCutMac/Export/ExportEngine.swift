@@ -11,14 +11,17 @@ final class ExportEngine {
     var isExporting = false
     var exportProgress: Double = 0
     var exportError: String?
+    var lastExportURL: URL?
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
 
-    func export(project: Project, to url: URL) async throws {
+    @discardableResult
+    func export(project: Project, to url: URL) async throws -> URL {
         isExporting = true
         exportProgress = 0
         exportError = nil
+        lastExportURL = nil
 
         do {
             let exportPackage = try await makeExportPackage(for: project)
@@ -43,7 +46,9 @@ final class ExportEngine {
             let fileType = outputFileType(for: url, settings: project.exportSettings, supportedFileTypes: exportSession.supportedFileTypes)
             try await exportSession.export(to: url, as: fileType)
             exportProgress = 1
+            lastExportURL = url
             finishExport()
+            return url
         } catch {
             exportError = error.localizedDescription
             finishExport()
@@ -112,8 +117,11 @@ final class ExportEngine {
                         timeRange: CMTimeRange(start: destinationTime, duration: clipDuration),
                         transform: clip.transform,
                         opacity: clip.opacity,
+                        transition: nil,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        chromaKeyColor: clip.chromaKeyColor,
+                        chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
                         textContent: textContent
                     ))
@@ -220,8 +228,11 @@ final class ExportEngine {
                         timeRange: CMTimeRange(start: destinationTime, duration: clipCompositionDuration),
                         transform: clip.transform,
                         opacity: clip.opacity,
+                        transition: clip.transition,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        chromaKeyColor: clip.chromaKeyColor,
+                        chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects
                     ))
                 }
@@ -269,7 +280,7 @@ final class ExportEngine {
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
 
         let usesCustomVideoCompositor = clips.contains { clip in
-            clip.colorCorrection != nil || clip.mask != nil
+            clip.colorCorrection != nil || clip.chromaKeyColor != nil || clip.mask != nil
         }
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -309,8 +320,24 @@ final class ExportEngine {
                 layerInstruction.setOpacity(1, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
             }
 
+            if let transition = clip.transition, transition.type == .crossDissolve {
+                let overlapDuration = transition.duration
+                let overlapStart = CMTimeAdd(
+                    clip.timeRange.start,
+                    CMTime(seconds: clip.timeRange.duration.seconds - overlapDuration, preferredTimescale: 600)
+                )
+                layerInstruction.setOpacityRamp(
+                    fromStartOpacity: 1.0,
+                    toEndOpacity: 0.0,
+                    timeRange: CMTimeRange(
+                        start: overlapStart,
+                        duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
+                    )
+                )
+            }
+
             if clip.requiresCustomVideoCompositorMetadata {
-                // Color correction and analysis effects need a CIImage-backed custom compositor.
+                // Color correction, chroma key, and analysis effects need a CIImage-backed custom compositor.
                 customCompositorClips.append(clip)
             }
         }
@@ -326,6 +353,8 @@ final class ExportEngine {
                             trackID: clip.trackID,
                             timeRange: clip.timeRange,
                             colorCorrection: clip.colorCorrection,
+                            chromaKeyColor: clip.chromaKeyColor,
+                            chromaKeyThreshold: clip.chromaKeyThreshold,
                             mask: clip.mask
                         )
                     }
@@ -384,6 +413,15 @@ final class ExportEngine {
             let duration = clipMeta.timeRange.duration.seconds
             textLayer.beginTime = AVCoreAnimationBeginTimeAtZero + beginTime
             textLayer.duration = duration
+            if let animation = textContent.animation {
+                TextAnimationRenderer.applyCoreAnimation(
+                    animation,
+                    to: textLayer,
+                    canvasSize: canvas.size,
+                    fontSize: fontSize,
+                    text: textContent.text
+                )
+            }
             parentLayer.addSublayer(textLayer)
             addedTextLayer = true
         }
@@ -602,6 +640,7 @@ final class ExportEngine {
         progressTask?.cancel()
         activeExportSession = nil
         exportProgress = 0
+        lastExportURL = nil
         isExporting = false
     }
 
@@ -625,13 +664,16 @@ private struct ExportClipInstructionMetadata {
     var timeRange: CMTimeRange
     var transform: ClipTransform
     var opacity: Double
+    var transition: Transition?
     var mask: Mask?
     var colorCorrection: ColorCorrection?
+    var chromaKeyColor: SIMD3<Float>?
+    var chromaKeyThreshold: Float = 0.3
     var effects: [Effect]
     var textContent: TextClipContent?
 
     var requiresCustomVideoCompositorMetadata: Bool {
-        textContent != nil || mask != nil || colorCorrection != nil || !effects.isEmpty
+        textContent != nil || mask != nil || colorCorrection != nil || chromaKeyColor != nil || !effects.isEmpty
     }
 }
 

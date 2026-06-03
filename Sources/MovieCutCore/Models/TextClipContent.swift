@@ -38,6 +38,9 @@ public struct TextClipContent: Codable, Sendable, Equatable {
     /// The text position on the canvas.
     public var position: CGPoint
 
+    /// Optional animation applied when rendering this text clip.
+    public var animation: TextAnimation?
+
     /// Creates text clip content.
     public init(
         text: String,
@@ -46,7 +49,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         fontColor: String = "#FFFFFF",
         alignment: TextAlignment = .center,
         backgroundColor: String? = nil,
-        position: CGPoint = .zero
+        position: CGPoint = .zero,
+        animation: TextAnimation? = nil
     ) {
         self.text = text
         self.fontFamily = fontFamily
@@ -55,5 +59,6 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         self.alignment = alignment
         self.backgroundColor = backgroundColor
         self.position = position
+        self.animation = animation
     }
 }

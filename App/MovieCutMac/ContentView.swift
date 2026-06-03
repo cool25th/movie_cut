@@ -2,7 +2,7 @@ import SwiftUI
 import MovieCutCore
 
 struct ContentView: View {
-    var viewModel: EditorViewModel
+    @Bindable var viewModel: EditorViewModel
     @State private var isCanvasSettingsPresented = false
     @State private var isTemplatePickerPresented = false
 
@@ -54,6 +54,18 @@ struct ContentView: View {
 
                 Divider()
 
+                Picker("Canvas", selection: $viewModel.canvasSelection) {
+                    ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
+                        Text(aspectRatio.displayName).tag(aspectRatio)
+                    }
+                }
+                .onChange(of: viewModel.canvasSelection) { _, newValue in
+                    guard viewModel.currentProject.canvas.aspectRatio != newValue else { return }
+                    Task {
+                        await viewModel.updateCanvas(CanvasPreset(aspectRatio: newValue))
+                    }
+                }
+
                 Button(action: { isCanvasSettingsPresented.toggle() }) {
                     Label("Canvas", systemImage: "rectangle.dashed")
                 }
@@ -69,10 +81,27 @@ struct ContentView: View {
 
                 Divider()
 
+                Button(action: { Task { await viewModel.syncToCloud() } }) {
+                    if viewModel.isCloudSyncing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "cloud.and.arrow.up")
+                    }
+                }
+                .help("Sync to Cloud")
+
+                Divider()
+
                 Button(action: { Task { await viewModel.exportProject() } }) {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
                 .keyboardShortcut("e", modifiers: .command)
+
+                if let exportURL = viewModel.lastExportURL {
+                    ShareLink(item: exportURL) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                }
             }
         }
         .background(shortcutButtons)
@@ -85,6 +114,17 @@ struct ContentView: View {
         .sheet(isPresented: $isTemplatePickerPresented) {
             TemplatePickerView(viewModel: viewModel)
         }
+    }
+
+    private var toolbarCanvasPresets: [AspectRatio] {
+        [
+            .landscape16x9,
+            .portrait9x16,
+            .portrait4x5,
+            .square1x1,
+            .wide21x9,
+            .ultrawide21x9
+        ]
     }
 
     private var statusBar: some View {

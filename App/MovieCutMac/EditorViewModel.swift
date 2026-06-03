@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 @Observable
 final class EditorViewModel {
     var currentProject: Project
+    var canvasSelection: AspectRatio = .landscape16x9
     var selectedClipIds: Set<UUID> = []
     var selectedClipId: UUID? {
         get {
@@ -37,6 +38,9 @@ final class EditorViewModel {
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
+    var lastExportURL: URL?
+    var isCloudSyncing: Bool = false
+    var cloudSyncError: String?
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
@@ -45,6 +49,7 @@ final class EditorViewModel {
     init(project: Project = EditorViewModel.defaultProject()) {
         let project = EditorViewModel.ensureDefaultTracks(in: project)
         self.currentProject = project
+        self.canvasSelection = project.canvas.aspectRatio
         self.playbackEngine = PlaybackEngine()
         self.exportEngine = ExportEngine()
         self.musicLibrary = MusicLibrary.placeholder()
@@ -130,12 +135,14 @@ final class EditorViewModel {
         let project = Self.defaultProject()
         session = EditorSession(project: project)
         currentProject = project
+        canvasSelection = project.canvas.aspectRatio
         selectedClipId = nil
         selectedAssetId = nil
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
         lastErrorMessage = nil
+        lastExportURL = nil
     }
 
     func openProject(from url: URL) async {
@@ -144,12 +151,14 @@ final class EditorViewModel {
             let project = Self.ensureDefaultTracks(in: loadedProject)
             session = EditorSession(project: project)
             currentProject = project
+            canvasSelection = project.canvas.aspectRatio
             selectedClipId = nil
             selectedAssetId = nil
             playbackEngine.clear()
             playheadTime = 0
             clearGeneratedSubtitles()
             lastErrorMessage = nil
+            lastExportURL = nil
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -178,6 +187,19 @@ final class EditorViewModel {
         await saveProject(to: url)
     }
 
+    func syncToCloud() async {
+        isCloudSyncing = true
+        defer { isCloudSyncing = false }
+
+        do {
+            let sync = CloudSyncService()
+            try await sync.sync(project: currentProject)
+            cloudSyncError = nil
+        } catch {
+            cloudSyncError = error.localizedDescription
+        }
+    }
+
     func exportProject() async {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
@@ -188,11 +210,14 @@ final class EditorViewModel {
             return
         }
 
+        lastExportURL = nil
+
         do {
             let snapshot = await session.snapshot()
-            try await exportEngine.export(project: snapshot, to: url)
+            lastExportURL = try await exportEngine.export(project: snapshot, to: url)
             lastErrorMessage = nil
         } catch {
+            lastExportURL = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -604,6 +629,7 @@ final class EditorViewModel {
 
     private func refreshFromSession() async throws {
         currentProject = await session.snapshot()
+        canvasSelection = currentProject.canvas.aspectRatio
 
         selectedClipIds.formIntersection(currentClipIds)
 
@@ -835,6 +861,7 @@ final class EditorViewModel {
         let project = templateStore.createProject(from: bundle)
         session = EditorSession(project: project)
         currentProject = project
+        canvasSelection = project.canvas.aspectRatio
         selectedClipId = nil
         selectedAssetId = nil
         playbackEngine.clear()
@@ -842,6 +869,7 @@ final class EditorViewModel {
         clearGeneratedSubtitles()
         analysisResult = nil
         lastErrorMessage = nil
+        lastExportURL = nil
     }
 
     func createProjectFromTemplate(_ bundle: TemplateBundle) async {

@@ -3,8 +3,83 @@ import CoreImage
 import CoreText
 import Foundation
 import MovieCutCore
+import QuartzCore
 
 final class TextAnimationRenderer {
+    static func applyCoreAnimation(
+        _ textAnimation: TextAnimation,
+        to textLayer: CATextLayer,
+        canvasSize: CGSize,
+        fontSize: CGFloat,
+        text: String
+    ) {
+        let duration = max(textAnimation.duration, 0)
+        guard duration > 0 else { return }
+
+        let delay = max(textAnimation.delay, 0)
+        let targetPositionY = textLayer.position.y
+        let targetOpacity = textLayer.opacity
+
+        switch textAnimation.type {
+        case .fadeIn:
+            let fadeAnimation = CABasicAnimation(keyPath: "opacity")
+            fadeAnimation.fromValue = 0
+            fadeAnimation.toValue = targetOpacity
+            configure(fadeAnimation, duration: duration, delay: delay)
+            textLayer.add(fadeAnimation, forKey: "fadeIn")
+        case .fadeOut:
+            let fadeAnimation = CABasicAnimation(keyPath: "opacity")
+            fadeAnimation.fromValue = targetOpacity
+            fadeAnimation.toValue = 0
+            configure(fadeAnimation, duration: duration, delay: delay)
+            textLayer.add(fadeAnimation, forKey: "fadeOut")
+        case .slideUp:
+            let slideAnimation = CABasicAnimation(keyPath: "position.y")
+            slideAnimation.fromValue = canvasSize.height + fontSize
+            slideAnimation.toValue = targetPositionY
+            configure(slideAnimation, duration: duration, delay: delay)
+            textLayer.add(slideAnimation, forKey: "slideUp")
+        case .slideDown:
+            let slideAnimation = CABasicAnimation(keyPath: "position.y")
+            slideAnimation.fromValue = -fontSize
+            slideAnimation.toValue = targetPositionY
+            configure(slideAnimation, duration: duration, delay: delay)
+            textLayer.add(slideAnimation, forKey: "slideDown")
+        case .scale:
+            let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
+            scaleAnimation.fromValue = 0
+            scaleAnimation.toValue = 1
+            configure(scaleAnimation, duration: duration, delay: delay)
+            textLayer.add(scaleAnimation, forKey: "scale")
+        case .bounce:
+            let bounceAnimation = CAKeyframeAnimation(keyPath: "position.y")
+            bounceAnimation.values = [
+                NSNumber(value: Double(targetPositionY)),
+                NSNumber(value: Double(targetPositionY + 20)),
+                NSNumber(value: Double(targetPositionY - 8)),
+                NSNumber(value: Double(targetPositionY + 3)),
+                NSNumber(value: Double(targetPositionY))
+            ]
+            bounceAnimation.keyTimes = [0, 0.35, 0.6, 0.8, 1].map(NSNumber.init(value:))
+            configure(bounceAnimation, duration: duration, delay: delay)
+            textLayer.add(bounceAnimation, forKey: "bounce")
+        case .typewriter:
+            guard !text.isEmpty else { return }
+
+            let characters = Array(text)
+            let typewriterAnimation = CAKeyframeAnimation(keyPath: "string")
+            typewriterAnimation.values = (0...characters.count).map { characterCount in
+                String(characters.prefix(characterCount))
+            }
+            typewriterAnimation.keyTimes = (0...characters.count).map { characterCount in
+                NSNumber(value: Double(characterCount) / Double(characters.count))
+            }
+            typewriterAnimation.calculationMode = .discrete
+            configure(typewriterAnimation, duration: duration, delay: delay)
+            textLayer.add(typewriterAnimation, forKey: "typewriter")
+        }
+    }
+
     static func render(
         text: String,
         font: CGFont,
@@ -44,6 +119,18 @@ final class TextAnimationRenderer {
         )
         let clear = CIImage(color: CIColor.clear).cropped(to: bounds)
         return transformed.composited(over: clear).cropped(to: bounds)
+    }
+
+    private static func configure(
+        _ animation: CAAnimation,
+        duration: TimeInterval,
+        delay: TimeInterval
+    ) {
+        animation.duration = duration
+        animation.beginTime = delay
+        animation.fillMode = .both
+        animation.isRemovedOnCompletion = false
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
     }
 
     private static func renderedText(_ text: String, animation: TextAnimation, progress: Double) -> String {

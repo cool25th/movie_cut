@@ -65,6 +65,42 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Optional chroma key settings for green/blue screen removal.
     public var chromaKey: ChromaKeySettings?
 
+    /// The keyed chroma color as RGB components from 0.0 to 1.0.
+    public var chromaKeyColor: SIMD3<Float>? {
+        get {
+            chromaKey.flatMap { Self.rgb(fromHex: $0.keyColor) }
+        }
+        set {
+            guard let newValue else {
+                chromaKey = nil
+                return
+            }
+
+            let defaults = chromaKey ?? .greenScreen()
+            chromaKey = ChromaKeySettings(
+                keyColor: Self.hexRGB(from: newValue),
+                tolerance: Double(chromaKeyThreshold),
+                softness: defaults.softness,
+                spillSuppression: defaults.spillSuppression
+            )
+        }
+    }
+
+    /// The chroma key matching threshold from 0.0 to 1.0.
+    public var chromaKeyThreshold: Float {
+        get {
+            Float(chromaKey?.tolerance ?? 0.3)
+        }
+        set {
+            guard var settings = chromaKey else {
+                return
+            }
+
+            settings.tolerance = Double(min(max(newValue, 0), 1))
+            chromaKey = settings
+        }
+    }
+
     /// Optional mask applied to the clip.
     public var mask: Mask?
 
@@ -118,6 +154,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         transition: Transition? = nil,
         textContent: TextClipContent? = nil,
         chromaKey: ChromaKeySettings? = nil,
+        chromaKeyColor: SIMD3<Float>? = nil,
+        chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil,
         effects: [Effect] = [],
         isReversed: Bool = false,
@@ -138,7 +176,18 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.keyframes = keyframes
         self.transition = transition
         self.textContent = textContent
-        self.chromaKey = chromaKey
+        if let chromaKey {
+            self.chromaKey = chromaKey
+        } else if let chromaKeyColor {
+            self.chromaKey = ChromaKeySettings(
+                keyColor: Self.hexRGB(from: chromaKeyColor),
+                tolerance: Double(min(max(chromaKeyThreshold, 0), 1)),
+                softness: ChromaKeySettings.greenScreen().softness,
+                spillSuppression: ChromaKeySettings.greenScreen().spillSuppression
+            )
+        } else {
+            self.chromaKey = nil
+        }
         self.mask = mask
         self.effects = effects
         self.isReversed = isReversed
@@ -191,5 +240,29 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(effects, forKey: .effects)
         try container.encode(isReversed, forKey: .isReversed)
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
+    }
+
+    private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {
+        let clean = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
+            return nil
+        }
+
+        return SIMD3<Float>(
+            Float((value >> 16) & 0xFF) / 255,
+            Float((value >> 8) & 0xFF) / 255,
+            Float(value & 0xFF) / 255
+        )
+    }
+
+    private static func hexRGB(from color: SIMD3<Float>) -> String {
+        let red = byteValue(color.x)
+        let green = byteValue(color.y)
+        let blue = byteValue(color.z)
+        return String(format: "#%02X%02X%02X", red, green, blue)
+    }
+
+    private static func byteValue(_ component: Float) -> Int {
+        Int((min(max(component, 0), 1) * 255).rounded())
     }
 }

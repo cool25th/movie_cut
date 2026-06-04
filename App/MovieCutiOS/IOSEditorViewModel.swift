@@ -9,6 +9,7 @@ final class IOSEditorViewModel {
     var selectedClipId: UUID?
     var playheadTime: TimeInterval
     var isPlaying: Bool
+    var lastErrorMessage: String? = nil
     var exportEngine: IOSExportEngine = IOSExportEngine()
 
     private let session: EditorSession
@@ -58,6 +59,7 @@ final class IOSEditorViewModel {
             try await session.dispatch(ImportMediaCommand(asset: asset))
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -88,6 +90,7 @@ final class IOSEditorViewModel {
             playheadTime = clip.timelineRange.start
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -104,6 +107,7 @@ final class IOSEditorViewModel {
             try await session.dispatch(SplitClipCommand(clipId: selectedClipId, trackId: trackId, splitTime: playheadTime))
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -116,6 +120,7 @@ final class IOSEditorViewModel {
             self.selectedClipId = nil
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -125,6 +130,7 @@ final class IOSEditorViewModel {
             try await session.undo()
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -134,6 +140,7 @@ final class IOSEditorViewModel {
             try await session.redo()
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -195,6 +202,7 @@ final class IOSEditorViewModel {
                 playheadTime = duplicateClip.timelineRange.start
             }
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -207,6 +215,7 @@ final class IOSEditorViewModel {
             self.selectedClipId = nil
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -220,6 +229,8 @@ final class IOSEditorViewModel {
         exportEngine.cancelExport()
     }
 
+    func clearError() { lastErrorMessage = nil }
+
     private var selectedClipTrackId: UUID? {
         guard let selectedClipId else { return nil }
         return currentProject.timeline.tracks.first { track in
@@ -232,11 +243,13 @@ final class IOSEditorViewModel {
             try await session.dispatch(command)
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
 
     private func refreshFromSession() async {
+        self.lastErrorMessage = nil
         currentProject = await session.snapshot()
         if selectedClipId != nil, selectedClip == nil {
             selectedClipId = nil
@@ -343,6 +356,7 @@ final class IOSEditorViewModel {
             playheadTime = clip.timelineRange.start
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -375,6 +389,7 @@ final class IOSEditorViewModel {
             selectedClipId = clipId
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }
@@ -393,6 +408,7 @@ final class IOSEditorViewModel {
             try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
             await refreshFromSession()
         } catch {
+            self.lastErrorMessage = error.localizedDescription
             return
         }
     }

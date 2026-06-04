@@ -145,6 +145,14 @@ struct IOSContentView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.lastErrorMessage != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            )) {
+                Button("OK") { viewModel.clearError() }
+            } message: {
+                Text(viewModel.lastErrorMessage ?? "An unknown error occurred.")
+            }
             .onChange(of: selectedPhotosItem) { _, newItem in
                 guard let newItem else { return }
 

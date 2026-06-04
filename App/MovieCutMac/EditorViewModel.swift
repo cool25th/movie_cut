@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import Foundation
 import MovieCutCore
 import Observation
@@ -74,8 +75,13 @@ final class EditorViewModel {
     var exportFormat: String = "mp4"
     var cloudProjects: [CloudProjectInfo] = []
 
+    @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
+
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
+    @ObservationIgnored private var currentProjectURL: URL?
+    @ObservationIgnored private var isAutoSaveRunning = false
+    @ObservationIgnored private var isSavingCurrentProject = false
     @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
     @ObservationIgnored private var clipEQPresets: [UUID: String] = [:]
     @ObservationIgnored private var noiseReductionClipIds: Set<UUID> = []
@@ -97,6 +103,12 @@ final class EditorViewModel {
         for bundle in TemplateStore.builtInTemplates() {
             self.templateStore.add(bundle)
         }
+
+        startAutoSave()
+    }
+
+    deinit {
+        stopAutoSave()
     }
 
     var mediaAssets: [MediaAsset] {
@@ -172,6 +184,7 @@ final class EditorViewModel {
         let project = Self.defaultProject()
         session = EditorSession(project: project)
         currentProject = project
+        currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
         selectedClipId = nil
         selectedAssetId = nil
@@ -190,6 +203,7 @@ final class EditorViewModel {
             let project = Self.ensureDefaultTracks(in: loadedProject)
             session = EditorSession(project: project)
             currentProject = project
+            currentProjectURL = url
             canvasSelection = project.canvas.aspectRatio
             selectedClipId = nil
             selectedAssetId = nil
@@ -209,6 +223,7 @@ final class EditorViewModel {
         do {
             let snapshot = await session.snapshot()
             try await projectStore.save(snapshot, to: url)
+            currentProjectURL = url
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -226,6 +241,72 @@ final class EditorViewModel {
         }
 
         await saveProject(to: url)
+    }
+
+    func startAutoSave() {
+        guard !isAutoSaveRunning else { return }
+
+        isAutoSaveRunning = true
+        scheduleNextAutoSave()
+    }
+
+    func stopAutoSave() {
+        isAutoSaveRunning = false
+    }
+
+    func saveCurrentProject() {
+        guard !isSavingCurrentProject else { return }
+
+        isSavingCurrentProject = true
+        Task { @MainActor in
+            defer { isSavingCurrentProject = false }
+
+            do {
+                let snapshot = await session.snapshot()
+                let url = currentProjectURL ?? defaultAutoSaveURL(for: snapshot)
+                try await projectStore.save(snapshot, to: url)
+                if currentProjectURL == nil {
+                    currentProjectURL = url
+                }
+                lastAutoSaveDate = Date()
+                lastErrorMessage = nil
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func scheduleNextAutoSave() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            guard let self else { return }
+
+            self.saveCurrentProject()
+            if self.isAutoSaveRunning {
+                self.scheduleNextAutoSave()
+            }
+        }
+    }
+
+    private func defaultAutoSaveURL(for project: Project) -> URL {
+        let baseDirectory = (
+            try? FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+        ) ?? FileManager.default.temporaryDirectory
+
+        let sanitizedName = project.name
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let fileName = sanitizedName.isEmpty ? "Untitled" : sanitizedName
+
+        return baseDirectory
+            .appendingPathComponent("MovieCut", isDirectory: true)
+            .appendingPathComponent("Autosave", isDirectory: true)
+            .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
     }
 
     func syncToCloud() async {

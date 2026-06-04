@@ -6,6 +6,11 @@ struct IOSTimelineView: View {
     @Bindable var viewModel: IOSEditorViewModel
     var onInspectorRequested: () -> Void
 
+    @State private var dragOffset: CGFloat = 0
+    @State private var draggedClipId: UUID?
+    @State private var dragInitialStartTime: TimeInterval?
+    @GestureState private var dragTranslation: CGFloat = 0
+
     private let secondsWidth: CGFloat = 38
     private let trackHeaderWidth: CGFloat = 76
 
@@ -82,6 +87,7 @@ struct IOSTimelineView: View {
 
     private func clipButton(_ clip: Clip) -> some View {
         let isSelected = viewModel.selectedClipId == clip.id
+        let activeDragOffset = draggedClipId == clip.id ? (dragTranslation == 0 ? dragOffset : dragTranslation) : 0
 
         return Button {
             select(clip)
@@ -110,6 +116,8 @@ struct IOSTimelineView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .offset(x: activeDragOffset)
+        .zIndex(draggedClipId == clip.id ? 1 : 0)
         .contextMenu {
             Button("Inspect", systemImage: "slider.horizontal.3") {
                 select(clip)
@@ -127,6 +135,7 @@ struct IOSTimelineView: View {
                 onInspectorRequested()
             }
         )
+        .gesture(dragGesture(for: clip))
         .accessibilityLabel("\(clip.kind.rawValue.capitalized) clip, \(durationText(clip.timelineRange.duration))")
     }
 
@@ -141,6 +150,33 @@ struct IOSTimelineView: View {
     private func select(_ clip: Clip) {
         viewModel.selectedClipId = clip.id
         viewModel.playheadTime = clip.timelineRange.start
+    }
+
+    private func dragGesture(for clip: Clip) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .updating($dragTranslation) { value, state, _ in
+                state = value.translation.width
+            }
+            .onChanged { value in
+                if draggedClipId != clip.id {
+                    draggedClipId = clip.id
+                    dragInitialStartTime = clip.timelineRange.start
+                    select(clip)
+                }
+                dragOffset = value.translation.width
+            }
+            .onEnded { value in
+                let initialStart = dragInitialStartTime ?? clip.timelineRange.start
+                let newStart = max(0, initialStart + Double(value.translation.width / secondsWidth))
+
+                Task {
+                    await viewModel.moveClip(clipId: clip.id, newStart: newStart)
+                }
+
+                dragOffset = 0
+                draggedClipId = nil
+                dragInitialStartTime = nil
+            }
     }
 
     private func clipSegments(for track: Track) -> [TimelineClipSegment] {

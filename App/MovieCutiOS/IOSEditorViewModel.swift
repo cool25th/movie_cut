@@ -11,8 +11,10 @@ final class IOSEditorViewModel {
     var isPlaying: Bool
     var lastErrorMessage: String? = nil
     var exportEngine: IOSExportEngine = IOSExportEngine()
+    var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
 
     private let session: EditorSession
+    private var sfxURLResolver: [String: URL] = Self.makeSFXURLResolver()
 
     init() {
         let project = Self.defaultProject()
@@ -95,6 +97,81 @@ final class IOSEditorViewModel {
         }
     }
 
+    func addMusicTrack(_ track: MovieCutCore.MusicTrack) async {
+        do {
+            let duration: TimeInterval
+            if track.duration > 0 {
+                duration = track.duration
+            } else {
+                duration = await self.duration(for: track.fileURL, kind: .audio) ?? 5
+            }
+
+            let asset = MediaAsset(
+                originalURL: track.fileURL,
+                kind: .audio,
+                duration: duration,
+                metadata: MediaMetadata(fileSize: fileSize(for: track.fileURL))
+            )
+
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedClipId = clip.id
+            playheadTime = clip.timelineRange.start
+            await refreshFromSession()
+        } catch {
+            self.lastErrorMessage = error.localizedDescription
+            return
+        }
+    }
+
+    func addSFXToTimeline(_ item: SFXItem) async {
+        guard let fileURL = resolveSFXURL(for: item) else {
+            lastErrorMessage = "Missing bundled sound effect: \(item.fileName)"
+            return
+        }
+
+        do {
+            let duration = await duration(for: fileURL, kind: .audio) ?? 1
+            let asset = MediaAsset(
+                originalURL: fileURL,
+                kind: .audio,
+                duration: duration,
+                metadata: MediaMetadata(fileSize: fileSize(for: fileURL))
+            )
+
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedClipId = clip.id
+            playheadTime = clip.timelineRange.start
+            await refreshFromSession()
+        } catch {
+            self.lastErrorMessage = error.localizedDescription
+            return
+        }
+    }
+
+    func sfxURL(for item: SFXItem) -> URL? {
+        resolveSFXURL(for: item)
+    }
+
     func splitClip() async {
         guard
             let selectedClipId,
@@ -169,6 +246,11 @@ final class IOSEditorViewModel {
         await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: correction))
     }
 
+    func updateSelectedEffects(_ effects: [Effect]) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+    }
+
     func setTransition(_ type: TransitionType) async {
         guard let selectedClipId else { return }
 
@@ -238,6 +320,21 @@ final class IOSEditorViewModel {
         }?.id
     }
 
+    private func ensureTrack(for kind: TrackKind) async throws -> Track {
+        let snapshot = await session.snapshot()
+        if let track = snapshot.timeline.tracks.first(where: { $0.kind == kind }) {
+            return track
+        }
+
+        let track = Track(
+            kind: kind,
+            name: defaultTrackName(for: kind, index: snapshot.timeline.tracks.count + 1),
+            zIndex: snapshot.timeline.tracks.count
+        )
+        try await session.dispatch(CreateTrackCommand(track: track))
+        return track
+    }
+
     private func apply(_ command: any EditorCommand) async {
         do {
             try await session.dispatch(command)
@@ -293,6 +390,26 @@ final class IOSEditorViewModel {
         return 5
     }
 
+    private func fileSize(for url: URL) -> Int64? {
+        guard let value = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            return nil
+        }
+        return Int64(value)
+    }
+
+    private func resolveSFXURL(for item: SFXItem) -> URL? {
+        if let url = sfxURLResolver[item.fileName] {
+            return url
+        }
+
+        guard let url = Self.bundleSFXURL(for: item.fileName) else {
+            return nil
+        }
+
+        sfxURLResolver[item.fileName] = url
+        return url
+    }
+
     private func clipKind(for mediaKind: MediaKind) -> ClipKind {
         switch mediaKind {
         case .video: .video
@@ -315,6 +432,42 @@ final class IOSEditorViewModel {
             Track(kind: .text, name: "Text", zIndex: 2)
         ]
         return Project(name: "Untitled Project", timeline: Timeline(tracks: tracks))
+    }
+
+    private static func makeSFXURLResolver() -> [String: URL] {
+        Dictionary(uniqueKeysWithValues: SFXLibrary.all.compactMap { item in
+            guard let url = bundleSFXURL(for: item.fileName) else {
+                return nil
+            }
+            return (item.fileName, url)
+        })
+    }
+
+    private static func bundleSFXURL(for fileName: String) -> URL? {
+        let fileURL = URL(fileURLWithPath: fileName)
+        let resourceName = fileURL.deletingPathExtension().lastPathComponent
+        let fileExtension = fileURL.pathExtension
+
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension, subdirectory: "SFX") {
+            return url
+        }
+
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension, subdirectory: "Resources/SFX") {
+            return url
+        }
+
+        return Bundle.main.url(forResource: resourceName, withExtension: fileExtension)
+    }
+
+    private func defaultTrackName(for kind: TrackKind, index: Int) -> String {
+        switch kind {
+        case .video:
+            return "Video \(index)"
+        case .audio:
+            return "Audio \(index)"
+        case .text:
+            return "Text \(index)"
+        }
     }
 
     func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
@@ -354,6 +507,38 @@ final class IOSEditorViewModel {
             try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
             selectedClipId = clip.id
             playheadTime = clip.timelineRange.start
+            await refreshFromSession()
+        } catch {
+            self.lastErrorMessage = error.localizedDescription
+            return
+        }
+    }
+
+    func moveClip(clipId: UUID, newStart: TimeInterval) async {
+        guard newStart.isFinite else { return }
+
+        let trackAndClip = currentProject.timeline.tracks.compactMap { track -> (Track, Clip)? in
+            guard let clip = track.clips.first(where: { $0.id == clipId }) else { return nil }
+            return (track, clip)
+        }.first
+        guard let (track, clip) = trackAndClip else { return }
+
+        let timelineRange = TimeRange(
+            start: max(0, newStart),
+            duration: clip.timelineRange.duration
+        )
+
+        do {
+            try await session.dispatch(
+                MoveClipCommand(
+                    clipId: clipId,
+                    sourceTrackId: track.id,
+                    targetTrackId: track.id,
+                    newTimelineRange: timelineRange
+                )
+            )
+            selectedClipId = clipId
+            playheadTime = timelineRange.start
             await refreshFromSession()
         } catch {
             self.lastErrorMessage = error.localizedDescription

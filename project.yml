@@ -42,6 +42,10 @@ targets:
     sources:
       - path: App/MovieCutiOS
       - path: Sources/MovieCutCore
+    resources:
+      - path: App/MovieCutMac/Resources
+        includes:
+          - "**/*.wav"
     info:
       path: App/MovieCutiOS/Info.plist
     dependencies:

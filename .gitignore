@@ -1,9 +1,17 @@
-# CI
-*.xcresult
-
+# Build artifacts
 .build/
+.build-local/
 .swiftpm/
 DerivedData/
-.build/
-*.xcodeproj/
-.swiftpm/
+*.xcresult
+
+# Xcode
+.xcode-cache/
+.derivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+*.swp
+*~

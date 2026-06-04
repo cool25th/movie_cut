@@ -185,7 +185,7 @@ final class ExportEngine {
                         clip: sourceAsset,
                         timeRange: sourceTimeRange,
                         outputURL: reversedOutputURL,
-                        progress: { _ in }
+                        progress: { @Sendable _ in }
                     )
 
                     let reversedAsset = AVURLAsset(url: reversedOutputURL)
@@ -386,7 +386,7 @@ final class ExportEngine {
         _ = tracks
         let parentLayer = CALayer()
         let videoLayer = CALayer()
-        parentLayer.frame = CGRect(origin: .zero, size: canvas.size)
+        parentLayer.frame = CGRect(x: 0, y: 0, width: canvas.size.width, height: canvas.size.height)
         videoLayer.frame = parentLayer.bounds
         parentLayer.addSublayer(videoLayer)
 

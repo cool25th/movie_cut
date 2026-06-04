@@ -371,7 +371,7 @@ final class PlaybackEngine {
                                 clip: sourceAsset,
                                 timeRange: sourceTimeRange,
                                 outputURL: reversedOutputURL,
-                                progress: { _ in }
+                                progress: { @Sendable _ in }
                             )
 
                             let reversedAsset = AVURLAsset(url: reversedOutputURL)
@@ -390,19 +390,19 @@ final class PlaybackEngine {
                         )
 
                         let insertedDuration = effectiveSourceTimeRange.duration
-                        let scaledDuration: CMTime
+                        let targetDuration: CMTime
                         if isFreezeFrame {
-                            scaledDuration = cmTime(clip.timelineRange.duration)
+                            targetDuration = cmTime(clip.timelineRange.duration)
                             videoCompositionTrack.scaleTimeRange(
                                 CMTimeRange(start: destinationTime, duration: insertedDuration),
-                                toDuration: scaledDuration
+                                toDuration: targetDuration
                             )
                         } else {
-                            scaledDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
-                            if scaledDuration != insertedDuration {
+                            targetDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
+                            if targetDuration != insertedDuration {
                                 videoCompositionTrack.scaleTimeRange(
                                     CMTimeRange(start: destinationTime, duration: insertedDuration),
-                                    toDuration: scaledDuration
+                                    toDuration: targetDuration
                                 )
                             }
                         }
@@ -411,7 +411,7 @@ final class PlaybackEngine {
                         let sourceSize = try await sourceTrack.load(.naturalSize)
                         videoClipInstructions.append((
                             videoCompositionTrack.trackID,
-                            CMTimeRange(start: destinationTime, duration: scaledDuration),
+                            CMTimeRange(start: destinationTime, duration: targetDuration),
                             affineTransform(
                                 for: clip.transform,
                                 sourceSize: sourceSize,
@@ -437,11 +437,11 @@ final class PlaybackEngine {
                             at: destinationTime
                         )
 
-                        let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
-                        if scaledDuration != sourceTimeRange.duration {
+                        let targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                        if targetDuration != sourceTimeRange.duration {
                             audioCompositionTrack.scaleTimeRange(
                                 CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
-                                toDuration: scaledDuration
+                                toDuration: targetDuration
                             )
                         }
 
@@ -449,7 +449,7 @@ final class PlaybackEngine {
                             for: clip,
                             audioParameters: audioParameters,
                             destinationTime: destinationTime,
-                            clipDuration: scaledDuration
+                            clipDuration: targetDuration
                         )
                     }
                 }
@@ -485,11 +485,11 @@ final class PlaybackEngine {
                         at: destinationTime
                     )
 
-                    let scaledDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
-                    if scaledDuration != sourceTimeRange.duration {
+                    let targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                    if targetDuration != sourceTimeRange.duration {
                         audioCompositionTrack.scaleTimeRange(
                             CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
-                            toDuration: scaledDuration
+                            toDuration: targetDuration
                         )
                     }
 
@@ -497,7 +497,7 @@ final class PlaybackEngine {
                         for: clip,
                         audioParameters: audioParameters,
                         destinationTime: destinationTime,
-                        clipDuration: scaledDuration
+                        clipDuration: targetDuration
                     )
                 }
 

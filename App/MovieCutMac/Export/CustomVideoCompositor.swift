@@ -384,7 +384,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         to image: CIImage,
         renderSize: CGSize
     ) -> CIImage {
-        let renderBounds = CGRect(origin: .zero, size: renderSize)
+        let renderBounds = CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height)
         var animatedImage = image
 
         if !isIdentityTransform(animationState.transform) {

@@ -53,6 +53,8 @@ final class EditorViewModel {
     var selectedEQPreset: String = "flat"
     var isBackgroundRemoved: Bool = false
     var selectedStyle: String = "none"
+    var exportResolution: String = "1080p"
+    var exportQuality: String = "high"
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
     var exportEngine: ExportEngine
@@ -296,7 +298,7 @@ final class EditorViewModel {
         }
     }
 
-    func addMusicTrack(_ track: MusicTrack) async {
+    func addMusicTrack(_ track: MovieCutCore.MusicTrack) async {
         do {
             let duration = track.duration > 0 ? track.duration : 5
             let asset = MediaAsset(
@@ -565,6 +567,15 @@ final class EditorViewModel {
         await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
     }
 
+    func updateSelectedAudioFade(fadeInDuration: TimeInterval? = nil, fadeOutDuration: TimeInterval? = nil) async {
+        guard let selectedClipId, let selectedClip else { return }
+        await apply(AudioFadeCommand(
+            clipId: selectedClipId,
+            fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
+            fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
+        ))
+    }
+
     func applyEQPreset(_ preset: String) async {
         guard let clipId = selectedClipId else { return }
 
@@ -659,9 +670,16 @@ final class EditorViewModel {
     }
 
     func autoColorCorrect(for clipId: UUID) async throws {
-        var snapshot = await session.snapshot()
-        let location = try snapshot.clipLocation(for: clipId)
-        let clip = snapshot.timeline.tracks[location.trackIndex].clips[location.clipIndex]
+        let snapshot = await session.snapshot()
+        var found: Clip?
+        outer: for (ti, track) in snapshot.timeline.tracks.enumerated() {
+            for (ci, c) in track.clips.enumerated() {
+                if c.id == clipId { found = c; break outer }
+            }
+        }
+        guard var clip = found else {
+            throw EditorCommandError.invalidCommand("Clip not found")
+        }
         var colorCorrection = clip.colorCorrection ?? ColorCorrection()
         colorCorrection.brightness = 0.05
         colorCorrection.contrast = 1.1

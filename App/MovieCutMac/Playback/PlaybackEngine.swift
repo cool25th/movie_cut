@@ -202,6 +202,76 @@ final class PlaybackEngine {
             return CMTime(seconds: insertedDuration.seconds / playbackRate, preferredTimescale: 600)
         }
 
+        func insertSpeedRampSegments(
+            _ curve: SpeedRampCurve,
+            sourceTrack: AVAssetTrack,
+            sourceTimeRange: CMTimeRange,
+            destinationTime: CMTime,
+            compositionTrack: AVMutableCompositionTrack
+        ) throws -> CMTime {
+            let sourceDuration = sourceTimeRange.duration.seconds
+            guard sourceDuration.isFinite, sourceDuration > 0 else {
+                return sourceTimeRange.duration
+            }
+
+            let boundaries = ([0.0, 1.0] + curve.points.map { min(max($0.time, 0), 1) })
+                .sorted()
+                .reduce(into: [Double]()) { result, value in
+                    if result.last.map({ abs($0 - value) > 1.0e-9 }) ?? true {
+                        result.append(value)
+                    }
+                }
+
+            guard boundaries.count > 1 else {
+                try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
+                return sourceTimeRange.duration
+            }
+
+            var accumulatedOutputDuration = CMTime.zero
+            for index in 0..<(boundaries.count - 1) {
+                let sourceStart = boundaries[index]
+                let sourceEnd = boundaries[index + 1]
+                let sourceSegmentDuration = (sourceEnd - sourceStart) * sourceDuration
+                guard sourceSegmentDuration > 0 else { continue }
+
+                let outputSegmentStart = curve.timeMapping(sourceTime: sourceStart) * sourceDuration
+                let outputSegmentEnd = curve.timeMapping(sourceTime: sourceEnd) * sourceDuration
+                let outputSegmentDuration = max(outputSegmentEnd - outputSegmentStart, 1.0 / 600.0)
+
+                let segmentSourceRange = CMTimeRange(
+                    start: CMTimeAdd(
+                        sourceTimeRange.start,
+                        CMTime(seconds: sourceStart * sourceDuration, preferredTimescale: 600)
+                    ),
+                    duration: CMTime(seconds: sourceSegmentDuration, preferredTimescale: 600)
+                )
+                let segmentDestinationTime = CMTimeAdd(destinationTime, accumulatedOutputDuration)
+                let scaledDuration = CMTime(seconds: outputSegmentDuration, preferredTimescale: 600)
+
+                try compositionTrack.insertTimeRange(
+                    segmentSourceRange,
+                    of: sourceTrack,
+                    at: segmentDestinationTime
+                )
+
+                if scaledDuration != segmentSourceRange.duration {
+                    compositionTrack.scaleTimeRange(
+                        CMTimeRange(start: segmentDestinationTime, duration: segmentSourceRange.duration),
+                        toDuration: scaledDuration
+                    )
+                }
+
+                accumulatedOutputDuration = CMTimeAdd(accumulatedOutputDuration, scaledDuration)
+            }
+
+            if accumulatedOutputDuration == .zero {
+                try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
+                return sourceTimeRange.duration
+            }
+
+            return accumulatedOutputDuration
+        }
+
         func applyAudioVolumeAndFades(
             for clip: Clip,
             audioParameters: AVMutableAudioMixInputParameters,
@@ -391,21 +461,36 @@ final class PlaybackEngine {
                             effectiveSourceTimeRange = CMTimeRange(start: .zero, duration: sourceTimeRange.duration)
                         }
 
-                        try videoCompositionTrack.insertTimeRange(
-                            effectiveSourceTimeRange,
-                            of: effectiveSourceTrack,
-                            at: destinationTime
-                        )
-
-                        let insertedDuration = effectiveSourceTimeRange.duration
                         let targetDuration: CMTime
                         if isFreezeFrame {
+                            try videoCompositionTrack.insertTimeRange(
+                                effectiveSourceTimeRange,
+                                of: effectiveSourceTrack,
+                                at: destinationTime
+                            )
+
+                            let insertedDuration = effectiveSourceTimeRange.duration
                             targetDuration = cmTime(clip.timelineRange.duration)
                             videoCompositionTrack.scaleTimeRange(
                                 CMTimeRange(start: destinationTime, duration: insertedDuration),
                                 toDuration: targetDuration
                             )
+                        } else if clip.speedRampPoints.count >= 2 {
+                            targetDuration = try insertSpeedRampSegments(
+                                SpeedRampCurve(points: clip.speedRampPoints),
+                                sourceTrack: effectiveSourceTrack,
+                                sourceTimeRange: effectiveSourceTimeRange,
+                                destinationTime: destinationTime,
+                                compositionTrack: videoCompositionTrack
+                            )
                         } else {
+                            try videoCompositionTrack.insertTimeRange(
+                                effectiveSourceTimeRange,
+                                of: effectiveSourceTrack,
+                                at: destinationTime
+                            )
+
+                            let insertedDuration = effectiveSourceTimeRange.duration
                             targetDuration = scaledDuration(for: clip, insertedDuration: insertedDuration)
                             if targetDuration != insertedDuration {
                                 videoCompositionTrack.scaleTimeRange(
@@ -439,18 +524,29 @@ final class PlaybackEngine {
                        let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first {
                         guard sourceTimeRange.duration > .zero else { continue }
 
-                        try audioCompositionTrack.insertTimeRange(
-                            sourceTimeRange,
-                            of: sourceTrack,
-                            at: destinationTime
-                        )
-
-                        let targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
-                        if targetDuration != sourceTimeRange.duration {
-                            audioCompositionTrack.scaleTimeRange(
-                                CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
-                                toDuration: targetDuration
+                        let targetDuration: CMTime
+                        if clip.speedRampPoints.count >= 2 {
+                            targetDuration = try insertSpeedRampSegments(
+                                SpeedRampCurve(points: clip.speedRampPoints),
+                                sourceTrack: sourceTrack,
+                                sourceTimeRange: sourceTimeRange,
+                                destinationTime: destinationTime,
+                                compositionTrack: audioCompositionTrack
                             )
+                        } else {
+                            try audioCompositionTrack.insertTimeRange(
+                                sourceTimeRange,
+                                of: sourceTrack,
+                                at: destinationTime
+                            )
+
+                            targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                            if targetDuration != sourceTimeRange.duration {
+                                audioCompositionTrack.scaleTimeRange(
+                                    CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                                    toDuration: targetDuration
+                                )
+                            }
                         }
 
                         applyAudioVolumeAndFades(
@@ -487,18 +583,29 @@ final class PlaybackEngine {
                     let sourceTimeRange = cmTimeRange(clip.sourceRange)
                     guard sourceTimeRange.duration > .zero else { continue }
 
-                    try audioCompositionTrack.insertTimeRange(
-                        sourceTimeRange,
-                        of: sourceTrack,
-                        at: destinationTime
-                    )
-
-                    let targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
-                    if targetDuration != sourceTimeRange.duration {
-                        audioCompositionTrack.scaleTimeRange(
-                            CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
-                            toDuration: targetDuration
+                    let targetDuration: CMTime
+                    if clip.speedRampPoints.count >= 2 {
+                        targetDuration = try insertSpeedRampSegments(
+                            SpeedRampCurve(points: clip.speedRampPoints),
+                            sourceTrack: sourceTrack,
+                            sourceTimeRange: sourceTimeRange,
+                            destinationTime: destinationTime,
+                            compositionTrack: audioCompositionTrack
                         )
+                    } else {
+                        try audioCompositionTrack.insertTimeRange(
+                            sourceTimeRange,
+                            of: sourceTrack,
+                            at: destinationTime
+                        )
+
+                        targetDuration = scaledDuration(for: clip, insertedDuration: sourceTimeRange.duration)
+                        if targetDuration != sourceTimeRange.duration {
+                            audioCompositionTrack.scaleTimeRange(
+                                CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration),
+                                toDuration: targetDuration
+                            )
+                        }
                     }
 
                     applyAudioVolumeAndFades(

@@ -1,12 +1,14 @@
-import SwiftUI
-import PhotosUI
-import MovieCutCore
+#if os(iOS)
 import AVFoundation
+import MovieCutCore
+import PhotosUI
+import SwiftUI
 
-struct ContentView: View {
+struct IOSContentView: View {
     @State private var viewModel = IOSEditorViewModel()
     @State private var selectedPhotosItem: PhotosPickerItem?
     @State private var isMediaBrowserPresented = false
+    @State private var isInspectorPresented = false
     @State private var isExportUnavailablePresented = false
     @State private var isImporting = false
 
@@ -16,7 +18,7 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     PreviewView(viewModel: viewModel)
                         .frame(maxWidth: .infinity)
-                        .frame(height: max(250, proxy.size.height * 0.4))
+                        .frame(height: max(240, proxy.size.height * 0.38))
                         .background(Color.black)
 
                     Divider()
@@ -24,8 +26,10 @@ struct ContentView: View {
                     VStack(spacing: 0) {
                         playheadBar
 
-                        TimelineView(viewModel: viewModel)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        IOSTimelineView(viewModel: viewModel) {
+                            isInspectorPresented = true
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                         bottomToolbar
                     }
@@ -53,11 +57,18 @@ struct ContentView: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    PhotosPicker(selection: $selectedPhotosItem, matching: .videos) {
+                    PhotosPicker(selection: $selectedPhotosItem, matching: .any(of: [.videos, .images])) {
                         Image(systemName: "photo.on.rectangle")
                     }
                     .disabled(isImporting)
-                    .accessibilityLabel("Import Video")
+                    .accessibilityLabel("Import Media")
+
+                    Button {
+                        isInspectorPresented = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Inspector")
 
                     Button {
                         Task {
@@ -81,6 +92,13 @@ struct ContentView: View {
                         .navigationTitle("Media")
                         .navigationBarTitleDisplayMode(.inline)
                 }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isInspectorPresented) {
+                IOSInspectorSheet(viewModel: viewModel)
+                    .presentationDetents([.height(300), .medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .alert("Export is not available yet", isPresented: $isExportUnavailablePresented) {
                 Button("OK", role: .cancel) {}
@@ -101,20 +119,29 @@ struct ContentView: View {
     }
 
     private var playheadBar: some View {
-        HStack(spacing: 10) {
-            Text(timeString(viewModel.playheadTime))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.primary)
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Text(timeString(viewModel.playheadTime))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.primary)
 
-            ProgressView(
-                value: min(max(viewModel.playheadTime, 0), max(viewModel.currentProject.timeline.duration, 0)),
-                total: max(viewModel.currentProject.timeline.duration, 0.1)
+                Spacer()
+
+                Text(timeString(viewModel.currentProject.timeline.duration))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            Slider(
+                value: Binding(
+                    get: { viewModel.playheadTime },
+                    set: { viewModel.playheadTime = clampedPlayhead($0) }
+                ),
+                in: 0...max(viewModel.currentProject.timeline.duration, 0.1)
             )
             .tint(.primary)
-
-            Text(timeString(viewModel.currentProject.timeline.duration))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+            .frame(minHeight: 32)
+            .accessibilityLabel("Playhead")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -122,19 +149,20 @@ struct ContentView: View {
     }
 
     private var bottomToolbar: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             toolbarButton(title: "Media", systemImage: "plus.rectangle.on.rectangle") {
                 isMediaBrowserPresented = true
             }
 
-            Spacer(minLength: 12)
+            toolbarButton(title: "Inspect", systemImage: "slider.horizontal.3") {
+                isInspectorPresented = true
+            }
+            .disabled(viewModel.selectedClipId == nil)
 
             toolbarButton(title: "Split", systemImage: "scissors") {
                 Task { await viewModel.splitClip() }
             }
             .disabled(viewModel.selectedClipId == nil)
-
-            Spacer(minLength: 12)
 
             toolbarButton(title: "Delete", systemImage: "trash") {
                 Task { await viewModel.deleteClip() }
@@ -142,8 +170,8 @@ struct ContentView: View {
             .disabled(viewModel.selectedClipId == nil)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(.bar)
     }
 
@@ -163,8 +191,11 @@ struct ContentView: View {
                     .frame(width: 36, height: 28)
                 Text(title)
                     .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(minWidth: 58)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .contentShape(Rectangle())
         }
     }
 
@@ -196,6 +227,11 @@ struct ContentView: View {
         return imageExtensions.contains(fileExtension.lowercased()) ? .image : .video
     }
 
+    private func clampedPlayhead(_ time: TimeInterval) -> TimeInterval {
+        let duration = max(viewModel.currentProject.timeline.duration, 0)
+        return min(max(0, time.isFinite ? time : 0), duration)
+    }
+
     private func timeString(_ time: TimeInterval) -> String {
         let clampedTime = max(0, time.isFinite ? time : 0)
         let totalSeconds = Int(clampedTime.rounded(.down))
@@ -206,5 +242,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    IOSContentView()
 }
+#endif

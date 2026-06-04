@@ -29,7 +29,7 @@ final class ExportEngine {
         lastExportURL = nil
 
         do {
-            let exportPackage = try await makeExportPackage(for: project)
+            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
             guard !exportPackage.composition.tracks.isEmpty else {
                 throw ExportEngineError.noExportableMedia
             }
@@ -75,7 +75,10 @@ final class ExportEngine {
         let _ = bitrateForQuality(exportQuality, resolution: exportResolution)
     }
 
-    private func makeExportPackage(for project: Project) async throws -> ExportPackage {
+    private func makeExportPackage(
+        for project: Project,
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    ) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
         var videoClipInstructions: [ExportClipInstructionMetadata] = []
@@ -85,9 +88,11 @@ final class ExportEngine {
             for clip: Clip,
             audioParameters: AVMutableAudioMixInputParameters,
             destinationTime: CMTime,
-            clipDuration: CMTime
+            clipDuration: CMTime,
+            eqPreset: EqualizerPreset? = nil
         ) {
-            let volume = Float(clip.volume)
+            let eqMultiplier = eqPreset.map(eqVolumeMultiplier(for:)) ?? 1
+            let volume = Float(min(max(clip.volume * eqMultiplier, 0), 2))
             audioParameters.setVolume(volume, at: destinationTime)
 
             guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
@@ -211,9 +216,9 @@ final class ExportEngine {
                 let clipDuration: CMTime
 
                 if isFreezeFrame && mediaType == .video {
-                    let frozenSourceRange = CMTimeRange(
-                        start: sourceTimeRange.start,
-                        duration: CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
+                    let frozenSourceRange = try await freezeFrameSourceTimeRange(
+                        for: sourceTrack,
+                        requestedStart: sourceTimeRange.start
                     )
                     destinationTime = CMTime(seconds: adjustedTimelineStart, preferredTimescale: 600)
                     clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
@@ -298,7 +303,8 @@ final class ExportEngine {
                         for: clip,
                         audioParameters: audioParameters,
                         destinationTime: destinationTime,
-                        clipDuration: clipCompositionDuration
+                        clipDuration: clipCompositionDuration,
+                        eqPreset: audioProcessing.eqPresets[clip.id]
                     )
                 }
             }
@@ -339,6 +345,7 @@ final class ExportEngine {
 
         let usesCustomVideoCompositor = clips.contains { clip in
             clip.colorCorrection != nil
+                || clip.textContent != nil
                 || clip.chromaKeyColor != nil
                 || clip.mask != nil
                 || !clip.keyframes.isEmpty
@@ -414,12 +421,15 @@ final class ExportEngine {
                         CustomCompositionClipEffect(
                             trackID: clip.trackID,
                             timeRange: clip.timeRange,
+                            transform: clip.transform,
+                            opacity: clip.opacity,
                             keyframes: clip.keyframes,
                             colorCorrection: clip.colorCorrection,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
                             mask: clip.mask,
                             effects: clip.effects,
+                            textContent: clip.textContent,
                             isBackgroundRemoved: clip.isBackgroundRemoved
                         )
                     }
@@ -427,12 +437,12 @@ final class ExportEngine {
             ]
         } else {
             videoComposition.instructions = [instruction]
+            videoComposition.animationTool = makeCustomVideoCompositorInstruction(
+                tracks: tracks,
+                clips: customCompositorClips,
+                canvas: canvas
+            )
         }
-        videoComposition.animationTool = makeCustomVideoCompositorInstruction(
-            tracks: tracks,
-            clips: customCompositorClips,
-            canvas: canvas
-        )
 
         return videoComposition
     }
@@ -548,6 +558,41 @@ final class ExportEngine {
         }
 
         return accumulatedOutputDuration
+    }
+
+    private func freezeFrameSourceTimeRange(
+        for sourceTrack: AVAssetTrack,
+        requestedStart: CMTime
+    ) async throws -> CMTimeRange {
+        let trackTimeRange = try await sourceTrack.load(.timeRange)
+        let minFrameDuration = try await sourceTrack.load(.minFrameDuration)
+        let fallbackFrameDuration = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
+        let frameDuration = minFrameDuration.isValid && minFrameDuration > .zero
+            ? minFrameDuration
+            : fallbackFrameDuration
+
+        let trackEnd = CMTimeAdd(trackTimeRange.start, trackTimeRange.duration)
+        guard trackTimeRange.duration > .zero, trackEnd > trackTimeRange.start else {
+            return CMTimeRange(start: requestedStart, duration: frameDuration)
+        }
+
+        let latestStart = CMTimeSubtract(trackEnd, frameDuration)
+        let lowerBound = trackTimeRange.start
+        let upperBound = latestStart >= lowerBound ? latestStart : lowerBound
+        let clampedStart = min(max(requestedStart, lowerBound), upperBound)
+        let clampedDuration = min(frameDuration, CMTimeSubtract(trackEnd, clampedStart))
+
+        return CMTimeRange(start: clampedStart, duration: clampedDuration > .zero ? clampedDuration : frameDuration)
+    }
+
+    private func eqVolumeMultiplier(for preset: EqualizerPreset) -> Double {
+        guard !preset.bands.isEmpty else { return 1 }
+
+        let averageGain = preset.bands.reduce(Double(0)) { partialResult, band in
+            partialResult + Double(band.gain)
+        } / Double(preset.bands.count)
+        let multiplier = pow(10.0, averageGain / 20.0)
+        return min(max(multiplier, 0.0), 2.0)
     }
 
     // MARK: - Export Preset Helpers

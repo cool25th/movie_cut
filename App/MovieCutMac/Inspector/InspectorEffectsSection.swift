@@ -460,6 +460,11 @@ struct InspectorEffectsSection: View {
             return []
         case .blur:
             return [EffectParameterDefinition(key: "radius", title: "Radius", range: 1 ... 12, defaultValue: 1, valueFormat: "%.0f")]
+        case .styleTransfer:
+            return [
+                EffectParameterDefinition(key: "styleIndex", title: "Style", range: 1 ... 5, defaultValue: 1, valueFormat: "%.0f"),
+                EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.75)
+            ]
         }
     }
 }

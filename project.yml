@@ -35,6 +35,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: App/MovieCutiOS
+      - path: Sources/MovieCutCore
     info:
       path: App/MovieCutiOS/Info.plist
     dependencies:

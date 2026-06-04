@@ -135,6 +135,7 @@ extension EffectType {
         case .grayscale: return "Grayscale"
         case .sepia: return "Sepia"
         case .blur: return "Blur"
+        case .styleTransfer: return "Style Transfer"
         }
     }
 }

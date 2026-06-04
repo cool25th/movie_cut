@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CoreText
 import MovieCutCore
 
 struct CustomCompositionClipEffect {
@@ -13,6 +14,7 @@ struct CustomCompositionClipEffect {
     let chromaKeyThreshold: Float
     let mask: Mask?
     let effects: [Effect]
+    let textContent: TextClipContent?
     let isBackgroundRemoved: Bool
 
     init?(
@@ -26,6 +28,7 @@ struct CustomCompositionClipEffect {
         chromaKeyThreshold: Float = 0.3,
         mask: Mask?,
         effects: [Effect] = [],
+        textContent: TextClipContent? = nil,
         isBackgroundRemoved: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -33,6 +36,7 @@ struct CustomCompositionClipEffect {
             || chromaKeyColor != nil
             || mask != nil
             || !effects.isEmpty
+            || textContent != nil
             || isBackgroundRemoved
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
         else {
@@ -49,6 +53,7 @@ struct CustomCompositionClipEffect {
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
         self.effects = effects
+        self.textContent = textContent
         self.isBackgroundRemoved = isBackgroundRemoved
     }
 
@@ -207,6 +212,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
+    let textContent: TextClipContent?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float = 0.3
     let mask: Mask?
@@ -216,6 +222,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         timeRange: CMTimeRange,
         trackIDs: [CMPersistentTrackID],
         colorCorrection: ColorCorrection? = nil,
+        textContent: TextClipContent? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil
@@ -223,6 +230,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = colorCorrection
+        self.textContent = textContent
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
@@ -233,6 +241,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = nil
+        self.textContent = nil
         self.chromaKeyColor = nil
         self.mask = nil
         self.clipEffects = clipEffects
@@ -277,7 +286,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 let clipEffects = effect?.effects ?? []
                 let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
 
-                // Apply CIFilter-based effects (blur, grayscale, sepia, temperature, exposure)
+                // Apply CIFilter-based effects (blur, grayscale, sepia, temperature, exposure, style transfer)
                 if !clipEffects.isEmpty {
                     image = self.applyEffects(clipEffects, to: image)
                 }
@@ -306,6 +315,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                         renderSize: request.renderContext.size
                     )
                 }
+
+                image = self.renderTextOverlay(
+                    for: effect,
+                    instruction: instruction,
+                    onto: image,
+                    at: request.compositionTime
+                )
             }
             
             guard let outputBuffer = request.renderContext.newPixelBuffer() else {
@@ -353,16 +369,451 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     ]
                 )
             case .exposure:
-                let ev = effect.parameters["ev"] ?? 0.5
+                let ev = effect.parameters["ev"] ?? effect.parameters["amount"] ?? 0.5
                 result = result.applyingFilter(
                     "CIExposureAdjust",
                     parameters: [kCIInputEVKey: ev]
                 )
+            case .styleTransfer:
+                result = applyStyleTransfer(effect, to: result)
             default:
                 break
             }
         }
         return result
+    }
+
+    private func renderTextOverlay(
+        for clipEffect: CustomCompositionClipEffect?,
+        instruction: CustomCompositionInstruction,
+        onto image: CIImage,
+        at time: CMTime
+    ) -> CIImage {
+        _ = clipEffect
+
+        let activeTextEffects = instruction.clipEffects.filter { effect in
+            effect.textContent != nil && CMTimeRangeContainsTime(effect.timeRange, time: time)
+        }
+        let hasInstructionText = instruction.textContent != nil
+            && CMTimeRangeContainsTime(instruction.timeRange, time: time)
+
+        guard !activeTextEffects.isEmpty || hasInstructionText else {
+            return image
+        }
+
+        let renderBounds = image.extent
+        let renderSize = renderBounds.size
+        guard renderSize.width > 0, renderSize.height > 0 else {
+            return image
+        }
+
+        let width = max(Int(ceil(renderSize.width)), 1)
+        let height = max(Int(ceil(renderSize.height)), 1)
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return image
+        }
+
+        context.clear(CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
+
+        for textEffect in activeTextEffects {
+            drawTextEffect(textEffect, in: context, renderSize: renderSize, at: time)
+        }
+
+        if let textContent = instruction.textContent {
+            drawTextContent(
+                textContent,
+                transform: ClipTransform(),
+                opacity: 1,
+                timeRange: instruction.timeRange,
+                in: context,
+                renderSize: renderSize,
+                at: time
+            )
+        }
+
+        guard let cgImage = context.makeImage() else {
+            return image
+        }
+
+        var overlay = CIImage(cgImage: cgImage)
+        if renderBounds.origin != .zero {
+            overlay = overlay.transformed(
+                by: CGAffineTransform(
+                    translationX: renderBounds.origin.x,
+                    y: renderBounds.origin.y
+                )
+            )
+        }
+
+        return overlay
+            .composited(over: image)
+            .cropped(to: renderBounds)
+    }
+
+    private func drawTextEffect(
+        _ textEffect: CustomCompositionClipEffect,
+        in context: CGContext,
+        renderSize: CGSize,
+        at time: CMTime
+    ) {
+        guard let textContent = textEffect.textContent else { return }
+
+        let animationState = textEffect.animationState(at: time)
+        drawTextContent(
+            textContent,
+            transform: animationState?.transform ?? textEffect.transform,
+            opacity: animationState?.opacity ?? textEffect.opacity,
+            timeRange: textEffect.timeRange,
+            in: context,
+            renderSize: renderSize,
+            at: time
+        )
+    }
+
+    private func drawTextContent(
+        _ textContent: TextClipContent,
+        transform: ClipTransform,
+        opacity: Double,
+        timeRange: CMTimeRange,
+        in context: CGContext,
+        renderSize: CGSize,
+        at time: CMTime
+    ) {
+        let textState = animatedTextState(for: textContent, timeRange: timeRange, at: time)
+        guard !textState.text.isEmpty else { return }
+
+        let effectiveOpacity = min(max(opacity * textState.alpha, 0), 1)
+        guard effectiveOpacity > 0 else { return }
+
+        let fontSize = max(CGFloat(textContent.fontSize), 1)
+        let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
+        let font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
+        let textColor = cgColor(hexRGB: textContent.fontColor)
+        let attributedString = attributedText(
+            textState.text,
+            font: font,
+            color: textColor,
+            alignment: textContent.alignment
+        )
+        let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
+        let paddingX = max(fontSize * 0.35, 10)
+        let paddingY = max(fontSize * 0.2, 6)
+        let minimumWidth = min(max(fontSize * 5, 160), renderSize.width)
+        let constrainedWidth = max(renderSize.width * 0.8 - paddingX * 2, 1)
+        let suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: attributedString.length),
+            nil,
+            CGSize(width: constrainedWidth, height: .greatestFiniteMagnitude),
+            nil
+        )
+        let boxWidth = min(max(ceil(suggestedSize.width) + paddingX * 2, minimumWidth), renderSize.width)
+        let boxHeight = min(
+            max(ceil(suggestedSize.height) + paddingY * 2, fontSize + paddingY * 2),
+            renderSize.height
+        )
+
+        let basePosition = textPosition(for: textContent, transform: transform, renderSize: renderSize)
+        let center = CGPoint(
+            x: basePosition.x + transform.offset.x + textState.translation.x,
+            y: renderSize.height - basePosition.y - transform.offset.y + textState.translation.y
+        )
+        let scaleX = transform.scale.width * textState.scale
+        let scaleY = transform.scale.height * textState.scale
+
+        context.saveGState()
+        context.setAlpha(CGFloat(effectiveOpacity))
+        context.translateBy(x: center.x, y: center.y)
+        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
+        context.scaleBy(x: scaleX, y: scaleY)
+
+        let textBox = CGRect(x: -boxWidth * 0.5, y: -boxHeight * 0.5, width: boxWidth, height: boxHeight)
+        if let backgroundColor = textContent.backgroundColor {
+            context.setFillColor(cgColor(hexRGB: backgroundColor))
+            context.fill(textBox)
+        }
+
+        let textRect = textBox.insetBy(dx: paddingX, dy: paddingY)
+        let path = CGMutablePath()
+        path.addRect(textRect)
+        context.textMatrix = .identity
+        let frame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: attributedString.length),
+            path,
+            nil
+        )
+        CTFrameDraw(frame, context)
+        context.restoreGState()
+    }
+
+    private func animatedTextState(
+        for textContent: TextClipContent,
+        timeRange: CMTimeRange,
+        at time: CMTime
+    ) -> (text: String, alpha: Double, translation: CGPoint, scale: CGFloat) {
+        guard let animation = textContent.animation else {
+            return (textContent.text, 1, .zero, 1)
+        }
+
+        let rawLocalTime = CMTimeSubtract(time, timeRange.start).seconds
+        let localTime = rawLocalTime.isFinite ? max(0, rawLocalTime) : 0
+        let delay = max(animation.delay, 0)
+        let duration = max(animation.duration, 1.0e-6)
+        let elapsed = localTime - delay
+        let progress = min(max(elapsed / duration, 0), 1)
+        let isBeforeDelay = elapsed < 0
+
+        switch animation.type {
+        case .fadeIn:
+            return (textContent.text, isBeforeDelay ? 0 : progress, .zero, 1)
+        case .fadeOut:
+            return (textContent.text, isBeforeDelay ? 1 : 1 - progress, .zero, 1)
+        case .typewriter:
+            guard !isBeforeDelay else {
+                return ("", 1, .zero, 1)
+            }
+            let characterCount = Int(floor(progress * Double(textContent.text.count)))
+            return (String(textContent.text.prefix(characterCount)), 1, .zero, 1)
+        case .slideUp:
+            return (
+                textContent.text,
+                1,
+                CGPoint(x: 0, y: -40 * (1 - progress)),
+                1
+            )
+        case .slideDown:
+            return (
+                textContent.text,
+                1,
+                CGPoint(x: 0, y: 40 * (1 - progress)),
+                1
+            )
+        case .scale:
+            return (textContent.text, 1, .zero, max(CGFloat(progress), 0.001))
+        case .bounce:
+            let offset = sin(progress * .pi * 3) * 20 * (1 - progress)
+            return (textContent.text, 1, CGPoint(x: 0, y: offset), 1)
+        }
+    }
+
+    private func attributedText(
+        _ text: String,
+        font: CTFont,
+        color: CGColor,
+        alignment: TextAlignment
+    ) -> NSAttributedString {
+        var ctAlignment = coreTextAlignment(for: alignment)
+        let paragraphStyle = CTParagraphStyleCreate([
+            CTParagraphStyleSetting(
+                spec: .alignment,
+                valueSize: MemoryLayout<CTTextAlignment>.size,
+                value: &ctAlignment
+            )
+        ], 1)
+
+        return NSAttributedString(
+            string: text,
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
+            ]
+        )
+    }
+
+    private func coreTextAlignment(for alignment: TextAlignment) -> CTTextAlignment {
+        switch alignment {
+        case .leading:
+            return .left
+        case .center:
+            return .center
+        case .trailing:
+            return .right
+        case .justified:
+            return .justified
+        }
+    }
+
+    private func textPosition(
+        for textContent: TextClipContent,
+        transform: ClipTransform,
+        renderSize: CGSize
+    ) -> CGPoint {
+        if !isZeroPoint(textContent.position) {
+            return textContent.position
+        }
+
+        if !isZeroPoint(transform.position) {
+            return transform.position
+        }
+
+        return CGPoint(x: renderSize.width * 0.5, y: renderSize.height * 0.5)
+    }
+
+    private func cgColor(hexRGB: String) -> CGColor {
+        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+            return CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+        }
+
+        return CGColor(
+            red: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    private func applyStyleTransfer(_ effect: Effect, to image: CIImage) -> CIImage {
+        let intensity = min(max(effect.parameters["intensity"] ?? 0.75, 0), 1)
+        guard intensity > 0 else { return image }
+
+        let styleIndex = Int((effect.parameters["styleIndex"] ?? 1).rounded())
+        guard let gradientImage = gradientMapImage(for: styleIndex) else {
+            return image
+        }
+
+        let colorMapFilter = CIFilter(name: "CIColorMap")
+        colorMapFilter?.setValue(image, forKey: kCIInputImageKey)
+        colorMapFilter?.setValue(gradientImage, forKey: "inputGradientImage")
+        guard let mappedImage = colorMapFilter?.outputImage?.cropped(to: image.extent) else {
+            return image
+        }
+
+        let blendFilterName = styleIndex == 2 ? "CIMultiplyBlendMode" : "CISoftLightBlendMode"
+        let blendFilter = CIFilter(name: blendFilterName)
+        blendFilter?.setValue(mappedImage, forKey: kCIInputImageKey)
+        blendFilter?.setValue(image, forKey: kCIInputBackgroundImageKey)
+        let blendedImage = blendFilter?.outputImage?.cropped(to: image.extent) ?? mappedImage
+
+        let dissolveFilter = CIFilter(name: "CIDissolveTransition")
+        dissolveFilter?.setValue(image, forKey: kCIInputImageKey)
+        dissolveFilter?.setValue(blendedImage, forKey: kCIInputTargetImageKey)
+        dissolveFilter?.setValue(intensity, forKey: kCIInputTimeKey)
+
+        return dissolveFilter?.outputImage?.cropped(to: image.extent) ?? blendedImage
+    }
+
+    private func gradientMapImage(for styleIndex: Int) -> CIImage? {
+        let width = 256
+        let height = 1
+        let stops = gradientStops(for: styleIndex)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+
+        for index in 0..<width {
+            let t = CGFloat(index) / CGFloat(width - 1)
+            let color = interpolatedColor(at: t, stops: stops)
+            let offset = index * 4
+            pixels[offset] = UInt8(min(max(color.red * 255, 0), 255).rounded())
+            pixels[offset + 1] = UInt8(min(max(color.green * 255, 0), 255).rounded())
+            pixels[offset + 2] = UInt8(min(max(color.blue * 255, 0), 255).rounded())
+            pixels[offset + 3] = 255
+        }
+
+        let data = Data(pixels)
+        guard let provider = CGDataProvider(data: data as CFData) else {
+            return nil
+        }
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let cgImage = CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: true,
+            intent: .defaultIntent
+        ) else {
+            return nil
+        }
+
+        return CIImage(cgImage: cgImage)
+    }
+
+    private func gradientStops(
+        for styleIndex: Int
+    ) -> [(position: CGFloat, red: CGFloat, green: CGFloat, blue: CGFloat)] {
+        switch styleIndex {
+        case 2:
+            return [
+                (0, 0.02, 0.02, 0.02),
+                (0.5, 0.45, 0.45, 0.45),
+                (1, 0.96, 0.96, 0.92)
+            ]
+        case 3:
+            return [
+                (0, 0.12, 0.07, 0.03),
+                (0.45, 0.68, 0.43, 0.23),
+                (1, 1.0, 0.87, 0.58)
+            ]
+        case 4:
+            return [
+                (0, 0.03, 0.0, 0.12),
+                (0.45, 0.0, 0.72, 0.95),
+                (1, 1.0, 0.08, 0.58)
+            ]
+        case 5:
+            return [
+                (0, 0.16, 0.22, 0.30),
+                (0.5, 0.53, 0.72, 0.78),
+                (1, 0.96, 0.92, 0.82)
+            ]
+        default:
+            return [
+                (0, 0.04, 0.04, 0.05),
+                (0.5, 0.88, 0.22, 0.12),
+                (1, 1.0, 0.92, 0.18)
+            ]
+        }
+    }
+
+    private func interpolatedColor(
+        at value: CGFloat,
+        stops: [(position: CGFloat, red: CGFloat, green: CGFloat, blue: CGFloat)]
+    ) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        guard let first = stops.first else {
+            return (value, value, value)
+        }
+
+        guard value > first.position else {
+            return (first.red, first.green, first.blue)
+        }
+
+        for index in 0..<(stops.count - 1) {
+            let start = stops[index]
+            let end = stops[index + 1]
+            guard value <= end.position else { continue }
+
+            let span = max(end.position - start.position, 1.0e-6)
+            let progress = min(max((value - start.position) / span, 0), 1)
+            return (
+                start.red + (end.red - start.red) * progress,
+                start.green + (end.green - start.green) * progress,
+                start.blue + (end.blue - start.blue) * progress
+            )
+        }
+
+        let last = stops[stops.count - 1]
+        return (last.red, last.green, last.blue)
     }
 
     // MARK: - Background Removal

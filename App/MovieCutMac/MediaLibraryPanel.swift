@@ -5,13 +5,13 @@ import UniformTypeIdentifiers
 struct MediaLibraryPanel: View {
     var viewModel: EditorViewModel
     @State private var isAddingText = false
-    @State private var textClipText = "Text"
+    @State private var textClipText = NSLocalizedString("Text", comment: "")
     @State private var selectedLibraryTab: LibraryTab = .media
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Library")
+                Text(NSLocalizedString("Library", comment: ""))
                     .font(.headline)
                 Spacer()
                 if selectedLibraryTab == .media {
@@ -19,35 +19,42 @@ struct MediaLibraryPanel: View {
                         Image(systemName: "plus")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(NSLocalizedString("Import", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Opens a file picker to import media.", comment: ""))
                     Button(action: openTextSheet) {
                         Image(systemName: "textformat")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(NSLocalizedString("Add Text", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Creates a new text clip.", comment: ""))
                 }
             }
             .padding(.horizontal, 8)
             .padding(.top, 8)
 
-            Picker("Library", selection: $selectedLibraryTab) {
+            Picker(NSLocalizedString("Library", comment: ""), selection: $selectedLibraryTab) {
                 ForEach(LibraryTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Text(tab.displayName).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 8)
+            .accessibilityLabel(NSLocalizedString("Library", comment: ""))
 
             switch selectedLibraryTab {
             case .media:
                 mediaContent
 
                 if viewModel.selectedAsset != nil {
-                    Button("Add to Timeline") {
+                    Button(NSLocalizedString("Add to Timeline", comment: "")) {
                         Task { await viewModel.addClipToTimeline() }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
+                    .accessibilityLabel(NSLocalizedString("Add to Timeline", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Adds the selected library asset to the timeline.", comment: ""))
                 }
             case .stickers:
                 StickerPickerView { sticker in
@@ -63,28 +70,36 @@ struct MediaLibraryPanel: View {
             handleDrop(providers)
             return true
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Library", comment: ""))
+        .accessibilityHint(NSLocalizedString("Drop media files here to import them.", comment: ""))
         .sheet(isPresented: $isAddingText) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Add Text")
+                Text(NSLocalizedString("Add Text", comment: ""))
                     .font(.headline)
-                TextField("Text", text: $textClipText)
+                TextField(NSLocalizedString("Text", comment: ""), text: $textClipText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 260)
+                    .accessibilityLabel(NSLocalizedString("Text", comment: ""))
                 HStack {
                     Spacer()
-                    Button("Cancel") {
+                    Button(NSLocalizedString("Cancel", comment: "")) {
                         isAddingText = false
                     }
-                    Button("Add") {
+                    .accessibilityLabel(NSLocalizedString("Cancel", comment: ""))
+                    Button(NSLocalizedString("Add", comment: "")) {
                         let text = textClipText
                         isAddingText = false
                         Task { await viewModel.addTextClip(text: text) }
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel(NSLocalizedString("Add", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Adds the text clip to the timeline.", comment: ""))
                 }
             }
             .padding(16)
+            .accessibilityElement(children: .contain)
         }
     }
 
@@ -95,11 +110,13 @@ struct MediaLibraryPanel: View {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("Drop media files here")
+                Text(NSLocalizedString("Drop media files here", comment: ""))
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(NSLocalizedString("Drop media files here", comment: ""))
         } else {
             ScrollView {
                 LazyVStack(spacing: 4) {
@@ -118,7 +135,7 @@ struct MediaLibraryPanel: View {
                                     .lineLimit(1)
                                     .font(.caption)
                                 if let duration = asset.duration {
-                                    Text(String(format: "%.1fs", duration))
+                                    Text(String(format: NSLocalizedString("%.1fs", comment: ""), duration))
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -132,15 +149,24 @@ struct MediaLibraryPanel: View {
                         .onTapGesture {
                             viewModel.selectedAssetId = asset.id
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(asset.originalURL.lastPathComponent)
+                        .accessibilityValue(assetAccessibilityValue(asset))
+                        .accessibilityHint(NSLocalizedString("Selects this asset in the media library.", comment: ""))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction {
+                            viewModel.selectedAssetId = asset.id
+                        }
                     }
                 }
                 .padding(4)
             }
+            .accessibilityLabel(NSLocalizedString("Asset List", comment: ""))
         }
     }
 
     private func openTextSheet() {
-        textClipText = "Text"
+        textClipText = NSLocalizedString("Text", comment: "")
         isAddingText = true
     }
 
@@ -177,12 +203,31 @@ struct MediaLibraryPanel: View {
         case .image: return "photo"
         }
     }
+
+    private func assetAccessibilityValue(_ asset: MediaAsset) -> String {
+        let kindName = String(describing: asset.kind)
+        if let duration = asset.duration {
+            return String(format: NSLocalizedString("%@, duration %@", comment: ""), kindName, String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+        }
+        return kindName
+    }
 }
 
-private enum LibraryTab: String, CaseIterable, Identifiable {
-    case media = "Media"
-    case stickers = "Stickers"
-    case music = "Music"
+private enum LibraryTab: CaseIterable, Identifiable {
+    case media
+    case stickers
+    case music
 
-    var id: String { rawValue }
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .media:
+            return NSLocalizedString("Media", comment: "")
+        case .stickers:
+            return NSLocalizedString("Stickers", comment: "")
+        case .music:
+            return NSLocalizedString("Music", comment: "")
+        }
+    }
 }

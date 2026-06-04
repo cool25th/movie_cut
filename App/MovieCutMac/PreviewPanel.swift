@@ -5,6 +5,7 @@ struct PreviewPanel: View {
     var viewModel: EditorViewModel
     @State private var playbackEngine: PlaybackEngine
     @State private var loadedAssetId: UUID?
+    @State private var previewVolume: Double = 1
 
     init(viewModel: EditorViewModel) {
         self.viewModel = viewModel
@@ -25,12 +26,15 @@ struct PreviewPanel: View {
                             }
                         }
                 } else {
-                    Text("No clip selected")
+                    Text(NSLocalizedString("No clip selected", comment: ""))
                         .foregroundStyle(.white.opacity(0.4))
                         .font(.title3)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(NSLocalizedString("Preview", comment: ""))
+            .accessibilityValue(previewAccessibilityValue)
             .task {
                 loadSelectedClipAsset()
             }
@@ -48,6 +52,9 @@ struct PreviewPanel: View {
                 Text(timecodeString(playbackEngine.currentTime))
                     .font(.system(.caption, design: .monospaced))
                     .frame(width: 80)
+                    .accessibilityElement()
+                    .accessibilityLabel(NSLocalizedString("Current Time", comment: ""))
+                    .accessibilityValue(timecodeString(playbackEngine.currentTime))
 
                 Spacer()
 
@@ -57,6 +64,8 @@ struct PreviewPanel: View {
                 .buttonStyle(.borderless)
                 .font(.title3)
                 .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
+                .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
 
                 Button(action: {
                     seekByFrames(-1)
@@ -65,6 +74,8 @@ struct PreviewPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
+                .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
 
                 Button(action: {
                     seekByFrames(1)
@@ -73,6 +84,8 @@ struct PreviewPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
+                .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
 
                 Spacer()
 
@@ -80,10 +93,31 @@ struct PreviewPanel: View {
                     .font(.system(.caption, design: .monospaced))
                     .frame(width: 80)
                     .foregroundStyle(.secondary)
+                    .accessibilityElement()
+                    .accessibilityLabel(NSLocalizedString("Duration", comment: ""))
+                    .accessibilityValue(timecodeString(playbackEngine.duration))
+
+                HStack(spacing: 6) {
+                    Image(systemName: "speaker.wave.2")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Slider(value: Binding(
+                        get: { previewVolume },
+                        set: { newValue in
+                            previewVolume = newValue
+                            playbackEngine.player.volume = Float(newValue)
+                        }
+                    ), in: 0 ... 1)
+                    .frame(width: 84)
+                    .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
+                    .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
+                    .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(Color(nsColor: .controlBackgroundColor))
+            .accessibilityElement(children: .contain)
         }
     }
 
@@ -97,10 +131,17 @@ struct PreviewPanel: View {
             Image(systemName: "play.rectangle")
                 .font(.largeTitle)
                 .foregroundStyle(.white.opacity(0.5))
-            Text(clip.kind.rawValue)
+            Text(String(describing: clip.kind))
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.5))
         }
+    }
+
+    private var previewAccessibilityValue: String {
+        if let clip = viewModel.selectedClip {
+            return String(format: NSLocalizedString("Selected clip %@", comment: ""), String(describing: clip.kind))
+        }
+        return NSLocalizedString("No clip selected", comment: "")
     }
 
     private func loadSelectedClipAsset() {

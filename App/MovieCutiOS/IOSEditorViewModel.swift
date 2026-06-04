@@ -129,6 +129,21 @@ final class IOSEditorViewModel {
         isPlaying.toggle()
     }
 
+    func updateSelectedOpacity(_ opacity: Double) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .opacity(opacity)))
+    }
+
+    func updateSelectedVolume(_ volume: Double) async {
+        guard let selectedClipId else { return }
+        await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
+    }
+
+    func updateSelectedPlaybackRate(_ rate: Double) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
+    }
+
     func exportProject() async {
         // Export is not wired in the iOS target yet. The toolbar calls through here
         // so the UI contract is in place when the export pipeline is connected.
@@ -139,6 +154,15 @@ final class IOSEditorViewModel {
         return currentProject.timeline.tracks.first { track in
             track.clips.contains { $0.id == selectedClipId }
         }?.id
+    }
+
+    private func apply(_ command: any EditorCommand) async {
+        do {
+            try await session.dispatch(command)
+            await refreshFromSession()
+        } catch {
+            return
+        }
     }
 
     private func refreshFromSession() async {

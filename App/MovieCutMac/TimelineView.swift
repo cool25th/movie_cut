@@ -24,17 +24,21 @@ struct TimelineView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Timeline")
+                Text(NSLocalizedString("Timeline", comment: ""))
                     .font(.headline)
                 Spacer()
                 Button(action: { viewModel.timelineZoom = max(20, viewModel.timelineZoom - 20) }) {
                     Image(systemName: "minus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("Zoom Out", comment: ""))
+                .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
                 Button(action: { viewModel.timelineZoom = min(300, viewModel.timelineZoom + 20) }) {
                     Image(systemName: "plus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("Zoom In", comment: ""))
+                .accessibilityHint(NSLocalizedString("Zooms the timeline in.", comment: ""))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -54,6 +58,8 @@ struct TimelineView: View {
         }
         .frame(minHeight: 180)
         .background(Color(nsColor: .textBackgroundColor))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Timeline", comment: ""))
     }
 
     private var timeRuler: some View {
@@ -62,7 +68,7 @@ struct TimelineView: View {
                 .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 .frame(width: 80, height: rulerHeight)
                 .overlay(alignment: .leading) {
-                    Text("Time")
+                    Text(NSLocalizedString("Time", comment: ""))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
@@ -134,6 +140,9 @@ struct TimelineView: View {
                     .fill(Color.red)
                     .frame(width: 2)
                     .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond))
+                    .accessibilityElement()
+                    .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
+                    .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
 
                 ForEach(viewModel.currentProject.markers) { marker in
                     Rectangle()
@@ -156,6 +165,9 @@ struct TimelineView: View {
                 }
                 return true
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(track.name)
+            .accessibilityHint(NSLocalizedString("Drop media files here to add them to this track.", comment: ""))
         }
         .frame(height: trackHeight)
         .overlay(alignment: .bottom) { Divider() }
@@ -203,6 +215,20 @@ struct TimelineView: View {
                 }
                 .contentShape(Rectangle())
                 .gesture(moveGesture(for: clip))
+                .accessibilityElement()
+                .accessibilityLabel(String(format: NSLocalizedString("Clip %@", comment: ""), clipLabel(clip)))
+                .accessibilityValue(
+                    String(
+                        format: NSLocalizedString("Starts at %@, duration %@", comment: ""),
+                        timelineSecondsString(clip.timelineRange.start),
+                        timelineSecondsString(clip.timelineRange.duration)
+                    )
+                )
+                .accessibilityHint(NSLocalizedString("Selects the clip. Drag to move it on the timeline.", comment: ""))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction {
+                    selectClip(clip.id, extendingSelection: false)
+                }
 
             HStack(spacing: 0) {
                 Rectangle()
@@ -210,6 +236,9 @@ struct TimelineView: View {
                     .frame(width: trimHandleWidth)
                     .contentShape(Rectangle())
                     .gesture(leftTrimGesture(for: clip))
+                    .accessibilityElement()
+                    .accessibilityLabel(String(format: NSLocalizedString("Left trim handle for %@", comment: ""), clipLabel(clip)))
+                    .accessibilityHint(NSLocalizedString("Drag to trim the clip start.", comment: ""))
 
                 Spacer(minLength: 0)
 
@@ -218,30 +247,34 @@ struct TimelineView: View {
                     .frame(width: trimHandleWidth)
                     .contentShape(Rectangle())
                     .gesture(rightTrimGesture(for: clip))
+                    .accessibilityElement()
+                    .accessibilityLabel(String(format: NSLocalizedString("Right trim handle for %@", comment: ""), clipLabel(clip)))
+                    .accessibilityHint(NSLocalizedString("Drag to trim the clip end.", comment: ""))
             }
         }
             .frame(width: max(2, width), height: trackHeight - 8)
             .offset(x: x, y: 4)
             .zIndex(isActiveDrag || isSelected ? 1 : 0)
             .contentShape(Rectangle())
+            .accessibilityElement(children: .contain)
             .onTapGesture {
                 selectClip(clip.id, extendingSelection: isCommandModifierPressed)
             }
             .contextMenu {
-                Button("Split") {
+                Button(NSLocalizedString("Split", comment: "")) {
                     selectClip(clip.id, extendingSelection: false)
                     Task { await viewModel.splitClip() }
                 }
-                Button("Delete") {
+                Button(NSLocalizedString("Delete", comment: "")) {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.deleteClips(clipIds) }
                 }
-                Button("Duplicate") {
+                Button(NSLocalizedString("Duplicate", comment: "")) {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.duplicateClips(clipIds) }
                 }
                 Divider()
-                Button("Ripple Delete") {
+                Button(NSLocalizedString("Ripple Delete", comment: "")) {
                     selectClip(clip.id, extendingSelection: false)
                     Task { await viewModel.rippleDeleteClip(clipId: clip.id) }
                 }
@@ -460,6 +493,10 @@ struct TimelineView: View {
         if let textContent = clip.textContent {
             return String(textContent.text.prefix(20))
         }
-        return clip.kind.rawValue
+        return String(describing: clip.kind)
+    }
+
+    private func timelineSecondsString(_ time: TimeInterval) -> String {
+        String(format: NSLocalizedString("%.2fs", comment: ""), time)
     }
 }

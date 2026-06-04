@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 
 /// The iOS entry point for MovieCut.
@@ -5,7 +6,8 @@ import SwiftUI
 struct MovieCutiOSApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            IOSContentView()
         }
     }
 }
+#endif

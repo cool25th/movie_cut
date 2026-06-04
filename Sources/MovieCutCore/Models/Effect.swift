@@ -34,6 +34,9 @@ public enum EffectType: String, Codable, Sendable, Equatable, Hashable, CaseIter
 
     /// Blur effect.
     case blur
+
+    /// Stylized color remapping effect.
+    case styleTransfer
 }
 
 /// An effect instance and its numeric parameters.
@@ -73,5 +76,10 @@ public extension Effect {
     /// A blur effect instance.
     static var blur: Effect {
         Effect(type: .blur, parameters: ["radius": 1])
+    }
+
+    /// A stylized color remapping effect instance.
+    static var styleTransfer: Effect {
+        Effect(type: .styleTransfer, parameters: ["styleIndex": 1, "intensity": 0.75])
     }
 }

@@ -662,6 +662,26 @@ final class EditorViewModel {
         } else {
             clipStyles[clipId] = style
         }
+
+        guard let clip = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == clipId })
+        else {
+            return
+        }
+
+        var effects = clip.effects.filter { $0.type != .styleTransfer }
+        if let styleIndex = styleTransferIndex(for: style) {
+            effects.append(Effect(
+                type: .styleTransfer,
+                parameters: [
+                    "styleIndex": styleIndex,
+                    "intensity": 0.75
+                ]
+            ))
+        }
+
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .effects(effects)))
     }
 
     func applyDucking(to clipId: UUID, duckLevel: Double = 0.3) async {
@@ -1126,6 +1146,23 @@ final class EditorViewModel {
         selectedStyle = clipStyles[selectedClipId] ?? "none"
     }
 
+    private func styleTransferIndex(for style: String) -> Double? {
+        switch style {
+        case "comic":
+            return 1
+        case "noir":
+            return 2
+        case "vintage":
+            return 3
+        case "cyberpunk":
+            return 4
+        case "watercolor":
+            return 5
+        default:
+            return nil
+        }
+    }
+
     private var currentClipIds: Set<UUID> {
         Set(currentProject.timeline.tracks.flatMap(\.clips).map(\.id))
     }
@@ -1390,7 +1427,7 @@ final class EditorViewModel {
 
         var eqPresets: [UUID: EqualizerPreset] = [:]
         for (clipId, presetName) in clipEQPresets {
-            let matched = EqualizerPreset.all.first { $0.name.lowercased() == presetName.lowercased() }
+            let matched = equalizerPreset(for: presetName)
             if let matched {
                 eqPresets[clipId] = matched
             }
@@ -1402,6 +1439,23 @@ final class EditorViewModel {
             duckLevel: 0.3,
             voiceClipIds: voiceClipIds
         )
+    }
+
+    private func equalizerPreset(for option: String) -> EqualizerPreset? {
+        switch option {
+        case "flat":
+            return nil
+        case "bassBoost":
+            return .bassBoost
+        case "trebleBoost":
+            return .trebleBoost
+        case "voice":
+            return .voiceEnhance
+        case "cinema":
+            return .loudness
+        default:
+            return EqualizerPreset.all.first { $0.name.lowercased() == option.lowercased() }
+        }
     }
 
     // MARK: - Phase 3-1: AI Analysis & Voiceover

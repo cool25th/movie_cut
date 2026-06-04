@@ -19,7 +19,10 @@ public enum ConflictStrategy: Sendable {
 }
 
 /// Lightweight metadata for a synced project document.
-public struct CloudProjectInfo: Sendable, Equatable {
+public struct CloudProjectInfo: Sendable, Equatable, Identifiable {
+    /// Unique identifier based on name.
+    public var id: String { name }
+
     /// Project name without the `.moviecut` extension.
     public var name: String
 

@@ -69,11 +69,14 @@ final class EditorViewModel {
     var lastExportURL: URL?
     var isCloudSyncing: Bool = false
     var cloudSyncError: String?
+    var exportFormat: String = "mp4"
+    var cloudProjects: [CloudProjectInfo] = []
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
     @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
     @ObservationIgnored private var clipEQPresets: [UUID: String] = [:]
+    @ObservationIgnored private var noiseReductionClipIds: Set<UUID> = []
     @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
     @ObservationIgnored private var clipStyles: [UUID: String] = [:]
 
@@ -233,11 +236,57 @@ final class EditorViewModel {
         }
     }
 
+    func loadFromCloud() async {
+        isCloudSyncing = true
+        defer { isCloudSyncing = false }
+
+        do {
+            let sync = CloudSyncService()
+            let projects = try await sync.listRemoteProjects()
+            cloudProjects = projects
+            cloudSyncError = nil
+        } catch {
+            cloudSyncError = error.localizedDescription
+        }
+    }
+
+    func listCloudProjects() async {
+        await loadFromCloud()
+    }
+
+    func openCloudProject(name: String) async {
+        isCloudSyncing = true
+        defer { isCloudSyncing = false }
+
+        do {
+            let sync = CloudSyncService()
+            let project = try await sync.download(name: name)
+            let loaded = Self.ensureDefaultTracks(in: project)
+            session = EditorSession(project: loaded)
+            currentProject = loaded
+            canvasSelection = loaded.canvas.aspectRatio
+            selectedClipId = nil
+            selectedAssetId = nil
+            playbackEngine.clear()
+            playheadTime = 0
+            clearGeneratedSubtitles()
+            clearClipProcessingState()
+            lastErrorMessage = nil
+            lastExportURL = nil
+            cloudSyncError = nil
+        } catch {
+            cloudSyncError = error.localizedDescription
+        }
+    }
+
     func exportProject() async {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(currentProject.name).mp4"
+
+        // Set default extension based on selected format
+        let ext = exportFormat == "mov" ? "mov" : "mp4"
+        panel.nameFieldStringValue = "\(currentProject.name).\(ext)"
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -245,9 +294,15 @@ final class EditorViewModel {
 
         lastExportURL = nil
 
+        // Configure export engine with current settings
+        exportEngine.exportResolution = exportResolution
+        exportEngine.exportQuality = exportQuality
+        exportEngine.exportFormat = exportFormat
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+
         do {
             let snapshot = await session.snapshot()
-            lastExportURL = try await exportEngine.export(project: snapshot, to: url)
+            lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -736,7 +791,64 @@ final class EditorViewModel {
     }
 
     func extractAudio(from clipId: UUID) async throws {
-        try await session.dispatch(ExtractAudioCommand(clipId: clipId))
+        let snapshot = await session.snapshot()
+        let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
+        guard asset.kind == .video else {
+            throw EditorCommandError.invalidCommand("Audio can only be extracted from video clips.")
+        }
+
+        let sourceAsset = AVAsset(url: asset.originalURL)
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutExtractedAudio_\(clipId.uuidString)")
+            .appendingPathExtension("m4a")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: sourceAsset,
+            presetName: AVAssetExportPresetAppleM4A
+        ) else {
+            throw EditorCommandError.invalidCommand("Could not create audio export session.")
+        }
+
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .m4a
+
+        let sourceStart = CMTime(seconds: clip.sourceRange.start, preferredTimescale: 600)
+        let sourceDur = CMTime(seconds: clip.sourceRange.duration, preferredTimescale: 600)
+        exportSession.timeRange = CMTimeRange(start: sourceStart, duration: sourceDur)
+
+        await exportSession.export()
+
+        guard exportSession.status == .completed else {
+            throw EditorCommandError.invalidCommand(
+                exportSession.error?.localizedDescription ?? "Audio extraction failed."
+            )
+        }
+
+        let audioAsset = MediaAsset(
+            originalURL: outputURL,
+            kind: .audio,
+            duration: clip.sourceRange.duration,
+            metadata: MediaMetadata(fileSize: fileSize(for: outputURL))
+        )
+
+        try await session.dispatch(ImportMediaCommand(asset: audioAsset))
+
+        let audioTrack = try await ensureTrack(for: .audio)
+        let audioClip = Clip(
+            assetId: audioAsset.id,
+            kind: .audio,
+            sourceRange: TimeRange(start: 0, duration: clip.sourceRange.duration),
+            timelineRange: clip.timelineRange,
+            volume: clip.volume,
+            fadeInDuration: clip.fadeInDuration,
+            fadeOutDuration: clip.fadeOutDuration,
+            playbackRate: clip.playbackRate
+        )
+
+        try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: audioClip))
+        selectedAssetId = audioAsset.id
+        selectedClipId = audioClip.id
         try await refreshFromSession()
     }
 
@@ -997,6 +1109,7 @@ final class EditorViewModel {
         clipEQPresets = [:]
         backgroundRemovedClipIds = []
         clipStyles = [:]
+        noiseReductionClipIds = []
         loadSelectedClipProcessingState()
     }
 
@@ -1254,6 +1367,41 @@ final class EditorViewModel {
 
         try pngData.write(to: fileURL, options: .atomic)
         return fileURL
+    }
+
+
+    func toggleNoiseReduction(_ enabled: Bool) {
+        guard let clipId = selectedClipId else { return }
+        if enabled {
+            noiseReductionClipIds.insert(clipId)
+        } else {
+            noiseReductionClipIds.remove(clipId)
+        }
+    }
+
+    private func buildAudioProcessingOptions() -> ClipAudioProcessingOptions {
+        let snapshot = currentProject
+        var voiceClipIds: Set<UUID> = []
+        for track in snapshot.timeline.tracks where track.kind == .video {
+            for clip in track.clips where clip.volume > 0 {
+                voiceClipIds.insert(clip.id)
+            }
+        }
+
+        var eqPresets: [UUID: EqualizerPreset] = [:]
+        for (clipId, presetName) in clipEQPresets {
+            let matched = EqualizerPreset.all.first { $0.name.lowercased() == presetName.lowercased() }
+            if let matched {
+                eqPresets[clipId] = matched
+            }
+        }
+
+        return ClipAudioProcessingOptions(
+            eqPresets: eqPresets,
+            noiseReductionClipIds: noiseReductionClipIds,
+            duckLevel: 0.3,
+            voiceClipIds: voiceClipIds
+        )
     }
 
     // MARK: - Phase 3-1: AI Analysis & Voiceover

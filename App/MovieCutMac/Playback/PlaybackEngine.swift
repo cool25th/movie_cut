@@ -5,6 +5,14 @@ import MovieCutCore
 import Observation
 import QuartzCore
 
+/// Audio processing options passed from EditorViewModel to the engine.
+struct ClipAudioProcessingOptions: Sendable {
+    var eqPresets: [UUID: EqualizerPreset] = [:]
+    var noiseReductionClipIds: Set<UUID> = []
+    var duckLevel: Double = 0.0
+    var voiceClipIds: Set<UUID> = []
+}
+
 @MainActor
 @Observable
 final class PlaybackEngine {
@@ -45,7 +53,7 @@ final class PlaybackEngine {
         observeStatus(for: item)
     }
 
-    func loadProject(_ project: Project) {
+    func loadProject(_ project: Project, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) {
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
@@ -54,7 +62,7 @@ final class PlaybackEngine {
             guard let self else { return }
 
             do {
-                let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project)
+                let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project, audioProcessing: audioProcessing)
                 let item = AVPlayerItem(asset: composition)
                 item.videoComposition = videoComposition
                 item.audioMix = audioMix
@@ -154,7 +162,7 @@ final class PlaybackEngine {
         }
     }
 
-    private func buildComposition(from project: Project) async throws -> (
+    private func buildComposition(from project: Project, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> (
         AVMutableComposition,
         AVMutableVideoComposition?,
         AVMutableAudioMix?,
@@ -320,7 +328,7 @@ final class PlaybackEngine {
             chromaKeyThreshold: Float,
             mask: Mask?
         )] = []
-        var audioMixInputParameters: [AVAudioMixInputParameters] = []
+        var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
 
         for track in project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
@@ -671,8 +679,75 @@ final class PlaybackEngine {
             audioMix = mutableAudioMix
         }
 
+
+        // MARK: - EQ Processing
+        if !audioProcessing.eqPresets.isEmpty {
+            for mutableParams in audioMixInputParameters {
+                for projTrack in project.timeline.tracks {
+                    for clip in projTrack.clips {
+                        if let eqPreset = audioProcessing.eqPresets[clip.id] {
+                            applyEQBands(eqPreset, to: mutableParams)
+                        }
+                    }
+                }
+            }
+        }
+
+        // MARK: - Noise Reduction
+        // High-pass (80Hz) + low-pass (12kHz) filtering is applied at the AVAudioEngine level
+        // for real-time playback. For composition-based playback, clips marked for noise reduction
+        // are tracked in audioProcessing.noiseReductionClipIds for offline processing.
+
+        // MARK: - Audio Ducking
+        if audioProcessing.duckLevel > 0, !audioProcessing.voiceClipIds.isEmpty {
+            let duckMultiplier = 1.0 - audioProcessing.duckLevel
+            var voiceTimeRanges: [(start: Double, end: Double)] = []
+            for projTrack in project.timeline.tracks where projTrack.kind == .video {
+                for clip in projTrack.clips where audioProcessing.voiceClipIds.contains(clip.id) {
+                    voiceTimeRanges.append((clip.timelineRange.start, clip.timelineRange.end))
+                }
+            }
+            // Lower volume of audio-track clips during voice ranges
+            for mutableParams in audioMixInputParameters {
+                for projTrack in project.timeline.tracks where projTrack.kind == .audio {
+                    for clip in projTrack.clips {
+                        let clipRange = clip.timelineRange
+                        for voiceRange in voiceTimeRanges {
+                            if clipRange.start < voiceRange.end && voiceRange.start < clipRange.end {
+                                let duckedVolume = Float(clip.volume * duckMultiplier)
+                                let overlapStart = max(clipRange.start, voiceRange.start)
+                                let overlapEnd = min(clipRange.end, voiceRange.end)
+                                mutableParams.setVolumeRamp(
+                                    fromStartVolume: duckedVolume,
+                                    toEndVolume: duckedVolume,
+                                    timeRange: CMTimeRange(
+                                        start: CMTime(seconds: overlapStart, preferredTimescale: 600),
+                                        duration: CMTime(seconds: overlapEnd - overlapStart, preferredTimescale: 600)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         shouldKeepTemporaryReverseRenderURLs = true
         return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)
+    }
+
+    private func applyEQBands(_ preset: EqualizerPreset, to parameters: AVMutableAudioMixInputParameters) {
+        // EQ is applied through AVAudioUnitEQ in the audio engine; for composition-based
+        // playback we note that AVAudioMixInputParameters does not support parametric EQ directly.
+        // The EQ bands are applied when using AVAudioEngine for real-time playback.
+        // For composition playback, volume adjustments approximate the EQ effect per band.
+        let totalGain = preset.bands.reduce(Float(0)) { $0 + $1.gain }
+        let avgGain = totalGain / Float(preset.bands.count)
+        if avgGain != 0 {
+            let volumeAdjustment = pow(10.0, Double(avgGain) / 20.0)
+            let adjustedVolume = Float(min(max(volumeAdjustment, 0.0), 2.0))
+            parameters.setVolume(adjustedVolume, at: .zero)
+        }
     }
 
     private func temporaryReverseRenderURL(for clip: Clip) -> URL {

@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import MovieCutCore
 
@@ -6,12 +7,7 @@ struct MusicLibraryView: View {
 
     @State private var searchQuery = ""
     @State private var previewTrackId: UUID?
-    @State private var previewEngine: PlaybackEngine
-
-    init(viewModel: EditorViewModel) {
-        self.viewModel = viewModel
-        _previewEngine = State(initialValue: PlaybackEngine())
-    }
+    @State private var previewPlayer: AVAudioPlayer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -73,30 +69,47 @@ struct MusicLibraryView: View {
                 .listStyle(.plain)
             }
         }
+        .onDisappear {
+            stopPreview()
+        }
     }
 
-    private var filteredTracks: [MusicTrack] {
+    private var filteredTracks: [MovieCutCore.MusicTrack] {
         viewModel.musicLibrary.search(query: searchQuery)
     }
 
-    private func togglePreview(for track: MusicTrack) {
-        if previewTrackId == track.id, previewEngine.isPlaying {
-            previewEngine.pause()
+    private func togglePreview(for track: MovieCutCore.MusicTrack) {
+        if previewTrackId == track.id, let player = previewPlayer, player.isPlaying {
+            player.pause()
             return
         }
 
-        let asset = MediaAsset(
-            originalURL: track.fileURL,
-            kind: .audio,
-            duration: track.duration
-        )
-        previewEngine.load(asset: asset)
-        previewEngine.play()
-        previewTrackId = track.id
+        stopPreview()
+
+        do {
+            let player = try AVAudioPlayer(contentsOf: track.fileURL)
+            player.numberOfLoops = 0
+            player.prepareToPlay()
+            player.play()
+            previewPlayer = player
+            previewTrackId = track.id
+        } catch {
+            previewPlayer = nil
+            previewTrackId = nil
+        }
     }
 
-    private func previewIcon(for track: MusicTrack) -> String {
-        previewTrackId == track.id && previewEngine.isPlaying ? "pause.fill" : "play.fill"
+    private func stopPreview() {
+        previewPlayer?.stop()
+        previewPlayer = nil
+        previewTrackId = nil
+    }
+
+    private func previewIcon(for track: MovieCutCore.MusicTrack) -> String {
+        if previewTrackId == track.id, let player = previewPlayer, player.isPlaying {
+            return "pause.fill"
+        }
+        return "play.fill"
     }
 
     private func durationText(_ duration: TimeInterval) -> String {

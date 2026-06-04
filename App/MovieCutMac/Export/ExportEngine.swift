@@ -13,11 +13,16 @@ final class ExportEngine {
     var exportError: String?
     var lastExportURL: URL?
 
+    var exportResolution: String = "1080p"
+    var exportQuality: String = "high"
+    var exportFormat: String = "mp4"
+    var backgroundRemovedClipIds: Set<UUID> = []
+
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
 
     @discardableResult
-    func export(project: Project, to url: URL) async throws -> URL {
+    func export(project: Project, to url: URL, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> URL {
         isExporting = true
         exportProgress = 0
         exportError = nil
@@ -33,6 +38,8 @@ final class ExportEngine {
             guard let exportSession = AVAssetExportSession(asset: exportPackage.composition, presetName: presetName) else {
                 throw ExportEngineError.exportSessionCreationFailed
             }
+
+            configureExportSession(exportSession, videoComposition: exportPackage.videoComposition, project: project)
 
             exportSession.videoComposition = exportPackage.videoComposition
             exportSession.audioMix = exportPackage.audioMix
@@ -56,11 +63,23 @@ final class ExportEngine {
         }
     }
 
+    private func configureExportSession(
+        _ exportSession: AVAssetExportSession,
+        videoComposition: AVMutableVideoComposition?,
+        project: Project
+    ) {
+        if let videoComp = videoComposition {
+            let resolvedSize = renderSize(for: exportResolution, canvas: project.canvas)
+            videoComp.renderSize = resolvedSize
+        }
+        let _ = bitrateForQuality(exportQuality, resolution: exportResolution)
+    }
+
     private func makeExportPackage(for project: Project) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
         var videoClipInstructions: [ExportClipInstructionMetadata] = []
-        var audioMixInputParameters: [AVAudioMixInputParameters] = []
+        var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
 
         func applyAudioVolumeAndFades(
             for clip: Clip,
@@ -124,7 +143,8 @@ final class ExportEngine {
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
                         textContent: textContent,
-                        keyframes: clip.keyframes
+                        keyframes: clip.keyframes,
+                        isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
                     ))
                 }
 
@@ -136,7 +156,9 @@ final class ExportEngine {
             var destinationTrack: AVMutableCompositionTrack?
             let audioParameters = AVMutableAudioMixInputParameters()
 
-            for clip in track.clips {
+            let sortedClips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
+
+            for (clipIndex, clip) in sortedClips.enumerated() {
                 guard let assetId = clip.assetId,
                       let mediaAsset = project.mediaLibrary.assets[assetId] else {
                     continue
@@ -168,18 +190,50 @@ final class ExportEngine {
                     }
                 }
 
+                // Transition overlap: when previous clip has a transition, overlap by transition duration
+                var adjustedTimelineStart = clip.timelineRange.start
+                if clipIndex > 0 {
+                    let previousClip = sortedClips[clipIndex - 1]
+                    if let transition = previousClip.transition, transition.duration > 0 {
+                        adjustedTimelineStart = max(0, adjustedTimelineStart - transition.duration)
+                    }
+                }
+
                 let sourceTimeRange = CMTimeRange(
                     start: CMTime(seconds: clip.sourceRange.start, preferredTimescale: 600),
                     duration: CMTime(seconds: clip.sourceRange.duration, preferredTimescale: 600)
                 )
-                let destinationTime = CMTime(seconds: clip.timelineRange.start, preferredTimescale: 600)
-                try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
+
+                // Freeze frame: very short sourceRange but long timelineRange
+                let isFreezeFrame = clip.sourceRange.duration < 0.1 && clip.timelineRange.duration > 0.5
+
+                let destinationTime: CMTime
+                let clipDuration: CMTime
+
+                if isFreezeFrame && mediaType == .video {
+                    let frozenSourceRange = CMTimeRange(
+                        start: sourceTimeRange.start,
+                        duration: CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
+                    )
+                    destinationTime = CMTime(seconds: adjustedTimelineStart, preferredTimescale: 600)
+                    clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
+
+                    try compositionTrack.insertTimeRange(frozenSourceRange, of: sourceTrack, at: destinationTime)
+
+                    let insertedRange = CMTimeRange(start: destinationTime, duration: frozenSourceRange.duration)
+                    compositionTrack.scaleTimeRange(insertedRange, toDuration: clipDuration)
+                } else {
+                    destinationTime = CMTime(seconds: adjustedTimelineStart, preferredTimescale: 600)
+                    clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
+
+                    try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: destinationTime)
+                }
 
                 var effectiveSourceTrack = sourceTrack
                 var effectiveSourceTimeRange = sourceTimeRange
-                var clipCompositionDuration = sourceTimeRange.duration
+                var clipCompositionDuration = isFreezeFrame ? clipDuration : sourceTimeRange.duration
 
-                if clip.isReversed, mediaType == .video {
+                if clip.isReversed, mediaType == .video, !isFreezeFrame {
                     let reversedOutputURL = temporaryReverseRenderURL(for: clip)
                     try await ReverseRenderService().renderReversed(
                         clip: sourceAsset,
@@ -201,7 +255,7 @@ final class ExportEngine {
                 }
 
                 var didApplySpeedRamp = false
-                if clip.speedRampPoints.count >= 2 {
+                if clip.speedRampPoints.count >= 2, !isFreezeFrame {
                     let curve = SpeedRampCurve(points: clip.speedRampPoints)
                     clipCompositionDuration = try applySpeedRamp(
                         curve,
@@ -214,7 +268,7 @@ final class ExportEngine {
                 }
 
                 let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
-                if playbackRate != 1, !didApplySpeedRamp {
+                if playbackRate != 1, !didApplySpeedRamp, !isFreezeFrame {
                     let scaledDuration = CMTime(seconds: clip.sourceRange.duration / playbackRate, preferredTimescale: 600)
                     let insertedRange = CMTimeRange(start: destinationTime, duration: clipCompositionDuration)
                     compositionTrack.scaleTimeRange(insertedRange, toDuration: scaledDuration)
@@ -222,7 +276,6 @@ final class ExportEngine {
                 }
 
                 if mediaType == .video {
-                    // Masked clips are carried into the video-composition metadata for future compositing.
                     videoClipInstructions.append(ExportClipInstructionMetadata(
                         clipID: clip.id,
                         trackID: compositionTrack.trackID,
@@ -235,7 +288,8 @@ final class ExportEngine {
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
-                        keyframes: clip.keyframes
+                        keyframes: clip.keyframes,
+                        isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
                     ))
                 }
 
@@ -278,7 +332,9 @@ final class ExportEngine {
         guard !tracks.isEmpty else { return nil }
 
         let videoComposition = AVMutableVideoComposition()
-        videoComposition.renderSize = canvas.size
+
+        let resolvedSize = renderSize(for: exportResolution, canvas: canvas)
+        videoComposition.renderSize = resolvedSize
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
 
         let usesCustomVideoCompositor = clips.contains { clip in
@@ -286,6 +342,8 @@ final class ExportEngine {
                 || clip.chromaKeyColor != nil
                 || clip.mask != nil
                 || !clip.keyframes.isEmpty
+                || !clip.effects.isEmpty
+                || clip.isBackgroundRemoved
         }
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -309,7 +367,7 @@ final class ExportEngine {
 
             if !isIdentityTransform(clip.transform) {
                 layerInstruction.setTransform(
-                    affineTransform(for: clip.transform, canvasSize: canvas.size),
+                    affineTransform(for: clip.transform, canvasSize: resolvedSize),
                     at: clip.timeRange.start
                 )
                 layerInstruction.setTransform(.identity, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
@@ -342,7 +400,6 @@ final class ExportEngine {
             }
 
             if clip.requiresCustomVideoCompositorMetadata {
-                // Color correction, chroma key, keyframes, and analysis effects need CIImage-backed metadata.
                 customCompositorClips.append(clip)
             }
         }
@@ -361,7 +418,9 @@ final class ExportEngine {
                             colorCorrection: clip.colorCorrection,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
-                            mask: clip.mask
+                            mask: clip.mask,
+                            effects: clip.effects,
+                            isBackgroundRemoved: clip.isBackgroundRemoved
                         )
                     }
                 )
@@ -491,6 +550,53 @@ final class ExportEngine {
         return accumulatedOutputDuration
     }
 
+    // MARK: - Export Preset Helpers
+
+    private func renderSize(for resolution: String, canvas: CanvasPreset) -> CGSize {
+        switch resolution {
+        case "4k":
+            return CGSize(width: 3840, height: 2160)
+        case "1080p":
+            return CGSize(width: 1920, height: 1080)
+        case "720p":
+            return CGSize(width: 1280, height: 720)
+        case "480p":
+            return CGSize(width: 854, height: 480)
+        default:
+            return canvas.size
+        }
+    }
+
+    private func bitrateForQuality(_ quality: String, resolution: String) -> Int {
+        let baseBitrate: Int
+        switch quality {
+        case "high":
+            baseBitrate = 20_000_000
+        case "medium":
+            baseBitrate = 10_000_000
+        case "low":
+            baseBitrate = 5_000_000
+        default:
+            baseBitrate = 10_000_000
+        }
+        let resolutionScale: Double
+        switch resolution {
+        case "4k":
+            resolutionScale = 1.0
+        case "1080p":
+            resolutionScale = 0.5
+        case "720p":
+            resolutionScale = 0.3
+        case "480p":
+            resolutionScale = 0.15
+        default:
+            resolutionScale = 0.5
+        }
+        return Int(Double(baseBitrate) * resolutionScale)
+    }
+
+    // MARK: - Transform Helpers
+
     private func isIdentityTransform(_ transform: ClipTransform) -> Bool {
         isZeroPoint(transform.position)
             && isZeroPoint(transform.offset)
@@ -566,7 +672,7 @@ final class ExportEngine {
         }
     }
 
-    private func makeAudioMix(parameters: [AVAudioMixInputParameters]) -> AVMutableAudioMix? {
+    private func makeAudioMix(parameters: [AVMutableAudioMixInputParameters]) -> AVMutableAudioMix? {
         guard !parameters.isEmpty else { return nil }
 
         let audioMix = AVMutableAudioMix()
@@ -678,6 +784,7 @@ private struct ExportClipInstructionMetadata {
     var effects: [Effect]
     var textContent: TextClipContent?
     var keyframes: [Keyframe]
+    var isBackgroundRemoved: Bool
 
     var requiresCustomVideoCompositorMetadata: Bool {
         textContent != nil
@@ -685,6 +792,7 @@ private struct ExportClipInstructionMetadata {
             || colorCorrection != nil
             || chromaKeyColor != nil
             || !effects.isEmpty
+            || isBackgroundRemoved
             || !keyframes.isEmpty
     }
 }

@@ -166,11 +166,18 @@ struct InspectorBasicSection: View {
         }
     }
 
+    private let fontFamilies = [
+        "System", "Helvetica Neue", "Helvetica Neue Bold",
+        "SF Pro", "SF Pro Rounded", "Georgia", "Menlo",
+        "Avenir Next", "Futura", "Courier New"
+    ]
+
     private func textContentSection(_ textContent: TextClipContent) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Text")
                 .font(.subheadline)
                 .fontWeight(.semibold)
+
             TextField("Text", text: Binding(
                 get: { textContent.text },
                 set: { newValue in
@@ -180,7 +187,92 @@ struct InspectorBasicSection: View {
                 }
             ))
             .textFieldStyle(.roundedBorder)
+
+            HStack(spacing: 8) {
+                Picker("Font", selection: Binding(
+                    get: { textContent.fontFamily },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.fontFamily = newValue
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                )) {
+                    ForEach(fontFamilies, id: \.self) { family in
+                        Text(family).tag(family)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 160)
+
+                HStack(spacing: 4) {
+                    Text("Size")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Slider(value: Binding(
+                        get: { textContent.fontSize },
+                        set: { newValue in
+                            var updated = textContent
+                            updated.fontSize = newValue
+                            Task { await viewModel.updateSelectedTextContent(updated) }
+                        }
+                    ), in: 8 ... 144, step: 1)
+                    Text(String(format: "%.0f", textContent.fontSize))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, alignment: .trailing)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Picker("Alignment", selection: Binding(
+                    get: { textContent.alignment },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.alignment = newValue
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                )) {
+                    Label("Left", systemImage: "text.alignleft").tag(MovieCutCore.TextAlignment.leading)
+                    Label("Center", systemImage: "text.aligncenter").tag(MovieCutCore.TextAlignment.center)
+                    Label("Right", systemImage: "text.alignright").tag(MovieCutCore.TextAlignment.trailing)
+                    Label("Justify", systemImage: "text.justify").tag(MovieCutCore.TextAlignment.justified)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 200)
+
+                ColorPicker("Color", selection: Binding(
+                    get: {
+                        colorFromHex(textContent.fontColor)
+                    },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.fontColor = hexFromColor(newValue)
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                ))
+                .labelsHidden()
+            }
         }
+    }
+
+    private func colorFromHex(_ hex: String) -> Color {
+        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
+            return .white
+        }
+        let r = Double((value >> 16) & 0xFF) / 255.0
+        let g = Double((value >> 8) & 0xFF) / 255.0
+        let b = Double(value & 0xFF) / 255.0
+        return Color(red: r, green: g, blue: b)
+    }
+
+    private func hexFromColor(_ color: Color) -> String {
+        let nsColor = NSColor(color)
+        guard let rgb = nsColor.usingColorSpace(.sRGB) else { return "#FFFFFF" }
+        let r = Int((rgb.redComponent * 255).rounded())
+        let g = Int((rgb.greenComponent * 255).rounded())
+        let b = Int((rgb.blueComponent * 255).rounded())
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 
     private func speedPresetLabel(_ rate: Double) -> String {

@@ -120,6 +120,62 @@ struct InspectorEffectsSection: View {
                 binding: maskFeatherBinding()
             )
 
+            inspectorSlider(
+                title: "Position X",
+                value: Double(mask.position.x),
+                range: 0 ... Double(viewModel.currentProject.canvas.size.width),
+                binding: Binding(
+                    get: { Double(mask.position.x) },
+                    set: { newValue in
+                        var updatedMask = clip.mask ?? defaultMask()
+                        updatedMask.position.x = CGFloat(newValue)
+                        Task { await viewModel.updateSelectedMask(updatedMask) }
+                    }
+                )
+            )
+
+            inspectorSlider(
+                title: "Position Y",
+                value: Double(mask.position.y),
+                range: 0 ... Double(viewModel.currentProject.canvas.size.height),
+                binding: Binding(
+                    get: { Double(mask.position.y) },
+                    set: { newValue in
+                        var updatedMask = clip.mask ?? defaultMask()
+                        updatedMask.position.y = CGFloat(newValue)
+                        Task { await viewModel.updateSelectedMask(updatedMask) }
+                    }
+                )
+            )
+
+            inspectorSlider(
+                title: "Width",
+                value: Double(mask.size.width),
+                range: 0 ... Double(viewModel.currentProject.canvas.size.width),
+                binding: Binding(
+                    get: { Double(mask.size.width) },
+                    set: { newValue in
+                        var updatedMask = clip.mask ?? defaultMask()
+                        updatedMask.size.width = CGFloat(newValue)
+                        Task { await viewModel.updateSelectedMask(updatedMask) }
+                    }
+                )
+            )
+
+            inspectorSlider(
+                title: "Height",
+                value: Double(mask.size.height),
+                range: 0 ... Double(viewModel.currentProject.canvas.size.height),
+                binding: Binding(
+                    get: { Double(mask.size.height) },
+                    set: { newValue in
+                        var updatedMask = clip.mask ?? defaultMask()
+                        updatedMask.size.height = CGFloat(newValue)
+                        Task { await viewModel.updateSelectedMask(updatedMask) }
+                    }
+                )
+            )
+
             Toggle("Inverted", isOn: Binding(
                 get: { mask.inverted },
                 set: { inverted in

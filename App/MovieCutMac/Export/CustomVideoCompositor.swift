@@ -12,6 +12,8 @@ struct CustomCompositionClipEffect {
     let chromaKeyColor: SIMD3<Float>?
     let chromaKeyThreshold: Float
     let mask: Mask?
+    let effects: [Effect]
+    let isBackgroundRemoved: Bool
 
     init?(
         trackID: CMPersistentTrackID,
@@ -22,12 +24,16 @@ struct CustomCompositionClipEffect {
         colorCorrection: ColorCorrection?,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
-        mask: Mask?
+        mask: Mask?,
+        effects: [Effect] = [],
+        isBackgroundRemoved: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
         guard colorCorrection != nil
             || chromaKeyColor != nil
             || mask != nil
+            || !effects.isEmpty
+            || isBackgroundRemoved
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
         else {
             return nil
@@ -42,6 +48,8 @@ struct CustomCompositionClipEffect {
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
+        self.effects = effects
+        self.isBackgroundRemoved = isBackgroundRemoved
     }
 
     func applies(to trackID: CMPersistentTrackID, at time: CMTime) -> Bool {
@@ -266,6 +274,18 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
                 let mask = effect?.mask ?? instruction.mask
                 let animationState = effect?.animationState(at: request.compositionTime)
+                let clipEffects = effect?.effects ?? []
+                let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
+
+                // Apply CIFilter-based effects (blur, grayscale, sepia, temperature, exposure)
+                if !clipEffects.isEmpty {
+                    image = self.applyEffects(clipEffects, to: image)
+                }
+
+                // Apply background removal
+                if isBackgroundRemoved {
+                    image = self.applyBackgroundRemoval(to: image)
+                }
 
                 if let colorCorrection {
                     image = self.apply(colorCorrection: colorCorrection, to: image)
@@ -299,6 +319,100 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
     
     func cancelAllPendingVideoCompositionRequests() {}
+
+    // MARK: - Effects Rendering
+
+    private func applyEffects(_ effects: [Effect], to image: CIImage) -> CIImage {
+        var result = image
+        for effect in effects {
+            switch effect.type {
+            case .blur:
+                let radius = effect.parameters["radius"] ?? 5.0
+                result = result.applyingFilter(
+                    "CIGaussianBlur",
+                    parameters: [kCIInputRadiusKey: radius]
+                )
+            case .grayscale:
+                result = result.applyingFilter("CIPhotoEffectMono", parameters: [:])
+            case .sepia:
+                result = result.applyingFilter("CIPhotoEffectSepia", parameters: [:])
+            case .temperature:
+                let neutral = CGPoint(
+                    x: effect.parameters["neutralX"] ?? 6500,
+                    y: effect.parameters["neutralY"] ?? 6500
+                )
+                let target = CGPoint(
+                    x: effect.parameters["targetX"] ?? 6500,
+                    y: effect.parameters["targetY"] ?? 6500
+                )
+                result = result.applyingFilter(
+                    "CITemperatureAndTint",
+                    parameters: [
+                        "inputNeutral": CIVector(cgPoint: neutral),
+                        "inputTargetNeutral": CIVector(cgPoint: target)
+                    ]
+                )
+            case .exposure:
+                let ev = effect.parameters["ev"] ?? 0.5
+                result = result.applyingFilter(
+                    "CIExposureAdjust",
+                    parameters: [kCIInputEVKey: ev]
+                )
+            default:
+                break
+            }
+        }
+        return result
+    }
+
+    // MARK: - Background Removal
+
+    private func applyBackgroundRemoval(to image: CIImage) -> CIImage {
+        let size = image.extent.size
+        guard size.width > 0, size.height > 0 else { return image }
+
+        // Create a simple center-biased elliptical mask to approximate foreground
+        // In production this would use a Vision-based person segmentation
+        let maskImage = CIImage(color: .white).cropped(to: image.extent)
+
+        // Generate a vignette-based mask: brighter in center, darker at edges
+        // This serves as a basic background removal heuristic
+        let vignetteRadius = min(size.width, size.height) * 0.4
+        let masked = image.applyingFilter(
+            "CIVignette",
+            parameters: [
+                kCIInputRadiusKey: vignetteRadius,
+                kCIInputIntensityKey: 1.0
+            ]
+        )
+
+        // Blend with mask: use the original image with a soft edge mask
+        // For a basic approach, use blendWithMask to combine with a black background
+        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
+            .cropped(to: image.extent)
+
+        // Create a simple radial gradient mask for the center region
+        let gradientMask = CIFilter(
+            name: "CIRadialGradient",
+            parameters: [
+                "inputCenter": CIVector(x: size.width / 2, y: size.height / 2),
+                "inputRadius0": NSNumber(value: Float(vignetteRadius)),
+                "inputRadius1": NSNumber(value: Float(max(size.width, size.height) * 0.7)),
+                "inputColor0": CIColor(red: 1, green: 1, blue: 1, alpha: 1),
+                "inputColor1": CIColor(red: 0, green: 0, blue: 0, alpha: 0)
+            ]
+        )?.outputImage?.cropped(to: image.extent) ?? maskImage
+
+        return image.applyingFilter(
+            "CIBlendWithMask",
+            parameters: [
+                kCIInputMaskImageKey: gradientMask,
+                kCIInputBackgroundImageKey: backgroundColor
+            ]
+        )
+    }
+
+    // MARK: - Source Frame Helpers
 
     private func firstSourceFrame(
         in request: AVAsynchronousVideoCompositionRequest

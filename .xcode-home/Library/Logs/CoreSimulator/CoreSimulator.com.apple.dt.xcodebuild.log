@@ -1,0 +1,238 @@
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:13:14 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76098] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: simdiskimaged connection is currently unavailable because connection became invalid
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=409 "Cannot talk to the service used to manage runtime disk images (simdiskimaged) because its launchd job is not registered or was unloaded" UserInfo={NSLocalizedDescription=Cannot talk to the service used to manage runtime disk images (simdiskimaged) because its launchd job is not registered or was unloaded}
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: simdiskimaged connection is currently unavailable because connection became invalid
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:13:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[76932] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:14:57 cool-mini4ui-Macmini com.apple.dt.xcodebuild[77980] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:15:10 cool-mini4ui-Macmini com.apple.dt.xcodebuild[78115] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:16:02 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:16:03 cool-mini4ui-Macmini com.apple.dt.xcodebuild[80228] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:26:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82655] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:20 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82720] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:27:35 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82737] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:27:45 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82750] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:04 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82778] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:47 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82858] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:28:59 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82872] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jun  4 08:29:34 cool-mini4ui-Macmini com.apple.dt.xcodebuild[82894] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 09:05:31 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=409 "Cannot talk to the service used to manage runtime disk images (simdiskimaged) because its launchd job is not registered or was unloaded" UserInfo={NSLocalizedDescription=Cannot talk to the service used to manage runtime disk images (simdiskimaged) because its launchd job is not registered or was unloaded}
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: simdiskimaged connection is currently unavailable because connection became invalid
+Jun  4 09:05:32 cool-mini4ui-Macmini com.apple.dt.xcodebuild[7048] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/cool-mini4/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.

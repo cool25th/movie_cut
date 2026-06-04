@@ -12,9 +12,13 @@ struct InspectorExportSection: View {
                 Text("480p (854x480)").tag("480p")
             }
             Picker("Quality", selection: $viewModel.exportQuality) {
-                Text("High").tag("high")
-                Text("Medium").tag("medium")
-                Text("Low").tag("low")
+                Text("High (20 Mbps)").tag("high")
+                Text("Medium (10 Mbps)").tag("medium")
+                Text("Low (5 Mbps)").tag("low")
+            }
+            Picker("Format", selection: $viewModel.exportFormat) {
+                Text("MP4").tag("mp4")
+                Text("MOV").tag("mov")
             }
         }
         .padding(12)

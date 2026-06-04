@@ -15,6 +15,7 @@ struct CustomCompositionClipEffect {
     let mask: Mask?
     let effects: [Effect]
     let textContent: TextClipContent?
+    let stickerEmoji: String?
     let isBackgroundRemoved: Bool
 
     init?(
@@ -29,6 +30,7 @@ struct CustomCompositionClipEffect {
         mask: Mask?,
         effects: [Effect] = [],
         textContent: TextClipContent? = nil,
+        stickerEmoji: String? = nil,
         isBackgroundRemoved: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -37,6 +39,7 @@ struct CustomCompositionClipEffect {
             || mask != nil
             || !effects.isEmpty
             || textContent != nil
+            || stickerEmoji != nil
             || isBackgroundRemoved
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
         else {
@@ -54,6 +57,7 @@ struct CustomCompositionClipEffect {
         self.mask = mask
         self.effects = effects
         self.textContent = textContent
+        self.stickerEmoji = stickerEmoji
         self.isBackgroundRemoved = isBackgroundRemoved
     }
 
@@ -213,6 +217,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
     let textContent: TextClipContent?
+    let stickerEmoji: String?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float = 0.3
     let mask: Mask?
@@ -223,6 +228,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         trackIDs: [CMPersistentTrackID],
         colorCorrection: ColorCorrection? = nil,
         textContent: TextClipContent? = nil,
+        stickerEmoji: String? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil
@@ -231,6 +237,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = colorCorrection
         self.textContent = textContent
+        self.stickerEmoji = stickerEmoji
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
@@ -242,6 +249,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = nil
         self.textContent = nil
+        self.stickerEmoji = nil
         self.chromaKeyColor = nil
         self.mask = nil
         self.clipEffects = clipEffects
@@ -317,6 +325,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 }
 
                 image = self.renderTextOverlay(
+                    for: effect,
+                    instruction: instruction,
+                    onto: image,
+                    at: request.compositionTime
+                )
+
+                image = self.renderStickerOverlay(
                     for: effect,
                     instruction: instruction,
                     onto: image,
@@ -449,7 +464,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         var overlay = CIImage(cgImage: cgImage)
-        if renderBounds.origin != .zero {
+        if !isZeroPoint(renderBounds.origin) {
             overlay = overlay.transformed(
                 by: CGAffineTransform(
                     translationX: renderBounds.origin.x,
@@ -461,6 +476,158 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         return overlay
             .composited(over: image)
             .cropped(to: renderBounds)
+    }
+
+    private func renderStickerOverlay(
+        for clipEffect: CustomCompositionClipEffect?,
+        instruction: CustomCompositionInstruction,
+        onto image: CIImage,
+        at time: CMTime
+    ) -> CIImage {
+        _ = clipEffect
+
+        let activeStickerEffects = instruction.clipEffects.filter { effect in
+            effect.stickerEmoji != nil && CMTimeRangeContainsTime(effect.timeRange, time: time)
+        }
+        let hasInstructionSticker = instruction.stickerEmoji != nil
+            && CMTimeRangeContainsTime(instruction.timeRange, time: time)
+
+        guard !activeStickerEffects.isEmpty || hasInstructionSticker else {
+            return image
+        }
+
+        let renderBounds = image.extent
+        let renderSize = renderBounds.size
+        guard renderSize.width > 0, renderSize.height > 0 else {
+            return image
+        }
+
+        let width = max(Int(ceil(renderSize.width)), 1)
+        let height = max(Int(ceil(renderSize.height)), 1)
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return image
+        }
+
+        context.clear(CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
+
+        for stickerEffect in activeStickerEffects {
+            drawStickerEffect(stickerEffect, in: context, renderSize: renderSize, at: time)
+        }
+
+        if let stickerEmoji = instruction.stickerEmoji {
+            drawStickerEmoji(
+                stickerEmoji,
+                transform: ClipTransform(),
+                opacity: 1,
+                in: context,
+                renderSize: renderSize
+            )
+        }
+
+        guard let cgImage = context.makeImage() else {
+            return image
+        }
+
+        var overlay = CIImage(cgImage: cgImage)
+        if !isZeroPoint(renderBounds.origin) {
+            overlay = overlay.transformed(
+                by: CGAffineTransform(
+                    translationX: renderBounds.origin.x,
+                    y: renderBounds.origin.y
+                )
+            )
+        }
+
+        return overlay
+            .composited(over: image)
+            .cropped(to: renderBounds)
+    }
+
+    private func drawStickerEffect(
+        _ stickerEffect: CustomCompositionClipEffect,
+        in context: CGContext,
+        renderSize: CGSize,
+        at time: CMTime
+    ) {
+        guard let stickerEmoji = stickerEffect.stickerEmoji else { return }
+
+        let animationState = stickerEffect.animationState(at: time)
+        drawStickerEmoji(
+            stickerEmoji,
+            transform: animationState?.transform ?? stickerEffect.transform,
+            opacity: animationState?.opacity ?? stickerEffect.opacity,
+            in: context,
+            renderSize: renderSize
+        )
+    }
+
+    private func drawStickerEmoji(
+        _ stickerEmoji: String,
+        transform: ClipTransform,
+        opacity: Double,
+        in context: CGContext,
+        renderSize: CGSize
+    ) {
+        let emoji = stickerEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !emoji.isEmpty else { return }
+
+        let effectiveOpacity = min(max(opacity, 0), 1)
+        guard effectiveOpacity > 0 else { return }
+
+        let fontSize = CGFloat(88)
+        let font = CTFontCreateWithName("Apple Color Emoji" as CFString, fontSize, nil)
+        let attributedString = NSAttributedString(
+            string: emoji,
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(
+                    red: 1,
+                    green: 1,
+                    blue: 1,
+                    alpha: 1
+                )
+            ]
+        )
+        let line = CTLineCreateWithAttributedString(attributedString)
+        var ascent = CGFloat(0)
+        var descent = CGFloat(0)
+        var leading = CGFloat(0)
+        let lineWidth = max(
+            CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading)),
+            fontSize
+        )
+
+        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
+        let center = CGPoint(
+            x: basePosition.x + transform.offset.x,
+            y: renderSize.height - basePosition.y - transform.offset.y
+        )
+
+        context.saveGState()
+        context.setAlpha(CGFloat(effectiveOpacity))
+        context.translateBy(x: center.x, y: center.y)
+        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
+        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(
+            x: -lineWidth * 0.5,
+            y: (descent - ascent) * 0.5
+        )
+        CTLineDraw(line, context)
+        context.restoreGState()
     }
 
     private func drawTextEffect(
@@ -566,7 +733,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         at time: CMTime
     ) -> (text: String, alpha: Double, translation: CGPoint, scale: CGFloat) {
         guard let animation = textContent.animation else {
-            return (textContent.text, 1, .zero, 1)
+            return (textContent.text, 1, CGPoint(x: 0, y: 0), 1)
         }
 
         let rawLocalTime = CMTimeSubtract(time, timeRange.start).seconds
@@ -579,15 +746,15 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
         switch animation.type {
         case .fadeIn:
-            return (textContent.text, isBeforeDelay ? 0 : progress, .zero, 1)
+            return (textContent.text, isBeforeDelay ? 0 : progress, CGPoint(x: 0, y: 0), 1)
         case .fadeOut:
-            return (textContent.text, isBeforeDelay ? 1 : 1 - progress, .zero, 1)
+            return (textContent.text, isBeforeDelay ? 1 : 1 - progress, CGPoint(x: 0, y: 0), 1)
         case .typewriter:
             guard !isBeforeDelay else {
-                return ("", 1, .zero, 1)
+                return ("", 1, CGPoint(x: 0, y: 0), 1)
             }
             let characterCount = Int(floor(progress * Double(textContent.text.count)))
-            return (String(textContent.text.prefix(characterCount)), 1, .zero, 1)
+            return (String(textContent.text.prefix(characterCount)), 1, CGPoint(x: 0, y: 0), 1)
         case .slideUp:
             return (
                 textContent.text,
@@ -603,7 +770,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 1
             )
         case .scale:
-            return (textContent.text, 1, .zero, max(CGFloat(progress), 0.001))
+            return (textContent.text, 1, CGPoint(x: 0, y: 0), max(CGFloat(progress), 0.001))
         case .bounce:
             let offset = sin(progress * .pi * 3) * 20 * (1 - progress)
             return (textContent.text, 1, CGPoint(x: 0, y: offset), 1)
@@ -662,6 +829,21 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         return CGPoint(x: renderSize.width * 0.5, y: renderSize.height * 0.5)
+    }
+
+    private func stickerPosition(
+        transform: ClipTransform,
+        renderSize: CGSize
+    ) -> CGPoint {
+        if !isZeroPoint(transform.position) {
+            return transform.position
+        }
+
+        return CGPoint(x: renderSize.width * 0.5, y: renderSize.height * 0.5)
+    }
+
+    private func isZeroPoint(_ point: CGPoint) -> Bool {
+        abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
     }
 
     private func cgColor(hexRGB: String) -> CGColor {

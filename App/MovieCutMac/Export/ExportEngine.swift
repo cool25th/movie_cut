@@ -133,6 +133,8 @@ final class ExportEngine {
                         continue
                     }
 
+                    let stickerEmoji = stickerEmoji(from: textContent)
+                    let exportTextContent = stickerEmoji == nil ? textContent : nil
                     let destinationTime = CMTime(seconds: clip.timelineRange.start, preferredTimescale: 600)
                     let clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
                     videoClipInstructions.append(ExportClipInstructionMetadata(
@@ -147,7 +149,8 @@ final class ExportEngine {
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
-                        textContent: textContent,
+                        textContent: exportTextContent,
+                        stickerEmoji: stickerEmoji,
                         keyframes: clip.keyframes,
                         isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
                     ))
@@ -346,6 +349,7 @@ final class ExportEngine {
         let usesCustomVideoCompositor = clips.contains { clip in
             clip.colorCorrection != nil
                 || clip.textContent != nil
+                || clip.stickerEmoji != nil
                 || clip.chromaKeyColor != nil
                 || clip.mask != nil
                 || !clip.keyframes.isEmpty
@@ -363,7 +367,7 @@ final class ExportEngine {
         var customCompositorClips: [ExportClipInstructionMetadata] = []
 
         for clip in clips {
-            if clip.textContent != nil {
+            if clip.textContent != nil || clip.stickerEmoji != nil {
                 customCompositorClips.append(clip)
                 continue
             }
@@ -430,6 +434,7 @@ final class ExportEngine {
                             mask: clip.mask,
                             effects: clip.effects,
                             textContent: clip.textContent,
+                            stickerEmoji: clip.stickerEmoji,
                             isBackgroundRemoved: clip.isBackgroundRemoved
                         )
                     }
@@ -593,6 +598,33 @@ final class ExportEngine {
         } / Double(preset.bands.count)
         let multiplier = pow(10.0, averageGain / 20.0)
         return min(max(multiplier, 0.0), 2.0)
+    }
+
+    private func stickerEmoji(from textContent: TextClipContent) -> String? {
+        let trimmedText = textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isSingleEmoji(trimmedText) else {
+            return nil
+        }
+
+        return trimmedText
+    }
+
+    private func isSingleEmoji(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+
+        let variationSelector = "\u{FE0F}"
+        let zeroWidthJoiner = "\u{200D}"
+        let emojiAtom = "(?:\\p{Emoji_Presentation}|\\p{Extended_Pictographic}\(variationSelector)?)(?:\\p{Emoji_Modifier})?"
+        let pattern = "^(?:(?:\\p{Regional_Indicator}{2})|\(emojiAtom))(?:\(zeroWidthJoiner)\(emojiAtom))*$"
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return text.count == 1 && text.unicodeScalars.contains { scalar in
+                scalar.properties.isEmojiPresentation
+            }
+        }
+
+        return regex.firstMatch(in: text, range: range)?.range == range
     }
 
     // MARK: - Export Preset Helpers
@@ -828,11 +860,13 @@ private struct ExportClipInstructionMetadata {
     var chromaKeyThreshold: Float = 0.3
     var effects: [Effect]
     var textContent: TextClipContent?
+    var stickerEmoji: String? = nil
     var keyframes: [Keyframe]
     var isBackgroundRemoved: Bool
 
     var requiresCustomVideoCompositorMetadata: Bool {
         textContent != nil
+            || stickerEmoji != nil
             || mask != nil
             || colorCorrection != nil
             || chromaKeyColor != nil

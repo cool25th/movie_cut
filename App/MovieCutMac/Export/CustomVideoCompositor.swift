@@ -2,6 +2,7 @@ import AVFoundation
 import CoreImage
 import CoreText
 import MovieCutCore
+import Vision
 
 struct CustomCompositionClipEffect {
     let trackID: CMPersistentTrackID
@@ -269,6 +270,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     ]
     private let renderQueue = DispatchQueue(label: "com.moviecut.compositor")
     private let ciContext = CIContext()
+    private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
     
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {
@@ -301,7 +303,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
                 // Apply background removal
                 if isBackgroundRemoved {
-                    image = self.applyBackgroundRemoval(to: image)
+                    image = self.applyPersonSegmentation(to: image, request: request)
                 }
 
                 if let colorCorrection {
@@ -1000,31 +1002,103 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     // MARK: - Background Removal
 
+    private func applyPersonSegmentation(
+        to image: CIImage,
+        request: AVAsynchronousVideoCompositionRequest
+    ) -> CIImage {
+        _ = request
+
+        let extent = image.extent
+        guard extent.width > 0, extent.height > 0 else { return image }
+        guard let sourceImage = ciContext.createCGImage(image, from: extent) else {
+            return applyBackgroundRemoval(to: image)
+        }
+
+        let segmentationRequest = VNGeneratePersonSegmentationRequest()
+        segmentationRequest.qualityLevel = .accurate
+        segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
+
+        do {
+            try personSegmentationHandler.perform([segmentationRequest], on: sourceImage)
+        } catch {
+            return applyBackgroundRemoval(to: image)
+        }
+
+        guard let maskPixelBuffer = segmentationRequest.results?.first?.pixelBuffer else {
+            return applyBackgroundRemoval(to: image)
+        }
+
+        let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
+        guard !maskImage.extent.isEmpty else {
+            return applyBackgroundRemoval(to: image)
+        }
+
+        let scaleX = extent.width / maskImage.extent.width
+        let scaleY = extent.height / maskImage.extent.height
+        var scaledMask = maskImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        scaledMask = scaledMask.transformed(by: CGAffineTransform(
+            translationX: extent.minX - scaledMask.extent.minX,
+            y: extent.minY - scaledMask.extent.minY
+        ))
+        let alignedMask = scaledMask.cropped(to: extent)
+        guard maskContainsForeground(alignedMask, extent: extent) else {
+            return applyBackgroundRemoval(to: image)
+        }
+
+        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
+            .cropped(to: extent)
+
+        return image.applyingFilter(
+            "CIBlendWithMask",
+            parameters: [
+                kCIInputMaskImageKey: alignedMask,
+                kCIInputBackgroundImageKey: backgroundColor
+            ]
+        ).cropped(to: extent)
+    }
+
+    private func maskContainsForeground(_ maskImage: CIImage, extent: CGRect) -> Bool {
+        guard let maximumImage = CIFilter(
+            name: "CIAreaMaximum",
+            parameters: [
+                kCIInputImageKey: maskImage,
+                kCIInputExtentKey: CIVector(cgRect: extent)
+            ]
+        )?.outputImage else {
+            return true
+        }
+
+        var maximumPixel = [UInt8](repeating: 0, count: 4)
+        maximumPixel.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            ciContext.render(
+                maximumImage,
+                toBitmap: baseAddress,
+                rowBytes: 4,
+                bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                format: .RGBA8,
+                colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+        }
+
+        return maximumPixel[0] > 8 || maximumPixel[1] > 8 || maximumPixel[2] > 8
+    }
+
     private func applyBackgroundRemoval(to image: CIImage) -> CIImage {
         let size = image.extent.size
         guard size.width > 0, size.height > 0 else { return image }
 
-        // Create a simple center-biased elliptical mask to approximate foreground
-        // In production this would use a Vision-based person segmentation
+        // Create a simple center-biased elliptical mask to approximate foreground.
         let maskImage = CIImage(color: .white).cropped(to: image.extent)
 
-        // Generate a vignette-based mask: brighter in center, darker at edges
-        // This serves as a basic background removal heuristic
+        // Generate a vignette-based mask: brighter in center, darker at edges.
+        // This serves as a fallback when Vision cannot produce a person mask.
         let vignetteRadius = min(size.width, size.height) * 0.4
-        let masked = image.applyingFilter(
-            "CIVignette",
-            parameters: [
-                kCIInputRadiusKey: vignetteRadius,
-                kCIInputIntensityKey: 1.0
-            ]
-        )
 
-        // Blend with mask: use the original image with a soft edge mask
-        // For a basic approach, use blendWithMask to combine with a black background
         let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
             .cropped(to: image.extent)
 
-        // Create a simple radial gradient mask for the center region
+        // Create a simple radial gradient mask for the center region.
         let gradientMask = CIFilter(
             name: "CIRadialGradient",
             parameters: [

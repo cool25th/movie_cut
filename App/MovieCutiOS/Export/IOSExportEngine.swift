@@ -30,6 +30,7 @@ final class IOSExportEngine {
                 throw IOSExportEngineError.noExportableMedia
             }
 
+            let shouldUseCustomCompositor = needsCustomCompositor(for: project)
             guard let exportSession = AVAssetExportSession(
                 asset: composition,
                 presetName: AVAssetExportPresetHighestQuality
@@ -45,6 +46,9 @@ final class IOSExportEngine {
             exportSession.outputURL = outputURL
             exportSession.outputFileType = .mov
             exportSession.shouldOptimizeForNetworkUse = true
+            if shouldUseCustomCompositor {
+                exportSession.videoComposition = makeVideoComposition(for: project)
+            }
             activeExportSession = exportSession
             startProgressPolling()
 
@@ -84,6 +88,191 @@ final class IOSExportEngine {
         }
 
         return composition
+    }
+
+    private func needsCustomCompositor(for project: Project) -> Bool {
+        project.timeline.tracks.contains { track in
+            track.clips.contains { clip in
+                clip.colorCorrection != nil
+                    || !clip.effects.isEmpty
+                    || clip.mask != nil
+                    || clip.chromaKey != nil
+                    || clip.textContent != nil
+            }
+        }
+    }
+
+    private func makeVideoComposition(for project: Project) -> AVVideoComposition {
+        let videoComposition = AVMutableVideoComposition()
+        let canvasSize = project.canvas.size
+        let renderSize = canvasSize.width > 0 && canvasSize.height > 0
+            ? canvasSize
+            : CGSize(width: 1920, height: 1080)
+
+        videoComposition.renderSize = renderSize
+        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+
+        let sortedTracks = project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex })
+        let trackIDComposition = AVMutableComposition()
+        var videoTrackIDsByTrackID: [UUID: CMPersistentTrackID] = [:]
+
+        for timelineTrack in sortedTracks {
+            switch timelineTrack.kind {
+            case .video:
+                let playableClips = timelineTrack.clips.filter { $0.kind == .video }
+                guard !playableClips.isEmpty else { continue }
+
+                if !timelineTrack.isHidden,
+                   let videoTrack = trackIDComposition.addMutableTrack(
+                       withMediaType: .video,
+                       preferredTrackID: kCMPersistentTrackID_Invalid
+                   ) {
+                    videoTrackIDsByTrackID[timelineTrack.id] = videoTrack.trackID
+                }
+
+                if !timelineTrack.isMuted {
+                    trackIDComposition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid
+                    )
+                }
+            case .audio:
+                let playableClips = timelineTrack.clips.filter { $0.kind == .audio || $0.kind == .video }
+                guard !timelineTrack.isMuted, !playableClips.isEmpty else { continue }
+                trackIDComposition.addMutableTrack(
+                    withMediaType: .audio,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                )
+            case .text:
+                continue
+            }
+        }
+
+        var clipEffects: [CustomCompositionClipEffect] = []
+        var videoTrackIDs: [CMPersistentTrackID] = []
+
+        for timelineTrack in sortedTracks {
+            switch timelineTrack.kind {
+            case .video:
+                guard let trackID = videoTrackIDsByTrackID[timelineTrack.id] else { continue }
+                videoTrackIDs.append(trackID)
+
+                for clip in timelineTrack.clips
+                    .filter({ $0.kind == .video })
+                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    let timeRange = CMTimeRange(
+                        start: cmTime(clip.timelineRange.start),
+                        duration: cmTime(clip.timelineRange.duration)
+                    )
+
+                    guard let clipEffect = CustomCompositionClipEffect(
+                        trackID: trackID,
+                        timeRange: timeRange,
+                        transform: clip.transform,
+                        opacity: clip.opacity,
+                        keyframes: clip.keyframes,
+                        colorCorrection: clip.colorCorrection,
+                        chromaKeyColor: clip.chromaKeyColor,
+                        chromaKeyThreshold: clip.chromaKeyThreshold,
+                        mask: clip.mask,
+                        effects: clip.effects,
+                        textContent: clip.textContent,
+                        isBackgroundRemoved: false
+                    ) else {
+                        continue
+                    }
+
+                    clipEffects.append(clipEffect)
+                }
+            case .text:
+                guard !timelineTrack.isHidden else { continue }
+
+                for clip in timelineTrack.clips
+                    .filter({ $0.kind == .text })
+                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    let timeRange = CMTimeRange(
+                        start: cmTime(clip.timelineRange.start),
+                        duration: cmTime(clip.timelineRange.duration)
+                    )
+
+                    guard let clipEffect = CustomCompositionClipEffect(
+                        trackID: kCMPersistentTrackID_Invalid,
+                        timeRange: timeRange,
+                        transform: clip.transform,
+                        opacity: clip.opacity,
+                        keyframes: clip.keyframes,
+                        colorCorrection: clip.colorCorrection,
+                        chromaKeyColor: clip.chromaKeyColor,
+                        chromaKeyThreshold: clip.chromaKeyThreshold,
+                        mask: clip.mask,
+                        effects: clip.effects,
+                        textContent: clip.textContent,
+                        isBackgroundRemoved: false
+                    ) else {
+                        continue
+                    }
+
+                    clipEffects.append(clipEffect)
+                }
+            case .audio:
+                continue
+            }
+        }
+
+        let durationSeconds = max(project.timeline.duration, 0)
+        let duration = cmTime(durationSeconds)
+        var instructionBoundaries = [TimeInterval(0), durationSeconds]
+        for clipEffect in clipEffects {
+            let start = min(max(clipEffect.timeRange.start.seconds, 0), durationSeconds)
+            let end = min(max(CMTimeAdd(clipEffect.timeRange.start, clipEffect.timeRange.duration).seconds, 0), durationSeconds)
+            guard end > start else { continue }
+            instructionBoundaries.append(start)
+            instructionBoundaries.append(end)
+        }
+
+        let sortedBoundaries = instructionBoundaries
+            .sorted()
+            .reduce(into: [TimeInterval]()) { result, boundary in
+                guard result.last.map({ abs($0 - boundary) > 1.0e-9 }) ?? true else {
+                    return
+                }
+                result.append(boundary)
+            }
+
+        let instructions = zip(sortedBoundaries, sortedBoundaries.dropFirst()).compactMap { start, end in
+            guard end > start else { return nil }
+
+            let segmentStart = cmTime(start)
+            let segmentEnd = cmTime(end)
+            let segmentRange = CMTimeRange(
+                start: segmentStart,
+                duration: CMTimeSubtract(segmentEnd, segmentStart)
+            )
+            let activeClipEffects = clipEffects.filter { clipEffect in
+                let clipEnd = CMTimeAdd(clipEffect.timeRange.start, clipEffect.timeRange.duration)
+                return CMTimeCompare(clipEffect.timeRange.start, segmentEnd) < 0
+                    && CMTimeCompare(clipEnd, segmentStart) > 0
+            }
+
+            return CustomCompositionInstruction(
+                timeRange: segmentRange,
+                trackIDs: videoTrackIDs,
+                clipEffects: activeClipEffects
+            )
+        }
+
+        videoComposition.instructions = instructions.isEmpty
+            ? [
+                CustomCompositionInstruction(
+                    timeRange: CMTimeRange(start: .zero, duration: duration),
+                    trackIDs: videoTrackIDs,
+                    clipEffects: clipEffects
+                )
+            ]
+            : instructions
+
+        return videoComposition
     }
 
     private func insertVideoTrack(

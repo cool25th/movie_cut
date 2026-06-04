@@ -52,6 +52,7 @@
 		5190BDA600FFA6DDD5B3B029 /* InspectorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AA1F3C0FE3E6F86EA86740 /* InspectorPanel.swift */; };
 		51FDE6938BE0A0E62B89854A /* MovieCutCore in Frameworks */ = {isa = PBXBuildFile; productRef = B70788801C30ABFAAEC3C829 /* MovieCutCore */; };
 		53B5A75761DD0F54FA56308C /* IOSTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3246BCE285678EDCF9CCD357 /* IOSTimelineView.swift */; };
+		F3B1C4D8A2604E5CA9B70D12 /* IOSChromaKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E4A9C0B7F14E299B5A2C80 /* IOSChromaKeyView.swift */; };
 		5708CC07D22CB3C91055315F /* ExportProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FC1F81A0274B68B268AA7C /* ExportProgress.swift */; };
 		571637D6AA6A5EADCC235761 /* AnalysisTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A1A3DDD27C7B49E703843D /* AnalysisTypes.swift */; };
 		57A78322AB485AF3AFE07653 /* ClipTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E6351766F11DD16F329B0F /* ClipTransform.swift */; };
@@ -207,6 +208,7 @@
 		368CF6156F08B48B77D8FD08 /* DuplicateClipCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateClipCommand.swift; sourceTree = "<group>"; };
 		39CEB7896DC9FF08C5B7D0C4 /* GestureTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureTransform.swift; sourceTree = "<group>"; };
 		3C06AF6904EB8A3BA2E69DC3 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
+		D6E4A9C0B7F14E299B5A2C80 /* IOSChromaKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSChromaKeyView.swift; sourceTree = "<group>"; };
 		3E43C8DBFA3D23658F242816 /* WaveformGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformGenerator.swift; sourceTree = "<group>"; };
 		4258C2155DCC57FF06BF0687 /* InspectorAnalysisSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorAnalysisSection.swift; sourceTree = "<group>"; };
 		434DFFB19E4C1930AB28F00A /* SpeedRampPoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedRampPoint.swift; sourceTree = "<group>"; };
@@ -766,6 +768,7 @@
 		F0031F660E7D426C4B700FBD /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				D6E4A9C0B7F14E299B5A2C80 /* IOSChromaKeyView.swift */,
 				B27CBD50A7D6F25F2B4D0BEF /* MediaBrowserView.swift */,
 				3C06AF6904EB8A3BA2E69DC3 /* PreviewView.swift */,
 			);
@@ -1015,6 +1018,7 @@
 				E1EEB65CD40B13017C739BEA /* IOSEditorViewModel.swift in Sources */,
 				CEC1D129137657774AADD18E /* IOSInspectorSheet.swift in Sources */,
 				53B5A75761DD0F54FA56308C /* IOSTimelineView.swift in Sources */,
+				F3B1C4D8A2604E5CA9B70D12 /* IOSChromaKeyView.swift in Sources */,
 				492550BD8A42D35964B41B07 /* ImportMediaCommand.swift in Sources */,
 				884529EE7AC8EE672544A18A /* ImportMultipleCommand.swift in Sources */,
 				3AA97280B1C1E76DC9123D0E /* Keyframe.swift in Sources */,

@@ -9,7 +9,11 @@ struct IOSContentView: View {
     @State private var selectedPhotosItem: PhotosPickerItem?
     @State private var isMediaBrowserPresented = false
     @State private var isInspectorPresented = false
-    @State private var isExportUnavailablePresented = false
+    @State private var isExportProgressPresented = false
+    @State private var isExportResultPresented = false
+    @State private var isExportErrorPresented = false
+    @State private var didCancelExport = false
+    @State private var exportErrorMessage: String?
     @State private var isImporting = false
 
     var body: some View {
@@ -71,19 +75,25 @@ struct IOSContentView: View {
                     .accessibilityLabel("Inspector")
 
                     Button {
-                        Task {
-                            await viewModel.exportProject()
-                            isExportUnavailablePresented = true
-                        }
+                        Task { await startExport() }
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    .disabled(viewModel.isExporting || viewModel.currentProject.timeline.duration <= 0)
                     .accessibilityLabel("Export")
 
-                    ShareLink(item: sharePlaceholderText) {
-                        Image(systemName: "square.and.arrow.up.on.square")
+                    if let exportURL = viewModel.lastExportURL {
+                        ShareLink(item: exportURL) {
+                            Image(systemName: "square.and.arrow.up.on.square")
+                        }
+                        .accessibilityLabel("Share Export")
+                    } else {
+                        Button {} label: {
+                            Image(systemName: "square.and.arrow.up.on.square")
+                        }
+                        .disabled(true)
+                        .accessibilityLabel("Share Export")
                     }
-                    .accessibilityLabel("Share")
                 }
             }
             .sheet(isPresented: $isMediaBrowserPresented) {
@@ -100,10 +110,28 @@ struct IOSContentView: View {
                     .presentationDetents([.height(300), .medium, .large])
                     .presentationDragIndicator(.visible)
             }
-            .alert("Export is not available yet", isPresented: $isExportUnavailablePresented) {
+            .sheet(isPresented: $isExportProgressPresented) {
+                IOSExportProgressSheet(
+                    progress: viewModel.exportProgress,
+                    cancelAction: {
+                        didCancelExport = true
+                        viewModel.cancelExport()
+                        isExportProgressPresented = false
+                    }
+                )
+                .presentationDetents([.height(220)])
+                .interactiveDismissDisabled(viewModel.isExporting)
+            }
+            .sheet(isPresented: $isExportResultPresented) {
+                if let exportURL = viewModel.lastExportURL {
+                    IOSExportResultSheet(exportURL: exportURL)
+                        .presentationDetents([.height(240)])
+                }
+            }
+            .alert("Export Failed", isPresented: $isExportErrorPresented) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The iOS editor can preview and edit the timeline, but export has not been connected in this target.")
+                Text(exportErrorMessage ?? "MovieCut could not export this project.")
             }
             .onChange(of: selectedPhotosItem) { _, newItem in
                 guard let newItem else { return }
@@ -115,6 +143,30 @@ struct IOSContentView: View {
                     isImporting = false
                 }
             }
+        }
+    }
+
+    @MainActor
+    private func startExport() async {
+        guard !viewModel.isExporting else { return }
+
+        didCancelExport = false
+        isExportProgressPresented = true
+        exportErrorMessage = nil
+
+        do {
+            _ = try await viewModel.exportProject()
+            isExportProgressPresented = false
+            isExportResultPresented = viewModel.lastExportURL != nil
+        } catch {
+            isExportProgressPresented = false
+
+            guard !didCancelExport else {
+                return
+            }
+
+            exportErrorMessage = error.localizedDescription
+            isExportErrorPresented = true
         }
     }
 
@@ -173,10 +225,6 @@ struct IOSContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(.bar)
-    }
-
-    private var sharePlaceholderText: String {
-        "MovieCut project: \(viewModel.currentProject.name)"
     }
 
     private func toolbarButton(
@@ -238,6 +286,74 @@ struct IOSContentView: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+private struct IOSExportProgressSheet: View {
+    var progress: Double
+    var cancelAction: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Exporting")
+                        .font(.headline)
+
+                    ProgressView(value: min(max(progress, 0), 1))
+                        .progressViewStyle(.linear)
+
+                    Text("\(Int((min(max(progress, 0), 1) * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Button("Cancel Export", role: .destructive, action: cancelAction)
+                    .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .navigationTitle("Export")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+private struct IOSExportResultSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var exportURL: URL
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Export Complete", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+
+                Text(exportURL.lastPathComponent)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                ShareLink(item: exportURL) {
+                    Label("Share Movie", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .navigationTitle("Export")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

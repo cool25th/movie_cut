@@ -40,6 +40,44 @@ public struct CloudProjectInfo: Sendable, Equatable, Identifiable {
     }
 }
 
+/// Sidecar metadata stored next to a synced project document.
+public struct CloudSyncMetadata: Codable, Sendable, Equatable {
+    /// Project identifier from the document snapshot.
+    public var projectId: UUID
+
+    /// Project name used for the backing document.
+    public var projectName: String
+
+    /// Stable checksum for the encoded project payload.
+    public var checksum: String
+
+    /// Metadata write time.
+    public var timestamp: Date
+
+    /// Project update time from the document snapshot.
+    public var updatedAt: Date
+
+    /// Backing project file size in bytes.
+    public var fileSize: Int
+
+    /// Creates cloud sidecar metadata.
+    public init(
+        projectId: UUID,
+        projectName: String,
+        checksum: String,
+        timestamp: Date = Date(),
+        updatedAt: Date,
+        fileSize: Int
+    ) {
+        self.projectId = projectId
+        self.projectName = projectName
+        self.checksum = checksum
+        self.timestamp = timestamp
+        self.updatedAt = updatedAt
+        self.fileSize = fileSize
+    }
+}
+
 /// iCloud Drive-backed project synchronization service with local fallback storage.
 @MainActor
 public final class CloudSyncService: ObservableObject, Sendable {
@@ -51,6 +89,10 @@ public final class CloudSyncService: ObservableObject, Sendable {
 
     private let fileManager: FileManager
     private let projectStore: ProjectStore
+    private let versionHistory = VersionHistory()
+    private var metadataQuery: NSMetadataQuery?
+    private var metadataQueryObservers: [NSObjectProtocol]
+    private var autoSyncTasks: [UUID: Task<Void, Never>]
 
     /// Creates a cloud synchronization service.
     public init(
@@ -63,6 +105,8 @@ public final class CloudSyncService: ObservableObject, Sendable {
         self.lastSyncDate = lastSyncDate
         self.projectStore = projectStore
         self.fileManager = fileManager
+        self.metadataQueryObservers = []
+        self.autoSyncTasks = [:]
     }
 
     /// Returns whether iCloud Drive storage is currently available.
@@ -75,14 +119,126 @@ public final class CloudSyncService: ObservableObject, Sendable {
         status = .syncing
 
         do {
+            try await versionHistory.save(project, description: "Auto-save before cloud sync")
             let fileURL = try projectFileURL(name: project.name, createDirectory: true)
             try await projectStore.save(project, to: fileURL)
+            try await syncMetadata(project: project)
             lastSyncDate = Date()
             status = .synced
         } catch {
             status = .failed(error)
             throw error
         }
+    }
+
+    /// Starts an iCloud metadata query that watches MovieCut documents for remote changes.
+    public func startCloudWatcher() {
+        stopCloudWatcher()
+
+        guard isCloudAvailable() else {
+            status = .offline
+            return
+        }
+
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+        query.predicate = NSPredicate(format: "%K ENDSWITH %@", NSMetadataItemFSNameKey, ".moviecut")
+
+        let notificationCenter = NotificationCenter.default
+        let finishName = Notification.Name.NSMetadataQueryDidFinishGathering
+        let updateName = Notification.Name.NSMetadataQueryDidUpdate
+
+        let finishObserver = notificationCenter.addObserver(
+            forName: finishName,
+            object: query,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.cloudMetadataDidChange()
+            }
+        }
+
+        let updateObserver = notificationCenter.addObserver(
+            forName: updateName,
+            object: query,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.cloudMetadataDidChange()
+            }
+        }
+
+        metadataQueryObservers = [finishObserver, updateObserver]
+        metadataQuery = query
+        query.start()
+    }
+
+    /// Starts periodic synchronization for a project when the service is not busy.
+    public func autoSync(project: Project, with interval: TimeInterval = 30) {
+        autoSyncTasks[project.id]?.cancel()
+
+        let delay = Self.sleepNanoseconds(for: interval)
+        autoSyncTasks[project.id] = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    break
+                }
+
+                guard let self, !Task.isCancelled else {
+                    break
+                }
+
+                guard self.canStartAutomaticSync else {
+                    continue
+                }
+
+                do {
+                    try await self.sync(project: project)
+                } catch {
+                    continue
+                }
+            }
+        }
+    }
+
+    /// Synchronizes a `.moviecut.meta` sidecar for the supplied project.
+    @discardableResult
+    public func syncMetadata(project: Project) async throws -> CloudSyncMetadata {
+        let projectURL = try projectFileURL(name: project.name, createDirectory: true)
+        let metadataURL = metadataFileURL(for: projectURL)
+        _ = try? loadMetadata(from: metadataURL)
+
+        let projectData = try Self.encodedProjectData(project)
+        let fileSize = projectFileSize(at: projectURL) ?? projectData.count
+        let metadata = CloudSyncMetadata(
+            projectId: project.id,
+            projectName: project.name,
+            checksum: Self.checksum(for: projectData),
+            updatedAt: project.updatedAt,
+            fileSize: fileSize
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(metadata)
+        try data.write(to: metadataURL, options: [.atomic])
+        return metadata
+    }
+
+    /// Returns true when local and remote project metadata diverge.
+    public func detectConflict(local: Project, remote: Project) -> Bool {
+        let timestampDiffers = local.updatedAt != remote.updatedAt
+        let sizeDiffers = Self.encodedProjectSize(local) != Self.encodedProjectSize(remote)
+        let hasConflict = timestampDiffers || sizeDiffers
+
+        if hasConflict {
+            status = .conflict
+        }
+
+        return hasConflict
     }
 
     /// Lists synced project documents from iCloud Drive, or local fallback storage.
@@ -161,6 +317,10 @@ public final class CloudSyncService: ObservableObject, Sendable {
             .appendingPathExtension("moviecut")
     }
 
+    private func metadataFileURL(for projectURL: URL) -> URL {
+        projectURL.appendingPathExtension("meta")
+    }
+
     private func movieCutDirectoryURL(create: Bool) throws -> URL {
         let directoryURL = try documentStorageURL(create: create)
             .appendingPathComponent("MovieCut", isDirectory: true)
@@ -195,6 +355,77 @@ public final class CloudSyncService: ObservableObject, Sendable {
         }
 
         return containerURL.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    private func stopCloudWatcher() {
+        metadataQuery?.stop()
+        metadataQuery = nil
+
+        metadataQueryObservers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+        metadataQueryObservers.removeAll()
+    }
+
+    private func cloudMetadataDidChange() {
+        lastSyncDate = Date()
+
+        if case .syncing = status {
+            return
+        }
+
+        status = .idle
+    }
+
+    private var canStartAutomaticSync: Bool {
+        switch status {
+        case .idle, .synced:
+            return true
+        case .syncing, .conflict, .offline, .failed:
+            return false
+        }
+    }
+
+    private func loadMetadata(from url: URL) throws -> CloudSyncMetadata {
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(CloudSyncMetadata.self, from: data)
+    }
+
+    private func projectFileSize(at url: URL) -> Int? {
+        guard fileManager.fileExists(atPath: url.path) else {
+            return nil
+        }
+
+        return try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+    }
+
+    private static func sleepNanoseconds(for interval: TimeInterval) -> UInt64 {
+        let seconds = max(interval, 1)
+        return UInt64(seconds * 1_000_000_000)
+    }
+
+    private static func encodedProjectSize(_ project: Project) -> Int {
+        (try? encodedProjectData(project).count) ?? 0
+    }
+
+    private static func encodedProjectData(_ project: Project) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(project)
+    }
+
+    private static func checksum(for data: Data) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+
+        for byte in data {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+
+        return String(format: "%016llx", hash)
     }
 
     private func mergedProject(local: Project, remote: Project) -> Project {

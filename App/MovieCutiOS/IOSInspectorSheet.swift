@@ -58,13 +58,79 @@ struct IOSInspectorSheet: View {
                             )
                         }
 
+                        if clip.kind == .video {
+                            Section("Color") {
+                                sliderRow(
+                                    title: "Brightness",
+                                    value: Binding(
+                                        get: { brightnessSliderValue(for: clip) },
+                                        set: { newValue in
+                                            updateColorCorrection(for: clip, brightnessSliderValue: newValue)
+                                        }
+                                    ),
+                                    range: 0...2,
+                                    valueText: numericText(brightnessSliderValue(for: clip))
+                                )
+
+                                sliderRow(
+                                    title: "Contrast",
+                                    value: Binding(
+                                        get: { colorCorrection(for: clip).contrast },
+                                        set: { newValue in
+                                            updateColorCorrection(for: clip, contrast: newValue)
+                                        }
+                                    ),
+                                    range: 0...2,
+                                    valueText: numericText(colorCorrection(for: clip).contrast)
+                                )
+
+                                sliderRow(
+                                    title: "Saturation",
+                                    value: Binding(
+                                        get: { colorCorrection(for: clip).saturation },
+                                        set: { newValue in
+                                            updateColorCorrection(for: clip, saturation: newValue)
+                                        }
+                                    ),
+                                    range: 0...2,
+                                    valueText: numericText(colorCorrection(for: clip).saturation)
+                                )
+                            }
+
+                            Section("Transition") {
+                                Picker(
+                                    "Type",
+                                    selection: Binding(
+                                        get: { viewModel.selectedClip?.transition?.type ?? clip.transition?.type ?? .none },
+                                        set: { newValue in
+                                            Task { await viewModel.setTransition(newValue) }
+                                        }
+                                    )
+                                ) {
+                                    ForEach(TransitionType.allCases, id: \.self) { transitionType in
+                                        Text(transitionTitle(for: transitionType))
+                                            .tag(transitionType)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                            }
+                        }
+
                         Section {
                             Button("Split at Playhead", systemImage: "scissors") {
                                 Task { await viewModel.splitClip() }
                             }
 
+                            Button("Duplicate Clip", systemImage: "plus.square.on.square") {
+                                Task { await viewModel.duplicateClip() }
+                            }
+
                             Button("Delete Clip", systemImage: "trash", role: .destructive) {
                                 Task { await viewModel.deleteClip() }
+                            }
+
+                            Button("Ripple Delete", systemImage: "delete.left", role: .destructive) {
+                                Task { await viewModel.rippleDeleteClip() }
                             }
                         }
                     }
@@ -108,6 +174,49 @@ struct IOSInspectorSheet: View {
 
     private func percentText(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
+    }
+
+    private func colorCorrection(for clip: Clip) -> ColorCorrection {
+        viewModel.selectedClip?.colorCorrection ?? clip.colorCorrection ?? ColorCorrection()
+    }
+
+    private func brightnessSliderValue(for clip: Clip) -> Double {
+        colorCorrection(for: clip).brightness + 1
+    }
+
+    private func updateColorCorrection(
+        for clip: Clip,
+        brightnessSliderValue: Double? = nil,
+        contrast: Double? = nil,
+        saturation: Double? = nil
+    ) {
+        let current = colorCorrection(for: clip)
+        let correction = ColorCorrection(
+            brightness: (brightnessSliderValue ?? (current.brightness + 1)) - 1,
+            contrast: contrast ?? current.contrast,
+            saturation: saturation ?? current.saturation,
+            warmth: current.warmth,
+            tint: current.tint
+        )
+
+        Task { await viewModel.updateSelectedColorCorrection(correction) }
+    }
+
+    private func numericText(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
+
+    private func transitionTitle(for type: TransitionType) -> String {
+        switch type {
+        case .none:
+            "None"
+        case .crossDissolve:
+            "Cross Dissolve"
+        case .fadeThroughBlack:
+            "Fade Through Black"
+        case .wipeRight:
+            "Wipe Right"
+        }
     }
 
     private func timeString(_ time: TimeInterval) -> String {

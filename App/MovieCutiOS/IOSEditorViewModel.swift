@@ -9,6 +9,7 @@ final class IOSEditorViewModel {
     var selectedClipId: UUID?
     var playheadTime: TimeInterval
     var isPlaying: Bool
+    var exportEngine: IOSExportEngine = IOSExportEngine()
 
     private let session: EditorSession
 
@@ -32,6 +33,18 @@ final class IOSEditorViewModel {
         return currentProject.timeline.tracks
             .flatMap(\.clips)
             .first { $0.id == selectedClipId }
+    }
+
+    var lastExportURL: URL? {
+        exportEngine.lastExportURL
+    }
+
+    var isExporting: Bool {
+        exportEngine.isExporting
+    }
+
+    var exportProgress: Double {
+        exportEngine.exportProgress
     }
 
     func importMedia(from url: URL, kind: MediaKind? = nil) async {
@@ -144,9 +157,67 @@ final class IOSEditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
     }
 
-    func exportProject() async {
-        // Export is not wired in the iOS target yet. The toolbar calls through here
-        // so the UI contract is in place when the export pipeline is connected.
+    func updateSelectedColorCorrection(_ correction: ColorCorrection) async {
+        guard let selectedClipId else { return }
+        await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: correction))
+    }
+
+    func setTransition(_ type: TransitionType) async {
+        guard let selectedClipId else { return }
+
+        let transition: Transition?
+        if type == .none {
+            transition = nil
+        } else {
+            transition = Transition(type: type, duration: selectedClip?.transition?.duration ?? 0.5)
+        }
+
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
+    }
+
+    func duplicateClip() async {
+        guard let selectedClipId else { return }
+
+        let originalClipId = selectedClipId
+        let originalClip = selectedClip
+        let originalTrackId = selectedClipTrackId
+
+        do {
+            try await session.dispatch(DuplicateClipCommand(clipId: originalClipId))
+            await refreshFromSession()
+
+            if let duplicateClip = duplicatedClip(
+                after: originalClip,
+                trackId: originalTrackId,
+                excluding: originalClipId
+            ) {
+                self.selectedClipId = duplicateClip.id
+                playheadTime = duplicateClip.timelineRange.start
+            }
+        } catch {
+            return
+        }
+    }
+
+    func rippleDeleteClip() async {
+        guard let selectedClipId else { return }
+
+        do {
+            try await session.dispatch(RippleDeleteCommand(clipId: selectedClipId))
+            self.selectedClipId = nil
+            await refreshFromSession()
+        } catch {
+            return
+        }
+    }
+
+    @discardableResult
+    func exportProject() async throws -> URL {
+        try await exportEngine.exportProject(currentProject)
+    }
+
+    func cancelExport() {
+        exportEngine.cancelExport()
     }
 
     private var selectedClipTrackId: UUID? {
@@ -173,6 +244,23 @@ final class IOSEditorViewModel {
         playheadTime = min(max(0, playheadTime), currentProject.timeline.duration)
         if currentProject.timeline.duration == 0 {
             isPlaying = false
+        }
+    }
+
+    private func duplicatedClip(after originalClip: Clip?, trackId: UUID?, excluding originalClipId: UUID) -> Clip? {
+        guard
+            let originalClip,
+            let trackId,
+            let track = currentProject.timeline.tracks.first(where: { $0.id == trackId })
+        else { return nil }
+
+        return track.clips.first { clip in
+            clip.id != originalClipId
+                && clip.assetId == originalClip.assetId
+                && clip.kind == originalClip.kind
+                && clip.sourceRange == originalClip.sourceRange
+                && abs(clip.timelineRange.start - originalClip.timelineRange.end) < 0.0001
+                && abs(clip.timelineRange.duration - originalClip.timelineRange.duration) < 0.0001
         }
     }
 

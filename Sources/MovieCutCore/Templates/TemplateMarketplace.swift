@@ -21,6 +21,9 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
     /// Optional image asset name used for previews.
     public var previewImageName: String?
 
+    /// Optional remote URL for downloading the template bundle payload.
+    public var downloadURL: URL?
+
     /// The template payload returned on download.
     public var bundle: TemplateBundle
 
@@ -34,6 +37,7 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         case description
         case category
         case previewImageName
+        case downloadURL
         case bundle
         case tags
     }
@@ -46,6 +50,7 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         description: String,
         category: String,
         previewImageName: String? = nil,
+        downloadURL: URL? = nil,
         bundle: TemplateBundle,
         tags: [String] = []
     ) {
@@ -55,6 +60,7 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         self.description = description
         self.category = category
         self.previewImageName = previewImageName
+        self.downloadURL = downloadURL
         self.bundle = bundle
         self.tags = tags
     }
@@ -67,6 +73,7 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         description = try container.decode(String.self, forKey: .description)
         category = try container.decode(String.self, forKey: .category)
         previewImageName = try container.decodeIfPresent(String.self, forKey: .previewImageName)
+        downloadURL = try container.decodeIfPresent(URL.self, forKey: .downloadURL)
         bundle = try container.decode(TemplateBundle.self, forKey: .bundle)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
@@ -79,9 +86,39 @@ public struct TemplateMarketplaceItem: Codable, Sendable, Identifiable, Equatabl
         try container.encode(description, forKey: .description)
         try container.encode(category, forKey: .category)
         try container.encodeIfPresent(previewImageName, forKey: .previewImageName)
+        try container.encodeIfPresent(downloadURL, forKey: .downloadURL)
         try container.encode(bundle, forKey: .bundle)
         try container.encode(tags, forKey: .tags)
     }
+}
+
+/// Difference between a local marketplace catalog and a remote catalog.
+public struct CatalogDiff: Sendable {
+    /// Items present remotely but not locally.
+    public var added: [TemplateMarketplaceItem]
+
+    /// Items present in both catalogs with changed metadata or bundle payloads.
+    public var updated: [TemplateMarketplaceItem]
+
+    /// Items present locally but no longer present remotely.
+    public var removed: [TemplateMarketplaceItem]
+
+    /// Creates catalog diff metadata.
+    public init(
+        added: [TemplateMarketplaceItem],
+        updated: [TemplateMarketplaceItem],
+        removed: [TemplateMarketplaceItem]
+    ) {
+        self.added = added
+        self.updated = updated
+        self.removed = removed
+    }
+}
+
+/// Errors produced by remote marketplace operations.
+public enum TemplateMarketplaceError: Error, Sendable, Equatable {
+    case remoteCatalogURLMissing
+    case invalidHTTPResponse(Int)
 }
 
 /// Local JSON-backed template marketplace facade.
@@ -89,6 +126,8 @@ public final class TemplateMarketplace: Sendable {
     private static let featuredTag = "featured"
 
     private let catalogURL: URL
+    private let cacheURL: URL
+    private let remoteCatalogURL: URL?
     private let store = TemplateStore()
     private let cachedItems = OSAllocatedUnfairLock(initialState: [TemplateMarketplaceItem]())
 
@@ -107,8 +146,15 @@ public final class TemplateMarketplace: Sendable {
     }
 
     /// Creates a marketplace backed by the local template catalog.
-    public init() {
+    public convenience init() {
+        self.init(remoteCatalogURL: nil)
+    }
+
+    /// Creates a marketplace backed by a remote catalog URL with local fallback.
+    public init(remoteCatalogURL: URL?) {
         catalogURL = Self.defaultCatalogURL()
+        cacheURL = Self.defaultCacheURL()
+        self.remoteCatalogURL = remoteCatalogURL
         TemplateStore.builtInTemplates().forEach { store.add($0) }
 
         if FileManager.default.fileExists(atPath: catalogURL.path) {
@@ -142,8 +188,111 @@ public final class TemplateMarketplace: Sendable {
         item.bundle
     }
 
-    /// Simulates refreshing the remote marketplace by reloading the local catalog.
+    /// Fetches the configured remote catalog.
+    public func fetchRemoteCatalog() async throws -> [TemplateMarketplaceItem] {
+        guard let remoteCatalogURL else {
+            throw TemplateMarketplaceError.remoteCatalogURLMissing
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: remoteCatalogURL)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200 ... 299).contains(httpResponse.statusCode) {
+            throw TemplateMarketplaceError.invalidHTTPResponse(httpResponse.statusCode)
+        }
+
+        return try JSONDecoder().decode([TemplateMarketplaceItem].self, from: data)
+    }
+
+    /// Writes a remote catalog cache to Application Support.
+    public func cacheRemoteCatalog(_ items: [TemplateMarketplaceItem]) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        let directoryURL = cacheURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let data = try encoder.encode(items)
+        try data.write(to: cacheURL, options: [.atomic])
+    }
+
+    /// Diffs two marketplace catalogs by item identifier.
+    public func diffCatalog(
+        local: [TemplateMarketplaceItem],
+        remote: [TemplateMarketplaceItem]
+    ) -> CatalogDiff {
+        var localByID: [UUID: TemplateMarketplaceItem] = [:]
+        var remoteByID: [UUID: TemplateMarketplaceItem] = [:]
+
+        local.forEach { item in localByID[item.id] = item }
+        remote.forEach { item in remoteByID[item.id] = item }
+
+        let added = remote.filter { item in
+            localByID[item.id] == nil
+        }
+        .sorted { $0.name < $1.name }
+
+        let updated = remote.filter { item in
+            guard let localItem = localByID[item.id] else {
+                return false
+            }
+
+            return localItem != item
+        }
+        .sorted { $0.name < $1.name }
+
+        let removed = local.filter { item in
+            remoteByID[item.id] == nil
+        }
+        .sorted { $0.name < $1.name }
+
+        return CatalogDiff(added: added, updated: updated, removed: removed)
+    }
+
+    /// Downloads a remote template bundle with progress reporting.
+    public func downloadTemplate(
+        item: TemplateMarketplaceItem,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> TemplateBundle {
+        progress?(0)
+
+        guard let downloadURL = item.downloadURL else {
+            store.add(item.bundle)
+            progress?(1)
+            return item.bundle
+        }
+
+        let data = try await Self.downloadData(from: downloadURL, progress: progress)
+        let decoder = JSONDecoder()
+        let bundle: TemplateBundle
+
+        if let decodedBundle = try? decoder.decode(TemplateBundle.self, from: data) {
+            bundle = decodedBundle
+        } else {
+            bundle = try decoder.decode(TemplateMarketplaceItem.self, from: data).bundle
+        }
+
+        store.add(bundle)
+        progress?(1)
+        return bundle
+    }
+
+    /// Refreshes the marketplace from remote, cached, or generated local catalog data.
     public func refreshCatalog() async throws {
+        if remoteCatalogURL != nil {
+            do {
+                let remoteItems = try await fetchRemoteCatalog()
+                try cacheRemoteCatalog(remoteItems)
+                applyCatalog(remoteItems)
+                try? saveCatalog(remoteItems)
+                return
+            } catch {
+                if let cachedRemoteItems = try? loadCachedRemoteCatalog() {
+                    applyCatalog(cachedRemoteItems)
+                    return
+                }
+            }
+        }
+
         if FileManager.default.fileExists(atPath: catalogURL.path) {
             try loadCatalog()
         } else {
@@ -151,12 +300,21 @@ public final class TemplateMarketplace: Sendable {
         }
     }
 
+    private func applyCatalog(_ items: [TemplateMarketplaceItem]) {
+        cachedItems.withLock { $0 = items }
+        items.map(\.bundle).forEach { store.add($0) }
+    }
+
     private func loadCatalog() throws {
         let data = try Data(contentsOf: catalogURL)
         let decoder = JSONDecoder()
         let items = try decoder.decode([TemplateMarketplaceItem].self, from: data)
-        cachedItems.withLock { $0 = items }
-        items.map(\.bundle).forEach { store.add($0) }
+        applyCatalog(items)
+    }
+
+    private func loadCachedRemoteCatalog() throws -> [TemplateMarketplaceItem] {
+        let data = try Data(contentsOf: cacheURL)
+        return try JSONDecoder().decode([TemplateMarketplaceItem].self, from: data)
     }
 
     private func saveCatalog(_ items: [TemplateMarketplaceItem]) throws {
@@ -184,6 +342,31 @@ public final class TemplateMarketplace: Sendable {
         return baseURL
             .appendingPathComponent("MovieCut", isDirectory: true)
             .appendingPathComponent("template-catalog.json", isDirectory: false)
+    }
+
+    private static func defaultCacheURL() -> URL {
+        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+
+        return baseURL
+            .appendingPathComponent("MovieCut", isDirectory: true)
+            .appendingPathComponent("marketplace-cache.json", isDirectory: false)
+    }
+
+    private static func downloadData(
+        from url: URL,
+        progress: (@Sendable (Double) -> Void)?
+    ) async throws -> Data {
+        let delegate = TemplateDownloadDelegate(progress: progress)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer {
+            session.finishTasksAndInvalidate()
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            delegate.resume(with: continuation)
+            session.downloadTask(with: url).resume()
+        }
     }
 
     private static func generatedCatalogItems(from builtInTemplates: [TemplateBundle]) -> [TemplateMarketplaceItem] {
@@ -273,4 +456,77 @@ private struct CatalogVariation {
     var category: String
     var descriptionPrefix: String
     var tags: [String]
+}
+
+private final class TemplateDownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let progress: (@Sendable (Double) -> Void)?
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Data, Error>?
+
+    init(progress: (@Sendable (Double) -> Void)?) {
+        self.progress = progress
+    }
+
+    func resume(with continuation: CheckedContinuation<Data, Error>) {
+        lock.withLock {
+            self.continuation = continuation
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard totalBytesExpectedToWrite > 0 else {
+            return
+        }
+
+        let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        progress?(min(max(fraction, 0), 1))
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        do {
+            let data = try Data(contentsOf: location)
+            finish(.success(data))
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        if let error {
+            finish(.failure(error))
+        }
+    }
+
+    private func finish(_ result: Result<Data, Error>) {
+        let continuation = lock.withLock {
+            let continuation = self.continuation
+            self.continuation = nil
+            return continuation
+        }
+
+        guard let continuation else {
+            return
+        }
+
+        switch result {
+        case let .success(data):
+            continuation.resume(returning: data)
+        case let .failure(error):
+            continuation.resume(throwing: error)
+        }
+    }
 }

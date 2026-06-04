@@ -164,6 +164,7 @@
 		F564D339EA355DC6A86A14F4 /* EditorCommandError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EA5887DE4D4542F6AD31888 /* EditorCommandError.swift */; };
 		F5A3513F325546D36848F65D /* InspectorExportSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11259ED82B4488D3FC50B574 /* InspectorExportSection.swift */; };
 		F70E621923B9547F0994271D /* ExporterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF57C4EFB189C7CC03ECDC46 /* ExporterPlugin.swift */; };
+		F0A1B2C3D4E5F60718293A4B /* IOSExportEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A4C /* IOSExportEngine.swift */; };
 		FF9AC92A806015DF12559C55 /* StyleTransferProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E75387A5BBB2DB9505D25C /* StyleTransferProvider.swift */; };
 /* End PBXBuildFile section */
 
@@ -318,6 +319,7 @@
 		F1F9AFCF7834808124E9A749 /* IOSInspectorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSInspectorSheet.swift; sourceTree = "<group>"; };
 		F21CAB901012C0BB13802BC6 /* MovieCutMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieCutMacApp.swift; sourceTree = "<group>"; };
 		F2FC1F81A0274B68B268AA7C /* ExportProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportProgress.swift; sourceTree = "<group>"; };
+		F0A1B2C3D4E5F60718293A4C /* IOSExportEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSExportEngine.swift; sourceTree = "<group>"; };
 		F5C2DCE4CC3F5CBDD1199F64 /* TimeRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeRange.swift; sourceTree = "<group>"; };
 		F632D51EC79AB2F6251AEFC2 /* SFXLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFXLibrary.swift; sourceTree = "<group>"; };
 		FA8783EDDC39100FEC510546 /* KeyframeUIFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyframeUIFormatting.swift; sourceTree = "<group>"; };
@@ -430,10 +432,19 @@
 				F1F9AFCF7834808124E9A749 /* IOSInspectorSheet.swift */,
 				3246BCE285678EDCF9CCD357 /* IOSTimelineView.swift */,
 				9507ABDD9B05124D7FE956AA /* MovieCutiOSApp.swift */,
+				F0A1B2C3D4E5F60718293A4D /* Export */,
 				F0031F660E7D426C4B700FBD /* Views */,
 			);
 			name = MovieCutiOS;
 			path = App/MovieCutiOS;
+			sourceTree = "<group>";
+		};
+		F0A1B2C3D4E5F60718293A4D /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				F0A1B2C3D4E5F60718293A4C /* IOSExportEngine.swift */,
+			);
+			path = Export;
 			sourceTree = "<group>";
 		};
 		2647A1351683BDC30977996D /* MovieCutMac */ = {
@@ -1000,6 +1011,7 @@
 				D203155F7777F673F41BBE45 /* ExtractAudioCommand.swift in Sources */,
 				6338E066D3BA1B1CC504FEEF /* FreezeFrameCommand.swift in Sources */,
 				9C3179AA13DB3ACC0A665C1B /* GestureTransform.swift in Sources */,
+				F0A1B2C3D4E5F60718293A4B /* IOSExportEngine.swift in Sources */,
 				E1EEB65CD40B13017C739BEA /* IOSEditorViewModel.swift in Sources */,
 				CEC1D129137657774AADD18E /* IOSInspectorSheet.swift in Sources */,
 				53B5A75761DD0F54FA56308C /* IOSTimelineView.swift in Sources */,

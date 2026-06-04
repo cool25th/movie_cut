@@ -99,6 +99,7 @@ public enum MessageType: String, Codable, Sendable {
     case join
     case leave
     case sync
+    case heartbeat
 }
 
 /// Wire format for local collaboration messages.
@@ -112,11 +113,15 @@ public struct CollaborationMessage: Codable, Sendable {
     /// Encoded payload appropriate for the message type.
     public var payload: Data
 
+    /// Time the message was created.
+    public var timestamp: Date
+
     /// Creates a collaboration message.
-    public init(type: MessageType, senderId: UUID, payload: Data) {
+    public init(type: MessageType, senderId: UUID, payload: Data, timestamp: Date = Date()) {
         self.type = type
         self.senderId = senderId
         self.payload = payload
+        self.timestamp = timestamp
     }
 }
 
@@ -134,6 +139,9 @@ public protocol NearbyPeer: Sendable {
 
 /// Activity state for a collaborator.
 public struct CollaboratorPresence: Codable, Sendable, Equatable {
+    /// Collaborator identifier this presence refers to.
+    public var collaboratorId: UUID
+
     /// Whether the collaborator is currently considered active.
     public var isActive: Bool
 
@@ -141,7 +149,8 @@ public struct CollaboratorPresence: Codable, Sendable, Equatable {
     public var lastSeen: Date
 
     /// Creates collaborator presence metadata.
-    public init(isActive: Bool, lastSeen: Date = Date()) {
+    public init(collaboratorId: UUID = UUID(), isActive: Bool, lastSeen: Date = Date()) {
+        self.collaboratorId = collaboratorId
         self.isActive = isActive
         self.lastSeen = lastSeen
     }
@@ -176,7 +185,7 @@ public class CollaborationService: ObservableObject, Sendable {
         self.pendingInvites = []
         self.recentChanges = []
         self.collaboratorPresence = [
-            collaborator.id: CollaboratorPresence(isActive: true)
+            collaborator.id: CollaboratorPresence(collaboratorId: collaborator.id, isActive: true)
         ]
         self.nearbyPeers = [:]
     }
@@ -216,7 +225,7 @@ public class CollaborationService: ObservableObject, Sendable {
         activeCollaborators.removeAll { collaborator in
             collaborator.id == localCollaborator.id
         }
-        collaboratorPresence[localCollaborator.id] = CollaboratorPresence(isActive: false)
+        collaboratorPresence[localCollaborator.id] = CollaboratorPresence(collaboratorId: localCollaborator.id, isActive: false)
     }
 
     /// Records a local project change, retaining only the last 100 events.
@@ -254,7 +263,7 @@ public class CollaborationService: ObservableObject, Sendable {
         activeCollaborators.removeAll { collaborator in
             collaborator.id == collaboratorId
         }
-        collaboratorPresence[collaboratorId] = CollaboratorPresence(isActive: false)
+        collaboratorPresence[collaboratorId] = CollaboratorPresence(collaboratorId: collaboratorId, isActive: false)
     }
 
     /// Registers a nearby peer for collaboration message exchange.
@@ -336,6 +345,91 @@ public class CollaborationService: ObservableObject, Sendable {
         }
     }
 
+
+    // MARK: - Networking Additions
+
+    /// Broadcasts a project change event to a specific nearby peer.
+    public func broadcastChange(_ event: ProjectChangeEvent, via peer: any NearbyPeer) async throws {
+        let payload = try JSONEncoder().encode(event)
+        let message = CollaborationMessage(
+            type: .change,
+            senderId: localCollaborator.id,
+            payload: payload
+        )
+        try await peer.sendMessage(message)
+    }
+
+    /// Handles an incoming collaboration message by decoding the payload and applying it.
+    public func handleIncomingMessage(_ message: CollaborationMessage) async throws {
+        touchPresence(for: message.senderId)
+
+        let decoder = JSONDecoder()
+
+        switch message.type {
+        case .change:
+            let event = try decoder.decode(ProjectChangeEvent.self, from: message.payload)
+            appendChange(event)
+        case .join:
+            if let collaborator = try? decoder.decode(Collaborator.self, from: message.payload) {
+                upsertCollaborator(collaborator)
+            }
+        case .leave:
+            removeCollaborator(collaboratorId: message.senderId)
+        case .sync:
+            if let events = try? decoder.decode([ProjectChangeEvent].self, from: message.payload) {
+                events.forEach { appendChange($0) }
+            } else if let event = try? decoder.decode(ProjectChangeEvent.self, from: message.payload) {
+                appendChange(event)
+            }
+        case .heartbeat:
+            touchPresence(for: message.senderId)
+        }
+    }
+
+    /// Starts periodic heartbeat updates for collaborator presence sent through a nearby peer.
+    public func startPresenceHeartbeat(via peer: any NearbyPeer, interval: TimeInterval = 15) {
+        presenceHeartbeatTask?.cancel()
+        presenceHeartbeatTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+
+                self.refreshPresence()
+
+                let payload = try? JSONEncoder().encode(
+                    CollaboratorPresence(
+                        collaboratorId: self.localCollaborator.id,
+                        isActive: true,
+                        lastSeen: Date()
+                    )
+                )
+                if let payload {
+                    let message = CollaborationMessage(
+                        type: .heartbeat,
+                        senderId: self.localCollaborator.id,
+                        payload: payload
+                    )
+                    _ = try? await peer.sendMessage(message)
+                }
+
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                } catch {
+                    break
+                }
+            }
+        }
+    }
+
+    /// Updates presence state for a collaborator.
+    public func updatePresence(_ presence: CollaboratorPresence) {
+        collaboratorPresence[presence.collaboratorId] = presence
+    }
+
+    /// Active presence snapshots keyed by collaborator identifier.
+    public var activePresences: [UUID: CollaboratorPresence] {
+        collaboratorPresence.filter { _, presence in presence.isActive }
+    }
+
     private func upsertCollaborator(_ collaborator: Collaborator) {
         if let index = activeCollaborators.firstIndex(where: { activeCollaborator in
             activeCollaborator.id == collaborator.id
@@ -380,17 +474,19 @@ public class CollaborationService: ObservableObject, Sendable {
             } else if let event = try? decoder.decode(ProjectChangeEvent.self, from: message.payload) {
                 appendChange(event)
             }
+        case .heartbeat:
+            break
         }
     }
 
     private func touchPresence(for collaboratorId: UUID, at date: Date = Date()) {
-        collaboratorPresence[collaboratorId] = CollaboratorPresence(isActive: true, lastSeen: date)
+        collaboratorPresence[collaboratorId] = CollaboratorPresence(collaboratorId: collaboratorId, isActive: true, lastSeen: date)
     }
 
     private func refreshPresence(now: Date = Date()) {
         touchPresence(for: localCollaborator.id, at: now)
 
-        for collaboratorId in collaboratorPresence.keys {
+        for collaboratorId in Array(collaboratorPresence.keys) {
             guard collaboratorId != localCollaborator.id,
                   let presence = collaboratorPresence[collaboratorId] else {
                 continue
@@ -398,6 +494,7 @@ public class CollaborationService: ObservableObject, Sendable {
 
             let isActive = now.timeIntervalSince(presence.lastSeen) <= 30
             collaboratorPresence[collaboratorId] = CollaboratorPresence(
+                collaboratorId: collaboratorId,
                 isActive: isActive,
                 lastSeen: presence.lastSeen
             )

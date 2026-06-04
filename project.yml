@@ -18,6 +18,12 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: App/MovieCutMac
+        excludes:
+          - Resources/**/*.wav
+    resources:
+      - path: App/MovieCutMac/Resources
+        includes:
+          - "**/*.wav"
     info:
       path: App/MovieCutMac/Info.plist
     dependencies:

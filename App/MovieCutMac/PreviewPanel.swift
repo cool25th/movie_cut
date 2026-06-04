@@ -21,9 +21,7 @@ struct PreviewPanel: View {
                     VideoPreviewView(player: playbackEngine.player)
                         .aspectRatio(canvasAspectRatio, contentMode: .fit)
                         .overlay {
-                            if clip.assetId == nil {
-                                clipPlaceholder(for: clip)
-                            }
+                            previewOverlay(for: clip)
                         }
                 } else {
                     Text(NSLocalizedString("No clip selected", comment: ""))
@@ -124,6 +122,37 @@ struct PreviewPanel: View {
     private var canvasAspectRatio: CGFloat {
         let size = viewModel.currentProject.canvas.size
         return size.width / max(size.height, 1)
+    }
+
+    @ViewBuilder
+    private func previewOverlay(for clip: Clip) -> some View {
+        ZStack {
+            if clip.assetId == nil {
+                clipPlaceholder(for: clip)
+            }
+
+            if viewModel.isMaskEditorActive {
+                MaskCanvasView(
+                    mask: maskBinding(for: clip.id),
+                    canvasSize: viewModel.currentProject.canvas.size
+                )
+            }
+        }
+    }
+
+    private func maskBinding(for clipId: UUID) -> Binding<Mask?> {
+        Binding(
+            get: {
+                guard viewModel.selectedClip?.id == clipId else { return nil }
+                return viewModel.selectedClip?.mask
+            },
+            set: { newMask in
+                Task {
+                    guard viewModel.selectedClipId == clipId else { return }
+                    await viewModel.updateSelectedMask(newMask)
+                }
+            }
+        )
     }
 
     private func clipPlaceholder(for clip: Clip) -> some View {

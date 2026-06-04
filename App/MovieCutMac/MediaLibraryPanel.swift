@@ -62,6 +62,8 @@ struct MediaLibraryPanel: View {
                 }
             case .music:
                 MusicLibraryView(viewModel: viewModel)
+            case .sfx:
+                SFXPickerView(viewModel: viewModel)
             }
         }
         .frame(minWidth: 200)
@@ -217,6 +219,7 @@ private enum LibraryTab: CaseIterable, Identifiable {
     case media
     case stickers
     case music
+    case sfx
 
     var id: Self { self }
 
@@ -228,6 +231,8 @@ private enum LibraryTab: CaseIterable, Identifiable {
             return NSLocalizedString("Stickers", comment: "")
         case .music:
             return NSLocalizedString("Music", comment: "")
+        case .sfx:
+            return NSLocalizedString("SFX", comment: "")
         }
     }
 }

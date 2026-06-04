@@ -55,12 +55,14 @@ final class EditorViewModel {
     var selectedStyle: String = "none"
     var exportResolution: String = "1080p"
     var exportQuality: String = "high"
+    var isMaskEditorActive: Bool = false
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
     var exportEngine: ExportEngine
     var musicLibrary: MusicLibrary
     var transcriptionService: TranscriptionService
     var templateStore: TemplateStore
+    var sfxURLResolver: [String: URL]
     var generatedSubtitleSegments: [TranscriptionSegment] = []
     var pendingSubtitleClips: [Clip] = []
     var playheadTime: TimeInterval = 0
@@ -89,6 +91,7 @@ final class EditorViewModel {
         self.musicLibrary = MusicLibrary.placeholder()
         self.transcriptionService = TranscriptionService()
         self.templateStore = TemplateStore()
+        self.sfxURLResolver = Self.makeSFXURLResolver()
         self.session = EditorSession(project: project)
 
         for bundle in TemplateStore.builtInTemplates() {
@@ -172,6 +175,7 @@ final class EditorViewModel {
         canvasSelection = project.canvas.aspectRatio
         selectedClipId = nil
         selectedAssetId = nil
+        isMaskEditorActive = false
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
@@ -189,6 +193,7 @@ final class EditorViewModel {
             canvasSelection = project.canvas.aspectRatio
             selectedClipId = nil
             selectedAssetId = nil
+            isMaskEditorActive = false
             playbackEngine.clear()
             playheadTime = 0
             clearGeneratedSubtitles()
@@ -267,6 +272,7 @@ final class EditorViewModel {
             canvasSelection = loaded.canvas.aspectRatio
             selectedClipId = nil
             selectedAssetId = nil
+            isMaskEditorActive = false
             playbackEngine.clear()
             playheadTime = 0
             clearGeneratedSubtitles()
@@ -380,6 +386,44 @@ final class EditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    func addSFXToTimeline(_ item: SFXItem) async {
+        guard let fileURL = resolveSFXURL(for: item) else {
+            lastErrorMessage = "Missing bundled sound effect: \(item.fileName)"
+            return
+        }
+
+        do {
+            let duration = audioDuration(for: fileURL) ?? 1
+            let asset = MediaAsset(
+                originalURL: fileURL,
+                kind: .audio,
+                duration: duration,
+                metadata: MediaMetadata(fileSize: fileSize(for: fileURL))
+            )
+
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration)
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedAssetId = asset.id
+            selectedClipId = clip.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func sfxURL(for item: SFXItem) -> URL? {
+        resolveSFXURL(for: item)
     }
 
     func addTextClip(text: String) async {
@@ -880,6 +924,16 @@ final class EditorViewModel {
         Task { await apply(AddMarkerCommand(marker: marker)) }
     }
 
+    func toggleMaskEditor() {
+        isMaskEditorActive.toggle()
+    }
+
+    func addMask() async {
+        guard let selectedClipId else { return }
+        isMaskEditorActive = true
+        await apply(SetClipMaskCommand(clipId: selectedClipId, mask: defaultMask()))
+    }
+
     func updateSelectedMask(_ mask: Mask?) async {
         guard let selectedClipId else { return }
         await apply(SetClipMaskCommand(clipId: selectedClipId, mask: mask))
@@ -1105,6 +1159,15 @@ final class EditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    private func defaultMask(shape: MaskShape = .rectangle) -> Mask {
+        let canvasSize = currentProject.canvas.size
+        return Mask(
+            shape: shape,
+            position: CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5),
+            size: CGSize(width: canvasSize.width * 0.5, height: canvasSize.height * 0.5)
+        )
     }
 
     private func refreshFromSession() async throws {
@@ -1356,6 +1419,30 @@ final class EditorViewModel {
         return Int64(value)
     }
 
+    private func resolveSFXURL(for item: SFXItem) -> URL? {
+        if let url = sfxURLResolver[item.fileName] {
+            return url
+        }
+
+        guard let url = Self.bundleSFXURL(for: item.fileName) else {
+            return nil
+        }
+
+        sfxURLResolver[item.fileName] = url
+        return url
+    }
+
+    private func audioDuration(for url: URL) -> TimeInterval? {
+        guard
+            let audioFile = try? AVAudioFile(forReading: url),
+            audioFile.processingFormat.sampleRate > 0
+        else {
+            return nil
+        }
+
+        return TimeInterval(audioFile.length) / audioFile.processingFormat.sampleRate
+    }
+
     private func defaultTrackName(for kind: TrackKind, index: Int) -> String {
         switch kind {
         case .video:
@@ -1566,6 +1653,31 @@ final class EditorViewModel {
 
     private static func defaultProject() -> Project {
         ensureDefaultTracks(in: Project(name: "Untitled"))
+    }
+
+    private static func makeSFXURLResolver() -> [String: URL] {
+        Dictionary(uniqueKeysWithValues: SFXLibrary.all.compactMap { item in
+            guard let url = bundleSFXURL(for: item.fileName) else {
+                return nil
+            }
+            return (item.fileName, url)
+        })
+    }
+
+    private static func bundleSFXURL(for fileName: String) -> URL? {
+        let fileURL = URL(fileURLWithPath: fileName)
+        let resourceName = fileURL.deletingPathExtension().lastPathComponent
+        let fileExtension = fileURL.pathExtension
+
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension, subdirectory: "SFX") {
+            return url
+        }
+
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension, subdirectory: "Resources/SFX") {
+            return url
+        }
+
+        return Bundle.main.url(forResource: resourceName, withExtension: fileExtension)
     }
 
     private static func ensureDefaultTracks(in project: Project) -> Project {

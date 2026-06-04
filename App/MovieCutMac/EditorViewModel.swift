@@ -1093,6 +1093,7 @@ final class EditorViewModel {
             return $0.time < $1.time
         }
 
+        // Persist auto-reframe keyframes on the clip; export forwards clip.keyframes to CustomVideoCompositor.
         try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
         try await refreshFromSession()
     }

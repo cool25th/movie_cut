@@ -719,20 +719,48 @@ final class PlaybackEngine {
                     )
                 }
 
-                if let transition = clipInstruction.transition, transition.type == .crossDissolve {
+                if let transition = clipInstruction.transition, transition.duration > 0 {
                     let overlapDuration = transition.duration
                     let overlapStart = CMTimeAdd(
                         clipInstruction.timeRange.start,
                         CMTime(seconds: clipInstruction.timeRange.duration.seconds - overlapDuration, preferredTimescale: 600)
                     )
-                    layerInstruction.setOpacityRamp(
-                        fromStartOpacity: 1.0,
-                        toEndOpacity: 0.0,
-                        timeRange: CMTimeRange(
-                            start: overlapStart,
-                            duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
-                        )
+
+                    let overlapRange = CMTimeRange(
+                        start: overlapStart,
+                        duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
                     )
+
+                    switch transition.type {
+                    case .crossDissolve:
+                        layerInstruction.setOpacityRamp(
+                            fromStartOpacity: 1.0,
+                            toEndOpacity: 0.0,
+                            timeRange: overlapRange
+                        )
+                    case .fadeThroughBlack:
+                        let halfDuration = overlapDuration / 2
+                        layerInstruction.setOpacityRamp(
+                            fromStartOpacity: 1.0,
+                            toEndOpacity: 0.0,
+                            timeRange: CMTimeRange(
+                                start: overlapStart,
+                                duration: CMTime(seconds: halfDuration, preferredTimescale: 600)
+                            )
+                        )
+                    case .wipeRight:
+                        let fromTransform = CGAffineTransform(
+                            translationX: -CGFloat(clipInstruction.timeRange.duration.seconds) * 100,
+                            y: 0
+                        )
+                        layerInstruction.setTransformRamp(
+                            fromStartTransform: fromTransform,
+                            toEndTransform: .identity,
+                            timeRange: overlapRange
+                        )
+                    case .none:
+                        break
+                    }
                 }
             }
 

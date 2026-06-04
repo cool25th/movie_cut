@@ -172,6 +172,8 @@ final class ExportEngine {
                     continue
                 }
 
+                // Denoised video audio is imported as a new audio MediaAsset and added as
+                // an audio-track clip, so using this clip's asset URL preserves that source.
                 let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
                 guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first else {
                     continue
@@ -394,20 +396,48 @@ final class ExportEngine {
                 layerInstruction.setOpacity(1, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
             }
 
-            if let transition = clip.transition, transition.type == .crossDissolve {
+            if let transition = clip.transition, transition.duration > 0 {
                 let overlapDuration = transition.duration
                 let overlapStart = CMTimeAdd(
                     clip.timeRange.start,
                     CMTime(seconds: clip.timeRange.duration.seconds - overlapDuration, preferredTimescale: 600)
                 )
-                layerInstruction.setOpacityRamp(
-                    fromStartOpacity: 1.0,
-                    toEndOpacity: 0.0,
-                    timeRange: CMTimeRange(
-                        start: overlapStart,
-                        duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
-                    )
+
+                let overlapRange = CMTimeRange(
+                    start: overlapStart,
+                    duration: CMTime(seconds: overlapDuration, preferredTimescale: 600)
                 )
+
+                switch transition.type {
+                case .crossDissolve:
+                    layerInstruction.setOpacityRamp(
+                        fromStartOpacity: 1.0,
+                        toEndOpacity: 0.0,
+                        timeRange: overlapRange
+                    )
+                case .fadeThroughBlack:
+                    let halfDuration = overlapDuration / 2
+                    layerInstruction.setOpacityRamp(
+                        fromStartOpacity: 1.0,
+                        toEndOpacity: 0.0,
+                        timeRange: CMTimeRange(
+                            start: overlapStart,
+                            duration: CMTime(seconds: halfDuration, preferredTimescale: 600)
+                        )
+                    )
+                case .wipeRight:
+                    let fromTransform = CGAffineTransform(
+                        translationX: -CGFloat(clip.timeRange.duration.seconds) * 100,
+                        y: 0
+                    )
+                    layerInstruction.setTransformRamp(
+                        fromStartTransform: fromTransform,
+                        toEndTransform: .identity,
+                        timeRange: overlapRange
+                    )
+                case .none:
+                    break
+                }
             }
 
             if clip.requiresCustomVideoCompositorMetadata {

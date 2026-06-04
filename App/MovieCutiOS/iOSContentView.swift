@@ -17,6 +17,18 @@ struct IOSContentView: View {
     @State private var isImporting = false
     @State private var isTextClipPresented = false
     @State private var isFilterPickerPresented = false
+    @State private var isStickerPickerPresented = false
+    @State private var isChromaKeyPresented = false
+    @State private var isMaskCanvasPresented = false
+    @State private var isKeyframeEditorPresented = false
+    @State private var isMusicLibraryPresented = false
+    @State private var isSFXPickerPresented = false
+    @State private var isVoiceoverPresented = false
+    @State private var isAutoSubtitlesPresented = false
+    @State private var isAutoAssistantPresented = false
+    @State private var isTemplatePickerPresented = false
+    @State private var isCanvasSettingsPresented = false
+    @State private var isEffectsInspectorPresented = false
 
     var body: some View {
         NavigationStack {
@@ -145,6 +157,153 @@ struct IOSContentView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            // MARK: - New Sheet Integrations
+            .sheet(isPresented: $isStickerPickerPresented) {
+                NavigationStack {
+                    IOSStickerPickerView(viewModel: viewModel)
+                        .navigationTitle("Stickers")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isMusicLibraryPresented) {
+                NavigationStack {
+                    IOSMusicLibraryView(viewModel: viewModel)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isSFXPickerPresented) {
+                NavigationStack {
+                    IOSSFXPickerView(viewModel: viewModel)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isVoiceoverPresented) {
+                NavigationStack {
+                    IOSVoiceoverRecordingView(viewModel: viewModel)
+                        .navigationTitle("Voiceover")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isAutoSubtitlesPresented) {
+                NavigationStack {
+                    IOSAutoSubtitlesView(viewModel: viewModel)
+                        .navigationTitle("Auto Subtitles")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isAutoAssistantPresented) {
+                NavigationStack {
+                    IOSAutoAssistantView(viewModel: viewModel)
+                        .navigationTitle("AI Assistant")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isTemplatePickerPresented) {
+                NavigationStack {
+                    IOSTemplatePickerView(viewModel: viewModel)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isCanvasSettingsPresented) {
+                NavigationStack {
+                    IOSCanvasSettingsView(
+                        canvas: viewModel.currentProject.canvas.preset,
+                        onChange: { newPreset in
+                            Task { await viewModel.updateCanvasPreset(newPreset) }
+                        }
+                    )
+                    .navigationTitle("Canvas Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                }
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isChromaKeyPresented) {
+                if let clipId = viewModel.selectedClipId,
+                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
+                    NavigationStack {
+                        IOSChromaKeyView(clip: clip) { chromaKey in
+                            Task { await viewModel.updateSelectedChromaKey(chromaKey) }
+                        }
+                        .navigationTitle("Chroma Key")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                    }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                }
+            }
+            .sheet(isPresented: $isMaskCanvasPresented) {
+                if let clipId = viewModel.selectedClipId,
+                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
+                    NavigationStack {
+                        IOSMaskCanvasView(
+                            mask: Binding(
+                                get: { clip.mask },
+                                set: { newMask in
+                                    Task { await viewModel.updateSelectedMask(newMask) }
+                                }
+                            ),
+                            canvasSize: viewModel.currentProject.canvas.size
+                        )
+                        .navigationTitle("Mask")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                }
+            }
+            .sheet(isPresented: $isEffectsInspectorPresented) {
+                if let clipId = viewModel.selectedClipId,
+                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
+                    NavigationStack {
+                        IOSEffectsInspectorView(viewModel: viewModel, clip: clip)
+                            .navigationTitle("Effects")
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                }
+            }
+            .sheet(isPresented: $isKeyframeEditorPresented) {
+                if let clipId = viewModel.selectedClipId,
+                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
+                    NavigationStack {
+                        IOSKeyframeEditorView(
+                            clip: clip,
+                            playheadTime: viewModel.playheadTime,
+                            selectedKeyframeId: nil,
+                            onSelect: { _ in },
+                            onChange: { keyframes in
+                                Task { await viewModel.updateSelectedKeyframes(keyframes) }
+                            }
+                        )
+                        .navigationTitle("Keyframes")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                }
+            }
             .alert("Error", isPresented: Binding(
                 get: { viewModel.lastErrorMessage != nil },
                 set: { if !$0 { viewModel.clearError() } }
@@ -221,38 +380,96 @@ struct IOSContentView: View {
     }
 
     private var bottomToolbar: some View {
-        HStack(spacing: 8) {
-            toolbarButton(title: "Media", systemImage: "plus.rectangle.on.rectangle") {
-                isMediaBrowserPresented = true
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                toolbarButton(title: "Media", systemImage: "plus.rectangle.on.rectangle") {
+                    isMediaBrowserPresented = true
+                }
 
-            toolbarButton(title: "Inspect", systemImage: "slider.horizontal.3") {
-                isInspectorPresented = true
-            }
-            .disabled(viewModel.selectedClipId == nil)
+                toolbarButton(title: "Text", systemImage: "textformat") {
+                    isTextClipPresented = true
+                }
 
-            toolbarButton(title: "Split", systemImage: "scissors") {
-                Task { await viewModel.splitClip() }
-            }
-            .disabled(viewModel.selectedClipId == nil)
+                toolbarButton(title: "Sticker", systemImage: "face.smiling") {
+                    isStickerPickerPresented = true
+                }
 
-            toolbarButton(title: "Text", systemImage: "textformat") {
-                isTextClipPresented = true
-            }
+                toolbarButton(title: "Music", systemImage: "music.note") {
+                    isMusicLibraryPresented = true
+                }
 
-            toolbarButton(title: "Filter", systemImage: "wand.and.stars") {
-                isFilterPickerPresented = true
-            }
-            .disabled(viewModel.selectedClipId == nil)
+                toolbarButton(title: "SFX", systemImage: "speaker.wave.2") {
+                    isSFXPickerPresented = true
+                }
 
-            toolbarButton(title: "Delete", systemImage: "trash") {
-                Task { await viewModel.deleteClip() }
+                toolbarButton(title: "Voice", systemImage: "mic") {
+                    isVoiceoverPresented = true
+                }
+
+                Divider().frame(height: 28)
+
+                toolbarButton(title: "Filter", systemImage: "wand.and.stars") {
+                    isFilterPickerPresented = true
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Effects", systemImage: "sparkles") {
+                    isEffectsInspectorPresented = true
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Chroma", systemImage: "paintpalette") {
+                    isChromaKeyPresented = true
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Mask", systemImage: "circle.dashed") {
+                    isMaskCanvasPresented = true
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                Divider().frame(height: 28)
+
+                toolbarButton(title: "Keyframe", systemImage: "diamond") {
+                    isKeyframeEditorPresented = true
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Subtitles", systemImage: "captions.bubble") {
+                    isAutoSubtitlesPresented = true
+                }
+
+                toolbarButton(title: "AI", systemImage: "brain") {
+                    isAutoAssistantPresented = true
+                }
+
+                toolbarButton(title: "Split", systemImage: "scissors") {
+                    Task { await viewModel.splitClip() }
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Trim", systemImage: "crop") {
+                    // Trim handle is inline in timeline
+                }
+                .disabled(viewModel.selectedClipId == nil)
+
+                toolbarButton(title: "Template", systemImage: "square.grid.2x2") {
+                    isTemplatePickerPresented = true
+                }
+
+                toolbarButton(title: "Canvas", systemImage: "rectangle.expand.vertical") {
+                    isCanvasSettingsPresented = true
+                }
+
+                toolbarButton(title: "Delete", systemImage: "trash") {
+                    Task { await viewModel.deleteClip() }
+                }
+                .disabled(viewModel.selectedClipId == nil)
             }
-            .disabled(viewModel.selectedClipId == nil)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
         .background(.bar)
     }
 
@@ -383,6 +600,14 @@ private struct IOSExportResultSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct DismissButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button("Done") { dismiss() }
     }
 }
 

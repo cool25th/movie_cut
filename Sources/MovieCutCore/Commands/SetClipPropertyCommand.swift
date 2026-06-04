@@ -31,6 +31,12 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Replaces the clip effects list.
     case effects([Effect])
+
+    /// Replaces the clip mask.
+    case mask(Mask?)
+
+    /// Replaces the clip color correction.
+    case colorCorrection(ColorCorrection?)
 }
 
 /// Sets one editable clip property.
@@ -96,6 +102,12 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .effects(let effects):
             previousProperty = .effects(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].effects = effects
+        case .mask(let mask):
+            previousProperty = .mask(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].mask)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].mask = mask
+        case .colorCorrection(let colorCorrection):
+            previousProperty = .colorCorrection(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].colorCorrection)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].colorCorrection = colorCorrection
         }
 
         return CommandResult(

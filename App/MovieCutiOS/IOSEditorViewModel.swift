@@ -597,4 +597,50 @@ final class IOSEditorViewModel {
             return
         }
     }
+
+    // MARK: - Integrated View Support
+
+    func updateCanvasPreset(_ preset: CanvasPreset) async {
+        currentProject.canvas = preset
+    }
+
+    func updateSelectedChromaKey(_ chromaKey: ChromaKeySettings?) async {
+        guard let selectedClipId else { return }
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .chromaKey(chromaKey)))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func updateSelectedMask(_ mask: Mask?) async {
+        guard let selectedClipId else { return }
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .mask(mask)))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func updateSelectedKeyframes(_ keyframes: [Keyframe]) async {
+        guard let selectedClipId else { return }
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .keyframes(keyframes)))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func updateSelectedColorCorrection(_ colorCorrection: ColorCorrection?) async {
+        guard let selectedClipId else { return }
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .colorCorrection(colorCorrection)))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
 }

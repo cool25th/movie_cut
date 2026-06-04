@@ -116,12 +116,35 @@ public struct CollaborationMessage: Codable, Sendable {
     /// Time the message was created.
     public var timestamp: Date
 
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case senderId
+        case payload
+        case timestamp
+    }
+
     /// Creates a collaboration message.
     public init(type: MessageType, senderId: UUID, payload: Data, timestamp: Date = Date()) {
         self.type = type
         self.senderId = senderId
         self.payload = payload
         self.timestamp = timestamp
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(MessageType.self, forKey: .type)
+        senderId = try container.decode(UUID.self, forKey: .senderId)
+        payload = try container.decode(Data.self, forKey: .payload)
+        timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(payload, forKey: .payload)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }
 
@@ -148,11 +171,31 @@ public struct CollaboratorPresence: Codable, Sendable, Equatable {
     /// Most recent observed activity time.
     public var lastSeen: Date
 
+    private enum CodingKeys: String, CodingKey {
+        case collaboratorId
+        case isActive
+        case lastSeen
+    }
+
     /// Creates collaborator presence metadata.
     public init(collaboratorId: UUID = UUID(), isActive: Bool, lastSeen: Date = Date()) {
         self.collaboratorId = collaboratorId
         self.isActive = isActive
         self.lastSeen = lastSeen
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        collaboratorId = try container.decodeIfPresent(UUID.self, forKey: .collaboratorId) ?? UUID()
+        isActive = try container.decode(Bool.self, forKey: .isActive)
+        lastSeen = try container.decode(Date.self, forKey: .lastSeen)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(collaboratorId, forKey: .collaboratorId)
+        try container.encode(isActive, forKey: .isActive)
+        try container.encode(lastSeen, forKey: .lastSeen)
     }
 }
 

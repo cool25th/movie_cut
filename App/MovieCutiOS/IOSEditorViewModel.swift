@@ -303,4 +303,97 @@ final class IOSEditorViewModel {
         ]
         return Project(name: "Untitled Project", timeline: Timeline(tracks: tracks))
     }
+
+    func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        do {
+            let snapshot = await session.snapshot()
+            let track: Track
+            if let existingTrack = snapshot.timeline.tracks.first(where: { $0.kind == .text }) {
+                track = existingTrack
+            } else {
+                let textTrack = Track(
+                    kind: .text,
+                    name: "Text",
+                    zIndex: snapshot.timeline.tracks.count
+                )
+                try await session.dispatch(CreateTrackCommand(track: textTrack))
+                track = textTrack
+            }
+
+            let duration: TimeInterval = 5
+            let content = TextClipContent(
+                text: trimmedText,
+                fontFamily: fontName,
+                fontSize: fontSize,
+                fontColor: color
+            )
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            playheadTime = clip.timelineRange.start
+            await refreshFromSession()
+        } catch {
+            return
+        }
+    }
+
+    func trimClip(clipId: UUID, newStart: TimeInterval, newDuration: TimeInterval) async {
+        guard newStart.isFinite, newDuration.isFinite, newDuration >= 0 else { return }
+
+        let trackAndClip = currentProject.timeline.tracks.compactMap { track -> (Track, Clip)? in
+            guard let clip = track.clips.first(where: { $0.id == clipId }) else { return nil }
+            return (track, clip)
+        }.first
+        guard let (track, clip) = trackAndClip else { return }
+
+        let sourceStartDelta = newStart - clip.timelineRange.start
+        let sourceRange = TimeRange(
+            start: max(0, clip.sourceRange.start + sourceStartDelta),
+            duration: newDuration
+        )
+        let timelineRange = TimeRange(start: newStart, duration: newDuration)
+
+        do {
+            try await session.dispatch(
+                TrimClipCommand(
+                    clipId: clipId,
+                    trackId: track.id,
+                    newSourceRange: sourceRange,
+                    newTimelineRange: timelineRange
+                )
+            )
+            selectedClipId = clipId
+            await refreshFromSession()
+        } catch {
+            return
+        }
+    }
+
+    func applyEffect(_ effectType: String) async {
+        guard
+            let selectedClipId,
+            let selectedClip,
+            let type = EffectType(rawValue: effectType)
+        else { return }
+
+        var effects = selectedClip.effects
+        effects.append(Effect(type: type))
+
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+            await refreshFromSession()
+        } catch {
+            return
+        }
+    }
 }

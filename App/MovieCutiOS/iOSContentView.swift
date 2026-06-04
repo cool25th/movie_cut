@@ -15,6 +15,8 @@ struct IOSContentView: View {
     @State private var didCancelExport = false
     @State private var exportErrorMessage: String?
     @State private var isImporting = false
+    @State private var isTextClipPresented = false
+    @State private var isFilterPickerPresented = false
 
     var body: some View {
         NavigationStack {
@@ -133,6 +135,16 @@ struct IOSContentView: View {
             } message: {
                 Text(exportErrorMessage ?? "MovieCut could not export this project.")
             }
+            .sheet(isPresented: $isTextClipPresented) {
+                IOSTextClipSheet(viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isFilterPickerPresented) {
+                IOSFilterPickerView(viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .onChange(of: selectedPhotosItem) { _, newItem in
                 guard let newItem else { return }
 
@@ -213,6 +225,15 @@ struct IOSContentView: View {
 
             toolbarButton(title: "Split", systemImage: "scissors") {
                 Task { await viewModel.splitClip() }
+            }
+            .disabled(viewModel.selectedClipId == nil)
+
+            toolbarButton(title: "Text", systemImage: "textformat") {
+                isTextClipPresented = true
+            }
+
+            toolbarButton(title: "Filter", systemImage: "wand.and.stars") {
+                isFilterPickerPresented = true
             }
             .disabled(viewModel.selectedClipId == nil)
 

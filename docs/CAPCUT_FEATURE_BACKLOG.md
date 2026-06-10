@@ -70,7 +70,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 라이브러리 → 타임라인 드래그 **(P0; 2026-06-10 실기기 GUI 드래그 검증 완료)**
 - [x] ✅ 실제 duration probe (AVAsset) **(P0; duration만 앱 레이어에서 구현, 해상도/fps는 후속)**
 - [x] ✅ 드롭 성공/실패 피드백 **(P0; status bar의 `lastStatusMessage`/`lastErrorMessage`, static-contract 검증)**
-- [ ] ❌ 썸네일/프록시 생성 (P1)
+- [x] ✅ 썸네일/프록시 생성 (P1) — import path가 video/image `MediaAsset`에 `ThumbnailGenerator` PNG 썸네일을 opportunistic/non-fatal로 채우고, Media Library와 Timeline clip background가 `thumbnailData`를 실제 이미지로 렌더한다. video asset은 `ProxyGenerator.makeProxyPlan`의 deterministic target/resolution과 AVFoundation best-effort proxy export를 통해 실제 파일이 존재할 때만 `ProxyInfo(proxyURL:)`를 저장한다. Media Library row/context action에서 Generate Proxy를 실행하고 Proxy ready/No proxy 및 thumbnail 상태를 접근성 value에 노출한다. Caveat: proxy export는 `AVAssetExportSession`이 해당 source와 mp4 output을 지원하는 경우에만 성공하며, 실패 시 asset.proxy는 nil로 유지된다.
 - [x] ✅ 포맷별 export(mp4/mov, 코덱/비트레이트 실제 반영) (P1) — format/codec/quality/container/estimated bitrate are persisted in `ExportSettings` and wired to macOS export. Custom bitrate now resolves only inside the documented 1~200 Mbps range (`nil` below minimum, clamp to 200 above maximum), and Inspector/toolbar export controls expose selected settings to VoiceOver. `AVAssetExportSession` still exposes preset selection plus `fileLengthLimit` rather than a direct `averageVideoBitRate` knob, so exact encoder bitrate control remains approximate.
 - [ ] 🟡 플랫폼 프리셋(TikTok/Reels/Shorts/YouTube) 실제 인코딩 (P2)
 
@@ -140,8 +140,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ## 4. 권장 작업 순서
 
-1. **P0 묶음 완료 확인** — 드래그앤드롭 코드는 닫혔지만 실기기 드래그앤드롭 확인은 아직 최우선 미확인 항목이다. 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)는 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
-2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 다음 1순위는 썸네일/프록시(A)다. 그 다음 speed ramp preview(G), 텍스트 스타일 편집 UI(D)를 진행한다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
+1. **P0 묶음 완료 확인** — 라이브러리→타임라인 드래그앤드롭은 2026-06-10 실기기 GUI 검증까지 완료됐고, 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)도 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
+2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A)는 닫혔다. 다음 1순위는 speed ramp preview(G), 그 다음은 텍스트 스타일 편집 UI(D)다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
 3. **"🟡 배선만" → 실제 알고리즘 채우기** — 명령/메타데이터 경로가 이미 있으므로, compositor에 CIFilter/Vision/AVAudioUnit 처리만 붙이면 됨. 신규 배선보다 ROI 높음.
 4. **갭 문서 재작성** — "코드 존재"가 아니라 "preview+export 결과 확인"을 완료 기준으로.
 

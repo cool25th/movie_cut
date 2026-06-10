@@ -1,14 +1,14 @@
 # 세션 핸드오프 — 다음 개발 세션 시작 가이드
 
-> 작성일: 2026-06-10 / 브랜치: `main` / 기준 기능 커밋: `3933d94` (thumbnail and proxy workflow)
+> 작성일: 2026-06-10 / 브랜치: `main` / 기준 기능 커밋: `71893cb` (speed ramp preview parity) + 텍스트 스타일 UI 배치 검증 완료
 > 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md` 참고.
 
 ---
 
 ## 1. 현재 상태 요약
 
-- CapCut 파리티 작업은 Batch 17 이후 P1 transition pass, export/마스크 접근성 및 custom bitrate clamp, 실기기 드래그앤드롭 수정, 썸네일/프록시 생성 배치까지 진행됨.
-- 이전 핸드오프의 **미커밋 71개 파일 유실 위험은 해결됨**. 기능 단위 커밋 6개(`d5db68f`~`ef74997`), 접근성/비트레이트 커밋 `45cda56`, 실기기 드래그앤드롭 수정 `91e7cb4`, 썸네일/프록시 생성 `3933d94`까지 저장됨.
+- CapCut 파리티 작업은 Batch 17 이후 P1 transition pass, export/마스크 접근성 및 custom bitrate clamp, 실기기 드래그앤드롭 수정, 썸네일/프록시 생성, speed ramp preview contract, 텍스트 스타일 편집 UI 배치까지 진행됨.
+- 이전 핸드오프의 **미커밋 71개 파일 유실 위험은 해결됨**. 기능 단위 커밋 6개(`d5db68f`~`ef74997`), 접근성/비트레이트 커밋 `45cda56`, 실기기 드래그앤드롭 수정 `91e7cb4`, 썸네일/프록시 생성 `3933d94`, speed ramp preview contract `71893cb`까지 저장됨. 텍스트 스타일 UI 배치는 이 문서 갱신과 함께 다음 커밋으로 저장한다.
 - `45cda56` 포함 작업:
   - `ExportSettings` custom bitrate를 1~200 Mbps 범위로 문서화/클램프.
   - Mac Export 버튼/진행률/Share, Inspector export picker/summary/preset/custom bitrate에 VoiceOver label/value/hint 추가.
@@ -20,7 +20,8 @@
   - `git diff --check` — 통과.
   - `swift test --filter 'Transition|Rendering|StaticContract'` — 108 tests passed (2026-06-10 재실행, 접근성 배치의 contract 테스트 추가로 P1 transition pass 시점의 98개에서 증가). `swift build` 및 `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
 - `3933d94` 썸네일/프록시 배치는 `swift build`, `swift test --filter 'Thumbnail|Proxy|Rendering|StaticContract'`(107 tests passed), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED로 검증됨.
-- speed ramp preview 배치는 Mac `PlaybackEngine`의 video, embedded-audio, standalone audio-track preview 경로가 `SpeedRampCurve` segment 삽입과 `scaleTimeRange`를 사용한다는 static contract로 검증됨. 이 sandbox에서는 workspace module cache + `--disable-sandbox` fallback으로 `swift build`와 `swift test --filter 'SpeedRamp|speed ramp|StaticContract'`를 실행해 통과함.
+- speed ramp preview 배치는 Mac `PlaybackEngine`의 video, embedded-audio, standalone audio-track preview 경로가 `SpeedRampCurve` segment 삽입과 `scaleTimeRange`를 사용한다는 static contract로 검증됨. 호스트 검증: `git diff --check`, `swift build`, `swift test --filter 'SpeedRamp|speed ramp|StaticContract'` 69 tests passed, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
+- 텍스트 스타일 편집 UI 배치는 Mac `InspectorBasicSection`의 일반 텍스트 클립 편집 그룹이 본문, 폰트, 크기, 정렬, foreground/background 색상, background none toggle/path, Title/Caption/Lower Third/BG Safe quick presets를 `TextClipContent` + `updateSelectedTextContent` command path로 갱신하도록 닫는 범위다. Sticker clip은 기존 sticker metadata/transform 중심 UI를 유지한다. 호스트 검증: `git diff --check` 통과, `swift build` 통과, `swift test --filter 'Text|StaticContract|Rendering'` 119 tests passed, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
 - **드래그앤드롭 P0는 실기기 GUI 검증까지 완료(2026-06-10)**. 라이브 검증 중 실제 버그를 발견·수정함: 기존 `DropDelegate` 기반 타임라인 `.onDrop` 등록이 실제 Finder 드래그를 조용히 거부했음(드래그 고스트는 레인 위에 표시되지만 drop 미발생, 로그/피드백 없음). 라이브러리 패널에서 검증된 closure 기반 `onDrop(of:isTargeted:perform:)` (location 오버로드)로 교체하고, 커스텀 UTType `com.moviecut.media-asset-id`를 Info.plist `UTExportedTypeDeclarations`에 정식 선언해 해결. Finder→타임라인 파일 드롭(드롭 위치 클립 생성 + 실제 3.0s duration + 상태 메시지)과 라이브러리→타임라인 내부 에셋 드래그 모두 실제 마우스 드래그로 확인됨.
 
 ## 2. 가장 먼저 할 일 (순서대로)
@@ -31,6 +32,7 @@
 
 1. `git status --short`가 비어 있는지 확인.
 2. `git log --oneline -8`에서 최소 아래 커밋들이 보이는지 확인:
+   - `71893cb test: lock speed ramp preview parity`
    - `3933d94 feat: add thumbnail and proxy workflow`
    - `91e7cb4 fix: timeline drop rejected live Finder drags`
    - `45cda56 feat: custom bitrate clamp and export mask accessibility`
@@ -67,14 +69,14 @@
 
 ## 3. 다음 개발 큐 (P1, 우선순위순)
 
-백로그 §3 기준 미완료 P1 항목. 전환효과 two-source compositor 통합, 썸네일/프록시 생성, speed ramp preview static contract 검증은 완료됐으므로 다음 우선순위는 텍스트 스타일 편집 UI:
+백로그 §3 기준 미완료 P1 항목. 전환효과 two-source compositor 통합, 썸네일/프록시 생성, speed ramp preview static contract 검증, 텍스트 스타일 편집 UI는 완료됐으므로 다음 우선순위는 보이스오버 실녹음:
 
 | # | 작업 | 시작점 |
 |---|---|---|
-| 1 | **텍스트 스타일 편집 UI** — 폰트/크기/색/정렬 Inspector 편집 (burn-in 렌더는 Batch 16에 완료됨) | `Inspector/InspectorBasicSection.swift`, `TextOverlayPixelProcessor` |
-| 2 | **보이스오버 실녹음** — AVAudioRecorder 캡처 → 기존 `addVoiceoverAudio(from:)` 연결 | `App/MovieCutMac/Recording/` |
-| 3 | **페이드 duration 편집 UI** — `fadeInDuration`/`fadeOutDuration` Inspector 슬라이더 (적용 경로는 이미 동작) | `Inspector/InspectorBasicSection.swift` |
-| 4 | **마그네틱 타임라인 / 클립별 zIndex** — 구조 변경 수반, 단독 배치로 진행 권장 | `TimelineView.swift`, Core `Track`/`Clip` 모델 |
+| 1 | **보이스오버 실녹음** — AVAudioRecorder 캡처 → 기존 `addVoiceoverAudio(from:)` 연결 | `App/MovieCutMac/Recording/` |
+| 2 | **페이드 duration 편집 UI** — `fadeInDuration`/`fadeOutDuration` Inspector 슬라이더 (적용 경로는 이미 동작) | `Inspector/InspectorBasicSection.swift` |
+| 3 | **마그네틱 타임라인 / 클립별 zIndex** — 구조 변경 수반, 단독 배치로 진행 권장 | `TimelineView.swift`, Core `Track`/`Clip` 모델 |
+| 완료 | ✅ **텍스트 스타일 편집 UI** — 일반 텍스트 클립 Inspector가 본문/font/size/alignment/foreground/background/none/presets를 `updateSelectedTextContent` command path로 갱신한다. Sticker clip metadata path는 그대로 유지한다. Caveat: 고급 title template library는 별도 후속. | `App/MovieCutMac/Inspector/InspectorBasicSection.swift`, `Tests/MovieCutCoreTests/TextStyleInspectorStaticContractTests.swift` |
 | 완료 | ✅ **speed ramp preview 반영** — Mac preview가 video, video-embedded audio, standalone audio track 모두에서 `SpeedRampCurve` segment 삽입과 `scaleTimeRange`를 사용한다. ExportEngine의 기존 speed ramp export 경로와 backlog 완료 문구도 static contract로 잠근다. Caveat: 실제 GUI/manual playback 검증은 이번 범위가 아니며, optical-flow slow motion은 별도 P3 항목이다. | `App/MovieCutMac/Playback/PlaybackEngine.swift`, `App/MovieCutMac/Export/ExportEngine.swift`, `Tests/MovieCutCoreTests/SpeedRampPreviewStaticContractTests.swift` |
 | 완료 | ✅ **썸네일/프록시 생성** — Mac import path가 video/image asset에 `ThumbnailGenerator` PNG 썸네일을 non-fatal로 채우고, Media Library/Timeline이 `thumbnailData`를 실제 이미지로 렌더한다. video asset은 `ProxyGenerator.makeProxyPlan` + AVFoundation best-effort export로 실제 proxy file이 존재할 때만 `ProxyInfo(proxyURL:)`를 저장한다. Media Library row/context action에서 Generate Proxy를 실행하고 Proxy ready/No proxy 및 thumbnail 상태를 접근성 value에 노출한다. Caveat: source가 AVAssetExportSession mp4 proxy export를 지원하지 않으면 asset.proxy는 nil로 유지된다. | `Sources/MovieCutCore/Media/ThumbnailGenerator.swift`, `App/MovieCutMac/EditorViewModel.swift`, `App/MovieCutMac/MediaLibraryPanel.swift`, `App/MovieCutMac/TimelineView.swift` |
 | 완료 | ✅ **전환효과 two-source compositor 통합** — Mac preview/export가 `requiresTwoSourcePixelProcessing` 전환(wipeLeft/Up/Down, slide, zoom, glitch)에 대해 outgoing/incoming track metadata를 `CustomVideoCompositor`로 넘기고 `TransitionPixelProcessor.apply(type:from:to:progress:)`로 합성한다. 인접 비디오 클립은 전환 overlap에서 별도 composition track을 쓰도록 배선했다. Caveat: SwiftPM/static contract 검증 기준이며, 실제 exported visual fixture 검증은 아직 필요하다. | `Sources/MovieCutCore/Rendering/TransitionPixelProcessor.swift`, `App/MovieCutMac/Export/CustomVideoCompositor.swift`, `App/MovieCutMac/Export/ExportEngine.swift`, `App/MovieCutMac/Playback/PlaybackEngine.swift` |

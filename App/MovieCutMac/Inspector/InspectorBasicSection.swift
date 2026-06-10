@@ -253,94 +253,245 @@ struct InspectorBasicSection: View {
         "Avenir Next", "Futura", "Courier New"
     ]
 
+    private struct TextStylePreset: Identifiable {
+        var id: String
+        var name: String
+        var systemImage: String
+        var fontFamily: String
+        var fontSize: Double
+        var alignment: MovieCutCore.TextAlignment
+        var fontColor: String
+        var backgroundColor: String?
+    }
+
+    private let textStylePresets = [
+        TextStylePreset(
+            id: "title",
+            name: "Title",
+            systemImage: "textformat.size.larger",
+            fontFamily: "Helvetica Neue Bold",
+            fontSize: 64,
+            alignment: .center,
+            fontColor: "#FFFFFF",
+            backgroundColor: nil
+        ),
+        TextStylePreset(
+            id: "caption",
+            name: "Caption",
+            systemImage: "captions.bubble",
+            fontFamily: "System",
+            fontSize: 28,
+            alignment: .center,
+            fontColor: "#FFFFFF",
+            backgroundColor: "#000000"
+        ),
+        TextStylePreset(
+            id: "lower_third",
+            name: "Lower Third",
+            systemImage: "rectangle.bottomthird.inset.filled",
+            fontFamily: "Avenir Next",
+            fontSize: 34,
+            alignment: .leading,
+            fontColor: "#FFFFFF",
+            backgroundColor: "#000000"
+        ),
+        TextStylePreset(
+            id: "background_safe",
+            name: "BG Safe",
+            systemImage: "rectangle.inset.filled",
+            fontFamily: "System",
+            fontSize: 36,
+            alignment: .center,
+            fontColor: "#FFFFFF",
+            backgroundColor: "#111111"
+        )
+    ]
+
     private func textContentSection(_ textContent: TextClipContent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(isStickerClip ? "Sticker" : "Text")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            TextField(isStickerClip ? "Sticker" : "Text", text: Binding(
-                get: { textContent.text },
-                set: { newValue in
-                    var updated = textContent
-                    updated.text = newValue
-                    if isStickerClip {
-                        updated.contentKind = .sticker
-                    }
-                    Task { await viewModel.updateSelectedTextContent(updated) }
-                }
-            ))
-            .textFieldStyle(.roundedBorder)
+            textBodyEditor(textContent)
 
             if isStickerClip {
                 stickerMetadataSection(textContent)
             } else {
-                HStack(spacing: 8) {
-                    Picker("Font", selection: Binding(
-                        get: { textContent.fontFamily },
-                        set: { newValue in
-                            var updated = textContent
-                            updated.fontFamily = newValue
-                            Task { await viewModel.updateSelectedTextContent(updated) }
-                        }
-                    )) {
-                        ForEach(fontFamilies, id: \.self) { family in
-                            Text(family).tag(family)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 160)
+                normalTextStyleEditor(textContent)
+            }
+        }
+    }
 
-                    HStack(spacing: 4) {
-                        Text("Size")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Slider(value: Binding(
-                            get: { textContent.fontSize },
-                            set: { newValue in
-                                var updated = textContent
-                                updated.fontSize = newValue
-                                Task { await viewModel.updateSelectedTextContent(updated) }
-                            }
-                        ), in: 8 ... 144, step: 1)
-                        Text(String(format: "%.0f", textContent.fontSize))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 32, alignment: .trailing)
-                    }
+    private func normalTextStyleEditor(_ textContent: TextClipContent) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                fontPicker(textContent)
+                fontSizeControl(textContent)
+            }
+
+            HStack(spacing: 8) {
+                alignmentPicker(textContent)
+                foregroundColorPicker(textContent)
+            }
+
+            textBackgroundControls(textContent)
+            textQuickStylePresets(textContent)
+        }
+    }
+
+    private func textBodyEditor(_ textContent: TextClipContent) -> some View {
+        TextField(isStickerClip ? "Sticker" : "Text", text: Binding(
+            get: { textContent.text },
+            set: { newValue in
+                var updated = textContent
+                updated.text = newValue
+                if isStickerClip {
+                    updated.contentKind = .sticker
                 }
+                Task { await viewModel.updateSelectedTextContent(updated) }
+            }
+        ))
+        .textFieldStyle(.roundedBorder)
+    }
 
-                HStack(spacing: 8) {
-                    Picker("Alignment", selection: Binding(
-                        get: { textContent.alignment },
-                        set: { newValue in
-                            var updated = textContent
-                            updated.alignment = newValue
-                            Task { await viewModel.updateSelectedTextContent(updated) }
-                        }
-                    )) {
-                        Label("Left", systemImage: "text.alignleft").tag(MovieCutCore.TextAlignment.leading)
-                        Label("Center", systemImage: "text.aligncenter").tag(MovieCutCore.TextAlignment.center)
-                        Label("Right", systemImage: "text.alignright").tag(MovieCutCore.TextAlignment.trailing)
-                        Label("Justify", systemImage: "text.justify").tag(MovieCutCore.TextAlignment.justified)
+    private func fontPicker(_ textContent: TextClipContent) -> some View {
+        Picker("Font", selection: Binding(
+            get: { textContent.fontFamily },
+            set: { newValue in
+                var updated = textContent
+                updated.fontFamily = newValue
+                Task { await viewModel.updateSelectedTextContent(updated) }
+            }
+        )) {
+            ForEach(fontFamilies, id: \.self) { family in
+                Text(family).tag(family)
+            }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 170)
+    }
+
+    private func fontSizeControl(_ textContent: TextClipContent) -> some View {
+        HStack(spacing: 4) {
+            Text("Size")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Slider(value: Binding(
+                get: { textContent.fontSize },
+                set: { newValue in
+                    var updated = textContent
+                    updated.fontSize = newValue
+                    Task { await viewModel.updateSelectedTextContent(updated) }
+                }
+            ), in: 8 ... 144, step: 1)
+            Text(String(format: "%.0f", textContent.fontSize))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 32, alignment: .trailing)
+        }
+    }
+
+    private func alignmentPicker(_ textContent: TextClipContent) -> some View {
+        Picker("Alignment", selection: Binding(
+            get: { textContent.alignment },
+            set: { newValue in
+                var updated = textContent
+                updated.alignment = newValue
+                Task { await viewModel.updateSelectedTextContent(updated) }
+            }
+        )) {
+            Label("Left", systemImage: "text.alignleft").tag(MovieCutCore.TextAlignment.leading)
+            Label("Center", systemImage: "text.aligncenter").tag(MovieCutCore.TextAlignment.center)
+            Label("Right", systemImage: "text.alignright").tag(MovieCutCore.TextAlignment.trailing)
+            Label("Justify", systemImage: "text.justify").tag(MovieCutCore.TextAlignment.justified)
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 220)
+    }
+
+    private func foregroundColorPicker(_ textContent: TextClipContent) -> some View {
+        ColorPicker("Foreground", selection: Binding(
+            get: {
+                colorFromHex(textContent.fontColor)
+            },
+            set: { newValue in
+                var updated = textContent
+                updated.fontColor = hexFromColor(newValue)
+                Task { await viewModel.updateSelectedTextContent(updated) }
+            }
+        ))
+        .labelsHidden()
+    }
+
+    private func textBackgroundControls(_ textContent: TextClipContent) -> some View {
+        HStack(spacing: 8) {
+            Toggle("Background", isOn: Binding(
+                get: { textContent.backgroundColor != nil },
+                set: { isEnabled in
+                    setTextBackgroundEnabled(isEnabled, for: textContent)
+                }
+            ))
+            .toggleStyle(.checkbox)
+
+            ColorPicker("Background", selection: Binding(
+                get: {
+                    colorFromHex(textContent.backgroundColor ?? "#000000")
+                },
+                set: { newValue in
+                    var updated = textContent
+                    updated.backgroundColor = hexFromColor(newValue)
+                    Task { await viewModel.updateSelectedTextContent(updated) }
+                }
+            ))
+            .labelsHidden()
+            .disabled(textContent.backgroundColor == nil)
+
+            Button("None") {
+                setTextBackgroundEnabled(false, for: textContent)
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func textQuickStylePresets(_ textContent: TextClipContent) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Presets")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], spacing: 6) {
+                ForEach(textStylePresets) { preset in
+                    Button {
+                        applyTextStylePreset(preset, to: textContent)
+                    } label: {
+                        Label(preset.name, systemImage: preset.systemImage)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 200)
-
-                    ColorPicker("Color", selection: Binding(
-                        get: {
-                            colorFromHex(textContent.fontColor)
-                        },
-                        set: { newValue in
-                            var updated = textContent
-                            updated.fontColor = hexFromColor(newValue)
-                            Task { await viewModel.updateSelectedTextContent(updated) }
-                        }
-                    ))
-                    .labelsHidden()
+                    .controlSize(.small)
                 }
             }
         }
+    }
+
+    private func applyTextStylePreset(_ preset: TextStylePreset, to textContent: TextClipContent) {
+        var updated = textContent
+        updated.fontFamily = preset.fontFamily
+        updated.fontSize = preset.fontSize
+        updated.alignment = preset.alignment
+        updated.fontColor = preset.fontColor
+        updated.backgroundColor = preset.backgroundColor
+        updated.contentKind = .text
+        Task { await viewModel.updateSelectedTextContent(updated) }
+    }
+
+    private func setTextBackgroundEnabled(_ isEnabled: Bool, for textContent: TextClipContent) {
+        var updated = textContent
+        if isEnabled {
+            updated.backgroundColor = normalizedHexRGB(textContent.backgroundColor) ?? "#000000"
+        } else {
+            updated.backgroundColor = nil
+        }
+        Task { await viewModel.updateSelectedTextContent(updated) }
     }
 
     private func stickerMetadataSection(_ textContent: TextClipContent) -> some View {
@@ -427,14 +578,25 @@ struct InspectorBasicSection: View {
     }
 
     private func colorFromHex(_ hex: String) -> Color {
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
+        guard let normalized = normalizedHexRGB(hex) else {
             return .white
         }
+        let clean = String(normalized.dropFirst())
+        guard let value = UInt64(clean, radix: 16) else { return .white }
         let r = Double((value >> 16) & 0xFF) / 255.0
         let g = Double((value >> 8) & 0xFF) / 255.0
         let b = Double(value & 0xFF) / 255.0
         return Color(red: r, green: g, blue: b)
+    }
+
+    private func normalizedHexRGB(_ hex: String?) -> String? {
+        guard let hex else { return nil }
+        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard clean.count >= 6 else { return nil }
+
+        let rgb = String(clean.prefix(6)).uppercased()
+        guard UInt64(rgb, radix: 16) != nil else { return nil }
+        return "#\(rgb)"
     }
 
     private func hexFromColor(_ color: Color) -> String {

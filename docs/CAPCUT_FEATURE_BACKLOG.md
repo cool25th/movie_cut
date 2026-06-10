@@ -92,7 +92,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] ❌ 모션 트래킹 (P3)
 
 ### D. 텍스트/자막
-- [ ] 🟡 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1)
+- [x] ✅ 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1) — burn-in export는 Batch 16에서 완료됐고, Mac Inspector controls now cover font/size/color/background/alignment/presets for ordinary text clips. 편집은 `TextClipContent`를 `updateSelectedTextContent` → `SetClipPropertyCommand.textContent` 경로로 갱신하며, sticker clip은 기존 sticker metadata/transform 중심 UI를 유지한다. Caveat: advanced title template library remains separate P1/P2 work.
 - [ ] 🟡 텍스트 템플릿/타이틀 프리셋 (Core만 존재) (P1)
 - [x] ✅ 자동 자막(STT) 실제 생성 **(P0)** — Mac `AutoSubtitlesView` 경로가 `TranscriptionService.currentProvider`의 Apple Speech provider로 실제 STT를 실행하고, 선택된 audio/video 타임라인 클립이 있으면 `subtitleClips(from:alignedTo:)`로 `sourceRange`/`timelineRange`에 맞춰 pending subtitle clips를 만든 뒤 Apply에서 삽입한다. 타임라인 클립 없이 라이브러리 asset만 선택한 경우에는 00:00 기준 pending clips를 만들며 status text에 이를 명시한다. Caveat: macOS Speech Recognition 권한과 recognizer availability가 필요하고, SwiftPM static-contract/build 검증은 추가됐지만 실제 오디오 fixture 기반 UI e2e 자동화는 아직 없다.
 - [x] ✅ 자막/text burn-in export (P1) — Batch 16에서 `TextOverlayPixelProcessor`가 CoreGraphics/CoreText 기반으로 텍스트/자막 클립을 투명 RGBA overlay에 렌더하고 Mac/iOS `CustomVideoCompositor`가 shared processor로 위임한다. 픽셀 테스트는 배경 박스/알파 변화, fadeIn, typewriter, extent preservation을 guarded `CIContext`로 검증하고 static contract가 Mac/iOS compositor delegation과 Mac export/playback 경로를 확인한다. Caveat: 이 완료 범위는 text/subtitle clip burn-in이며, 자막 스타일 프리셋과 고급 caption template 렌더링은 이미 별도 구현된 경우를 제외하면 후속 항목이다.
@@ -141,7 +141,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ## 4. 권장 작업 순서
 
 1. **P0 묶음 완료 확인** — 라이브러리→타임라인 드래그앤드롭은 2026-06-10 실기기 GUI 검증까지 완료됐고, 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)도 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
-2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A)와 speed ramp preview+export(G)는 닫혔다. 다음 1순위는 텍스트 스타일 편집 UI(D)다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
+2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A), speed ramp preview+export(G), 텍스트 스타일 편집 UI(D)는 닫혔다. 다음 1순위는 보이스오버 실녹음(F)이다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
 3. **"🟡 배선만" → 실제 알고리즘 채우기** — 명령/메타데이터 경로가 이미 있으므로, compositor에 CIFilter/Vision/AVAudioUnit 처리만 붙이면 됨. 신규 배선보다 ROI 높음.
 4. **갭 문서 재작성** — "코드 존재"가 아니라 "preview+export 결과 확인"을 완료 기준으로.
 

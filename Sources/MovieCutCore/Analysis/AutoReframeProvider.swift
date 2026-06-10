@@ -7,7 +7,7 @@ import Vision
 #endif
 
 /// A source-time crop rectangle calculated for automatic reframing.
-public struct CropFrame: Sendable {
+public struct CropFrame: Sendable, Codable, Equatable {
     /// Source time in seconds.
     public var time: TimeInterval
 

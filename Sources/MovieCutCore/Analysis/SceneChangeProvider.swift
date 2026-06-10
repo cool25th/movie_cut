@@ -13,6 +13,9 @@ public final class SceneChangeProvider: AnalysisProvider {
     private let configuration: OSAllocatedUnfairLock<SceneChangeConfiguration>
     private let context = CIContext()
 
+    /// User-visible provider name used consistently in provider lists and analysis results.
+    public let providerName = "SceneChange"
+
     /// Frames per second to sample for comparison (default: 2).
     public var samplingFPS: Double {
         get {
@@ -61,7 +64,7 @@ public final class SceneChangeProvider: AnalysisProvider {
         return AnalysisResult(
             suggestions: suggestions,
             sourceAssetID: asset.id.uuidString,
-            providerName: "SceneChange"
+            providerName: providerName
         )
     }
 

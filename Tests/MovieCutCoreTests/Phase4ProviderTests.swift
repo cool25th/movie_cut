@@ -11,10 +11,10 @@ struct Phase4ProviderTests {
         #expect(provider.isAvailable == true)
     }
 
-    @Test("Silence detection provider has correct name")
+    @Test("Silence detection provider uses stable user-visible name")
     func silenceDetectionProviderName() {
         let provider = SilenceDetectionProvider()
-        #expect(provider.providerName == "SilenceDetectionProvider")
+        #expect(provider.providerName == "SilenceDetection")
     }
 
     @Test("Silence detection provider uses configurable thresholds")
@@ -35,10 +35,10 @@ struct Phase4ProviderTests {
         #expect(provider.isAvailable == true)
     }
 
-    @Test("Scene change provider has correct name")
+    @Test("Scene change provider uses stable user-visible name")
     func sceneChangeProviderName() {
         let provider = SceneChangeProvider()
-        #expect(provider.providerName == "SceneChangeProvider")
+        #expect(provider.providerName == "SceneChange")
     }
 
     @Test("Scene change provider uses configurable thresholds")

@@ -22,6 +22,8 @@ final class TranscriptionService {
             throw TranscriptionError.assetNotReady
         }
 
+        try validateCurrentProvider()
+
         isTranscribing = true
         progress = 0
         defer {
@@ -35,5 +37,13 @@ final class TranscriptionService {
     func subtitles(from result: TranscriptionResult, in project: Project) -> [Clip] {
         let trackId = project.timeline.tracks.first { $0.kind == .text }?.id ?? UUID()
         return SubtitleGenerator.generateClips(from: result, trackId: trackId)
+    }
+
+    private func validateCurrentProvider() throws {
+        if currentProvider is StubTranscriptionProvider {
+            throw TranscriptionError.transcriptionFailed(
+                "The Stub provider does not generate real subtitles. Choose Apple Speech."
+            )
+        }
     }
 }

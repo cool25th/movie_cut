@@ -1,7 +1,7 @@
 import Foundation
 
 /// An edit suggestion produced by an analysis provider.
-public enum AnalysisSuggestion: Sendable, Codable {
+public enum AnalysisSuggestion: Sendable, Codable, Equatable {
     /// Timeline ranges that can be removed because they are silent.
     case silenceRemoval(ranges: [TimeRange])
 

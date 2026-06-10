@@ -54,7 +54,7 @@ public struct TranscriptionResult: Codable, Sendable, Equatable {
 }
 
 /// Errors surfaced by the transcription abstraction.
-public enum TranscriptionError: Error, Sendable, Equatable {
+public enum TranscriptionError: Error, LocalizedError, Sendable, Equatable {
     /// The source asset cannot be transcribed yet.
     case assetNotReady
 
@@ -63,4 +63,15 @@ public enum TranscriptionError: Error, Sendable, Equatable {
 
     /// Transcription is unavailable on the current system or provider.
     case notSupported
+
+    public var errorDescription: String? {
+        switch self {
+        case .assetNotReady:
+            return "Select an audio or video asset that is ready for transcription."
+        case .transcriptionFailed(let message):
+            return message
+        case .notSupported:
+            return "Transcription is unavailable on this system or provider."
+        }
+    }
 }

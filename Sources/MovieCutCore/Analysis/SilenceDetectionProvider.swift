@@ -12,6 +12,9 @@ private struct SilenceDetectionConfiguration: Sendable {
 public final class SilenceDetectionProvider: AnalysisProvider {
     private let configuration: OSAllocatedUnfairLock<SilenceDetectionConfiguration>
 
+    /// User-visible provider name used consistently in provider lists and analysis results.
+    public let providerName = "SilenceDetection"
+
     /// Minimum RMS power in dB to consider non-silent (default: -40 dB).
     public var silenceThresholdDB: Float {
         get {
@@ -60,9 +63,9 @@ public final class SilenceDetectionProvider: AnalysisProvider {
     /// Analyzes the asset audio track and returns silence-removal suggestions.
     public func analyze(asset: MediaAsset, in project: Project) async throws -> AnalysisResult {
         let url = asset.originalURL
-        let asset = AVAsset(url: url)
+        let avAsset = AVAsset(url: url)
 
-        let silentRanges = try await detectSilentRanges(in: asset)
+        let silentRanges = try await detectSilentRanges(in: avAsset)
 
         let suggestions: [AnalysisSuggestion]
         if silentRanges.isEmpty {
@@ -73,8 +76,8 @@ public final class SilenceDetectionProvider: AnalysisProvider {
 
         return AnalysisResult(
             suggestions: suggestions,
-            sourceAssetID: asset.description,
-            providerName: "SilenceDetection"
+            sourceAssetID: asset.id.uuidString,
+            providerName: providerName
         )
     }
 
@@ -121,6 +124,31 @@ public final class SilenceDetectionProvider: AnalysisProvider {
         var silentRanges: [TimeRange] = []
         var currentSilenceStart: TimeInterval?
         var chunkIndex: Int = 0
+        var pendingBytes = [UInt8]()
+        pendingBytes.reserveCapacity(bytesPerChunk * 2)
+
+        func processChunk(_ chunkData: ArraySlice<UInt8>) {
+            let rms = computeRMS(chunkData)
+
+            let chunkStartTime = Double(chunkIndex) * configuration.chunkDuration
+            let isSilent = rms < configuration.silenceThresholdDB
+
+            if isSilent {
+                if currentSilenceStart == nil {
+                    currentSilenceStart = chunkStartTime
+                }
+            } else {
+                if let start = currentSilenceStart {
+                    let silenceDuration = chunkStartTime - start
+                    if silenceDuration >= configuration.minimumSilenceDuration {
+                        silentRanges.append(TimeRange(start: start, duration: silenceDuration))
+                    }
+                    currentSilenceStart = nil
+                }
+            }
+
+            chunkIndex += 1
+        }
 
         while true {
             let buffer = trackOutput.copyNextSampleBuffer()
@@ -128,35 +156,38 @@ public final class SilenceDetectionProvider: AnalysisProvider {
 
             guard let blockBuffer = CMSampleBufferGetDataBuffer(buffer) else { continue }
             let length = CMBlockBufferGetDataLength(blockBuffer)
-            var data = [UInt8](repeating: 0, count: length)
-            CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: &data)
+            guard length > 0 else { continue }
 
-            // Process in chunks
-            var offset = 0
-            while offset + bytesPerChunk <= data.count {
-                let chunkData = data[offset..<(offset + bytesPerChunk)]
-                let rms = computeRMS(chunkData)
-
-                let chunkStartTime = Double(chunkIndex) * configuration.chunkDuration
-                let isSilent = rms < configuration.silenceThresholdDB
-
-                if isSilent {
-                    if currentSilenceStart == nil {
-                        currentSilenceStart = chunkStartTime
-                    }
-                } else {
-                    if let start = currentSilenceStart {
-                        let silenceDuration = chunkStartTime - start
-                        if silenceDuration >= configuration.minimumSilenceDuration {
-                            silentRanges.append(TimeRange(start: start, duration: silenceDuration))
-                        }
-                        currentSilenceStart = nil
-                    }
+            let pendingCount = pendingBytes.count
+            pendingBytes.append(contentsOf: repeatElement(0, count: length))
+            pendingBytes.withUnsafeMutableBytes { bytes in
+                if let baseAddress = bytes.baseAddress {
+                    CMBlockBufferCopyDataBytes(
+                        blockBuffer,
+                        atOffset: 0,
+                        dataLength: length,
+                        destination: baseAddress.advanced(by: pendingCount)
+                    )
                 }
+            }
 
-                chunkIndex += 1
+            // Process fixed-size chunks across CMSampleBuffer boundaries. Keeping the
+            // tail avoids dropping partial audio frames from every reader buffer, which
+            // can shift detected silence ranges and hide short gaps in fixture-sized
+            // media files.
+            var offset = 0
+            while offset + bytesPerChunk <= pendingBytes.count {
+                processChunk(pendingBytes[offset..<(offset + bytesPerChunk)])
                 offset += bytesPerChunk
             }
+
+            if offset > 0 {
+                pendingBytes.removeFirst(offset)
+            }
+        }
+
+        if !pendingBytes.isEmpty {
+            processChunk(pendingBytes[...])
         }
 
         // Handle trailing silence

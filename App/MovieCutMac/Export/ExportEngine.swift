@@ -13,6 +13,7 @@ final class ExportEngine {
     var exportError: String?
     var lastExportURL: URL?
 
+    /// Legacy UI mirrors. Export behavior is driven by Project.exportSettings.
     var exportResolution: String = "1080p"
     var exportQuality: String = "high"
     var exportFormat: String = "mp4"
@@ -69,10 +70,35 @@ final class ExportEngine {
         project: Project
     ) {
         if let videoComp = videoComposition {
-            let resolvedSize = renderSize(for: exportResolution, canvas: project.canvas)
+            let resolvedSize = renderSize(for: project.exportSettings.resolution, canvas: project.canvas)
             videoComp.renderSize = resolvedSize
         }
-        let _ = bitrateForQuality(exportQuality, resolution: exportResolution)
+
+        applyBitrateFileLengthLimit(exportSession, project: project)
+    }
+
+    private func applyBitrateFileLengthLimit(_ exportSession: AVAssetExportSession, project: Project) {
+        let duration = project.timeline.duration
+        let targetVideoBitrate = bitrateForQuality(project.exportSettings)
+        guard duration.isFinite, duration > 0, targetVideoBitrate > 0 else {
+            return
+        }
+
+        let audioBitrate = estimatedAudioBitrateBitsPerSecond(for: project.exportSettings.audioCodec)
+        let targetBits = Double(targetVideoBitrate + audioBitrate) * duration
+
+        // AVAssetExportSession preset exports do not expose a direct averageVideoBitRate knob.
+        // fileLengthLimit is the available AVFoundation constraint here, so this applies the
+        // selected target bitrate approximately while the chosen preset still controls encoding.
+        exportSession.fileLengthLimit = Int64((targetBits / 8.0 * 1.05).rounded(.up))
+    }
+
+    private static func advancedTransitionPixelProcessorHook(for type: TransitionType) {
+        // Advanced transitions are implemented in Core by
+        // TransitionPixelProcessor.apply(type:from:to:progress:). This AVFoundation
+        // layer-instruction path only has per-layer ramps; full export integration needs
+        // transition-boundary metadata that pairs outgoing and incoming source frames.
+        _ = type.requiresTwoSourcePixelProcessing
     }
 
     private func makeExportPackage(
@@ -133,8 +159,10 @@ final class ExportEngine {
                         continue
                     }
 
-                    let stickerEmoji = stickerEmoji(from: textContent)
-                    let exportTextContent = stickerEmoji == nil ? textContent : nil
+                    let stickerImageURL = stickerImageURL(from: textContent)
+                    let stickerEmoji = stickerImageURL == nil ? stickerEmoji(from: textContent) : nil
+                    let exportTextContent = stickerEmoji == nil && stickerImageURL == nil ? textContent : nil
+                    let stickerFontSize = stickerEmoji == nil && stickerImageURL == nil ? nil : CGFloat(textContent.fontSize)
                     let destinationTime = CMTime(seconds: clip.timelineRange.start, preferredTimescale: 600)
                     let clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
                     videoClipInstructions.append(ExportClipInstructionMetadata(
@@ -146,11 +174,15 @@ final class ExportEngine {
                         transition: nil,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
                         textContent: exportTextContent,
                         stickerEmoji: stickerEmoji,
+                        stickerFallbackText: stickerImageURL == nil ? nil : textContent.text,
+                        stickerImageURL: stickerImageURL,
+                        stickerFontSize: stickerFontSize,
                         keyframes: clip.keyframes,
                         isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
                     ))
@@ -295,6 +327,7 @@ final class ExportEngine {
                         transition: clip.transition,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
@@ -323,7 +356,8 @@ final class ExportEngine {
             tracks: videoCompositionTracks,
             clips: videoClipInstructions,
             duration: composition.duration,
-            canvas: project.canvas
+            canvas: project.canvas,
+            exportSettings: project.exportSettings
         )
         let audioMix = makeAudioMix(parameters: audioMixInputParameters)
 
@@ -338,20 +372,23 @@ final class ExportEngine {
         tracks: [AVCompositionTrack],
         clips: [ExportClipInstructionMetadata],
         duration: CMTime,
-        canvas: CanvasPreset
+        canvas: CanvasPreset,
+        exportSettings: ExportSettings
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
 
         let videoComposition = AVMutableVideoComposition()
 
-        let resolvedSize = renderSize(for: exportResolution, canvas: canvas)
+        let resolvedSize = renderSize(for: exportSettings.resolution, canvas: canvas)
         videoComposition.renderSize = resolvedSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(canvas.frameRate.framesPerSecond))
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(exportSettings.frameRate.framesPerSecond))
 
         let usesCustomVideoCompositor = clips.contains { clip in
             clip.colorCorrection != nil
                 || clip.textContent != nil
                 || clip.stickerEmoji != nil
+                || clip.stickerImageURL != nil
+                || clip.chromaKey != nil
                 || clip.chromaKeyColor != nil
                 || clip.mask != nil
                 || !clip.keyframes.isEmpty
@@ -369,7 +406,7 @@ final class ExportEngine {
         var customCompositorClips: [ExportClipInstructionMetadata] = []
 
         for clip in clips {
-            if clip.textContent != nil || clip.stickerEmoji != nil {
+            if clip.textContent != nil || clip.stickerEmoji != nil || clip.stickerImageURL != nil {
                 customCompositorClips.append(clip)
                 continue
             }
@@ -431,10 +468,19 @@ final class ExportEngine {
                         y: 0
                     )
                     layerInstruction.setTransformRamp(
-                        fromStartTransform: fromTransform,
-                        toEndTransform: .identity,
+                        fromStart: fromTransform,
+                        toEnd: .identity,
                         timeRange: overlapRange
                     )
+                case .wipeLeft,
+                     .wipeUp,
+                     .wipeDown,
+                     .slideLeft,
+                     .slideRight,
+                     .zoomIn,
+                     .zoomOut,
+                     .glitch:
+                    Self.advancedTransitionPixelProcessorHook(for: transition.type)
                 case .none:
                     break
                 }
@@ -459,12 +505,16 @@ final class ExportEngine {
                             opacity: clip.opacity,
                             keyframes: clip.keyframes,
                             colorCorrection: clip.colorCorrection,
+                            chromaKey: clip.chromaKey,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
                             mask: clip.mask,
                             effects: clip.effects,
                             textContent: clip.textContent,
                             stickerEmoji: clip.stickerEmoji,
+                            stickerFallbackText: clip.stickerFallbackText,
+                            stickerImageURL: clip.stickerImageURL,
+                            stickerFontSize: clip.stickerFontSize,
                             isBackgroundRemoved: clip.isBackgroundRemoved
                         )
                     }
@@ -631,12 +681,28 @@ final class ExportEngine {
     }
 
     private func stickerEmoji(from textContent: TextClipContent) -> String? {
+        guard textContent.isSticker || isLegacyStickerContent(textContent) else {
+            return nil
+        }
+
         let trimmedText = textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isSingleEmoji(trimmedText) else {
             return nil
         }
 
         return trimmedText
+    }
+
+    private func stickerImageURL(from textContent: TextClipContent) -> URL? {
+        guard textContent.isSticker else {
+            return nil
+        }
+
+        return textContent.stickerImageURL
+    }
+
+    private func isLegacyStickerContent(_ textContent: TextClipContent) -> Bool {
+        textContent.fontFamily == "Apple Color Emoji"
     }
 
     private func isSingleEmoji(_ text: String) -> Bool {
@@ -659,47 +725,54 @@ final class ExportEngine {
 
     // MARK: - Export Preset Helpers
 
-    private func renderSize(for resolution: String, canvas: CanvasPreset) -> CGSize {
+    private func renderSize(for resolution: ExportResolution, canvas: CanvasPreset) -> CGSize {
+        let shortEdge: CGFloat
         switch resolution {
-        case "4k":
-            return CGSize(width: 3840, height: 2160)
-        case "1080p":
-            return CGSize(width: 1920, height: 1080)
-        case "720p":
-            return CGSize(width: 1280, height: 720)
-        case "480p":
-            return CGSize(width: 854, height: 480)
-        default:
-            return canvas.size
+        case .p4K:
+            shortEdge = 2160
+        case .p1080:
+            shortEdge = 1080
+        case .p720:
+            shortEdge = 720
         }
+
+        let canvasSize = canvas.size
+        guard canvasSize.width > 0, canvasSize.height > 0 else {
+            return CGSize(width: shortEdge * 16 / 9, height: shortEdge)
+        }
+
+        let aspectRatio = canvasSize.width / canvasSize.height
+        guard aspectRatio.isFinite, aspectRatio > 0 else {
+            return CGSize(width: shortEdge * 16 / 9, height: shortEdge)
+        }
+
+        if aspectRatio >= 1 {
+            return CGSize(width: evenDimension(shortEdge * aspectRatio), height: evenDimension(shortEdge))
+        }
+
+        return CGSize(width: evenDimension(shortEdge), height: evenDimension(shortEdge / aspectRatio))
     }
 
-    private func bitrateForQuality(_ quality: String, resolution: String) -> Int {
-        let baseBitrate: Int
-        switch quality {
-        case "high":
-            baseBitrate = 20_000_000
-        case "medium":
-            baseBitrate = 10_000_000
-        case "low":
-            baseBitrate = 5_000_000
-        default:
-            baseBitrate = 10_000_000
+    private func evenDimension(_ value: CGFloat) -> CGFloat {
+        let rounded = max(2, Int(value.rounded()))
+        return CGFloat(rounded - (rounded % 2))
+    }
+
+    private func bitrateForQuality(_ settings: ExportSettings) -> Int {
+        guard let megabits = settings.resolvedVideoBitrateMbps, megabits > 0 else {
+            return 0
         }
-        let resolutionScale: Double
-        switch resolution {
-        case "4k":
-            resolutionScale = 1.0
-        case "1080p":
-            resolutionScale = 0.5
-        case "720p":
-            resolutionScale = 0.3
-        case "480p":
-            resolutionScale = 0.15
-        default:
-            resolutionScale = 0.5
+
+        return megabits * 1_000_000
+    }
+
+    private func estimatedAudioBitrateBitsPerSecond(for codec: MovieCutCore.AudioCodec) -> Int {
+        switch codec {
+        case .aac:
+            return 192_000
+        case .pcm:
+            return 1_536_000
         }
-        return Int(Double(baseBitrate) * resolutionScale)
     }
 
     // MARK: - Transform Helpers
@@ -820,25 +893,23 @@ final class ExportEngine {
         settings: ExportSettings,
         supportedFileTypes: [AVFileType]
     ) -> AVFileType {
-        let requested: AVFileType
-        switch url.pathExtension.lowercased() {
-        case "mov":
-            requested = .mov
-        case "m4v":
-            requested = .m4v
-        default:
-            requested = settings.codec == .hevc ? .mov : .mp4
-        }
-
-        if supportedFileTypes.contains(requested) {
-            return requested
-        }
-
-        if supportedFileTypes.contains(.mp4) {
-            return .mp4
+        _ = url
+        for fileType in fallbackFileTypes(for: settings) where supportedFileTypes.contains(fileType) {
+            return fileType
         }
 
         return supportedFileTypes.first ?? .mov
+    }
+
+    private func fallbackFileTypes(for settings: ExportSettings) -> [AVFileType] {
+        switch settings.containerFormat {
+        case .mp4:
+            return settings.codec == .hevc ? [.mp4, .mov, .m4v] : [.mp4, .m4v, .mov]
+        case .mov:
+            return [.mov, .mp4, .m4v]
+        case .m4v:
+            return [.m4v, .mp4, .mov]
+        }
     }
 
     private func startProgressPolling() {
@@ -886,19 +957,25 @@ private struct ExportClipInstructionMetadata {
     var transition: Transition?
     var mask: Mask?
     var colorCorrection: ColorCorrection?
+    var chromaKey: ChromaKeySettings?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float = 0.3
     var effects: [Effect]
     var textContent: TextClipContent?
     var stickerEmoji: String? = nil
+    var stickerFallbackText: String? = nil
+    var stickerImageURL: URL? = nil
+    var stickerFontSize: CGFloat? = nil
     var keyframes: [Keyframe]
     var isBackgroundRemoved: Bool
 
     var requiresCustomVideoCompositorMetadata: Bool {
         textContent != nil
             || stickerEmoji != nil
+            || stickerImageURL != nil
             || mask != nil
             || colorCorrection != nil
+            || chromaKey != nil
             || chromaKeyColor != nil
             || !effects.isEmpty
             || isBackgroundRemoved

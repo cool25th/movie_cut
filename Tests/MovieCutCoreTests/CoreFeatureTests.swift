@@ -255,6 +255,68 @@ struct CoreFeatureTests {
         #expect(settings.resolution == .p1080)
         #expect(settings.frameRate == .fps30)
         #expect(settings.audioCodec == .aac)
+        #expect(settings.containerFormat == .mp4)
+        #expect(settings.quality == .high)
+        #expect(settings.videoBitrateMbps == nil)
+    }
+
+    @Test("Delete marker command removes marker from project and timeline")
+    func deleteMarkerCommandRemovesMarkerFromProjectAndTimeline() async throws {
+        let marker = Marker(time: 4.25, name: "Hook", color: "#FFD60A")
+        let session = EditorSession(project: makeProject(markers: [marker]))
+
+        try await session.dispatch(DeleteMarkerCommand(markerId: marker.id))
+
+        let snapshot = await session.snapshot()
+        #expect(snapshot.markers.isEmpty)
+        #expect(snapshot.timeline.markers.isEmpty)
+
+        try await session.undo()
+
+        let restored = await session.snapshot()
+        #expect(restored.markers == [marker])
+        #expect(restored.timeline.markers == [marker])
+    }
+
+    @Test("Update marker command renames marker in project and timeline")
+    func updateMarkerCommandRenamesMarkerInProjectAndTimeline() async throws {
+        let marker = Marker(time: 7.5, name: "Old Name", color: "#FF9500")
+        let updatedMarker = Marker(id: marker.id, time: marker.time, name: "New Name", color: marker.color)
+        let session = EditorSession(project: makeProject(markers: [marker]))
+
+        try await session.dispatch(UpdateMarkerCommand(markerId: marker.id, marker: updatedMarker))
+
+        let snapshot = await session.snapshot()
+        #expect(snapshot.markers == [updatedMarker])
+        #expect(snapshot.timeline.markers == [updatedMarker])
+
+        try await session.undo()
+
+        let restored = await session.snapshot()
+        #expect(restored.markers == [marker])
+        #expect(restored.timeline.markers == [marker])
+    }
+
+    @Test("Canvas and export commands persist vertical social preset values")
+    func canvasAndExportCommandsPersistVerticalSocialPresetValues() async throws {
+        let session = EditorSession(project: makeProject())
+        let canvas = CanvasPreset(aspectRatio: .portrait9x16, frameRate: .fps60)
+        let exportSettings = ExportSettings(
+            resolution: .p1080,
+            frameRate: .fps60,
+            codec: .h264,
+            audioCodec: .aac
+        )
+
+        try await session.dispatch(SetProjectCanvasCommand(canvas: canvas))
+        try await session.dispatch(SetProjectExportSettingsCommand(exportSettings: exportSettings))
+
+        let snapshot = await session.snapshot()
+        #expect(snapshot.canvas == canvas)
+        #expect(snapshot.timeline.aspectRatio == .portrait9x16)
+        #expect(snapshot.timeline.canvasSize == CGSize(width: 1080, height: 1920))
+        #expect(snapshot.timeline.frameRate == Rational(numerator: 60, denominator: 1))
+        #expect(snapshot.exportSettings == exportSettings)
     }
 
     private func makeProject(

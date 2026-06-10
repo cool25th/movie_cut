@@ -10,6 +10,10 @@ import Testing
     #expect(settings.codec == .h264)
     #expect(settings.audioCodec == .aac)
     #expect(settings.frameRate == .fps30)
+    #expect(settings.containerFormat == .mp4)
+    #expect(settings.quality == .high)
+    #expect(settings.videoBitrateMbps == nil)
+    #expect(settings.resolvedVideoBitrateMbps == 20)
 }
 
 @Test func exportSettingsRoundTrip() throws {
@@ -17,13 +21,37 @@ import Testing
         resolution: .p4K,
         frameRate: .fps60,
         codec: .hevc,
-        audioCodec: .pcm
+        audioCodec: .pcm,
+        containerFormat: .mov,
+        quality: .custom,
+        videoBitrateMbps: 42
     )
 
     let data = try JSONEncoder().encode(settings)
     let decodedSettings = try JSONDecoder().decode(ExportSettings.self, from: data)
 
     #expect(decodedSettings == settings)
+}
+
+@Test func exportSettingsDecodesLegacyJSONWithDefaults() throws {
+    let json = """
+    {
+      "resolution": "p720",
+      "frameRate": "fps24",
+      "codec": "h264",
+      "audioCodec": "aac"
+    }
+    """.data(using: .utf8)!
+
+    let settings = try JSONDecoder().decode(ExportSettings.self, from: json)
+
+    #expect(settings.resolution == .p720)
+    #expect(settings.frameRate == .fps24)
+    #expect(settings.codec == .h264)
+    #expect(settings.audioCodec == .aac)
+    #expect(settings.containerFormat == .mp4)
+    #expect(settings.quality == .high)
+    #expect(settings.videoBitrateMbps == nil)
 }
 
 @Test func exportResolutionCases() {
@@ -44,6 +72,32 @@ import Testing
 @Test func audioCodecCases() {
     #expect(AudioCodec.aac.rawValue == "aac")
     #expect(AudioCodec.pcm.rawValue == "pcm")
+}
+
+@Test func exportContainerFormatCases() {
+    #expect(ExportContainerFormat.allCases.count == 3)
+    #expect(ExportContainerFormat.mp4.rawValue == "mp4")
+    #expect(ExportContainerFormat.mov.rawValue == "mov")
+    #expect(ExportContainerFormat.m4v.rawValue == "m4v")
+    #expect(ExportContainerFormat.mp4.fileExtension == "mp4")
+    #expect(ExportContainerFormat.mov.fileExtension == "mov")
+    #expect(ExportContainerFormat.m4v.fileExtension == "m4v")
+    #expect(ExportContainerFormat.mp4.displayName == "MP4")
+    #expect(ExportContainerFormat.mov.displayName == "MOV")
+    #expect(ExportContainerFormat.m4v.displayName == "M4V")
+}
+
+@Test func exportQualityCasesAndBitrateMapping() {
+    #expect(ExportQuality.allCases.count == 4)
+    #expect(ExportQuality.low.rawValue == "low")
+    #expect(ExportQuality.medium.rawValue == "medium")
+    #expect(ExportQuality.high.rawValue == "high")
+    #expect(ExportQuality.custom.rawValue == "custom")
+    #expect(ExportQuality.low.defaultVideoBitrateMbps(for: .p1080) == 5)
+    #expect(ExportQuality.medium.defaultVideoBitrateMbps(for: .p1080) == 10)
+    #expect(ExportQuality.high.defaultVideoBitrateMbps(for: .p1080) == 20)
+    #expect(ExportQuality.high.defaultVideoBitrateMbps(for: .p4K) == 60)
+    #expect(ExportQuality.custom.defaultVideoBitrateMbps(for: .p1080) == nil)
 }
 
 @Test func canvasPresetDefault() {
@@ -132,7 +186,7 @@ import Testing
 }
 
 @Test func effectTypeAllCases() {
-    #expect(EffectType.allCases.count == 12)
+    #expect(EffectType.allCases.count == 17)
 }
 
 @Test func effectCreation() {
@@ -148,6 +202,11 @@ import Testing
     #expect(Effect.blur.type == .blur)
     #expect(Effect.blur.parameters["radius"] != nil)
     #expect(Effect.styleTransfer.type == .styleTransfer)
+    #expect(Effect.cinematicLUT.type == .cinematicLUT)
+    #expect(Effect.vintageLUT.type == .vintageLUT)
+    #expect(Effect.noirLUT.type == .noirLUT)
+    #expect(Effect.vividLUT.type == .vividLUT)
+    #expect(Effect.coolLUT.type == .coolLUT)
 }
 
 @Test func speedRampCurveLinearIsConstant() {
@@ -172,11 +231,19 @@ import Testing
 }
 
 @Test func transitionTypeAllCases() {
-    #expect(TransitionType.allCases.count == 4)
+    #expect(TransitionType.allCases.count == 12)
     #expect(TransitionType.none.rawValue == "none")
     #expect(TransitionType.crossDissolve.rawValue == "crossDissolve")
     #expect(TransitionType.fadeThroughBlack.rawValue == "fadeThroughBlack")
     #expect(TransitionType.wipeRight.rawValue == "wipeRight")
+    #expect(TransitionType.wipeLeft.rawValue == "wipeLeft")
+    #expect(TransitionType.wipeUp.rawValue == "wipeUp")
+    #expect(TransitionType.wipeDown.rawValue == "wipeDown")
+    #expect(TransitionType.slideLeft.rawValue == "slideLeft")
+    #expect(TransitionType.slideRight.rawValue == "slideRight")
+    #expect(TransitionType.zoomIn.rawValue == "zoomIn")
+    #expect(TransitionType.zoomOut.rawValue == "zoomOut")
+    #expect(TransitionType.glitch.rawValue == "glitch")
 }
 
 @Test func maskCreation() {
@@ -250,6 +317,9 @@ import Testing
     #expect(content.fontSize == 48)
     #expect(content.fontColor == "#FFFFFF")
     #expect(content.alignment == .center)
+    #expect(content.contentKind == .text)
+    #expect(content.stickerAssetID == nil)
+    #expect(content.isSticker == false)
 }
 
 @Test func textClipContentRoundTrip() throws {
@@ -268,6 +338,69 @@ import Testing
     let decodedContent = try JSONDecoder().decode(TextClipContent.self, from: data)
 
     #expect(decodedContent == content)
+}
+
+@Test func textClipContentDecodesLegacyStickerMetadataDefaults() throws {
+    let legacyArrayPointJSON = """
+    {
+      "text": "Legacy",
+      "fontFamily": "System",
+      "fontSize": 48,
+      "fontColor": "#FFFFFF",
+      "alignment": "center",
+      "position": [0, 0]
+    }
+    """.data(using: .utf8)!
+    let legacyDictionaryPointJSON = """
+    {
+      "text": "Legacy",
+      "fontFamily": "System",
+      "fontSize": 48,
+      "fontColor": "#FFFFFF",
+      "alignment": "center",
+      "position": { "x": 12, "y": 24 }
+    }
+    """.data(using: .utf8)!
+
+    let decodedContent = try JSONDecoder().decode(TextClipContent.self, from: legacyArrayPointJSON)
+    let decodedDictionaryPointContent = try JSONDecoder().decode(TextClipContent.self, from: legacyDictionaryPointJSON)
+
+    #expect(decodedContent.text == "Legacy")
+    #expect(decodedContent.contentKind == .text)
+    #expect(decodedContent.stickerAssetID == nil)
+    #expect(decodedContent.isSticker == false)
+    #expect(decodedDictionaryPointContent.position.x == 12)
+    #expect(decodedDictionaryPointContent.position.y == 24)
+    #expect(decodedDictionaryPointContent.contentKind == .text)
+}
+
+@Test func stickerTextClipContentRoundTrip() throws {
+    let stickerID = UUID(uuidString: "00000000-0000-4000-8000-000000000006")!
+    let content = TextClipContent(
+        text: "🔥",
+        fontFamily: "Apple Color Emoji",
+        fontSize: 120,
+        backgroundColor: "#00000000",
+        position: CGPoint(x: 640, y: 360),
+        animation: TextAnimation(type: .scale, duration: 0.25),
+        contentKind: .sticker,
+        stickerAssetID: stickerID
+    )
+
+    let data = try JSONEncoder().encode(content)
+    let decodedContent = try JSONDecoder().decode(TextClipContent.self, from: data)
+
+    #expect(decodedContent == content)
+    #expect(decodedContent.isSticker == true)
+    #expect(decodedContent.stickerAssetID == stickerID)
+}
+
+@Test func builtInStickerAssetIDsAreStable() {
+    let firstLibrary = StickerLibrary.builtIn()
+    let secondLibrary = StickerLibrary.builtIn()
+
+    #expect(firstLibrary.stickers.map(\.id) == secondLibrary.stickers.map(\.id))
+    #expect(Set(firstLibrary.stickers.map(\.id)).count == firstLibrary.stickers.count)
 }
 
 @Test func textClipContentWithAnimation() {

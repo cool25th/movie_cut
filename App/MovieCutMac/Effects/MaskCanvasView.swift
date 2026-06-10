@@ -54,6 +54,11 @@ struct MaskCanvasView: View {
             .coordinateSpace(name: Self.coordinateSpaceName)
             .frame(width: viewSize.width, height: viewSize.height)
             .clipped()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Mask visual editor")
+            .accessibilityValue(maskAccessibilityValue(for: currentMask))
+            .accessibilityHint("Move the center handle, resize with corner handles, rotate with the top handle, or choose a mask shape from the toolbar.")
+            .accessibilitySortPriority(0)
         }
     }
 
@@ -141,6 +146,21 @@ struct MaskCanvasView: View {
         .position(center)
         .gesture(moveGesture(currentMask: currentMask, metrics: metrics))
         .accessibilityLabel("Mask center")
+        .accessibilityValue(positionAccessibilityValue(for: currentMask.position))
+        .accessibilityHint("Drag to move the mask on the canvas, or use VoiceOver actions to nudge the mask one percent at a time")
+        .accessibilityAction(named: "Nudge mask left") {
+            nudgeMask(currentMask, by: CGVector(dx: -metrics.accessibilityNudgeStepX, dy: 0), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask right") {
+            nudgeMask(currentMask, by: CGVector(dx: metrics.accessibilityNudgeStepX, dy: 0), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask up") {
+            nudgeMask(currentMask, by: CGVector(dx: 0, dy: metrics.accessibilityNudgeStepY), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask down") {
+            nudgeMask(currentMask, by: CGVector(dx: 0, dy: -metrics.accessibilityNudgeStepY), metrics: metrics)
+        }
+        .accessibilitySortPriority(4)
     }
 
     private func resizeHandle(
@@ -161,6 +181,9 @@ struct MaskCanvasView: View {
             .position(point)
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
             .accessibilityLabel(corner.accessibilityLabel)
+            .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
+            .accessibilityHint("Drag to resize the mask. Hold Shift to preserve aspect ratio")
+            .accessibilitySortPriority(3)
     }
 
     private func rotationHandle(for currentMask: Mask, metrics: MaskCanvasMetrics) -> some View {
@@ -177,6 +200,15 @@ struct MaskCanvasView: View {
             .position(point)
             .gesture(rotationGesture(currentMask: currentMask, metrics: metrics))
             .accessibilityLabel("Rotate mask")
+            .accessibilityValue(rotationAccessibilityValue(for: currentMask.rotation))
+            .accessibilityHint("Drag to rotate the mask, or use VoiceOver actions to rotate five degrees at a time")
+            .accessibilityAction(named: "Rotate mask counterclockwise") {
+                rotateMask(currentMask, by: -5)
+            }
+            .accessibilityAction(named: "Rotate mask clockwise") {
+                rotateMask(currentMask, by: 5)
+            }
+            .accessibilitySortPriority(2)
     }
 
     private func shapeToolbar(currentMask: Mask) -> some View {
@@ -216,6 +248,7 @@ struct MaskCanvasView: View {
                 .stroke(Color.white.opacity(0.18), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+        .accessibilitySortPriority(1)
     }
 
     private func toolbarButton(
@@ -237,6 +270,34 @@ struct MaskCanvasView: View {
         .buttonStyle(.plain)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint(isSelected ? "Current mask option" : "Activate to apply this mask option")
+    }
+
+    private func maskAccessibilityValue(for currentMask: Mask) -> String {
+        let shape = currentMask.shape.displayName
+        let mode = currentMask.inverted ? "inverted" : "normal"
+        return "\(shape), \(mode), \(positionAccessibilityValue(for: currentMask.position)), \(sizeAccessibilityValue(for: currentMask.size)), \(rotationAccessibilityValue(for: currentMask.rotation))"
+    }
+
+    private func positionAccessibilityValue(for position: CGPoint) -> String {
+        "x \(rounded(position.x)), y \(rounded(position.y))"
+    }
+
+    private func sizeAccessibilityValue(for size: CGSize) -> String {
+        "width \(rounded(size.width)), height \(rounded(size.height))"
+    }
+
+    private func rotationAccessibilityValue(for rotation: Double) -> String {
+        "rotation \(rounded(rotation)) degrees"
+    }
+
+    private func rounded(_ value: CGFloat) -> String {
+        String(format: "%.0f", Double(value))
+    }
+
+    private func rounded(_ value: Double) -> String {
+        String(format: "%.0f", value)
     }
 
     private func moveGesture(currentMask: Mask, metrics: MaskCanvasMetrics) -> some Gesture {
@@ -353,6 +414,37 @@ struct MaskCanvasView: View {
     private func updateMask(_ updatedMask: Mask) {
         draftMask = updatedMask
         mask = updatedMask
+    }
+
+    private func nudgeMask(_ currentMask: Mask, by requestedDelta: CGVector, metrics: MaskCanvasMetrics) {
+        let newPosition = metrics.clampedCanvasPoint(CGPoint(
+            x: currentMask.position.x + requestedDelta.dx,
+            y: currentMask.position.y + requestedDelta.dy
+        ))
+        let appliedDelta = CGVector(
+            dx: newPosition.x - currentMask.position.x,
+            dy: newPosition.y - currentMask.position.y
+        )
+
+        var updatedMask = currentMask
+        updatedMask.position = newPosition
+
+        if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
+            updatedMask.brushPoints = offset(currentMask.brushPoints, by: appliedDelta)
+        }
+
+        updateMask(updatedMask)
+    }
+
+    private func rotateMask(_ currentMask: Mask, by deltaDegrees: Double) {
+        var updatedMask = currentMask
+        updatedMask.rotation = normalizedDegrees(currentMask.rotation + deltaDegrees)
+
+        if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
+            updatedMask.brushPoints = rotate(currentMask.brushPoints, degrees: deltaDegrees, around: currentMask.position)
+        }
+
+        updateMask(updatedMask)
     }
 
     private func maskPath(for currentMask: Mask, metrics: MaskCanvasMetrics) -> Path {
@@ -618,6 +710,14 @@ private struct MaskCanvasMetrics {
 
     var minimumMaskSize: CGFloat {
         max(min(canvasSize.width, canvasSize.height) * 0.02, 12)
+    }
+
+    var accessibilityNudgeStepX: CGFloat {
+        max(canvasSize.width * 0.01, 1)
+    }
+
+    var accessibilityNudgeStepY: CGFloat {
+        max(canvasSize.height * 0.01, 1)
     }
 
     func viewPoint(for canvasPoint: CGPoint) -> CGPoint {

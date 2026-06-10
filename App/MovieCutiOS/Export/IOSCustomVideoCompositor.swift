@@ -19,6 +19,7 @@ struct CustomCompositionClipEffect {
     let effects: [Effect]
     let textContent: TextClipContent?
     let stickerEmoji: String?
+    let stickerFontSize: CGFloat?
     let isBackgroundRemoved: Bool
 
     init?(
@@ -34,6 +35,7 @@ struct CustomCompositionClipEffect {
         effects: [Effect] = [],
         textContent: TextClipContent? = nil,
         stickerEmoji: String? = nil,
+        stickerFontSize: CGFloat? = nil,
         isBackgroundRemoved: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -61,6 +63,7 @@ struct CustomCompositionClipEffect {
         self.effects = effects
         self.textContent = textContent
         self.stickerEmoji = stickerEmoji
+        self.stickerFontSize = stickerFontSize
         self.isBackgroundRemoved = isBackgroundRemoved
     }
 
@@ -317,7 +320,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 }
 
                 if let mask {
-                    image = MaskCompositor.apply(mask: mask, to: image, at: request.compositionTime.seconds)
+                    image = MaskPixelProcessor.apply(mask, to: image, at: request.compositionTime.seconds)
                 }
 
                 if let animationState {
@@ -329,7 +332,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 }
 
                 image = self.renderTextOverlay(
-                    for: effect,
                     instruction: instruction,
                     onto: image,
                     at: request.compositionTime
@@ -395,6 +397,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 )
             case .styleTransfer:
                 result = applyStyleTransfer(effect, to: result)
+            case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT:
+                result = VisualEffectPixelProcessor.apply([effect], to: result)
             default:
                 break
             }
@@ -403,83 +407,51 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
 
     private func renderTextOverlay(
-        for clipEffect: CustomCompositionClipEffect?,
         instruction: CustomCompositionInstruction,
         onto image: CIImage,
         at time: CMTime
     ) -> CIImage {
-        _ = clipEffect
-
-        let activeTextEffects = instruction.clipEffects.filter { effect in
-            effect.textContent != nil && CMTimeRangeContainsTime(effect.timeRange, time: time)
-        }
-        let hasInstructionText = instruction.textContent != nil
-            && CMTimeRangeContainsTime(instruction.timeRange, time: time)
-
-        guard !activeTextEffects.isEmpty || hasInstructionText else {
+        let items = textOverlayRenderItems(in: instruction, at: time)
+        guard !items.isEmpty else {
             return image
         }
 
-        let renderBounds = image.extent
-        let renderSize = renderBounds.size
-        guard renderSize.width > 0, renderSize.height > 0 else {
-            return image
+        return TextOverlayPixelProcessor.apply(items, to: image, at: time.seconds)
+    }
+
+    private func textOverlayRenderItems(
+        in instruction: CustomCompositionInstruction,
+        at time: CMTime
+    ) -> [TextOverlayRenderItem] {
+        var items = instruction.clipEffects.compactMap { effect -> TextOverlayRenderItem? in
+            guard let textContent = effect.textContent,
+                  CMTimeRangeContainsTime(effect.timeRange, time: time)
+            else {
+                return nil
+            }
+
+            let animationState = effect.animationState(at: time)
+            return TextOverlayRenderItem(
+                textContent: textContent,
+                transform: animationState?.transform ?? effect.transform,
+                opacity: animationState?.opacity ?? effect.opacity,
+                timeRangeStart: effect.timeRange.start.seconds,
+                timeRangeDuration: effect.timeRange.duration.seconds
+            )
         }
 
-        let width = max(Int(ceil(renderSize.width)), 1)
-        let height = max(Int(ceil(renderSize.height)), 1)
-        let bytesPerPixel = 4
-        let bytesPerRow = width * bytesPerPixel
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else {
-            return image
-        }
-
-        context.clear(CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
-
-        for textEffect in activeTextEffects {
-            drawTextEffect(textEffect, in: context, renderSize: renderSize, at: time)
-        }
-
-        if let textContent = instruction.textContent {
-            drawTextContent(
-                textContent,
+        if let textContent = instruction.textContent,
+           CMTimeRangeContainsTime(instruction.timeRange, time: time) {
+            items.append(TextOverlayRenderItem(
+                textContent: textContent,
                 transform: ClipTransform(),
                 opacity: 1,
-                timeRange: instruction.timeRange,
-                in: context,
-                renderSize: renderSize,
-                at: time
-            )
+                timeRangeStart: instruction.timeRange.start.seconds,
+                timeRangeDuration: instruction.timeRange.duration.seconds
+            ))
         }
 
-        guard let cgImage = context.makeImage() else {
-            return image
-        }
-
-        var overlay = CIImage(cgImage: cgImage)
-        if !isZeroPoint(renderBounds.origin) {
-            overlay = overlay.transformed(
-                by: CGAffineTransform(
-                    translationX: renderBounds.origin.x,
-                    y: renderBounds.origin.y
-                )
-            )
-        }
-
-        return overlay
-            .composited(over: image)
-            .cropped(to: renderBounds)
+        return items
     }
 
     private func renderStickerOverlay(
@@ -573,6 +545,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             stickerEmoji,
             transform: animationState?.transform ?? stickerEffect.transform,
             opacity: animationState?.opacity ?? stickerEffect.opacity,
+            fontSize: stickerEffect.stickerFontSize ?? 88,
             in: context,
             renderSize: renderSize
         )
@@ -582,6 +555,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         _ stickerEmoji: String,
         transform: ClipTransform,
         opacity: Double,
+        fontSize: CGFloat = 88,
         in context: CGContext,
         renderSize: CGSize
     ) {
@@ -591,7 +565,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         let effectiveOpacity = min(max(opacity, 0), 1)
         guard effectiveOpacity > 0 else { return }
 
-        let fontSize = CGFloat(88)
+        let fontSize = max(fontSize, 1)
         let font = CTFontCreateWithName("Apple Color Emoji" as CFString, fontSize, nil)
         let attributedString = NSAttributedString(
             string: emoji,
@@ -634,207 +608,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         context.restoreGState()
     }
 
-    private func drawTextEffect(
-        _ textEffect: CustomCompositionClipEffect,
-        in context: CGContext,
-        renderSize: CGSize,
-        at time: CMTime
-    ) {
-        guard let textContent = textEffect.textContent else { return }
-
-        let animationState = textEffect.animationState(at: time)
-        drawTextContent(
-            textContent,
-            transform: animationState?.transform ?? textEffect.transform,
-            opacity: animationState?.opacity ?? textEffect.opacity,
-            timeRange: textEffect.timeRange,
-            in: context,
-            renderSize: renderSize,
-            at: time
-        )
-    }
-
-    private func drawTextContent(
-        _ textContent: TextClipContent,
-        transform: ClipTransform,
-        opacity: Double,
-        timeRange: CMTimeRange,
-        in context: CGContext,
-        renderSize: CGSize,
-        at time: CMTime
-    ) {
-        let textState = animatedTextState(for: textContent, timeRange: timeRange, at: time)
-        guard !textState.text.isEmpty else { return }
-
-        let effectiveOpacity = min(max(opacity * textState.alpha, 0), 1)
-        guard effectiveOpacity > 0 else { return }
-
-        let fontSize = max(CGFloat(textContent.fontSize), 1)
-        let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
-        let font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
-        let textColor = cgColor(hexRGB: textContent.fontColor)
-        let attributedString = attributedText(
-            textState.text,
-            font: font,
-            color: textColor,
-            alignment: textContent.alignment
-        )
-        let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
-        let paddingX = max(fontSize * 0.35, 10)
-        let paddingY = max(fontSize * 0.2, 6)
-        let minimumWidth = min(max(fontSize * 5, 160), renderSize.width)
-        let constrainedWidth = max(renderSize.width * 0.8 - paddingX * 2, 1)
-        let suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(
-            framesetter,
-            CFRange(location: 0, length: attributedString.length),
-            nil,
-            CGSize(width: constrainedWidth, height: .greatestFiniteMagnitude),
-            nil
-        )
-        let boxWidth = min(max(ceil(suggestedSize.width) + paddingX * 2, minimumWidth), renderSize.width)
-        let boxHeight = min(
-            max(ceil(suggestedSize.height) + paddingY * 2, fontSize + paddingY * 2),
-            renderSize.height
-        )
-
-        let basePosition = textPosition(for: textContent, transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x + textState.translation.x,
-            y: renderSize.height - basePosition.y - transform.offset.y + textState.translation.y
-        )
-        let scaleX = transform.scale.width * textState.scale
-        let scaleY = transform.scale.height * textState.scale
-
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: scaleX, y: scaleY)
-
-        let textBox = CGRect(x: -boxWidth * 0.5, y: -boxHeight * 0.5, width: boxWidth, height: boxHeight)
-        if let backgroundColor = textContent.backgroundColor {
-            context.setFillColor(cgColor(hexRGB: backgroundColor))
-            context.fill(textBox)
-        }
-
-        let textRect = textBox.insetBy(dx: paddingX, dy: paddingY)
-        let path = CGMutablePath()
-        path.addRect(textRect)
-        context.textMatrix = .identity
-        let frame = CTFramesetterCreateFrame(
-            framesetter,
-            CFRange(location: 0, length: attributedString.length),
-            path,
-            nil
-        )
-        CTFrameDraw(frame, context)
-        context.restoreGState()
-    }
-
-    private func animatedTextState(
-        for textContent: TextClipContent,
-        timeRange: CMTimeRange,
-        at time: CMTime
-    ) -> (text: String, alpha: Double, translation: CGPoint, scale: CGFloat) {
-        guard let animation = textContent.animation else {
-            return (textContent.text, 1, CGPoint(x: 0, y: 0), 1)
-        }
-
-        let rawLocalTime = CMTimeSubtract(time, timeRange.start).seconds
-        let localTime = rawLocalTime.isFinite ? max(0, rawLocalTime) : 0
-        let delay = max(animation.delay, 0)
-        let duration = max(animation.duration, 1.0e-6)
-        let elapsed = localTime - delay
-        let progress = min(max(elapsed / duration, 0), 1)
-        let isBeforeDelay = elapsed < 0
-
-        switch animation.type {
-        case .fadeIn:
-            return (textContent.text, isBeforeDelay ? 0 : progress, CGPoint(x: 0, y: 0), 1)
-        case .fadeOut:
-            return (textContent.text, isBeforeDelay ? 1 : 1 - progress, CGPoint(x: 0, y: 0), 1)
-        case .typewriter:
-            guard !isBeforeDelay else {
-                return ("", 1, CGPoint(x: 0, y: 0), 1)
-            }
-            let characterCount = Int(floor(progress * Double(textContent.text.count)))
-            return (String(textContent.text.prefix(characterCount)), 1, CGPoint(x: 0, y: 0), 1)
-        case .slideUp:
-            return (
-                textContent.text,
-                1,
-                CGPoint(x: 0, y: -40 * (1 - progress)),
-                1
-            )
-        case .slideDown:
-            return (
-                textContent.text,
-                1,
-                CGPoint(x: 0, y: 40 * (1 - progress)),
-                1
-            )
-        case .scale:
-            return (textContent.text, 1, CGPoint(x: 0, y: 0), max(CGFloat(progress), 0.001))
-        case .bounce:
-            let offset = sin(progress * .pi * 3) * 20 * (1 - progress)
-            return (textContent.text, 1, CGPoint(x: 0, y: offset), 1)
-        }
-    }
-
-    private func attributedText(
-        _ text: String,
-        font: CTFont,
-        color: CGColor,
-        alignment: TextAlignment
-    ) -> NSAttributedString {
-        var ctAlignment = coreTextAlignment(for: alignment)
-        let paragraphStyle = CTParagraphStyleCreate([
-            CTParagraphStyleSetting(
-                spec: .alignment,
-                valueSize: MemoryLayout<CTTextAlignment>.size,
-                value: &ctAlignment
-            )
-        ], 1)
-
-        return NSAttributedString(
-            string: text,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
-                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
-            ]
-        )
-    }
-
-    private func coreTextAlignment(for alignment: TextAlignment) -> CTTextAlignment {
-        switch alignment {
-        case .leading:
-            return .left
-        case .center:
-            return .center
-        case .trailing:
-            return .right
-        case .justified:
-            return .justified
-        }
-    }
-
-    private func textPosition(
-        for textContent: TextClipContent,
-        transform: ClipTransform,
-        renderSize: CGSize
-    ) -> CGPoint {
-        if !isZeroPoint(textContent.position) {
-            return textContent.position
-        }
-
-        if !isZeroPoint(transform.position) {
-            return transform.position
-        }
-
-        return CGPoint(x: renderSize.width * 0.5, y: renderSize.height * 0.5)
-    }
-
     private func stickerPosition(
         transform: ClipTransform,
         renderSize: CGSize
@@ -848,20 +621,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     private func isZeroPoint(_ point: CGPoint) -> Bool {
         abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
-    }
-
-    private func cgColor(hexRGB: String) -> CGColor {
-        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
-            return CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-        }
-
-        return CGColor(
-            red: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255,
-            alpha: 1
-        )
     }
 
     private func applyStyleTransfer(_ effect: Effect, to image: CIImage) -> CIImage {

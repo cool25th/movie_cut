@@ -195,6 +195,9 @@ final class IOSExportEngine {
                         start: cmTime(clip.timelineRange.start),
                         duration: cmTime(clip.timelineRange.duration)
                     )
+                    let stickerEmoji = clip.textContent.flatMap(stickerEmoji(from:))
+                    let exportTextContent = stickerEmoji == nil ? clip.textContent : nil
+                    let stickerFontSize = stickerEmoji == nil ? nil : clip.textContent.map { CGFloat($0.fontSize) }
 
                     guard let clipEffect = CustomCompositionClipEffect(
                         trackID: kCMPersistentTrackID_Invalid,
@@ -207,7 +210,9 @@ final class IOSExportEngine {
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,
                         effects: clip.effects,
-                        textContent: clip.textContent,
+                        textContent: exportTextContent,
+                        stickerEmoji: stickerEmoji,
+                        stickerFontSize: stickerFontSize,
                         isBackgroundRemoved: false
                     ) else {
                         continue
@@ -273,6 +278,37 @@ final class IOSExportEngine {
             : instructions
 
         return videoComposition
+    }
+
+    private func stickerEmoji(from textContent: TextClipContent) -> String? {
+        guard textContent.isSticker || textContent.fontFamily == "Apple Color Emoji" else {
+            return nil
+        }
+
+        let trimmedText = textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isSingleEmoji(trimmedText) else {
+            return nil
+        }
+
+        return trimmedText
+    }
+
+    private func isSingleEmoji(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+
+        let variationSelector = "\u{FE0F}"
+        let zeroWidthJoiner = "\u{200D}"
+        let emojiAtom = "(?:\\p{Emoji_Presentation}|\\p{Extended_Pictographic}\(variationSelector)?)(?:\\p{Emoji_Modifier})?"
+        let pattern = "^(?:(?:\\p{Regional_Indicator}{2})|\(emojiAtom))(?:\(zeroWidthJoiner)\(emojiAtom))*$"
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return text.count == 1 && text.unicodeScalars.contains { scalar in
+                scalar.properties.isEmojiPresentation
+            }
+        }
+
+        return regex.firstMatch(in: text, range: range)?.range == range
     }
 
     private func insertVideoTrack(

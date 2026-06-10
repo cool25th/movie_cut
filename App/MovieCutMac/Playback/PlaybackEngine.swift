@@ -37,6 +37,14 @@ final class PlaybackEngine {
         self.playbackRate = 1
     }
 
+    private static func advancedTransitionPixelProcessorHook(for type: TransitionType) {
+        // Advanced transitions are implemented in Core by
+        // TransitionPixelProcessor.apply(type:from:to:progress:). This AVFoundation
+        // layer-instruction path only has per-layer ramps; full playback integration needs
+        // transition-boundary metadata that pairs outgoing and incoming source frames.
+        _ = type.requiresTwoSourcePixelProcessing
+    }
+
     func load(asset: MediaAsset) {
         pause()
         statusObservation?.invalidate()
@@ -394,9 +402,11 @@ final class PlaybackEngine {
             opacity: Float,
             transition: Transition?,
             colorCorrection: ColorCorrection?,
+            chromaKey: ChromaKeySettings?,
             chromaKeyColor: SIMD3<Float>?,
             chromaKeyThreshold: Float,
-            mask: Mask?
+            mask: Mask?,
+            effects: [Effect]
         )] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
 
@@ -513,9 +523,11 @@ final class PlaybackEngine {
                             Float(min(max(clip.opacity, 0), 1)),
                             clip.transition,
                             clip.colorCorrection,
+                            clip.chromaKey,
                             clip.chromaKeyColor,
                             clip.chromaKeyThreshold,
-                            clip.mask
+                            clip.mask,
+                            clip.effects
                         ))
                     }
 
@@ -623,10 +635,7 @@ final class PlaybackEngine {
                 for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
                     guard let textContent = clip.textContent else { continue }
 
-                    let textLayer = CATextLayer()
                     let fontSize = CGFloat(textContent.fontSize)
-                    let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
-                    let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
                     let canvasSize = project.timeline.canvasSize
                     let fallbackPosition = CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
                     let position: CGPoint
@@ -637,6 +646,54 @@ final class PlaybackEngine {
                     } else {
                         position = fallbackPosition
                     }
+                    let layerPosition = CGPoint(
+                        x: position.x + clip.transform.offset.x,
+                        y: position.y + clip.transform.offset.y
+                    )
+                    let clipStart = cmTime(clip.timelineRange.start)
+                    let clipDuration = cmTime(clip.timelineRange.duration)
+
+                    if let stickerImageURL = textContent.stickerImageURL,
+                       let stickerImage = NSImage(contentsOf: stickerImageURL),
+                       let stickerCGImage = stickerImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                        let imageLayer = CALayer()
+                        imageLayer.contents = stickerCGImage
+                        imageLayer.contentsGravity = .resizeAspect
+                        imageLayer.contentsScale = 2.0
+                        imageLayer.opacity = Float(min(max(clip.opacity, 0), 1))
+
+                        let sourceSize = CGSize(width: stickerCGImage.width, height: stickerCGImage.height)
+                        let displaySize = stickerDisplaySize(
+                            sourceSize: sourceSize,
+                            fontSize: fontSize,
+                            canvasSize: canvasSize
+                        )
+                        imageLayer.frame = CGRect(
+                            x: layerPosition.x - displaySize.width * 0.5,
+                            y: canvasSize.height - layerPosition.y - displaySize.height * 0.5,
+                            width: displaySize.width,
+                            height: displaySize.height
+                        )
+                        let layerTransform = CGAffineTransform(rotationAngle: CGFloat(clip.transform.rotation * .pi / 180))
+                            .scaledBy(x: clip.transform.scale.width, y: clip.transform.scale.height)
+                        imageLayer.setAffineTransform(layerTransform)
+                        imageLayer.beginTime = AVCoreAnimationBeginTimeAtZero + clipStart.seconds
+                        imageLayer.duration = clipDuration.seconds
+                        if let animation = textContent.animation {
+                            applyStickerLayerAnimation(
+                                animation,
+                                to: imageLayer,
+                                canvasSize: canvasSize,
+                                displaySize: displaySize
+                            )
+                        }
+                        textLayers.append(imageLayer)
+                        continue
+                    }
+
+                    let textLayer = CATextLayer()
+                    let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
+                    let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
 
                     textLayer.string = textContent.text
                     textLayer.font = font
@@ -644,15 +701,17 @@ final class PlaybackEngine {
                     textLayer.foregroundColor = cgColor(hexRGB: textContent.fontColor)
                     textLayer.alignmentMode = textAlignmentMode(for: textContent.alignment)
                     textLayer.contentsScale = 2.0
+                    textLayer.opacity = Float(min(max(clip.opacity, 0), 1))
                     textLayer.frame = CGRect(
-                        x: position.x - 100,
-                        y: canvasSize.height - position.y - fontSize,
+                        x: layerPosition.x - 100,
+                        y: canvasSize.height - layerPosition.y - fontSize,
                         width: 200,
                         height: fontSize + 20
                     )
+                    let layerTransform = CGAffineTransform(rotationAngle: CGFloat(clip.transform.rotation * .pi / 180))
+                        .scaledBy(x: clip.transform.scale.width, y: clip.transform.scale.height)
+                    textLayer.setAffineTransform(layerTransform)
 
-                    let clipStart = cmTime(clip.timelineRange.start)
-                    let clipDuration = cmTime(clip.timelineRange.duration)
                     textLayer.beginTime = AVCoreAnimationBeginTimeAtZero + clipStart.seconds
                     textLayer.duration = clipDuration.seconds
                     if let animation = textContent.animation {
@@ -682,7 +741,11 @@ final class PlaybackEngine {
             )
 
             let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
-                clipInstruction.colorCorrection != nil || clipInstruction.chromaKeyColor != nil || clipInstruction.mask != nil
+                clipInstruction.colorCorrection != nil
+                    || clipInstruction.chromaKey != nil
+                    || clipInstruction.chromaKeyColor != nil
+                    || clipInstruction.mask != nil
+                    || !clipInstruction.effects.isEmpty
             }
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
@@ -754,10 +817,19 @@ final class PlaybackEngine {
                             y: 0
                         )
                         layerInstruction.setTransformRamp(
-                            fromStartTransform: fromTransform,
-                            toEndTransform: .identity,
+                            fromStart: fromTransform,
+                            toEnd: .identity,
                             timeRange: overlapRange
                         )
+                    case .wipeLeft,
+                         .wipeUp,
+                         .wipeDown,
+                         .slideLeft,
+                         .slideRight,
+                         .zoomIn,
+                         .zoomOut,
+                         .glitch:
+                        Self.advancedTransitionPixelProcessorHook(for: transition.type)
                     case .none:
                         break
                     }
@@ -775,9 +847,11 @@ final class PlaybackEngine {
                                 trackID: clipInstruction.trackID,
                                 timeRange: clipInstruction.timeRange,
                                 colorCorrection: clipInstruction.colorCorrection,
+                                chromaKey: clipInstruction.chromaKey,
                                 chromaKeyColor: clipInstruction.chromaKeyColor,
                                 chromaKeyThreshold: clipInstruction.chromaKeyThreshold,
-                                mask: clipInstruction.mask
+                                mask: clipInstruction.mask,
+                                effects: clipInstruction.effects
                             )
                         }
                     )
@@ -869,6 +943,91 @@ final class PlaybackEngine {
 
         shouldKeepTemporaryReverseRenderURLs = true
         return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)
+    }
+
+    private func stickerDisplaySize(sourceSize: CGSize, fontSize: CGFloat, canvasSize: CGSize) -> CGSize {
+        let aspectRatio: CGFloat
+        if sourceSize.width > 0, sourceSize.height > 0 {
+            aspectRatio = sourceSize.width / sourceSize.height
+        } else {
+            aspectRatio = 1
+        }
+
+        let shorterCanvasEdge = max(min(canvasSize.width, canvasSize.height), 1)
+        let baseWidth = min(max(fontSize * 2.8, 96), shorterCanvasEdge * 0.45)
+        let width = baseWidth
+        let height = max(width / max(aspectRatio, 0.01), 1)
+        return CGSize(width: width, height: height)
+    }
+
+    private func applyStickerLayerAnimation(
+        _ textAnimation: TextAnimation,
+        to layer: CALayer,
+        canvasSize: CGSize,
+        displaySize: CGSize
+    ) {
+        let duration = max(textAnimation.duration, 0)
+        guard duration > 0 else { return }
+
+        let delay = max(textAnimation.delay, 0)
+        switch textAnimation.type {
+        case .fadeIn:
+            let animation = CABasicAnimation(keyPath: "opacity")
+            animation.fromValue = 0
+            animation.toValue = layer.opacity
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "fadeIn")
+        case .fadeOut:
+            let animation = CABasicAnimation(keyPath: "opacity")
+            animation.fromValue = layer.opacity
+            animation.toValue = 0
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "fadeOut")
+        case .slideUp:
+            let animation = CABasicAnimation(keyPath: "position.y")
+            animation.fromValue = canvasSize.height + displaySize.height
+            animation.toValue = layer.position.y
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "slideUp")
+        case .slideDown:
+            let animation = CABasicAnimation(keyPath: "position.y")
+            animation.fromValue = -displaySize.height
+            animation.toValue = layer.position.y
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "slideDown")
+        case .scale:
+            let animation = CABasicAnimation(keyPath: "transform.scale")
+            animation.fromValue = 0
+            animation.toValue = 1
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "scale")
+        case .bounce:
+            let animation = CAKeyframeAnimation(keyPath: "position.y")
+            animation.values = [
+                NSNumber(value: Double(layer.position.y)),
+                NSNumber(value: Double(layer.position.y + 20)),
+                NSNumber(value: Double(layer.position.y - 8)),
+                NSNumber(value: Double(layer.position.y + 3)),
+                NSNumber(value: Double(layer.position.y))
+            ]
+            animation.keyTimes = [0, 0.35, 0.6, 0.8, 1].map(NSNumber.init(value:))
+            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
+            layer.add(animation, forKey: "bounce")
+        case .typewriter:
+            break
+        }
+    }
+
+    private func configureStickerLayerAnimation(
+        _ animation: CAAnimation,
+        duration: TimeInterval,
+        delay: TimeInterval
+    ) {
+        animation.duration = duration
+        animation.beginTime = delay
+        animation.fillMode = .both
+        animation.isRemovedOnCompletion = false
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
     }
 
     private func applyEQBands(_ preset: EqualizerPreset, to parameters: AVMutableAudioMixInputParameters) {

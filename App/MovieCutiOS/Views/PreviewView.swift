@@ -438,6 +438,8 @@ private extension PreviewView {
                 .cropped(to: image.extent)
         case .styleTransfer:
             return applyFilter("CIPhotoEffectTransfer", to: image)
+        case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT:
+            return VisualEffectPixelProcessor.apply([effect], to: image)
         case .fadeIn, .fadeOut, .crossDissolve:
             return image
         }

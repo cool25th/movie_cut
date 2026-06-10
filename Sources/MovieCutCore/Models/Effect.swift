@@ -37,6 +37,21 @@ public enum EffectType: String, Codable, Sendable, Equatable, Hashable, CaseIter
 
     /// Stylized color remapping effect.
     case styleTransfer
+
+    /// Procedural cinematic LUT-style color remapping.
+    case cinematicLUT
+
+    /// Procedural vintage LUT-style color remapping.
+    case vintageLUT
+
+    /// Procedural noir LUT-style color remapping.
+    case noirLUT
+
+    /// Procedural vivid LUT-style color remapping.
+    case vividLUT
+
+    /// Procedural cool LUT-style color remapping.
+    case coolLUT
 }
 
 /// An effect instance and its numeric parameters.
@@ -70,7 +85,7 @@ public extension Effect {
 
     /// A sepia effect instance.
     static var sepia: Effect {
-        Effect(type: .sepia)
+        Effect(type: .sepia, parameters: ["intensity": 0.9])
     }
 
     /// A blur effect instance.
@@ -81,5 +96,30 @@ public extension Effect {
     /// A stylized color remapping effect instance.
     static var styleTransfer: Effect {
         Effect(type: .styleTransfer, parameters: ["styleIndex": 1, "intensity": 0.75])
+    }
+
+    /// A procedural cinematic LUT effect instance.
+    static var cinematicLUT: Effect {
+        Effect(type: .cinematicLUT, parameters: ["intensity": 0.85])
+    }
+
+    /// A procedural vintage LUT effect instance.
+    static var vintageLUT: Effect {
+        Effect(type: .vintageLUT, parameters: ["intensity": 0.8])
+    }
+
+    /// A procedural noir LUT effect instance.
+    static var noirLUT: Effect {
+        Effect(type: .noirLUT, parameters: ["intensity": 0.9])
+    }
+
+    /// A procedural vivid LUT effect instance.
+    static var vividLUT: Effect {
+        Effect(type: .vividLUT, parameters: ["intensity": 0.8])
+    }
+
+    /// A procedural cool LUT effect instance.
+    static var coolLUT: Effect {
+        Effect(type: .coolLUT, parameters: ["intensity": 0.8])
     }
 }

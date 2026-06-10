@@ -3,6 +3,8 @@ import SwiftUI
 import MovieCutCore
 
 struct IOSMaskCanvasView: View {
+    private static let coordinateSpaceName = "IOSMaskCanvasViewSpace"
+
     @Binding var mask: Mask?
     var canvasSize: CGSize
 
@@ -46,11 +48,19 @@ struct IOSMaskCanvasView: View {
                     resizeHandle(for: corner, currentMask: currentMask, metrics: metrics)
                 }
 
+                rotationHandle(for: currentMask, metrics: metrics)
+
                 shapeToolbar(currentMask: currentMask)
                     .padding(10)
             }
             .frame(width: viewSize.width, height: viewSize.height)
             .clipped()
+            .coordinateSpace(name: Self.coordinateSpaceName)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Mask visual editor")
+            .accessibilityValue(maskAccessibilityValue(for: currentMask))
+            .accessibilityHint("Move the center handle, resize with corner handles, rotate with the top handle, or choose a mask shape from the toolbar.")
+            .accessibilitySortPriority(0)
         }
     }
 
@@ -69,6 +79,13 @@ struct IOSMaskCanvasView: View {
             with: .color(accentColor),
             style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [6, 4])
         )
+
+        let topCenter = topCenterPoint(for: currentMask, metrics: metrics)
+        let rotationHandlePoint = rotationHandlePoint(for: currentMask, metrics: metrics)
+        var rotationStem = Path()
+        rotationStem.move(to: topCenter)
+        rotationStem.addLine(to: rotationHandlePoint)
+        context.stroke(rotationStem, with: .color(Color.white.opacity(0.45)), lineWidth: 1.5)
     }
 
     // MARK: - Handles
@@ -89,6 +106,22 @@ struct IOSMaskCanvasView: View {
         }
         .position(center)
         .gesture(moveGesture(currentMask: currentMask, metrics: metrics))
+        .accessibilityLabel("Mask center")
+        .accessibilityValue(positionAccessibilityValue(for: currentMask.position))
+        .accessibilityHint("Drag to move the mask on the canvas, or use VoiceOver actions to nudge the mask one percent at a time")
+        .accessibilityAction(named: "Nudge mask left") {
+            nudgeMask(currentMask, by: CGVector(dx: -metrics.accessibilityNudgeStepX, dy: 0), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask right") {
+            nudgeMask(currentMask, by: CGVector(dx: metrics.accessibilityNudgeStepX, dy: 0), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask up") {
+            nudgeMask(currentMask, by: CGVector(dx: 0, dy: -metrics.accessibilityNudgeStepY), metrics: metrics)
+        }
+        .accessibilityAction(named: "Nudge mask down") {
+            nudgeMask(currentMask, by: CGVector(dx: 0, dy: metrics.accessibilityNudgeStepY), metrics: metrics)
+        }
+        .accessibilitySortPriority(4)
     }
 
     private func resizeHandle(
@@ -108,6 +141,29 @@ struct IOSMaskCanvasView: View {
             .shadow(color: .black.opacity(0.35), radius: 2)
             .position(point)
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
+            .accessibilityLabel(corner.accessibilityLabel)
+            .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
+            .accessibilityHint("Drag to resize the mask")
+            .accessibilitySortPriority(3)
+    }
+
+    private func rotationHandle(for currentMask: Mask, metrics: IOSMaskMetrics) -> some View {
+        let point = rotationHandlePoint(for: currentMask, metrics: metrics)
+
+        return Circle()
+            .fill(Color.white)
+            .frame(width: 18, height: 18)
+            .overlay {
+                Circle()
+                    .stroke(Color.black.opacity(0.55), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 2)
+            .position(point)
+            .gesture(rotationGesture(currentMask: currentMask, metrics: metrics))
+            .accessibilityLabel("Rotate mask")
+            .accessibilityValue(rotationAccessibilityValue(for: currentMask.rotation))
+            .accessibilityHint("Drag to rotate the mask")
+            .accessibilitySortPriority(2)
     }
 
     // MARK: - Toolbar
@@ -115,41 +171,29 @@ struct IOSMaskCanvasView: View {
     private func shapeToolbar(currentMask: Mask) -> some View {
         HStack(spacing: 8) {
             ForEach(MaskShape.allCases, id: \.self) { shape in
-                Button {
+                toolbarButton(
+                    systemImage: shape.systemImage,
+                    isSelected: currentMask.shape == shape,
+                    accessibilityLabel: shape.accessibilityLabel
+                ) {
                     var updatedMask = currentMask
                     updatedMask.shape = shape
                     updateMask(updatedMask)
-                } label: {
-                    Image(systemName: shape.systemImage)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(currentMask.shape == shape ? Color.white : Color.primary)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(currentMask.shape == shape ? Color.accentColor : Color.clear)
-                        )
                 }
-                .buttonStyle(.plain)
             }
 
             Divider()
                 .frame(height: 24)
 
-            Button {
+            toolbarButton(
+                systemImage: "circle.lefthalf.filled",
+                isSelected: currentMask.inverted,
+                accessibilityLabel: "Invert mask"
+            ) {
                 var updatedMask = currentMask
                 updatedMask.inverted.toggle()
                 updateMask(updatedMask)
-            } label: {
-                Image(systemName: "circle.lefthalf.filled")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(currentMask.inverted ? Color.white : Color.primary)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(currentMask.inverted ? Color.orange : Color.clear)
-                    )
             }
-            .buttonStyle(.plain)
         }
         .padding(8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -158,6 +202,54 @@ struct IOSMaskCanvasView: View {
                 .stroke(Color.white.opacity(0.18), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+        .accessibilitySortPriority(1)
+    }
+
+    private func toolbarButton(
+        systemImage: String,
+        isSelected: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isSelected ? Color.accentColor : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint(isSelected ? "Current mask option" : "Activate to apply this mask option")
+    }
+
+    private func maskAccessibilityValue(for currentMask: Mask) -> String {
+        let mode = currentMask.inverted ? "inverted" : "normal"
+        return "\(currentMask.shape.accessibilityLabel), \(mode), \(positionAccessibilityValue(for: currentMask.position)), \(sizeAccessibilityValue(for: currentMask.size)), \(rotationAccessibilityValue(for: currentMask.rotation))"
+    }
+
+    private func positionAccessibilityValue(for position: CGPoint) -> String {
+        "x \(rounded(position.x)), y \(rounded(position.y))"
+    }
+
+    private func sizeAccessibilityValue(for size: CGSize) -> String {
+        "width \(rounded(size.width)), height \(rounded(size.height))"
+    }
+
+    private func rotationAccessibilityValue(for rotation: Double) -> String {
+        "rotation \(rounded(rotation)) degrees"
+    }
+
+    private func rounded(_ value: CGFloat) -> String {
+        String(format: "%.0f", Double(value))
+    }
+
+    private func rounded(_ value: Double) -> String {
+        String(format: "%.0f", value)
     }
 
     // MARK: - Gestures (iOS touch)
@@ -174,6 +266,11 @@ struct IOSMaskCanvasView: View {
                     x: startMask.position.x + delta.dx,
                     y: startMask.position.y + delta.dy
                 ))
+
+                if updatedMask.shape == .brush, startMask.brushPoints.count > 1 {
+                    updatedMask.brushPoints = offset(startMask.brushPoints, by: delta)
+                }
+
                 updateMask(updatedMask)
             }
             .onEnded { _ in
@@ -210,6 +307,21 @@ struct IOSMaskCanvasView: View {
             }
     }
 
+    private func rotationGesture(currentMask: Mask, metrics: IOSMaskMetrics) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.coordinateSpaceName))
+            .onChanged { value in
+                beginInteraction(with: currentMask)
+                guard let startMask = gestureStartMask else { return }
+
+                var updatedMask = startMask
+                updatedMask.rotation = rotationDegrees(for: value.location, around: startMask.position, metrics: metrics)
+                updateMask(updatedMask)
+            }
+            .onEnded { _ in
+                finishInteraction()
+            }
+    }
+
     // MARK: - Interaction State
 
     private func beginInteraction(with currentMask: Mask) {
@@ -227,6 +339,26 @@ struct IOSMaskCanvasView: View {
     private func updateMask(_ updatedMask: Mask) {
         draftMask = updatedMask
         mask = updatedMask
+    }
+
+    private func nudgeMask(_ currentMask: Mask, by requestedDelta: CGVector, metrics: IOSMaskMetrics) {
+        let newPosition = metrics.clampedCanvasPoint(CGPoint(
+            x: currentMask.position.x + requestedDelta.dx,
+            y: currentMask.position.y + requestedDelta.dy
+        ))
+        let appliedDelta = CGVector(
+            dx: newPosition.x - currentMask.position.x,
+            dy: newPosition.y - currentMask.position.y
+        )
+
+        var updatedMask = currentMask
+        updatedMask.position = newPosition
+
+        if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
+            updatedMask.brushPoints = offset(currentMask.brushPoints, by: appliedDelta)
+        }
+
+        updateMask(updatedMask)
     }
 
     // MARK: - Path Generation
@@ -342,7 +474,38 @@ struct IOSMaskCanvasView: View {
         ))
     }
 
+    private func topCenterPoint(for currentMask: Mask, metrics: IOSMaskMetrics) -> CGPoint {
+        let local = CGVector(dx: 0, dy: currentMask.size.height * 0.5)
+        let rotated = Self.rotate(local, degrees: currentMask.rotation)
+        return metrics.viewPoint(for: CGPoint(
+            x: currentMask.position.x + rotated.dx,
+            y: currentMask.position.y + rotated.dy
+        ))
+    }
+
+    private func rotationHandlePoint(for currentMask: Mask, metrics: IOSMaskMetrics) -> CGPoint {
+        let center = metrics.viewPoint(for: currentMask.position)
+        let topCenter = topCenterPoint(for: currentMask, metrics: metrics)
+        let dx = topCenter.x - center.x
+        let dy = topCenter.y - center.y
+        let length = max(hypot(dx, dy), 1)
+        let handleDistance: CGFloat = 40
+
+        return CGPoint(
+            x: topCenter.x + (dx / length) * handleDistance,
+            y: topCenter.y + (dy / length) * handleDistance
+        )
+    }
+
     // MARK: - Geometry Helpers
+
+    private func rotationDegrees(for location: CGPoint, around center: CGPoint, metrics: IOSMaskMetrics) -> Double {
+        let centerPoint = metrics.viewPoint(for: center)
+        let dx = (location.x - centerPoint.x) / metrics.scale
+        let dy = (location.y - centerPoint.y) / metrics.scale
+        guard dx.isFinite, dy.isFinite, hypot(dx, dy) > 0.001 else { return 0 }
+        return normalizedDegrees(Double(atan2(-dx, dy) * 180 / CGFloat.pi))
+    }
 
     private func inverseRotate(_ vector: CGVector, degrees: Double) -> CGVector {
         let radians = -degrees * .pi / 180
@@ -363,6 +526,22 @@ struct IOSMaskCanvasView: View {
             dy: vector.dx * sinA + vector.dy * cosA
         )
     }
+
+    private func offset(_ points: [CGPoint], by delta: CGVector) -> [CGPoint] {
+        points.map { point in
+            CGPoint(x: point.x + delta.dx, y: point.y + delta.dy)
+        }
+    }
+
+    private func normalizedDegrees(_ degrees: Double) -> Double {
+        var value = degrees.truncatingRemainder(dividingBy: 360)
+        if value > 180 {
+            value -= 360
+        } else if value < -180 {
+            value += 360
+        }
+        return value
+    }
 }
 
 // MARK: - iOS Metrics
@@ -374,6 +553,8 @@ private struct IOSMaskMetrics {
 
     var isUsable: Bool { scale > 0 && viewSize.width > 0 && viewSize.height > 0 }
     var minimumMaskSize: CGFloat { 20 / scale }
+    var accessibilityNudgeStepX: CGFloat { max(canvasSize.width * 0.01, 1) }
+    var accessibilityNudgeStepY: CGFloat { max(canvasSize.height * 0.01, 1) }
 
     init(viewSize: CGSize, canvasSize: CGSize) {
         self.viewSize = viewSize
@@ -401,6 +582,80 @@ private struct IOSMaskMetrics {
             x: min(max(point.x, 0), canvasSize.width),
             y: min(max(point.y, 0), canvasSize.height)
         )
+    }
+}
+
+private enum MaskCorner: CaseIterable {
+    case topLeft
+    case topRight
+    case bottomRight
+    case bottomLeft
+
+    var xSign: CGFloat {
+        switch self {
+        case .topLeft, .bottomLeft:
+            return -1
+        case .topRight, .bottomRight:
+            return 1
+        }
+    }
+
+    var ySign: CGFloat {
+        switch self {
+        case .topLeft, .topRight:
+            return 1
+        case .bottomRight, .bottomLeft:
+            return -1
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .topLeft:
+            return "Top left resize handle"
+        case .topRight:
+            return "Top right resize handle"
+        case .bottomRight:
+            return "Bottom right resize handle"
+        case .bottomLeft:
+            return "Bottom left resize handle"
+        }
+    }
+}
+
+private extension MaskShape {
+    var systemImage: String {
+        switch self {
+        case .rectangle:
+            return "rectangle"
+        case .ellipse:
+            return "circle"
+        case .triangle:
+            return "triangle"
+        case .diamond:
+            return "diamond"
+        case .linear:
+            return "line.diagonal"
+        case .brush:
+            return "paintbrush"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .rectangle:
+            return "Rectangle mask"
+        case .ellipse:
+            return "Ellipse mask"
+        case .triangle:
+            return "Triangle mask"
+        case .diamond:
+            return "Diamond mask"
+        case .linear:
+            return "Linear mask"
+        case .brush:
+            return "Brush mask"
+        }
     }
 }
 #endif

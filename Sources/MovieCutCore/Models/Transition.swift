@@ -1,5 +1,14 @@
 import Foundation
 
+/// High-level groups for built-in transition identifiers.
+public enum TransitionCategory: String, Codable, Sendable, Equatable, Hashable {
+    case basic
+    case wipe
+    case slide
+    case zoom
+    case stylized
+}
+
 /// Built-in transition identifiers for Phase 1 editing.
 public enum TransitionType: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// No transition.
@@ -13,6 +22,66 @@ public enum TransitionType: String, Codable, Sendable, Equatable, Hashable, Case
 
     /// A wipe from left to right.
     case wipeRight
+
+    /// A wipe from right to left.
+    case wipeLeft
+
+    /// A wipe from bottom to top.
+    case wipeUp
+
+    /// A wipe from top to bottom.
+    case wipeDown
+
+    /// A slide where the outgoing clip exits left and the incoming clip enters from the right.
+    case slideLeft
+
+    /// A slide where the outgoing clip exits right and the incoming clip enters from the left.
+    case slideRight
+
+    /// A zooming incoming transition.
+    case zoomIn
+
+    /// A zooming outgoing transition.
+    case zoomOut
+
+    /// A deterministic strip-offset glitch transition.
+    case glitch
+
+    /// The transition group used for UI organization and renderer contracts.
+    public var category: TransitionCategory {
+        switch self {
+        case .none, .crossDissolve, .fadeThroughBlack:
+            .basic
+        case .wipeRight, .wipeLeft, .wipeUp, .wipeDown:
+            .wipe
+        case .slideLeft, .slideRight:
+            .slide
+        case .zoomIn, .zoomOut:
+            .zoom
+        case .glitch:
+            .stylized
+        }
+    }
+
+    /// True when the transition has a directional variant.
+    public var isDirectional: Bool {
+        switch self {
+        case .wipeRight, .wipeLeft, .wipeUp, .wipeDown, .slideLeft, .slideRight:
+            true
+        case .none, .crossDissolve, .fadeThroughBlack, .zoomIn, .zoomOut, .glitch:
+            false
+        }
+    }
+
+    /// True when full rendering requires both outgoing and incoming images for each transition frame.
+    public var requiresTwoSourcePixelProcessing: Bool {
+        switch self {
+        case .wipeLeft, .wipeUp, .wipeDown, .slideLeft, .slideRight, .zoomIn, .zoomOut, .glitch:
+            true
+        case .none, .crossDissolve, .fadeThroughBlack, .wipeRight:
+            false
+        }
+    }
 }
 
 /// A transition instance and duration applied to a clip boundary.

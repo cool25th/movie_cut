@@ -33,19 +33,30 @@ public struct DeleteClipCommand: EditorCommand {
     }
 
     public func apply(to project: inout Project) throws -> CommandResult {
+        let location = try project.clipLocation(for: clipId)
+        let previousClips = project.timeline.tracks[location.trackIndex].clips
         let removed = try project.removeClip(id: clipId)
         return CommandResult(
-            affectedClipIds: [removed.clip.id],
+            affectedClipIds: Set(previousClips.map(\.id)),
             description: "Deleted clip \(clipId)",
             undoValues: [
                 "trackId": .uuid(removed.trackId),
                 "clipIndex": .int(removed.clipIndex),
-                "clip": .clip(removed.clip)
+                "clip": .clip(removed.clip),
+                RestoreTrackClipsCommand.snapshotKey(for: removed.trackId): .clips(previousClips)
             ]
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
+        if !snapshots.isEmpty {
+            return RestoreTrackClipsCommand(
+                snapshots: snapshots,
+                description: "Restored deleted clip \(clipId)"
+            )
+        }
+
         if
             case .uuid(let trackId)? = result.undoValues["trackId"],
             case .clip(let clip)? = result.undoValues["clip"],

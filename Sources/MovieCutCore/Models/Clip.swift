@@ -32,6 +32,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// The timeline placement range in seconds.
     public var timelineRange: TimeRange
 
+    /// The clip's ordering inside its track.
+    public var zIndex: Int
+
     /// The visual transform applied to the clip.
     public var transform: ClipTransform
 
@@ -119,6 +122,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case kind
         case sourceRange
         case timelineRange
+        case zIndex
         case transform
         case opacity
         case volume
@@ -143,6 +147,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         kind: ClipKind,
         sourceRange: TimeRange,
         timelineRange: TimeRange,
+        zIndex: Int = 0,
         transform: ClipTransform = ClipTransform(),
         opacity: Double = 1.0,
         volume: Double = 1.0,
@@ -166,6 +171,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.kind = kind
         self.sourceRange = sourceRange
         self.timelineRange = timelineRange
+        self.zIndex = zIndex
         self.transform = transform
         self.opacity = opacity
         self.volume = volume
@@ -201,6 +207,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         kind = try container.decode(ClipKind.self, forKey: .kind)
         sourceRange = try container.decode(TimeRange.self, forKey: .sourceRange)
         timelineRange = try container.decode(TimeRange.self, forKey: .timelineRange)
+        zIndex = try container.decodeIfPresent(Int.self, forKey: .zIndex) ?? 0
         transform = try container.decode(ClipTransform.self, forKey: .transform)
         opacity = try container.decode(Double.self, forKey: .opacity)
         volume = try container.decode(Double.self, forKey: .volume)
@@ -225,6 +232,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(kind, forKey: .kind)
         try container.encode(sourceRange, forKey: .sourceRange)
         try container.encode(timelineRange, forKey: .timelineRange)
+        try container.encode(zIndex, forKey: .zIndex)
         try container.encode(transform, forKey: .transform)
         try container.encode(opacity, forKey: .opacity)
         try container.encode(volume, forKey: .volume)

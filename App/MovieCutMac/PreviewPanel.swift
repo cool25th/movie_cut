@@ -158,7 +158,7 @@ struct PreviewPanel: View {
                     textContent: textContent,
                     canvasSize: viewModel.currentProject.canvas.size,
                     isSticker: viewModel.selectedClipIsSticker,
-                    trackZIndex: viewModel.selectedClipTrack?.zIndex,
+                    clipZIndex: clip.zIndex,
                     onLayerBackward: {
                         Task { await viewModel.moveSelectedClipLayerBackward() }
                     },
@@ -300,7 +300,7 @@ private struct CanvasTransformOverlay: View {
     var textContent: TextClipContent
     var canvasSize: CGSize
     var isSticker: Bool
-    var trackZIndex: Int?
+    var clipZIndex: Int?
     var onLayerBackward: () -> Void
     var onLayerForward: () -> Void
     var onLayerFront: () -> Void
@@ -380,7 +380,7 @@ private struct CanvasTransformOverlay: View {
 
                 CanvasTransformControlStack(
                     transform: transform,
-                    trackZIndex: trackZIndex,
+                    clipZIndex: clipZIndex,
                     onCenter: centerOverlay,
                     onNudgeLeft: { nudgeOverlay(dx: -8, dy: 0) },
                     onNudgeRight: { nudgeOverlay(dx: 8, dy: 0) },
@@ -1033,7 +1033,7 @@ private struct CanvasSnapGuideLine: View {
 
 private struct CanvasTransformControlStack: View {
     var transform: ClipTransform
-    var trackZIndex: Int?
+    var clipZIndex: Int?
     var onCenter: () -> Void
     var onNudgeLeft: () -> Void
     var onNudgeRight: () -> Void
@@ -1046,7 +1046,7 @@ private struct CanvasTransformControlStack: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            CanvasTransformHUD(transform: transform, trackZIndex: trackZIndex)
+            CanvasTransformHUD(transform: transform, clipZIndex: clipZIndex)
 
             CanvasNudgeControls(
                 onCenter: onCenter,
@@ -1368,7 +1368,7 @@ private struct CanvasOverlayTextButton: View {
 
 private struct CanvasTransformHUD: View {
     var transform: ClipTransform
-    var trackZIndex: Int?
+    var clipZIndex: Int?
 
     var body: some View {
         Text(hudText)
@@ -1394,8 +1394,8 @@ private struct CanvasTransformHUD: View {
             (transform.scale.width + transform.scale.height) * 0.5,
             transform.rotation
         )
-        if let trackZIndex {
-            return "\(transformText)  Z \(trackZIndex)"
+        if let clipZIndex {
+            return "\(transformText)  Z \(clipZIndex)"
         }
         return transformText
     }

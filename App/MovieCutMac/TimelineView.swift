@@ -138,6 +138,24 @@ struct TimelineView: View {
             .help("Duplicate Selected Clips")
 
             Button {
+                Task { await viewModel.sendSelectedClipLayerToBack() }
+            } label: {
+                Image(systemName: "arrow.down.to.line")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.selectedClip == nil)
+            .help("Send Selected Clip to Back")
+
+            Button {
+                Task { await viewModel.bringSelectedClipLayerToFront() }
+            } label: {
+                Image(systemName: "arrow.up.to.line")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.selectedClip == nil)
+            .help("Bring Selected Clip to Front")
+
+            Button {
                 Task { await viewModel.deleteClip() }
             } label: {
                 Image(systemName: "trash")
@@ -242,7 +260,7 @@ struct TimelineView: View {
                 Rectangle()
                     .fill(Color(nsColor: .textBackgroundColor))
 
-                ForEach(track.clips) { clip in
+                ForEach(clipsForDisplay(track)) { clip in
                     clipView(clip, trackKind: track.kind)
                 }
 
@@ -318,12 +336,13 @@ struct TimelineView: View {
                 .accessibilityLabel(clipAccessibilityLabel(for: clip))
                 .accessibilityValue(
                     String(
-                        format: NSLocalizedString("Starts at %@, duration %@", comment: ""),
+                        format: NSLocalizedString("Starts at %@, duration %@, layer %d", comment: ""),
                         timelineSecondsString(clip.timelineRange.start),
-                        timelineSecondsString(clip.timelineRange.duration)
+                        timelineSecondsString(clip.timelineRange.duration),
+                        clip.zIndex
                     )
                 )
-                .accessibilityHint(NSLocalizedString("Selects the clip. Drag to move it on the timeline.", comment: ""))
+                .accessibilityHint(NSLocalizedString("Selects the clip. Drag to move it on the timeline. Layer actions adjust its zIndex.", comment: ""))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction {
                     selectClip(clip.id, extendingSelection: false)
@@ -353,7 +372,7 @@ struct TimelineView: View {
         }
             .frame(width: max(2, width), height: trackHeight - 8)
             .offset(x: x, y: 4)
-            .zIndex(isActiveDrag || isSelected ? 1 : 0)
+            .zIndex(Double(clip.zIndex) + (isActiveDrag || isSelected ? 10_000 : 0))
             .contentShape(Rectangle())
             .accessibilityElement(children: .contain)
             .onTapGesture {
@@ -380,6 +399,15 @@ struct TimelineView: View {
                 Button("Snap Playhead to End") {
                     selectClip(clip.id, extendingSelection: false)
                     viewModel.snapPlayheadToSelectedClipEnd()
+                }
+                Divider()
+                Button("Bring to Front") {
+                    selectClip(clip.id, extendingSelection: false)
+                    Task { await viewModel.bringSelectedClipLayerToFront() }
+                }
+                Button("Send to Back") {
+                    selectClip(clip.id, extendingSelection: false)
+                    Task { await viewModel.sendSelectedClipLayerToBack() }
                 }
                 Divider()
                 Button(NSLocalizedString("Ripple Delete", comment: "")) {
@@ -642,6 +670,10 @@ struct TimelineView: View {
         viewModel.currentProject.timeline.tracks
             .flatMap(\.clips)
             .filter { $0.id != clipId }
+    }
+
+    private func clipsForDisplay(_ track: Track) -> [Clip] {
+        track.clipsForLayerDisplay
     }
 
     private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {

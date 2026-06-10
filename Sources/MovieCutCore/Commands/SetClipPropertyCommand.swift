@@ -37,6 +37,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Replaces the clip color correction.
     case colorCorrection(ColorCorrection?)
+
+    /// Replaces the clip's same-track layer order.
+    case zIndex(Int)
 }
 
 /// Sets one editable clip property.
@@ -108,6 +111,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .colorCorrection(let colorCorrection):
             previousProperty = .colorCorrection(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].colorCorrection)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].colorCorrection = colorCorrection
+        case .zIndex(let zIndex):
+            previousProperty = .zIndex(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].zIndex)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].zIndex = zIndex
         }
 
         return CommandResult(

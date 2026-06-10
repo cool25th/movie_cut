@@ -14,6 +14,9 @@ public enum CommandResultValue: Sendable, Equatable {
     /// A full clip snapshot.
     case clip(Clip)
 
+    /// Full clip snapshots for a track.
+    case clips([Clip])
+
     /// A full marker snapshot.
     case marker(Marker)
 

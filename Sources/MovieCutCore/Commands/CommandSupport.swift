@@ -1,5 +1,63 @@
 import Foundation
 
+public extension Track {
+    /// Clips ordered for same-track layer display.
+    var clipsForLayerDisplay: [Clip] {
+        clips.sorted(by: Self.clipLayerOrder)
+    }
+
+    /// Assigns deterministic contiguous clip zIndexes inside this track.
+    mutating func normalizeClipZIndexes() {
+        clips = clips
+            .sorted(by: Self.clipLayerOrder)
+            .enumerated()
+            .map { index, clip in
+                var normalizedClip = clip
+                normalizedClip.zIndex = index
+                return normalizedClip
+            }
+    }
+
+    /// Packs clips end-to-start from zero while preserving duration and chronological order.
+    mutating func compactClipsMagnetically() throws {
+        guard !isLocked else { return }
+
+        var nextStart: TimeInterval = 0
+        clips = try clips
+            .sorted(by: Self.clipTimelineOrder)
+            .map { clip in
+                guard clip.timelineRange.duration >= 0 else {
+                    throw EditorCommandError.invalidCommand("Clip duration cannot be negative.")
+                }
+
+                var compactedClip = clip
+                compactedClip.timelineRange = TimeRange(
+                    start: max(0, nextStart),
+                    duration: clip.timelineRange.duration
+                )
+                nextStart = compactedClip.timelineRange.end
+                return compactedClip
+            }
+    }
+
+    static func clipLayerOrder(_ lhs: Clip, _ rhs: Clip) -> Bool {
+        if lhs.zIndex != rhs.zIndex {
+            return lhs.zIndex < rhs.zIndex
+        }
+        return clipTimelineOrder(lhs, rhs)
+    }
+
+    static func clipTimelineOrder(_ lhs: Clip, _ rhs: Clip) -> Bool {
+        if lhs.timelineRange.start != rhs.timelineRange.start {
+            return lhs.timelineRange.start < rhs.timelineRange.start
+        }
+        if lhs.timelineRange.duration != rhs.timelineRange.duration {
+            return lhs.timelineRange.duration < rhs.timelineRange.duration
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}
+
 extension Project {
     mutating func trackIndex(for trackId: UUID) throws -> Int {
         guard let index = timeline.tracks.firstIndex(where: { $0.id == trackId }) else {
@@ -59,6 +117,28 @@ extension Project {
             timeline.tracks[index].zIndex = index
         }
     }
+
+    mutating func normalizeClipZIndexes(in trackId: UUID) throws {
+        let trackIndex = try trackIndex(for: trackId)
+        timeline.tracks[trackIndex].normalizeClipZIndexes()
+    }
+
+    mutating func compactTrackMagnetically(_ trackId: UUID) throws {
+        let trackIndex = try trackIndex(for: trackId)
+        try ensureTrackIsEditable(at: trackIndex)
+        try timeline.tracks[trackIndex].compactClipsMagnetically()
+    }
+
+    mutating func restoreClips(_ clips: [Clip], in trackId: UUID) throws {
+        let trackIndex = try trackIndex(for: trackId)
+        try ensureTrackIsEditable(at: trackIndex)
+        timeline.tracks[trackIndex].clips = clips
+    }
+
+    mutating func trackClipSnapshot(for trackId: UUID) throws -> [Clip] {
+        let trackIndex = try trackIndex(for: trackId)
+        return timeline.tracks[trackIndex].clips
+    }
 }
 
 struct NoOpCommand: EditorCommand {
@@ -76,5 +156,71 @@ struct NoOpCommand: EditorCommand {
 
     func invert(from result: CommandResult) throws -> any EditorCommand {
         self
+    }
+}
+
+struct RestoreTrackClipsCommand: EditorCommand {
+    let id: UUID
+    var snapshots: [UUID: [Clip]]
+    var restoreDescription: String
+
+    init(
+        id: UUID = UUID(),
+        snapshots: [UUID: [Clip]],
+        description: String = "Restored track clips"
+    ) {
+        self.id = id
+        self.snapshots = snapshots
+        self.restoreDescription = description
+    }
+
+    func apply(to project: inout Project) throws -> CommandResult {
+        var undoValues: [String: CommandResultValue] = [:]
+        var affectedClipIds = Set<UUID>()
+
+        for (trackId, clips) in snapshots {
+            let previousClips = try project.trackClipSnapshot(for: trackId)
+            undoValues[Self.snapshotKey(for: trackId)] = .clips(previousClips)
+            affectedClipIds.formUnion(previousClips.map(\.id))
+            affectedClipIds.formUnion(clips.map(\.id))
+            try project.restoreClips(clips, in: trackId)
+        }
+
+        return CommandResult(
+            affectedClipIds: affectedClipIds,
+            description: restoreDescription,
+            undoValues: undoValues
+        )
+    }
+
+    func invert(from result: CommandResult) throws -> any EditorCommand {
+        let snapshots = Self.snapshots(from: result.undoValues)
+        guard !snapshots.isEmpty else {
+            return NoOpCommand(description: "Missing track clip snapshots for inverse")
+        }
+
+        return RestoreTrackClipsCommand(
+            snapshots: snapshots,
+            description: "Restored track clips"
+        )
+    }
+
+    static func snapshotKey(for trackId: UUID) -> String {
+        "trackClips:\(trackId.uuidString)"
+    }
+
+    static func snapshots(from undoValues: [String: CommandResultValue]) -> [UUID: [Clip]] {
+        var snapshots: [UUID: [Clip]] = [:]
+        let prefix = "trackClips:"
+
+        for (key, value) in undoValues where key.hasPrefix(prefix) {
+            let idString = String(key.dropFirst(prefix.count))
+            guard let trackId = UUID(uuidString: idString), case .clips(let clips) = value else {
+                continue
+            }
+            snapshots[trackId] = clips
+        }
+
+        return snapshots
     }
 }

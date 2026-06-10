@@ -18,6 +18,8 @@ public struct DuplicateClipCommand: EditorCommand {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
+        let trackId = project.timeline.tracks[location.trackIndex].id
+        let previousClips = project.timeline.tracks[location.trackIndex].clips
         let originalClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         var duplicateClip = originalClip
         duplicateClip.id = UUID()
@@ -30,15 +32,28 @@ public struct DuplicateClipCommand: EditorCommand {
             duplicateClip,
             at: location.clipIndex + 1
         )
+        try project.compactTrackMagnetically(trackId)
+        try project.normalizeClipZIndexes(in: trackId)
 
         return CommandResult(
-            affectedClipIds: [duplicateClip.id],
+            affectedClipIds: Set(previousClips.map(\.id)).union([duplicateClip.id]),
             description: "Duplicated clip \(clipId)",
-            undoValues: ["duplicateClipId": .uuid(duplicateClip.id)]
+            undoValues: [
+                "duplicateClipId": .uuid(duplicateClip.id),
+                RestoreTrackClipsCommand.snapshotKey(for: trackId): .clips(previousClips)
+            ]
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
+        if !snapshots.isEmpty {
+            return RestoreTrackClipsCommand(
+                snapshots: snapshots,
+                description: "Removed duplicated clip \(clipId)"
+            )
+        }
+
         if case .uuid(let duplicateClipId)? = result.undoValues["duplicateClipId"] {
             return DeleteClipCommand(clipId: duplicateClipId)
         }

@@ -100,6 +100,8 @@ public struct MoveClipCommand: EditorCommand {
         let destinationTrackId = targetTrackId ?? currentTrackId
         let destinationTrackIndex = try project.trackIndex(for: destinationTrackId)
         try project.ensureTrackIsEditable(at: destinationTrackIndex)
+        let sourceTrackClipsBefore = project.timeline.tracks[location.trackIndex].clips
+        let destinationTrackClipsBefore = project.timeline.tracks[destinationTrackIndex].clips
 
         var updatedRange = newTimelineRange
         let originalClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
@@ -133,18 +135,45 @@ public struct MoveClipCommand: EditorCommand {
             }
         }
 
+        try project.compactTrackMagnetically(currentTrackId)
+        try project.normalizeClipZIndexes(in: currentTrackId)
+        if destinationTrackId != currentTrackId {
+            try project.compactTrackMagnetically(destinationTrackId)
+            try project.normalizeClipZIndexes(in: destinationTrackId)
+        }
+
+        var undoValues: [String: CommandResultValue] = [
+            "sourceTrackId": .uuid(currentTrackId),
+            "sourceClipIndex": .int(location.clipIndex),
+            "timelineRange": .timeRange(originalClip.timelineRange),
+            RestoreTrackClipsCommand.snapshotKey(for: currentTrackId): .clips(sourceTrackClipsBefore)
+        ]
+        if destinationTrackId != currentTrackId {
+            undoValues[RestoreTrackClipsCommand.snapshotKey(for: destinationTrackId)] = .clips(destinationTrackClipsBefore)
+        }
+
+        var affectedClipIds = Set(sourceTrackClipsBefore.map(\.id))
+        if destinationTrackId != currentTrackId {
+            affectedClipIds.formUnion(destinationTrackClipsBefore.map(\.id))
+        }
+        affectedClipIds.insert(clipId)
+
         return CommandResult(
-            affectedClipIds: [clipId],
+            affectedClipIds: affectedClipIds,
             description: "Moved clip \(clipId)",
-            undoValues: [
-                "sourceTrackId": .uuid(currentTrackId),
-                "sourceClipIndex": .int(location.clipIndex),
-                "timelineRange": .timeRange(originalClip.timelineRange)
-            ]
+            undoValues: undoValues
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
+        if !snapshots.isEmpty {
+            return RestoreTrackClipsCommand(
+                snapshots: snapshots,
+                description: "Restored moved clip \(clipId)"
+            )
+        }
+
         if
             case .uuid(let originalTrackId)? = result.undoValues["sourceTrackId"],
             case .int(let originalClipIndex)? = result.undoValues["sourceClipIndex"],

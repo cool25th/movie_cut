@@ -1319,30 +1319,30 @@ final class EditorViewModel {
     }
 
     func moveSelectedClipLayerForward() async {
-        guard let track = selectedClipTrack else { return }
-        await setSelectedClipTrackZIndex(track.zIndex + 1)
+        guard let selectedClip else { return }
+        await setSelectedClipZIndex(selectedClip.zIndex + 1)
     }
 
     func moveSelectedClipLayerBackward() async {
-        guard let track = selectedClipTrack else { return }
-        await setSelectedClipTrackZIndex(track.zIndex - 1)
+        guard let selectedClip else { return }
+        await setSelectedClipZIndex(selectedClip.zIndex - 1)
     }
 
     func bringSelectedClipLayerToFront() async {
-        guard let track = selectedClipTrack else { return }
-        let frontZIndex = (currentProject.timeline.tracks.map(\.zIndex).max() ?? track.zIndex) + 1
-        await setSelectedClipTrackZIndex(frontZIndex)
+        guard let selectedClip else { return }
+        let frontZIndex = (selectedClipTrack?.clips.map(\.zIndex).max() ?? selectedClip.zIndex) + 1
+        await setSelectedClipZIndex(frontZIndex)
     }
 
     func sendSelectedClipLayerToBack() async {
-        guard let track = selectedClipTrack else { return }
-        let backZIndex = (currentProject.timeline.tracks.map(\.zIndex).min() ?? track.zIndex) - 1
-        await setSelectedClipTrackZIndex(backZIndex)
+        guard let selectedClip else { return }
+        let backZIndex = (selectedClipTrack?.clips.map(\.zIndex).min() ?? selectedClip.zIndex) - 1
+        await setSelectedClipZIndex(backZIndex)
     }
 
-    private func setSelectedClipTrackZIndex(_ zIndex: Int) async {
-        guard let trackId = selectedClipTrackId else { return }
-        await apply(SetTrackPropertyCommand(trackId: trackId, property: .zIndex(zIndex)))
+    private func setSelectedClipZIndex(_ zIndex: Int) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .zIndex(zIndex)))
     }
 
     func updateSelectedOpacity(_ opacity: Double) async {
@@ -2735,7 +2735,10 @@ final class EditorViewModel {
         )
 
         try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
-        return clip
+        let snapshot = await session.snapshot()
+        return snapshot.timeline.tracks
+            .flatMap(\.clips)
+            .first { $0.id == clip.id } ?? clip
     }
 
     private func destinationTrack(for asset: MediaAsset, preferredTrackId: UUID?) async throws -> Track {

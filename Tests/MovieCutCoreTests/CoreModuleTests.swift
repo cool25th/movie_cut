@@ -72,20 +72,89 @@ import MovieCutCore
     #expect(decoded.id == project.id)
 }
 
+@Test func clipCodableLegacyJSONWithoutZIndexDefaultsToZero() throws {
+    let clip = Clip(kind: .video, sourceRange: TimeRange(start: 1, duration: 5), timelineRange: TimeRange(start: 2, duration: 5), zIndex: 7)
+    let encoded = try JSONEncoder().encode(clip)
+    var jsonObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    jsonObject.removeValue(forKey: "zIndex")
+
+    let legacyData = try JSONSerialization.data(withJSONObject: jsonObject)
+    let decoded = try JSONDecoder().decode(Clip.self, from: legacyData)
+
+    #expect(decoded.zIndex == 0)
+    #expect(decoded.timelineRange.start == 2)
+    #expect(decoded.timelineRange.duration == 5)
+}
+
+@Test func clipCodableRoundTripPreservesNonzeroZIndex() throws {
+    let clip = Clip(kind: .text, sourceRange: TimeRange(start: 0, duration: 4), timelineRange: TimeRange(start: 3, duration: 4), zIndex: 12)
+    let data = try JSONEncoder().encode(clip)
+    let decoded = try JSONDecoder().decode(Clip.self, from: data)
+
+    #expect(decoded.zIndex == 12)
+    #expect(decoded.timelineRange.start == 3)
+    #expect(decoded.timelineRange.duration == 4)
+}
+
 @Test func moveClipCommandAppliesAndInverts() throws {
     var project = Project(name: "Test", timeline: Timeline(tracks: [
         Track(kind: .video, name: "V1", zIndex: 0, clips: [
             Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 5), timelineRange: TimeRange(start: 0, duration: 5))
         ])
     ]))
+    let originalClips = project.timeline.tracks[0].clips
     let clipId = project.timeline.tracks[0].clips[0].id
     let trackId = project.timeline.tracks[0].id
     let cmd = MoveClipCommand(clipId: clipId, sourceTrackId: trackId, targetTrackId: trackId, newTimelineRange: TimeRange(start: 3, duration: 5))
     let result: CommandResult = try cmd.apply(to: &project)
-    #expect(project.timeline.tracks[0].clips[0].timelineRange.start == 3)
+    #expect(project.timeline.tracks[0].clips[0].timelineRange.start == 0)
+    #expect(project.timeline.tracks[0].clips[0].timelineRange.duration == 5)
     let undo = try cmd.invert(from: result)
     _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].clips[0].timelineRange.start == 0)
+    expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
+}
+
+@Test func addClipCommandMagneticallyCompactsSameTrackAndLeavesOtherTrackUntouched() throws {
+    let existingClip = Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 4, duration: 2))
+    let addedClip = Clip(kind: .video, sourceRange: TimeRange(start: 2, duration: 3), timelineRange: TimeRange(start: 20, duration: 3))
+    let otherTrackClip = Clip(kind: .audio, sourceRange: TimeRange(start: 0, duration: 4), timelineRange: TimeRange(start: 7, duration: 4))
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [existingClip]),
+        Track(kind: .audio, name: "A1", zIndex: 1, clips: [otherTrackClip])
+    ]))
+    let trackId = project.timeline.tracks[0].id
+    let otherTrackSnapshot = project.timeline.tracks[1].clips
+
+    _ = try AddClipCommand(trackId: trackId, clip: addedClip).apply(to: &project)
+
+    let videoClips = project.timeline.tracks[0].clips
+    #expect(videoClips.map(\.id) == [existingClip.id, addedClip.id])
+    #expect(videoClips.map { $0.timelineRange.start } == [0, 2])
+    #expect(videoClips.map { $0.timelineRange.duration } == [2, 3])
+    #expect(videoClips.map(\.zIndex) == [0, 1])
+    expectClipTimelineSnapshot(project.timeline.tracks[1].clips, matches: otherTrackSnapshot)
+}
+
+@Test func moveClipCommandMagneticCompactionRemovesGapsAndUndoRestoresSnapshot() throws {
+    let firstClip = Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 0, duration: 2), zIndex: 0)
+    let secondClip = Clip(kind: .video, sourceRange: TimeRange(start: 2, duration: 3), timelineRange: TimeRange(start: 10, duration: 3), zIndex: 1)
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, secondClip])
+    ]))
+    let trackId = project.timeline.tracks[0].id
+    let originalClips = project.timeline.tracks[0].clips
+    let cmd = MoveClipCommand(clipId: secondClip.id, sourceTrackId: trackId, targetTrackId: trackId, newTimelineRange: TimeRange(start: 12, duration: 3))
+
+    let result = try cmd.apply(to: &project)
+
+    let compactedClips = project.timeline.tracks[0].clips
+    #expect(compactedClips.map(\.id) == [firstClip.id, secondClip.id])
+    #expect(compactedClips.map { $0.timelineRange.start } == [0, 2])
+    #expect(compactedClips.map { $0.timelineRange.duration } == [2, 3])
+
+    let undo = try cmd.invert(from: result)
+    _ = try undo.apply(to: &project)
+    expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
 }
 
 @Test func trimClipCommandAppliesAndInverts() throws {
@@ -197,6 +266,24 @@ func setTrackPropertyZIndexAppliesAndInverts() throws {
     #expect(project.timeline.tracks[0].zIndex == 4)
 }
 
+@Test("SetClipProperty zIndex applies and inverts on selected clip")
+func setClipPropertyZIndexAppliesAndInvertsOnSelectedClip() throws {
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .text, name: "Overlay", zIndex: 0, clips: [
+            Clip(kind: .text, sourceRange: TimeRange(start: 0, duration: 5), timelineRange: TimeRange(start: 0, duration: 5), zIndex: 2)
+        ])
+    ]))
+    let clipId = project.timeline.tracks[0].clips[0].id
+    let command = SetClipPropertyCommand(clipId: clipId, property: .zIndex(8))
+
+    let result = try command.apply(to: &project)
+    #expect(project.timeline.tracks[0].clips[0].zIndex == 8)
+
+    let undo = try command.invert(from: result)
+    _ = try undo.apply(to: &project)
+    #expect(project.timeline.tracks[0].clips[0].zIndex == 2)
+}
+
 @Test("SetTrackProperty boolean applies and inverts")
 func setTrackPropertyBooleanAppliesAndInverts() throws {
     var project = Project(name: "Test", timeline: Timeline(tracks: [
@@ -246,4 +333,22 @@ func setTrackPropertyBooleanAppliesAndInverts() throws {
     project.markers = [marker]
     #expect(project.markers.count == 1)
     #expect(project.markers[0].time == 5.0)
+}
+
+private func expectClipTimelineSnapshot(_ actual: [Clip], matches expected: [Clip]) {
+    #expect(actual.count == expected.count)
+    guard actual.count == expected.count else {
+        return
+    }
+
+    for index in actual.indices {
+        #expect(actual[index].id == expected[index].id)
+        #expect(actual[index].assetId == expected[index].assetId)
+        #expect(actual[index].kind == expected[index].kind)
+        #expect(actual[index].sourceRange.start == expected[index].sourceRange.start)
+        #expect(actual[index].sourceRange.duration == expected[index].sourceRange.duration)
+        #expect(actual[index].timelineRange.start == expected[index].timelineRange.start)
+        #expect(actual[index].timelineRange.duration == expected[index].timelineRange.duration)
+        #expect(actual[index].zIndex == expected[index].zIndex)
+    }
 }

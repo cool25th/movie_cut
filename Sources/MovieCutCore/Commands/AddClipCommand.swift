@@ -27,20 +27,32 @@ public struct AddClipCommand: EditorCommand {
             throw EditorCommandError.invalidCommand("Clip already exists: \(clip.id)")
         }
 
+        let previousClips = try project.trackClipSnapshot(for: trackId)
         try project.insertClip(clip, into: trackId, at: insertionIndex)
+        try project.compactTrackMagnetically(trackId)
+        try project.normalizeClipZIndexes(in: trackId)
         project.normalizeTrackZIndexes()
 
         return CommandResult(
-            affectedClipIds: [clip.id],
+            affectedClipIds: Set(previousClips.map(\.id)).union([clip.id]),
             description: "Added clip \(clip.id)",
             undoValues: [
                 "trackId": .uuid(trackId),
-                "clip": .clip(clip)
+                "clip": .clip(clip),
+                RestoreTrackClipsCommand.snapshotKey(for: trackId): .clips(previousClips)
             ]
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
-        DeleteClipCommand(clipId: clip.id, deletedTrackId: trackId, deletedClip: clip, deletedClipIndex: insertionIndex)
+        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
+        if !snapshots.isEmpty {
+            return RestoreTrackClipsCommand(
+                snapshots: snapshots,
+                description: "Removed added clip \(clip.id)"
+            )
+        }
+
+        return DeleteClipCommand(clipId: clip.id, deletedTrackId: trackId, deletedClip: clip, deletedClipIndex: insertionIndex)
     }
 }

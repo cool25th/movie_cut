@@ -51,6 +51,20 @@ struct MacMaskCanvasStaticContractTests {
         #expect(source.contains("normalizedDegrees(currentMask.rotation + deltaDegrees)"))
     }
 
+    @Test("macOS mask canvas exposes VoiceOver resize actions for precise size adjustment")
+    func voiceOverResizeActionContract() throws {
+        let source = try source
+
+        #expect(source.contains("Increase mask width"))
+        #expect(source.contains("Decrease mask width"))
+        #expect(source.contains("Increase mask height"))
+        #expect(source.contains("Decrease mask height"))
+        #expect(source.contains("accessibilityResizeStepX"))
+        #expect(source.contains("accessibilityResizeStepY"))
+        #expect(source.contains("private func resizeMask(_ currentMask: Mask, by deltaSize: CGSize, metrics: MaskCanvasMetrics)"))
+        #expect(source.contains("scaleBrushPoints("))
+    }
+
     @Test("macOS mask canvas exposes position, size, rotation, and selected toolbar state to VoiceOver")
     func accessibilityValueContract() throws {
         let source = try source

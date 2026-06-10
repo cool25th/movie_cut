@@ -143,7 +143,19 @@ struct IOSMaskCanvasView: View {
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
             .accessibilityLabel(corner.accessibilityLabel)
             .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
-            .accessibilityHint("Drag to resize the mask")
+            .accessibilityHint("Drag to resize the mask, or use VoiceOver actions to adjust width and height one percent at a time")
+            .accessibilityAction(named: "Increase mask width") {
+                resizeMask(currentMask, by: CGSize(width: metrics.accessibilityResizeStepX, height: 0), metrics: metrics)
+            }
+            .accessibilityAction(named: "Decrease mask width") {
+                resizeMask(currentMask, by: CGSize(width: -metrics.accessibilityResizeStepX, height: 0), metrics: metrics)
+            }
+            .accessibilityAction(named: "Increase mask height") {
+                resizeMask(currentMask, by: CGSize(width: 0, height: metrics.accessibilityResizeStepY), metrics: metrics)
+            }
+            .accessibilityAction(named: "Decrease mask height") {
+                resizeMask(currentMask, by: CGSize(width: 0, height: -metrics.accessibilityResizeStepY), metrics: metrics)
+            }
             .accessibilitySortPriority(3)
     }
 
@@ -162,7 +174,13 @@ struct IOSMaskCanvasView: View {
             .gesture(rotationGesture(currentMask: currentMask, metrics: metrics))
             .accessibilityLabel("Rotate mask")
             .accessibilityValue(rotationAccessibilityValue(for: currentMask.rotation))
-            .accessibilityHint("Drag to rotate the mask")
+            .accessibilityHint("Drag to rotate the mask, or use VoiceOver actions to rotate five degrees at a time")
+            .accessibilityAction(named: "Rotate mask counterclockwise") {
+                rotateMask(currentMask, by: -5)
+            }
+            .accessibilityAction(named: "Rotate mask clockwise") {
+                rotateMask(currentMask, by: 5)
+            }
             .accessibilitySortPriority(2)
     }
 
@@ -315,6 +333,12 @@ struct IOSMaskCanvasView: View {
 
                 var updatedMask = startMask
                 updatedMask.rotation = rotationDegrees(for: value.location, around: startMask.position, metrics: metrics)
+
+                if updatedMask.shape == .brush, startMask.brushPoints.count > 1 {
+                    let delta = normalizedDegrees(updatedMask.rotation - startMask.rotation)
+                    updatedMask.brushPoints = rotate(startMask.brushPoints, degrees: delta, around: startMask.position)
+                }
+
                 updateMask(updatedMask)
             }
             .onEnded { _ in
@@ -358,6 +382,26 @@ struct IOSMaskCanvasView: View {
             updatedMask.brushPoints = offset(currentMask.brushPoints, by: appliedDelta)
         }
 
+        updateMask(updatedMask)
+    }
+
+    private func rotateMask(_ currentMask: Mask, by deltaDegrees: Double) {
+        var updatedMask = currentMask
+        updatedMask.rotation = normalizedDegrees(currentMask.rotation + deltaDegrees)
+
+        if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
+            updatedMask.brushPoints = rotate(currentMask.brushPoints, degrees: deltaDegrees, around: currentMask.position)
+        }
+
+        updateMask(updatedMask)
+    }
+
+    private func resizeMask(_ currentMask: Mask, by deltaSize: CGSize, metrics: IOSMaskMetrics) {
+        var updatedMask = currentMask
+        updatedMask.size = CGSize(
+            width: min(max(currentMask.size.width + deltaSize.width, metrics.minimumMaskSize), metrics.canvasSize.width),
+            height: min(max(currentMask.size.height + deltaSize.height, metrics.minimumMaskSize), metrics.canvasSize.height)
+        )
         updateMask(updatedMask)
     }
 
@@ -527,6 +571,16 @@ struct IOSMaskCanvasView: View {
         )
     }
 
+    private func rotate(_ points: [CGPoint], degrees: Double, around center: CGPoint) -> [CGPoint] {
+        points.map { point in
+            let rotated = Self.rotate(
+                CGVector(dx: point.x - center.x, dy: point.y - center.y),
+                degrees: degrees
+            )
+            return CGPoint(x: center.x + rotated.dx, y: center.y + rotated.dy)
+        }
+    }
+
     private func offset(_ points: [CGPoint], by delta: CGVector) -> [CGPoint] {
         points.map { point in
             CGPoint(x: point.x + delta.dx, y: point.y + delta.dy)
@@ -555,6 +609,8 @@ private struct IOSMaskMetrics {
     var minimumMaskSize: CGFloat { 20 / scale }
     var accessibilityNudgeStepX: CGFloat { max(canvasSize.width * 0.01, 1) }
     var accessibilityNudgeStepY: CGFloat { max(canvasSize.height * 0.01, 1) }
+    var accessibilityResizeStepX: CGFloat { max(canvasSize.width * 0.01, 1) }
+    var accessibilityResizeStepY: CGFloat { max(canvasSize.height * 0.01, 1) }
 
     init(viewSize: CGSize, canvasSize: CGSize) {
         self.viewSize = viewSize

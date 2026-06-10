@@ -182,7 +182,19 @@ struct MaskCanvasView: View {
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
             .accessibilityLabel(corner.accessibilityLabel)
             .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
-            .accessibilityHint("Drag to resize the mask. Hold Shift to preserve aspect ratio")
+            .accessibilityHint("Drag to resize the mask, hold Shift to preserve aspect ratio, or use VoiceOver actions to adjust width and height one percent at a time")
+            .accessibilityAction(named: "Increase mask width") {
+                resizeMask(currentMask, by: CGSize(width: metrics.accessibilityResizeStepX, height: 0), metrics: metrics)
+            }
+            .accessibilityAction(named: "Decrease mask width") {
+                resizeMask(currentMask, by: CGSize(width: -metrics.accessibilityResizeStepX, height: 0), metrics: metrics)
+            }
+            .accessibilityAction(named: "Increase mask height") {
+                resizeMask(currentMask, by: CGSize(width: 0, height: metrics.accessibilityResizeStepY), metrics: metrics)
+            }
+            .accessibilityAction(named: "Decrease mask height") {
+                resizeMask(currentMask, by: CGSize(width: 0, height: -metrics.accessibilityResizeStepY), metrics: metrics)
+            }
             .accessibilitySortPriority(3)
     }
 
@@ -431,6 +443,25 @@ struct MaskCanvasView: View {
 
         if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
             updatedMask.brushPoints = offset(currentMask.brushPoints, by: appliedDelta)
+        }
+
+        updateMask(updatedMask)
+    }
+
+    private func resizeMask(_ currentMask: Mask, by deltaSize: CGSize, metrics: MaskCanvasMetrics) {
+        var updatedMask = currentMask
+        updatedMask.size = CGSize(
+            width: min(max(currentMask.size.width + deltaSize.width, metrics.minimumMaskSize), metrics.canvasSize.width),
+            height: min(max(currentMask.size.height + deltaSize.height, metrics.minimumMaskSize), metrics.canvasSize.height)
+        )
+
+        if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
+            updatedMask.brushPoints = scaleBrushPoints(
+                currentMask.brushPoints,
+                around: currentMask.position,
+                from: currentMask.size,
+                to: updatedMask.size
+            )
         }
 
         updateMask(updatedMask)
@@ -717,6 +748,14 @@ private struct MaskCanvasMetrics {
     }
 
     var accessibilityNudgeStepY: CGFloat {
+        max(canvasSize.height * 0.01, 1)
+    }
+
+    var accessibilityResizeStepX: CGFloat {
+        max(canvasSize.width * 0.01, 1)
+    }
+
+    var accessibilityResizeStepY: CGFloat {
         max(canvasSize.height * 0.01, 1)
     }
 

@@ -121,6 +121,12 @@ public enum ExportQuality: String, Codable, Sendable, Equatable, Hashable, CaseI
 
 /// User-selectable export settings.
 public struct ExportSettings: Codable, Sendable, Equatable {
+    /// Lowest custom video bitrate accepted by export APIs, in megabits per second.
+    public static let minimumCustomVideoBitrateMbps = 1
+
+    /// Highest custom video bitrate accepted by export APIs, in megabits per second.
+    public static let maximumCustomVideoBitrateMbps = 200
+
     /// Output resolution.
     public var resolution: ExportResolution
 
@@ -196,10 +202,10 @@ public struct ExportSettings: Codable, Sendable, Equatable {
     /// Resolved target video bitrate in megabits per second.
     public var resolvedVideoBitrateMbps: Int? {
         if quality == .custom {
-            guard let videoBitrateMbps, videoBitrateMbps > 0 else {
+            guard let videoBitrateMbps, videoBitrateMbps >= Self.minimumCustomVideoBitrateMbps else {
                 return nil
             }
-            return videoBitrateMbps
+            return min(videoBitrateMbps, Self.maximumCustomVideoBitrateMbps)
         }
 
         return quality.defaultVideoBitrateMbps(for: resolution)

@@ -105,11 +105,19 @@ struct ContentView: View {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
                 .keyboardShortcut("e", modifiers: .command)
+                .disabled(viewModel.exportEngine.isExporting)
+                .help(exportButtonHelpText)
+                .accessibilityLabel("Export project")
+                .accessibilityValue(exportButtonAccessibilityValue)
+                .accessibilityHint(exportButtonHelpText)
 
                 if let exportURL = viewModel.lastExportURL {
                     ShareLink(item: exportURL) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
+                    .help("Share the most recent export file")
+                    .accessibilityLabel("Share latest export")
+                    .accessibilityValue(exportURL.lastPathComponent)
                 }
             }
         }
@@ -134,6 +142,23 @@ struct ContentView: View {
             .wide21x9,
             .ultrawide21x9
         ]
+    }
+
+    private var exportButtonHelpText: String {
+        if viewModel.exportEngine.isExporting {
+            return "Export is already running. Review progress in the export sheet or cancel it before starting another export."
+        }
+
+        return "Export the current project using the selected container, codec, quality, and resolution settings."
+    }
+
+    private var exportButtonAccessibilityValue: String {
+        let settings = viewModel.currentProject.exportSettings
+        let quality = settings.quality == .custom
+            ? "Custom \(settings.resolvedVideoBitrateMbps ?? 0) Mbps"
+            : settings.quality.displayName
+
+        return "\(settings.containerFormat.displayName), \(settings.codec.accessibilityDisplayName), \(settings.resolution.accessibilityDisplayName), \(settings.frameRate.statusDisplayName), \(quality) quality"
     }
 
     private var statusBar: some View {
@@ -461,6 +486,9 @@ struct ExportSheet: View {
                 .font(.headline)
             ProgressView(value: viewModel.exportEngine.exportProgress)
                 .frame(width: 280)
+                .accessibilityLabel("Export progress")
+                .accessibilityValue(exportProgressAccessibilityValue)
+                .accessibilityHint("Shows the current export percentage. This progress alone is not an export golden or playback verification.")
             Text(String(format: "%.0f%%", viewModel.exportEngine.exportProgress * 100))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -468,12 +496,43 @@ struct ExportSheet: View {
                 Text(exportError)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .accessibilityLabel("Export error")
             }
             Button("Cancel") {
                 viewModel.cancelExport()
             }
+            .help("Cancel the current export")
+            .accessibilityHint("Stops the running export. It does not delete previously exported files.")
         }
         .padding(16)
+    }
+
+    private var exportProgressAccessibilityValue: String {
+        String(format: "%.0f percent", viewModel.exportEngine.exportProgress * 100)
+    }
+}
+
+private extension ExportResolution {
+    var accessibilityDisplayName: String {
+        switch self {
+        case .p720:
+            return "720p"
+        case .p1080:
+            return "1080p"
+        case .p4K:
+            return "4K"
+        }
+    }
+}
+
+private extension ExportCodec {
+    var accessibilityDisplayName: String {
+        switch self {
+        case .h264:
+            return "H.264"
+        case .hevc:
+            return "HEVC"
+        }
     }
 }
 

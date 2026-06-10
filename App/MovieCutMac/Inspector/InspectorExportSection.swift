@@ -15,29 +15,47 @@ struct InspectorExportSection: View {
                     Text(format.displayName).tag(format)
                 }
             }
+            .accessibilityLabel("Export container format")
+            .accessibilityValue(viewModel.currentProject.exportSettings.containerFormat.displayName)
+            .accessibilityHint(exportPickerAccessibilityHint)
             Picker("Resolution", selection: exportResolutionBinding) {
                 Text("4K (3840x2160)").tag(ExportResolution.p4K)
                 Text("1080p (1920x1080)").tag(ExportResolution.p1080)
                 Text("720p (1280x720)").tag(ExportResolution.p720)
             }
+            .accessibilityLabel("Export resolution")
+            .accessibilityValue(exportResolutionAccessibilityValue)
+            .accessibilityHint(exportPickerAccessibilityHint)
             Picker("Frame Rate", selection: exportFrameRateBinding) {
                 Text("24 fps").tag(ExportFrameRate.fps24)
                 Text("30 fps").tag(ExportFrameRate.fps30)
                 Text("60 fps").tag(ExportFrameRate.fps60)
             }
+            .accessibilityLabel("Export frame rate")
+            .accessibilityValue(exportFrameRateAccessibilityValue)
+            .accessibilityHint(exportPickerAccessibilityHint)
             Picker("Video Codec", selection: exportCodecBinding) {
                 Text("H.264").tag(ExportCodec.h264)
                 Text("HEVC").tag(ExportCodec.hevc)
             }
+            .accessibilityLabel("Export video codec")
+            .accessibilityValue(videoCodecLabel)
+            .accessibilityHint(exportPickerAccessibilityHint)
             Picker("Audio Codec", selection: exportAudioCodecBinding) {
                 Text("AAC").tag(MovieCutCore.AudioCodec.aac)
                 Text("PCM").tag(MovieCutCore.AudioCodec.pcm)
             }
+            .accessibilityLabel("Export audio codec")
+            .accessibilityValue(audioCodecLabel)
+            .accessibilityHint(exportPickerAccessibilityHint)
             Picker("Quality", selection: exportQualityBinding) {
                 ForEach(ExportQuality.allCases, id: \.self) { quality in
                     Text(qualityPickerLabel(for: quality)).tag(quality)
                 }
             }
+            .accessibilityLabel("Export quality")
+            .accessibilityValue(qualityLabel)
+            .accessibilityHint(exportPickerAccessibilityHint)
             if viewModel.currentProject.exportSettings.quality == .custom {
                 customBitrateEditor
             }
@@ -83,6 +101,9 @@ struct InspectorExportSection: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel("Apply export preset \(preset.name)")
+                .accessibilityValue(socialPresetAccessibilityValue(for: preset))
+                .accessibilityHint(socialPresetAccessibilityHint(for: preset))
             }
         }
     }
@@ -157,6 +178,15 @@ struct InspectorExportSection: View {
             && viewModel.currentProject.exportSettings == preset.exportSettings
     }
 
+    private func socialPresetAccessibilityValue(for preset: SocialExportPreset) -> String {
+        let selectedState = isApplied(preset) ? "Selected" : "Not selected"
+        return "\(selectedState). \(preset.detail)"
+    }
+
+    private func socialPresetAccessibilityHint(for preset: SocialExportPreset) -> String {
+        "Applies \(preset.detail) export and canvas settings. This does not start export or verify an export golden file."
+    }
+
     private var exportEstimateView: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Export Summary")
@@ -181,6 +211,14 @@ struct InspectorExportSection: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Export summary")
+        .accessibilityValue(exportSummaryAccessibilityValue)
+        .accessibilityHint("Estimated size and bitrate are planning aids only. This summary does not verify an export golden file or playback result.")
+    }
+
+    private var exportPickerAccessibilityHint: String {
+        "Changes export settings used for the next export. This does not start export, verify an export golden file, or confirm playback."
     }
 
     private var summaryLine: String {
@@ -207,6 +245,21 @@ struct InspectorExportSection: View {
         case .hevc:
             return "HEVC"
         }
+    }
+
+    private var exportResolutionAccessibilityValue: String {
+        switch viewModel.currentProject.exportSettings.resolution {
+        case .p4K:
+            return "4K 3840 by 2160"
+        case .p1080:
+            return "1080p 1920 by 1080"
+        case .p720:
+            return "720p 1280 by 720"
+        }
+    }
+
+    private var exportFrameRateAccessibilityValue: String {
+        "\(viewModel.currentProject.exportSettings.frameRate.framesPerSecond) fps"
     }
 
     private var audioCodecLabel: String {
@@ -236,6 +289,10 @@ struct InspectorExportSection: View {
         return String(format: "~%.1f MB for %.1fs", megabytes, duration)
     }
 
+    private var exportSummaryAccessibilityValue: String {
+        "\(summaryLine). Video \(videoCodecLabel), \(qualityLabel). Audio \(audioCodecLabel). Format \(viewModel.currentProject.exportSettings.containerFormat.displayName). Estimated size \(estimatedFileSizeLabel)."
+    }
+
     private var estimatedVideoBitrateMbps: Double {
         let settings = viewModel.currentProject.exportSettings
         return Double(settings.resolvedVideoBitrateMbps ?? 10)
@@ -244,9 +301,14 @@ struct InspectorExportSection: View {
     private var customBitrateEditor: some View {
         HStack(spacing: 8) {
             Stepper("Custom Bitrate", value: customBitrateMbpsBinding, in: 1...200)
+                .accessibilityValue("\(customBitrateMbpsBinding.wrappedValue) Mbps")
+                .accessibilityHint("Adjusts the target video bitrate used for export planning and AVFoundation file length constraints.")
             TextField("Mbps", value: customBitrateMbpsBinding, format: .number)
                 .frame(width: 64)
                 .multilineTextAlignment(.trailing)
+                .accessibilityLabel("Custom bitrate value")
+                .accessibilityValue("\(customBitrateMbpsBinding.wrappedValue) Mbps")
+                .accessibilityHint("Enter a value from 1 to 200 Mbps. This does not verify an export golden file.")
             Text("Mbps")
                 .foregroundStyle(.secondary)
         }

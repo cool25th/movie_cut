@@ -548,20 +548,29 @@ private struct IOSExportProgressSheet: View {
 
                     ProgressView(value: min(max(progress, 0), 1))
                         .progressViewStyle(.linear)
+                        .accessibilityLabel("Export progress")
+                        .accessibilityValue(exportProgressAccessibilityValue)
+                        .accessibilityHint("This progress alone does not verify an export golden file or playback result.")
 
                     Text("\(Int((min(max(progress, 0), 1) * 100).rounded()))%")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
 
                 Button("Cancel Export", role: .destructive, action: cancelAction)
                     .buttonStyle(.bordered)
+                    .accessibilityHint("Stops the running export. It does not delete previously exported files.")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private var exportProgressAccessibilityValue: String {
+        "\(Int((min(max(progress, 0), 1) * 100).rounded())) percent"
     }
 }
 
@@ -576,17 +585,24 @@ private struct IOSExportResultSheet: View {
                 Label("Export Complete", systemImage: "checkmark.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.green)
+                    .accessibilityLabel("Export complete")
+                    .accessibilityValue(exportURL.lastPathComponent)
+                    .accessibilityHint("The file was written by the export engine. Share it after playback review if you need export golden evidence.")
 
                 Text(exportURL.lastPathComponent)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .accessibilityHidden(true)
 
                 ShareLink(item: exportURL) {
                     Label("Share Movie", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Share exported movie")
+                .accessibilityValue(exportURL.lastPathComponent)
+                .accessibilityHint("Opens the iOS share sheet for the latest export file. This does not confirm playback sync or export golden verification.")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)

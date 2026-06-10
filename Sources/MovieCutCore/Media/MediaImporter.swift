@@ -6,7 +6,7 @@ public struct MediaImporter: Sendable {
         "avi", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm"
     ]
     private static let audioExtensions: Set<String> = [
-        "aac", "aif", "aiff", "flac", "m4a", "mp3", "ogg", "wav"
+        "aac", "aif", "aiff", "caf", "flac", "m4a", "mp3", "ogg", "wav"
     ]
     private static let imageExtensions: Set<String> = [
         "bmp", "gif", "heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"

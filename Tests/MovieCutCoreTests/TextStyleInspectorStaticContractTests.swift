@@ -107,14 +107,14 @@ struct TextStyleInspectorStaticContractTests {
         #expect(updateCommand.contains("property: .textContent(textContent)"))
     }
 
-    @Test("Backlog marks text style UI complete and moves next P1 to voiceover")
-    func backlogMarksTextStyleCompleteAndVoiceoverNext() throws {
+    @Test("Backlog marks text style UI complete and keeps next P1 current")
+    func backlogMarksTextStyleCompleteAndKeepsNextP1Current() throws {
         let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
 
         #expect(backlog.contains("- [x] ✅ 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1)"))
         #expect(backlog.contains("Inspector controls now cover font/size/color/background/alignment/presets"))
         #expect(backlog.contains("advanced title template library remains separate P1/P2"))
-        #expect(backlog.contains("다음 1순위는 보이스오버 실녹음"))
+        #expect(backlog.contains("다음 1순위는 페이드 duration 편집 UI"))
         #expect(!backlog.contains("- [ ] 🟡 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1)"))
         #expect(!backlog.contains("다음 1순위는 텍스트 스타일 편집 UI"))
     }

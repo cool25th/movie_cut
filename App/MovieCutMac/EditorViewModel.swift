@@ -60,6 +60,8 @@ final class EditorViewModel {
         }
     }
 
+    private static let minimumVoiceoverDuration: TimeInterval = 0.1
+
     static let textTemplates: [TextTemplate] = [
         TextTemplate(id: "title", name: "Title", fontName: "HelveticaNeue-Bold", fontSize: 36, isBold: true, alignment: .center, animation: .fadeIn),
         TextTemplate(id: "subtitle", name: "Subtitle", fontName: "HelveticaNeue", fontSize: 24, isBold: false, alignment: .center, animation: .slideUp),
@@ -2823,6 +2825,20 @@ final class EditorViewModel {
         return TimeInterval(audioFile.length) / audioFile.processingFormat.sampleRate
     }
 
+    private func resolvedVoiceoverDuration(for url: URL, fallbackDuration: TimeInterval?) -> TimeInterval {
+        sanitizedDuration(audioDuration(for: url))
+            ?? sanitizedDuration(fallbackDuration)
+            ?? Self.minimumVoiceoverDuration
+    }
+
+    private func sanitizedDuration(_ duration: TimeInterval?) -> TimeInterval? {
+        guard let duration, duration.isFinite, duration > 0 else {
+            return nil
+        }
+
+        return max(duration, Self.minimumVoiceoverDuration)
+    }
+
     private func defaultTrackName(for kind: TrackKind, index: Int) -> String {
         switch kind {
         case .video:
@@ -2986,13 +3002,14 @@ final class EditorViewModel {
         }
     }
 
-    func addVoiceoverAudio(from url: URL) async {
+    func addVoiceoverAudio(from url: URL, fallbackDuration: TimeInterval? = nil) async {
         do {
-            let asset = MediaImporter.probe(url: url)
+            var asset = MediaImporter.probe(url: url)
+            let duration = resolvedVoiceoverDuration(for: url, fallbackDuration: fallbackDuration)
+            asset.duration = duration
             try await session.dispatch(ImportMediaCommand(asset: asset))
 
             let audioTrack = try await ensureTrack(for: .audio)
-            let duration = asset.duration ?? 5
             let clip = Clip(
                 assetId: asset.id,
                 kind: .audio,

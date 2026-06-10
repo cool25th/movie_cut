@@ -1,6 +1,6 @@
 # MovieCut → CapCut 수준 개발 명세서 (Development Specification)
 
-> 버전: 1.1 / 작성일: 2026-06-11 / 기준 커밋: `d439168`
+> 버전: 1.2 / 작성일: 2026-06-11 / 기준 커밋: `08db5a0`
 > 관련 문서: `CAPCUT_FEATURE_BACKLOG.md`(기능 목록·상태), `SESSION_HANDOFF.md`(세션 인수인계)
 > 이 문서는 "무엇을"(백로그)이 아니라 **"어떻게, 어떤 기준으로, 어떤 순서로"**를 정의한다.
 > 운영 규칙: 신규 기능 작업은 이 문서의 F-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
@@ -48,9 +48,11 @@
 - **보이스오버**: 마이크 권한 + `AVAudioEngine` 실녹음 → 클립 배치(`4e982b0`; 실제 마이크 GUI 검증은 잔여 caveat)
 - **스티커**: 이모지/이미지, 온캔버스 이동/리사이즈/회전/스냅 가이드/멀티선택 정렬, 클립별 라벨
 - **Export**: container(mp4/mov)/codec/fps/quality/커스텀 비트레이트(1~200Mbps clamp), 소셜 프리셋, 진행률/취소/공유, 접근성
+- **마그네틱 타임라인 + 클립 zIndex**(`08db5a0`): same-track magnetic packing, `Clip.zIndex` 기반 표시 순서/Bring to Front·Send to Back — F-03 완료, F-04는 zIndex만 완료(그룹/링크 잔여)
+- **오디오 페이드 편집 UI**(`0a5874f`): Inspector Fade In/Out slider/stepper/preset → `AudioFadeCommand`
 
 ### 2.2 미완 (이 명세서의 대상)
-비파일 드래그 소스(F-01), 마그네틱 타임라인(F-03), 클립 zIndex/그룹(F-04), 단축키 맵(F-05), 해상도/fps probe(F-06), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
+비파일 드래그 소스(F-01), 클립 그룹/링크(F-04 잔여), 단축키 맵(F-05), 해상도/fps probe(F-06), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
 
 ### 2.3 아키텍처 현황 (유지할 구조)
 ```
@@ -80,7 +82,7 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 
 | 마일스톤 | 테마 | 포함 기능 | 완료 판정 |
 |---|---|---|---|
-| **M1. 편집 기본기 완성** | 미디어 파이프라인 + 타임라인 UX | F-01, F-03~F-06 | W1 워크플로우를 외부 도움 없이 완주 |
+| **M1. 편집 기본기 완성** | 미디어 파이프라인 + 타임라인 UX | F-01, F-04(잔여), F-05, F-06 | W1 워크플로우를 외부 도움 없이 완주 |
 | **M2. 비주얼 심화** | 효과의 신뢰성과 깊이 | F-07~F-11 | W4 완주 + export visual fixture 통과 |
 | **M3. 오디오 & 텍스트** | 소리와 자막의 CapCut 체감 | F-12R, F-13~F-15, F-17 | W2, W3 완주 |
 | **M4. 지능형 편집** | AI 도구 E2E | F-18~F-21 | 자동컷/리프레임이 실제 영상에서 유효 결과 |
@@ -101,12 +103,12 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: `TimelineView.handleTrackDrop` / `MediaLibraryPanel.handleDrop`의 수용 타입에 `.image`, `.movie`, file promise 추가. `NSFilePromiseReceiver`로 임시 디렉토리(`FileManager.temporaryDirectory/MovieCutImports/`)에 수신 후 기존 `importMediaAndAddToTimeline` 경로 재사용. raw image data는 PNG로 저장 후 동일 경로.
 - **AC**: ① 사진 앱에서 사진을 타임라인에 드래그 → 클립 생성 ② Safari 이미지 드래그 → 클립 생성 ③ 실패 시 `lastErrorMessage`로 원인 표시. **실기기 검증 필수**(드래그앤드롭 전례 — F-01은 contract 테스트만으로 완료 처리 금지).
 
-#### F-03. 마그네틱 타임라인
+#### F-03. 마그네틱 타임라인 — ✅ 완료 (`08db5a0`, 2026-06-11)
 - **요구사항**: CapCut처럼 클립 이동/삭제 시 같은 트랙의 뒤 클립들이 자동 밀착(옵션 토글). 드래그 중 인접 클립과 충돌 시 밀어내기 또는 스왑.
 - **구현**: Core에 `MagneticInsertCommand`/`CloseGapCommand` 신설(기존 `RippleDeleteCommand` 일반화). `EditorViewModel.isMagneticTimeline: Bool`(기본 on, UserDefaults). `TimelineView.moveGesture` 커밋 시 마그네틱 모드면 충돌 해소 명령으로 변환. 토글 UI는 타임라인 헤더에 자석 아이콘.
 - **AC**: ① 중간 클립 삭제 → 갭 자동 닫힘 ② 클립을 다른 클립 위로 드래그 → 겹침 없이 삽입·재배치 ③ 토글 off 시 기존 자유 배치 유지 ④ 모든 동작 단일 undo.
 
-#### F-04. 클립 단위 zIndex & 그룹/링크
+#### F-04. 클립 단위 zIndex & 그룹/링크 — 🟡 zIndex 완료(`08db5a0`), 그룹/링크 잔여
 - **요구사항**: 트랙이 아닌 클립 단위 레이어 순서 조정. 영상+오디오, 영상+자막을 그룹으로 묶어 함께 이동/트림.
 - **구현**: `Clip`에 `zIndexOverride: Int?`, `groupId: UUID?` 추가(A5 준수). compositor 정렬 키를 `(track.zIndex, clip.zIndexOverride ?? 0)`으로 확장. 그룹: 컨텍스트 메뉴 "Group/Ungroup", `moveClip`/`trimClip`이 같은 groupId 클립에 델타 전파(단일 undo 단위 batch dispatch).
 - **AC**: ① 두 텍스트 오버레이의 앞뒤 순서를 클립 단위로 변경 → preview/export 동일 ② 그룹 이동 시 상대 오프셋 유지 ③ ungroup 후 개별 동작 ④ 구버전 프로젝트 로드 호환.

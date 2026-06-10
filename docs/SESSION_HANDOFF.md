@@ -1,6 +1,6 @@
 # 세션 핸드오프 — 다음 개발 세션 시작 가이드
 
-> 작성일: 2026-06-10 / 브랜치: `main` / 기준 기능 커밋: `4e982b0` (voiceover recording workflow)
+> 작성일: 2026-06-11 / 브랜치: `main` / 기준 커밋: `08db5a0` (magnetic timeline + clip z-index)
 > 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md`, **개발 명세서(F-ID별 요구사항/구현 방안/수용 기준/마일스톤/DoD)는 `docs/CAPCUT_PARITY_SPEC.md`** 참고. 신규 기능 작업은 명세서의 F-ID 단위로 진행.
 
 ---
@@ -75,11 +75,17 @@
 
 ## 3. 다음 개발 큐 (P1, 우선순위순)
 
-백로그 §3 기준 미완료 P1 항목. 전환효과 two-source compositor 통합, 썸네일/프록시 생성, speed ramp preview static contract 검증, 텍스트 스타일 편집 UI, 보이스오버 실녹음, 페이드 duration 편집 UI, 마그네틱 타임라인 / 클립별 zIndex는 완료됐으므로 다음 우선순위는 텍스트 템플릿/타이틀 프리셋:
+**`docs/CAPCUT_PARITY_SPEC.md`의 F-ID가 작업 단위의 기준이다** (요구사항/구현 방안/AC 포함). 남은 M1 항목부터 순서대로:
 
-| # | 작업 | 시작점 |
+| # | 작업 (명세서 F-ID) | 시작점 |
 |---|---|---|
-| 1 | **텍스트 템플릿/타이틀 프리셋** — Core template 존재 여부와 실제 Inspector/Canvas 적용 경로를 확인해 단독 배치로 진행 | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
+| 1 | **F-01 비파일 드래그 소스** — 사진/브라우저 드래그를 `NSFilePromiseReceiver`로 수신 → 기존 import 경로 재사용. **실기기 검증 필수** | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop` |
+| 2 | **F-05 키보드 단축키 맵** — Space/Cmd+B/Q/W/Delete/Cmd+D 등 CapCut 표준 세트, `.commands {}` 메뉴 등록 | `MovieCutMacApp.swift`, `EditorViewModel` |
+| 3 | **F-06 임포트 메타데이터(해상도/fps)** — probe 확장 + 라이브러리/Inspector 표기 | `EditorViewModel.mediaAssetWithAppProbe`, `MediaMetadata` |
+| 4 | **F-04 잔여: 클립 그룹/링크** — `Clip.groupId` + 이동/트림 델타 전파(단일 undo) | `Clip.swift`, `MoveClipCommand`, `TimelineView` |
+| 5 | **텍스트 템플릿/타이틀 프리셋 적용 경로** — Core template의 Inspector/Canvas 적용 확인(스펙 F-12R과 연계) | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
+
+M1 종료 시 §1.1의 W1 워크플로우(숏폼 제작) 수동 완주로 마일스톤 판정. 이후 M2는 F-07(전환 export visual fixture)부터.
 | 완료 | ✅ **마그네틱 타임라인 / 클립별 zIndex** — Add/Move/Duplicate/Delete command path가 track snapshot undo와 same-track magnetic packing을 제공하고, persisted `Clip.zIndex`가 TimelineView display ordering/layer actions 및 Bring to Front / Send to Back에 연결된다. Caveat: 클립 그룹/링크는 P2 별도 항목. | `Sources/MovieCutCore/Commands/CommandSupport.swift`, `Sources/MovieCutCore/Models/Clip.swift`, `App/MovieCutMac/TimelineView.swift`, `Tests/MovieCutCoreTests/MagneticTimelineZIndexStaticContractTests.swift` |
 | 완료 | ✅ **페이드 duration 편집 UI** — Mac Inspector `Fade Duration` 그룹이 Fade In/Fade Out 현재값, Slider, Seconds `TextField`, 0.05s Stepper, Reset Fades/None/Soft/Long preset을 제공한다. 모든 변경은 `updateSelectedAudioFade` → `AudioFadeCommand` path로 적용된다. | `App/MovieCutMac/Inspector/InspectorBasicSection.swift`, `Tests/MovieCutCoreTests/AudioFadeInspectorStaticContractTests.swift` |
 | 완료 | ✅ **보이스오버 실녹음** — Mac 앱 microphone usage string, macOS 권한 요청, real `VoiceoverRecorder` CAF capture, saving/progress/accessibility state, on-disappear cancel, duration fallback handoff, and timeline insertion duration resolution are wired. Caveat: actual capture requires macOS Microphone permission and real input hardware host verification. | `App/MovieCutMac/Recording/VoiceoverRecordingView.swift`, `App/MovieCutMac/EditorViewModel.swift`, `App/MovieCutMac/Info.plist` |

@@ -14,8 +14,9 @@ struct MediaDragDropStaticContractTests {
         let source = try source("App/MovieCutMac/TimelineView.swift")
 
         #expect(source.contains(".fileURL"))
-        #expect(source.contains("TimelineTrackDropDelegate"))
-        #expect(source.contains("info.location.x"))
+        #expect(source.contains("handleTrackDrop"))
+        #expect(source.contains("onDrop(of: [.fileURL, .movieCutMediaAssetID], isTargeted: nil)"))
+        #expect(source.contains("location.x"))
         #expect(source.contains("pixelsPerSecond"))
         #expect(source.contains("importMediaAndAddToTimeline"))
         #expect(source.contains("preferredTrackId: trackId"))

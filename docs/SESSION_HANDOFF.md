@@ -18,8 +18,8 @@
 - 검증 완료:
   - `swift test --filter 'ExportFormatStaticContract|IOSMaskCanvasStaticContract|MacMaskCanvasStaticContract'` — 23 tests passed.
   - `git diff --check` — 통과.
-  - 이전 P1 transition pass 검증: `swift build`, `swift test --filter 'Transition|Rendering|StaticContract'` 98 tests passed, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
-- 드래그앤드롭 P0는 코드상 완료. 단, **사용자 실기기 확인은 아직 안 됨** — 사용자가 이전 빌드를 실행했을 가능성 있음.
+  - `swift test --filter 'Transition|Rendering|StaticContract'` — 108 tests passed (2026-06-10 재실행, 접근성 배치의 contract 테스트 추가로 P1 transition pass 시점의 98개에서 증가). `swift build` 및 `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
+- **드래그앤드롭 P0는 실기기 GUI 검증까지 완료(2026-06-10)**. 라이브 검증 중 실제 버그를 발견·수정함: 기존 `DropDelegate` 기반 타임라인 `.onDrop` 등록이 실제 Finder 드래그를 조용히 거부했음(드래그 고스트는 레인 위에 표시되지만 drop 미발생, 로그/피드백 없음). 라이브러리 패널에서 검증된 closure 기반 `onDrop(of:isTargeted:perform:)` (location 오버로드)로 교체하고, 커스텀 UTType `com.moviecut.media-asset-id`를 Info.plist `UTExportedTypeDeclarations`에 정식 선언해 해결. Finder→타임라인 파일 드롭(드롭 위치 클립 생성 + 실제 3.0s duration + 상태 메시지)과 라이브러리→타임라인 내부 에셋 드래그 모두 실제 마우스 드래그로 확인됨.
 
 ## 2. 가장 먼저 할 일 (순서대로)
 
@@ -38,21 +38,19 @@
    - `d5db68f feat: timeline drag drop import feedback`
 3. 작업트리가 더러우면 먼저 diff/stat을 읽고 의도 있는 변경인지 확인한 뒤 기능 단위로 커밋.
 
-### 2-2. 드래그앤드롭 실동작 확인 — 최우선 미확인 항목
+### 2-2. 드래그앤드롭 실동작 — ✅ 검증 완료 (2026-06-10)
 
-사용자가 "드래그앤드롭이 안 된다"고 보고했으나 코드는 완료 상태. 다음 세션의 최우선 확인 절차:
+사용자가 반복 보고한 "드래그앤드롭이 안 된다"는 **실제 버그였음** (static contract 테스트는 통과했지만 런타임은 깨져 있었음).
 
-1. 새로 빌드: `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`
-2. 빌드된 앱 실행: `~/Library/Developer/Xcode/DerivedData/MovieCut-*/Build/Products/Debug/MovieCutMac.app`
-3. Finder에서 mp4/png를 ① 타임라인 트랙 레인에 직접 드롭 ② 라이브러리 패널에 드롭 후 에셋을 타임라인으로 드래그.
-4. 기대 동작: 드롭 X좌표 위치에 클립 생성, 상태 바에 성공 메시지, 실제 duration 반영.
-5. 안 되면 의심 지점: 사진(Photos)/브라우저에서 끌었는지(현재 `.fileURL`만 수용 — 알려진 갭), 트랙 레인 밖(룰러/빈 영역)에 드롭했는지.
+- **근본 원인**: `TimelineTrackDropDelegate`(DropDelegate 기반) `.onDrop` 등록이 실제 Finder 드래그에서 조용히 거부됨. 같은 앱의 라이브러리 패널(closure 기반 `.onDrop`)은 정상 동작 → delegate 방식 + Info.plist 미선언 커스텀 UTType 조합이 원인.
+- **수정**: ① 타임라인 드롭을 closure 기반 `onDrop(of:isTargeted:perform:)` location 오버로드로 교체(`handleTrackDrop`), ② `com.moviecut.media-asset-id`를 Info.plist `UTExportedTypeDeclarations`에 선언, ③ contract 테스트를 새 구현에 맞게 갱신.
+- **라이브 검증**(실제 마우스 드래그, GUI 자동화): Finder→타임라인 드롭 시 드롭 위치에 클립 생성 + 실제 3.0s duration + "Added 1 media file to the timeline" 상태 메시지 확인. 라이브러리 행→타임라인 내부 드래그도 클립 생성 확인. 테스트 파일: `~/Desktop/MovieCutDropTest/` (재검증용으로 유지).
+- **교훈**: 문자열 존재만 검사하는 static contract 테스트는 런타임 회귀를 못 잡는다. drop 등록 방식 같은 플랫폼 동작은 실기기 검증 필수.
 
 ### 2-3. 알려진 드래그앤드롭 잔여 갭
 
 - **비파일 드래그 소스 미지원**: Photos 앱/브라우저 이미지는 file promise/image data 형태라 현재 안 받음. `NSFilePromiseReceiver` 또는 `.image`/`.movie` 데이터 수용 필요.
-- 커스텀 UTType `com.moviecut.media-asset-id`가 Info.plist `UTExportedTypeDeclarations`에 미선언 (in-process `.ownProcess` 드래그라 현재는 동작하지만 선언해 두는 게 안전).
-- UI 자동화 테스트 없음 — 검증은 build/static-contract 수준.
+- UI 자동화 테스트 없음 — 이번 검증은 수동 GUI 드래그 기준. XCUITest 기반 자동화는 후속.
 
 ### 2-4. 최근 접근성/비트레이트 배치 후속 확인
 

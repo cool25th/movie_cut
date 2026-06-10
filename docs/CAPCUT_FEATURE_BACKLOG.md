@@ -66,8 +66,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 우선순위: P0(기본기 필수) > P1 > P2 > P3(차별화·후순위)
 
 ### A. 미디어 입출력
-- [x] ✅ 타임라인 직접 드롭 → 클립 생성 **(P0, §1 참조; build/static-contract 검증, UI 자동화 미생성)**
-- [x] ✅ 라이브러리 → 타임라인 드래그 **(P0; build/static-contract 검증, UI 자동화 미생성)**
+- [x] ✅ 타임라인 직접 드롭 → 클립 생성 **(P0, §1 참조; 2026-06-10 실기기 GUI 드래그 검증 완료 — DropDelegate가 실제 드래그를 거부하던 런타임 버그를 closure 기반 onDrop + Info.plist UTType 선언으로 수정)**
+- [x] ✅ 라이브러리 → 타임라인 드래그 **(P0; 2026-06-10 실기기 GUI 드래그 검증 완료)**
 - [x] ✅ 실제 duration probe (AVAsset) **(P0; duration만 앱 레이어에서 구현, 해상도/fps는 후속)**
 - [x] ✅ 드롭 성공/실패 피드백 **(P0; status bar의 `lastStatusMessage`/`lastErrorMessage`, static-contract 검증)**
 - [ ] ❌ 썸네일/프록시 생성 (P1)

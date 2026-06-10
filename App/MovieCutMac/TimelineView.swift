@@ -266,14 +266,9 @@ struct TimelineView: View {
 
             }
             .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
-            .onDrop(
-                of: [.fileURL, .movieCutMediaAssetID],
-                delegate: TimelineTrackDropDelegate(
-                    trackId: track.id,
-                    pixelsPerSecond: pixelsPerSecond,
-                    viewModel: viewModel
-                )
-            )
+            .onDrop(of: [.fileURL, .movieCutMediaAssetID], isTargeted: nil) { providers, location in
+                handleTrackDrop(providers: providers, location: location, trackId: track.id)
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))
             .accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))
@@ -674,21 +669,16 @@ struct TimelineView: View {
     private func timelineSecondsString(_ time: TimeInterval) -> String {
         String(format: NSLocalizedString("%.2fs", comment: ""), time)
     }
-}
 
-private struct TimelineTrackDropDelegate: DropDelegate {
-    var trackId: UUID
-    var pixelsPerSecond: Double
-    var viewModel: EditorViewModel
+    /// Closure-based drop handling. The previous DropDelegate-based registration
+    /// silently rejected live Finder drags on macOS, so timeline drops share the
+    /// same onDrop(of:isTargeted:perform:) path that the media library uses.
+    private func handleTrackDrop(providers: [NSItemProvider], location: CGPoint, trackId: UUID) -> Bool {
+        let startTime = max(0, Double(location.x) / max(pixelsPerSecond, 1))
 
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.movieCutMediaAssetID]) ||
-            info.hasItemsConforming(to: [.fileURL])
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let startTime = max(0, Double(info.location.x) / max(pixelsPerSecond, 1))
-        let assetProviders = info.itemProviders(for: [.movieCutMediaAssetID])
+        let assetProviders = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.movieCutMediaAssetID.identifier)
+        }
         if !assetProviders.isEmpty {
             TimelineDropPayloadLoader.loadAssetIDs(from: assetProviders) { assetIds in
                 guard !assetIds.isEmpty else {
@@ -708,7 +698,9 @@ private struct TimelineTrackDropDelegate: DropDelegate {
             return true
         }
 
-        let fileProviders = info.itemProviders(for: [.fileURL])
+        let fileProviders = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }
         guard !fileProviders.isEmpty else {
             Task { @MainActor in
                 viewModel.reportUnsupportedTimelineDrop()

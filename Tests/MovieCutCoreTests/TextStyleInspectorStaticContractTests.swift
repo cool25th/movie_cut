@@ -114,7 +114,7 @@ struct TextStyleInspectorStaticContractTests {
         #expect(backlog.contains("- [x] ✅ 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1)"))
         #expect(backlog.contains("Inspector controls now cover font/size/color/background/alignment/presets"))
         #expect(backlog.contains("advanced title template library remains separate P1/P2"))
-        #expect(backlog.contains("다음 1순위는 페이드 duration 편집 UI"))
+        #expect(backlog.contains("다음 1순위는 마그네틱 타임라인"))
         #expect(!backlog.contains("- [ ] 🟡 텍스트 오버레이 + 폰트/정렬/스타일 편집 UI (P1)"))
         #expect(!backlog.contains("다음 1순위는 텍스트 스타일 편집 UI"))
     }

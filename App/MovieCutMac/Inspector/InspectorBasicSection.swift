@@ -18,6 +18,7 @@ struct InspectorBasicSection: View {
 
             if clip.kind.supportsVolume {
                 volumeSection
+                fadeDurationSection
                 equalizerSection
             }
 
@@ -168,22 +169,6 @@ struct InspectorBasicSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
             }
-            Slider(value: Binding(
-                get: { clip.fadeInDuration },
-                set: { newValue in
-                    Task { await viewModel.updateSelectedAudioFade(fadeInDuration: newValue) }
-                }
-            ), in: 0 ... 5, step: 0.1) {
-                Text("Fade In")
-            }
-            Slider(value: Binding(
-                get: { clip.fadeOutDuration },
-                set: { newValue in
-                    Task { await viewModel.updateSelectedAudioFade(fadeOutDuration: newValue) }
-                }
-            ), in: 0 ... 5, step: 0.1) {
-                Text("Fade Out")
-            }
 
             HStack {
                 Button("Noise Reduction") {
@@ -202,6 +187,10 @@ struct InspectorBasicSection: View {
                 .disabled(clip.kind != .video)
             }
         }
+    }
+
+    private var fadeDurationSection: some View {
+        AudioFadeDurationEditor(viewModel: viewModel, clip: clip)
     }
 
     private var equalizerSection: some View {
@@ -613,5 +602,173 @@ struct InspectorBasicSection: View {
             return String(format: "%.0fx", rate)
         }
         return String(format: "%.2gx", rate)
+    }
+}
+
+private struct AudioFadeDurationEditor: View {
+    let viewModel: EditorViewModel
+    let clip: Clip
+
+    private let fineStep: Double = 0.05
+    private let softPresetDuration: Double = 0.5
+    private let longPresetDuration: Double = 2.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Fade Duration")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("\(formattedSeconds(clip.fadeInDuration)) in / \(formattedSeconds(clip.fadeOutDuration)) out")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            fadeDurationControl(
+                title: "Fade In",
+                value: clip.fadeInDuration,
+                accessibilityLabel: "Fade In duration",
+                accessibilityHint: "Adjusts how long the selected audio clip takes to fade in."
+            ) { newValue in
+                updateFadeInDuration(newValue)
+            }
+
+            fadeDurationControl(
+                title: "Fade Out",
+                value: clip.fadeOutDuration,
+                accessibilityLabel: "Fade Out duration",
+                accessibilityHint: "Adjusts how long the selected audio clip takes to fade out."
+            ) { newValue in
+                updateFadeOutDuration(newValue)
+            }
+
+            HStack(spacing: 6) {
+                Button("Reset Fades") {
+                    resetAudioFades()
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Reset audio fades")
+                .accessibilityHint("Sets fade in and fade out duration to zero seconds.")
+
+                Button("None") {
+                    applyAudioFadePreset(0)
+                }
+                .controlSize(.small)
+                .accessibilityLabel("No audio fade preset")
+                .accessibilityHint("Sets fade in and fade out duration to zero seconds.")
+
+                Button("Soft") {
+                    applyAudioFadePreset(softPresetDuration)
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Soft audio fade preset")
+                .accessibilityHint("Sets fade in and fade out to a short duration.")
+
+                Button("Long") {
+                    applyAudioFadePreset(longPresetDuration)
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Long audio fade preset")
+                .accessibilityHint("Sets fade in and fade out to a longer duration.")
+            }
+        }
+    }
+
+    private func fadeDurationControl(
+        title: String,
+        value: Double,
+        accessibilityLabel: String,
+        accessibilityHint: String,
+        onChange: @escaping (Double) -> Void
+    ) -> some View {
+        let clampedValue = clampedFadeDuration(value)
+        let binding = Binding<Double>(
+            get: { clampedValue },
+            set: { newValue in
+                onChange(clampedFadeDuration(newValue))
+            }
+        )
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(formattedSeconds(clampedValue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 56, alignment: .trailing)
+            }
+
+            Slider(value: binding, in: fadeControlRange, step: fineStep)
+                .disabled(fadeDurationMaximum == 0)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityValue(formattedSeconds(clampedValue))
+                .accessibilityHint(accessibilityHint)
+
+            HStack(spacing: 6) {
+                TextField("Seconds", value: binding, format: .number.precision(.fractionLength(2)))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 76)
+                    .disabled(fadeDurationMaximum == 0)
+                    .accessibilityLabel("\(accessibilityLabel) value")
+                    .accessibilityValue(formattedSeconds(clampedValue))
+                    .accessibilityHint("Enter a non-negative duration in seconds.")
+
+                Stepper("Step \(title)", value: binding, in: fadeControlRange, step: fineStep)
+                    .labelsHidden()
+                    .disabled(fadeDurationMaximum == 0)
+                    .accessibilityLabel("\(accessibilityLabel) fine adjustment")
+                    .accessibilityValue(formattedSeconds(clampedValue))
+                    .accessibilityHint("Adjusts the duration in 0.05 second increments.")
+
+                Text("s")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var fadeDurationMaximum: Double {
+        max(0, min(10, clip.timelineRange.duration))
+    }
+
+    private var fadeControlRange: ClosedRange<Double> {
+        0 ... max(fadeDurationMaximum, fineStep)
+    }
+
+    private func clampedFadeDuration(_ value: Double) -> Double {
+        min(max(value, 0), fadeDurationMaximum)
+    }
+
+    private func updateFadeInDuration(_ newValue: Double) {
+        Task { await viewModel.updateSelectedAudioFade(fadeInDuration: clampedFadeDuration(newValue)) }
+    }
+
+    private func updateFadeOutDuration(_ newValue: Double) {
+        Task { await viewModel.updateSelectedAudioFade(fadeOutDuration: clampedFadeDuration(newValue)) }
+    }
+
+    private func resetAudioFades() {
+        let zero = clampedFadeDuration(0)
+        Task { await viewModel.updateSelectedAudioFade(fadeInDuration: zero, fadeOutDuration: zero) }
+    }
+
+    private func applyAudioFadePreset(_ duration: Double) {
+        let clampedDuration = clampedFadeDuration(duration)
+        Task {
+            await viewModel.updateSelectedAudioFade(
+                fadeInDuration: clampedDuration,
+                fadeOutDuration: clampedDuration
+            )
+        }
+    }
+
+    private func formattedSeconds(_ value: Double) -> String {
+        String(format: "%.2fs", clampedFadeDuration(value))
     }
 }

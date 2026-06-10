@@ -298,6 +298,19 @@ final class EditorViewModel {
         return samples
     }
 
+    func thumbnailData(for clip: Clip) -> Data? {
+        guard
+            clip.kind == .video || clip.kind == .image,
+            let assetId = clip.assetId,
+            let asset = currentProject.mediaLibrary.assets[assetId],
+            asset.kind == .video || asset.kind == .image
+        else {
+            return nil
+        }
+
+        return asset.thumbnailData
+    }
+
     var canGenerateSubtitles: Bool {
         if selectedClipId != nil {
             return selectedTranscribableClipAndAsset != nil
@@ -456,6 +469,22 @@ final class EditorViewModel {
             .appendingPathComponent("MovieCut", isDirectory: true)
             .appendingPathComponent("Autosave", isDirectory: true)
             .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
+    }
+
+    private nonisolated static func proxyDirectory(for projectId: UUID) -> URL {
+        let baseDirectory = (
+            try? FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+        ) ?? FileManager.default.temporaryDirectory
+
+        return baseDirectory
+            .appendingPathComponent("MovieCut", isDirectory: true)
+            .appendingPathComponent("Proxies", isDirectory: true)
+            .appendingPathComponent(projectId.uuidString, isDirectory: true)
     }
 
     func syncToCloud() async {
@@ -674,6 +703,58 @@ final class EditorViewModel {
         startTime: TimeInterval
     ) async {
         await addImportedAssetsToTimeline([assetId], preferredTrackId: preferredTrackId, startTime: startTime)
+    }
+
+    func generateProxyForSelectedAsset() async {
+        guard let selectedAssetId else {
+            lastErrorMessage = "Select a video asset to generate a proxy."
+            lastStatusMessage = nil
+            return
+        }
+
+        await generateProxy(for: selectedAssetId)
+    }
+
+    func generateProxy(for assetId: UUID) async {
+        let snapshot = await session.snapshot()
+        guard var asset = snapshot.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "Selected asset is no longer available."
+            lastStatusMessage = nil
+            return
+        }
+
+        guard asset.kind == .video else {
+            lastErrorMessage = "Proxy generation is only available for video assets."
+            lastStatusMessage = nil
+            return
+        }
+
+        let directory = Self.proxyDirectory(for: snapshot.id)
+        guard let plan = ProxyGenerator.makeProxyPlan(for: asset, in: directory) else {
+            lastErrorMessage = "Could not create a proxy generation plan."
+            lastStatusMessage = nil
+            return
+        }
+
+        lastErrorMessage = nil
+        lastStatusMessage = "Generating proxy for \(asset.originalURL.lastPathComponent)..."
+
+        do {
+            guard let proxyInfo = try await ProxyGenerator.generateProxy(for: asset, using: plan) else {
+                lastErrorMessage = "Proxy generation failed. The source file may not support proxy export."
+                lastStatusMessage = nil
+                return
+            }
+
+            asset.proxy = proxyInfo
+            try await session.dispatch(UpdateMediaAssetCommand(asset: asset))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Proxy ready for \(asset.originalURL.lastPathComponent)."
+        } catch {
+            lastErrorMessage = "Proxy generation failed: \(error.localizedDescription)"
+            lastStatusMessage = nil
+        }
     }
 
     func setDropStatus(_ message: String) {
@@ -2588,14 +2669,39 @@ final class EditorViewModel {
 
     private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
         var asset = MediaImporter.probe(url: url)
-        guard asset.kind == .video || asset.kind == .audio else {
+
+        if (asset.kind == .video || asset.kind == .audio),
+           let duration = await Self.avAssetDuration(for: url) {
+            asset.duration = duration
+        }
+
+        return await Self.enrichAssetWithThumbnail(asset)
+    }
+
+    private nonisolated static func enrichAssetWithThumbnail(_ asset: MediaAsset) async -> MediaAsset {
+        guard asset.kind == .video || asset.kind == .image else {
             return asset
         }
 
-        if let duration = await Self.avAssetDuration(for: url) {
-            asset.duration = duration
+        var enrichedAsset = asset
+        let thumbnailTime = Self.thumbnailTime(for: asset)
+        let thumbnailSize = ThumbnailGenerator.defaultSize
+        enrichedAsset.thumbnailData = await Task.detached(priority: .utility) {
+            ThumbnailGenerator.generate(for: asset, at: thumbnailTime, size: thumbnailSize)
+        }.value
+        return enrichedAsset
+    }
+
+    private nonisolated static func thumbnailTime(for asset: MediaAsset) -> TimeInterval {
+        guard asset.kind == .video else {
+            return 0
         }
-        return asset
+
+        guard let duration = asset.duration, duration.isFinite, duration > 0 else {
+            return 0
+        }
+
+        return min(max(duration * 0.05, 0), 1)
     }
 
     private nonisolated static func avAssetDuration(for url: URL) async -> TimeInterval? {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import MovieCutCore
@@ -124,51 +125,92 @@ struct MediaLibraryPanel: View {
             ScrollView {
                 LazyVStack(spacing: 4) {
                     ForEach(viewModel.mediaAssets) { asset in
-                        HStack(spacing: 8) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.secondary.opacity(0.2))
-                                .frame(width: 48, height: 36)
-                                .overlay {
-                                    Image(systemName: iconForKind(asset.kind))
-                                        .foregroundStyle(.secondary)
-                                }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(asset.originalURL.lastPathComponent)
-                                    .lineLimit(1)
-                                    .font(.caption)
-                                if let duration = asset.duration {
-                                    Text(String(format: NSLocalizedString("%.1fs", comment: ""), duration))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                        }
-                        .padding(6)
-                        .background(asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.2) : Color.clear)
-                        .cornerRadius(6)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            viewModel.selectedAssetId = asset.id
-                        }
-                        .onDrag {
-                            viewModel.selectedAssetId = asset.id
-                            return assetDragProvider(for: asset)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(asset.originalURL.lastPathComponent)
-                        .accessibilityValue(assetAccessibilityValue(asset))
-                        .accessibilityHint(NSLocalizedString("Selects this asset. Drag it to the timeline to create a clip.", comment: ""))
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction {
-                            viewModel.selectedAssetId = asset.id
-                        }
+                        assetRow(asset)
                     }
                 }
                 .padding(4)
             }
             .accessibilityLabel(NSLocalizedString("Asset List", comment: ""))
+        }
+    }
+
+    private func assetRow(_ asset: MediaAsset) -> some View {
+        HStack(spacing: 8) {
+            assetThumbnailView(asset)
+            assetInfoView(asset)
+            Spacer()
+            proxyButton(asset)
+        }
+        .padding(6)
+        .background(asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.2) : Color.clear)
+        .cornerRadius(6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            viewModel.selectedAssetId = asset.id
+        }
+        .onDrag {
+            viewModel.selectedAssetId = asset.id
+            return assetDragProvider(for: asset)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(asset.originalURL.lastPathComponent)
+        .accessibilityValue(assetAccessibilityValue(asset))
+        .accessibilityHint(NSLocalizedString("Selects this asset. Drag it to the timeline to create a clip.", comment: ""))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            viewModel.selectedAssetId = asset.id
+        }
+        .contextMenu {
+            if asset.kind == .video {
+                Button(NSLocalizedString("Generate Proxy", comment: "")) {
+                    viewModel.selectedAssetId = asset.id
+                    Task { await viewModel.generateProxy(for: asset.id) }
+                }
+            }
+        }
+    }
+
+    private func assetInfoView(_ asset: MediaAsset) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(asset.originalURL.lastPathComponent)
+                .lineLimit(1)
+                .font(.caption)
+            if let duration = asset.duration {
+                Text(String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            assetStateText(asset)
+        }
+    }
+
+    @ViewBuilder
+    private func assetStateText(_ asset: MediaAsset) -> some View {
+        if asset.kind == .video {
+            Text(proxyStateText(asset))
+                .font(.caption2)
+                .foregroundStyle(asset.proxy?.proxyURL == nil ? Color.secondary : Color.green)
+        } else if asset.kind == .image {
+            Text(thumbnailStateText(asset))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func proxyButton(_ asset: MediaAsset) -> some View {
+        if asset.kind == .video {
+            Button {
+                viewModel.selectedAssetId = asset.id
+                Task { await viewModel.generateProxy(for: asset.id) }
+            } label: {
+                Image(systemName: asset.proxy?.proxyURL == nil ? "film" : "checkmark.circle")
+            }
+            .buttonStyle(.borderless)
+            .help(NSLocalizedString("Generate Proxy", comment: ""))
+            .accessibilityLabel(NSLocalizedString("Generate Proxy", comment: ""))
+            .accessibilityValue(proxyStateText(asset))
+            .accessibilityHint(NSLocalizedString("Creates a lower-resolution proxy file for smoother editing.", comment: ""))
         }
     }
 
@@ -228,12 +270,61 @@ struct MediaLibraryPanel: View {
         return provider
     }
 
+    @ViewBuilder
+    private func assetThumbnailView(_ asset: MediaAsset) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.secondary.opacity(0.2))
+
+            if let image = thumbnailImage(for: asset) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 48, height: 36)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            } else {
+                Image(systemName: iconForKind(asset.kind))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 48, height: 36)
+        .clipped()
+        .accessibilityHidden(true)
+    }
+
+    private func thumbnailImage(for asset: MediaAsset) -> NSImage? {
+        guard
+            asset.kind == .video || asset.kind == .image,
+            let thumbnailData = asset.thumbnailData
+        else {
+            return nil
+        }
+
+        return NSImage(data: thumbnailData)
+    }
+
     private func iconForKind(_ kind: MediaKind) -> String {
         switch kind {
         case .video: return "film"
         case .audio: return "waveform"
         case .image: return "photo"
         }
+    }
+
+    private func thumbnailStateText(_ asset: MediaAsset) -> String {
+        if asset.kind == .video || asset.kind == .image {
+            return asset.thumbnailData == nil
+                ? NSLocalizedString("Thumbnail missing", comment: "")
+                : NSLocalizedString("Thumbnail ready", comment: "")
+        }
+
+        return NSLocalizedString("No thumbnail", comment: "")
+    }
+
+    private func proxyStateText(_ asset: MediaAsset) -> String {
+        asset.proxy?.proxyURL == nil
+            ? NSLocalizedString("No proxy", comment: "")
+            : NSLocalizedString("Proxy ready", comment: "")
     }
 
     private func assetAccessibilityValue(_ asset: MediaAsset) -> String {
@@ -244,7 +335,16 @@ struct MediaLibraryPanel: View {
         } else {
             detail = kindName
         }
-        return String(format: NSLocalizedString("%@, draggable to timeline", comment: ""), detail)
+
+        var states = [detail]
+        if asset.kind == .video || asset.kind == .image {
+            states.append(thumbnailStateText(asset))
+        }
+        if asset.kind == .video {
+            states.append(proxyStateText(asset))
+        }
+        states.append(NSLocalizedString("draggable to timeline", comment: ""))
+        return states.joined(separator: ", ")
     }
 }
 

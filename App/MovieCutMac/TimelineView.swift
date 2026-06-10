@@ -288,27 +288,8 @@ struct TimelineView: View {
             RoundedRectangle(cornerRadius: 4)
                 .fill(colorForClip(clip: clip, trackKind: trackKind, selected: isSelected))
                 .overlay {
-                    if trackKind != .text {
-                        Canvas { context, size in
-                            let samples = viewModel.waveform(for: clip)
-                            guard !samples.isEmpty else { return }
-
-                            let barWidth = max(1, size.width / CGFloat(samples.count))
-                            let midY = size.height / 2
-
-                            for (index, sample) in samples.enumerated() {
-                                let barHeight = CGFloat(sample) * size.height * 0.8
-                                let rect = CGRect(
-                                    x: CGFloat(index) * barWidth,
-                                    y: midY - barHeight / 2,
-                                    width: max(1, barWidth - 0.5),
-                                    height: barHeight
-                                )
-                                context.fill(Path(rect), with: .color(.white.opacity(0.4)))
-                            }
-                        }
-                        .allowsHitTesting(false)
-                    }
+                    clipMediaBackground(for: clip, trackKind: trackKind, selected: isSelected)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
                 .overlay(alignment: .leading) {
                     Text(clipLabel(clip))
@@ -323,6 +304,12 @@ struct TimelineView: View {
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.85))
                             .padding(.trailing, 4)
+                    }
+                }
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.white.opacity(0.9), lineWidth: 1)
                     }
                 }
                 .contentShape(Rectangle())
@@ -400,6 +387,73 @@ struct TimelineView: View {
                     Task { await viewModel.rippleDeleteClip(clipId: clip.id) }
                 }
             }
+    }
+
+    @ViewBuilder
+    private func clipMediaBackground(for clip: Clip, trackKind: TrackKind, selected: Bool) -> some View {
+        if let image = thumbnailImage(for: clip) {
+            thumbnailStrip(image)
+            Color.black.opacity(selected ? 0.28 : 0.16)
+                .allowsHitTesting(false)
+        } else if shouldRenderWaveform(for: clip, trackKind: trackKind) {
+            waveformCanvas(for: clip)
+        }
+    }
+
+    private func thumbnailImage(for clip: Clip) -> NSImage? {
+        guard
+            clip.kind == .video || clip.kind == .image,
+            let thumbnailData = viewModel.thumbnailData(for: clip)
+        else {
+            return nil
+        }
+
+        return NSImage(data: thumbnailData)
+    }
+
+    private func thumbnailStrip(_ image: NSImage) -> some View {
+        GeometryReader { proxy in
+            let height = max(proxy.size.height, 1)
+            let tileWidth = min(max(height * 16 / 9, 44), 72)
+            let tileCount = max(1, Int(ceil(max(proxy.size.width, tileWidth) / tileWidth)))
+
+            HStack(spacing: 1) {
+                ForEach(0..<tileCount, id: \.self) { _ in
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: tileWidth, height: height)
+                        .clipped()
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func shouldRenderWaveform(for clip: Clip, trackKind: TrackKind) -> Bool {
+        trackKind != .text && (clip.kind == .audio || clip.kind == .video)
+    }
+
+    private func waveformCanvas(for clip: Clip) -> some View {
+        Canvas { context, size in
+            let samples = viewModel.waveform(for: clip)
+            guard !samples.isEmpty else { return }
+
+            let barWidth = max(1, size.width / CGFloat(samples.count))
+            let midY = size.height / 2
+
+            for (index, sample) in samples.enumerated() {
+                let barHeight = CGFloat(sample) * size.height * 0.8
+                let rect = CGRect(
+                    x: CGFloat(index) * barWidth,
+                    y: midY - barHeight / 2,
+                    width: max(1, barWidth - 0.5),
+                    height: barHeight
+                )
+                context.fill(Path(rect), with: .color(.white.opacity(0.4)))
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var isCommandModifierPressed: Bool {

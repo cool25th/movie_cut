@@ -17,6 +17,9 @@ public enum CommandResultValue: Sendable, Equatable {
     /// A full marker snapshot.
     case marker(Marker)
 
+    /// A full media asset snapshot.
+    case mediaAsset(MediaAsset)
+
     /// A clip property snapshot.
     case clipProperty(ClipProperty)
 

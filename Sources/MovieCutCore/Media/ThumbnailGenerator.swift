@@ -1,20 +1,27 @@
 import Foundation
+import CoreGraphics
 #if canImport(AVFoundation)
 import AVFoundation
 import CoreImage
 #endif
 
 public struct ThumbnailGenerator: Sendable {
+    public static let defaultSize = CGSize(width: 160, height: 90)
+
     public static func generate(for asset: MediaAsset, at time: TimeInterval, size: CGSize) -> Data? {
         #if canImport(AVFoundation)
         let context = CIContext()
 
-        if isImageFile(asset.originalURL) {
+        if asset.kind == .image || isImageFile(asset.originalURL) {
             guard let image = CIImage(contentsOf: asset.originalURL) else {
                 return nil
             }
 
             return pngData(from: image, fitting: size, context: context)
+        }
+
+        guard asset.kind == .video else {
+            return nil
         }
 
         guard time.isFinite else {
@@ -78,4 +85,157 @@ public struct ThumbnailGenerator: Sendable {
         return CGAffineTransform(scaleX: scale, y: scale)
     }
     #endif
+}
+
+/// Deterministic target metadata for a generated video proxy.
+public struct ProxyGenerationPlan: Sendable, Equatable {
+    /// The source media URL used to create the proxy.
+    public var sourceURL: URL
+
+    /// The file URL where the proxy should be written.
+    public var targetURL: URL
+
+    /// The intended proxy frame size.
+    public var resolution: CGSize
+
+    /// Creates a proxy generation plan.
+    public init(sourceURL: URL, targetURL: URL, resolution: CGSize) {
+        self.sourceURL = sourceURL
+        self.targetURL = targetURL
+        self.resolution = resolution
+    }
+}
+
+/// Lightweight proxy planning and best-effort AVFoundation transcoding.
+public enum ProxyGenerator {
+    public static let defaultMaxDimension: CGFloat = 960
+
+    public static func makeProxyPlan(
+        for asset: MediaAsset,
+        in directory: URL,
+        maxDimension: CGFloat = defaultMaxDimension
+    ) -> ProxyGenerationPlan? {
+        guard asset.kind == .video, maxDimension.isFinite, maxDimension > 0 else {
+            return nil
+        }
+
+        let targetURL = directory
+            .appendingPathComponent("\(asset.id.uuidString)-proxy")
+            .appendingPathExtension("mp4")
+        let resolution = proxyResolution(
+            width: asset.metadata.width,
+            height: asset.metadata.height,
+            maxDimension: maxDimension
+        )
+
+        return ProxyGenerationPlan(
+            sourceURL: asset.originalURL,
+            targetURL: targetURL,
+            resolution: resolution
+        )
+    }
+
+    public static func proxyInfoIfReady(for plan: ProxyGenerationPlan) -> ProxyInfo? {
+        guard proxyFileExists(at: plan.targetURL) else {
+            return nil
+        }
+
+        return ProxyInfo(proxyURL: plan.targetURL, resolution: plan.resolution)
+    }
+
+    public static func generateProxy(
+        for asset: MediaAsset,
+        in directory: URL,
+        maxDimension: CGFloat = defaultMaxDimension
+    ) async throws -> ProxyInfo? {
+        guard let plan = makeProxyPlan(for: asset, in: directory, maxDimension: maxDimension) else {
+            return nil
+        }
+
+        return try await generateProxy(for: asset, using: plan)
+    }
+
+    public static func generateProxy(
+        for asset: MediaAsset,
+        using plan: ProxyGenerationPlan
+    ) async throws -> ProxyInfo? {
+        guard asset.kind == .video else {
+            return nil
+        }
+
+        try FileManager.default.createDirectory(
+            at: plan.targetURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        if let readyInfo = proxyInfoIfReady(for: plan) {
+            return readyInfo
+        }
+
+        if FileManager.default.fileExists(atPath: plan.targetURL.path) {
+            try FileManager.default.removeItem(at: plan.targetURL)
+        }
+
+        #if canImport(AVFoundation)
+        let sourceAsset = AVURLAsset(url: asset.originalURL)
+        guard let exportSession = AVAssetExportSession(
+            asset: sourceAsset,
+            presetName: AVAssetExportPreset960x540
+        ) else {
+            return nil
+        }
+
+        guard exportSession.supportedFileTypes.contains(.mp4) else {
+            return nil
+        }
+
+        do {
+            try await exportSession.export(to: plan.targetURL, as: .mp4)
+        } catch {
+            try? FileManager.default.removeItem(at: plan.targetURL)
+            throw error
+        }
+
+        guard let proxyInfo = proxyInfoIfReady(for: plan) else {
+            try? FileManager.default.removeItem(at: plan.targetURL)
+            return nil
+        }
+
+        return proxyInfo
+        #else
+        return nil
+        #endif
+    }
+
+    private static func proxyResolution(width: Int?, height: Int?, maxDimension: CGFloat) -> CGSize {
+        guard
+            let width,
+            let height,
+            width > 0,
+            height > 0
+        else {
+            return CGSize(width: maxDimension, height: maxDimension * 9 / 16)
+        }
+
+        let sourceSize = CGSize(width: CGFloat(width), height: CGFloat(height))
+        let longestSide = max(sourceSize.width, sourceSize.height)
+        guard longestSide > maxDimension else {
+            return sourceSize
+        }
+
+        let scale = maxDimension / longestSide
+        return CGSize(
+            width: (sourceSize.width * scale).rounded(),
+            height: (sourceSize.height * scale).rounded()
+        )
+    }
+
+    private static func proxyFileExists(at url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return false
+        }
+
+        let fileSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        return (fileSize ?? 0) > 0
+    }
 }

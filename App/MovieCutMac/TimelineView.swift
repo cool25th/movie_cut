@@ -3,6 +3,10 @@ import SwiftUI
 import MovieCutCore
 import UniformTypeIdentifiers
 
+extension UTType {
+    static let movieCutMediaAssetID = UTType(exportedAs: "com.moviecut.media-asset-id")
+}
+
 struct TimelineView: View {
     var viewModel: EditorViewModel
 
@@ -16,9 +20,20 @@ struct TimelineView: View {
     private let rulerHeight: CGFloat = 24
     private let trimHandleWidth: CGFloat = 8
     private let minimumClipDuration: TimeInterval = 0.1
+    private let markerLabelWidth: CGFloat = 132
 
     private var pixelsPerSecond: Double {
         viewModel.timelineZoom
+    }
+
+    private var sortedMarkers: [Marker] {
+        viewModel.currentProject.markers.sorted { $0.time < $1.time }
+    }
+
+    private var timelineContentWidth: CGFloat {
+        let markerEnd = sortedMarkers.map(\.time).max() ?? 0
+        let visibleSeconds = max(viewModel.visibleTimelineDuration, markerEnd + 2)
+        return max(900, CGFloat(visibleSeconds) * CGFloat(pixelsPerSecond) + markerLabelWidth)
     }
 
     var body: some View {
@@ -26,7 +41,29 @@ struct TimelineView: View {
             HStack {
                 Text(NSLocalizedString("Timeline", comment: ""))
                     .font(.headline)
+                if !sortedMarkers.isEmpty {
+                    Text("\(sortedMarkers.count) markers")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if viewModel.hasSelectedClips {
+                    Divider()
+                        .frame(height: 16)
+                    selectedClipToolbar
+                }
                 Spacer()
+                Button(action: { viewModel.goToPreviousMarker() }) {
+                    Image(systemName: "backward.end.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.previousMarker == nil)
+                .help("Previous Marker")
+                Button(action: { viewModel.goToNextMarker() }) {
+                    Image(systemName: "forward.end.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.nextMarker == nil)
+                .help("Next Marker")
                 Button(action: { viewModel.timelineZoom = max(20, viewModel.timelineZoom - 20) }) {
                     Image(systemName: "minus.magnifyingglass")
                 }
@@ -62,6 +99,65 @@ struct TimelineView: View {
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
     }
 
+    private var selectedClipToolbar: some View {
+        HStack(spacing: 4) {
+            Button {
+                viewModel.snapPlayheadToSelectedClipStart()
+            } label: {
+                Image(systemName: "arrow.left.to.line.compact")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.selectedClip == nil)
+            .help("Snap Playhead to Clip Start")
+
+            Button {
+                viewModel.snapPlayheadToSelectedClipEnd()
+            } label: {
+                Image(systemName: "arrow.right.to.line.compact")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.selectedClip == nil)
+            .help("Snap Playhead to Clip End")
+
+            Button {
+                Task { await viewModel.splitClip() }
+            } label: {
+                Image(systemName: "scissors")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!viewModel.canSplitSelectedClip)
+            .help("Split at Playhead")
+
+            Button {
+                Task { await viewModel.duplicateSelectedClips() }
+            } label: {
+                Image(systemName: "square.on.square")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!viewModel.hasSelectedClips)
+            .help("Duplicate Selected Clips")
+
+            Button {
+                Task { await viewModel.deleteClip() }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!viewModel.hasSelectedClips)
+            .help("Delete Selected Clips")
+
+            Button {
+                Task { await viewModel.rippleDeleteSelectedClip() }
+            } label: {
+                Image(systemName: "delete.left")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.selectedClip == nil)
+            .help("Ripple Delete Selected Clip")
+        }
+        .font(.caption)
+    }
+
     private var timeRuler: some View {
         HStack(spacing: 0) {
             Rectangle()
@@ -74,36 +170,49 @@ struct TimelineView: View {
                         .padding(.leading, 4)
                 }
 
-            Canvas { context, size in
-                var x: CGFloat = 0
-                var time: TimeInterval = 0
-                let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+            ZStack(alignment: .topLeading) {
+                Canvas { context, size in
+                    var x: CGFloat = 0
+                    var time: TimeInterval = 0
+                    let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
 
-                while x < size.width {
-                    let isMajor = Int(time) % 10 == 0
-                    let tickH: CGFloat = isMajor ? rulerHeight : rulerHeight / 2
+                    while x < size.width {
+                        let isMajor = Int(time) % 10 == 0
+                        let tickH: CGFloat = isMajor ? rulerHeight : rulerHeight / 2
 
-                    context.stroke(
-                        Path { p in
-                            p.move(to: CGPoint(x: x, y: rulerHeight))
-                            p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
-                        },
-                        with: .color(.secondary),
-                        lineWidth: isMajor ? 1 : 0.5
-                    )
+                        context.stroke(
+                            Path { p in
+                                p.move(to: CGPoint(x: x, y: rulerHeight))
+                                p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
+                            },
+                            with: .color(.secondary),
+                            lineWidth: isMajor ? 1 : 0.5
+                        )
 
-                    if isMajor {
-                        let text = Text("\(Int(time))s")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                        context.draw(text, at: CGPoint(x: x + 4, y: 8))
+                        if isMajor {
+                            let text = Text("\(Int(time))s")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                            context.draw(text, at: CGPoint(x: x + 4, y: 8))
+                        }
+
+                        time += interval
+                        x = CGFloat(time) * CGFloat(pixelsPerSecond)
                     }
+                }
+                .frame(width: timelineContentWidth, height: rulerHeight)
 
-                    time += interval
-                    x = CGFloat(time) * CGFloat(pixelsPerSecond)
+                ForEach(sortedMarkers) { marker in
+                    TimelineMarkerFlag(marker: marker)
+                        .frame(width: markerLabelWidth, height: rulerHeight, alignment: .leading)
+                        .offset(x: markerX(marker), y: 0)
+                        .onTapGesture {
+                            viewModel.goToMarker(marker)
+                        }
+                        .help(markerHelp(marker))
                 }
             }
-            .frame(height: rulerHeight)
+            .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
         }
     }
 
@@ -137,6 +246,15 @@ struct TimelineView: View {
                     clipView(clip, trackKind: track.kind)
                 }
 
+                ForEach(sortedMarkers) { marker in
+                    TimelineMarkerLine(marker: marker, height: trackHeight)
+                        .offset(x: markerX(marker))
+                        .onTapGesture {
+                            viewModel.goToMarker(marker)
+                        }
+                        .help(markerHelp(marker))
+                }
+
                 // Playhead
                 Rectangle()
                     .fill(Color.red)
@@ -146,30 +264,19 @@ struct TimelineView: View {
                     .accessibilityLabel(NSLocalizedString("재생 헤드", comment: ""))
                     .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
 
-                ForEach(viewModel.currentProject.markers) { marker in
-                    Rectangle()
-                        .fill(Color.yellow.opacity(0.7))
-                        .frame(width: 2, height: trackHeight)
-                        .offset(x: CGFloat(marker.time) * CGFloat(pixelsPerSecond))
-                }
             }
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                for provider in providers {
-                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { data, _ in
-                        guard let data = data as? Data,
-                              let url = URL(dataRepresentation: data, relativeTo: nil)
-                        else { return }
-
-                        Task { @MainActor in
-                            await viewModel.importMedia([url])
-                        }
-                    }
-                }
-                return true
-            }
+            .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
+            .onDrop(
+                of: [.fileURL, .movieCutMediaAssetID],
+                delegate: TimelineTrackDropDelegate(
+                    trackId: track.id,
+                    pixelsPerSecond: pixelsPerSecond,
+                    viewModel: viewModel
+                )
+            )
             .accessibilityElement(children: .contain)
             .accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))
-            .accessibilityHint(NSLocalizedString("Drop media files here to add them to this track.", comment: ""))
+            .accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))
         }
         .frame(height: trackHeight)
         .overlay(alignment: .bottom) { Divider() }
@@ -184,7 +291,7 @@ struct TimelineView: View {
 
         return ZStack {
             RoundedRectangle(cornerRadius: 4)
-                .fill(colorForClip(trackKind: trackKind, selected: isSelected))
+                .fill(colorForClip(clip: clip, trackKind: trackKind, selected: isSelected))
                 .overlay {
                     if trackKind != .text {
                         Canvas { context, size in
@@ -214,6 +321,14 @@ struct TimelineView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .padding(.horizontal, 4)
+                }
+                .overlay(alignment: .trailing) {
+                    if isStickerClip(clip) {
+                        Image(systemName: "face.smiling")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .padding(.trailing, 4)
+                    }
                 }
                 .contentShape(Rectangle())
                 .gesture(moveGesture(for: clip))
@@ -274,6 +389,15 @@ struct TimelineView: View {
                 Button(NSLocalizedString("Duplicate", comment: "")) {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.duplicateClips(clipIds) }
+                }
+                Divider()
+                Button("Snap Playhead to Start") {
+                    selectClip(clip.id, extendingSelection: false)
+                    viewModel.snapPlayheadToSelectedClipStart()
+                }
+                Button("Snap Playhead to End") {
+                    selectClip(clip.id, extendingSelection: false)
+                    viewModel.snapPlayheadToSelectedClipEnd()
                 }
                 Divider()
                 Button(NSLocalizedString("Ripple Delete", comment: "")) {
@@ -473,6 +597,7 @@ struct TimelineView: View {
 
     private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
         let snapPoints = allClips.flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
+            + sortedMarkers.map(\.time)
             + [viewModel.playheadTime, 0.0]
         let thresholdTime = threshold / pixelsPerSecond
         for point in snapPoints {
@@ -483,7 +608,11 @@ struct TimelineView: View {
         return rawTime
     }
 
-    private func colorForClip(trackKind: TrackKind, selected: Bool) -> Color {
+    private func colorForClip(clip: Clip, trackKind: TrackKind, selected: Bool) -> Color {
+        if isStickerClip(clip) {
+            return selected ? .pink : .pink.opacity(0.68)
+        }
+
         switch trackKind {
         case .video: return selected ? .blue : .blue.opacity(0.6)
         case .audio: return selected ? .green : .green.opacity(0.6)
@@ -493,9 +622,28 @@ struct TimelineView: View {
 
     private func clipLabel(_ clip: Clip) -> String {
         if let textContent = clip.textContent {
+            if isStickerClip(clip) {
+                return "Sticker \(textContent.text)"
+            }
             return String(textContent.text.prefix(20))
         }
         return String(describing: clip.kind)
+    }
+
+    private func isStickerClip(_ clip: Clip) -> Bool {
+        guard clip.kind == .text, let textContent = clip.textContent else {
+            return false
+        }
+
+        return textContent.isSticker || textContent.fontFamily == "Apple Color Emoji"
+    }
+
+    private func markerX(_ marker: Marker) -> CGFloat {
+        CGFloat(marker.time) * CGFloat(pixelsPerSecond)
+    }
+
+    private func markerHelp(_ marker: Marker) -> String {
+        "\(marker.name) at \(timelineSecondsString(marker.time))"
     }
 
     private func clipAccessibilityLabel(for clip: Clip) -> String {
@@ -505,6 +653,9 @@ struct TimelineView: View {
         case .audio:
             return NSLocalizedString("오디오 클립", comment: "")
         case .text:
+            if isStickerClip(clip) {
+                return NSLocalizedString("스티커 클립", comment: "")
+            }
             return NSLocalizedString("텍스트 클립", comment: "")
         }
     }
@@ -522,5 +673,187 @@ struct TimelineView: View {
 
     private func timelineSecondsString(_ time: TimeInterval) -> String {
         String(format: NSLocalizedString("%.2fs", comment: ""), time)
+    }
+}
+
+private struct TimelineTrackDropDelegate: DropDelegate {
+    var trackId: UUID
+    var pixelsPerSecond: Double
+    var viewModel: EditorViewModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.movieCutMediaAssetID]) ||
+            info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let startTime = max(0, Double(info.location.x) / max(pixelsPerSecond, 1))
+        let assetProviders = info.itemProviders(for: [.movieCutMediaAssetID])
+        if !assetProviders.isEmpty {
+            TimelineDropPayloadLoader.loadAssetIDs(from: assetProviders) { assetIds in
+                guard !assetIds.isEmpty else {
+                    Task { @MainActor in
+                        viewModel.reportInvalidTimelineLibraryAssetDrop()
+                    }
+                    return
+                }
+                Task { @MainActor in
+                    await viewModel.addImportedAssetsToTimeline(
+                        assetIds,
+                        preferredTrackId: trackId,
+                        startTime: startTime
+                    )
+                }
+            }
+            return true
+        }
+
+        let fileProviders = info.itemProviders(for: [.fileURL])
+        guard !fileProviders.isEmpty else {
+            Task { @MainActor in
+                viewModel.reportUnsupportedTimelineDrop()
+            }
+            return false
+        }
+        TimelineDropPayloadLoader.loadFileURLs(from: fileProviders) { urls in
+            guard !urls.isEmpty else {
+                Task { @MainActor in
+                    viewModel.reportInvalidTimelineFileDrop()
+                }
+                return
+            }
+            Task { @MainActor in
+                await viewModel.importMediaAndAddToTimeline(
+                    urls,
+                    preferredTrackId: trackId,
+                    startTime: startTime
+                )
+            }
+        }
+        return true
+    }
+}
+
+private enum TimelineDropPayloadLoader {
+    static func loadAssetIDs(from providers: [NSItemProvider], completion: @escaping ([UUID]) -> Void) {
+        guard !providers.isEmpty else {
+            completion([])
+            return
+        }
+
+        let accumulator = OrderedDropPayloadAccumulator<UUID>(count: providers.count, completion: completion)
+        for (index, provider) in providers.enumerated() {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.movieCutMediaAssetID.identifier) { data, _ in
+                let id = data
+                    .flatMap { String(data: $0, encoding: .utf8) }
+                    .flatMap { UUID(uuidString: $0) }
+                accumulator.complete(index: index, value: id)
+            }
+        }
+    }
+
+    static func loadFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+        guard !providers.isEmpty else {
+            completion([])
+            return
+        }
+
+        let accumulator = OrderedDropPayloadAccumulator<URL>(count: providers.count, completion: completion)
+        for (index, provider) in providers.enumerated() {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let itemURL = item as? URL {
+                    url = itemURL
+                } else if let itemURL = item as? NSURL {
+                    url = itemURL as URL
+                } else {
+                    url = nil
+                }
+                accumulator.complete(index: index, value: url)
+            }
+        }
+    }
+}
+
+private final class OrderedDropPayloadAccumulator<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Value?]
+    private var remaining: Int
+    private let completion: ([Value]) -> Void
+
+    init(count: Int, completion: @escaping ([Value]) -> Void) {
+        self.values = Array(repeating: nil, count: count)
+        self.remaining = count
+        self.completion = completion
+    }
+
+    func complete(index: Int, value: Value?) {
+        let finishedValues: [Value]?
+        lock.lock()
+        values[index] = value
+        remaining -= 1
+        finishedValues = remaining == 0 ? values.compactMap { $0 } : nil
+        lock.unlock()
+
+        if let finishedValues {
+            completion(finishedValues)
+        }
+    }
+}
+
+private struct TimelineMarkerFlag: View {
+    var marker: Marker
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "flag.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.yellow)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(marker.name)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
+                Text(String(format: "%.1fs", marker.time))
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.leading, 2)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(marker.name), \(String(format: "%.1fs", marker.time))")
+    }
+}
+
+private struct TimelineMarkerLine: View {
+    var marker: Marker
+    var height: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Triangle()
+                .fill(Color.yellow)
+                .frame(width: 8, height: 6)
+            Rectangle()
+                .fill(Color.yellow.opacity(0.72))
+                .frame(width: 2, height: max(0, height - 6))
+        }
+        .frame(width: 8, height: height)
+        .offset(x: -4)
+        .accessibilityElement()
+        .accessibilityLabel("\(marker.name), \(String(format: "%.1fs", marker.time))")
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }

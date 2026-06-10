@@ -6,6 +6,15 @@ import MovieCutCore
 import Observation
 import UniformTypeIdentifiers
 
+enum CanvasOverlayAlignment: Sendable {
+    case leading
+    case centerX
+    case trailing
+    case top
+    case centerY
+    case bottom
+}
+
 @MainActor
 @Observable
 final class EditorViewModel {
@@ -17,6 +26,38 @@ final class EditorViewModel {
         let isBold: Bool
         let alignment: TextAlignment
         let animation: TextAnimationType?
+    }
+
+    struct AnalysisHistoryItem: Identifiable {
+        let id = UUID()
+        let action: String
+        let count: Int?
+        let clipDescription: String?
+        let message: String
+        let timestamp: Date
+    }
+
+    private enum DropFeedbackMessage {
+        static let invalidTimelineFilePayload = "Drop did not include valid media files."
+        static let invalidTimelineLibraryAssetPayload = "Drop did not include valid library assets."
+        static let unsupportedTimelinePayload = "Drop media files or library assets onto the timeline."
+        static let invalidMediaLibraryPayload = "Drop did not include supported media files."
+
+        static func importedMediaFiles(_ count: Int) -> String {
+            "Imported \(count) \(plural(count, singular: "media file", plural: "media files"))."
+        }
+
+        static func addedMediaFilesToTimeline(_ count: Int) -> String {
+            "Added \(count) \(plural(count, singular: "media file", plural: "media files")) to the timeline."
+        }
+
+        static func addedLibraryAssetsToTimeline(_ count: Int) -> String {
+            "Added \(count) \(plural(count, singular: "library asset", plural: "library assets")) to the timeline."
+        }
+
+        private static func plural(_ count: Int, singular: String, plural: String) -> String {
+            count == 1 ? singular : plural
+        }
     }
 
     static let textTemplates: [TextTemplate] = [
@@ -56,6 +97,9 @@ final class EditorViewModel {
     var selectedStyle: String = "none"
     var exportResolution: String = "1080p"
     var exportQuality: String = "high"
+    var exportFrameRate: ExportFrameRate = .fps30
+    var exportCodec: ExportCodec = .h264
+    var exportAudioCodec: MovieCutCore.AudioCodec = .aac
     var isMaskEditorActive: Bool = false
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
@@ -69,6 +113,9 @@ final class EditorViewModel {
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
+    var lastStatusMessage: String?
+    var quickToolProgressMessage: String?
+    var recentAnalysisResults: [AnalysisHistoryItem] = []
     var lastExportURL: URL?
     var isCloudSyncing: Bool = false
     var cloudSyncError: String?
@@ -88,10 +135,16 @@ final class EditorViewModel {
     @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
     @ObservationIgnored private var clipStyles: [UUID: String] = [:]
 
-    init(project: Project = EditorViewModel.defaultProject()) {
-        let project = EditorViewModel.ensureDefaultTracks(in: project)
+    init(project: Project? = nil) {
+        let project = EditorViewModel.ensureDefaultTracks(in: project ?? Project(name: "Untitled"))
         self.currentProject = project
         self.canvasSelection = project.canvas.aspectRatio
+        self.exportResolution = Self.exportResolutionString(for: project.exportSettings.resolution)
+        self.exportQuality = project.exportSettings.quality.rawValue
+        self.exportFrameRate = project.exportSettings.frameRate
+        self.exportCodec = project.exportSettings.codec
+        self.exportAudioCodec = project.exportSettings.audioCodec
+        self.exportFormat = project.exportSettings.containerFormat.rawValue
         self.playbackEngine = PlaybackEngine()
         self.exportEngine = ExportEngine()
         self.musicLibrary = MusicLibrary.placeholder()
@@ -105,10 +158,6 @@ final class EditorViewModel {
         }
 
         startAutoSave()
-    }
-
-    deinit {
-        stopAutoSave()
     }
 
     var mediaAssets: [MediaAsset] {
@@ -129,21 +178,105 @@ final class EditorViewModel {
             .first { $0.id == selectedClipId }
     }
 
+    var selectedCanvasOverlayClips: [Clip] {
+        var clips: [Clip] = []
+        for track in currentProject.timeline.tracks {
+            for clip in track.clips where selectedClipIds.contains(clip.id) {
+                if clip.kind == .text, clip.textContent != nil {
+                    clips.append(clip)
+                }
+            }
+        }
+        return clips
+    }
+
+    var hasMultipleSelectedCanvasOverlays: Bool {
+        selectedCanvasOverlayClips.count > 1
+    }
+
+    var hasSelectedClips: Bool {
+        !selectedClipIds.isEmpty
+    }
+
+    var canSplitSelectedClip: Bool {
+        guard let selectedClip else { return false }
+        return selectedClip.timelineRange.contains(playheadTime)
+    }
+
+    var selectedClipIsSticker: Bool {
+        guard let selectedClip else { return false }
+        return isStickerClip(selectedClip)
+    }
+
     var selectedTranscribableAsset: MediaAsset? {
         if
             let selectedClip,
             let assetId = selectedClip.assetId,
             let asset = currentProject.mediaLibrary.assets[assetId],
-            asset.kind == .audio || asset.kind == .video
+            Self.isTranscribable(asset)
         {
             return asset
         }
 
-        if let selectedAsset, selectedAsset.kind == .audio || selectedAsset.kind == .video {
+        if let selectedAsset, Self.isTranscribable(selectedAsset) {
             return selectedAsset
         }
 
         return nil
+    }
+
+    var selectedTranscribableClipAndAsset: (clip: Clip, asset: MediaAsset)? {
+        guard
+            let selectedClip,
+            let assetId = selectedClip.assetId,
+            let asset = currentProject.mediaLibrary.assets[assetId],
+            Self.isTranscribable(asset)
+        else {
+            return nil
+        }
+
+        return (selectedClip, asset)
+    }
+
+    var selectedClipSourceAsset: MediaAsset? {
+        guard let assetId = selectedClip?.assetId else { return nil }
+        return currentProject.mediaLibrary.assets[assetId]
+    }
+
+    var canRunAutoCutOnSelection: Bool {
+        guard let clip = selectedClip, let asset = selectedClipSourceAsset else { return false }
+        return (clip.kind == .audio || clip.kind == .video) && (asset.kind == .audio || asset.kind == .video)
+    }
+
+    var canDetectSceneChangesForSelection: Bool {
+        selectedClip?.kind == .video && selectedClipSourceAsset?.kind == .video
+    }
+
+    var canAutoReframeSelection: Bool {
+        selectedClip?.kind == .video && selectedClipSourceAsset?.kind == .video
+    }
+
+    var canApplyNoiseReductionToSelection: Bool {
+        guard let clip = selectedClip, let asset = selectedClipSourceAsset else { return false }
+        return (clip.kind == .audio || clip.kind == .video) && (asset.kind == .audio || asset.kind == .video)
+    }
+
+    var canExtractAudioFromSelection: Bool {
+        selectedClip?.kind == .video && selectedClipSourceAsset?.kind == .video
+    }
+
+    var previousMarker: Marker? {
+        currentProject.markers
+            .filter { $0.time < playheadTime - 0.001 }
+            .sorted { $0.time < $1.time }
+            .last
+    }
+
+    var nextMarker: Marker? {
+        currentProject.markers
+            .filter { $0.time > playheadTime + 0.001 }
+            .sorted { $0.time < $1.time }
+            .first
     }
 
     func waveform(for clip: Clip) -> [CGFloat] {
@@ -166,14 +299,23 @@ final class EditorViewModel {
     }
 
     var canGenerateSubtitles: Bool {
-        selectedTranscribableAsset != nil
+        if selectedClipId != nil {
+            return selectedTranscribableClipAndAsset != nil
+        }
+
+        guard let selectedAsset else { return false }
+        return Self.isTranscribable(selectedAsset)
     }
 
-    var selectedClipTrackId: UUID? {
+    var selectedClipTrack: Track? {
         guard let selectedClipId else { return nil }
         return currentProject.timeline.tracks.first { track in
             track.clips.contains { $0.id == selectedClipId }
-        }?.id
+        }
+    }
+
+    var selectedClipTrackId: UUID? {
+        selectedClipTrack?.id
     }
 
     var visibleTimelineDuration: TimeInterval {
@@ -186,6 +328,7 @@ final class EditorViewModel {
         currentProject = project
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
+        syncExportUI(from: project.exportSettings)
         selectedClipId = nil
         selectedAssetId = nil
         isMaskEditorActive = false
@@ -193,7 +336,9 @@ final class EditorViewModel {
         playheadTime = 0
         clearGeneratedSubtitles()
         clearClipProcessingState()
+        recentAnalysisResults = []
         lastErrorMessage = nil
+        lastStatusMessage = nil
         lastExportURL = nil
     }
 
@@ -205,6 +350,7 @@ final class EditorViewModel {
             currentProject = project
             currentProjectURL = url
             canvasSelection = project.canvas.aspectRatio
+            syncExportUI(from: project.exportSettings)
             selectedClipId = nil
             selectedAssetId = nil
             isMaskEditorActive = false
@@ -212,10 +358,13 @@ final class EditorViewModel {
             playheadTime = 0
             clearGeneratedSubtitles()
             clearClipProcessingState()
+            recentAnalysisResults = []
             lastErrorMessage = nil
+            lastStatusMessage = nil
             lastExportURL = nil
         } catch {
             lastErrorMessage = error.localizedDescription
+            lastStatusMessage = nil
         }
     }
 
@@ -351,6 +500,7 @@ final class EditorViewModel {
             session = EditorSession(project: loaded)
             currentProject = loaded
             canvasSelection = loaded.canvas.aspectRatio
+            syncExportUI(from: loaded.exportSettings)
             selectedClipId = nil
             selectedAssetId = nil
             isMaskEditorActive = false
@@ -358,6 +508,7 @@ final class EditorViewModel {
             playheadTime = 0
             clearGeneratedSubtitles()
             clearClipProcessingState()
+            recentAnalysisResults = []
             lastErrorMessage = nil
             lastExportURL = nil
             cloudSyncError = nil
@@ -367,13 +518,22 @@ final class EditorViewModel {
     }
 
     func exportProject() async {
+        let reconciledSettings = reconciledExportSettingsFromLegacyUI()
+        if currentProject.exportSettings != reconciledSettings {
+            await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
+            guard lastErrorMessage == nil else { return }
+        }
+
+        let settings = currentProject.exportSettings
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
+        panel.allowedContentTypes = [
+            .mpeg4Movie,
+            .quickTimeMovie,
+            UTType(filenameExtension: "m4v") ?? .mpeg4Movie
+        ]
         panel.canCreateDirectories = true
 
-        // Set default extension based on selected format
-        let ext = exportFormat == "mov" ? "mov" : "mp4"
-        panel.nameFieldStringValue = "\(currentProject.name).\(ext)"
+        panel.nameFieldStringValue = "\(currentProject.name).\(settings.containerFormat.fileExtension)"
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -381,10 +541,9 @@ final class EditorViewModel {
 
         lastExportURL = nil
 
-        // Configure export engine with current settings
-        exportEngine.exportResolution = exportResolution
-        exportEngine.exportQuality = exportQuality
-        exportEngine.exportFormat = exportFormat
+        exportEngine.exportResolution = Self.exportResolutionString(for: settings.resolution)
+        exportEngine.exportQuality = settings.quality.rawValue
+        exportEngine.exportFormat = settings.containerFormat.rawValue
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
 
         do {
@@ -402,15 +561,21 @@ final class EditorViewModel {
     }
 
     func importMedia(_ urls: [URL]) async {
+        guard !urls.isEmpty else {
+            reportInvalidMediaLibraryDrop()
+            return
+        }
+
         do {
             for url in urls {
-                let asset = MediaImporter.probe(url: url)
+                let asset = await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 selectedAssetId = asset.id
             }
             try await refreshFromSession()
+            reportMediaLibraryDropSuccess(count: urls.count)
         } catch {
-            lastErrorMessage = error.localizedDescription
+            setDropError(error.localizedDescription)
         }
     }
 
@@ -420,21 +585,151 @@ final class EditorViewModel {
     }
 
     func addClipToTimeline(_ asset: MediaAsset) async {
-        do {
-            let track = try await ensureTrack(for: trackKind(for: asset.kind))
-            let duration = defaultDuration(for: asset)
-            let start = currentProject.timeline.duration
-            let clip = Clip(
-                assetId: asset.id,
-                kind: clipKind(for: asset.kind),
-                sourceRange: TimeRange(start: 0, duration: duration),
-                timelineRange: TimeRange(start: start, duration: duration)
-            )
+        await addMediaAssetToTimeline(asset, preferredTrackId: nil, startTime: currentProject.timeline.duration)
+    }
 
-            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+    func importMediaAndAddToTimeline(
+        _ urls: [URL],
+        preferredTrackId: UUID? = nil,
+        startTime: TimeInterval
+    ) async {
+        guard !urls.isEmpty else {
+            reportInvalidTimelineFileDrop()
+            return
+        }
+
+        var needsRefresh = false
+        do {
+            var insertionStart = max(0, startTime)
+            for url in urls {
+                let asset = await mediaAssetWithAppProbe(for: url)
+                try await session.dispatch(ImportMediaCommand(asset: asset))
+                needsRefresh = true
+
+                let clip = try await insertMediaAssetOnTimeline(
+                    asset,
+                    preferredTrackId: preferredTrackId,
+                    startTime: insertionStart
+                )
+                insertionStart = clip.timelineRange.end
+                selectedAssetId = asset.id
+                selectedClipId = clip.id
+                playheadTime = clip.timelineRange.start
+            }
+
+            try await refreshFromSession()
+            reportTimelineFileDropSuccess(count: urls.count)
+        } catch {
+            if needsRefresh {
+                try? await refreshFromSession()
+            }
+            setDropError(error.localizedDescription)
+        }
+    }
+
+    func addImportedAssetsToTimeline(
+        _ assetIds: [UUID],
+        preferredTrackId: UUID? = nil,
+        startTime: TimeInterval
+    ) async {
+        guard !assetIds.isEmpty else {
+            reportInvalidTimelineLibraryAssetDrop()
+            return
+        }
+
+        var needsRefresh = false
+        do {
+            var insertionStart = max(0, startTime)
+            let snapshot = await session.snapshot()
+            for assetId in assetIds {
+                guard let asset = snapshot.mediaLibrary.assets[assetId] else {
+                    throw EditorCommandError.assetNotFound(assetId)
+                }
+
+                let clip = try await insertMediaAssetOnTimeline(
+                    asset,
+                    preferredTrackId: preferredTrackId,
+                    startTime: insertionStart
+                )
+                needsRefresh = true
+                insertionStart = clip.timelineRange.end
+                selectedAssetId = asset.id
+                selectedClipId = clip.id
+                playheadTime = clip.timelineRange.start
+            }
+
+            try await refreshFromSession()
+            reportTimelineLibraryAssetDropSuccess(count: assetIds.count)
+        } catch {
+            if needsRefresh {
+                try? await refreshFromSession()
+            }
+            setDropError(error.localizedDescription)
+        }
+    }
+
+    func addImportedAssetToTimeline(
+        _ assetId: UUID,
+        preferredTrackId: UUID? = nil,
+        startTime: TimeInterval
+    ) async {
+        await addImportedAssetsToTimeline([assetId], preferredTrackId: preferredTrackId, startTime: startTime)
+    }
+
+    func setDropStatus(_ message: String) {
+        lastErrorMessage = nil
+        lastStatusMessage = message
+    }
+
+    func setDropError(_ message: String) {
+        lastStatusMessage = nil
+        lastErrorMessage = message
+    }
+
+    func reportInvalidTimelineFileDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidTimelineFilePayload)
+    }
+
+    func reportInvalidTimelineLibraryAssetDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidTimelineLibraryAssetPayload)
+    }
+
+    func reportUnsupportedTimelineDrop() {
+        setDropError(Self.DropFeedbackMessage.unsupportedTimelinePayload)
+    }
+
+    func reportInvalidMediaLibraryDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidMediaLibraryPayload)
+    }
+
+    private func reportMediaLibraryDropSuccess(count: Int) {
+        setDropStatus(Self.DropFeedbackMessage.importedMediaFiles(count))
+    }
+
+    private func reportTimelineFileDropSuccess(count: Int) {
+        setDropStatus(Self.DropFeedbackMessage.addedMediaFilesToTimeline(count))
+    }
+
+    private func reportTimelineLibraryAssetDropSuccess(count: Int) {
+        setDropStatus(Self.DropFeedbackMessage.addedLibraryAssetsToTimeline(count))
+    }
+
+    private func addMediaAssetToTimeline(
+        _ asset: MediaAsset,
+        preferredTrackId: UUID?,
+        startTime: TimeInterval
+    ) async {
+        do {
+            let clip = try await insertMediaAssetOnTimeline(
+                asset,
+                preferredTrackId: preferredTrackId,
+                startTime: startTime
+            )
+            selectedAssetId = asset.id
             selectedClipId = clip.id
             playheadTime = clip.timelineRange.start
             try await refreshFromSession()
+            lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -539,17 +834,34 @@ final class EditorViewModel {
         do {
             let track = try await ensureTrack(for: .text)
             let duration: TimeInterval = 3
+            let canvasSize = effectiveCanvasSize(in: currentProject)
+            let placement = defaultStickerPlacement(for: sticker)
+            let stickerPosition = CGPoint(
+                x: canvasSize.width * placement.xRatio,
+                y: canvasSize.height * placement.yRatio
+            )
+            let stickerScale = CGSize(width: placement.transformScale, height: placement.transformScale)
+            let stickerImageURL = sticker.imageURL.flatMap { _ in StickerImageProvider.ensureImageURL(for: sticker) }
+            let isImageBackedSticker = stickerImageURL != nil
             let content = TextClipContent(
                 text: stickerText,
-                fontFamily: "Apple Color Emoji",
-                fontSize: 48,
-                alignment: .center
+                fontFamily: isImageBackedSticker ? "HelveticaNeue-Bold" : "Apple Color Emoji",
+                fontSize: max(84, min(Double(canvasSize.width), Double(canvasSize.height)) * placement.fontScale),
+                fontColor: "#FFFFFF",
+                alignment: .center,
+                backgroundColor: "#00000000",
+                position: stickerPosition,
+                animation: TextAnimation(type: .scale, duration: 0.25),
+                contentKind: .sticker,
+                stickerAssetID: sticker.id,
+                stickerImageURL: stickerImageURL
             )
             let clip = Clip(
                 assetId: nil,
                 kind: .text,
                 sourceRange: TimeRange(start: 0, duration: duration),
                 timelineRange: TimeRange(start: playheadTime, duration: duration),
+                transform: ClipTransform(position: stickerPosition, scale: stickerScale),
                 textContent: content
             )
 
@@ -585,6 +897,47 @@ final class EditorViewModel {
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func addTextTemplateClip(_ template: TextTemplate) async {
+        await addTextFromTemplate(template)
+        if lastErrorMessage == nil {
+            reportQuickToolSuccess("Added \(template.name) text template.")
+        }
+    }
+
+    func addTextTemplateClip(_ template: MovieCutCore.TextTemplate) async {
+        do {
+            let track = try await ensureTrack(for: .text)
+            let duration: TimeInterval = 5
+            var content = template.content
+            content.position = scaledTemplatePosition(content.position)
+            if content.animation == nil {
+                content.animation = template.animation
+            }
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            try await refreshFromSession()
+            reportQuickToolSuccess("Added \(template.name) text template.")
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
+    func addStickerClip(_ sticker: StickerAsset) async {
+        await addSticker(sticker)
+        if lastErrorMessage == nil {
+            let kindLabel = sticker.isImageBacked ? "image/badge" : "emoji"
+            reportQuickToolSuccess("Added \(sticker.name) \(kindLabel) sticker.")
         }
     }
 
@@ -652,6 +1005,10 @@ final class EditorViewModel {
         await duplicateClips([clipId])
     }
 
+    func duplicateSelectedClips() async {
+        await duplicateClips(selectedClipIds)
+    }
+
     func duplicateClips(_ clipIds: Set<UUID>) async {
         let orderedClipIds = timelineOrderedClipIds(from: clipIds)
         guard !orderedClipIds.isEmpty else { return }
@@ -679,6 +1036,21 @@ final class EditorViewModel {
 
     func deleteClip() async {
         await deleteClips(selectedClipIds)
+    }
+
+    func rippleDeleteSelectedClip() async {
+        guard let selectedClipId else { return }
+        await rippleDeleteClip(clipId: selectedClipId)
+    }
+
+    func snapPlayheadToSelectedClipStart() {
+        guard let selectedClip else { return }
+        seekPlayhead(to: selectedClip.timelineRange.start)
+    }
+
+    func snapPlayheadToSelectedClipEnd() {
+        guard let selectedClip else { return }
+        seekPlayhead(to: selectedClip.timelineRange.end)
     }
 
     func deleteClips(_ clipIds: Set<UUID>) async {
@@ -735,6 +1107,159 @@ final class EditorViewModel {
     func updateSelectedTransform(_ transform: ClipTransform) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transform(transform)))
+    }
+
+    func updateSelectedStickerTransform(_ transform: ClipTransform) async {
+        guard let selectedClipId, let selectedClip, isStickerClip(selectedClip) else { return }
+
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transform(transform)))
+        guard lastErrorMessage == nil, var textContent = selectedClip.textContent else { return }
+
+        let shouldPromoteToSticker = textContent.contentKind != .sticker
+        let shouldSyncPosition = !pointsEqual(textContent.position, transform.position)
+        guard shouldPromoteToSticker || shouldSyncPosition else { return }
+
+        textContent.contentKind = .sticker
+        if !pointsEqual(textContent.position, transform.position) {
+            textContent.position = transform.position
+        }
+
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
+    }
+
+    func nudgeSelectedCanvasOverlays(dx: CGFloat, dy: CGFloat) async {
+        let clips = selectedCanvasOverlayOperationClips()
+        guard !clips.isEmpty else { return }
+
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        let updates = clips.map { clip in
+            var transform = resolvedCanvasOverlayTransform(for: clip)
+            transform.position = clampedCanvasPoint(
+                CGPoint(x: transform.position.x + dx, y: transform.position.y + dy),
+                canvasSize: canvasSize
+            )
+            return (clip: clip, transform: transform)
+        }
+
+        await dispatchCanvasOverlayUpdates(updates)
+    }
+
+    func centerSelectedCanvasOverlays() async {
+        let clips = selectedCanvasOverlayOperationClips()
+        guard !clips.isEmpty else { return }
+
+        let canvasCenter = canvasCenter()
+
+        if clips.count > 1 {
+            let centers = clips.map { canvasOverlayVisualCenter(for: $0) }
+            let groupCenter = boundingCenter(for: centers)
+            await translateCanvasOverlayClips(
+                clips,
+                dx: canvasCenter.x - groupCenter.x,
+                dy: canvasCenter.y - groupCenter.y
+            )
+            return
+        }
+
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        let updates = clips.map { clip in
+            var transform = resolvedCanvasOverlayTransform(for: clip)
+            transform.position = clampedCanvasPoint(
+                CGPoint(x: canvasCenter.x - transform.offset.x, y: canvasCenter.y - transform.offset.y),
+                canvasSize: canvasSize
+            )
+            return (clip: clip, transform: transform)
+        }
+
+        await dispatchCanvasOverlayUpdates(updates)
+    }
+
+    func alignSelectedCanvasOverlays(_ alignment: CanvasOverlayAlignment) async {
+        let clips = selectedCanvasOverlayOperationClips()
+        guard !clips.isEmpty else { return }
+
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        let centers = clips.map { canvasOverlayVisualCenter(for: $0) }
+        let target = alignmentTarget(for: alignment, centers: centers, canvasSize: canvasSize, isMultiple: clips.count > 1)
+
+        let updates = clips.map { clip in
+            var transform = resolvedCanvasOverlayTransform(for: clip)
+            switch alignment {
+            case .leading, .centerX, .trailing:
+                transform.position.x = min(max(target - transform.offset.x, 0), canvasSize.width)
+            case .top, .centerY, .bottom:
+                transform.position.y = min(max(target - transform.offset.y, 0), canvasSize.height)
+            }
+            return (clip: clip, transform: transform)
+        }
+
+        await dispatchCanvasOverlayUpdates(updates)
+    }
+
+    func centerSelectedSticker() async {
+        guard let selectedClip, isStickerClip(selectedClip) else { return }
+
+        var transform = selectedClip.transform
+        transform.position = canvasCenter()
+        transform.offset = CGPoint(x: 0, y: 0)
+        await updateSelectedStickerTransform(transform)
+    }
+
+    func fitSelectedStickerToSocialSafeArea() async {
+        guard let selectedClip, isStickerClip(selectedClip) else { return }
+
+        let safeRect = socialSafeAreaRect()
+        let fallbackPosition = canvasCenter()
+        let currentPosition = nonZeroPoint(selectedClip.transform.position)
+            ?? selectedClip.textContent.flatMap { nonZeroPoint($0.position) }
+            ?? fallbackPosition
+
+        var transform = selectedClip.transform
+        transform.position = CGPoint(
+            x: min(max(currentPosition.x, safeRect.minX), safeRect.maxX),
+            y: min(max(currentPosition.y, safeRect.minY), safeRect.maxY)
+        )
+
+        let averageScale = (transform.scale.width + transform.scale.height) * 0.5
+        let clampedScale = min(max(averageScale.isFinite ? averageScale : 1, 0.35), 1.1)
+        transform.scale = CGSize(width: clampedScale, height: clampedScale)
+        await updateSelectedStickerTransform(transform)
+    }
+
+    func resetSelectedStickerTransform() async {
+        guard let selectedClip, isStickerClip(selectedClip) else { return }
+
+        var transform = ClipTransform()
+        transform.position = canvasCenter()
+        transform.scale = CGSize(width: 1, height: 1)
+        await updateSelectedStickerTransform(transform)
+    }
+
+    func moveSelectedClipLayerForward() async {
+        guard let track = selectedClipTrack else { return }
+        await setSelectedClipTrackZIndex(track.zIndex + 1)
+    }
+
+    func moveSelectedClipLayerBackward() async {
+        guard let track = selectedClipTrack else { return }
+        await setSelectedClipTrackZIndex(track.zIndex - 1)
+    }
+
+    func bringSelectedClipLayerToFront() async {
+        guard let track = selectedClipTrack else { return }
+        let frontZIndex = (currentProject.timeline.tracks.map(\.zIndex).max() ?? track.zIndex) + 1
+        await setSelectedClipTrackZIndex(frontZIndex)
+    }
+
+    func sendSelectedClipLayerToBack() async {
+        guard let track = selectedClipTrack else { return }
+        let backZIndex = (currentProject.timeline.tracks.map(\.zIndex).min() ?? track.zIndex) - 1
+        await setSelectedClipTrackZIndex(backZIndex)
+    }
+
+    private func setSelectedClipTrackZIndex(_ zIndex: Int) async {
+        guard let trackId = selectedClipTrackId else { return }
+        await apply(SetTrackPropertyCommand(trackId: trackId, property: .zIndex(zIndex)))
     }
 
     func updateSelectedOpacity(_ opacity: Double) async {
@@ -833,6 +1358,48 @@ final class EditorViewModel {
         await apply(SetProjectCanvasCommand(canvas: canvas))
     }
 
+    func updateExportSettings(
+        resolution: ExportResolution? = nil,
+        frameRate: ExportFrameRate? = nil,
+        codec: ExportCodec? = nil,
+        audioCodec: MovieCutCore.AudioCodec? = nil,
+        containerFormat: ExportContainerFormat? = nil,
+        quality: ExportQuality? = nil,
+        videoBitrateMbps: Int? = nil
+    ) async {
+        var settings = currentProject.exportSettings
+        settings.resolution = resolution ?? settings.resolution
+        settings.frameRate = frameRate ?? settings.frameRate
+        settings.codec = codec ?? settings.codec
+        settings.audioCodec = audioCodec ?? settings.audioCodec
+        settings.containerFormat = containerFormat ?? settings.containerFormat
+        if let quality {
+            settings.quality = quality
+            if quality != .custom {
+                settings.videoBitrateMbps = nil
+            }
+        }
+        if let videoBitrateMbps {
+            settings.videoBitrateMbps = min(max(videoBitrateMbps, 1), 200)
+        }
+
+        await apply(SetProjectExportSettingsCommand(exportSettings: settings))
+    }
+
+    func applyExportPreset(
+        named name: String,
+        canvas: CanvasPreset,
+        exportSettings: ExportSettings
+    ) async {
+        await apply(SetProjectCanvasCommand(canvas: canvas))
+        guard lastErrorMessage == nil else { return }
+
+        await apply(SetProjectExportSettingsCommand(exportSettings: exportSettings))
+        guard lastErrorMessage == nil else { return }
+
+        reportQuickToolSuccess("Applied \(name) export preset.")
+    }
+
     func updateSelectedTransition(_ transition: Transition?) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
@@ -860,8 +1427,8 @@ final class EditorViewModel {
 
     func suggestCuts() async throws {
         guard let clipId = selectedClipId else { return }
-        try? await autoCutSilence(for: clipId)
-        try? await detectAndSplitScenes(for: clipId)
+        _ = try? await autoCutSilence(for: clipId)
+        _ = try? await detectAndSplitScenes(for: clipId)
     }
 
     func autoColorCorrect() async {
@@ -872,12 +1439,12 @@ final class EditorViewModel {
     func autoColorCorrect(for clipId: UUID) async throws {
         let snapshot = await session.snapshot()
         var found: Clip?
-        outer: for (ti, track) in snapshot.timeline.tracks.enumerated() {
-            for (ci, c) in track.clips.enumerated() {
+        outer: for track in snapshot.timeline.tracks {
+            for c in track.clips {
                 if c.id == clipId { found = c; break outer }
             }
         }
-        guard var clip = found else {
+        guard let clip = found else {
             throw EditorCommandError.invalidCommand("Clip not found")
         }
         var colorCorrection = clip.colorCorrection ?? ColorCorrection()
@@ -997,12 +1564,177 @@ final class EditorViewModel {
         try await refreshFromSession()
     }
 
+    func runAutoCutOnSelection() async {
+        guard let clipId = selectedClipId, canRunAutoCutOnSelection else {
+            reportQuickToolFailure("Select an audio or video clip to auto cut silence.")
+            return
+        }
+
+        do {
+            let removedRangeCount = try await autoCutSilence(for: clipId)
+            let message = removedRangeCount == 0
+                ? "No removable silence was detected."
+                : "Removed \(removedRangeCount) silent \(removedRangeCount == 1 ? "range" : "ranges")."
+            recordAnalysisResult(
+                action: "Auto Cut",
+                count: removedRangeCount,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
+    func detectSceneChangesForSelection() async {
+        guard let clipId = selectedClipId, canDetectSceneChangesForSelection else {
+            reportQuickToolFailure("Select a video clip to detect scene changes.")
+            return
+        }
+
+        do {
+            let splitCount = try await detectAndSplitScenes(for: clipId)
+            let message = splitCount == 0
+                ? "No scene changes were detected."
+                : "Split \(splitCount) scene \(splitCount == 1 ? "boundary" : "boundaries")."
+            recordAnalysisResult(
+                action: "Detect Scenes",
+                count: splitCount,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
+    func autoReframeSelection() async {
+        guard let clipId = selectedClipId, canAutoReframeSelection else {
+            reportQuickToolFailure("Select a video clip to auto reframe.")
+            return
+        }
+
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        guard canvasSize.width > 0, canvasSize.height > 0 else {
+            reportQuickToolFailure("Set a valid canvas before auto reframing.")
+            return
+        }
+
+        do {
+            let keyframeCount = try await autoReframe(for: clipId, targetAspect: canvasSize.width / canvasSize.height)
+            let message = keyframeCount == 0
+                ? "Auto reframe found no subject frames; clip unchanged."
+                : "Added \(keyframeCount) reframe \(keyframeCount == 1 ? "keyframe" : "keyframes")."
+            recordAnalysisResult(
+                action: "Auto Reframe",
+                count: keyframeCount,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
+    func applyNoiseReductionToSelection() async {
+        guard let clipId = selectedClipId, canApplyNoiseReductionToSelection else {
+            reportQuickToolFailure("Select an audio or video clip for noise reduction.")
+            return
+        }
+
+        do {
+            try await applyNoiseReduction(for: clipId)
+            let message = "Applied noise reduction."
+            recordAnalysisResult(
+                action: "Noise Reduction",
+                count: nil,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
+    func extractAudioFromSelection() async {
+        guard let clipId = selectedClipId, canExtractAudioFromSelection else {
+            reportQuickToolFailure("Select a video clip to extract audio.")
+            return
+        }
+
+        do {
+            try await extractAudio(from: clipId)
+            let message = "Extracted audio to a new audio clip."
+            recordAnalysisResult(
+                action: "Extract Audio",
+                count: 1,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            reportQuickToolFailure(error)
+        }
+    }
+
     func addMarkerAtPlayhead() {
         let time = max(0, playheadTime)
         let markerName = "Marker \(currentProject.markers.count + 1)"
         let marker = Marker(time: time, name: markerName, color: "#FFD60A")
 
-        Task { await apply(AddMarkerCommand(marker: marker)) }
+        Task {
+            await apply(AddMarkerCommand(marker: marker))
+            if lastErrorMessage == nil {
+                reportQuickToolSuccess("Added \(markerName) at \(String(format: "%.1fs", time)).")
+            }
+        }
+    }
+
+    func goToPreviousMarker() {
+        guard let marker = previousMarker else { return }
+        goToMarker(marker)
+    }
+
+    func goToNextMarker() {
+        guard let marker = nextMarker else { return }
+        goToMarker(marker)
+    }
+
+    func goToMarker(_ marker: Marker) {
+        seekPlayhead(to: marker.time)
+        reportQuickToolSuccess("Moved to \(marker.name) at \(String(format: "%.1fs", marker.time)).")
+    }
+
+    func renameMarker(_ marker: Marker, to name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            reportQuickToolFailure("Marker name cannot be empty.")
+            return
+        }
+        guard trimmedName != marker.name else { return }
+
+        var updatedMarker = marker
+        updatedMarker.name = trimmedName
+
+        Task {
+            await apply(UpdateMarkerCommand(markerId: marker.id, marker: updatedMarker))
+            if lastErrorMessage == nil {
+                reportQuickToolSuccess("Renamed marker to \(trimmedName).")
+            }
+        }
+    }
+
+    func deleteMarker(_ marker: Marker) {
+        Task {
+            await apply(DeleteMarkerCommand(markerId: marker.id))
+            if lastErrorMessage == nil {
+                reportQuickToolSuccess("Deleted marker \(marker.name).")
+            }
+        }
     }
 
     func toggleMaskEditor() {
@@ -1043,51 +1775,92 @@ final class EditorViewModel {
     }
 
     func prepareSubtitles(for clipId: UUID) async throws {
+        lastStatusMessage = nil
+        lastErrorMessage = nil
+
         let snapshot = await session.snapshot()
         let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
+        let providerName = transcriptionService.currentProvider.providerName
 
         clearGeneratedSubtitles()
-        transcriptionService.isTranscribing = true
-        transcriptionService.progress = 0
-        defer {
-            transcriptionService.isTranscribing = false
-            transcriptionService.progress = 1
+        lastStatusMessage = "Transcribing with \(providerName)..."
+
+        let result: TranscriptionResult
+        do {
+            result = try await transcriptionService.transcribe(asset: asset)
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+            throw error
         }
 
-        let provider = SpeechTranscriptionProvider()
-        let result = try await provider.transcribe(audioURL: asset.originalURL, language: nil)
         let subtitleClips = subtitleClips(from: result, alignedTo: clip)
 
         generatedSubtitleSegments = result.segments
 
-        guard !subtitleClips.isEmpty else {
+        guard !result.segments.isEmpty else {
             lastErrorMessage = nil
+            lastStatusMessage = "No speech found with \(providerName)."
             return
         }
 
-        let textTrack = try await ensureTrack(for: .text)
-        for subtitleClip in subtitleClips {
-            try await session.dispatch(AddClipCommand(trackId: textTrack.id, clip: subtitleClip))
+        guard !subtitleClips.isEmpty else {
+            lastErrorMessage = nil
+            lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName), but none overlap the selected timeline clip."
+            return
         }
 
-        selectedClipId = subtitleClips.first?.id
-        try await refreshFromSession()
+        do {
+            let textTrack = try await ensureTrack(for: .text)
+            for subtitleClip in subtitleClips {
+                try await session.dispatch(AddClipCommand(trackId: textTrack.id, clip: subtitleClip))
+            }
+
+            selectedClipId = subtitleClips.first?.id
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName); inserted \(subtitleClips.count) subtitle clips."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+            throw error
+        }
     }
 
     func prepareSubtitles() async {
-        guard let asset = selectedTranscribableAsset else {
-            lastErrorMessage = "Select an audio or video clip to generate subtitles."
-            return
-        }
-
         clearGeneratedSubtitles()
+        lastStatusMessage = nil
+        lastErrorMessage = nil
 
         do {
-            let result = try await transcriptionService.transcribe(asset: asset)
+            let snapshot = await session.snapshot()
+            let source = try selectedSubtitleSource(in: snapshot)
+            let providerName = transcriptionService.currentProvider.providerName
+            lastStatusMessage = "Transcribing with \(providerName)..."
+
+            let result = try await transcriptionService.transcribe(asset: source.asset)
+            let subtitleClips: [Clip]
+            if let clip = source.clip {
+                subtitleClips = self.subtitleClips(from: result, alignedTo: clip)
+            } else {
+                subtitleClips = transcriptionService.subtitles(from: result, in: snapshot)
+            }
+
             generatedSubtitleSegments = result.segments
-            pendingSubtitleClips = transcriptionService.subtitles(from: result, in: currentProject)
+            pendingSubtitleClips = subtitleClips
             lastErrorMessage = nil
+
+            if result.segments.isEmpty {
+                lastStatusMessage = "No speech found with \(providerName)."
+            } else if subtitleClips.isEmpty {
+                lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName), but no pending subtitle clips overlap the selected timeline clip."
+            } else if source.clip != nil {
+                lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName); prepared \(subtitleClips.count) pending subtitle clips aligned to the selected timeline clip."
+            } else {
+                lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName); prepared \(subtitleClips.count) pending subtitle clips starting at 00:00 because no timeline clip is selected."
+            }
         } catch {
+            lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -1104,7 +1877,10 @@ final class EditorViewModel {
             pendingSubtitleClips = []
             selectedClipId = clips.first?.id
             try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Applied \(clips.count) generated subtitle clips to the timeline."
         } catch {
+            lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -1114,11 +1890,12 @@ final class EditorViewModel {
         await applyGeneratedSubtitles()
     }
 
+    @discardableResult
     func autoCutSilence(
         for clipId: UUID,
         thresholdDB: Float = -40,
         minDuration: TimeInterval = 0.5
-    ) async throws {
+    ) async throws -> Int {
         let snapshot = await session.snapshot()
         let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
         let provider = SilenceDetectionProvider(
@@ -1130,18 +1907,21 @@ final class EditorViewModel {
         let timelineSuggestions = timelineSuggestions(from: result.suggestions, alignedTo: clip)
         guard !timelineSuggestions.isEmpty else {
             lastErrorMessage = nil
-            return
+            return 0
         }
 
+        let removedRangeCount = removalRangeCount(in: timelineSuggestions)
         let commands = try await AutoCutEngine.apply(suggestions: timelineSuggestions, to: session)
         for command in commands {
             try await session.dispatch(command)
         }
 
         try await refreshFromSession()
+        return removedRangeCount
     }
 
-    func detectAndSplitScenes(for clipId: UUID, threshold: Float = 0.3) async throws {
+    @discardableResult
+    func detectAndSplitScenes(for clipId: UUID, threshold: Float = 0.3) async throws -> Int {
         let snapshot = await session.snapshot()
         let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
         guard asset.kind == .video else {
@@ -1170,7 +1950,7 @@ final class EditorViewModel {
         let uniqueSplitTimes = Array(Set(splitTimes.filter { $0.isFinite })).sorted(by: >)
         guard !uniqueSplitTimes.isEmpty else {
             lastErrorMessage = nil
-            return
+            return 0
         }
 
         for splitTime in uniqueSplitTimes {
@@ -1178,9 +1958,11 @@ final class EditorViewModel {
         }
 
         try await refreshFromSession()
+        return uniqueSplitTimes.count
     }
 
-    func autoReframe(for clipId: UUID, targetAspect: CGFloat) async throws {
+    @discardableResult
+    func autoReframe(for clipId: UUID, targetAspect: CGFloat) async throws -> Int {
         guard targetAspect.isFinite, targetAspect > 0 else {
             throw EditorCommandError.invalidCommand("Target aspect ratio must be greater than zero.")
         }
@@ -1216,7 +1998,7 @@ final class EditorViewModel {
 
         guard !generatedKeyframes.isEmpty else {
             lastErrorMessage = nil
-            return
+            return 0
         }
 
         let reframedProperties: Set<AnimatableProperty> = [.positionX, .positionY, .scaleX, .scaleY]
@@ -1231,6 +2013,7 @@ final class EditorViewModel {
         // Persist auto-reframe keyframes on the clip; export forwards clip.keyframes to CustomVideoCompositor.
         try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
         try await refreshFromSession()
+        return generatedKeyframes.count
     }
 
     private func apply(_ command: any EditorCommand) async {
@@ -1254,6 +2037,7 @@ final class EditorViewModel {
     private func refreshFromSession() async throws {
         currentProject = await session.snapshot()
         canvasSelection = currentProject.canvas.aspectRatio
+        syncExportUI(from: currentProject.exportSettings)
 
         selectedClipIds.formIntersection(currentClipIds)
 
@@ -1263,6 +2047,85 @@ final class EditorViewModel {
 
         playheadTime = min(playheadTime, max(0, currentProject.timeline.duration))
         lastErrorMessage = nil
+        lastStatusMessage = nil
+    }
+
+    private func syncExportUI(from settings: ExportSettings) {
+        exportResolution = Self.exportResolutionString(for: settings.resolution)
+        exportQuality = settings.quality.rawValue
+        exportFrameRate = settings.frameRate
+        exportCodec = settings.codec
+        exportAudioCodec = settings.audioCodec
+        exportFormat = settings.containerFormat.rawValue
+    }
+
+    private func reconciledExportSettingsFromLegacyUI() -> ExportSettings {
+        var settings = currentProject.exportSettings
+        settings.resolution = Self.exportResolution(from: exportResolution) ?? settings.resolution
+        settings.frameRate = exportFrameRate
+        settings.codec = exportCodec
+        settings.audioCodec = exportAudioCodec
+        settings.containerFormat = ExportContainerFormat(rawValue: exportFormat.lowercased()) ?? settings.containerFormat
+
+        if let quality = ExportQuality(rawValue: exportQuality.lowercased()) {
+            settings.quality = quality
+            if quality != .custom {
+                settings.videoBitrateMbps = nil
+            } else if settings.videoBitrateMbps == nil {
+                settings.videoBitrateMbps = ExportQuality.medium.defaultVideoBitrateMbps(for: settings.resolution)
+            }
+        }
+
+        return settings
+    }
+
+    private func recordAnalysisResult(
+        action: String,
+        count: Int?,
+        message: String,
+        clipId: UUID?
+    ) {
+        let item = AnalysisHistoryItem(
+            action: action,
+            count: count,
+            clipDescription: clipDescription(for: clipId),
+            message: message,
+            timestamp: Date()
+        )
+
+        recentAnalysisResults.insert(item, at: 0)
+        if recentAnalysisResults.count > 8 {
+            recentAnalysisResults.removeSubrange(8...)
+        }
+    }
+
+    private func clipDescription(for clipId: UUID?) -> String? {
+        guard let clipId else { return nil }
+
+        for track in currentProject.timeline.tracks {
+            if let clipIndex = track.clips.firstIndex(where: { $0.id == clipId }) {
+                let trackName = track.name.isEmpty ? track.kind.rawValue.capitalized : track.name
+                return "\(trackName) clip \(clipIndex + 1)"
+            }
+        }
+
+        return nil
+    }
+
+    private func reportQuickToolSuccess(_ message: String) {
+        quickToolProgressMessage = nil
+        lastErrorMessage = nil
+        lastStatusMessage = message
+    }
+
+    private func reportQuickToolFailure(_ message: String) {
+        quickToolProgressMessage = nil
+        lastStatusMessage = nil
+        lastErrorMessage = message
+    }
+
+    private func reportQuickToolFailure(_ error: Error) {
+        reportQuickToolFailure(error.localizedDescription)
     }
 
     private func clearGeneratedSubtitles() {
@@ -1293,15 +2156,15 @@ final class EditorViewModel {
 
     private func styleTransferIndex(for style: String) -> Double? {
         switch style {
-        case "comic":
+        case "cinematic":
             return 1
         case "noir":
             return 2
         case "vintage":
             return 3
-        case "cyberpunk":
+        case "vivid":
             return 4
-        case "watercolor":
+        case "cool":
             return 5
         default:
             return nil
@@ -1335,6 +2198,246 @@ final class EditorViewModel {
         return project.canvas.size
     }
 
+    private func canvasCenter() -> CGPoint {
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        guard canvasSize.width > 0, canvasSize.height > 0 else {
+            return CGPoint(x: 0, y: 0)
+        }
+
+        return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
+    }
+
+    private func socialSafeAreaRect() -> CGRect {
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        guard canvasSize.width > 0, canvasSize.height > 0 else {
+            return CGRect(x: 0, y: 0, width: 0, height: 0)
+        }
+
+        let horizontalInset = canvasSize.width * 0.12
+        let verticalInset = canvasSize.height * 0.18
+        return CGRect(origin: CGPoint(x: 0, y: 0), size: canvasSize).insetBy(dx: horizontalInset, dy: verticalInset)
+    }
+
+    private func selectedCanvasOverlayOperationClips() -> [Clip] {
+        let clips = selectedCanvasOverlayClips
+        if clips.count > 1 {
+            return clips
+        }
+
+        if let selectedClip, selectedClip.kind == .text, selectedClip.textContent != nil {
+            return [selectedClip]
+        }
+
+        return clips
+    }
+
+    private func translateCanvasOverlayClips(_ clips: [Clip], dx: CGFloat, dy: CGFloat) async {
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        let updates = clips.map { clip in
+            var transform = resolvedCanvasOverlayTransform(for: clip)
+            transform.position = clampedCanvasPoint(
+                CGPoint(x: transform.position.x + dx, y: transform.position.y + dy),
+                canvasSize: canvasSize
+            )
+            return (clip: clip, transform: transform)
+        }
+
+        await dispatchCanvasOverlayUpdates(updates)
+    }
+
+    private func dispatchCanvasOverlayUpdates(_ updates: [(clip: Clip, transform: ClipTransform)]) async {
+        guard !updates.isEmpty else { return }
+
+        do {
+            for update in updates {
+                try await session.dispatch(SetClipPropertyCommand(clipId: update.clip.id, property: .transform(update.transform)))
+
+                guard var textContent = update.clip.textContent else { continue }
+                let shouldPromoteToSticker = isStickerClip(update.clip) && textContent.contentKind != .sticker
+                let shouldSyncPosition = !pointsEqual(textContent.position, update.transform.position)
+                guard shouldPromoteToSticker || shouldSyncPosition else { continue }
+
+                if shouldPromoteToSticker {
+                    textContent.contentKind = .sticker
+                }
+                textContent.position = update.transform.position
+                try await session.dispatch(SetClipPropertyCommand(clipId: update.clip.id, property: .textContent(textContent)))
+            }
+
+            try await refreshFromSession()
+        } catch {
+            let message = error.localizedDescription
+            try? await refreshFromSession()
+            lastErrorMessage = message
+        }
+    }
+
+    private func resolvedCanvasOverlayTransform(for clip: Clip) -> ClipTransform {
+        var transform = clip.transform
+        guard isZeroPoint(transform.position) else {
+            return transform
+        }
+
+        if let textContent = clip.textContent, !isZeroPoint(textContent.position) {
+            transform.position = textContent.position
+        } else {
+            transform.position = canvasCenter()
+        }
+
+        return transform
+    }
+
+    private func canvasOverlayVisualCenter(for clip: Clip) -> CGPoint {
+        let transform = resolvedCanvasOverlayTransform(for: clip)
+        return CGPoint(
+            x: transform.position.x + transform.offset.x,
+            y: transform.position.y + transform.offset.y
+        )
+    }
+
+    private func boundingCenter(for points: [CGPoint]) -> CGPoint {
+        guard let first = points.first else {
+            return canvasCenter()
+        }
+
+        var minX = first.x
+        var maxX = first.x
+        var minY = first.y
+        var maxY = first.y
+
+        for point in points.dropFirst() {
+            minX = min(minX, point.x)
+            maxX = max(maxX, point.x)
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+
+        return CGPoint(x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5)
+    }
+
+    private func alignmentTarget(
+        for alignment: CanvasOverlayAlignment,
+        centers: [CGPoint],
+        canvasSize: CGSize,
+        isMultiple: Bool
+    ) -> CGFloat {
+        guard isMultiple, let first = centers.first else {
+            let safeRect = socialSafeAreaRect()
+            switch alignment {
+            case .leading:
+                return safeRect.minX
+            case .centerX:
+                return canvasSize.width * 0.5
+            case .trailing:
+                return safeRect.maxX
+            case .top:
+                return safeRect.maxY
+            case .centerY:
+                return canvasSize.height * 0.5
+            case .bottom:
+                return safeRect.minY
+            }
+        }
+
+        var minX = first.x
+        var maxX = first.x
+        var minY = first.y
+        var maxY = first.y
+
+        for center in centers.dropFirst() {
+            minX = min(minX, center.x)
+            maxX = max(maxX, center.x)
+            minY = min(minY, center.y)
+            maxY = max(maxY, center.y)
+        }
+
+        switch alignment {
+        case .leading:
+            return minX
+        case .centerX:
+            return (minX + maxX) * 0.5
+        case .trailing:
+            return maxX
+        case .top:
+            return maxY
+        case .centerY:
+            return (minY + maxY) * 0.5
+        case .bottom:
+            return minY
+        }
+    }
+
+    private func clampedCanvasPoint(_ point: CGPoint, canvasSize: CGSize) -> CGPoint {
+        CGPoint(
+            x: min(max(point.x, 0), canvasSize.width),
+            y: min(max(point.y, 0), canvasSize.height)
+        )
+    }
+
+    private func seekPlayhead(to time: TimeInterval) {
+        playheadTime = min(max(0, time), max(currentProject.timeline.duration, time))
+        if playbackEngine.playerItem != nil {
+            playbackEngine.seek(to: playheadTime)
+        }
+    }
+
+    private func isZeroPoint(_ point: CGPoint) -> Bool {
+        pointsEqual(point, CGPoint(x: 0, y: 0))
+    }
+
+    private func isStickerClip(_ clip: Clip) -> Bool {
+        guard clip.kind == .text, let textContent = clip.textContent else {
+            return false
+        }
+
+        return textContent.isSticker || isLegacyStickerContent(textContent)
+    }
+
+    private func isLegacyStickerContent(_ textContent: TextClipContent) -> Bool {
+        textContent.fontFamily == "Apple Color Emoji"
+    }
+
+    private func nonZeroPoint(_ point: CGPoint) -> CGPoint? {
+        pointsEqual(point, CGPoint(x: 0, y: 0)) ? nil : point
+    }
+
+    private func pointsEqual(_ lhs: CGPoint, _ rhs: CGPoint) -> Bool {
+        abs(lhs.x - rhs.x) <= 1.0e-9 && abs(lhs.y - rhs.y) <= 1.0e-9
+    }
+
+    private func scaledTemplatePosition(_ position: CGPoint) -> CGPoint {
+        let canvasSize = effectiveCanvasSize(in: currentProject)
+        guard canvasSize.width > 0, canvasSize.height > 0 else {
+            return position
+        }
+
+        if abs(position.x) <= 1.0e-9 && abs(position.y) <= 1.0e-9 {
+            return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
+        }
+
+        return CGPoint(
+            x: position.x / 1920 * canvasSize.width,
+            y: position.y / 1080 * canvasSize.height
+        )
+    }
+
+    private func defaultStickerPlacement(
+        for sticker: StickerAsset
+    ) -> (xRatio: CGFloat, yRatio: CGFloat, fontScale: Double, transformScale: CGFloat) {
+        let builtInStickers = StickerLibrary.builtIn().stickers
+        let stickerIndex = builtInStickers.firstIndex {
+            $0.id == sticker.id || ($0.name == sticker.name && $0.emoji == sticker.emoji)
+        } ?? 0
+        let placements: [(xRatio: CGFloat, yRatio: CGFloat, fontScale: Double, transformScale: CGFloat)] = [
+            (0.78, 0.32, 0.12, 1.00),
+            (0.24, 0.30, 0.11, 0.95),
+            (0.72, 0.68, 0.13, 1.08),
+            (0.30, 0.70, 0.10, 0.92)
+        ]
+
+        return placements[stickerIndex % placements.count]
+    }
+
     private func sourceClipAndAsset(for clipId: UUID, in project: Project) throws -> (clip: Clip, asset: MediaAsset) {
         for track in project.timeline.tracks {
             if let clip = track.clips.first(where: { $0.id == clipId }) {
@@ -1344,7 +2447,7 @@ final class EditorViewModel {
                 guard let asset = project.mediaLibrary.assets[assetId] else {
                     throw EditorCommandError.assetNotFound(assetId)
                 }
-                guard asset.kind == .audio || asset.kind == .video else {
+                guard Self.isTranscribable(asset) else {
                     throw EditorCommandError.invalidCommand("Select an audio or video clip.")
                 }
                 return (clip, asset)
@@ -1352,6 +2455,27 @@ final class EditorViewModel {
         }
 
         throw EditorCommandError.clipNotFound(clipId)
+    }
+
+    private func selectedSubtitleSource(in project: Project) throws -> (clip: Clip?, asset: MediaAsset) {
+        if let selectedClipId {
+            let source = try sourceClipAndAsset(for: selectedClipId, in: project)
+            return (source.clip, source.asset)
+        }
+
+        if
+            let selectedAssetId,
+            let asset = project.mediaLibrary.assets[selectedAssetId],
+            Self.isTranscribable(asset)
+        {
+            return (nil, asset)
+        }
+
+        throw EditorCommandError.invalidCommand("Select an audio or video clip to generate subtitles.")
+    }
+
+    private static func isTranscribable(_ asset: MediaAsset) -> Bool {
+        asset.kind == .audio || asset.kind == .video
     }
 
     private func subtitleClips(from result: TranscriptionResult, alignedTo clip: Clip) -> [Clip] {
@@ -1395,6 +2519,17 @@ final class EditorViewModel {
                     return timelineMapping(for: pointRange, in: clip)?.timelineRange.start
                 }
                 return mappedTimes.isEmpty ? nil : .sceneChanges(times: mappedTimes)
+            }
+        }
+    }
+
+    private func removalRangeCount(in suggestions: [AnalysisSuggestion]) -> Int {
+        suggestions.reduce(0) { count, suggestion in
+            switch suggestion {
+            case .silenceRemoval(let ranges), .autoCut(let ranges):
+                return count + ranges.count
+            case .sceneChanges:
+                return count
             }
         }
     }
@@ -1449,6 +2584,64 @@ final class EditorViewModel {
         let timelineOffset = sourceOffset / max(clip.playbackRate, 0.25)
         let timelineTime = clip.timelineRange.start + timelineOffset
         playheadTime = min(max(0, timelineTime), clip.timelineRange.end)
+    }
+
+    private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
+        var asset = MediaImporter.probe(url: url)
+        guard asset.kind == .video || asset.kind == .audio else {
+            return asset
+        }
+
+        if let duration = await Self.avAssetDuration(for: url) {
+            asset.duration = duration
+        }
+        return asset
+    }
+
+    private nonisolated static func avAssetDuration(for url: URL) async -> TimeInterval? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = duration.seconds
+            guard seconds.isFinite, seconds > 0 else {
+                return nil
+            }
+            return seconds
+        } catch {
+            return nil
+        }
+    }
+
+    private func insertMediaAssetOnTimeline(
+        _ asset: MediaAsset,
+        preferredTrackId: UUID?,
+        startTime: TimeInterval
+    ) async throws -> Clip {
+        let track = try await destinationTrack(for: asset, preferredTrackId: preferredTrackId)
+        let duration = defaultDuration(for: asset)
+        let clip = Clip(
+            assetId: asset.id,
+            kind: clipKind(for: asset.kind),
+            sourceRange: TimeRange(start: 0, duration: duration),
+            timelineRange: TimeRange(start: max(0, startTime), duration: duration)
+        )
+
+        try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+        return clip
+    }
+
+    private func destinationTrack(for asset: MediaAsset, preferredTrackId: UUID?) async throws -> Track {
+        let destinationKind = trackKind(for: asset.kind)
+        let snapshot = await session.snapshot()
+        if
+            let preferredTrackId,
+            let preferredTrack = snapshot.timeline.tracks.first(where: { $0.id == preferredTrackId }),
+            preferredTrack.kind == destinationKind
+        {
+            return preferredTrack
+        }
+
+        return try await ensureTrack(for: destinationKind)
     }
 
     private func ensureTrack(for kind: TrackKind) async throws -> Track {
@@ -1717,6 +2910,7 @@ final class EditorViewModel {
         session = EditorSession(project: project)
         currentProject = project
         canvasSelection = project.canvas.aspectRatio
+        syncExportUI(from: project.exportSettings)
         selectedClipId = nil
         selectedAssetId = nil
         playbackEngine.clear()
@@ -1724,6 +2918,7 @@ final class EditorViewModel {
         clearGeneratedSubtitles()
         clearClipProcessingState()
         analysisResult = nil
+        recentAnalysisResults = []
         lastErrorMessage = nil
         lastExportURL = nil
     }
@@ -1759,6 +2954,30 @@ final class EditorViewModel {
         }
 
         return Bundle.main.url(forResource: resourceName, withExtension: fileExtension)
+    }
+
+    private static func exportResolutionString(for resolution: ExportResolution) -> String {
+        switch resolution {
+        case .p720:
+            return "720p"
+        case .p1080:
+            return "1080p"
+        case .p4K:
+            return "4k"
+        }
+    }
+
+    private static func exportResolution(from value: String) -> ExportResolution? {
+        switch value.lowercased() {
+        case "720p":
+            return .p720
+        case "1080p":
+            return .p1080
+        case "4k", "p4k":
+            return .p4K
+        default:
+            return nil
+        }
     }
 
     private static func ensureDefaultTracks(in project: Project) -> Project {

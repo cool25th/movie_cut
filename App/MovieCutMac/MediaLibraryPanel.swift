@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import MovieCutCore
 import UniformTypeIdentifiers
@@ -151,10 +152,14 @@ struct MediaLibraryPanel: View {
                         .onTapGesture {
                             viewModel.selectedAssetId = asset.id
                         }
+                        .onDrag {
+                            viewModel.selectedAssetId = asset.id
+                            return assetDragProvider(for: asset)
+                        }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(asset.originalURL.lastPathComponent)
                         .accessibilityValue(assetAccessibilityValue(asset))
-                        .accessibilityHint(NSLocalizedString("Selects this asset in the media library.", comment: ""))
+                        .accessibilityHint(NSLocalizedString("Selects this asset. Drag it to the timeline to create a clip.", comment: ""))
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction {
                             viewModel.selectedAssetId = asset.id
@@ -188,14 +193,39 @@ struct MediaLibraryPanel: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) {
-        for provider in providers {
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                guard let url else { return }
+        guard !providers.isEmpty else {
+            Task { @MainActor in
+                viewModel.reportInvalidMediaLibraryDrop()
+            }
+            return
+        }
+
+        MediaLibraryDropPayloadLoader.loadFileURLs(from: providers) { urls in
+            guard !urls.isEmpty else {
                 Task { @MainActor in
-                    await viewModel.importMedia([url])
+                    viewModel.reportInvalidMediaLibraryDrop()
                 }
+                return
+            }
+
+            Task { @MainActor in
+                await viewModel.importMedia(urls)
             }
         }
+    }
+
+    private func assetDragProvider(for asset: MediaAsset) -> NSItemProvider {
+        let provider = NSItemProvider()
+        let payload = Data(asset.id.uuidString.utf8)
+        provider.suggestedName = asset.originalURL.lastPathComponent
+        provider.registerDataRepresentation(
+            forTypeIdentifier: UTType.movieCutMediaAssetID.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            completion(payload, nil)
+            return nil
+        }
+        return provider
     }
 
     private func iconForKind(_ kind: MediaKind) -> String {
@@ -208,10 +238,57 @@ struct MediaLibraryPanel: View {
 
     private func assetAccessibilityValue(_ asset: MediaAsset) -> String {
         let kindName = String(describing: asset.kind)
+        let detail: String
         if let duration = asset.duration {
-            return String(format: NSLocalizedString("%@, duration %@", comment: ""), kindName, String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+            detail = String(format: NSLocalizedString("%@, duration %@", comment: ""), kindName, String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+        } else {
+            detail = kindName
         }
-        return kindName
+        return String(format: NSLocalizedString("%@, draggable to timeline", comment: ""), detail)
+    }
+}
+
+private enum MediaLibraryDropPayloadLoader {
+    static func loadFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+        guard !providers.isEmpty else {
+            completion([])
+            return
+        }
+
+        let accumulator = MediaLibraryDropPayloadAccumulator<URL>(count: providers.count, completion: completion)
+        for (index, provider) in providers.enumerated() {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let url = DragDropHandler.fileURL(from: item)
+                    .flatMap { DragDropHandler.isSupportedMediaURL($0) ? $0 : nil }
+                accumulator.complete(index: index, value: url)
+            }
+        }
+    }
+}
+
+private final class MediaLibraryDropPayloadAccumulator<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Value?]
+    private var remaining: Int
+    private let completion: ([Value]) -> Void
+
+    init(count: Int, completion: @escaping ([Value]) -> Void) {
+        self.values = Array(repeating: nil, count: count)
+        self.remaining = count
+        self.completion = completion
+    }
+
+    func complete(index: Int, value: Value?) {
+        let finishedValues: [Value]?
+        lock.lock()
+        values[index] = value
+        remaining -= 1
+        finishedValues = remaining == 0 ? values.compactMap { $0 } : nil
+        lock.unlock()
+
+        if let finishedValues {
+            completion(finishedValues)
+        }
     }
 }
 

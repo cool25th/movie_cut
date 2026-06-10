@@ -9,8 +9,13 @@ DerivedData/
 # Xcode
 .xcode-cache/
 .derivedData/
+.xcode-derived/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Local AI wiki/session scratch files accidentally created at repo root
+/index.md
+/log.md
 
 # macOS
 .DS_Store

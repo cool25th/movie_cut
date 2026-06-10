@@ -28,10 +28,12 @@ public struct DragDropHandler {
     }
 
     private static let supportedMediaExtensions: Set<String> = [
-        "heic", "jpg", "m4a", "mov", "mp4", "png", "wav"
+        "aac", "aif", "aiff", "avi", "bmp", "flac", "gif", "heic",
+        "jpeg", "jpg", "m4a", "m4v", "mkv", "mov", "mp3", "mp4",
+        "mpeg", "mpg", "ogg", "png", "tif", "tiff", "wav", "webm", "webp"
     ]
 
-    private static func isSupportedMediaURL(_ url: URL) -> Bool {
+    public static func isSupportedMediaURL(_ url: URL) -> Bool {
         supportedMediaExtensions.contains(url.pathExtension.lowercased())
     }
 
@@ -46,7 +48,7 @@ public struct DragDropHandler {
         }
     }
 
-    private static func fileURL(from item: (any NSSecureCoding)?) -> URL? {
+    public static func fileURL(from item: (any NSSecureCoding)?) -> URL? {
         if let url = item as? URL {
             return url
         }

@@ -14,11 +14,20 @@ public enum CommandResultValue: Sendable, Equatable {
     /// A full clip snapshot.
     case clip(Clip)
 
+    /// A full marker snapshot.
+    case marker(Marker)
+
     /// A clip property snapshot.
     case clipProperty(ClipProperty)
 
+    /// A track property snapshot.
+    case trackProperty(TrackProperty)
+
     /// A canvas preset snapshot.
     case canvasPreset(CanvasPreset)
+
+    /// A project export settings snapshot.
+    case exportSettings(ExportSettings)
 }
 
 /// The observable result of applying an editor command.

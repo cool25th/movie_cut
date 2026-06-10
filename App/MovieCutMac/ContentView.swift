@@ -21,6 +21,10 @@ struct ContentView: View {
 
             Divider()
 
+            QuickToolsPanel(viewModel: viewModel)
+
+            Divider()
+
             statusBar
 
             Divider()
@@ -141,6 +145,10 @@ struct ContentView: View {
                 Text(error)
                     .foregroundStyle(.red)
                     .lineLimit(1)
+            } else if let message = viewModel.lastStatusMessage {
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         }
         .font(.caption)
@@ -190,6 +198,257 @@ struct ContentView: View {
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
+    }
+}
+
+private struct QuickToolsPanel: View {
+    var viewModel: EditorViewModel
+
+    @State private var runningTool: QuickTool?
+    @State private var isStickerBrowserPresented = false
+
+    private var textTemplates: [MovieCutCore.TextTemplate] {
+        MovieCutCore.TextTemplate.builtIn
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Text("Quick Tools")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Divider()
+                    .frame(height: 20)
+
+                textTemplateMenu
+                stickerBrowserButton
+                markerControls
+
+                Divider()
+                    .frame(height: 20)
+
+                quickButton(
+                    .autoCut,
+                    title: "Auto Cut",
+                    systemImage: "speaker.slash",
+                    isEnabled: viewModel.canRunAutoCutOnSelection
+                ) {
+                    await viewModel.runAutoCutOnSelection()
+                }
+
+                quickButton(
+                    .sceneDetect,
+                    title: "Detect Scenes",
+                    systemImage: "film.stack",
+                    isEnabled: viewModel.canDetectSceneChangesForSelection
+                ) {
+                    await viewModel.detectSceneChangesForSelection()
+                }
+
+                quickButton(
+                    .reframe,
+                    title: "Auto Reframe",
+                    systemImage: "viewfinder",
+                    isEnabled: viewModel.canAutoReframeSelection
+                ) {
+                    await viewModel.autoReframeSelection()
+                }
+
+                quickButton(
+                    .noiseReduction,
+                    title: "Noise Reduce",
+                    systemImage: "waveform.badge.minus",
+                    isEnabled: viewModel.canApplyNoiseReductionToSelection
+                ) {
+                    await viewModel.applyNoiseReductionToSelection()
+                }
+
+                quickButton(
+                    .extractAudio,
+                    title: "Extract Audio",
+                    systemImage: "waveform",
+                    isEnabled: viewModel.canExtractAudioFromSelection
+                ) {
+                    await viewModel.extractAudioFromSelection()
+                }
+
+                feedbackView
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var textTemplateMenu: some View {
+        Menu {
+            Section("Titles") {
+                templateButtons(named: ["Title", "Subtitle"])
+            }
+            Section("Social") {
+                templateButtons(named: ["Caption", "Lower Third"])
+            }
+            Section("End Card") {
+                templateButtons(named: ["Credits"])
+            }
+        } label: {
+            Label("Text", systemImage: "textformat")
+        }
+        .disabled(runningTool != nil)
+        .help("Add Text from Template")
+    }
+
+    @ViewBuilder
+    private func templateButtons(named names: [String]) -> some View {
+        ForEach(textTemplates.filter { names.contains($0.name) }) { template in
+            Button(template.name) {
+                run(.textTemplate) {
+                    await viewModel.addTextTemplateClip(template)
+                }
+            }
+        }
+    }
+
+    private var stickerBrowserButton: some View {
+        Button {
+            isStickerBrowserPresented.toggle()
+        } label: {
+            Label("Sticker", systemImage: "face.smiling")
+        }
+        .disabled(runningTool != nil)
+        .help("Open Sticker Browser")
+        .popover(isPresented: $isStickerBrowserPresented) {
+            StickerPickerView { sticker in
+                isStickerBrowserPresented = false
+                run(.sticker) {
+                    await viewModel.addStickerClip(sticker)
+                }
+            }
+            .frame(width: 280, height: 360)
+        }
+    }
+
+    private var markerControls: some View {
+        HStack(spacing: 2) {
+            Button {
+                viewModel.goToPreviousMarker()
+            } label: {
+                Image(systemName: "backward.end.fill")
+            }
+            .buttonStyle(.borderless)
+            .disabled(runningTool != nil || viewModel.previousMarker == nil)
+            .help("Previous Marker")
+
+            markerButton
+
+            Button {
+                viewModel.goToNextMarker()
+            } label: {
+                Image(systemName: "forward.end.fill")
+            }
+            .buttonStyle(.borderless)
+            .disabled(runningTool != nil || viewModel.nextMarker == nil)
+            .help("Next Marker")
+        }
+    }
+
+    private var markerButton: some View {
+        Button {
+            viewModel.addMarkerAtPlayhead()
+        } label: {
+            Label("Marker (\(viewModel.currentProject.markers.count))", systemImage: "flag.fill")
+        }
+        .disabled(runningTool != nil)
+        .help("Add Marker at Playhead")
+    }
+
+    private var feedbackView: some View {
+        Group {
+            if let message = viewModel.quickToolProgressMessage {
+                feedbackLabel(message, systemImage: "hourglass", color: .secondary)
+            } else if let message = viewModel.lastStatusMessage {
+                feedbackLabel(message, systemImage: "checkmark.circle", color: .secondary)
+            } else if let message = viewModel.lastErrorMessage {
+                feedbackLabel(message, systemImage: "exclamationmark.triangle", color: .red)
+            }
+        }
+    }
+
+    private func feedbackLabel(_ message: String, systemImage: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Divider()
+                .frame(height: 20)
+            Label(message, systemImage: systemImage)
+                .font(.caption)
+                .foregroundStyle(color)
+                .lineLimit(1)
+        }
+    }
+
+    private func quickButton(
+        _ tool: QuickTool,
+        title: String,
+        systemImage: String,
+        isEnabled: Bool,
+        action: @escaping @MainActor () async -> Void
+    ) -> some View {
+        Button {
+            run(tool, action: action)
+        } label: {
+            HStack(spacing: 5) {
+                if runningTool == tool {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Label(title, systemImage: systemImage)
+            }
+        }
+        .disabled(!isEnabled || (runningTool != nil && runningTool != tool))
+        .help(title)
+    }
+
+    private func run(_ tool: QuickTool, action: @escaping @MainActor () async -> Void) {
+        guard runningTool == nil else { return }
+        runningTool = tool
+        viewModel.quickToolProgressMessage = tool.progressMessage
+        Task { @MainActor in
+            await action()
+            if viewModel.quickToolProgressMessage == tool.progressMessage {
+                viewModel.quickToolProgressMessage = nil
+            }
+            runningTool = nil
+        }
+    }
+
+}
+
+private enum QuickTool: Equatable {
+    case textTemplate
+    case sticker
+    case autoCut
+    case sceneDetect
+    case reframe
+    case noiseReduction
+    case extractAudio
+
+    var progressMessage: String {
+        switch self {
+        case .textTemplate:
+            return "Adding text template..."
+        case .sticker:
+            return "Adding sticker..."
+        case .autoCut:
+            return "Analyzing silence..."
+        case .sceneDetect:
+            return "Detecting scene changes..."
+        case .reframe:
+            return "Tracking crop frames..."
+        case .noiseReduction:
+            return "Rendering denoised audio..."
+        case .extractAudio:
+            return "Extracting audio..."
+        }
     }
 }
 

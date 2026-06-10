@@ -113,7 +113,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] ❌ TTS(텍스트→음성) (P3)
 
 ### G. 속도/시간
-- [ ] 🟡 속도 조절 / speed ramp (export는 됨, preview 미반영) (P1)
+- [x] ✅ 속도 조절 / speed ramp preview+export (P1) — Mac `PlaybackEngine` preview와 `ExportEngine` export가 `SpeedRampCurve(points: clip.speedRampPoints)`로 source segment를 나누고 `scaleTimeRange`로 composition time range를 조정한다. 비디오 클립의 audio preview path와 `.audio` track preview path도 같은 segment/scale 경로를 사용한다. Caveat: 고급 옵티컬 플로우 기반 부드러운 슬로우모션은 별도 P3 항목이며 아직 완료되지 않았다.
 - ✅ 역재생
 - [ ] 🟡 정지프레임 (export 반영 미확인) (P2)
 - [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)
@@ -141,7 +141,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ## 4. 권장 작업 순서
 
 1. **P0 묶음 완료 확인** — 라이브러리→타임라인 드래그앤드롭은 2026-06-10 실기기 GUI 검증까지 완료됐고, 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)도 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
-2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A)는 닫혔다. 다음 1순위는 speed ramp preview(G), 그 다음은 텍스트 스타일 편집 UI(D)다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
+2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A)와 speed ramp preview+export(G)는 닫혔다. 다음 1순위는 텍스트 스타일 편집 UI(D)다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
 3. **"🟡 배선만" → 실제 알고리즘 채우기** — 명령/메타데이터 경로가 이미 있으므로, compositor에 CIFilter/Vision/AVAudioUnit 처리만 붙이면 됨. 신규 배선보다 ROI 높음.
 4. **갭 문서 재작성** — "코드 존재"가 아니라 "preview+export 결과 확인"을 완료 기준으로.
 

@@ -1,0 +1,254 @@
+# MovieCut → CapCut 수준 개발 명세서 (Development Specification)
+
+> 버전: 1.1 / 작성일: 2026-06-11 / 기준 커밋: `d439168`
+> 관련 문서: `CAPCUT_FEATURE_BACKLOG.md`(기능 목록·상태), `SESSION_HANDOFF.md`(세션 인수인계)
+> 이 문서는 "무엇을"(백로그)이 아니라 **"어떻게, 어떤 기준으로, 어떤 순서로"**를 정의한다.
+> 운영 규칙: 신규 기능 작업은 이 문서의 F-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
+
+---
+
+## 1. 목표와 범위
+
+### 1.1 목표
+일반 사용자가 CapCut(데스크탑)에서 수행하는 핵심 편집 워크플로우를 MovieCut macOS 앱에서 **동등한 체감 품질**로 수행할 수 있게 한다. 목표는 기능 체크리스트 충족이 아니라 **워크플로우 완주율**이다:
+
+| 핵심 워크플로우 | 정의 |
+|---|---|
+| W1. 숏폼 제작 | 미디어 임포트 → 컷 편집 → 자막/스티커 → 9:16 export → 공유 |
+| W2. 브이로그 편집 | 멀티클립 배치 → 전환/필터 → BGM/덕킹 → 1080p export |
+| W3. 자막 영상 | 영상 임포트 → 자동자막 → 자막 스타일링 → burn-in export |
+| W4. 효과 합성 | 크로마키/마스크/배경제거 → 키프레임 애니메이션 → export |
+
+### 1.2 범위 제외 (Non-Goals)
+- CapCut의 클라우드 협업·계정 시스템·템플릿 마켓플레이스의 **상용 백엔드** (로컬/iCloud 수준까지만)
+- 모바일(iOS) 파리티 — Mac 우선, iOS는 compositor/모델 동기화만 유지
+- 픽셀 단위 CapCut 룩앤필 복제 — 기능적 동등성만
+
+### 1.3 완료 기준 (Definition of Done) — 전 기능 공통
+이 프로젝트에서 반복 확인된 교훈("static contract 통과 ≠ 실동작" — 드래그앤드롭 사례: contract 테스트 통과 상태에서 런타임 드롭이 조용히 거부됨)에 따라, 모든 기능은 아래 4단계를 모두 통과해야 "완료"다:
+
+1. **Core 로직**: SwiftPM 테스트 (픽셀 처리는 guarded pixel sampling 포함)
+2. **배선 검증**: preview(`PlaybackEngine`)와 export(`ExportEngine`) **양쪽** 경로 연결
+3. **실기기 확인**: 빌드된 앱에서 해당 기능을 실제 조작으로 1회 이상 확인 (가능하면 XCUITest로 자동화)
+4. **결과물 검증**: export된 파일에서 효과가 실제로 보이는지 확인 (대표 기능은 visual fixture 비교)
+
+---
+
+## 2. 현재 기준선 (2026-06-11, `d439168` 실측/커밋 기준)
+
+### 2.1 완료 (✅)
+- **타임라인 편집**: trim/split/move/delete/ripple, 스냅, 줌, 다중선택, 마커(추가/이름/삭제/점프/스냅)
+- **드래그앤드롭**: Finder→타임라인(드롭 위치 클립 생성, 실제 duration), 라이브러리→타임라인 — **2026-06-10 실기기 GUI 드래그 검증 완료**
+- **썸네일/프록시**(`3933d94`): import 시 PNG 썸네일(라이브러리/타임라인 클립 표시), best-effort 프록시 생성 + Generate Proxy 액션
+- **픽셀 처리**(shared processor + Mac/iOS compositor): 색보정(밝기/대비/채도), 필터/LUT 프리셋 5종, 크로마키(tolerance/softness/spill), 마스크 6종(feather/invert/rotation), 텍스트/자막 burn-in
+- **전환**: 12종 `TransitionPixelProcessor` + two-source compositor 배선 (단, export visual fixture 검증은 미완 → F-07)
+- **키프레임**(position/scale/rotation/opacity) preview+export, 역재생, 정지프레임(preview), 볼륨/페이드, 파형
+- **speed ramp**: export `scaleTimeRange` + preview parity contract(`71893cb`)
+- **텍스트**: 스타일 편집 UI(본문/폰트/크기/정렬/전경·배경색/quick preset, `4a2bad8`), 자동자막(Apple Speech STT)+타임라인 정렬
+- **보이스오버**: 마이크 권한 + `AVAudioEngine` 실녹음 → 클립 배치(`4e982b0`; 실제 마이크 GUI 검증은 잔여 caveat)
+- **스티커**: 이모지/이미지, 온캔버스 이동/리사이즈/회전/스냅 가이드/멀티선택 정렬, 클립별 라벨
+- **Export**: container(mp4/mov)/codec/fps/quality/커스텀 비트레이트(1~200Mbps clamp), 소셜 프리셋, 진행률/취소/공유, 접근성
+
+### 2.2 미완 (이 명세서의 대상)
+비파일 드래그 소스(F-01), 마그네틱 타임라인(F-03), 클립 zIndex/그룹(F-04), 단축키 맵(F-05), 해상도/fps probe(F-06), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
+
+### 2.3 아키텍처 현황 (유지할 구조)
+```
+Sources/MovieCutCore/          ← 플랫폼 중립 SwiftPM 패키지
+  Models/        (Project, Timeline, Track, Clip, ExportSettings, …)
+  Commands/      (명령 패턴, EditorSession.dispatch 경유, undo/redo)
+  Rendering/     (shared pixel processors — CIImage in/out)
+  Analysis/      (무음/씬/리프레임 provider)
+  Transcription/ (STT provider 추상화)
+App/MovieCutMac/               ← AppKit/SwiftUI 앱
+  EditorViewModel.swift        (UI ↔ Core 브리지, @MainActor)
+  Playback/PlaybackEngine.swift (AVPlayer 기반 preview, custom compositor)
+  Export/ExportEngine.swift     (AVAssetExportSession + CustomVideoCompositor)
+App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유지)
+```
+
+**불변 원칙**
+- A1. 모든 편집 변형은 `EditorSession.dispatch(Command)` 경유 (undo/redo 보장). ViewModel에서 모델 직접 변형 금지.
+- A2. 시각 효과는 `Sources/MovieCutCore/Rendering/`의 shared processor(CIImage→CIImage)로 구현, Mac/iOS compositor는 위임만.
+- A3. preview와 export는 동일한 effect metadata를 소비한다 (한쪽만 구현 금지).
+- A4. Core는 AVFoundation 등 미디어 프레임워크 의존을 최소화하고, 미디어 I/O는 앱 레이어에서.
+- A5. 모델 필드 추가는 Codable 하위호환(optional 디코딩) + 디코딩 테스트 의무.
+
+---
+
+## 3. 마일스톤
+
+| 마일스톤 | 테마 | 포함 기능 | 완료 판정 |
+|---|---|---|---|
+| **M1. 편집 기본기 완성** | 미디어 파이프라인 + 타임라인 UX | F-01, F-03~F-06 | W1 워크플로우를 외부 도움 없이 완주 |
+| **M2. 비주얼 심화** | 효과의 신뢰성과 깊이 | F-07~F-11 | W4 완주 + export visual fixture 통과 |
+| **M3. 오디오 & 텍스트** | 소리와 자막의 CapCut 체감 | F-12R, F-13~F-15, F-17 | W2, W3 완주 |
+| **M4. 지능형 편집** | AI 도구 E2E | F-18~F-21 | 자동컷/리프레임이 실제 영상에서 유효 결과 |
+| **M5. 생태계(선택)** | 클라우드/게시/마켓 | F-22~F-24 | 별도 합의 후 착수 |
+
+순서 원칙: M1→M2→M3 순차 권장(의존성), M4는 M2와 병행 가능. 각 마일스톤 종료 시 §1.1 워크플로우 1회 수동 완주 + 백로그/핸드오프 문서 갱신.
+
+---
+
+## 4. 기능 명세
+
+각 항목: **요구사항 → 구현 방안(파일 수준) → 수용 기준(AC)**.
+
+### M1. 편집 기본기
+
+#### F-01. 비파일 드래그 소스 수용 (사진/브라우저)
+- **요구사항**: 사진(Photos) 앱, 웹 브라우저, 메일 첨부에서 이미지/영상을 타임라인·라이브러리에 직접 드래그할 수 있다.
+- **구현**: `TimelineView.handleTrackDrop` / `MediaLibraryPanel.handleDrop`의 수용 타입에 `.image`, `.movie`, file promise 추가. `NSFilePromiseReceiver`로 임시 디렉토리(`FileManager.temporaryDirectory/MovieCutImports/`)에 수신 후 기존 `importMediaAndAddToTimeline` 경로 재사용. raw image data는 PNG로 저장 후 동일 경로.
+- **AC**: ① 사진 앱에서 사진을 타임라인에 드래그 → 클립 생성 ② Safari 이미지 드래그 → 클립 생성 ③ 실패 시 `lastErrorMessage`로 원인 표시. **실기기 검증 필수**(드래그앤드롭 전례 — F-01은 contract 테스트만으로 완료 처리 금지).
+
+#### F-03. 마그네틱 타임라인
+- **요구사항**: CapCut처럼 클립 이동/삭제 시 같은 트랙의 뒤 클립들이 자동 밀착(옵션 토글). 드래그 중 인접 클립과 충돌 시 밀어내기 또는 스왑.
+- **구현**: Core에 `MagneticInsertCommand`/`CloseGapCommand` 신설(기존 `RippleDeleteCommand` 일반화). `EditorViewModel.isMagneticTimeline: Bool`(기본 on, UserDefaults). `TimelineView.moveGesture` 커밋 시 마그네틱 모드면 충돌 해소 명령으로 변환. 토글 UI는 타임라인 헤더에 자석 아이콘.
+- **AC**: ① 중간 클립 삭제 → 갭 자동 닫힘 ② 클립을 다른 클립 위로 드래그 → 겹침 없이 삽입·재배치 ③ 토글 off 시 기존 자유 배치 유지 ④ 모든 동작 단일 undo.
+
+#### F-04. 클립 단위 zIndex & 그룹/링크
+- **요구사항**: 트랙이 아닌 클립 단위 레이어 순서 조정. 영상+오디오, 영상+자막을 그룹으로 묶어 함께 이동/트림.
+- **구현**: `Clip`에 `zIndexOverride: Int?`, `groupId: UUID?` 추가(A5 준수). compositor 정렬 키를 `(track.zIndex, clip.zIndexOverride ?? 0)`으로 확장. 그룹: 컨텍스트 메뉴 "Group/Ungroup", `moveClip`/`trimClip`이 같은 groupId 클립에 델타 전파(단일 undo 단위 batch dispatch).
+- **AC**: ① 두 텍스트 오버레이의 앞뒤 순서를 클립 단위로 변경 → preview/export 동일 ② 그룹 이동 시 상대 오프셋 유지 ③ ungroup 후 개별 동작 ④ 구버전 프로젝트 로드 호환.
+
+#### F-05. 키보드 단축키 맵
+- **요구사항**: CapCut 표준 단축키. Space(재생/정지), Cmd+B(분할), Q/W(playhead 기준 앞/뒤 트림), Delete(삭제), Shift+Delete(ripple), Cmd+D(복제), ←/→(프레임), Shift+←/→(1초), ↑/↓(클립 점프), +/-(줌), M(마커), Cmd+Z/Shift+Cmd+Z.
+- **구현**: `MovieCutMacApp`에 `.commands { }` 메뉴 정의(메뉴 표기 겸 단축키 등록) + `EditorViewModel` 기존 메서드 호출. 텍스트 입력 포커스 중 비활성(`@FocusState` 분기).
+- **AC**: ① 전 단축키 동작 + 메뉴 표기 ② 텍스트 필드 편집 중 단축키 미발동 ③ Help 메뉴에 목록.
+
+#### F-06. 임포트 메타데이터 완성 (해상도/fps)
+- **요구사항**: duration만 읽는 현재 probe를 확장해 해상도/fps/코덱을 `MediaMetadata`에 기록, 라이브러리 행과 Inspector에 표시.
+- **구현**: `EditorViewModel.mediaAssetWithAppProbe`에서 `AVURLAsset.loadTracks(withMediaType:)` → `naturalSize`, `nominalFrameRate`. Core `MediaMetadata`에 optional 필드 추가.
+- **AC**: 1080p/30fps 영상 임포트 시 라이브러리에 "1920×1080 · 30fps · 3.0s" 표기. 프록시 트리거(F-02 완료분)가 실제 해상도 기준으로 동작.
+
+### M2. 비주얼 심화
+
+#### F-07. 전환효과 E2E 시각 검증 + 갭 마감
+- **요구사항**: 12종 전환이 preview와 export에서 **시각적으로 동일**하게 렌더됨을 증명. crossDissolve/fadeThroughBlack/wipeRight도 layer-instruction ramp가 아닌 two-source 경로로 통일.
+- **구현**: ① 잔여 3종을 two-source 경로로 이관 ② **export visual fixture 테스트** 신설: 고정 색 합성 클립 2개 + 각 전환 1초 export → 중간 프레임 픽셀 샘플 기대값 비교(`TransitionExportFixtureTests`; sandbox CoreImage 불가 환경은 skip 마킹).
+- **AC**: ① 12종 전환 각각 export 픽셀 fixture 통과 ② preview 스크럽과 시각 일치 ③ 전환 duration이 인접 클립 overlap과 일치.
+
+#### F-08. 배경 제거 (인물 세그멘테이션) 실동작
+- **요구사항**: 버튼 한 번으로 인물 외 배경 제거(알파) → preview/export 반영.
+- **구현**: 기존 Vision 기반 segmentation(`b85a10a`)을 frame-by-frame 경로로 연결: `CustomVideoCompositor`에서 `backgroundRemoval` effect 클립에 `VNGeneratePersonSegmentationRequest` 마스크를 `MaskPixelProcessor`와 동일한 알파 합성으로 적용. preview는 fast quality+프레임 캐시, export는 accurate.
+- **AC**: ① 인물 영상 적용 시 preview 배경 투명(캔버스 배경 노출) ② export 동일 ③ 1080p preview 15fps 이상(프록시 병행) ④ 인물 없는 영상은 무변경 + 상태 메시지.
+
+#### F-09. 외부 LUT(.cube) 임포트
+- **요구사항**: .cube 파일을 가져와 필터로 적용·관리, 강도 조절.
+- **구현**: Core `Rendering/CubeLUTParser`(.cube 텍스트 → `CIColorCube` data, 17/33/65 size). `Effect`에 `lutURL` 파라미터. Inspector 필터 섹션 "Import LUT…"(NSOpenPanel) + `~/Library/Application Support/MovieCut/LUTs/` 보관.
+- **AC**: ① 표준 33-size .cube 적용 시 preview/export 색 변화 일치(픽셀 테스트) ② 잘못된 파일 에러 메시지 ③ intensity 0~1 슬라이더.
+
+#### F-10. 크로마키 스포이드 & 매트 보정
+- **요구사항**: 미리보기에서 클릭으로 키 색상 추출(eyedropper), 매트 정리(shrink/feather).
+- **구현**: `PreviewPanel` eyedropper 모드(클릭 좌표 → 현재 프레임 픽셀 → `ChromaKeySettings.keyColor`). `ChromaKeyPixelProcessor`에 matte erode/feather 파라미터 추가(기존 softness와 직교).
+- **AC**: ① 그린스크린에서 스포이드 1클릭 → 즉시 키잉 ② edge fringe가 feather로 감소(픽셀 테스트) ③ 설정 프로젝트 저장/복원.
+
+#### F-11. 캔버스 배경 (컬러/블러/이미지)
+- **요구사항**: 9:16 캔버스에 16:9 영상 배치 시 여백을 단색/소스 블러/이미지로 채움.
+- **구현**: `Project.canvasBackground: CanvasBackground`(enum: color(hex)/blur(radius)/image(url), A5 준수). compositor 첫 단계에서 배경 합성(blur는 소스 확대+`CIGaussianBlur`). ProjectSettings popover에 UI.
+- **AC**: ① 3종 배경 모두 preview/export 일치 ② blur 배경이 프레임마다 갱신(정지 아님).
+
+### M3. 오디오 & 텍스트
+
+#### F-12R. 텍스트 스타일 잔여분 (외곽선/그림자/프리셋 저장)
+- **상태**: 본문/폰트/크기/정렬/전경·배경색/quick preset은 `4a2bad8`에서 완료. 잔여: 외곽선(stroke), 그림자(shadow), 굵기/이탤릭, 사용자 프리셋 저장.
+- **구현**: `TextClipContent`에 stroke(색/두께)/shadow(색/오프셋/블러)/weight/italic 필드 추가(A5). `TextOverlayPixelProcessor` 확장(stroke=외곽 draw, shadow=offset draw). 사용자 프리셋 `~/Library/Application Support/MovieCut/TextStyles.json`.
+- **AC**: ① stroke/shadow 유무가 export 픽셀 테스트로 구분 ② 프리셋 저장→새 텍스트 1클릭 적용 ③ 구버전 프로젝트 호환.
+
+#### F-13. 자막 편집 워크플로우 완성
+- **요구사항**: STT 결과를 리스트에서 텍스트 수정·타이밍 조정·분할/병합 후 일괄 스타일 적용. SRT import/export.
+- **구현**: `AutoSubtitlesView` 확장: pending segment 인라인 편집(텍스트/start/end), 행 분할·병합. Core `SubtitleDocument`(SRT 파서/시리얼라이저, 외부 의존 없음). 스타일은 F-12R 프리셋 참조.
+- **AC**: ① 5분 영상 STT → 오인식 수정 → 일괄 스타일 → burn-in export 완주(W3) ② SRT export가 외부 플레이어에서 로드됨 ③ SRT import로 자막 클립 생성.
+
+#### F-14. 오디오 DSP 실구현 (EQ/덕킹/노이즈)
+- **요구사항**: EQ 프리셋 5종(보이스 강조/저음 강화 등), 자동 덕킹(보이스 구간 BGM -12dB), 노이즈 감소 강도 조절 — preview/export 모두에서 들림.
+- **구현**:
+  - 덕킹(우선): `SilenceDetectionProvider` 역활용 — 보이스 트랙 비무음 구간에 BGM volume keyframe 자동 생성(`AudioDuckingCommand` 완성). keyframe 방식이라 preview/export 자동 일치.
+  - EQ: `MTAudioProcessingTap`으로 `AVAudioUnitEQ` 체인을 preview에 적용, export는 오디오 사전 렌더(offline render 후 교체 asset) — 양 경로가 **공통 렌더 함수**를 쓰도록 Core에 파라미터 정의.
+  - 노이즈: 기존 noise reduction 경로(`e420791`) 검증 + 강도 파라미터 노출.
+- **AC**: ① 사인파 fixture FFT로 EQ 전후 스펙트럼 차이 확인 ② 덕킹 ramp가 파형으로 확인 ③ preview/export 청감 일치(수동 1회) ④ 모두 undo 가능.
+
+#### F-15. 비트 감지 (음악 동기 편집)
+- **요구사항**: BGM 클립에서 비트 감지 → 타임라인 비트 마커 표시, 스냅 대상 포함.
+- **구현**: Core `Analysis/BeatDetectionProvider`(에너지 플럭스 onset, Accelerate vDSP). `Marker`에 `kind: .beat` 추가(A5). `TimelineView.snappedTime` snap point에 비트 마커 포함.
+- **AC**: ① 고정 BPM 테스트 트랙에서 비트 간격 오차 < 50ms ② 클립 드래그가 비트에 스냅 ③ 비트 마커 일괄 삭제.
+
+#### F-17. TTS (텍스트→음성)
+- **요구사항**: 텍스트 클립에서 "음성 생성" → 합성 오디오 클립 생성(시스템 보이스 선택).
+- **구현**: `AVSpeechSynthesizer.write(_:toBufferCallback:)`로 파일 렌더 → 기존 import 경로 재사용.
+- **AC**: 텍스트 클립과 동기화된 오디오 클립 생성, export 포함.
+
+### M4. 지능형 편집
+
+#### F-18. 자동 컷 E2E 신뢰성
+- **요구사항**: 무음 제거가 실제 인터뷰 영상에서 유효(임계값/최소 구간/패딩 조절 UI + 적용 전 미리보기).
+- **구현**: 기존 `SilenceDetectionProvider` + 파라미터 UI(threshold dB, 최소 무음 길이, 앞뒤 패딩). 제거 예정 구간을 타임라인 하이라이트로 미리보기 → 확인 후 일괄 적용.
+- **AC**: ① 10분 인터뷰 fixture에서 발화 손실 없음(수동 1회 + 무음 비율 테스트) ② 미리보기→취소 시 무변경 ③ 일괄 적용 단일 undo.
+
+#### F-19. 씬 감지 & 자동 리프레임 E2E
+- **요구사항**: 씬 분할과 피사체 추적 리프레임(16:9→9:16)이 실제 영상에서 유효, 리프레임 결과 미리보기 후 확정.
+- **구현**: 기존 provider 검증 + 크롭 경로 preview 오버레이 표시 → 확정. 리프레임 keyframe 이동 평균 스무딩.
+- **AC**: ① 멀티씬 fixture에서 컷 경계 ±10프레임 분할 ② 리프레임 시 인물이 크롭 밖으로 나가는 프레임 0 ③ keyframe 떨림 없음(미분값 상한 테스트).
+
+#### F-20. 자동 하이라이트 (롱폼→숏폼 후보)
+- **요구사항**: 오디오 에너지/음성 밀도/씬 변화 점수화 → 상위 N개 구간(15~60초) 제안 → 클릭으로 새 시퀀스 생성.
+- **구현**: Core `Analysis/HighlightScorer`(기존 provider 출력 조합, 신규 ML 의존 없음). UI는 분석 히스토리 패널 확장.
+- **AC**: 30분 fixture에서 3개 후보 제안 → 선택 시 해당 구간만의 새 프로젝트 생성.
+
+#### F-21. AI 어시스턴트 (로컬 명령 해석, 선택)
+- **요구사항**: "모든 클립에 시네마틱 필터 적용해줘" 수준의 자연어를 기존 명령으로 매핑하는 패널. 외부 LLM API 연동은 별도 합의.
+- **구현 1단계**: 규칙 기반 intent 매핑(대상×동작 동의어 사전) → `EditorSession` 명령 시퀀스. 온디바이스 Foundation Models 연동은 후속 검토.
+- **AC**: 정의된 20개 intent 문장 시나리오 테스트 통과, 미해석 문장은 가능한 명령 안내.
+
+### M5. 생태계 (착수 전 별도 합의)
+- **F-22. iCloud 프로젝트 동기화**: 기존 `CloudSyncService` 완성 — conflict는 최신 수정 우선 + 백업 사본. AC: 두 기기 시나리오 시뮬레이션 테스트.
+- **F-23. 템플릿 패키지**: 프로젝트를 에셋 포함 `.mctemplate`(zip)로 export/import. AC: 템플릿 적용 후 미디어 교체 플로우 완주.
+- **F-24. 플랫폼 게시**: OS 공유 시트 유지(직접 API 게시는 범위 외 유지 권장).
+
+---
+
+## 5. 비기능 요구사항 (NFR)
+
+| 항목 | 기준 |
+|---|---|
+| Preview 성능 | 1080p 타임라인 재생 30fps(효과 2개 중첩 기준), 4K는 프록시로 동일 |
+| 분석 작업 | 모든 분석(STT/씬/무음/리프레임/비트)은 비동기 + 진행률/상태 메시지, UI 블로킹 0 |
+| 프로젝트 파일 | 모델 변경은 Codable 하위호환(optional 디코딩) + 디코딩 테스트 의무(A5) |
+| Undo | 사용자 가시 변형 100% undo/redo, 그룹 동작은 단일 undo 단위 |
+| 접근성 | 신규 UI는 기존 관례 유지: accessibilityLabel/Value/Hint + VoiceOver custom action |
+| 현지화 | `NSLocalizedString` 경유, 한국어/영어 |
+| 에러 가시성 | 실패 침묵 금지 — `lastErrorMessage`/`lastStatusMessage` 경유 status bar 표시 |
+
+---
+
+## 6. 테스트 전략
+
+드래그앤드롭 사례(contract 통과 + 런타임 깨짐)의 재발 방지가 핵심.
+
+1. **픽셀 프로세서**: 기존 패턴 유지 — guarded `CIContext` 픽셀 샘플링 + extent 보존 + renderable contract.
+2. **Export visual fixture (신설, M2)**: 고정 색 합성 클립으로 실제 export 실행 → 프레임 픽셀 기대값 비교. 전환/필터/배경제거/텍스트 스타일에 적용. sandbox에서 CoreImage 불가 시 skip 마킹.
+3. **XCUITest 스모크 (신설, M1)**: `MovieCutMacUITests` 타겟. 최소 시나리오: 앱 실행 → 임포트 → 클립 존재 → 분할 → export 시트. CI는 `xcodebuild test`.
+4. **Static contract**: 배선 가시성 용도로만 유지 — **단독으로 "완료" 근거 사용 금지**.
+5. **수동 검증 체크리스트**: 각 마일스톤 종료 시 §1.1 워크플로우 1회 완주, 결과를 핸드오프 문서에 기록.
+
+---
+
+## 7. 리스크와 대응
+
+| 리스크 | 영향 | 대응 |
+|---|---|---|
+| preview/export 오디오 경로 불일치 (F-14) | 들리는 결과 다름 | 덕킹은 keyframe 방식 우선(자동 일치), DSP는 공통 렌더 함수 |
+| Vision 세그멘테이션 성능 (F-08) | preview 프레임 드롭 | fast quality + 프레임 캐시 + 프록시, export만 accurate |
+| 마그네틱 타임라인 회귀 (F-03) | 기존 편집 파괴 | 기존 명령 경로 보존, 충돌 해소만 신규 명령, 토글로 격리 |
+| 모델 필드 추가로 구버전 파일 깨짐 | 프로젝트 손실 | A5(optional 디코딩 + 디코딩 테스트) 의무 |
+| iOS 동기화 누락 | 플랫폼 분기 | compositor/모델 변경 시 iOS 대응 파일 체크 (기존 관례) |
+| 권한 의존 기능 (F-13 Speech, F-16 Mic) | 기능 차단 | usage description + 거부 시 안내 UI (F-16은 적용됨) |
+| 다중 세션 동시 작업 | 문서/작업 충돌·유실 | 신규 문서는 작성 즉시 커밋, 세션 시작 시 `git log`/`git status` 확인(핸드오프 §2-1) |
+
+---
+
+## 8. 운영 규칙
+
+- 작업 단위: 기능 ID(F-xx) 단위 커밋(`feat: F-03 magnetic timeline`), 완료 시 ① 백로그 체크 ② 이 문서 AC에 검증 결과 1줄 ③ 핸드오프 갱신.
+- DoD 4단계(§1.3) 미충족 기능은 백로그에 ✅ 표기 금지 — caveat와 함께 🟡 유지.
+- AC 변경은 이 문서 선(先)수정·커밋 후 구현.

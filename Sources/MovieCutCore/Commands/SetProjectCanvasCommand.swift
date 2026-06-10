@@ -43,6 +43,50 @@ public struct SetProjectCanvasCommand: EditorCommand {
     }
 }
 
+/// Updates the project's default export preset settings.
+public struct SetProjectExportSettingsCommand: EditorCommand {
+    /// The command identifier.
+    public let id: UUID
+
+    /// The new export settings.
+    public var exportSettings: ExportSettings
+
+    /// Optional prior settings used when constructing an inverse command.
+    public var previousExportSettings: ExportSettings?
+
+    /// Creates an export settings update command.
+    public init(
+        id: UUID = UUID(),
+        exportSettings: ExportSettings,
+        previousExportSettings: ExportSettings? = nil
+    ) {
+        self.id = id
+        self.exportSettings = exportSettings
+        self.previousExportSettings = previousExportSettings
+    }
+
+    public func apply(to project: inout Project) throws -> CommandResult {
+        let previousSettings = project.exportSettings
+        project.exportSettings = exportSettings
+
+        return CommandResult(
+            description: "Set project export settings",
+            undoValues: ["exportSettings": .exportSettings(previousSettings)]
+        )
+    }
+
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .exportSettings(let settings)? = result.undoValues["exportSettings"] {
+            return SetProjectExportSettingsCommand(exportSettings: settings)
+        }
+
+        guard let previousExportSettings else {
+            return NoOpCommand(description: "Missing export settings for inverse")
+        }
+        return SetProjectExportSettingsCommand(exportSettings: previousExportSettings)
+    }
+}
+
 private extension ExportFrameRate {
     var rational: Rational {
         switch self {

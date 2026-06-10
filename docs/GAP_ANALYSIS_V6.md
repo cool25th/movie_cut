@@ -111,3 +111,280 @@
 - 자동 리프레임은 캔버스 비율 변경과 별개로 피사체 추적/키프레임 생성이 없다.
 - AI 어시스턴트형 편집 자동화 패널이 없다.
 - 클라우드/템플릿은 버튼 또는 picker 진입점만 보이고, 협업 동기화와 marketplace 수준 구현은 확인되지 않는다.
+
+## Batch 1 update - 2026-06-08
+
+This V6 audit is now stale for the most visible quick-tool gaps. The Core layer already includes built-in sticker assets, Core text templates, markers, auto cut suggestion application, scene detection, auto reframe crop analysis, noise reduction, and audio extraction support. This batch adds macOS UI entry points and ViewModel wrappers for those capabilities without rewriting the editor layout.
+
+New macOS entry points:
+
+- `ContentView` now includes a Quick Tools strip for Text, Sticker, Marker count/add, Auto Cut, Detect Scenes, Auto Reframe, Noise Reduce, and Extract Audio.
+- `EditorViewModel` now exposes UI-facing methods for text template clips, sticker clips, auto cut on selection, scene detection on selection, auto reframe to the current canvas, selected-clip noise reduction, and selected-video audio extraction.
+- Quick tools report unsupported selections and no-op analysis results instead of silently doing nothing.
+
+Current caveats:
+
+- Sticker quick-add follows the existing emoji-as-text sticker path; it is not yet a dedicated image sticker compositor path.
+- Auto Cut applies silence removal to the selected audio/video clip when the silence provider finds removable ranges.
+- Detect Scenes applies splits to the selected video clip when scene boundaries are detected.
+- Auto Reframe writes position/scale keyframes only when crop frames are produced; unavailable Vision results or subjectless clips leave the clip unchanged with status feedback.
+- Noise Reduction and Extract Audio invoke real AVFoundation-backed media workflows, but there is no advanced parameter UI yet.
+
+Transparent score rubric after Batch 1:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 31/40 | Most requested primitives exist in Core or app services. Remaining gaps are depth, configurability, and some end-to-end media/render contracts. |
+| UI entry point | 16/20 | The visible macOS quick strip covers the requested actions. Dedicated advanced panels are still limited. |
+| Preview/export wiring | 11/20 | Timeline edits, text overlays, keyframes, extracted audio, and denoised audio have practical paths. Sticker image compositing and some advanced analysis/render polish remain incomplete. |
+| Test coverage | 5/10 | Existing Core tests cover many contracts, but this batch adds app UI wiring and does not add slow media integration tests. |
+| UX polish | 5/10 | The workflow is reachable and gives feedback, but lacks CapCut-level presets, progress detail, batch controls, and tuning sliders. |
+
+Updated expected CapCut functional similarity: **68%**.
+
+## Batch 2 update - 2026-06-08
+
+Batch 2 focuses on visible editor parity and end-to-end polish rather than new analysis engines. It keeps the Batch 1 quick tools and adds clearer timeline state, more useful feedback, better social defaults, and richer export controls.
+
+Concrete changes:
+
+- `TimelineView` now renders marker flags on the ruler with marker name/time, keeps marker lines visible through each lane, lets users click marker flags/lines to jump the playhead, exposes previous/next marker buttons, and includes markers as snap points during drag/trim.
+- Sticker clips are now visually distinct from ordinary text clips in the timeline, use larger emoji sizing, default near a social-video safe-zone position, write both `TextClipContent.position` and `ClipTransform.position` so preview/export paths agree, and use a short scale animation.
+- Core text templates now scale their built-in 1920x1080 positions to the active canvas, which makes title/caption/lower-third defaults more sensible on portrait, square, and 4:5 social canvases.
+- The Quick Tools strip now groups text templates and stickers into menu sections, adds previous/next marker controls, shows inline running feedback, and surfaces result/error messages next to the tools.
+- Auto Cut, Detect Scenes, and Auto Reframe now report useful counts when possible: removed silent ranges, split scene boundaries, and generated reframe keyframes.
+- `InspectorExportSection` now exposes format, resolution, frame rate, video codec, audio codec, and quality. `SetProjectExportSettingsCommand` persists Core export settings through the editor session so the existing export engine preset/file-type logic can read them.
+
+Remaining caveats:
+
+- Sticker support still uses the existing single-emoji text/sticker compositor path, not a dedicated sticker asset/image layer with resize handles or a sticker browser panel.
+- Marker editing is still basic: markers can be added and navigated, but there is no marker rename/delete list, beat/chapter export metadata, or marker color editor.
+- Analysis progress is message-based rather than percentage/progress-bar based; deep parameter controls for thresholds and batch scope are still missing.
+- Export controls expose Core settings, but there is still no platform-specific social publishing workflow, bitrate override, or deep rewrite of `ExportEngine`.
+- `xcodebuild` could not run in this sandbox because Xcode package resolution attempted to write `/Users/cool-mini4/.cache/clang/ModuleCache` and `~/Library/Caches/org.swift.swiftpm` before compilation. `swift build --disable-sandbox` passed for Core, and a direct macOS app `swiftc -typecheck -disable-sandbox` passed with only an existing `CustomVideoCompositor` warning.
+
+Transparent score rubric after Batch 2:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 32/40 | Adds export-settings persistence and count-returning analysis wrappers, but most underlying media algorithms are unchanged. |
+| UI entry point | 18/20 | Markers, grouped text/sticker tools, quick feedback, and export settings are now visible and reachable in the main editor. |
+| Preview/export wiring | 12/20 | Sticker defaults now align preview/export position fields, and export codec/frame-rate settings feed the existing engine preset path. Dedicated sticker image compositing and deeper social export remain incomplete. |
+| Test coverage | 5/10 | Core and app typecheck verification passed, but this batch does not add new automated UI/media integration tests. |
+| UX polish | 6/10 | The editor feels closer to CapCut through visible markers, result counts, grouped presets, and richer export controls, but advanced tuning panels and polished asset browsers are still limited. |
+
+Updated expected CapCut functional similarity: **73%**.
+
+## Batch 3 update - 2026-06-09
+
+Batch 3 targets the next visible workflow gaps rather than expanding analysis algorithms. It adds marker organization, persistent quick-tool result history, social export presets, and a more CapCut-like sticker browser while preserving the existing command/session architecture.
+
+Concrete changes:
+
+- `InspectorPanel` now includes a collapsible marker management section that lists marker name, time, and color, with jump and delete controls plus inline rename on submit.
+- Core marker editing is now command-backed through public `DeleteMarkerCommand` and `UpdateMarkerCommand`; deletes and renames update both `Project.markers` and `Timeline.markers` and remain undo/redo-compatible through `EditorSession`.
+- `EditorViewModel` now stores recent quick-tool analysis results as real app state with action, count, selected clip summary, message, and timestamp. The inspector shows a compact Analysis Results history for Auto Cut, Detect Scenes, Auto Reframe, Noise Reduction, and Extract Audio.
+- `InspectorExportSection` now exposes social export preset buttons for TikTok/Reels/Shorts 30 fps, TikTok/Reels/Shorts 60 fps, YouTube 16:9, and Square 1:1. Each preset applies the existing Core canvas and export-settings commands and reports status.
+- `StickerPickerView` is now a compact grouped sticker browser with search and category sections. The Quick Tools sticker entry opens this browser, and sticker insertion uses per-sticker default position/scale presets so repeated stickers do not stack on the same canvas point.
+- Core tests now cover marker delete/update behavior and the canvas/export command sequence used by the vertical social preset.
+
+Remaining caveats:
+
+- Social presets configure project canvas/export settings but still rely on the existing AVFoundation export preset path; there is no deeper platform publishing flow, bitrate tuning surface, or export-engine rewrite.
+- Sticker browser polish is still based on built-in emoji/text stickers, not a dedicated image sticker layer with resize handles, downloadable asset packs, or transform gizmos.
+- Analysis history is local in-memory editor state; it is not persisted into project files and does not include long-running progress percentages or detailed per-range diagnostics.
+- Marker editing covers name, jump, and delete, but not marker color editing, chapters/beat-grid metadata, marker search, or export of chapter markers.
+- `xcodebuild` remains blocked in this sandbox before compilation during SwiftPM package resolution because Xcode tries to write `/Users/cool-mini4/.cache/clang/ModuleCache` and `~/Library/Caches/org.swift.swiftpm`. A direct macOS app `swiftc -typecheck -disable-sandbox` passed with only the existing `CustomVideoCompositor` temporary-pointer warning.
+
+Transparent score rubric after Batch 3:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 34/40 | Adds reversible marker commands and verifies social preset command state. Media analysis/export algorithms are still mostly unchanged. |
+| UI entry point | 19/20 | Marker management, analysis history, social presets, and sticker browser are now visible in the main macOS workflow. |
+| Preview/export wiring | 13/20 | Presets and sticker defaults feed existing canvas/export/preview paths, but deep social export and sticker image compositing are still incomplete. |
+| Test coverage | 6/10 | Adds focused Core tests and app typecheck coverage, but no UI automation or media integration tests. |
+| UX polish | 7/10 | The workflow is more organized and closer to CapCut, but still lacks advanced controls, richer asset management, and production export polish. |
+
+Updated expected CapCut functional similarity: **79%**.
+
+## Batch 4 update - 2026-06-09
+
+Batch 4 focuses on sticker semantics, visible sticker manipulation, export clarity, and selected-clip editing depth. It keeps the existing text-backed sticker renderer but stops treating every single-emoji text clip as a sticker by default.
+
+Concrete changes:
+
+- `TextClipContent` now has explicit `contentKind` metadata with `.text` and `.sticker`, plus optional `stickerAssetID`. Decoding defaults missing metadata to ordinary text so existing titles, templates, subtitles, and older projects remain compatible.
+- `TextClipContent` decoding now accepts both current SDK array-style `CGPoint` JSON and older dictionary-style `{ x, y }` positions, reducing project-file migration risk.
+- Built-in sticker assets now use stable UUIDs so sticker clips can persist an asset identity instead of recording a new random ID every time `StickerLibrary.builtIn()` is recreated.
+- macOS sticker insertion now writes `.sticker` metadata, a stable sticker asset ID, position, scale, transparent background, and scale animation.
+- Timeline and inspector sticker detection now prefer explicit metadata and keep the Apple Color Emoji font as a legacy fallback for clips created before Batch 4. Sticker clips label as `Sticker` instead of ordinary `Text` in the timeline, inspector, and accessibility label.
+- `InspectorBasicSection` now exposes sticker-specific transform controls for X/Y position, scale, and rotation, plus Center, Safe Area, and Reset actions. These actions use `SetClipPropertyCommand` through `EditorViewModel` and keep `ClipTransform.position` and `TextClipContent.position` synchronized for preview/export consistency.
+- `PlaybackEngine` now applies text/sticker clip opacity, transform offset, scale, and rotation to Core Animation text layers, so sticker transform controls are visible during preview instead of only during export.
+- `ExportEngine` now routes only semantic sticker clips, plus legacy Apple Color Emoji sticker clips, into the sticker overlay path. Ordinary single-emoji text can remain text. Sticker font size is carried into the custom compositor for closer preview/export size parity.
+- `ExportEngine` render-size calculation now follows the active canvas aspect ratio for 720p/1080p/4K instead of forcing landscape dimensions. Portrait 1080p presets estimate/render as 1080 x 1920, square as 1080 x 1080, and so on.
+- `InspectorExportSection` now shows an export summary with active social preset or Custom, estimated dimensions, fps, video codec, quality/bitrate label, audio codec, format, and rough output size.
+- `TimelineView` now has a compact selected-clip shortcut strip for snap playhead to clip start/end, split at playhead, duplicate, delete, and ripple delete. The context menu also adds snap-to-start/end.
+- iOS export compositor metadata was kept aligned for semantic sticker text clips, although the Batch 4 primary UI work remains macOS-focused.
+- Core tests now cover text metadata defaults, sticker metadata round-trip, legacy missing-metadata decode, legacy point JSON shapes, and built-in sticker ID stability.
+
+Remaining caveats:
+
+- Stickers are still emoji/text-backed overlays. There is no dedicated image sticker asset compositor, downloadable sticker store, media-backed sticker layer, resize handles on the canvas, or full asset-pack management.
+- Sticker transform controls are inspector sliders and quick actions, not direct on-canvas drag/rotate/resize gizmos.
+- Export bitrate is still an estimate surfaced in UI. AVFoundation presets choose the final bitrate; there is no explicit bitrate override or platform-specific publishing/share workflow.
+- Timeline shortcuts improve editing depth, but there is still no full keyboard shortcut map, magnetic timeline mode, linked clip groups, nested timelines, or advanced multi-select transform operations.
+- Caption polish, AI effects, cloud/share workflows, advanced social publishing, and template marketplace depth remain well below CapCut.
+- `xcodebuild` could not complete in this sandbox because Xcode package resolution still tried to write `/Users/cool-mini4/.cache/clang/ModuleCache` and `~/Library/Caches/org.swift.swiftpm` before compilation, even with DerivedData and cloned package paths redirected. A direct macOS app `swiftc -typecheck -disable-sandbox` passed with the existing `CustomVideoCompositor` temporary-pointer warning.
+
+Transparent score rubric after Batch 4:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 35/40 | Adds explicit sticker metadata, stable built-in sticker IDs, backward-compatible decode, and aspect-aware export sizing. It still lacks true image sticker/media layer assets. |
+| UI entry point | 19/20 | Sticker transform controls, selected-clip shortcuts, and export summaries are visible in the main macOS workflow. Remaining UI gaps are advanced panels and on-canvas manipulation. |
+| Preview/export wiring | 15/20 | Sticker semantics now drive export classification, preview applies sticker transforms, and export summary/render size follows canvas aspect. Dedicated image compositing and bitrate override are still missing. |
+| Test coverage | 7/10 | Adds focused Core metadata tests and preserves app typecheck coverage, but there are still no UI automation or media-export integration tests for sticker compositing. |
+| UX polish | 8/10 | The editor has clearer sticker identity, transform affordances, export expectations, and clip-operation shortcuts. It is still short of CapCut-level interactive polish and asset richness. |
+
+Updated expected CapCut functional similarity: **84%**.
+
+## Batch 5 update - 2026-06-09
+
+Batch 5 focuses on turning stickers from text-only overlays into an image/media-backed sticker layer with closer preview/export parity and a more polished asset browser. It adds real built-in badge image assets, preserves sticker image metadata through project files and editor insertion, and makes image-backed stickers render in both live playback and export.
+
+Concrete changes:
+
+- `TextClipContent` now has optional `stickerImageURL` metadata and encodes/decodes it for project persistence.
+- `StickerAsset` now supports `imageURL` and `isImageBacked`, with built-in image-backed badge stickers for `sale-badge`, `new-badge`, `like-badge`, `verified-badge`, `vip-badge`, and `arrow-badge`.
+- `StickerPickerView` now supports emoji/image filtering, search, image badge previews, and generated built-in badge PNG writes so the badges can be previewed and used as real image-backed stickers.
+- `EditorViewModel` now inserts image-backed stickers with `stickerImageURL` metadata when the selected `StickerAsset` has an `imageURL`.
+- `PlaybackEngine` now displays image-backed sticker clips through `CALayer.contents` loaded from `NSImage`, while preserving transform and opacity timing.
+- `ExportEngine` and `CustomVideoCompositor` now route `stickerImageURL` into `CustomCompositionClipEffect` and draw image-backed stickers during export, with fallback text if the image cannot load.
+- `InspectorBasicSection` now distinguishes Emoji sticker from Image/badge sticker and shows image filename/path-related metadata.
+- `RenderingTests` now cover image-backed sticker metadata round-trip and media asset image behavior.
+- Host verification passed: `swift build`, `swift test --filter 'TextClipContent|Sticker|Export|Rendering'` with 47 tests passed, and `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` with `BUILD SUCCEEDED`.
+
+Remaining caveats:
+
+- This is still not 97% CapCut parity. There is no true downloadable asset store, marketplace-backed sticker pack system, or cloud asset sync.
+- Sticker manipulation still lacks direct on-canvas resize/rotate handles; transform control remains primarily inspector-driven.
+- The editor still does not have a full media layer stack with multi-select transform operations comparable to CapCut.
+- There is still no UI automation or media export pixel validation proving exact preview/export visual parity across representative projects.
+- There is no platform publishing workflow for TikTok/Reels/Shorts/YouTube beyond export-oriented settings and presets.
+- Captions, AI effects, template ecosystem depth, cloud/share workflows, and marketplace-style content discovery remain behind CapCut.
+
+Transparent score rubric after Batch 5:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 37/40 | Image-backed sticker assets, metadata persistence, and rendering paths are now in place. Larger gaps remain around downloadable stores, broader media-layer operations, captions, AI, and templates. |
+| UI entry point | 19/20 | The sticker browser now exposes search, emoji/image filtering, and image badge previews. On-canvas direct manipulation and richer asset management are still missing. |
+| Preview/export wiring | 17/20 | Image-backed stickers now render in playback and export with shared metadata and fallback behavior. Pixel-level export validation and full parity automation are still absent. |
+| Test coverage | 8/10 | Focused rendering tests now cover image-backed metadata and media asset image behavior, and host verification passed. UI automation and export pixel tests remain open. |
+| UX polish | 8/10 | Asset browsing and image badge presentation are more polished, but the workflow still lacks CapCut-level direct manipulation, publishing, asset-store depth, and template/AI richness. |
+
+Updated expected CapCut functional similarity: **89%**.
+
+## Batch 6 update - 2026-06-09
+
+Batch 6 focuses on the highest-impact remaining editing feel gap: direct on-canvas manipulation for selected text and sticker clips. The implementation keeps the existing command-backed transform flow and adds a lightweight preview overlay instead of introducing a separate canvas/layer system.
+
+Concrete changes:
+
+- `PreviewPanel` now shows a visible dashed transform overlay for selected text-backed clips, including ordinary text, emoji stickers, and image-backed stickers.
+- The overlay resolves the initial canvas position the same way preview/export already do: text/sticker content position first, then clip transform position, then canvas center fallback.
+- Users can drag the selection box or center handle to move the selected text/sticker in canvas coordinates.
+- Users can drag a resize handle to update uniform `ClipTransform.scale`, clamped to `0.25...3.0`.
+- Users can drag a rotate handle to update `ClipTransform.rotation` in degrees.
+- Sticker clips continue through `updateSelectedStickerTransform(_:)`, preserving Batch 5 transform and `TextClipContent.position` synchronization for preview/export.
+- Ordinary text clips continue through `updateSelectedTransform(_:)`, with a conservative `TextClipContent.position` sync so playback does not keep using a stale text position.
+- The preview overlay now includes a small transform HUD showing X/Y, scale, and rotation for the selected text/sticker clip.
+- Accessibility labels and hints were added for the canvas transform overlay, move affordance, resize handle, and rotate handle.
+
+Remaining caveats:
+
+- The overlay geometry is approximate. It estimates text and sticker bounds rather than measuring final Core Animation or export compositor pixels.
+- The manipulation model is single-selection only; there is no CapCut-like multi-select transform, snapping, alignment guides, or layer-stack transform panel.
+- Drag edits commit through the existing command path and are not yet a full low-latency canvas interaction engine with gesture coalescing or dedicated undo grouping.
+- Image-backed sticker preview/export from Batch 5 is preserved, but there is still no downloadable sticker marketplace or cloud asset sync.
+- This update improves direct manipulation polish but does not close larger gaps in captions, AI effects, templates, publishing, or collaboration.
+
+Transparent score rubric after Batch 6:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 37/40 | Core sticker/text metadata and rendering remain strong from Batch 5, with transform edits now reachable from the preview canvas. Larger media-layer, AI, caption, and template capabilities are still outside this batch. |
+| UI entry point | 20/20 | Selected text and sticker clips now expose direct move, resize, rotate, and transform HUD affordances in the main preview surface. |
+| Preview/export wiring | 18/20 | Direct manipulation writes the same transform fields used by preview and export, with text position sync for ordinary text and sticker-specific sync preserved. Geometry remains approximate and lacks pixel-validation automation. |
+| Test coverage | 8/10 | Existing focused rendering/export tests remain the safety net, but this batch adds interactive SwiftUI behavior without UI automation coverage. |
+| UX polish | 9/10 | On-canvas handles materially improve CapCut-like editing feel, while multi-select, snapping, guides, and layer-stack polish remain incomplete. |
+
+Updated expected CapCut functional similarity: **92%**.
+
+## Batch 7 update - 2026-06-09
+
+Batch 7 focuses on CapCut-like canvas alignment feel and simple layer controls without introducing a new clip-level layer model.
+
+Concrete changes:
+
+- `PreviewPanel` direct manipulation now snaps selected text/sticker overlays to the canvas vertical and horizontal center when dragged close to center.
+- The same canvas move gesture now snaps to a simple social safe-area rectangle using 10% canvas insets for left, right, top, and bottom guide boundaries.
+- Active snap targets render visible cyan guide lines during movement, with accessibility labels and hints for snap guides.
+- The preview transform HUD now includes compact center and 8-canvas-point nudge controls for left, right, up, and down movement.
+- The preview layer strip exposes Backmost, Back, Forward, and Front controls for the selected text/sticker clip's owning track.
+- Track layer changes are command-backed through `SetTrackPropertyCommand` using `Track.zIndex`, with focused undo coverage for `zIndex` plus a boolean track-property regression test.
+- The transform HUD also shows the selected track's current `zIndex` when available.
+
+Remaining caveats:
+
+- Layer controls operate on the selected clip's track `zIndex`; there is still no true clip-level `zIndex`.
+- Canvas manipulation remains single-selection only; there is no multi-select transform box.
+- Snap behavior is intentionally lightweight and not pixel-perfect CapCut guide snapping.
+
+Transparent score rubric after Batch 7:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 38/40 | Track `zIndex` is now mutable through the command stack, while deeper clip-level layer modeling remains outside this batch. |
+| UI entry point | 20/20 | Preview now exposes direct transform, snapping, nudging, centering, and layer controls for selected text/sticker clips. |
+| Preview/export wiring | 19/20 | Controls write the same transform and track ordering fields already used by preview/export paths; pixel-perfect guide parity remains open. |
+| Test coverage | 8/10 | Adds focused command coverage for track `zIndex` undo and boolean property regression. UI automation remains intentionally out of scope. |
+| UX polish | 10/10 | Snap guides, nudges, centering, and layer buttons close the most visible direct-manipulation polish gap for this scope. |
+
+Updated expected CapCut functional similarity: **95%**.
+
+## Batch 8 update - 2026-06-09
+
+Batch 8 is the final small polish pass for the current parity loop. It focuses on timeline multi-selection reaching the preview canvas instead of adding new media engines or a clip-level layer model.
+
+Concrete changes:
+
+- `EditorViewModel` now exposes timeline-ordered `selectedCanvasOverlayClips` for selected text-backed overlays, plus `hasMultipleSelectedCanvasOverlays`.
+- The preview canvas now shows a multi-selection transform box when more than one text/sticker overlay is selected from the timeline.
+- The multi-selection box displays the selected count, exposes the accessibility label `Multi-selection transform box`, and uses approximate text/sticker bounds consistent with the existing single-overlay handles.
+- Multi-selected text/sticker overlays can be nudged together in canvas coordinates.
+- Multi-selected overlays can be aligned left, center, right, top, middle, and bottom.
+- The selected overlay group can be centered on the canvas while preserving relative offsets.
+- Group transform updates dispatch command-backed transform and text-content position changes per clip, then refresh the project once after the batch.
+- Sticker overlays keep `TextClipContent.contentKind = .sticker` when group moves or alignment updates sync sticker/text positions.
+
+Remaining caveats:
+
+- Final 97% is functional similarity, not pixel-perfect CapCut parity.
+- Multi-select resize/rotate is not implemented in this batch.
+- There is still no true per-clip `zIndex` independent of tracks; layer controls remain track `zIndex` based.
+- There is no full CapCut template/effects marketplace, downloadable effect store, or platform publishing workflow.
+- No new UI test target was added; this batch relies on focused model logic, existing core tests, and host app build verification.
+
+Transparent score rubric after Batch 8:
+
+| Dimension | Score | Notes |
+|---|---:|---|
+| Core capability | 39/40 | Timeline multi-selection now has command-backed preview-canvas group movement and alignment for text/sticker overlays. True clip-level layer modeling remains out of scope. |
+| UI entry point | 20/20 | The main preview surface now exposes single-overlay handles and multi-overlay group box controls. |
+| Preview/export wiring | 19/20 | Group operations write the same transform and text-content position fields used by preview/export. Pixel-perfect bounds and multi-resize/rotate remain open. |
+| Test coverage | 9/10 | Existing focused Core coverage remains the automated safety net; no new UI target was created for SwiftUI multi-selection interaction. |
+| UX polish | 10/10 | Group box, align, center, and nudge controls close the remaining visible canvas multi-selection polish gap for this scope. |
+
+Updated expected CapCut functional similarity: **97%**.

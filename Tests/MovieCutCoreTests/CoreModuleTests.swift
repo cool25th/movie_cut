@@ -181,6 +181,38 @@ import MovieCutCore
     #expect(track.name == "Renamed")
 }
 
+@Test("SetTrackProperty zIndex applies and inverts")
+func setTrackPropertyZIndexAppliesAndInverts() throws {
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .text, name: "Overlay", zIndex: 4)
+    ]))
+    let trackId = project.timeline.tracks[0].id
+    let command = SetTrackPropertyCommand(trackId: trackId, property: .zIndex(12))
+
+    let result = try command.apply(to: &project)
+    #expect(project.timeline.tracks[0].zIndex == 12)
+
+    let undo = try command.invert(from: result)
+    _ = try undo.apply(to: &project)
+    #expect(project.timeline.tracks[0].zIndex == 4)
+}
+
+@Test("SetTrackProperty boolean applies and inverts")
+func setTrackPropertyBooleanAppliesAndInverts() throws {
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "Video", isHidden: false, zIndex: 0)
+    ]))
+    let trackId = project.timeline.tracks[0].id
+    let command = SetTrackPropertyCommand(trackId: trackId, property: .isHidden(true))
+
+    let result = try command.apply(to: &project)
+    #expect(project.timeline.tracks[0].isHidden == true)
+
+    let undo = try command.invert(from: result)
+    _ = try undo.apply(to: &project)
+    #expect(project.timeline.tracks[0].isHidden == false)
+}
+
 @Test func clipTextContentRoundTrip() {
     var clip = Clip(kind: .text, sourceRange: TimeRange(start: 0, duration: 5), timelineRange: TimeRange(start: 0, duration: 5))
     let content = TextClipContent(text: "Hello", fontFamily: "Helvetica", fontSize: 24, fontColor: "#FFFFFF")

@@ -4,6 +4,7 @@ public enum TrackProperty: Sendable, Codable, Equatable {
     case isLocked(Bool)
     case isMuted(Bool)
     case isHidden(Bool)
+    case zIndex(Int)
 }
 
 public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
@@ -38,15 +39,22 @@ public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
         case .isHidden(let isHidden):
             previous = .isHidden(project.timeline.tracks[index].isHidden)
             project.timeline.tracks[index].isHidden = isHidden
+        case .zIndex(let zIndex):
+            previous = .zIndex(project.timeline.tracks[index].zIndex)
+            project.timeline.tracks[index].zIndex = zIndex
         }
 
         return CommandResult(
             description: "Set track property for \(trackId)",
-            undoValues: ["oldValue": .int(previous.boolValue ? 1 : 0)]
+            undoValues: ["oldValue": .trackProperty(previous)]
         )
     }
 
     public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .trackProperty(let oldValue)? = result.undoValues["oldValue"] {
+            return SetTrackPropertyCommand(trackId: trackId, property: oldValue)
+        }
+
         if case .int(let value)? = result.undoValues["oldValue"] {
             return SetTrackPropertyCommand(trackId: trackId, property: property.replacingValue(with: value != 0))
         }
@@ -66,13 +74,6 @@ public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
 }
 
 private extension TrackProperty {
-    var boolValue: Bool {
-        switch self {
-        case .isLocked(let value), .isMuted(let value), .isHidden(let value):
-            return value
-        }
-    }
-
     func replacingValue(with value: Bool) -> TrackProperty {
         switch self {
         case .isLocked:
@@ -81,6 +82,8 @@ private extension TrackProperty {
             return .isMuted(value)
         case .isHidden:
             return .isHidden(value)
+        case .zIndex:
+            return self
         }
     }
 }

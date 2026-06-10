@@ -130,23 +130,33 @@ public final class PluginRegistry: Sendable {
         }
 
         // 5. Validate required fields
-        guard !payload.identifier.trimmedForPluginValidation.isEmpty else {
+        let identifier = payload.identifier.trimmedForPluginValidation
+        let name = payload.name.trimmedForPluginValidation
+        let version = payload.version.trimmedForPluginValidation
+        let author = payload.author?.trimmedForPluginValidation
+        let description = payload.description?.trimmedForPluginValidation
+        let entryPoint = payload.entryPoint.trimmedForPluginValidation
+
+        guard !identifier.isEmpty else {
             return .invalid("Manifest identifier must not be empty")
         }
-        guard !payload.name.trimmedForPluginValidation.isEmpty else {
+        guard !name.isEmpty else {
             return .invalid("Manifest name must not be empty")
         }
-        guard !payload.version.trimmedForPluginValidation.isEmpty else {
+        guard !version.isEmpty else {
             return .invalid("Manifest version must not be empty")
         }
-        guard !payload.entryPoint.trimmedForPluginValidation.isEmpty else {
+        guard !entryPoint.isEmpty else {
             return .invalid("Manifest entryPoint must not be empty")
+        }
+        guard Self.isSafeEntryPoint(entryPoint) else {
+            return .invalid("Manifest entryPoint must be a class/type name, not a file path")
         }
         guard !payload.pluginTypes.isEmpty else {
             return .invalid("Manifest pluginTypes must not be empty")
         }
 
-        guard Self.versionComponents(payload.version) != nil else {
+        guard Self.versionComponents(version) != nil else {
             return .invalid("Manifest version must be compatible with semantic version checks")
         }
 
@@ -158,12 +168,12 @@ public final class PluginRegistry: Sendable {
         }
 
         let manifest = PluginManifest(
-            identifier: payload.identifier,
-            name: payload.name,
-            version: payload.version,
-            author: payload.author ?? "Unknown",
-            description: payload.description ?? "",
-            entryPoint: payload.entryPoint,
+            identifier: identifier,
+            name: name,
+            version: version,
+            author: (author?.isEmpty == false) ? author ?? "Unknown" : "Unknown",
+            description: description ?? "",
+            entryPoint: entryPoint,
             pluginTypes: payload.pluginTypes
         )
 
@@ -237,12 +247,24 @@ public final class PluginRegistry: Sendable {
         case .full:
             return true
         case .readOnly:
-            return !write && resourceURL.standardizedFileURL.path.hasPrefix(pluginURL.standardizedFileURL.path)
+            return !write && Self.isResource(resourceURL, inside: pluginURL)
         case .minimal:
-            return !write
-                && resourceURL.lastPathComponent == "manifest.json"
-                && resourceURL.deletingLastPathComponent().standardizedFileURL == pluginURL.standardizedFileURL
+            return !write && Self.isTopLevelManifest(resourceURL, in: pluginURL)
         }
+    }
+
+    private static func isTopLevelManifest(_ resourceURL: URL, in pluginURL: URL) -> Bool {
+        let pluginPath = pluginURL.standardizedResolvedPath
+        let manifestPath = resourceURL.standardizedResolvedPath
+
+        return resourceURL.lastPathComponent == "manifest.json"
+            && manifestPath == pluginPath + "/manifest.json"
+    }
+
+    private static func isResource(_ resourceURL: URL, inside pluginURL: URL) -> Bool {
+        let pluginPath = pluginURL.standardizedResolvedPath
+        let resourcePath = resourceURL.standardizedResolvedPath
+        return resourcePath == pluginPath || resourcePath.hasPrefix(pluginPath + "/")
     }
 
     private func register(manifest: PluginManifest) {
@@ -308,6 +330,28 @@ public final class PluginRegistry: Sendable {
         return components.compactMap { $0 }
     }
 
+    private static func isSafeEntryPoint(_ entryPoint: String) -> Bool {
+        let trimmed = entryPoint.trimmedForPluginValidation
+        guard trimmed.isEmpty == false else { return false }
+        guard trimmed.contains("/") == false,
+              trimmed.contains("\\") == false,
+              trimmed.contains("..") == false else {
+            return false
+        }
+
+        guard trimmed.allSatisfy({ character in
+            character.isLetter || character.isNumber || character == "_" || character == "."
+        }) else {
+            return false
+        }
+
+        let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
+        return components.allSatisfy { component in
+            guard let first = component.first else { return false }
+            return first.isLetter || first == "_"
+        }
+    }
+
     private static let currentMovieCutVersion = "0.1.0"
 }
 
@@ -326,5 +370,18 @@ private struct PluginManifestPayload: Decodable {
 private extension String {
     var trimmedForPluginValidation: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension URL {
+    var standardizedResolvedPath: String {
+        let standardizedURL = standardizedFileURL
+        if FileManager.default.fileExists(atPath: standardizedURL.path) {
+            return standardizedURL.resolvingSymlinksInPath().path
+        }
+
+        let parentURL = standardizedURL.deletingLastPathComponent()
+        let resolvedParentURL = parentURL.resolvingSymlinksInPath()
+        return resolvedParentURL.appendingPathComponent(standardizedURL.lastPathComponent).path
     }
 }

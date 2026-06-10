@@ -349,6 +349,11 @@ struct IOSEffectsInspectorView: View {
         case .sepia: return "paintbrush"
         case .blur: return "drop"
         case .styleTransfer: return "sparkles"
+        case .cinematicLUT: return "film"
+        case .vintageLUT: return "camera.filters"
+        case .noirLUT: return "moon"
+        case .vividLUT: return "wand.and.stars"
+        case .coolLUT: return "snowflake"
         }
     }
 }

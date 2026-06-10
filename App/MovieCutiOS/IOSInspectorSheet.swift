@@ -216,6 +216,22 @@ struct IOSInspectorSheet: View {
             "Fade Through Black"
         case .wipeRight:
             "Wipe Right"
+        case .wipeLeft:
+            "Wipe Left"
+        case .wipeUp:
+            "Wipe Up"
+        case .wipeDown:
+            "Wipe Down"
+        case .slideLeft:
+            "Slide Left"
+        case .slideRight:
+            "Slide Right"
+        case .zoomIn:
+            "Zoom In"
+        case .zoomOut:
+            "Zoom Out"
+        case .glitch:
+            "Glitch"
         }
     }
 

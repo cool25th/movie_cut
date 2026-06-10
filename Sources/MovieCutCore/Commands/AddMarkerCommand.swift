@@ -36,16 +36,20 @@ public struct AddMarkerCommand: EditorCommand, Sendable, Codable {
     }
 }
 
-struct DeleteMarkerCommand: EditorCommand, Sendable, Codable {
-    let id: UUID
-    var markerId: UUID
+/// Removes a timeline marker from both project and timeline marker collections.
+public struct DeleteMarkerCommand: EditorCommand, Sendable, Codable {
+    public let id: UUID
+    public var markerId: UUID
 
-    init(id: UUID = UUID(), markerId: UUID) {
+    public init(id: UUID = UUID(), markerId: UUID) {
         self.id = id
         self.markerId = markerId
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws -> CommandResult {
+        let projectMarker = project.markers.first { $0.id == markerId }
+        let timelineMarker = project.timeline.markers.first { $0.id == markerId }
+        let deletedMarker = projectMarker ?? timelineMarker
         let projectMarkerCount = project.markers.count
         let timelineMarkerCount = project.timeline.markers.count
         project.markers.removeAll { $0.id == markerId }
@@ -55,10 +59,72 @@ struct DeleteMarkerCommand: EditorCommand, Sendable, Codable {
             throw EditorCommandError.invalidCommand("Marker not found: \(markerId)")
         }
 
-        return CommandResult(description: "Deleted marker \(markerId)")
+        var undoValues: [String: CommandResultValue] = [:]
+        if let deletedMarker {
+            undoValues["marker"] = .marker(deletedMarker)
+        }
+
+        return CommandResult(
+            description: "Deleted marker \(markerId)",
+            undoValues: undoValues
+        )
     }
 
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        NoOpCommand(description: "Missing marker snapshot for inverse")
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .marker(let marker)? = result.undoValues["marker"] {
+            return AddMarkerCommand(marker: marker)
+        }
+
+        return NoOpCommand(description: "Missing marker snapshot for inverse")
+    }
+}
+
+/// Updates a timeline marker while preserving its identifier.
+public struct UpdateMarkerCommand: EditorCommand, Sendable, Codable {
+    public let id: UUID
+    public var markerId: UUID
+    public var marker: Marker
+
+    public init(id: UUID = UUID(), markerId: UUID, marker: Marker) {
+        self.id = id
+        self.markerId = markerId
+        self.marker = marker
+    }
+
+    public func apply(to project: inout Project) throws -> CommandResult {
+        let updatedMarker = Marker(
+            id: markerId,
+            time: marker.time,
+            name: marker.name,
+            color: marker.color
+        )
+        let previousProjectMarker = project.markers.first { $0.id == markerId }
+        let previousTimelineMarker = project.timeline.markers.first { $0.id == markerId }
+        let previousMarker = previousProjectMarker ?? previousTimelineMarker
+
+        guard previousMarker != nil else {
+            throw EditorCommandError.invalidCommand("Marker not found: \(markerId)")
+        }
+
+        if let index = project.markers.firstIndex(where: { $0.id == markerId }) {
+            project.markers[index] = updatedMarker
+        }
+
+        if let index = project.timeline.markers.firstIndex(where: { $0.id == markerId }) {
+            project.timeline.markers[index] = updatedMarker
+        }
+
+        return CommandResult(
+            description: "Updated marker \(markerId)",
+            undoValues: previousMarker.map { ["marker": .marker($0)] } ?? [:]
+        )
+    }
+
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .marker(let marker)? = result.undoValues["marker"] {
+            return UpdateMarkerCommand(markerId: marker.id, marker: marker)
+        }
+
+        return NoOpCommand(description: "Missing marker snapshot for inverse")
     }
 }

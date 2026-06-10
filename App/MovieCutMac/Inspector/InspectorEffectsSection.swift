@@ -200,11 +200,11 @@ struct InspectorEffectsSection: View {
         Section("Style Transfer") {
             Picker("Style", selection: $viewModel.selectedStyle) {
                 Text("None").tag("none")
-                Text("Comic").tag("comic")
+                Text("Cinematic").tag("cinematic")
                 Text("Noir").tag("noir")
                 Text("Vintage").tag("vintage")
-                Text("Cyberpunk").tag("cyberpunk")
-                Text("Watercolor").tag("watercolor")
+                Text("Vivid").tag("vivid")
+                Text("Cool").tag("cool")
             }
             .onChange(of: viewModel.selectedStyle) { _, newValue in
                 Task { await viewModel.applyStyleTransfer(newValue) }
@@ -456,8 +456,10 @@ struct InspectorEffectsSection: View {
             return [EffectParameterDefinition(key: "amount", title: "Amount", range: -2 ... 2, defaultValue: 0)]
         case .fadeIn, .fadeOut, .crossDissolve:
             return [EffectParameterDefinition(key: "duration", title: "Duration", range: 0.1 ... 3, defaultValue: 0.5, valueFormat: "%.1fs")]
-        case .grayscale, .sepia:
-            return []
+        case .grayscale:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 1)]
+        case .sepia:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
         case .blur:
             return [EffectParameterDefinition(key: "radius", title: "Radius", range: 1 ... 12, defaultValue: 1, valueFormat: "%.0f")]
         case .styleTransfer:
@@ -465,6 +467,10 @@ struct InspectorEffectsSection: View {
                 EffectParameterDefinition(key: "styleIndex", title: "Style", range: 1 ... 5, defaultValue: 1, valueFormat: "%.0f"),
                 EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.75)
             ]
+        case .cinematicLUT, .vintageLUT, .vividLUT, .coolLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.8)]
+        case .noirLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
         }
     }
 }

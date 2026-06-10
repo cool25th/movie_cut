@@ -11,6 +11,9 @@ struct InspectorBasicSection: View {
         VStack(alignment: .leading, spacing: 16) {
             clipInfoSection
             transformSection
+            if isStickerClip {
+                stickerTransformSection
+            }
             opacitySection
 
             if clip.kind.supportsVolume {
@@ -33,7 +36,7 @@ struct InspectorBasicSection: View {
             Text("Clip Info")
                 .font(.subheadline)
                 .fontWeight(.semibold)
-            LabeledContent("Type", value: clip.kind.rawValue)
+            LabeledContent("Type", value: clipTypeLabel)
             LabeledContent("Duration", value: String(format: "%.2fs", clip.timelineRange.duration))
         }
     }
@@ -47,6 +50,84 @@ struct InspectorBasicSection: View {
             LabeledContent("Y", value: String(format: "%.1f", clip.transform.position.y))
             LabeledContent("Scale", value: String(format: "%.2f", clip.transform.scale.width))
             LabeledContent("Rotation", value: String(format: "%.1f\u{00B0}", clip.transform.rotation))
+        }
+    }
+
+    private var stickerTransformSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Sticker Transform")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("Quick")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            transformSlider(
+                title: "X",
+                value: Double(clip.transform.position.x),
+                range: 0 ... Double(max(canvasSize.width, 1))
+            ) { newValue in
+                var transform = clip.transform
+                transform.position.x = CGFloat(newValue)
+                Task { await viewModel.updateSelectedStickerTransform(transform) }
+            }
+
+            transformSlider(
+                title: "Y",
+                value: Double(clip.transform.position.y),
+                range: 0 ... Double(max(canvasSize.height, 1))
+            ) { newValue in
+                var transform = clip.transform
+                transform.position.y = CGFloat(newValue)
+                Task { await viewModel.updateSelectedStickerTransform(transform) }
+            }
+
+            transformSlider(
+                title: "Scale",
+                value: Double((clip.transform.scale.width + clip.transform.scale.height) * 0.5),
+                range: 0.25 ... 2.5
+            ) { newValue in
+                var transform = clip.transform
+                let scale = CGFloat(newValue)
+                transform.scale = CGSize(width: scale, height: scale)
+                Task { await viewModel.updateSelectedStickerTransform(transform) }
+            }
+
+            transformSlider(
+                title: "Rotate",
+                value: clip.transform.rotation,
+                range: -180 ... 180
+            ) { newValue in
+                var transform = clip.transform
+                transform.rotation = newValue
+                Task { await viewModel.updateSelectedStickerTransform(transform) }
+            }
+
+            HStack(spacing: 6) {
+                Button {
+                    Task { await viewModel.centerSelectedSticker() }
+                } label: {
+                    Label("Center", systemImage: "dot.scope")
+                }
+                .controlSize(.small)
+
+                Button {
+                    Task { await viewModel.fitSelectedStickerToSocialSafeArea() }
+                } label: {
+                    Label("Safe", systemImage: "viewfinder")
+                }
+                .controlSize(.small)
+
+                Button {
+                    Task { await viewModel.resetSelectedStickerTransform() }
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .controlSize(.small)
+            }
         }
     }
 
@@ -174,85 +255,175 @@ struct InspectorBasicSection: View {
 
     private func textContentSection(_ textContent: TextClipContent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Text")
+            Text(isStickerClip ? "Sticker" : "Text")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            TextField("Text", text: Binding(
+            TextField(isStickerClip ? "Sticker" : "Text", text: Binding(
                 get: { textContent.text },
                 set: { newValue in
                     var updated = textContent
                     updated.text = newValue
+                    if isStickerClip {
+                        updated.contentKind = .sticker
+                    }
                     Task { await viewModel.updateSelectedTextContent(updated) }
                 }
             ))
             .textFieldStyle(.roundedBorder)
 
-            HStack(spacing: 8) {
-                Picker("Font", selection: Binding(
-                    get: { textContent.fontFamily },
-                    set: { newValue in
-                        var updated = textContent
-                        updated.fontFamily = newValue
-                        Task { await viewModel.updateSelectedTextContent(updated) }
-                    }
-                )) {
-                    ForEach(fontFamilies, id: \.self) { family in
-                        Text(family).tag(family)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 160)
-
-                HStack(spacing: 4) {
-                    Text("Size")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Slider(value: Binding(
-                        get: { textContent.fontSize },
+            if isStickerClip {
+                stickerMetadataSection(textContent)
+            } else {
+                HStack(spacing: 8) {
+                    Picker("Font", selection: Binding(
+                        get: { textContent.fontFamily },
                         set: { newValue in
                             var updated = textContent
-                            updated.fontSize = newValue
+                            updated.fontFamily = newValue
                             Task { await viewModel.updateSelectedTextContent(updated) }
                         }
-                    ), in: 8 ... 144, step: 1)
-                    Text(String(format: "%.0f", textContent.fontSize))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, alignment: .trailing)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Picker("Alignment", selection: Binding(
-                    get: { textContent.alignment },
-                    set: { newValue in
-                        var updated = textContent
-                        updated.alignment = newValue
-                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    )) {
+                        ForEach(fontFamilies, id: \.self) { family in
+                            Text(family).tag(family)
+                        }
                     }
-                )) {
-                    Label("Left", systemImage: "text.alignleft").tag(MovieCutCore.TextAlignment.leading)
-                    Label("Center", systemImage: "text.aligncenter").tag(MovieCutCore.TextAlignment.center)
-                    Label("Right", systemImage: "text.alignright").tag(MovieCutCore.TextAlignment.trailing)
-                    Label("Justify", systemImage: "text.justify").tag(MovieCutCore.TextAlignment.justified)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 200)
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 160)
 
-                ColorPicker("Color", selection: Binding(
-                    get: {
-                        colorFromHex(textContent.fontColor)
-                    },
-                    set: { newValue in
-                        var updated = textContent
-                        updated.fontColor = hexFromColor(newValue)
-                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    HStack(spacing: 4) {
+                        Text("Size")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Slider(value: Binding(
+                            get: { textContent.fontSize },
+                            set: { newValue in
+                                var updated = textContent
+                                updated.fontSize = newValue
+                                Task { await viewModel.updateSelectedTextContent(updated) }
+                            }
+                        ), in: 8 ... 144, step: 1)
+                        Text(String(format: "%.0f", textContent.fontSize))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, alignment: .trailing)
                     }
-                ))
-                .labelsHidden()
+                }
+
+                HStack(spacing: 8) {
+                    Picker("Alignment", selection: Binding(
+                        get: { textContent.alignment },
+                        set: { newValue in
+                            var updated = textContent
+                            updated.alignment = newValue
+                            Task { await viewModel.updateSelectedTextContent(updated) }
+                        }
+                    )) {
+                        Label("Left", systemImage: "text.alignleft").tag(MovieCutCore.TextAlignment.leading)
+                        Label("Center", systemImage: "text.aligncenter").tag(MovieCutCore.TextAlignment.center)
+                        Label("Right", systemImage: "text.alignright").tag(MovieCutCore.TextAlignment.trailing)
+                        Label("Justify", systemImage: "text.justify").tag(MovieCutCore.TextAlignment.justified)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 200)
+
+                    ColorPicker("Color", selection: Binding(
+                        get: {
+                            colorFromHex(textContent.fontColor)
+                        },
+                        set: { newValue in
+                            var updated = textContent
+                            updated.fontColor = hexFromColor(newValue)
+                            Task { await viewModel.updateSelectedTextContent(updated) }
+                        }
+                    ))
+                    .labelsHidden()
+                }
             }
         }
+    }
+
+    private func stickerMetadataSection(_ textContent: TextClipContent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent("Kind", value: textContent.stickerImageURL == nil ? "Emoji sticker" : "Image/badge sticker")
+                .font(.caption)
+
+            if let stickerAssetID = textContent.stickerAssetID {
+                LabeledContent("Asset", value: stickerAssetID.uuidString.prefix(8).description)
+                    .font(.caption)
+            }
+
+            if let stickerImageURL = textContent.stickerImageURL {
+                LabeledContent("Image", value: stickerImageURL.lastPathComponent)
+                    .font(.caption)
+            }
+        }
+    }
+
+    private var clipTypeLabel: String {
+        if isStickerClip {
+            if clip.textContent?.stickerImageURL != nil {
+                return "Image Sticker"
+            }
+
+            return "Sticker"
+        }
+
+        return clip.kind.rawValue.capitalized
+    }
+
+    private var isStickerClip: Bool {
+        guard clip.kind == .text, let textContent = clip.textContent else {
+            return false
+        }
+
+        return textContent.isSticker || textContent.fontFamily == "Apple Color Emoji"
+    }
+
+    private var canvasSize: CGSize {
+        let timelineSize = viewModel.currentProject.timeline.canvasSize
+        if timelineSize.width > 0, timelineSize.height > 0 {
+            return timelineSize
+        }
+
+        return viewModel.currentProject.canvas.size
+    }
+
+    private func transformSlider(
+        title: String,
+        value: Double,
+        range: ClosedRange<Double>,
+        onChange: @escaping (Double) -> Void
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .leading)
+            Slider(
+                value: Binding(
+                    get: { value },
+                    set: { onChange($0) }
+                ),
+                in: range
+            )
+            Text(sliderValueLabel(title: title, value: value))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 52, alignment: .trailing)
+        }
+    }
+
+    private func sliderValueLabel(title: String, value: Double) -> String {
+        if title == "Scale" {
+            return String(format: "%.2f", value)
+        }
+
+        if title == "Rotate" {
+            return String(format: "%.0f\u{00B0}", value)
+        }
+
+        return String(format: "%.0f", value)
     }
 
     private func colorFromHex(_ hex: String) -> Color {

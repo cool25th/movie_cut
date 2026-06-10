@@ -136,6 +136,11 @@ extension EffectType {
         case .sepia: return "Sepia"
         case .blur: return "Blur"
         case .styleTransfer: return "Style Transfer"
+        case .cinematicLUT: return "Cinematic LUT"
+        case .vintageLUT: return "Vintage LUT"
+        case .noirLUT: return "Noir LUT"
+        case .vividLUT: return "Vivid LUT"
+        case .coolLUT: return "Cool LUT"
         }
     }
 }
@@ -160,6 +165,14 @@ extension TransitionType {
         case .crossDissolve: return "Cross Dissolve"
         case .fadeThroughBlack: return "Fade Through Black"
         case .wipeRight: return "Wipe Right"
+        case .wipeLeft: return "Wipe Left"
+        case .wipeUp: return "Wipe Up"
+        case .wipeDown: return "Wipe Down"
+        case .slideLeft: return "Slide Left"
+        case .slideRight: return "Slide Right"
+        case .zoomIn: return "Zoom In"
+        case .zoomOut: return "Zoom Out"
+        case .glitch: return "Glitch"
         }
     }
 }

@@ -1,6 +1,6 @@
 # 세션 핸드오프 — 다음 개발 세션 시작 가이드
 
-> 작성일: 2026-06-10 / 브랜치: `main` / 기준 기능 커밋: `f4a0255` (voiceover recording workflow)
+> 작성일: 2026-06-10 / 브랜치: `main` / 기준 기능 커밋: `4e982b0` (voiceover recording workflow)
 > 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md` 참고.
 
 ---
@@ -8,7 +8,7 @@
 ## 1. 현재 상태 요약
 
 - CapCut 파리티 작업은 Batch 17 이후 P1 transition pass, export/마스크 접근성 및 custom bitrate clamp, 실기기 드래그앤드롭 수정, 썸네일/프록시 생성, speed ramp preview contract, 텍스트 스타일 편집 UI, 보이스오버 실녹음 배치까지 진행됨.
-- 이전 핸드오프의 **미커밋 71개 파일 유실 위험은 해결됨**. 기능 단위 커밋 6개(`d5db68f`~`ef74997`), 접근성/비트레이트 커밋 `45cda56`, 실기기 드래그앤드롭 수정 `91e7cb4`, 썸네일/프록시 생성 `3933d94`, speed ramp preview contract `71893cb`, 텍스트 스타일 UI `4a2bad8`, 보이스오버 실녹음 `f4a0255`까지 저장됨.
+- 이전 핸드오프의 **미커밋 71개 파일 유실 위험은 해결됨**. 기능 단위 커밋 6개(`d5db68f`~`ef74997`), 접근성/비트레이트 커밋 `45cda56`, 실기기 드래그앤드롭 수정 `91e7cb4`, 썸네일/프록시 생성 `3933d94`, speed ramp preview contract `71893cb`, 텍스트 스타일 UI `4a2bad8`, 보이스오버 실녹음 `4e982b0`까지 저장됨.
 - `45cda56` 포함 작업:
   - `ExportSettings` custom bitrate를 1~200 Mbps 범위로 문서화/클램프.
   - Mac Export 버튼/진행률/Share, Inspector export picker/summary/preset/custom bitrate에 VoiceOver label/value/hint 추가.

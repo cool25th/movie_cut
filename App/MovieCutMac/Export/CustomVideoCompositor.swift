@@ -229,6 +229,31 @@ struct CustomCompositionAnimationState {
     let opacity: Double
 }
 
+struct CustomCompositionTransitionEffect {
+    let outgoingTrackID: CMPersistentTrackID
+    let incomingTrackID: CMPersistentTrackID
+    let timeRange: CMTimeRange
+    let type: TransitionType
+
+    func applies(at time: CMTime) -> Bool {
+        CMTimeRangeContainsTime(timeRange, time: time)
+    }
+
+    func progress(at time: CMTime) -> Double {
+        let durationSeconds = timeRange.duration.seconds
+        guard durationSeconds.isFinite, durationSeconds > 0 else {
+            return 1
+        }
+
+        let elapsedSeconds = CMTimeSubtract(time, timeRange.start).seconds
+        guard elapsedSeconds.isFinite else {
+            return 0
+        }
+
+        return min(max(elapsedSeconds / durationSeconds, 0), 1)
+    }
+}
+
 final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructionProtocol, @unchecked Sendable {
     let timeRange: CMTimeRange
     let enablePostProcessing: Bool = true
@@ -244,6 +269,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     var chromaKeyThreshold: Float = 0.3
     let mask: Mask?
     let clipEffects: [CustomCompositionClipEffect]
+    let transitionEffects: [CustomCompositionTransitionEffect]
 
     init(
         timeRange: CMTimeRange,
@@ -255,10 +281,14 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         chromaKey: ChromaKeySettings? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
-        mask: Mask? = nil
+        mask: Mask? = nil,
+        transitionEffects: [CustomCompositionTransitionEffect] = []
     ) {
         self.timeRange = timeRange
-        self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
+        self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
+            trackIDs: trackIDs,
+            transitionEffects: transitionEffects
+        )
         self.colorCorrection = colorCorrection
         self.textContent = textContent
         self.stickerEmoji = stickerEmoji
@@ -268,11 +298,20 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
         self.clipEffects = []
+        self.transitionEffects = transitionEffects
     }
 
-    init(timeRange: CMTimeRange, trackIDs: [CMPersistentTrackID], clipEffects: [CustomCompositionClipEffect]) {
+    init(
+        timeRange: CMTimeRange,
+        trackIDs: [CMPersistentTrackID],
+        clipEffects: [CustomCompositionClipEffect],
+        transitionEffects: [CustomCompositionTransitionEffect] = []
+    ) {
         self.timeRange = timeRange
-        self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
+        self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
+            trackIDs: trackIDs,
+            transitionEffects: transitionEffects
+        )
         self.colorCorrection = nil
         self.textContent = nil
         self.stickerEmoji = nil
@@ -281,10 +320,42 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.chromaKeyColor = nil
         self.mask = nil
         self.clipEffects = clipEffects
+        self.transitionEffects = transitionEffects
     }
 
     func effect(for trackID: CMPersistentTrackID, at time: CMTime) -> CustomCompositionClipEffect? {
         clipEffects.first { $0.applies(to: trackID, at: time) }
+    }
+
+    func activeTransition(at time: CMTime) -> CustomCompositionTransitionEffect? {
+        transitionEffects.first { $0.applies(at: time) }
+    }
+
+    private static func requiredTrackIDValues(
+        trackIDs: [CMPersistentTrackID],
+        transitionEffects: [CustomCompositionTransitionEffect]
+    ) -> [NSValue] {
+        var seenTrackIDs = Set<CMPersistentTrackID>()
+        var requiredTrackIDs: [CMPersistentTrackID] = []
+
+        func append(_ trackID: CMPersistentTrackID) {
+            guard trackID != kCMPersistentTrackID_Invalid, seenTrackIDs.insert(trackID).inserted else {
+                return
+            }
+
+            requiredTrackIDs.append(trackID)
+        }
+
+        for trackID in trackIDs {
+            append(trackID)
+        }
+
+        for transitionEffect in transitionEffects {
+            append(transitionEffect.outgoingTrackID)
+            append(transitionEffect.incomingTrackID)
+        }
+
+        return requiredTrackIDs.map { NSNumber(value: $0) }
     }
 }
 
@@ -306,6 +377,52 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
         renderQueue.async {
+            if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
+               let transition = instruction.activeTransition(at: request.compositionTime),
+               let outgoingBuffer = request.sourceFrame(byTrackID: transition.outgoingTrackID),
+               let incomingBuffer = request.sourceFrame(byTrackID: transition.incomingTrackID) {
+                let outgoingEffect = instruction.effect(
+                    for: transition.outgoingTrackID,
+                    at: request.compositionTime
+                )
+                let incomingEffect = instruction.effect(
+                    for: transition.incomingTrackID,
+                    at: request.compositionTime
+                )
+                let outgoingImage = self.applyClipEffects(
+                    to: CIImage(cvPixelBuffer: outgoingBuffer),
+                    effect: outgoingEffect,
+                    instruction: instruction,
+                    request: request
+                )
+                let incomingImage = self.applyClipEffects(
+                    to: CIImage(cvPixelBuffer: incomingBuffer),
+                    effect: incomingEffect,
+                    instruction: instruction,
+                    request: request
+                )
+
+                var transitionedImage = TransitionPixelProcessor.apply(
+                    type: transition.type,
+                    from: outgoingImage,
+                    to: incomingImage,
+                    progress: transition.progress(at: request.compositionTime)
+                )
+                transitionedImage = self.renderTextOverlay(
+                    instruction: instruction,
+                    onto: transitionedImage,
+                    at: request.compositionTime
+                )
+                transitionedImage = self.renderStickerOverlay(
+                    for: nil,
+                    instruction: instruction,
+                    onto: transitionedImage,
+                    at: request.compositionTime
+                )
+                self.finishRequest(request, with: transitionedImage)
+                return
+            }
+
             guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request) else {
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
@@ -315,49 +432,12 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
-                let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
-                let chromaKey = effect?.chromaKey ?? instruction.chromaKey
-                let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
-                let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
-                let mask = effect?.mask ?? instruction.mask
-                let animationState = effect?.animationState(at: request.compositionTime)
-                let clipEffects = effect?.effects ?? []
-                let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
-
-                if !clipEffects.isEmpty {
-                    image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
-                }
-
-                // Apply background removal
-                if isBackgroundRemoved {
-                    image = self.applyPersonSegmentation(to: image, request: request)
-                }
-
-                if let colorCorrection {
-                    image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
-                }
-
-                if let chromaKey {
-                    image = ChromaKeyPixelProcessor.apply(chromaKey, to: image)
-                } else if let chromaKeyColor {
-                    image = ChromaKeyPixelProcessor.apply(
-                        keyColor: chromaKeyColor,
-                        threshold: chromaKeyThreshold,
-                        to: image
-                    )
-                }
-
-                if let mask {
-                    image = MaskPixelProcessor.apply(mask, to: image, at: request.compositionTime.seconds)
-                }
-
-                if let animationState {
-                    image = self.apply(
-                        animationState: animationState,
-                        to: image,
-                        renderSize: request.renderContext.size
-                    )
-                }
+                image = self.applyClipEffects(
+                    to: image,
+                    effect: effect,
+                    instruction: instruction,
+                    request: request
+                )
 
                 image = self.renderTextOverlay(
                     instruction: instruction,
@@ -372,18 +452,75 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     at: request.compositionTime
                 )
             }
-            
-            guard let outputBuffer = request.renderContext.newPixelBuffer() else {
-                request.finish(with: NSError(domain: "MovieCut", code: -2, userInfo: nil))
-                return
-            }
-            
-            self.ciContext.render(image, to: outputBuffer)
-            request.finish(withComposedVideoFrame: outputBuffer)
+
+            self.finishRequest(request, with: image)
         }
     }
     
     func cancelAllPendingVideoCompositionRequests() {}
+
+    private func applyClipEffects(
+        to image: CIImage,
+        effect: CustomCompositionClipEffect?,
+        instruction: CustomCompositionInstruction,
+        request: AVAsynchronousVideoCompositionRequest
+    ) -> CIImage {
+        var image = image
+        let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
+        let chromaKey = effect?.chromaKey ?? instruction.chromaKey
+        let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
+        let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
+        let mask = effect?.mask ?? instruction.mask
+        let animationState = effect?.animationState(at: request.compositionTime)
+        let clipEffects = effect?.effects ?? []
+        let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
+
+        if !clipEffects.isEmpty {
+            image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
+        }
+
+        if isBackgroundRemoved {
+            image = applyPersonSegmentation(to: image, request: request)
+        }
+
+        if let colorCorrection {
+            image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
+        }
+
+        if let chromaKey {
+            image = ChromaKeyPixelProcessor.apply(chromaKey, to: image)
+        } else if let chromaKeyColor {
+            image = ChromaKeyPixelProcessor.apply(
+                keyColor: chromaKeyColor,
+                threshold: chromaKeyThreshold,
+                to: image
+            )
+        }
+
+        if let mask {
+            image = MaskPixelProcessor.apply(mask, to: image, at: request.compositionTime.seconds)
+        }
+
+        if let animationState {
+            image = apply(
+                animationState: animationState,
+                to: image,
+                renderSize: request.renderContext.size
+            )
+        }
+
+        return image
+    }
+
+    private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {
+        guard let outputBuffer = request.renderContext.newPixelBuffer() else {
+            request.finish(with: NSError(domain: "MovieCut", code: -2, userInfo: nil))
+            return
+        }
+
+        ciContext.render(image, to: outputBuffer)
+        request.finish(withComposedVideoFrame: outputBuffer)
+    }
 
     private func renderTextOverlay(
         instruction: CustomCompositionInstruction,

@@ -37,14 +37,6 @@ final class PlaybackEngine {
         self.playbackRate = 1
     }
 
-    private static func advancedTransitionPixelProcessorHook(for type: TransitionType) {
-        // Advanced transitions are implemented in Core by
-        // TransitionPixelProcessor.apply(type:from:to:progress:). This AVFoundation
-        // layer-instruction path only has per-layer ramps; full playback integration needs
-        // transition-boundary metadata that pairs outgoing and incoming source frames.
-        _ = type.requiresTwoSourcePixelProcessing
-    }
-
     func load(asset: MediaAsset) {
         pause()
         statusObservation?.invalidate()
@@ -395,55 +387,58 @@ final class PlaybackEngine {
 
         let composition = AVMutableComposition()
         var videoCompositionTracks: [(track: AVMutableCompositionTrack, zIndex: Int)] = []
-        var videoClipInstructions: [(
-            trackID: CMPersistentTrackID,
-            timeRange: CMTimeRange,
-            transform: CGAffineTransform,
-            opacity: Float,
-            transition: Transition?,
-            colorCorrection: ColorCorrection?,
-            chromaKey: ChromaKeySettings?,
-            chromaKeyColor: SIMD3<Float>?,
-            chromaKeyThreshold: Float,
-            mask: Mask?,
-            effects: [Effect]
-        )] = []
+        var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
 
         for track in project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
             case .video:
-                let videoCompositionTrack = track.isHidden ? nil : try makeCompositionTrack(
-                    in: composition,
-                    mediaType: .video
-                )
+                var videoCompositionTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
                 let audioCompositionTrack = track.isMuted ? nil : try makeCompositionTrack(
                     in: composition,
                     mediaType: .audio
                 )
                 let audioParameters = AVMutableAudioMixInputParameters()
 
-                if let videoCompositionTrack {
-                    videoCompositionTracks.append((videoCompositionTrack, track.zIndex))
-                }
-
                 if let audioCompositionTrack {
                     audioParameters.trackID = audioCompositionTrack.trackID
                 }
 
-                for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                let sortedClips = track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start })
+                for (clipIndex, clip) in sortedClips.enumerated() {
                     guard let assetId = clip.assetId,
                           let mediaAsset = project.mediaLibrary.assets[assetId] else {
                         continue
                     }
 
                     let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
-                    let destinationTime = cmTime(clip.timelineRange.start)
+                    var adjustedTimelineStart = clip.timelineRange.start
+                    if clipIndex > 0 {
+                        let previousClip = sortedClips[clipIndex - 1]
+                        if let transition = previousClip.transition, transition.duration > 0 {
+                            adjustedTimelineStart = max(0, adjustedTimelineStart - transition.duration)
+                        }
+                    }
+
+                    let destinationTime = cmTime(adjustedTimelineStart)
                     let sourceTimeRange = cmTimeRange(clip.sourceRange)
                     let isFreezeFrame = isFreezeFrameClip(clip)
 
-                    if let videoCompositionTrack,
+                    if !track.isHidden,
                        let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .video).first {
+                        let videoCompositionTrack: AVMutableCompositionTrack
+                        let trackSlot = clipIndex % 2
+                        if let existingTrack = videoCompositionTracksBySlot[trackSlot] {
+                            videoCompositionTrack = existingTrack
+                        } else {
+                            videoCompositionTrack = try makeCompositionTrack(
+                                in: composition,
+                                mediaType: .video
+                            )
+                            videoCompositionTracksBySlot[trackSlot] = videoCompositionTrack
+                            videoCompositionTracks.append((videoCompositionTrack, track.zIndex))
+                        }
+
                         if videoCompositionTrack.segments.isEmpty {
                             videoCompositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
                         }
@@ -512,22 +507,23 @@ final class PlaybackEngine {
 
                         let preferredTransform = try await sourceTrack.load(.preferredTransform)
                         let sourceSize = try await sourceTrack.load(.naturalSize)
-                        videoClipInstructions.append((
-                            videoCompositionTrack.trackID,
-                            CMTimeRange(start: destinationTime, duration: targetDuration),
-                            affineTransform(
+                        videoClipInstructions.append(PlaybackClipInstructionMetadata(
+                            timelineTrackID: track.id,
+                            trackID: videoCompositionTrack.trackID,
+                            timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
+                            transform: affineTransform(
                                 for: clip.transform,
                                 sourceSize: sourceSize,
                                 preferredTransform: preferredTransform
                             ),
-                            Float(min(max(clip.opacity, 0), 1)),
-                            clip.transition,
-                            clip.colorCorrection,
-                            clip.chromaKey,
-                            clip.chromaKeyColor,
-                            clip.chromaKeyThreshold,
-                            clip.mask,
-                            clip.effects
+                            opacity: Float(min(max(clip.opacity, 0), 1)),
+                            transition: clip.transition,
+                            colorCorrection: clip.colorCorrection,
+                            chromaKey: clip.chromaKey,
+                            chromaKeyColor: clip.chromaKeyColor,
+                            chromaKeyThreshold: clip.chromaKeyThreshold,
+                            mask: clip.mask,
+                            effects: clip.effects
                         ))
                     }
 
@@ -740,13 +736,14 @@ final class PlaybackEngine {
                 preferredTimescale: 600
             )
 
+            let transitionEffects = makeTransitionEffects(from: videoClipInstructions)
             let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
                 clipInstruction.colorCorrection != nil
                     || clipInstruction.chromaKey != nil
                     || clipInstruction.chromaKeyColor != nil
                     || clipInstruction.mask != nil
                     || !clipInstruction.effects.isEmpty
-            }
+            } || !transitionEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
 
@@ -783,6 +780,10 @@ final class PlaybackEngine {
                 }
 
                 if let transition = clipInstruction.transition, transition.duration > 0 {
+                    guard !transition.type.requiresTwoSourcePixelProcessing else {
+                        continue
+                    }
+
                     let overlapDuration = transition.duration
                     let overlapStart = CMTimeAdd(
                         clipInstruction.timeRange.start,
@@ -829,7 +830,7 @@ final class PlaybackEngine {
                          .zoomIn,
                          .zoomOut,
                          .glitch:
-                        Self.advancedTransitionPixelProcessorHook(for: transition.type)
+                        break
                     case .none:
                         break
                     }
@@ -853,7 +854,8 @@ final class PlaybackEngine {
                                 mask: clipInstruction.mask,
                                 effects: clipInstruction.effects
                             )
-                        }
+                        },
+                        transitionEffects: transitionEffects
                     )
                 ]
             } else {
@@ -943,6 +945,59 @@ final class PlaybackEngine {
 
         shouldKeepTemporaryReverseRenderURLs = true
         return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)
+    }
+
+    private func makeTransitionEffects(
+        from clips: [PlaybackClipInstructionMetadata]
+    ) -> [CustomCompositionTransitionEffect] {
+        let videoClipsByTimelineTrack = Dictionary(
+            grouping: clips.filter { $0.trackID != kCMPersistentTrackID_Invalid },
+            by: \.timelineTrackID
+        )
+
+        return videoClipsByTimelineTrack.values.flatMap { trackClips in
+            let sortedClips = trackClips.sorted {
+                if $0.timeRange.start == $1.timeRange.start {
+                    return $0.timeRange.duration > $1.timeRange.duration
+                }
+                return $0.timeRange.start < $1.timeRange.start
+            }
+
+            guard sortedClips.count > 1 else {
+                return [CustomCompositionTransitionEffect]()
+            }
+
+            return sortedClips.indices.dropLast().compactMap { index in
+                let outgoingClip = sortedClips[index]
+                let incomingClip = sortedClips[index + 1]
+
+                guard let transition = outgoingClip.transition,
+                      transition.duration > 0,
+                      transition.type.requiresTwoSourcePixelProcessing
+                else {
+                    return nil
+                }
+
+                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
+                let transitionDuration = min(
+                    requestedDuration,
+                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
+                )
+                guard transitionDuration > .zero else {
+                    return nil
+                }
+
+                let outgoingEnd = CMTimeAdd(outgoingClip.timeRange.start, outgoingClip.timeRange.duration)
+                let transitionStart = CMTimeSubtract(outgoingEnd, transitionDuration)
+
+                return CustomCompositionTransitionEffect(
+                    outgoingTrackID: outgoingClip.trackID,
+                    incomingTrackID: incomingClip.trackID,
+                    timeRange: CMTimeRange(start: transitionStart, duration: transitionDuration),
+                    type: transition.type
+                )
+            }
+        }
     }
 
     private func stickerDisplaySize(sourceSize: CGSize, fontSize: CGFloat, canvasSize: CGSize) -> CGSize {
@@ -1094,4 +1149,19 @@ final class PlaybackEngine {
             pause()
         }
     }
+}
+
+private struct PlaybackClipInstructionMetadata {
+    var timelineTrackID: UUID
+    var trackID: CMPersistentTrackID
+    var timeRange: CMTimeRange
+    var transform: CGAffineTransform
+    var opacity: Float
+    var transition: Transition?
+    var colorCorrection: ColorCorrection?
+    var chromaKey: ChromaKeySettings?
+    var chromaKeyColor: SIMD3<Float>?
+    var chromaKeyThreshold: Float
+    var mask: Mask?
+    var effects: [Effect]
 }

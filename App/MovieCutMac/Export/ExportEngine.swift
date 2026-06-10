@@ -93,14 +93,6 @@ final class ExportEngine {
         exportSession.fileLengthLimit = Int64((targetBits / 8.0 * 1.05).rounded(.up))
     }
 
-    private static func advancedTransitionPixelProcessorHook(for type: TransitionType) {
-        // Advanced transitions are implemented in Core by
-        // TransitionPixelProcessor.apply(type:from:to:progress:). This AVFoundation
-        // layer-instruction path only has per-layer ramps; full export integration needs
-        // transition-boundary metadata that pairs outgoing and incoming source frames.
-        _ = type.requiresTwoSourcePixelProcessing
-    }
-
     private func makeExportPackage(
         for project: Project,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
@@ -167,6 +159,7 @@ final class ExportEngine {
                     let clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
                     videoClipInstructions.append(ExportClipInstructionMetadata(
                         clipID: clip.id,
+                        timelineTrackID: track.id,
                         trackID: kCMPersistentTrackID_Invalid,
                         timeRange: CMTimeRange(start: destinationTime, duration: clipDuration),
                         transform: clip.transform,
@@ -194,6 +187,7 @@ final class ExportEngine {
             guard let mediaType = mediaType(for: track.kind) else { continue }
 
             var destinationTrack: AVMutableCompositionTrack?
+            var videoDestinationTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
             let audioParameters = AVMutableAudioMixInputParameters()
 
             let sortedClips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
@@ -212,7 +206,23 @@ final class ExportEngine {
                 }
 
                 let compositionTrack: AVMutableCompositionTrack
-                if let destinationTrack {
+                if mediaType == .video {
+                    let trackSlot = clipIndex % 2
+                    if let existingTrack = videoDestinationTracksBySlot[trackSlot] {
+                        compositionTrack = existingTrack
+                    } else {
+                        guard let createdTrack = composition.addMutableTrack(
+                            withMediaType: mediaType,
+                            preferredTrackID: kCMPersistentTrackID_Invalid
+                        ) else {
+                            throw ExportEngineError.compositionTrackCreationFailed
+                        }
+                        createdTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+                        videoDestinationTracksBySlot[trackSlot] = createdTrack
+                        videoCompositionTracks.append(createdTrack)
+                        compositionTrack = createdTrack
+                    }
+                } else if let destinationTrack {
                     compositionTrack = destinationTrack
                 } else {
                     guard let createdTrack = composition.addMutableTrack(
@@ -225,9 +235,7 @@ final class ExportEngine {
                     destinationTrack = createdTrack
                     compositionTrack = createdTrack
 
-                    if mediaType == .video {
-                        videoCompositionTracks.append(createdTrack)
-                    } else if mediaType == .audio {
+                    if mediaType == .audio {
                         audioParameters.trackID = createdTrack.trackID
                     }
                 }
@@ -320,6 +328,7 @@ final class ExportEngine {
                 if mediaType == .video {
                     videoClipInstructions.append(ExportClipInstructionMetadata(
                         clipID: clip.id,
+                        timelineTrackID: track.id,
                         trackID: compositionTrack.trackID,
                         timeRange: CMTimeRange(start: destinationTime, duration: clipCompositionDuration),
                         transform: clip.transform,
@@ -383,6 +392,7 @@ final class ExportEngine {
         videoComposition.renderSize = resolvedSize
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(exportSettings.frameRate.framesPerSecond))
 
+        let transitionEffects = makeTransitionEffects(from: clips)
         let usesCustomVideoCompositor = clips.contains { clip in
             clip.colorCorrection != nil
                 || clip.textContent != nil
@@ -394,7 +404,7 @@ final class ExportEngine {
                 || !clip.keyframes.isEmpty
                 || !clip.effects.isEmpty
                 || clip.isBackgroundRemoved
-        }
+        } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
         let layerInstructions = tracks.map { AVMutableVideoCompositionLayerInstruction(assetTrack: $0) }
@@ -434,6 +444,10 @@ final class ExportEngine {
             }
 
             if let transition = clip.transition, transition.duration > 0 {
+                guard !transition.type.requiresTwoSourcePixelProcessing else {
+                    continue
+                }
+
                 let overlapDuration = transition.duration
                 let overlapStart = CMTimeAdd(
                     clip.timeRange.start,
@@ -480,7 +494,7 @@ final class ExportEngine {
                      .zoomIn,
                      .zoomOut,
                      .glitch:
-                    Self.advancedTransitionPixelProcessorHook(for: transition.type)
+                    break
                 case .none:
                     break
                 }
@@ -517,7 +531,8 @@ final class ExportEngine {
                             stickerFontSize: clip.stickerFontSize,
                             isBackgroundRemoved: clip.isBackgroundRemoved
                         )
-                    }
+                    },
+                    transitionEffects: transitionEffects
                 )
             ]
         } else {
@@ -530,6 +545,59 @@ final class ExportEngine {
         }
 
         return videoComposition
+    }
+
+    private func makeTransitionEffects(
+        from clips: [ExportClipInstructionMetadata]
+    ) -> [CustomCompositionTransitionEffect] {
+        let videoClipsByTimelineTrack = Dictionary(
+            grouping: clips.filter { $0.trackID != kCMPersistentTrackID_Invalid },
+            by: \.timelineTrackID
+        )
+
+        return videoClipsByTimelineTrack.values.flatMap { trackClips in
+            let sortedClips = trackClips.sorted {
+                if $0.timeRange.start == $1.timeRange.start {
+                    return $0.timeRange.duration > $1.timeRange.duration
+                }
+                return $0.timeRange.start < $1.timeRange.start
+            }
+
+            guard sortedClips.count > 1 else {
+                return [CustomCompositionTransitionEffect]()
+            }
+
+            return sortedClips.indices.dropLast().compactMap { index in
+                let outgoingClip = sortedClips[index]
+                let incomingClip = sortedClips[index + 1]
+
+                guard let transition = outgoingClip.transition,
+                      transition.duration > 0,
+                      transition.type.requiresTwoSourcePixelProcessing
+                else {
+                    return nil
+                }
+
+                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
+                let transitionDuration = min(
+                    requestedDuration,
+                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
+                )
+                guard transitionDuration > .zero else {
+                    return nil
+                }
+
+                let outgoingEnd = CMTimeAdd(outgoingClip.timeRange.start, outgoingClip.timeRange.duration)
+                let transitionStart = CMTimeSubtract(outgoingEnd, transitionDuration)
+
+                return CustomCompositionTransitionEffect(
+                    outgoingTrackID: outgoingClip.trackID,
+                    incomingTrackID: incomingClip.trackID,
+                    timeRange: CMTimeRange(start: transitionStart, duration: transitionDuration),
+                    type: transition.type
+                )
+            }
+        }
     }
 
     private func makeCustomVideoCompositorInstruction(
@@ -950,6 +1018,7 @@ private struct ExportPackage {
 
 private struct ExportClipInstructionMetadata {
     var clipID: UUID
+    var timelineTrackID: UUID
     var trackID: CMPersistentTrackID
     var timeRange: CMTimeRange
     var transform: ClipTransform

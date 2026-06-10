@@ -50,7 +50,7 @@
 
 | # | 작업 | 시작점 |
 |---|---|---|
-| 1 | **전환효과 two-source compositor 통합** — Batch 17에서 `TransitionPixelProcessor`(12종)는 만들었으나, preview/export는 여전히 crossDissolve/fadeThroughBlack/wipeRight 단순 ramp만 동작. transition 경계에서 outgoing/incoming 두 프레임을 custom compositor로 넘기는 metadata 설계 필요 | `Sources/MovieCutCore/Rendering/TransitionPixelProcessor.swift`, `App/MovieCutMac/Export/ExportEngine.swift`, `Playback/PlaybackEngine.swift` |
+| 1 | ✅ **전환효과 two-source compositor 통합** — Mac preview/export가 `requiresTwoSourcePixelProcessing` 전환(wipeLeft/Up/Down, slide, zoom, glitch)에 대해 outgoing/incoming track metadata를 `CustomVideoCompositor`로 넘기고 `TransitionPixelProcessor.apply(type:from:to:progress:)`로 합성한다. 인접 비디오 클립은 전환 overlap에서 별도 composition track을 쓰도록 배선했다. Caveat: SwiftPM/static contract 검증 기준이며, 실제 exported visual fixture 검증은 아직 필요하다. | `Sources/MovieCutCore/Rendering/TransitionPixelProcessor.swift`, `App/MovieCutMac/Export/CustomVideoCompositor.swift`, `App/MovieCutMac/Export/ExportEngine.swift`, `App/MovieCutMac/Playback/PlaybackEngine.swift` |
 | 2 | **썸네일/프록시 생성** — 라이브러리·타임라인 클립에 `AVAssetImageGenerator` 썸네일 | `MediaLibraryPanel.swift`, `TimelineView.swift` clipView |
 | 3 | **speed ramp preview 반영** — export는 `scaleTimeRange` 적용됨, preview는 단일 rate만 | `PlaybackEngine.swift` |
 | 4 | **텍스트 스타일 편집 UI** — 폰트/크기/색/정렬 Inspector 편집 (burn-in 렌더는 Batch 16에 완료됨) | `Inspector/InspectorBasicSection.swift`, `TextOverlayPixelProcessor` |

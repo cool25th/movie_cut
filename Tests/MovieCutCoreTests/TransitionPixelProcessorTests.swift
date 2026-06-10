@@ -304,8 +304,9 @@ struct TransitionStaticContractTests {
         #expect(effectsSource.contains("Slider(value: Binding("))
     }
 
-    @Test("Mac export and playback handle advanced transition cases explicitly")
-    func macExportAndPlaybackHandleAdvancedTransitionCases() throws {
+    @Test("Mac export and playback wire two-source transition compositor metadata")
+    func macExportAndPlaybackWireTwoSourceTransitionCompositorMetadata() throws {
+        let compositorSource = try source("App/MovieCutMac/Export/CustomVideoCompositor.swift")
         let exportSource = try source("App/MovieCutMac/Export/ExportEngine.swift")
         let playbackSource = try source("App/MovieCutMac/Playback/PlaybackEngine.swift")
 
@@ -315,9 +316,43 @@ struct TransitionStaticContractTests {
             #expect(playbackSource.contains(caseName))
         }
 
-        #expect(exportSource.contains("advancedTransitionPixelProcessorHook"))
-        #expect(playbackSource.contains("advancedTransitionPixelProcessorHook"))
-        #expect(exportSource.contains("TransitionPixelProcessor.apply(type:from:to:progress:)"))
-        #expect(playbackSource.contains("TransitionPixelProcessor.apply(type:from:to:progress:)"))
+        #expect(!exportSource.contains("advancedTransitionPixelProcessorHook"))
+        #expect(!playbackSource.contains("advancedTransitionPixelProcessorHook"))
+        #expect(compositorSource.contains("struct CustomCompositionTransitionEffect"))
+        #expect(compositorSource.contains("let transitionEffects: [CustomCompositionTransitionEffect]"))
+        #expect(compositorSource.contains("func activeTransition(at time: CMTime)"))
+        #expect(compositorSource.contains("request.sourceFrame(byTrackID: transition.outgoingTrackID)"))
+        #expect(compositorSource.contains("request.sourceFrame(byTrackID: transition.incomingTrackID)"))
+        #expect(compositorSource.contains("TransitionPixelProcessor.apply("))
+        #expect(compositorSource.contains("progress: transition.progress(at: request.compositionTime)"))
+        #expect(compositorSource.contains("Self.requiredTrackIDValues("))
+        #expect(compositorSource.contains("applyClipEffects("))
+
+        for source in [exportSource, playbackSource] {
+            #expect(source.contains("let transitionEffects = makeTransitionEffects(from:"))
+            #expect(source.contains("transition.type.requiresTwoSourcePixelProcessing"))
+            #expect(source.contains("CustomCompositionTransitionEffect("))
+            #expect(source.contains("outgoingTrackID: outgoingClip.trackID"))
+            #expect(source.contains("incomingTrackID: incomingClip.trackID"))
+            #expect(source.contains("transitionEffects: transitionEffects"))
+            #expect(source.contains("customVideoCompositorClass = CustomVideoCompositor.self"))
+        }
+    }
+
+    @Test("Mac export and playback allocate separate source tracks for transition overlaps")
+    func macExportAndPlaybackAllocateSeparateTransitionSourceTracks() throws {
+        let exportSource = try source("App/MovieCutMac/Export/ExportEngine.swift")
+        let playbackSource = try source("App/MovieCutMac/Playback/PlaybackEngine.swift")
+
+        #expect(exportSource.contains("var videoDestinationTracksBySlot: [Int: AVMutableCompositionTrack]"))
+        #expect(exportSource.contains("let trackSlot = clipIndex % 2"))
+        #expect(exportSource.contains("videoDestinationTracksBySlot[trackSlot]"))
+        #expect(exportSource.contains("timelineTrackID: track.id"))
+
+        #expect(playbackSource.contains("var videoCompositionTracksBySlot: [Int: AVMutableCompositionTrack]"))
+        #expect(playbackSource.contains("let trackSlot = clipIndex % 2"))
+        #expect(playbackSource.contains("videoCompositionTracksBySlot[trackSlot]"))
+        #expect(playbackSource.contains("PlaybackClipInstructionMetadata"))
+        #expect(playbackSource.contains("timelineTrackID: track.id"))
     }
 }

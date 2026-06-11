@@ -166,10 +166,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: `TextClipContent`에 stroke(색/두께)/shadow(색/오프셋/블러)/weight/italic 필드 추가(A5). `TextOverlayPixelProcessor` 확장(stroke=외곽 draw, shadow=offset draw). 사용자 프리셋 `~/Library/Application Support/MovieCut/TextStyles.json`.
 - **AC**: ① stroke/shadow 유무가 export 픽셀 테스트로 구분 ② 프리셋 저장→새 텍스트 1클릭 적용 ③ 구버전 프로젝트 호환.
 
-#### F-13. 자막 편집 워크플로우 완성
+#### F-13. 자막 편집 워크플로우 완성 — 🟡 구현+테스트 완료(2026-06-11), W3 실기기 완주 잔여
 - **요구사항**: STT 결과를 리스트에서 텍스트 수정·타이밍 조정·분할/병합 후 일괄 스타일 적용. SRT import/export.
 - **구현**: `AutoSubtitlesView` 확장: pending segment 인라인 편집(텍스트/start/end), 행 분할·병합. Core `SubtitleDocument`(SRT 파서/시리얼라이저, 외부 의존 없음). 스타일은 F-12R 프리셋 참조.
 - **AC**: ① 5분 영상 STT → 오인식 수정 → 일괄 스타일 → burn-in export 완주(W3) ② SRT export가 외부 플레이어에서 로드됨 ③ SRT import로 자막 클립 생성.
+- **검증 기록(2026-06-11)**: Core `SubtitleDocument`(SRT 파서/시리얼라이저 — 인덱스 라인 생략·CRLF·dot-millis 허용, 잘못된/역순 타임코드 블록 스킵, 시작시간 정렬, 라운드트립) + `SubtitleDocumentTests` 7개. ViewModel: `updateGeneratedSubtitleSegment`(텍스트/시작/끝, 최소 0.1s 보장, 재정렬), `splitGeneratedSubtitleSegment`(중점 분할+단어 반분), `mergeGeneratedSubtitleSegmentWithNext`, `deleteGeneratedSubtitleSegment`, `importSubtitles(from:)`/`exportSubtitles(to:)` — export는 편집 중 세그먼트 우선, 없으면 타임라인 텍스트 클립(스티커 제외)에서 유도. 모든 편집은 `rebuildPendingSubtitleClips()`로 STT와 동일한 정렬 규칙(선택 클립 정렬 또는 00:00 기준)을 재사용. `AutoSubtitlesView`에 행 단위 인라인 편집(로컬 버퍼, submit/포커스 해제 시 커밋)·분할/병합/삭제 버튼·Import/Export SRT 패널. Caveat: W3 워크플로우 실기기 완주(STT→수정→burn-in export)와 외부 플레이어 SRT 로드 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 #### F-14. 오디오 DSP 실구현 (EQ/덕킹/노이즈)
 - **요구사항**: EQ 프리셋 5종(보이스 강조/저음 강화 등), 자동 덕킹(보이스 구간 BGM -12dB), 노이즈 감소 강도 조절 — preview/export 모두에서 들림.

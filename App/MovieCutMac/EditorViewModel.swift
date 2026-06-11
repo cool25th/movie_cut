@@ -125,6 +125,8 @@ final class EditorViewModel {
     var sfxURLResolver: [String: URL]
     var generatedSubtitleSegments: [TranscriptionSegment] = []
     var pendingSubtitleClips: [Clip] = []
+    /// Timeline clip the generated/imported subtitles are aligned to (F-13).
+    private var subtitleAlignmentClipId: UUID?
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
     var lastErrorMessage: String?
@@ -2138,6 +2140,7 @@ final class EditorViewModel {
         do {
             let snapshot = await session.snapshot()
             let source = try selectedSubtitleSource(in: snapshot)
+            subtitleAlignmentClipId = source.clip?.id
             let providerName = transcriptionService.currentProvider.providerName
             lastStatusMessage = "Transcribing with \(providerName)..."
 
@@ -2191,6 +2194,173 @@ final class EditorViewModel {
     func generateSubtitles() async {
         await prepareSubtitles()
         await applyGeneratedSubtitles()
+    }
+
+    // MARK: - Subtitle editing & SRT (F-13)
+
+    func updateGeneratedSubtitleSegment(
+        _ segmentId: UUID,
+        text: String? = nil,
+        startTime: TimeInterval? = nil,
+        endTime: TimeInterval? = nil
+    ) async {
+        guard let index = generatedSubtitleSegments.firstIndex(where: { $0.id == segmentId }) else { return }
+
+        var segment = generatedSubtitleSegments[index]
+        if let text {
+            segment.text = text
+        }
+        if let startTime {
+            segment.startTime = max(0, startTime)
+        }
+        if let endTime {
+            segment.endTime = endTime
+        }
+        segment.endTime = max(segment.endTime, segment.startTime + 0.1)
+        generatedSubtitleSegments[index] = segment
+        generatedSubtitleSegments.sort { $0.startTime < $1.startTime }
+        await rebuildPendingSubtitleClips()
+    }
+
+    func splitGeneratedSubtitleSegment(_ segmentId: UUID) async {
+        guard let index = generatedSubtitleSegments.firstIndex(where: { $0.id == segmentId }) else { return }
+
+        let segment = generatedSubtitleSegments[index]
+        let duration = segment.endTime - segment.startTime
+        guard duration >= 0.4 else {
+            lastErrorMessage = "Segment is too short to split."
+            return
+        }
+
+        let midTime = segment.startTime + duration / 2
+        let words = segment.text.split(separator: " ", omittingEmptySubsequences: true)
+        let firstText: String
+        let secondText: String
+        if words.count >= 2 {
+            let half = (words.count + 1) / 2
+            firstText = words[..<half].joined(separator: " ")
+            secondText = words[half...].joined(separator: " ")
+        } else {
+            firstText = segment.text
+            secondText = segment.text
+        }
+
+        var first = segment
+        first.text = firstText
+        first.endTime = midTime
+        let second = TranscriptionSegment(
+            text: secondText,
+            startTime: midTime,
+            endTime: segment.endTime,
+            confidence: segment.confidence
+        )
+        generatedSubtitleSegments.replaceSubrange(index...index, with: [first, second])
+        await rebuildPendingSubtitleClips()
+        lastStatusMessage = "Split subtitle segment at \(SubtitleDocument.srtTimestamp(from: midTime))."
+    }
+
+    func mergeGeneratedSubtitleSegmentWithNext(_ segmentId: UUID) async {
+        guard let index = generatedSubtitleSegments.firstIndex(where: { $0.id == segmentId }),
+              index + 1 < generatedSubtitleSegments.count
+        else {
+            lastErrorMessage = "No following segment to merge with."
+            return
+        }
+
+        var merged = generatedSubtitleSegments[index]
+        let next = generatedSubtitleSegments[index + 1]
+        merged.text = [merged.text, next.text]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        merged.endTime = max(merged.endTime, next.endTime)
+        generatedSubtitleSegments.replaceSubrange(index...(index + 1), with: [merged])
+        await rebuildPendingSubtitleClips()
+        lastStatusMessage = "Merged subtitle segment with the next one."
+    }
+
+    func deleteGeneratedSubtitleSegment(_ segmentId: UUID) async {
+        generatedSubtitleSegments.removeAll { $0.id == segmentId }
+        await rebuildPendingSubtitleClips()
+    }
+
+    func importSubtitles(from url: URL) async {
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let segments = SubtitleDocument.parseSRT(text)
+            guard !segments.isEmpty else {
+                lastStatusMessage = nil
+                lastErrorMessage = "No subtitle cues found in \(url.lastPathComponent)."
+                return
+            }
+
+            generatedSubtitleSegments = segments
+            if let selectedClip, selectedClip.kind == .video || selectedClip.kind == .audio {
+                subtitleAlignmentClipId = selectedClip.id
+            } else {
+                subtitleAlignmentClipId = nil
+            }
+            await rebuildPendingSubtitleClips()
+            lastErrorMessage = nil
+            lastStatusMessage = "Imported \(segments.count) subtitle cues from \(url.lastPathComponent). Review and Apply to Timeline."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func exportSubtitles(to url: URL) {
+        let segments = generatedSubtitleSegments.isEmpty
+            ? timelineSubtitleSegments()
+            : generatedSubtitleSegments
+        guard !segments.isEmpty else {
+            lastStatusMessage = nil
+            lastErrorMessage = "There are no subtitle segments or timeline text clips to export."
+            return
+        }
+
+        do {
+            try SubtitleDocument.srtString(from: segments).write(to: url, atomically: true, encoding: .utf8)
+            lastErrorMessage = nil
+            lastStatusMessage = "Exported \(segments.count) subtitle cues to \(url.lastPathComponent)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Derives SRT segments from applied text-track clips (excluding stickers).
+    private func timelineSubtitleSegments() -> [TranscriptionSegment] {
+        currentProject.timeline.tracks
+            .filter { $0.kind == .text }
+            .flatMap(\.clips)
+            .compactMap { clip in
+                guard let content = clip.textContent, content.contentKind != .sticker else {
+                    return nil
+                }
+                return TranscriptionSegment(
+                    text: content.text,
+                    startTime: clip.timelineRange.start,
+                    endTime: clip.timelineRange.end,
+                    confidence: 1.0
+                )
+            }
+            .sorted { $0.startTime < $1.startTime }
+    }
+
+    /// Rebuilds pending subtitle clips from the edited segments using the
+    /// same alignment rules as the original transcription pass.
+    private func rebuildPendingSubtitleClips() async {
+        let result = TranscriptionResult(segments: generatedSubtitleSegments)
+        let snapshot = await session.snapshot()
+
+        if let subtitleAlignmentClipId,
+           let clip = snapshot.timeline.tracks
+               .flatMap(\.clips)
+               .first(where: { $0.id == subtitleAlignmentClipId }) {
+            pendingSubtitleClips = subtitleClips(from: result, alignedTo: clip)
+        } else {
+            pendingSubtitleClips = transcriptionService.subtitles(from: result, in: snapshot)
+        }
     }
 
     @discardableResult
@@ -2434,6 +2604,7 @@ final class EditorViewModel {
     private func clearGeneratedSubtitles() {
         generatedSubtitleSegments = []
         pendingSubtitleClips = []
+        subtitleAlignmentClipId = nil
     }
 
     private func clearClipProcessingState() {

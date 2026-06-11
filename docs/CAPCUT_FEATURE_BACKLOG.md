@@ -80,7 +80,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - ✅ 스냅 / 줌 / 다중선택 / 컨텍스트 메뉴
 - [x] ✅ 마그네틱 타임라인(자동 밀착) (P1) — Add/Move/Duplicate/Delete command path가 `RestoreTrackClipsCommand` track snapshot을 남기고, Add/Move/Duplicate/Delete 후 same-track magnetic packing으로 클립을 0초부터 end-to-start로 밀착한다. Undo는 이전 track snapshot/range를 복원한다.
 - [x] ✅ 멀티트랙 레이어링 + 클립별 zIndex (P1) — persisted `Clip.zIndex`가 legacy JSON에서 기본값 0으로 decode되고 round-trip encode된다. `TimelineView`는 `clipsForDisplay(track)`와 `.zIndex(Double(clip.zIndex))` 기반 TimelineView display ordering/layer actions를 사용하며 Bring to Front / Send to Back context action으로 선택 클립 layer를 조정한다. Caveat: 클립 그룹/링크는 P2 별도 항목으로 남긴다.
-- [ ] ❌ 클립 그룹/링크(영상+오디오 묶음) (P2)
+- [ ] 🟡 클립 그룹/링크(영상+오디오 묶음, F-04 잔여) (P2) — `Clip.groupId` 영속화(legacy decode nil), `GroupClipsCommand`/undo, 연결 선택(그룹 클립 탭 → 그룹 전체 선택/해제), 컨텍스트 메뉴 Group/Ungroup, 타임라인 link 아이콘. `ClipGroupingTests` 7개 행동 검증. Caveat: 마그네틱 패킹 하에서 시간 오프셋 유지 이동은 미적용(연결 선택 방식 채택), GUI 실조작 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [x] ✅ 키보드 단축키 맵 전체 (P2) — `MovieCutMacApp.commands` now owns the F-05 Playback/Timeline/Edit shortcut map: Space, Cmd+B, Q/W, Delete, Shift+Delete, Cmd+D, frame/1s arrows, clip-boundary Up/Down, +/- zoom, M, and Cmd+Z/Shift+Cmd+Z. Toolbar/background duplicate shortcut registrations were removed from `ContentView`, and Help exposes "MovieCut Keyboard Shortcuts." Caveat: text-entry-sensitive unmodified shortcuts use a centralized AppKit first-responder guard rather than a full SwiftUI FocusState router; GUI text-field regression remains host verification.
 
 ### C. 비디오 효과 (Visual)

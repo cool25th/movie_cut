@@ -317,12 +317,20 @@ struct TimelineView: View {
                         .padding(.horizontal, 4)
                 }
                 .overlay(alignment: .trailing) {
-                    if isStickerClip(clip) {
-                        Image(systemName: "face.smiling")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(.trailing, 4)
+                    HStack(spacing: 2) {
+                        if clip.groupId != nil {
+                            Image(systemName: "link")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.85))
+                                .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
+                        }
+                        if isStickerClip(clip) {
+                            Image(systemName: "face.smiling")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
                     }
+                    .padding(.trailing, 4)
                 }
                 .overlay {
                     if isSelected {
@@ -391,6 +399,17 @@ struct TimelineView: View {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.duplicateClips(clipIds) }
                 }
+                Divider()
+                Button(NSLocalizedString("Group Clips", comment: "")) {
+                    _ = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.groupSelectedClips() }
+                }
+                .disabled(!viewModel.canGroupSelectedClips && !viewModel.selectedClipIds.contains(clip.id))
+                Button(NSLocalizedString("Ungroup Clips", comment: "")) {
+                    _ = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.ungroupSelectedClips() }
+                }
+                .disabled(clip.groupId == nil && !viewModel.hasGroupedSelection)
                 Divider()
                 Button("Snap Playhead to Start") {
                     selectClip(clip.id, extendingSelection: false)
@@ -490,15 +509,7 @@ struct TimelineView: View {
 
     @MainActor
     private func selectClip(_ clipId: UUID, extendingSelection: Bool) {
-        if extendingSelection {
-            if viewModel.selectedClipIds.contains(clipId) {
-                viewModel.selectedClipIds.remove(clipId)
-            } else {
-                viewModel.selectedClipIds.insert(clipId)
-            }
-        } else {
-            viewModel.selectedClipIds = [clipId]
-        }
+        viewModel.selectTimelineClip(clipId, extendSelection: extendingSelection)
     }
 
     @MainActor

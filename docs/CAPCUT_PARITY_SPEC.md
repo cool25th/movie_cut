@@ -111,10 +111,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: Core에 `MagneticInsertCommand`/`CloseGapCommand` 신설(기존 `RippleDeleteCommand` 일반화). `EditorViewModel.isMagneticTimeline: Bool`(기본 on, UserDefaults). `TimelineView.moveGesture` 커밋 시 마그네틱 모드면 충돌 해소 명령으로 변환. 토글 UI는 타임라인 헤더에 자석 아이콘.
 - **AC**: ① 중간 클립 삭제 → 갭 자동 닫힘 ② 클립을 다른 클립 위로 드래그 → 겹침 없이 삽입·재배치 ③ 토글 off 시 기존 자유 배치 유지 ④ 모든 동작 단일 undo.
 
-#### F-04. 클립 단위 zIndex & 그룹/링크 — 🟡 zIndex 완료(`08db5a0`), 그룹/링크 잔여
+#### F-04. 클립 단위 zIndex & 그룹/링크 — 🟡 zIndex 완료(`08db5a0`) + 그룹/링크 구현·행동테스트 완료(2026-06-11), GUI 실조작 검증 잔여
 - **요구사항**: 트랙이 아닌 클립 단위 레이어 순서 조정. 영상+오디오, 영상+자막을 그룹으로 묶어 함께 이동/트림.
 - **구현**: `Clip`에 `zIndexOverride: Int?`, `groupId: UUID?` 추가(A5 준수). compositor 정렬 키를 `(track.zIndex, clip.zIndexOverride ?? 0)`으로 확장. 그룹: 컨텍스트 메뉴 "Group/Ungroup", `moveClip`/`trimClip`이 같은 groupId 클립에 델타 전파(단일 undo 단위 batch dispatch).
 - **AC**: ① 두 텍스트 오버레이의 앞뒤 순서를 클립 단위로 변경 → preview/export 동일 ② 그룹 이동 시 상대 오프셋 유지 ③ ungroup 후 개별 동작 ④ 구버전 프로젝트 로드 호환.
+- **검증 기록(2026-06-11)**: `Clip.groupId`(optional, legacy decode 기본 nil) + `GroupClipsCommand`/`RestoreClipGroupsCommand`(이질적 이전 멤버십 복원 invert) + EditorViewModel 연결 선택(`selectTimelineClip`/`linkedClipIds` — 그룹 클립 선택 시 그룹 전체 선택, Cmd-해제 시 그룹 전체 해제) + 타임라인 컨텍스트 메뉴 Group/Ungroup + link 아이콘 표시. `ClipGroupingTests` 7개(legacy decode, round-trip, cross-track 그룹, undo 복원, 단일/미존재 클립 거부, 이질 멤버십 invert) 통과, 필터 스위트 196개 + Mac 앱 빌드 통과. **설계 결정**: `08db5a0`의 마그네틱 패킹이 모든 트랙을 0초부터 끝-시작 밀착으로 강제하므로 AC②의 "시간 오프셋 유지 이동"은 현 아키텍처에서 정의 불가 — 대신 연결 선택으로 그룹이 기존 다중선택 연산(삭제/복제/이동 툴바)의 단위가 되는 CapCut 링크 방식을 채택. GUI 실조작(Group/Ungroup 메뉴, 연결 선택) 확인은 잔여.
 
 #### F-05. 키보드 단축키 맵 — ✅ 구현+정적 계약 완료(2026-06-11), GUI 실동작 검증 별도
 - **요구사항**: CapCut 표준 단축키. Space(재생/정지), Cmd+B(분할), Q/W(playhead 기준 앞/뒤 트림), Delete(삭제), Shift+Delete(ripple), Cmd+D(복제), ←/→(프레임), Shift+←/→(1초), ↑/↓(클립 점프), +/-(줌), M(마커), Cmd+Z/Shift+Cmd+Z.

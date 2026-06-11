@@ -1167,6 +1167,100 @@ final class EditorViewModel {
         await duplicateClips([clipId])
     }
 
+    // MARK: - Clip link groups (F-04)
+
+    /// True when the current selection can be linked into a group.
+    var canGroupSelectedClips: Bool {
+        selectedClipIds.count >= 2
+    }
+
+    /// True when any selected clip belongs to a link group.
+    var hasGroupedSelection: Bool {
+        timelineClips(in: selectedClipIds).contains { $0.groupId != nil }
+    }
+
+    /// Returns the clip ids linked to the given clip, including the clip
+    /// itself. Ungrouped clips link only to themselves.
+    func linkedClipIds(for clipId: UUID) -> Set<UUID> {
+        guard
+            let clip = timelineClips(in: [clipId]).first,
+            let groupId = clip.groupId
+        else {
+            return [clipId]
+        }
+
+        var linked: Set<UUID> = [clipId]
+        for track in currentProject.timeline.tracks {
+            for trackClip in track.clips where trackClip.groupId == groupId {
+                linked.insert(trackClip.id)
+            }
+        }
+        return linked
+    }
+
+    /// Timeline tap selection that treats link groups as a unit: selecting a
+    /// grouped clip selects its whole group, and command-deselecting a grouped
+    /// clip removes the whole group from the selection.
+    func selectTimelineClip(_ clipId: UUID, extendSelection: Bool) {
+        let linked = linkedClipIds(for: clipId)
+        if extendSelection {
+            if selectedClipIds.contains(clipId) {
+                selectedClipIds.subtract(linked)
+            } else {
+                selectedClipIds.formUnion(linked)
+            }
+        } else {
+            selectedClipIds = linked
+        }
+    }
+
+    /// Links the selected clips into a new group.
+    func groupSelectedClips() async {
+        let clipIds = timelineOrderedClipIds(from: selectedClipIds)
+        guard clipIds.count >= 2 else {
+            lastErrorMessage = NSLocalizedString("Select at least two clips to group.", comment: "")
+            return
+        }
+
+        do {
+            try await session.dispatch(GroupClipsCommand(clipIds: clipIds, groupId: UUID()))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = String(
+                format: NSLocalizedString("Grouped %d clips", comment: ""),
+                clipIds.count
+            )
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Removes link-group membership from the selected clips.
+    func ungroupSelectedClips() async {
+        let groupedClipIds = timelineClips(in: selectedClipIds)
+            .filter { $0.groupId != nil }
+            .map(\.id)
+        guard !groupedClipIds.isEmpty else { return }
+
+        do {
+            try await session.dispatch(GroupClipsCommand(clipIds: groupedClipIds, groupId: nil))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = String(
+                format: NSLocalizedString("Ungrouped %d clips", comment: ""),
+                groupedClipIds.count
+            )
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func timelineClips(in clipIds: Set<UUID>) -> [Clip] {
+        currentProject.timeline.tracks.flatMap { track in
+            track.clips.filter { clipIds.contains($0.id) }
+        }
+    }
+
     func duplicateSelectedClips() async {
         await duplicateClips(selectedClipIds)
     }

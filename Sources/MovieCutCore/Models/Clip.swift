@@ -116,6 +116,10 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Optional color correction adjustments.
     public var colorCorrection: ColorCorrection?
 
+    /// Optional link group. Clips sharing a group identifier are selected and
+    /// edited together (CapCut-style linked clips). Nil means ungrouped.
+    public var groupId: UUID?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -138,6 +142,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case effects
         case isReversed
         case colorCorrection
+        case groupId
     }
 
     /// Creates a clip.
@@ -164,7 +169,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         mask: Mask? = nil,
         effects: [Effect] = [],
         isReversed: Bool = false,
-        colorCorrection: ColorCorrection? = nil
+        colorCorrection: ColorCorrection? = nil,
+        groupId: UUID? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -198,6 +204,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.effects = effects
         self.isReversed = isReversed
         self.colorCorrection = colorCorrection
+        self.groupId = groupId
     }
 
     public init(from decoder: any Decoder) throws {
@@ -223,6 +230,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         effects = try container.decodeIfPresent([Effect].self, forKey: .effects) ?? []
         isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
         colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
+        groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -248,6 +256,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(effects, forKey: .effects)
         try container.encode(isReversed, forKey: .isReversed)
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
+        try container.encodeIfPresent(groupId, forKey: .groupId)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

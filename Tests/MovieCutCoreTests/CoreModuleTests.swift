@@ -157,6 +157,48 @@ import MovieCutCore
     expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
 }
 
+@Test func deleteClipCommandMagneticCompactionNormalizesZIndexesAndUndoRestoresSnapshot() throws {
+    let firstClip = Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 3, duration: 2), zIndex: 4)
+    let middleClip = Clip(kind: .video, sourceRange: TimeRange(start: 2, duration: 3), timelineRange: TimeRange(start: 10, duration: 3), zIndex: 6)
+    let lastClip = Clip(kind: .video, sourceRange: TimeRange(start: 5, duration: 4), timelineRange: TimeRange(start: 20, duration: 4), zIndex: 9)
+
+    var middleDeleteProject = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, middleClip, lastClip])
+    ]))
+    let middleDeleteOriginalClips = middleDeleteProject.timeline.tracks[0].clips
+    let middleDeleteCommand = DeleteClipCommand(clipId: middleClip.id)
+
+    let middleDeleteResult = try middleDeleteCommand.apply(to: &middleDeleteProject)
+
+    let middleDeleteClips = middleDeleteProject.timeline.tracks[0].clips
+    #expect(middleDeleteClips.map(\.id) == [firstClip.id, lastClip.id])
+    #expect(middleDeleteClips.map { $0.timelineRange.start } == [0, 2])
+    #expect(middleDeleteClips.map { $0.timelineRange.duration } == [2, 4])
+    #expect(middleDeleteClips.map(\.zIndex) == [0, 1])
+
+    let middleDeleteUndo = try middleDeleteCommand.invert(from: middleDeleteResult)
+    _ = try middleDeleteUndo.apply(to: &middleDeleteProject)
+    expectClipTimelineSnapshot(middleDeleteProject.timeline.tracks[0].clips, matches: middleDeleteOriginalClips)
+
+    var firstDeleteProject = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, middleClip, lastClip])
+    ]))
+    let firstDeleteOriginalClips = firstDeleteProject.timeline.tracks[0].clips
+    let firstDeleteCommand = DeleteClipCommand(clipId: firstClip.id)
+
+    let firstDeleteResult = try firstDeleteCommand.apply(to: &firstDeleteProject)
+
+    let firstDeleteClips = firstDeleteProject.timeline.tracks[0].clips
+    #expect(firstDeleteClips.map(\.id) == [middleClip.id, lastClip.id])
+    #expect(firstDeleteClips.map { $0.timelineRange.start } == [0, 3])
+    #expect(firstDeleteClips.map { $0.timelineRange.duration } == [3, 4])
+    #expect(firstDeleteClips.map(\.zIndex) == [0, 1])
+
+    let firstDeleteUndo = try firstDeleteCommand.invert(from: firstDeleteResult)
+    _ = try firstDeleteUndo.apply(to: &firstDeleteProject)
+    expectClipTimelineSnapshot(firstDeleteProject.timeline.tracks[0].clips, matches: firstDeleteOriginalClips)
+}
+
 @Test func trimClipCommandAppliesAndInverts() throws {
     var project = Project(name: "Test", timeline: Timeline(tracks: [
         Track(kind: .video, name: "V1", zIndex: 0, clips: [

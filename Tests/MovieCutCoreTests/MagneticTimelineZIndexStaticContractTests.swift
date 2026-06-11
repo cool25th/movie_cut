@@ -31,6 +31,15 @@ struct MagneticTimelineZIndexStaticContractTests {
         #expect(source.contains("RestoreTrackClipsCommand"))
     }
 
+    @Test("Delete command compacts timeline and normalizes clip zIndex")
+    func deleteCommandCompactsTimelineAndNormalizesClipZIndex() throws {
+        let source = try source("Sources/MovieCutCore/Commands/DeleteClipCommand.swift")
+
+        #expect(source.contains("project.compactTrackMagnetically(removed.trackId)"))
+        #expect(source.contains("project.normalizeClipZIndexes(in: removed.trackId)"))
+        #expect(source.contains("RestoreTrackClipsCommand.snapshotKey(for: removed.trackId)"))
+    }
+
     @Test("Clip coding defaults legacy zIndex and persists zIndex")
     func clipCodingDefaultsLegacyZIndexAndPersistsZIndex() throws {
         let source = try source("Sources/MovieCutCore/Models/Clip.swift")
@@ -46,14 +55,15 @@ struct MagneticTimelineZIndexStaticContractTests {
 
         #expect(backlog.contains("- [x] ✅ 마그네틱 타임라인(자동 밀착) (P1)"))
         #expect(backlog.contains("Add/Move/Duplicate/Delete command path"))
+        #expect(backlog.contains("Add/Move/Duplicate/Delete 후 same-track magnetic packing"))
         #expect(backlog.contains("same-track magnetic packing"))
         #expect(backlog.contains("- [x] ✅ 멀티트랙 레이어링 + 클립별 zIndex (P1)"))
         #expect(backlog.contains("persisted `Clip.zIndex`"))
         #expect(backlog.contains("TimelineView display ordering/layer actions"))
         #expect(backlog.contains("Caveat: 클립 그룹/링크는 P2 별도 항목으로 남긴다."))
-        #expect(backlog.contains("다음 1순위는 텍스트 템플릿/타이틀 프리셋"))
+        #expect(backlog.contains("다음 1순위는 F-01 비파일 드래그 소스"))
 
-        #expect(handoff.contains("| 1 | **텍스트 템플릿/타이틀 프리셋**"))
+        #expect(handoff.contains("| 1 | **F-01 비파일 드래그 소스**"))
         #expect(handoff.contains("| 완료 | ✅ **마그네틱 타임라인 / 클립별 zIndex**"))
         #expect(!handoff.contains("| 1 | **마그네틱 타임라인 / 클립별 zIndex**"))
     }

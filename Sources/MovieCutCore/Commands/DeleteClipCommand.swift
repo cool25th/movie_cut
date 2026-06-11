@@ -36,6 +36,8 @@ public struct DeleteClipCommand: EditorCommand {
         let location = try project.clipLocation(for: clipId)
         let previousClips = project.timeline.tracks[location.trackIndex].clips
         let removed = try project.removeClip(id: clipId)
+        try project.compactTrackMagnetically(removed.trackId)
+        try project.normalizeClipZIndexes(in: removed.trackId)
         return CommandResult(
             affectedClipIds: Set(previousClips.map(\.id)),
             description: "Deleted clip \(clipId)",

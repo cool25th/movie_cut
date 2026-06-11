@@ -66,7 +66,7 @@
 ### 2-3. 알려진 드래그앤드롭 잔여 갭
 
 - **F-01 비파일 드래그 소스**: `.image`/`.movie` provider 수용, file representation/data representation materialization, 라이브러리/타임라인 기존 import 경로 재사용, NSItemProvider behavioral tests는 구현됨. 검증: `swift build`, `swift test --filter 'ExternalMediaDrop|MediaDragDrop|DragDropFeedback|Drop'` 13 tests passed, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
-- **남은 필수 확인**: Photos 앱/브라우저/Safari에서 실제 GUI 드래그로 타임라인·라이브러리에 클립이 생성되는지 확인해야 F-01 완료 처리 가능. F-01 명세는 contract 테스트만으로 완료 처리하지 말라고 못박혀 있다.
+- **F-01 실기기 추가 확인(2026-06-11 22:44~22:56)**: Safari embedded data URL PNG → MovieCut 라이브러리 실제 드래그 성공(`Imported Media.png`, 320×180, thumbnail ready, `Imported 1 media file.`), Safari embedded data URL PNG → Video 1 타임라인 실제 드래그 성공(`image-…` 클립 생성). 증거: `/tmp/moviecut_f01_safari_data_to_library_after.png`, `/tmp/moviecut_f01_timeline_direct_after.png`. **남은 필수 확인**: Photos 앱 또는 대체 네이티브 앱 비파일 소스에서 실제 GUI 드래그로 클립 생성 확인. 이번 세션에서는 Photos window 0/AppleScript import timeout, Preview/Telegram 검증 시 screencapture black-frame으로 증거 확보 실패. F-01 명세는 contract 테스트만으로 완료 처리하지 말라고 못박혀 있으므로 전체 완료 처리는 아직 보류.
 - UI 자동화 테스트 없음 — 이번 검증은 수동 GUI 드래그 기준. XCUITest 기반 자동화는 후속.
 
 ### 2-4. 최근 접근성/비트레이트 배치 후속 확인
@@ -84,7 +84,7 @@
 
 | # | 작업 (명세서 F-ID) | 시작점 |
 |---|---|---|
-| 1 | **F-01 실기기 검증** — Photos/Safari/브라우저 실제 GUI 드래그로 타임라인·라이브러리 클립 생성 확인. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
+| 1 | **F-01 실기기 검증** — Safari/브라우저 data URL 이미지의 라이브러리 import와 Video 1 타임라인 클립 생성은 2026-06-11 실제 GUI 드래그로 확인됨. 남은 범위는 Photos 앱 또는 대체 네이티브 앱 비파일 소스 드래그 1회 검증. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
 | 완료 | ✅ **F-04 클립 그룹/링크** — GUI 실기기 검증까지 완료(2026-06-11): 연결 선택을 단일클릭+Delete 그룹 전체 삭제로 입증, link 아이콘/메뉴 가드 확인. 부수 수리: File>Open·New·Import 메뉴 스텁 배선, 탭 제스처 이벤트 기반 전환. 스펙 F-04 검증 기록 참조 | `GroupClipsCommand.swift`, `MovieCutMacApp.swift`, `TimelineView` |
 | 3 | **텍스트 템플릿/타이틀 프리셋 적용 경로** — Core template의 Inspector/Canvas 적용 확인(스펙 F-12R과 연계) | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
 

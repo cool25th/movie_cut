@@ -120,6 +120,14 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// edited together (CapCut-style linked clips). Nil means ungrouped.
     public var groupId: UUID?
 
+    /// Clip-local time ranges (seconds from the clip's timeline start) where
+    /// audio volume is ducked under speech (F-14). Empty means no ducking.
+    public var duckingRanges: [TimeRange]
+
+    /// Ducked volume multiplier from 0.0 to 1.0 applied inside
+    /// `duckingRanges` (0.25 is roughly -12 dB). Nil disables ducking.
+    public var duckingLevel: Double?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -143,6 +151,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case isReversed
         case colorCorrection
         case groupId
+        case duckingRanges
+        case duckingLevel
     }
 
     /// Creates a clip.
@@ -170,7 +180,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         effects: [Effect] = [],
         isReversed: Bool = false,
         colorCorrection: ColorCorrection? = nil,
-        groupId: UUID? = nil
+        groupId: UUID? = nil,
+        duckingRanges: [TimeRange] = [],
+        duckingLevel: Double? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -205,6 +217,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.isReversed = isReversed
         self.colorCorrection = colorCorrection
         self.groupId = groupId
+        self.duckingRanges = duckingRanges
+        self.duckingLevel = duckingLevel
     }
 
     public init(from decoder: any Decoder) throws {
@@ -231,6 +245,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
         colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
         groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
+        duckingRanges = try container.decodeIfPresent([TimeRange].self, forKey: .duckingRanges) ?? []
+        duckingLevel = try container.decodeIfPresent(Double.self, forKey: .duckingLevel)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -257,6 +273,10 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(isReversed, forKey: .isReversed)
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
         try container.encodeIfPresent(groupId, forKey: .groupId)
+        if !duckingRanges.isEmpty {
+            try container.encode(duckingRanges, forKey: .duckingRanges)
+        }
+        try container.encodeIfPresent(duckingLevel, forKey: .duckingLevel)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

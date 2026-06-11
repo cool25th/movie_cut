@@ -673,6 +673,40 @@ private struct AudioFadeDurationEditor: View {
                 .accessibilityLabel("Long audio fade preset")
                 .accessibilityHint("Sets fade in and fade out to a longer duration.")
             }
+
+            Divider()
+
+            HStack {
+                Text("Audio Ducking")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                if !clip.duckingRanges.isEmpty, let level = clip.duckingLevel {
+                    Text("\(clip.duckingRanges.count) range(s) at \(Int(level * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
+            HStack(spacing: 6) {
+                Button("Duck Other Audio") {
+                    Task { await viewModel.autoDuckOtherAudio() }
+                }
+                .controlSize(.small)
+                .help("Lowers overlapping music while this clip's voice is active.")
+                .accessibilityLabel("Duck other audio under this clip")
+                .accessibilityHint("Analyzes this clip's speech and lowers overlapping audio clips during voiced intervals.")
+
+                if !clip.duckingRanges.isEmpty {
+                    Button("Clear Ducking") {
+                        Task { await viewModel.clearDuckingOnSelectedClip() }
+                    }
+                    .controlSize(.small)
+                    .accessibilityLabel("Clear ducking on this clip")
+                    .accessibilityHint("Removes the ducking volume ranges from this clip.")
+                }
+            }
         }
     }
 

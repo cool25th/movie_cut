@@ -24,3 +24,10 @@ public struct TimeRange: Codable, Sendable, Equatable, Hashable {
         time >= start && time < end
     }
 }
+
+public extension TimeRange {
+    /// Whether two ranges share any positive-duration overlap.
+    func overlaps(_ other: TimeRange) -> Bool {
+        start < other.end && other.start < end
+    }
+}

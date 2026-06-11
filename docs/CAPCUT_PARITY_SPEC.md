@@ -172,13 +172,14 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 5분 영상 STT → 오인식 수정 → 일괄 스타일 → burn-in export 완주(W3) ② SRT export가 외부 플레이어에서 로드됨 ③ SRT import로 자막 클립 생성.
 - **검증 기록(2026-06-11)**: Core `SubtitleDocument`(SRT 파서/시리얼라이저 — 인덱스 라인 생략·CRLF·dot-millis 허용, 잘못된/역순 타임코드 블록 스킵, 시작시간 정렬, 라운드트립) + `SubtitleDocumentTests` 7개. ViewModel: `updateGeneratedSubtitleSegment`(텍스트/시작/끝, 최소 0.1s 보장, 재정렬), `splitGeneratedSubtitleSegment`(중점 분할+단어 반분), `mergeGeneratedSubtitleSegmentWithNext`, `deleteGeneratedSubtitleSegment`, `importSubtitles(from:)`/`exportSubtitles(to:)` — export는 편집 중 세그먼트 우선, 없으면 타임라인 텍스트 클립(스티커 제외)에서 유도. 모든 편집은 `rebuildPendingSubtitleClips()`로 STT와 동일한 정렬 규칙(선택 클립 정렬 또는 00:00 기준)을 재사용. `AutoSubtitlesView`에 행 단위 인라인 편집(로컬 버퍼, submit/포커스 해제 시 커밋)·분할/병합/삭제 버튼·Import/Export SRT 패널. Caveat: W3 워크플로우 실기기 완주(STT→수정→burn-in export)와 외부 플레이어 SRT 로드 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
-#### F-14. 오디오 DSP 실구현 (EQ/덕킹/노이즈)
+#### F-14. 오디오 DSP 실구현 (EQ/덕킹/노이즈) — 🟡 덕킹(범위 기반) 구현+테스트 완료(2026-06-11), EQ/노이즈 DSP·청감 확인 잔여
 - **요구사항**: EQ 프리셋 5종(보이스 강조/저음 강화 등), 자동 덕킹(보이스 구간 BGM -12dB), 노이즈 감소 강도 조절 — preview/export 모두에서 들림.
 - **구현**:
   - 덕킹(우선): `SilenceDetectionProvider` 역활용 — 보이스 트랙 비무음 구간에 BGM volume keyframe 자동 생성(`AudioDuckingCommand` 완성). keyframe 방식이라 preview/export 자동 일치.
   - EQ: `MTAudioProcessingTap`으로 `AVAudioUnitEQ` 체인을 preview에 적용, export는 오디오 사전 렌더(offline render 후 교체 asset) — 양 경로가 **공통 렌더 함수**를 쓰도록 Core에 파라미터 정의.
   - 노이즈: 기존 noise reduction 경로(`e420791`) 검증 + 강도 파라미터 노출.
 - **AC**: ① 사인파 fixture FFT로 EQ 전후 스펙트럼 차이 확인 ② 덕킹 ramp가 파형으로 확인 ③ preview/export 청감 일치(수동 1회) ④ 모두 undo 가능.
+- **검증 기록(2026-06-11, 덕킹)**: Core `AudioDuckingPlanner`(silence 보집합→voice intervals, padding/merge/clip-local 변환 — 순수 수학, 행동 테스트 6개) + `Clip.duckingRanges`/`duckingLevel`(A5 하위호환 + 디코딩 테스트) + `SetAudioDuckingCommand`(다중 클립 단일 undo, clear+invert 복원). Mac Export/Playback 양 엔진의 `applyAudioVolumeAndFades`에 동일한 `applyDuckingRamps` 추가 — attack 0.12s/release 0.25s ramp, fade 창과 겹침 방지 클램프(A3: 같은 메타데이터 소비). ViewModel `autoDuckOtherAudio`(선택 음성 클립 silence 분석→타임라인 매핑→겹치는 오디오 클립에 일괄 적용, 기본 -12dB=0.25) + `clearDuckingOnSelectedClip`, Inspector Audio Ducking 그룹(Duck Other Audio/Clear + 범위·레벨 표시). `AudioDuckingTests` 14개 통과. Caveat: 실제 청감(preview 재생/export 파형) 확인과 EQ/노이즈 DSP는 잔여 — DoD §1.3에 따라 ✅ 보류. 속도 램프된 클립의 클립-로컬 시간 매핑은 미보정(후속).
 
 #### F-15. 비트 감지 (음악 동기 편집)
 - **요구사항**: BGM 클립에서 비트 감지 → 타임라인 비트 마커 표시, 스냅 대상 포함.

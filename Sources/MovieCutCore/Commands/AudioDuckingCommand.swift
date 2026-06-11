@@ -164,8 +164,3 @@ private struct RestoreClipVolumesCommand: EditorCommand, Sendable, Codable {
     }
 }
 
-private extension TimeRange {
-    func overlaps(_ other: TimeRange) -> Bool {
-        start < other.end && other.start < end
-    }
-}

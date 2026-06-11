@@ -142,6 +142,69 @@ final class ExportEngine {
                     )
                 )
             }
+            applyDuckingRamps(
+                for: clip,
+                audioParameters: audioParameters,
+                destinationTime: destinationTime,
+                clipDuration: clipDuration,
+                baseVolume: volume
+            )
+        }
+
+        func applyDuckingRamps(
+            for clip: Clip,
+            audioParameters: AVMutableAudioMixInputParameters,
+            destinationTime: CMTime,
+            clipDuration: CMTime,
+            baseVolume: Float
+        ) {
+            guard let duckingLevel = clip.duckingLevel,
+                  duckingLevel < 1,
+                  !clip.duckingRanges.isEmpty,
+                  clipDuration.seconds.isFinite, clipDuration.seconds > 0
+            else { return }
+
+            let duckedVolume = baseVolume * Float(max(0, duckingLevel))
+            let attack = AudioDuckingPlanner.attackDuration
+            let release = AudioDuckingPlanner.releaseDuration
+            // Keep ducking ramps clear of the fade windows so AVFoundation
+            // never receives overlapping volume ramps on one clip.
+            let lowerBound = clip.fadeInDuration > 0 ? min(clip.fadeInDuration, clipDuration.seconds) : 0
+            let upperBound = clipDuration.seconds
+                - (clip.fadeOutDuration > 0 ? min(clip.fadeOutDuration, clipDuration.seconds) : 0)
+            guard upperBound > lowerBound else { return }
+
+            for range in AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges) {
+                let start = max(range.start, lowerBound)
+                let end = min(range.end, upperBound)
+                guard end - start > attack + release else { continue }
+
+                let attackStart = CMTimeAdd(
+                    destinationTime,
+                    CMTime(seconds: start, preferredTimescale: 600)
+                )
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: baseVolume,
+                    toEndVolume: duckedVolume,
+                    timeRange: CMTimeRange(
+                        start: attackStart,
+                        duration: CMTime(seconds: attack, preferredTimescale: 600)
+                    )
+                )
+
+                let releaseStart = CMTimeAdd(
+                    destinationTime,
+                    CMTime(seconds: end - release, preferredTimescale: 600)
+                )
+                audioParameters.setVolumeRamp(
+                    fromStartVolume: duckedVolume,
+                    toEndVolume: baseVolume,
+                    timeRange: CMTimeRange(
+                        start: releaseStart,
+                        duration: CMTime(seconds: release, preferredTimescale: 600)
+                    )
+                )
+            }
         }
 
         for track in project.timeline.tracks where !track.isMuted {

@@ -35,6 +35,10 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Default export settings for the project.
     public var exportSettings: ExportSettings
 
+    /// Optional canvas background fill behind video frames. Nil renders the
+    /// historical solid black canvas.
+    public var canvasBackground: CanvasBackground?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -47,6 +51,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case markers
         case canvas
         case exportSettings
+        case canvasBackground
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -61,7 +66,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         timeline: Timeline = Timeline(),
         markers: [Marker] = [],
         canvas: CanvasPreset = CanvasPreset.defaultPreset(),
-        exportSettings: ExportSettings = ExportSettings()
+        exportSettings: ExportSettings = ExportSettings(),
+        canvasBackground: CanvasBackground? = nil
     ) {
         self.id = id
         self.name = name
@@ -74,6 +80,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.markers = markers
         self.canvas = canvas
         self.exportSettings = exportSettings
+        self.canvasBackground = canvasBackground
     }
 
     public init(from decoder: any Decoder) throws {
@@ -89,6 +96,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         markers = try container.decodeIfPresent([Marker].self, forKey: .markers) ?? []
         canvas = try container.decodeIfPresent(CanvasPreset.self, forKey: .canvas) ?? CanvasPreset.defaultPreset()
         exportSettings = try container.decode(ExportSettings.self, forKey: .exportSettings)
+        canvasBackground = try container.decodeIfPresent(CanvasBackground.self, forKey: .canvasBackground)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -104,5 +112,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         try container.encode(markers, forKey: .markers)
         try container.encode(canvas, forKey: .canvas)
         try container.encode(exportSettings, forKey: .exportSettings)
+        try container.encodeIfPresent(canvasBackground, forKey: .canvasBackground)
     }
 }

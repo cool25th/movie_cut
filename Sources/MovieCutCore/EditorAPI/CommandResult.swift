@@ -34,6 +34,9 @@ public enum CommandResultValue: Sendable, Equatable {
 
     /// A project export settings snapshot.
     case exportSettings(ExportSettings)
+
+    /// A canvas background snapshot.
+    case canvasBackground(CanvasBackground)
 }
 
 /// The observable result of applying an editor command.

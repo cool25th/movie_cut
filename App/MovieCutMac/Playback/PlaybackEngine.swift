@@ -855,7 +855,8 @@ final class PlaybackEngine {
                                 effects: clipInstruction.effects
                             )
                         },
-                        transitionEffects: transitionEffects
+                        transitionEffects: transitionEffects,
+                        canvasBackground: project.canvasBackground
                     )
                 ]
             } else {

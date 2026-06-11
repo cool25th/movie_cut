@@ -1656,6 +1656,11 @@ final class EditorViewModel {
         await apply(SetProjectCanvasCommand(canvas: canvas))
     }
 
+    /// Sets or clears the canvas background fill (F-11).
+    func updateCanvasBackground(_ background: CanvasBackground?) async {
+        await apply(SetCanvasBackgroundCommand(background: background))
+    }
+
     func updateExportSettings(
         resolution: ExportResolution? = nil,
         frameRate: ExportFrameRate? = nil,

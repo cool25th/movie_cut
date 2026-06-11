@@ -128,7 +128,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ### I. 캔버스/프로젝트
 - ✅ 비율 프리셋(16:9 / 9:16 / 1:1 / 4:5 / 21:9)
-- [ ] ❌ 배경(블러/컬러/이미지) (P2)
+- [ ] 🟡 캔버스 배경(블러/컬러/이미지, F-11) (P2→구현됨) — shared `CanvasBackgroundPixelProcessor` + Mac/iOS compositor 합성 + Canvas 팝오버 UI + `CanvasBackgroundTests` 14개. Caveat: 실기기 preview 확인과 export visual fixture 잔여 — DoD §1.3에 따라 ✅ 보류. 상세는 스펙 F-11 검증 기록.
 - ✅ 마커(추가/이름/삭제/점프)
 - [ ] ❌ 챕터/비트 마커 export 메타데이터 (P3)
 

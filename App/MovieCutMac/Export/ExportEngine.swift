@@ -366,7 +366,8 @@ final class ExportEngine {
             clips: videoClipInstructions,
             duration: composition.duration,
             canvas: project.canvas,
-            exportSettings: project.exportSettings
+            exportSettings: project.exportSettings,
+            canvasBackground: project.canvasBackground
         )
         let audioMix = makeAudioMix(parameters: audioMixInputParameters)
 
@@ -382,7 +383,8 @@ final class ExportEngine {
         clips: [ExportClipInstructionMetadata],
         duration: CMTime,
         canvas: CanvasPreset,
-        exportSettings: ExportSettings
+        exportSettings: ExportSettings,
+        canvasBackground: CanvasBackground? = nil
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
 
@@ -532,7 +534,8 @@ final class ExportEngine {
                             isBackgroundRemoved: clip.isBackgroundRemoved
                         )
                     },
-                    transitionEffects: transitionEffects
+                    transitionEffects: transitionEffects,
+                    canvasBackground: canvasBackground
                 )
             ]
         } else {

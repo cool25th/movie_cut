@@ -153,7 +153,7 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: `PreviewPanel` eyedropper 모드(클릭 좌표 → 현재 프레임 픽셀 → `ChromaKeySettings.keyColor`). `ChromaKeyPixelProcessor`에 matte erode/feather 파라미터 추가(기존 softness와 직교).
 - **AC**: ① 그린스크린에서 스포이드 1클릭 → 즉시 키잉 ② edge fringe가 feather로 감소(픽셀 테스트) ③ 설정 프로젝트 저장/복원.
 
-#### F-11. 캔버스 배경 (컬러/블러/이미지)
+#### F-11. 캔버스 배경 (컬러/블러/이미지) — 🟡 구현+테스트+배선 완료(2026-06-11), 실기기/визual fixture 잔여
 - **요구사항**: 9:16 캔버스에 16:9 영상 배치 시 여백을 단색/소스 블러/이미지로 채움.
 - **구현**: `Project.canvasBackground: CanvasBackground`(enum: color(hex)/blur(radius)/image(url), A5 준수). compositor 첫 단계에서 배경 합성(blur는 소스 확대+`CIGaussianBlur`). ProjectSettings popover에 UI.
 - **AC**: ① 3종 배경 모두 preview/export 일치 ② blur 배경이 프레임마다 갱신(정지 아님).

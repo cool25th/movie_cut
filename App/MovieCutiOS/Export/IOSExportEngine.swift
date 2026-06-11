@@ -263,7 +263,8 @@ final class IOSExportEngine {
             return CustomCompositionInstruction(
                 timeRange: segmentRange,
                 trackIDs: videoTrackIDs,
-                clipEffects: activeClipEffects
+                clipEffects: activeClipEffects,
+                canvasBackground: project.canvasBackground
             )
         }
 
@@ -272,7 +273,8 @@ final class IOSExportEngine {
                 CustomCompositionInstruction(
                     timeRange: CMTimeRange(start: .zero, duration: duration),
                     trackIDs: videoTrackIDs,
-                    clipEffects: clipEffects
+                    clipEffects: clipEffects,
+                    canvasBackground: project.canvasBackground
                 )
             ]
             : instructions

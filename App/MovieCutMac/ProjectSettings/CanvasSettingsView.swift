@@ -1,13 +1,42 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
+import UniformTypeIdentifiers
 
 struct CanvasSettingsView: View {
     var canvas: CanvasPreset
+    var background: CanvasBackground? = nil
+    var onBackgroundChange: (CanvasBackground?) -> Void = { _ in }
     var onChange: (CanvasPreset) -> Void
 
     private let columns = [
         GridItem(.adaptive(minimum: 88), spacing: 8)
     ]
+
+    private enum BackgroundKind: String, CaseIterable, Identifiable {
+        case none = "None"
+        case color = "Color"
+        case blur = "Blur"
+        case image = "Image"
+
+        var id: String { rawValue }
+    }
+
+    private static let colorPresets: [(name: String, hex: String)] = [
+        ("Black", "000000"),
+        ("White", "FFFFFF"),
+        ("Gray", "3A3A3C"),
+        ("Navy", "0B1D3A")
+    ]
+
+    private var backgroundKind: BackgroundKind {
+        switch background {
+        case nil: return .none
+        case .color: return .color
+        case .sourceBlur: return .blur
+        case .image: return .image
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -83,9 +112,115 @@ struct CanvasSettingsView: View {
             Text(canvasSizeText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            backgroundSection
         }
         .padding(14)
         .frame(width: 360)
+    }
+
+    @ViewBuilder
+    private var backgroundSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("Background", comment: ""))
+                .font(.subheadline)
+
+            Picker(NSLocalizedString("Background Style", comment: ""), selection: Binding(
+                get: { backgroundKind },
+                set: { kind in
+                    switch kind {
+                    case .none:
+                        onBackgroundChange(nil)
+                    case .color:
+                        onBackgroundChange(.color(hex: "000000"))
+                    case .blur:
+                        onBackgroundChange(.sourceBlur(radius: 24))
+                    case .image:
+                        chooseBackgroundImage()
+                    }
+                }
+            )) {
+                ForEach(BackgroundKind.allCases) { kind in
+                    Text(NSLocalizedString(kind.rawValue, comment: "")).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(NSLocalizedString("Canvas background style", comment: ""))
+
+            switch background {
+            case .color(let hex):
+                HStack(spacing: 6) {
+                    ForEach(Self.colorPresets, id: \.hex) { preset in
+                        Button {
+                            onBackgroundChange(.color(hex: preset.hex))
+                        } label: {
+                            Circle()
+                                .fill(Color(hex: preset.hex))
+                                .frame(width: 22, height: 22)
+                                .overlay {
+                                    Circle().stroke(
+                                        hex == preset.hex ? Color.accentColor : Color.secondary.opacity(0.4),
+                                        lineWidth: hex == preset.hex ? 2 : 1
+                                    )
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(
+                            format: NSLocalizedString("%@ background color", comment: ""),
+                            preset.name
+                        ))
+                    }
+                    Text("#\(hex)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
+            case .sourceBlur(let radius):
+                HStack(spacing: 8) {
+                    Slider(value: Binding(
+                        get: { radius },
+                        set: { onBackgroundChange(.sourceBlur(radius: $0)) }
+                    ), in: 2...60)
+                    .accessibilityLabel(NSLocalizedString("Background blur radius", comment: ""))
+                    Text(String(format: "%.0f", radius))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 26, alignment: .trailing)
+                }
+
+            case .image(let url):
+                HStack(spacing: 8) {
+                    Text(url.lastPathComponent)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(NSLocalizedString("Change...", comment: "")) {
+                        chooseBackgroundImage()
+                    }
+                    .font(.caption)
+                }
+
+            case nil:
+                Text(NSLocalizedString("Letterbox areas render black.", comment: ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func chooseBackgroundImage() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        if panel.runModal() == .OK, let url = panel.url {
+            onBackgroundChange(.image(url: url))
+        }
     }
 
     private var canvasSizeText: String {
@@ -165,5 +300,17 @@ private extension ExportFrameRate {
         case .fps60:
             return "60 fps"
         }
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let value = UInt64(clean, radix: 16) ?? 0
+        self.init(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255
+        )
     }
 }

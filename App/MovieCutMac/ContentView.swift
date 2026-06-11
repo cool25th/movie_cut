@@ -7,31 +7,34 @@ struct ContentView: View {
     @State private var isTemplatePickerPresented = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HSplitView {
-                MediaLibraryPanel(viewModel: viewModel)
-                    .frame(minWidth: 200, maxWidth: 300)
+        VSplitView {
+            VStack(spacing: 0) {
+                HSplitView {
+                    MediaLibraryPanel(viewModel: viewModel)
+                        .frame(minWidth: 200, maxWidth: 300)
 
-                PreviewPanel(viewModel: viewModel)
-                    .frame(minWidth: 400)
+                    PreviewPanel(viewModel: viewModel)
+                        .frame(minWidth: 400)
 
-                InspectorPanel(viewModel: viewModel)
-                    .frame(minWidth: 240, maxWidth: 320)
+                    InspectorPanel(viewModel: viewModel)
+                        .frame(minWidth: 240, maxWidth: 320)
+                }
+
+                Divider()
+
+                QuickToolsPanel(viewModel: viewModel)
+
+                Divider()
+
+                statusBar
             }
-
-            Divider()
-
-            QuickToolsPanel(viewModel: viewModel)
-
-            Divider()
-
-            statusBar
-
-            Divider()
+            .frame(minHeight: 220, maxHeight: .infinity)
+            .layoutPriority(1)
 
             TimelineView(viewModel: viewModel)
+                .frame(minHeight: 210, idealHeight: 260, maxHeight: .infinity)
         }
-        .frame(minWidth: 1024, minHeight: 640)
+        .frame(minWidth: 1024, minHeight: 460)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { Task { await viewModel.undo() } }) {
@@ -74,7 +77,13 @@ struct ContentView: View {
                     Label("Canvas", systemImage: "rectangle.dashed")
                 }
                 .popover(isPresented: $isCanvasSettingsPresented) {
-                    CanvasSettingsView(canvas: viewModel.currentProject.canvas) { canvas in
+                    CanvasSettingsView(
+                        canvas: viewModel.currentProject.canvas,
+                        background: viewModel.currentProject.canvasBackground,
+                        onBackgroundChange: { background in
+                            Task { await viewModel.updateCanvasBackground(background) }
+                        }
+                    ) { canvas in
                         Task { await viewModel.updateCanvas(canvas) }
                     }
                 }

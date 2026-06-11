@@ -270,6 +270,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let mask: Mask?
     let clipEffects: [CustomCompositionClipEffect]
     let transitionEffects: [CustomCompositionTransitionEffect]
+    let canvasBackground: CanvasBackground?
 
     init(
         timeRange: CMTimeRange,
@@ -282,7 +283,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil,
-        transitionEffects: [CustomCompositionTransitionEffect] = []
+        transitionEffects: [CustomCompositionTransitionEffect] = [],
+        canvasBackground: CanvasBackground? = nil
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -299,13 +301,15 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.mask = mask
         self.clipEffects = []
         self.transitionEffects = transitionEffects
+        self.canvasBackground = canvasBackground
     }
 
     init(
         timeRange: CMTimeRange,
         trackIDs: [CMPersistentTrackID],
         clipEffects: [CustomCompositionClipEffect],
-        transitionEffects: [CustomCompositionTransitionEffect] = []
+        transitionEffects: [CustomCompositionTransitionEffect] = [],
+        canvasBackground: CanvasBackground? = nil
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -321,6 +325,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.mask = nil
         self.clipEffects = clipEffects
         self.transitionEffects = transitionEffects
+        self.canvasBackground = canvasBackground
     }
 
     func effect(for trackID: CMPersistentTrackID, at time: CMTime) -> CustomCompositionClipEffect? {
@@ -419,6 +424,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     onto: transitionedImage,
                     at: request.compositionTime
                 )
+                transitionedImage = CanvasBackgroundPixelProcessor.compose(
+                    frame: transitionedImage,
+                    over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size
+                )
                 self.finishRequest(request, with: transitionedImage)
                 return
             }
@@ -450,6 +460,12 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     instruction: instruction,
                     onto: image,
                     at: request.compositionTime
+                )
+
+                image = CanvasBackgroundPixelProcessor.compose(
+                    frame: image,
+                    over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size
                 )
             }
 

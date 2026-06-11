@@ -228,6 +228,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     var chromaKeyThreshold: Float = 0.3
     let mask: Mask?
     let clipEffects: [CustomCompositionClipEffect]
+    let canvasBackground: CanvasBackground?
 
     init(
         timeRange: CMTimeRange,
@@ -237,7 +238,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         stickerEmoji: String? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
-        mask: Mask? = nil
+        mask: Mask? = nil,
+        canvasBackground: CanvasBackground? = nil
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
@@ -248,9 +250,15 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
         self.clipEffects = []
+        self.canvasBackground = canvasBackground
     }
 
-    init(timeRange: CMTimeRange, trackIDs: [CMPersistentTrackID], clipEffects: [CustomCompositionClipEffect]) {
+    init(
+        timeRange: CMTimeRange,
+        trackIDs: [CMPersistentTrackID],
+        clipEffects: [CustomCompositionClipEffect],
+        canvasBackground: CanvasBackground? = nil
+    ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = nil
@@ -259,6 +267,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.chromaKeyColor = nil
         self.mask = nil
         self.clipEffects = clipEffects
+        self.canvasBackground = canvasBackground
     }
 
     func effect(for trackID: CMPersistentTrackID, at time: CMTime) -> CustomCompositionClipEffect? {
@@ -342,6 +351,12 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     instruction: instruction,
                     onto: image,
                     at: request.compositionTime
+                )
+
+                image = CanvasBackgroundPixelProcessor.compose(
+                    frame: image,
+                    over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size
                 )
             }
             

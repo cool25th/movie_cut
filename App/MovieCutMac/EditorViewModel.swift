@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Combine
 import Foundation
+import ImageIO
 import MovieCutCore
 import Observation
 import UniformTypeIdentifiers
@@ -2832,12 +2833,113 @@ final class EditorViewModel {
     private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
         var asset = MediaImporter.probe(url: url)
 
-        if (asset.kind == .video || asset.kind == .audio),
-           let duration = await Self.avAssetDuration(for: url) {
-            asset.duration = duration
-        }
+        let probe = await Self.appMetadataProbe(
+            for: url,
+            kind: asset.kind,
+            baseMetadata: asset.metadata
+        )
+        asset.duration = probe.duration ?? asset.duration
+        asset.metadata = probe.metadata
 
         return await Self.enrichAssetWithThumbnail(asset)
+    }
+
+    private nonisolated static func appMetadataProbe(
+        for url: URL,
+        kind: MediaKind,
+        baseMetadata: MediaMetadata
+    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
+        switch kind {
+        case .video:
+            return await videoMetadataProbe(for: url, baseMetadata: baseMetadata)
+        case .audio:
+            return await audioMetadataProbe(for: url, baseMetadata: baseMetadata)
+        case .image:
+            return (nil, imageMetadataProbe(for: url, baseMetadata: baseMetadata))
+        }
+    }
+
+    private nonisolated static func videoMetadataProbe(
+        for url: URL,
+        baseMetadata: MediaMetadata
+    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
+        let avAsset = AVURLAsset(url: url)
+        var metadata = baseMetadata
+
+        let duration = await Self.avAssetDuration(for: avAsset)
+        guard let videoTrack = await Self.firstTrack(in: avAsset, mediaType: .video) else {
+            return (duration, metadata)
+        }
+
+        if let dimensions = await Self.videoDisplayDimensions(for: videoTrack) {
+            metadata.width = dimensions.width
+            metadata.height = dimensions.height
+        }
+        if let frameRate = await Self.videoFrameRate(for: videoTrack) {
+            metadata.frameRate = frameRate
+        }
+        if let codec = await Self.codecDescription(for: videoTrack) {
+            metadata.codec = codec
+        }
+
+        return (duration, metadata)
+    }
+
+    private nonisolated static func audioMetadataProbe(
+        for url: URL,
+        baseMetadata: MediaMetadata
+    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
+        let avAsset = AVURLAsset(url: url)
+        var metadata = baseMetadata
+
+        let duration = await Self.avAssetDuration(for: avAsset)
+        guard let audioTrack = await Self.firstTrack(in: avAsset, mediaType: .audio) else {
+            return (duration, metadata)
+        }
+
+        if let audioDescription = await Self.audioFormatDescription(for: audioTrack) {
+            if let sampleRate = audioDescription.sampleRate {
+                metadata.sampleRate = sampleRate
+            }
+            if let channelCount = audioDescription.channelCount {
+                metadata.channelCount = channelCount
+            }
+        }
+        if let codec = await Self.codecDescription(for: audioTrack) {
+            metadata.codec = codec
+        }
+
+        return (duration, metadata)
+    }
+
+    private nonisolated static func imageMetadataProbe(
+        for url: URL,
+        baseMetadata: MediaMetadata
+    ) -> MediaMetadata {
+        var metadata = baseMetadata
+
+        if let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any] {
+            if let width = properties[kCGImagePropertyPixelWidth] as? NSNumber {
+                metadata.width = width.intValue
+            }
+            if let height = properties[kCGImagePropertyPixelHeight] as? NSNumber {
+                metadata.height = height.intValue
+            }
+        }
+
+        if metadata.width == nil || metadata.height == nil,
+           let image = NSImage(contentsOf: url),
+           let representation = image.representations.first {
+            if metadata.width == nil, representation.pixelsWide > 0 {
+                metadata.width = representation.pixelsWide
+            }
+            if metadata.height == nil, representation.pixelsHigh > 0 {
+                metadata.height = representation.pixelsHigh
+            }
+        }
+
+        return metadata
     }
 
     private nonisolated static func enrichAssetWithThumbnail(_ asset: MediaAsset) async -> MediaAsset {
@@ -2867,7 +2969,10 @@ final class EditorViewModel {
     }
 
     private nonisolated static func avAssetDuration(for url: URL) async -> TimeInterval? {
-        let asset = AVURLAsset(url: url)
+        await avAssetDuration(for: AVURLAsset(url: url))
+    }
+
+    private nonisolated static func avAssetDuration(for asset: AVURLAsset) async -> TimeInterval? {
         do {
             let duration = try await asset.load(.duration)
             let seconds = duration.seconds
@@ -2878,6 +2983,127 @@ final class EditorViewModel {
         } catch {
             return nil
         }
+    }
+
+    private nonisolated static func firstTrack(
+        in asset: AVURLAsset,
+        mediaType: AVMediaType
+    ) async -> AVAssetTrack? {
+        do {
+            return try await asset.loadTracks(withMediaType: mediaType).first
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func videoDisplayDimensions(for track: AVAssetTrack) async -> (width: Int, height: Int)? {
+        do {
+            let naturalSize = try await track.load(.naturalSize)
+            let preferredTransform = try await track.load(.preferredTransform)
+            let transformedBounds = CGRect(origin: CGPoint(x: 0, y: 0), size: naturalSize)
+                .applying(preferredTransform)
+            let width = Int(abs(transformedBounds.width).rounded())
+            let height = Int(abs(transformedBounds.height).rounded())
+
+            if width > 0, height > 0 {
+                return (width, height)
+            }
+
+            let fallbackWidth = Int(abs(naturalSize.width).rounded())
+            let fallbackHeight = Int(abs(naturalSize.height).rounded())
+            guard fallbackWidth > 0, fallbackHeight > 0 else {
+                return nil
+            }
+            return (fallbackWidth, fallbackHeight)
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func videoFrameRate(for track: AVAssetTrack) async -> Double? {
+        do {
+            let frameRate = try await track.load(.nominalFrameRate)
+            guard frameRate.isFinite, frameRate > 0 else {
+                return nil
+            }
+            return Double(frameRate)
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func audioFormatDescription(for track: AVAssetTrack) async -> (sampleRate: Int?, channelCount: Int?)? {
+        guard let formatDescription = await Self.firstFormatDescription(for: track),
+              let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee else {
+            return nil
+        }
+
+        let sampleRate = streamDescription.mSampleRate.isFinite && streamDescription.mSampleRate > 0
+            ? Int(streamDescription.mSampleRate.rounded())
+            : nil
+        let channelCount = streamDescription.mChannelsPerFrame > 0
+            ? Int(streamDescription.mChannelsPerFrame)
+            : nil
+        return (sampleRate, channelCount)
+    }
+
+    private nonisolated static func codecDescription(for track: AVAssetTrack) async -> String? {
+        guard let formatDescription = await Self.firstFormatDescription(for: track) else {
+            return nil
+        }
+
+        return codecName(from: CMFormatDescriptionGetMediaSubType(formatDescription))
+    }
+
+    private nonisolated static func firstFormatDescription(for track: AVAssetTrack) async -> CMFormatDescription? {
+        do {
+            return try await track.load(.formatDescriptions).first
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func codecName(from mediaSubType: FourCharCode) -> String? {
+        guard let subtype = fourCharacterCodeString(from: mediaSubType) else {
+            return nil
+        }
+
+        switch subtype {
+        case "avc1":
+            return "H.264"
+        case "hvc1", "hev1":
+            return "HEVC"
+        case "apch":
+            return "ProRes 422 HQ"
+        case "apcn":
+            return "ProRes 422"
+        case "apcs":
+            return "ProRes 422 LT"
+        case "apco":
+            return "ProRes 422 Proxy"
+        case "ap4h":
+            return "ProRes 4444"
+        case "mp4a":
+            return "AAC"
+        case "lpcm":
+            return "PCM"
+        default:
+            return subtype
+        }
+    }
+
+    private nonisolated static func fourCharacterCodeString(from code: FourCharCode) -> String? {
+        var bigEndianCode = code.bigEndian
+        let bytes = withUnsafeBytes(of: &bigEndianCode) { Array($0) }
+        guard bytes.allSatisfy({ byte in
+            byte >= 32 && byte <= 126
+        }) else {
+            return nil
+        }
+
+        let string = String(bytes: bytes, encoding: .ascii)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return string?.isEmpty == false ? string : nil
     }
 
     private func insertMediaAssetOnTimeline(

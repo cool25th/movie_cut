@@ -175,8 +175,9 @@ struct MediaLibraryPanel: View {
             Text(asset.originalURL.lastPathComponent)
                 .lineLimit(1)
                 .font(.caption)
-            if let duration = asset.duration {
-                Text(String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+            if let detail = assetDetailSummary(asset) {
+                Text(detail)
+                    .lineLimit(1)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -327,16 +328,118 @@ struct MediaLibraryPanel: View {
             : NSLocalizedString("Proxy ready", comment: "")
     }
 
+    private func assetDetailSummary(_ asset: MediaAsset) -> String? {
+        var parts: [String] = []
+        if let duration = asset.duration {
+            parts.append(durationSummary(duration))
+        }
+        if let metadata = metadataSummary(asset) {
+            parts.append(metadata)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func metadataSummary(_ asset: MediaAsset) -> String? {
+        var parts: [String] = []
+        let metadata = asset.metadata
+
+        if let resolution = resolutionSummary(metadata) {
+            parts.append(resolution)
+        }
+
+        switch asset.kind {
+        case .video:
+            if let frameRate = frameRateSummary(metadata.frameRate) {
+                parts.append(frameRate)
+            }
+            if let codec = codecSummary(metadata.codec) {
+                parts.append(codec)
+            }
+        case .audio:
+            if let sampleRate = sampleRateSummary(metadata.sampleRate) {
+                parts.append(sampleRate)
+            }
+            if let channelCount = channelCountSummary(metadata.channelCount) {
+                parts.append(channelCount)
+            }
+            if let codec = codecSummary(metadata.codec) {
+                parts.append(codec)
+            }
+        case .image:
+            if let codec = codecSummary(metadata.codec) {
+                parts.append(codec)
+            }
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func resolutionSummary(_ metadata: MediaMetadata) -> String? {
+        guard let width = metadata.width,
+              let height = metadata.height,
+              width > 0,
+              height > 0 else {
+            return nil
+        }
+
+        return "\(width)×\(height)"
+    }
+
+    private func frameRateSummary(_ frameRate: Double?) -> String? {
+        guard let frameRate, frameRate.isFinite, frameRate > 0 else {
+            return nil
+        }
+
+        if abs(frameRate - frameRate.rounded()) < 0.01 {
+            return String(format: NSLocalizedString("%.0f fps", comment: ""), frameRate)
+        }
+
+        return String(format: NSLocalizedString("%.2f fps", comment: ""), frameRate)
+    }
+
+    private func sampleRateSummary(_ sampleRate: Int?) -> String? {
+        guard let sampleRate, sampleRate > 0 else {
+            return nil
+        }
+
+        let kilohertz = Double(sampleRate) / 1_000
+        if sampleRate % 1_000 == 0 {
+            return String(format: NSLocalizedString("%.0f kHz", comment: ""), kilohertz)
+        }
+
+        return String(format: NSLocalizedString("%.1f kHz", comment: ""), kilohertz)
+    }
+
+    private func channelCountSummary(_ channelCount: Int?) -> String? {
+        guard let channelCount, channelCount > 0 else {
+            return nil
+        }
+
+        return String(format: NSLocalizedString("%d ch", comment: ""), channelCount)
+    }
+
+    private func codecSummary(_ codec: String?) -> String? {
+        let trimmedCodec = codec?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedCodec?.isEmpty == false ? trimmedCodec : nil
+    }
+
+    private func durationSummary(_ duration: TimeInterval) -> String {
+        String(format: NSLocalizedString("%.1fs", comment: ""), duration)
+    }
+
     private func assetAccessibilityValue(_ asset: MediaAsset) -> String {
         let kindName = String(describing: asset.kind)
         let detail: String
         if let duration = asset.duration {
-            detail = String(format: NSLocalizedString("%@, duration %@", comment: ""), kindName, String(format: NSLocalizedString("%.1fs", comment: ""), duration))
+            detail = String(format: NSLocalizedString("%@, duration %@", comment: ""), kindName, durationSummary(duration))
         } else {
             detail = kindName
         }
 
         var states = [detail]
+        if let metadata = metadataSummary(asset) {
+            states.append(metadata)
+        }
         if asset.kind == .video || asset.kind == .image {
             states.append(thumbnailStateText(asset))
         }

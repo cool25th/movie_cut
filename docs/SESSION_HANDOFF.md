@@ -7,7 +7,7 @@
 
 ## 1. 현재 상태 요약
 
-- CapCut 파리티 작업은 Batch 17 이후 P1 transition pass, export/마스크 접근성 및 custom bitrate clamp, 실기기 드래그앤드롭 수정, 썸네일/프록시 생성, speed ramp preview contract, 텍스트 스타일 편집 UI, 보이스오버 실녹음 배치까지 진행됨.
+- CapCut 파리티 작업은 Batch 17 이후 P1 transition pass, export/마스크 접근성 및 custom bitrate clamp, 실기기 드래그앤드롭 수정, 썸네일/프록시 생성, speed ramp preview contract, 텍스트 스타일 편집 UI, 보이스오버 실녹음, F-06 임포트 메타데이터 배치까지 진행됨.
 - 이전 핸드오프의 **미커밋 71개 파일 유실 위험은 해결됨**. 기능 단위 커밋 6개(`d5db68f`~`ef74997`), 접근성/비트레이트 커밋 `45cda56`, 실기기 드래그앤드롭 수정 `91e7cb4`, 썸네일/프록시 생성 `3933d94`, speed ramp preview contract `71893cb`, 텍스트 스타일 UI `4a2bad8`, 보이스오버 실녹음 `4e982b0`까지 저장됨.
 - `45cda56` 포함 작업:
   - `ExportSettings` custom bitrate를 1~200 Mbps 범위로 문서화/클램프.
@@ -28,6 +28,8 @@
   - 검증: `git diff --check`, `swift build`, `swift test --filter 'Delete|Magnetic|ZIndex|CoreModule|StaticContract'`, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`를 호스트에서 재실행해 통과 확인.
 - F-05 키보드 단축키 맵 배치는 `MovieCutMacApp.commands`에 Playback/Timeline/Edit 메뉴를 추가해 Space, Cmd+B, Q/W, Delete, Shift+Delete, Cmd+D, Arrow/Shift+Arrow, Up/Down, +/-, M, Cmd+Z/Shift+Cmd+Z를 단일 등록하고, `EditorViewModel`에 trim-to-playhead/1초 seek/clip-boundary jump/zoom actions를 노출한다. `ContentView`의 toolbar/background duplicate shortcut 등록은 제거됐다. Caveat: text-entry-sensitive unmodified shortcuts는 AppKit first-responder guard 기반 best-effort이며, 실제 GUI 텍스트 필드 회귀 검증은 호스트에서 별도 확인해야 한다.
   - 검증: `git diff --check`, `swift build`, `swift test --filter 'Keyboard|Shortcut|StaticContract'` 통과. macOS app compile은 가능하면 `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`로 추가 확인.
+- F-06 임포트 메타데이터 배치는 Core `MediaImporter.probe`를 Foundation-only 경량 path로 유지하고, Mac `EditorViewModel.mediaAssetWithAppProbe`에서 AVFoundation/ImageIO best-effort metadata probing을 수행한다. Video/audio duration, video resolution/fps/codec, audio sample rate/channel count/codec, image dimensions를 `MediaMetadata`에 채우고, `MediaLibraryPanel` 행/접근성 value에 compact summary로 노출한다. Caveat: exact codec labels depend on AVFoundation format descriptions/subtype mapping. GUI visual verification not included.
+  - 검증: static contract 기준. 호스트 검증은 `git diff --check`, `swift build`, `swift test --filter 'ImportMetadata|MediaMetadata|StaticContract'`, 가능하면 `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`.
 - **드래그앤드롭 P0는 실기기 GUI 검증까지 완료(2026-06-10)**. 라이브 검증 중 실제 버그를 발견·수정함: 기존 `DropDelegate` 기반 타임라인 `.onDrop` 등록이 실제 Finder 드래그를 조용히 거부했음(드래그 고스트는 레인 위에 표시되지만 drop 미발생, 로그/피드백 없음). 라이브러리 패널에서 검증된 closure 기반 `onDrop(of:isTargeted:perform:)` (location 오버로드)로 교체하고, 커스텀 UTType `com.moviecut.media-asset-id`를 Info.plist `UTExportedTypeDeclarations`에 정식 선언해 해결. Finder→타임라인 파일 드롭(드롭 위치 클립 생성 + 실제 3.0s duration + 상태 메시지)과 라이브러리→타임라인 내부 에셋 드래그 모두 실제 마우스 드래그로 확인됨.
 
 ## 2. 가장 먼저 할 일 (순서대로)
@@ -82,12 +84,12 @@
 
 | # | 작업 (명세서 F-ID) | 시작점 |
 |---|---|---|
-| 1 | **F-06 임포트 메타데이터(해상도/fps)** — probe 확장 + 라이브러리/Inspector 표기 | `EditorViewModel.mediaAssetWithAppProbe`, `MediaMetadata` |
-| 2 | **F-01 실기기 검증** — Photos/Safari/브라우저 실제 GUI 드래그로 타임라인·라이브러리 클립 생성 확인. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
-| 3 | **F-04 잔여: 클립 그룹/링크** — `Clip.groupId` + 이동/트림 델타 전파(단일 undo) | `Clip.swift`, `MoveClipCommand`, `TimelineView` |
-| 4 | **텍스트 템플릿/타이틀 프리셋 적용 경로** — Core template의 Inspector/Canvas 적용 확인(스펙 F-12R과 연계) | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
+| 1 | **F-01 실기기 검증** — Photos/Safari/브라우저 실제 GUI 드래그로 타임라인·라이브러리 클립 생성 확인. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
+| 2 | **F-04 잔여: 클립 그룹/링크** — `Clip.groupId` + 이동/트림 델타 전파(단일 undo) | `Clip.swift`, `MoveClipCommand`, `TimelineView` |
+| 3 | **텍스트 템플릿/타이틀 프리셋 적용 경로** — Core template의 Inspector/Canvas 적용 확인(스펙 F-12R과 연계) | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
 
 M1 종료 시 §1.1의 W1 워크플로우(숏폼 제작) 수동 완주로 마일스톤 판정. 이후 M2는 F-07(전환 export visual fixture)부터.
+| 완료 | ✅ **F-06 임포트 메타데이터** — Mac import path가 `MediaImporter.probe`의 `fileSize`를 유지한 뒤 AVFoundation/ImageIO best-effort probe로 video/audio duration, video resolution/fps/codec, audio sample rate/channel count/codec, image dimensions를 채운다. Media Library row/accessibility value가 compact metadata summary를 표시한다. Caveat: exact codec labels depend on AVFoundation format descriptions; GUI visual verification not included. | `App/MovieCutMac/EditorViewModel.swift`, `App/MovieCutMac/MediaLibraryPanel.swift`, `Tests/MovieCutCoreTests/F06ImportMetadataStaticContractTests.swift` |
 | 완료 | ✅ **F-05 키보드 단축키 맵** — `MovieCutMacApp.commands`가 F-05 menu/shortcut registration을 단일 소유하고, `EditorViewModel`이 Q/W trim-to-playhead, Shift+Delete ripple, Cmd+D duplicate, one-second seek, clip-boundary jump, zoom actions를 제공한다. Help 목록 포함. Caveat: GUI 실동작 및 text-field regression은 static contract 밖의 host verification. | `App/MovieCutMac/MovieCutMacApp.swift`, `App/MovieCutMac/EditorViewModel.swift`, `App/MovieCutMac/ContentView.swift`, `Tests/MovieCutCoreTests/KeyboardShortcutStaticContractTests.swift` |
 | 완료 | ✅ **마그네틱 타임라인 / 클립별 zIndex** — Add/Move/Duplicate/Delete command path가 track snapshot undo와 same-track magnetic packing을 제공하고, persisted `Clip.zIndex`가 TimelineView display ordering/layer actions 및 Bring to Front / Send to Back에 연결된다. Caveat: 클립 그룹/링크는 P2 별도 항목. | `Sources/MovieCutCore/Commands/CommandSupport.swift`, `Sources/MovieCutCore/Models/Clip.swift`, `App/MovieCutMac/TimelineView.swift`, `Tests/MovieCutCoreTests/MagneticTimelineZIndexStaticContractTests.swift` |
 | 완료 | ✅ **페이드 duration 편집 UI** — Mac Inspector `Fade Duration` 그룹이 Fade In/Fade Out 현재값, Slider, Seconds `TextField`, 0.05s Stepper, Reset Fades/None/Soft/Long preset을 제공한다. 모든 변경은 `updateSelectedAudioFade` → `AudioFadeCommand` path로 적용된다. | `App/MovieCutMac/Inspector/InspectorBasicSection.swift`, `Tests/MovieCutCoreTests/AudioFadeInspectorStaticContractTests.swift` |

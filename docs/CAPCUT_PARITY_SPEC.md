@@ -50,9 +50,10 @@
 - **Export**: container(mp4/mov)/codec/fps/quality/커스텀 비트레이트(1~200Mbps clamp), 소셜 프리셋, 진행률/취소/공유, 접근성
 - **마그네틱 타임라인 + 클립 zIndex**(`08db5a0`): same-track magnetic packing, `Clip.zIndex` 기반 표시 순서/Bring to Front·Send to Back — F-03 완료, F-04는 zIndex만 완료(그룹/링크 잔여)
 - **오디오 페이드 편집 UI**(`0a5874f`): Inspector Fade In/Out slider/stepper/preset → `AudioFadeCommand`
+- **임포트 메타데이터(F-06)**: 앱 레이어에서 video/audio duration, 해상도/fps/codec, audio sample rate/channel count, image dimensions를 best-effort로 probe하고 라이브러리 행/접근성 value에 노출
 
 ### 2.2 미완 (이 명세서의 대상)
-비파일 드래그 소스(F-01), 클립 그룹/링크(F-04 잔여), 단축키 맵(F-05), 해상도/fps probe(F-06), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
+비파일 드래그 소스(F-01 실기기 검증), 클립 그룹/링크(F-04 잔여), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
 
 ### 2.3 아키텍처 현황 (유지할 구조)
 ```
@@ -121,10 +122,12 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **텍스트 입력 caveat**: full SwiftUI `@FocusState` command router는 아직 도입하지 않았다. 대신 Space/Q/W/Delete/Arrow/+/-/M 같은 text-entry-sensitive command actions는 `MovieCutShortcutGuard`에서 AppKit first responder(`NSTextView`/`NSTextField`)를 확인해 중앙 차단하고, static contract로 잠근다.
 - **AC 상태**: ① 메뉴 표기와 전 shortcut 등록은 static contract로 완료 ② 텍스트 필드 충돌은 guard 기반 best-effort 완료, 실제 텍스트 편집 GUI 회귀는 호스트 확인 필요 ③ Help 메뉴 목록 구현 완료. **GUI 실동작 검증은 이번 완료 범위에 포함하지 않음.**
 
-#### F-06. 임포트 메타데이터 완성 (해상도/fps)
+#### F-06. 임포트 메타데이터 완성 (해상도/fps) — ✅ 구현+정적 계약 완료(2026-06-11)
 - **요구사항**: duration만 읽는 현재 probe를 확장해 해상도/fps/코덱을 `MediaMetadata`에 기록, 라이브러리 행과 Inspector에 표시.
-- **구현**: `EditorViewModel.mediaAssetWithAppProbe`에서 `AVURLAsset.loadTracks(withMediaType:)` → `naturalSize`, `nominalFrameRate`. Core `MediaMetadata`에 optional 필드 추가.
-- **AC**: 1080p/30fps 영상 임포트 시 라이브러리에 "1920×1080 · 30fps · 3.0s" 표기. 프록시 트리거(F-02 완료분)가 실제 해상도 기준으로 동작.
+- **구현**: Core `MediaImporter.probe`는 기존처럼 Foundation-only 경량 probe로 유지하고, macOS 앱 레이어 `EditorViewModel.mediaAssetWithAppProbe`가 `AVURLAsset.loadTracks(withMediaType:)`와 Swift async `load` API로 video duration/naturalSize/preferredTransform/nominalFrameRate/formatDescriptions, audio duration/sample rate/channel count/formatDescriptions를 best-effort metadata probing으로 채운다. Still image는 ImageIO/NSImageRep로 width/height를 읽는다.
+- **표시**: `MediaLibraryPanel` 라이브러리 행과 접근성 value가 resolution, fps, codec, audio sample rate/channel count를 compact summary로 노출한다. 현재 별도 selected-asset Inspector가 없으므로 이 배치의 Inspector 대체 표면은 라이브러리 행 + accessibility value로 문서화한다.
+- **Caveat**: import는 probe 실패에도 계속 성공한다. exact codec labels depend on AVFoundation format descriptions/subtype mapping. GUI visual verification not included; 정적 계약과 빌드/테스트 기준으로 완료 처리한다.
+- **AC**: 1080p/30fps 영상 임포트 시 라이브러리에 "3.0s · 1920×1080 · 30 fps · H.264" 형식으로 표시 가능. 오디오 asset은 "48 kHz · 2 ch · AAC", 이미지 asset은 "1920×1080" 형식으로 표시 가능. 프록시 트리거(F-02 완료분)는 기존 흐름을 유지한다.
 
 ### M2. 비주얼 심화
 

@@ -118,8 +118,8 @@ struct KeyboardShortcutStaticContractTests {
         #expect(source.contains("maximumTimelineZoom"))
     }
 
-    @Test("docs mark F-05 complete and move the next queue to F-06")
-    func docsMarkF05CompleteAndMoveNextQueueToF06() throws {
+    @Test("docs mark F-05 complete and keep next queue current after F-06")
+    func docsMarkF05CompleteAndKeepNextQueueCurrentAfterF06() throws {
         let parity = try source("docs/CAPCUT_PARITY_SPEC.md")
         let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
         let handoff = try source("docs/SESSION_HANDOFF.md")
@@ -127,8 +127,9 @@ struct KeyboardShortcutStaticContractTests {
         #expect(parity.contains("#### F-05. 키보드 단축키 맵 — ✅ 구현+정적 계약 완료"))
         #expect(backlog.contains("- [x] ✅ 키보드 단축키 맵 전체 (P2)"))
         #expect(backlog.contains("MovieCut Keyboard Shortcuts"))
-        #expect(backlog.contains("다음 1순위는 F-06 임포트 메타데이터(해상도/fps) 완성"))
+        #expect(backlog.contains("다음 1순위는 F-01 실기기 검증"))
         #expect(handoff.contains("| 완료 | ✅ **F-05 키보드 단축키 맵**"))
-        #expect(handoff.contains("| 1 | **F-06 임포트 메타데이터(해상도/fps)**"))
+        #expect(handoff.contains("| 완료 | ✅ **F-06 임포트 메타데이터**"))
+        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
     }
 }

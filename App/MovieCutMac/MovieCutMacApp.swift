@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import MovieCutCore
+import UniformTypeIdentifiers
 
 @main
 struct MovieCutMacApp: App {
@@ -12,16 +13,35 @@ struct MovieCutMacApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Project") {}
+                Button("New Project") {
+                    viewModel.newProject()
+                }
                     .keyboardShortcut("n", modifiers: .command)
-                Button("Open...") {}
+                Button("Open...") {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json, .json]
+                    panel.allowsMultipleSelection = false
+                    panel.canChooseDirectories = false
+                    if panel.runModal() == .OK, let url = panel.url {
+                        Task { await viewModel.openProject(from: url) }
+                    }
+                }
                     .keyboardShortcut("o", modifiers: .command)
                 Button("Save...") {
                     Task { await viewModel.saveProject() }
                 }
                     .keyboardShortcut("s", modifiers: .command)
                 Divider()
-                Button("Import Media...") {}
+                Button("Import Media...") {
+                    let panel = NSOpenPanel()
+                    panel.allowsMultipleSelection = true
+                    panel.canChooseDirectories = false
+                    panel.allowedContentTypes = [.movie, .video, .audio, .image]
+                    if panel.runModal() == .OK {
+                        let urls = panel.urls
+                        Task { await viewModel.importMedia(urls) }
+                    }
+                }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()
                 Button("Export...") {

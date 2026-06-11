@@ -383,8 +383,15 @@ struct TimelineView: View {
             .zIndex(Double(clip.zIndex) + (isActiveDrag || isSelected ? 10_000 : 0))
             .contentShape(Rectangle())
             .accessibilityElement(children: .contain)
+            .highPriorityGesture(
+                TapGesture()
+                    .modifiers(.command)
+                    .onEnded {
+                        selectClip(clip.id, extendingSelection: true)
+                    }
+            )
             .onTapGesture {
-                selectClip(clip.id, extendingSelection: isCommandModifierPressed)
+                selectClip(clip.id, extendingSelection: false)
             }
             .contextMenu {
                 Button(NSLocalizedString("Split", comment: "")) {
@@ -501,10 +508,6 @@ struct TimelineView: View {
             }
         }
         .allowsHitTesting(false)
-    }
-
-    private var isCommandModifierPressed: Bool {
-        NSApp.currentEvent?.modifierFlags.contains(.command) == true
     }
 
     @MainActor

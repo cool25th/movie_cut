@@ -93,7 +93,8 @@ struct TimelineView: View {
                 }
             }
         }
-        .frame(minHeight: 180)
+        // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
+        .frame(minHeight: 210)
         .background(Color(nsColor: .textBackgroundColor))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))

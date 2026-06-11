@@ -293,6 +293,9 @@ struct InspectorEffectsSection: View {
                         Text(type.displayName).tag(type)
                     }
                 }
+                .accessibilityLabel("Transition type")
+                .accessibilityValue((clip.transition?.type ?? .none).displayName)
+                .accessibilityHint("Chooses the visual transition between this clip and the next clip. Export and device playback still require separate verification.")
 
                 if let transition = clip.transition {
                     HStack {
@@ -302,15 +305,70 @@ struct InspectorEffectsSection: View {
                                 updateTransitionDuration(duration)
                             }
                         ), in: 0.1 ... 3)
+                        .accessibilityLabel("Transition duration")
+                        .accessibilityValue(String(format: "%.1f seconds", transition.duration))
+                        .accessibilityHint("Adjusts how long the transition overlap lasts between clips.")
                         Text(String(format: "%.1fs", transition.duration))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(width: 44)
                     }
+
+                    transitionVerificationNote
                 }
             }
             .padding(.top, 4)
         }
+    }
+
+    private var transitionVerificationNote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Static preview only · export/device not verified · next: golden export sample", systemImage: "checklist.unchecked")
+
+            Text("Claim label: targeted transition confidence only")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text("Evidence scope: inspector + pixel processor only")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Boundary fixture: fade-through-black midpoint accepted · vertical slide pending")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Retrospective quote: targeted confidence · export golden pending")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Review-safe wording: do not say exported or device verified")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Next evidence owner: export golden sample · output path + hash")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("6/12 next action: single golden export fixture before device/full-suite claims")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Review handoff: Accepted evidence · Blocked claim · Next artifact · Owner")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text("Final report guard: do not say exported/release-ready until golden artifact path exists")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Transition verification status")
+        .accessibilityValue("Static preview only. Claim label is targeted transition confidence only. Evidence scope is inspector plus pixel processor only. Boundary fixture is fade-through-black midpoint accepted and vertical slide pending. Export golden and device playback are not verified. Review-safe wording says do not say exported or device verified. Next evidence owner is export golden sample with output path and hash. 6/12 next action is a single golden export fixture before device or full-suite claims. Review handoff uses Accepted evidence, Blocked claim, Next artifact, and Owner columns. Final report guard says do not say exported or release-ready until a golden artifact path exists. Next evidence needed is a deterministic golden export sample.")
+        .accessibilityHint("Use this transition evidence as targeted confidence only. Do not claim exported, device-verified, or release-ready until export golden, device playback, and full-suite evidence exist.")
+        .help("Transition targeted tests are accepted as targeted transition confidence only from inspector plus pixel processor evidence; next evidence owner is export golden sample with output path and hash; review handoff columns are Accepted evidence, Blocked claim, Next artifact, Owner; final report guard blocks exported/release-ready wording until a golden artifact path exists; 6/12 next action is one golden export fixture before device/full-suite claims. iOS device playback, full-suite, and release-ready claims still require separate evidence.")
     }
 
     private var animationSection: some View {

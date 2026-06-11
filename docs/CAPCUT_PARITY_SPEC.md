@@ -137,6 +137,7 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **요구사항**: 12종 전환이 preview와 export에서 **시각적으로 동일**하게 렌더됨을 증명. crossDissolve/fadeThroughBlack/wipeRight도 layer-instruction ramp가 아닌 two-source 경로로 통일.
 - **구현**: ① 잔여 3종을 two-source 경로로 이관 ② **export visual fixture 테스트** 신설: 고정 색 합성 클립 2개 + 각 전환 1초 export → 중간 프레임 픽셀 샘플 기대값 비교(`TransitionExportFixtureTests`; sandbox CoreImage 불가 환경은 skip 마킹).
 - **AC**: ① 12종 전환 각각 export 픽셀 fixture 통과 ② preview 스크럽과 시각 일치 ③ 전환 duration이 인접 클립 overlap과 일치.
+- **검증 기록(2026-06-11 targeted pass)**: `TransitionPixelProcessorTests`에 fade-through-black midpoint가 cross dissolve가 아니라 black boundary를 통과하는 픽셀 fixture와 0.25/0.75 boundary progression fixture를 추가했다. `InspectorEffectsSection`은 transition picker/duration accessibility와 `transitionVerificationNote`를 노출하여 accepted evidence, blocked claim, next artifact, owner를 명확히 표시한다. 이 기록은 **targeted transition confidence only**이며 export golden, device playback, full-suite, release-ready claim은 여전히 금지한다. 다음 산출물은 deterministic golden export sample(output path + hash)이다. Timeline minimum height는 header/ruler/3개 기본 lane이 GUI 검증 중 가려지지 않도록 210으로 올렸다.
 
 #### F-08. 배경 제거 (인물 세그멘테이션) 실동작
 - **요구사항**: 버튼 한 번으로 인물 외 배경 제거(알파) → preview/export 반영.

@@ -55,6 +55,37 @@ struct TransitionPixelProcessorTests {
         assertPixel(end, red: 0, green: 0, blue: 255)
     }
 
+    @Test("fade through black midpoint is black not a cross-dissolve blend")
+    func fadeThroughBlackMidpointUsesBlackBoundary() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let outgoing = solidColorImage(red: 1, green: 0, blue: 0)
+        let incoming = solidColorImage(red: 0, green: 0, blue: 1)
+        let samplePoint = CGPoint(x: 8, y: 8)
+
+        let midpoint = samplePixel(
+            from: TransitionPixelProcessor.apply(
+                type: .fadeThroughBlack,
+                from: outgoing,
+                to: incoming,
+                progress: 0.5
+            ),
+            at: samplePoint
+        )
+        let crossDissolveMidpoint = samplePixel(
+            from: TransitionPixelProcessor.apply(
+                type: .crossDissolve,
+                from: outgoing,
+                to: incoming,
+                progress: 0.5
+            ),
+            at: samplePoint
+        )
+
+        assertPixel(midpoint, red: 0, green: 0, blue: 0)
+        #expect(pixelDistance(midpoint, crossDissolveMidpoint) > 250)
+    }
+
     @Test("wipe right reveals incoming on the left and preserves outgoing on the right")
     func wipeRightRevealDirection() {
         guard coreImageRenderingAvailable() else { return }
@@ -68,6 +99,51 @@ struct TransitionPixelProcessorTests {
 
         assertPixel(samplePixel(from: processed, at: CGPoint(x: 2, y: 8)), red: 0, green: 0, blue: 255)
         assertPixel(samplePixel(from: processed, at: CGPoint(x: 14, y: 8)), red: 255, green: 0, blue: 0)
+    }
+
+    @Test("fade through black boundary: progress 0.25 is nearer outgoing, 0.75 is nearer incoming")
+    func fadeThroughBlackBoundaryProgressions() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let outgoing = solidColorImage(red: 1, green: 0, blue: 0)
+        let incoming = solidColorImage(red: 0, green: 0, blue: 1)
+        let samplePoint = CGPoint(x: 8, y: 8)
+
+        let early = samplePixel(
+            from: TransitionPixelProcessor.apply(
+                type: .fadeThroughBlack,
+                from: outgoing,
+                to: incoming,
+                progress: 0.25
+            ),
+            at: samplePoint
+        )
+        let late = samplePixel(
+            from: TransitionPixelProcessor.apply(
+                type: .fadeThroughBlack,
+                from: outgoing,
+                to: incoming,
+                progress: 0.75
+            ),
+            at: samplePoint
+        )
+        let midpoint = samplePixel(
+            from: TransitionPixelProcessor.apply(
+                type: .fadeThroughBlack,
+                from: outgoing,
+                to: incoming,
+                progress: 0.5
+            ),
+            at: samplePoint
+        )
+
+        // At 0.25, should be darker (closer to black) than outgoing but redder than midpoint
+        #expect(Int(early.r) > Int(midpoint.r))
+        // At 0.75, should be bluer (closer to incoming) than midpoint
+        #expect(Int(late.b) > Int(midpoint.b))
+        // Neither should be pure outgoing or pure incoming
+        #expect(Int(early.r) < 255)
+        #expect(Int(late.b) < 255)
     }
 
     @Test("wipe left up and down use distinct reveal directions")
@@ -300,8 +376,41 @@ struct TransitionStaticContractTests {
             #expect(sharedSource.contains(label))
         }
         #expect(effectsSource.contains("ForEach(TransitionType.allCases"))
+        #expect(effectsSource.contains(".accessibilityLabel(\"Transition type\")"))
+        #expect(effectsSource.contains(".accessibilityValue((clip.transition?.type ?? .none).displayName)"))
+        #expect(effectsSource.contains("Export and device playback still require separate verification."))
         #expect(effectsSource.contains("updateTransitionDuration"))
         #expect(effectsSource.contains("Slider(value: Binding("))
+        #expect(effectsSource.contains(".accessibilityLabel(\"Transition duration\")"))
+        #expect(effectsSource.contains("Adjusts how long the transition overlap lasts between clips."))
+        #expect(effectsSource.contains("transitionVerificationNote"))
+        #expect(effectsSource.contains("Static preview only · export/device not verified · next: golden export sample"))
+        #expect(effectsSource.contains("Claim label: targeted transition confidence only"))
+        #expect(effectsSource.contains("Transition verification status"))
+        #expect(effectsSource.contains("Claim label is targeted transition confidence only."))
+        #expect(effectsSource.contains("Next evidence needed is a deterministic golden export sample."))
+        #expect(effectsSource.contains("Evidence scope: inspector + pixel processor only"))
+        #expect(effectsSource.contains("Boundary fixture: fade-through-black midpoint accepted · vertical slide pending"))
+        #expect(effectsSource.contains("Retrospective quote: targeted confidence · export golden pending"))
+        #expect(effectsSource.contains("Review-safe wording: do not say exported or device verified"))
+        #expect(effectsSource.contains("Next evidence owner: export golden sample · output path + hash"))
+        #expect(effectsSource.contains("6/12 next action: single golden export fixture before device/full-suite claims"))
+        #expect(effectsSource.contains("Review handoff: Accepted evidence · Blocked claim · Next artifact · Owner"))
+        #expect(effectsSource.contains("Final report guard: do not say exported/release-ready until golden artifact path exists"))
+        #expect(effectsSource.contains(".accessibilityElement(children: .combine)"))
+        #expect(effectsSource.contains("Evidence scope is inspector plus pixel processor only."))
+        #expect(effectsSource.contains("Boundary fixture is fade-through-black midpoint accepted and vertical slide pending."))
+        #expect(effectsSource.contains("Review-safe wording says do not say exported or device verified."))
+        #expect(effectsSource.contains("Next evidence owner is export golden sample with output path and hash."))
+        #expect(effectsSource.contains("6/12 next action is a single golden export fixture before device or full-suite claims."))
+        #expect(effectsSource.contains("Review handoff uses Accepted evidence, Blocked claim, Next artifact, and Owner columns."))
+        #expect(effectsSource.contains("Final report guard says do not say exported or release-ready until a golden artifact path exists."))
+        #expect(effectsSource.contains("Do not claim exported, device-verified, or release-ready until export golden, device playback, and full-suite evidence exist."))
+        #expect(effectsSource.contains("final report guard blocks exported/release-ready wording until a golden artifact path exists"))
+        #expect(effectsSource.contains("next evidence owner is export golden sample with output path and hash; review handoff columns are Accepted evidence, Blocked claim, Next artifact, Owner"))
+        #expect(effectsSource.contains("review handoff columns are Accepted evidence, Blocked claim, Next artifact, Owner"))
+        #expect(effectsSource.contains("targeted tests are accepted as targeted transition confidence only from inspector plus pixel processor evidence"))
+        #expect(effectsSource.contains("iOS device playback, full-suite, and release-ready claims still require separate evidence"))
     }
 
     @Test("Mac export and playback wire two-source transition compositor metadata")

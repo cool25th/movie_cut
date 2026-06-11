@@ -284,7 +284,7 @@ struct TimelineView: View {
 
             }
             .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
-            .onDrop(of: [.fileURL, .movieCutMediaAssetID], isTargeted: nil) { providers, location in
+            .onDrop(of: [.fileURL, .movie, .image, .movieCutMediaAssetID], isTargeted: nil) { providers, location in
                 handleTrackDrop(providers: providers, location: location, trackId: track.id)
             }
             .accessibilityElement(children: .contain)
@@ -784,16 +784,16 @@ struct TimelineView: View {
             return true
         }
 
-        let fileProviders = providers.filter {
-            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        let externalProviders = providers.filter {
+            DragDropHandler.providesExternalMedia($0)
         }
-        guard !fileProviders.isEmpty else {
+        guard !externalProviders.isEmpty else {
             Task { @MainActor in
                 viewModel.reportUnsupportedTimelineDrop()
             }
             return false
         }
-        TimelineDropPayloadLoader.loadFileURLs(from: fileProviders) { urls in
+        DragDropHandler.loadExternalMediaURLs(from: externalProviders) { urls in
             guard !urls.isEmpty else {
                 Task { @MainActor in
                     viewModel.reportInvalidTimelineFileDrop()
@@ -826,30 +826,6 @@ private enum TimelineDropPayloadLoader {
                     .flatMap { String(data: $0, encoding: .utf8) }
                     .flatMap { UUID(uuidString: $0) }
                 accumulator.complete(index: index, value: id)
-            }
-        }
-    }
-
-    static func loadFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
-        guard !providers.isEmpty else {
-            completion([])
-            return
-        }
-
-        let accumulator = OrderedDropPayloadAccumulator<URL>(count: providers.count, completion: completion)
-        for (index, provider) in providers.enumerated() {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                let url: URL?
-                if let data = item as? Data {
-                    url = URL(dataRepresentation: data, relativeTo: nil)
-                } else if let itemURL = item as? URL {
-                    url = itemURL
-                } else if let itemURL = item as? NSURL {
-                    url = itemURL as URL
-                } else {
-                    url = nil
-                }
-                accumulator.complete(index: index, value: url)
             }
         }
     }

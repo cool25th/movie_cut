@@ -98,10 +98,12 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 
 ### M1. 편집 기본기
 
-#### F-01. 비파일 드래그 소스 수용 (사진/브라우저)
+#### F-01. 비파일 드래그 소스 수용 (사진/브라우저) — 🟡 구현+행동테스트 완료(2026-06-11), 실기기 드래그 검증 잔여 — 🟡 구현/behavioral test 완료, 실기기 검증 대기 (`pending`, 2026-06-11)
 - **요구사항**: 사진(Photos) 앱, 웹 브라우저, 메일 첨부에서 이미지/영상을 타임라인·라이브러리에 직접 드래그할 수 있다.
-- **구현**: `TimelineView.handleTrackDrop` / `MediaLibraryPanel.handleDrop`의 수용 타입에 `.image`, `.movie`, file promise 추가. `NSFilePromiseReceiver`로 임시 디렉토리(`FileManager.temporaryDirectory/MovieCutImports/`)에 수신 후 기존 `importMediaAndAddToTimeline` 경로 재사용. raw image data는 PNG로 저장 후 동일 경로.
+- **구현**: `TimelineView.handleTrackDrop` / `MediaLibraryPanel.handleDrop`의 수용 타입에 `.image`, `.movie`를 추가하고, `DragDropHandler.loadExternalMediaURLs`가 file URL, `loadFileRepresentation`, `loadDataRepresentation` payload를 임시 디렉토리(`FileManager.temporaryDirectory/MovieCutImports/`)에 materialize한 뒤 기존 `importMediaAndAddToTimeline` / `importMedia` 경로를 재사용한다. raw image/movie data는 UTType 기반 확장자로 저장 후 동일 경로에 태운다.
 - **AC**: ① 사진 앱에서 사진을 타임라인에 드래그 → 클립 생성 ② Safari 이미지 드래그 → 클립 생성 ③ 실패 시 `lastErrorMessage`로 원인 표시. **실기기 검증 필수**(드래그앤드롭 전례 — F-01은 contract 테스트만으로 완료 처리 금지).
+- **검증 기록(2026-06-11)**: 구현은 Core `DragDropHandler.loadExternalMediaURLs`(fileURL 통과 + movie/image 우선순위 + `loadFileRepresentation`→data fallback→임시 디렉토리 기록)로 완료. `ExternalMediaDropTests` 6개가 실제 `NSItemProvider` 페이로드(브라우저식 PNG data, mp4 data, fileURL, 비미디어 거부, movie>image 우선, 파일명 규칙)를 행동 검증. 타임라인/라이브러리 `.onDrop`에 `.movie`/`.image` 추가. **실기기 드래그(사진 앱→타임라인)는 검증 도중 사용자 세션 사용으로 중단** — 사진 라이브러리에 test_image.png 1장이 import되어 있어 다음 세션에서 사진→타임라인 드래그 1회로 AC① 마감 가능. AC②(Safari)는 브라우저 드래그가 자동화 권한상 불가하므로 수동 확인 필요.
+- **현재 검증**: `swift build`, `swift test --filter 'ExternalMediaDrop|MediaDragDrop|DragDropFeedback|Drop'`, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` 통과. 남은 검증은 실제 Photos/Safari/브라우저 GUI 드래그다.
 
 #### F-03. 마그네틱 타임라인 — ✅ 완료 (`08db5a0`, 2026-06-11)
 - **요구사항**: CapCut처럼 클립 이동/삭제 시 같은 트랙의 뒤 클립들이 자동 밀착(옵션 토글). 드래그 중 인접 클립과 충돌 시 밀어내기 또는 스왑.

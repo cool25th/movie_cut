@@ -61,7 +61,8 @@
 
 ### 2-3. 알려진 드래그앤드롭 잔여 갭
 
-- **비파일 드래그 소스 미지원**: Photos 앱/브라우저 이미지는 file promise/image data 형태라 현재 안 받음. `NSFilePromiseReceiver` 또는 `.image`/`.movie` 데이터 수용 필요.
+- **F-01 비파일 드래그 소스**: `.image`/`.movie` provider 수용, file representation/data representation materialization, 라이브러리/타임라인 기존 import 경로 재사용, NSItemProvider behavioral tests는 구현됨. 검증: `swift build`, `swift test --filter 'ExternalMediaDrop|MediaDragDrop|DragDropFeedback|Drop'` 13 tests passed, `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
+- **남은 필수 확인**: Photos 앱/브라우저/Safari에서 실제 GUI 드래그로 타임라인·라이브러리에 클립이 생성되는지 확인해야 F-01 완료 처리 가능. F-01 명세는 contract 테스트만으로 완료 처리하지 말라고 못박혀 있다.
 - UI 자동화 테스트 없음 — 이번 검증은 수동 GUI 드래그 기준. XCUITest 기반 자동화는 후속.
 
 ### 2-4. 최근 접근성/비트레이트 배치 후속 확인
@@ -79,7 +80,7 @@
 
 | # | 작업 (명세서 F-ID) | 시작점 |
 |---|---|---|
-| 1 | **F-01 비파일 드래그 소스** — 사진/브라우저 드래그를 `NSFilePromiseReceiver`로 수신 → 기존 import 경로 재사용. **실기기 검증 필수** | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop` |
+| 1 | **F-01 실기기 검증** — Photos/Safari/브라우저 실제 GUI 드래그로 타임라인·라이브러리 클립 생성 확인. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
 | 2 | **F-05 키보드 단축키 맵** — Space/Cmd+B/Q/W/Delete/Cmd+D 등 CapCut 표준 세트, `.commands {}` 메뉴 등록 | `MovieCutMacApp.swift`, `EditorViewModel` |
 | 3 | **F-06 임포트 메타데이터(해상도/fps)** — probe 확장 + 라이브러리/Inspector 표기 | `EditorViewModel.mediaAssetWithAppProbe`, `MediaMetadata` |
 | 4 | **F-04 잔여: 클립 그룹/링크** — `Clip.groupId` + 이동/트림 델타 전파(단일 undo) | `Clip.swift`, `MoveClipCommand`, `TimelineView` |

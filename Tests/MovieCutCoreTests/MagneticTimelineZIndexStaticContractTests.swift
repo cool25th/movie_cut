@@ -61,9 +61,9 @@ struct MagneticTimelineZIndexStaticContractTests {
         #expect(backlog.contains("persisted `Clip.zIndex`"))
         #expect(backlog.contains("TimelineView display ordering/layer actions"))
         #expect(backlog.contains("Caveat: 클립 그룹/링크는 P2 별도 항목으로 남긴다."))
-        #expect(backlog.contains("다음 1순위는 F-01 비파일 드래그 소스"))
+        #expect(backlog.contains("다음 1순위는 F-01 실제 Photos/Safari GUI 드래그 검증"))
 
-        #expect(handoff.contains("| 1 | **F-01 비파일 드래그 소스**"))
+        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
         #expect(handoff.contains("| 완료 | ✅ **마그네틱 타임라인 / 클립별 zIndex**"))
         #expect(!handoff.contains("| 1 | **마그네틱 타임라인 / 클립별 zIndex**"))
     }

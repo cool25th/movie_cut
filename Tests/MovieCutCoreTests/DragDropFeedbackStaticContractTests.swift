@@ -39,9 +39,9 @@ struct DragDropFeedbackStaticContractTests {
     func mediaLibraryInvalidDropsReportFeedback() throws {
         let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
 
-        #expect(source.contains("MediaLibraryDropPayloadLoader.loadFileURLs"))
+        #expect(source.contains("DragDropHandler.loadExternalMediaURLs"))
         #expect(source.contains("viewModel.reportInvalidMediaLibraryDrop()"))
-        #expect(source.contains("DragDropHandler.isSupportedMediaURL"))
+        #expect(source.contains("onDrop(of: [.fileURL, .movie, .image], isTargeted: nil)"))
         #expect(source.contains("await viewModel.importMedia(urls)"))
     }
 }

@@ -70,7 +70,7 @@ struct MediaLibraryPanel: View {
         }
         .frame(minWidth: 200)
         .background(Color(nsColor: .controlBackgroundColor))
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+        .onDrop(of: [.fileURL, .movie, .image], isTargeted: nil) { providers in
             handleDrop(providers)
             return true
         }
@@ -242,7 +242,7 @@ struct MediaLibraryPanel: View {
             return
         }
 
-        MediaLibraryDropPayloadLoader.loadFileURLs(from: providers) { urls in
+        DragDropHandler.loadExternalMediaURLs(from: providers) { urls in
             guard !urls.isEmpty else {
                 Task { @MainActor in
                     viewModel.reportInvalidMediaLibraryDrop()
@@ -345,50 +345,6 @@ struct MediaLibraryPanel: View {
         }
         states.append(NSLocalizedString("draggable to timeline", comment: ""))
         return states.joined(separator: ", ")
-    }
-}
-
-private enum MediaLibraryDropPayloadLoader {
-    static func loadFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
-        guard !providers.isEmpty else {
-            completion([])
-            return
-        }
-
-        let accumulator = MediaLibraryDropPayloadAccumulator<URL>(count: providers.count, completion: completion)
-        for (index, provider) in providers.enumerated() {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                let url = DragDropHandler.fileURL(from: item)
-                    .flatMap { DragDropHandler.isSupportedMediaURL($0) ? $0 : nil }
-                accumulator.complete(index: index, value: url)
-            }
-        }
-    }
-}
-
-private final class MediaLibraryDropPayloadAccumulator<Value>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var values: [Value?]
-    private var remaining: Int
-    private let completion: ([Value]) -> Void
-
-    init(count: Int, completion: @escaping ([Value]) -> Void) {
-        self.values = Array(repeating: nil, count: count)
-        self.remaining = count
-        self.completion = completion
-    }
-
-    func complete(index: Int, value: Value?) {
-        let finishedValues: [Value]?
-        lock.lock()
-        values[index] = value
-        remaining -= 1
-        finishedValues = remaining == 0 ? values.compactMap { $0 } : nil
-        lock.unlock()
-
-        if let finishedValues {
-            completion(finishedValues)
-        }
     }
 }
 

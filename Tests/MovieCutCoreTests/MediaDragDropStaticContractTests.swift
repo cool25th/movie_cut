@@ -15,7 +15,9 @@ struct MediaDragDropStaticContractTests {
 
         #expect(source.contains(".fileURL"))
         #expect(source.contains("handleTrackDrop"))
-        #expect(source.contains("onDrop(of: [.fileURL, .movieCutMediaAssetID], isTargeted: nil)"))
+        #expect(source.contains("onDrop(of: [.fileURL, .movie, .image, .movieCutMediaAssetID], isTargeted: nil)"))
+        #expect(source.contains("DragDropHandler.providesExternalMedia"))
+        #expect(source.contains("DragDropHandler.loadExternalMediaURLs"))
         #expect(source.contains("location.x"))
         #expect(source.contains("pixelsPerSecond"))
         #expect(source.contains("importMediaAndAddToTimeline"))

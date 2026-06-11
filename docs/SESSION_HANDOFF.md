@@ -85,7 +85,7 @@
 | # | 작업 (명세서 F-ID) | 시작점 |
 |---|---|---|
 | 1 | **F-01 실기기 검증** — Photos/Safari/브라우저 실제 GUI 드래그로 타임라인·라이브러리 클립 생성 확인. 구현/behavioral tests/xcodebuild는 통과, 완료 처리는 이 검증 후. | `TimelineView.handleTrackDrop`, `MediaLibraryPanel.handleDrop`, `DragDropHandler.loadExternalMediaURLs` |
-| 2 | **F-04 잔여: 클립 그룹/링크** — `Clip.groupId` + 이동/트림 델타 전파(단일 undo) | `Clip.swift`, `MoveClipCommand`, `TimelineView` |
+| 2 | **F-04 잔여: 클립 그룹/링크 — 🟡 구현+행동테스트 완료(2026-06-11, `1f46b13`)**: `Clip.groupId` + `GroupClipsCommand` + 연결 선택(그룹 클립 탭 → 그룹 전체 선택) + Group/Ungroup 컨텍스트 메뉴 + link 아이콘. 잔여: GUI 실조작 확인. 이동 델타 전파는 마그네틱 패킹과 충돌해 연결 선택 방식 채택(스펙 F-04 검증 기록 참조) | `GroupClipsCommand.swift`, `ClipGroupingTests.swift`, `TimelineView`, `EditorViewModel` |
 | 3 | **텍스트 템플릿/타이틀 프리셋 적용 경로** — Core template의 Inspector/Canvas 적용 확인(스펙 F-12R과 연계) | `Inspector/InspectorBasicSection.swift`, Core text/template 모델 |
 
 M1 종료 시 §1.1의 W1 워크플로우(숏폼 제작) 수동 완주로 마일스톤 판정. 이후 M2는 F-07(전환 export visual fixture)부터.

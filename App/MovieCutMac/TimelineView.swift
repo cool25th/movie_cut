@@ -64,13 +64,13 @@ struct TimelineView: View {
                 .buttonStyle(.borderless)
                 .disabled(viewModel.nextMarker == nil)
                 .help("Next Marker")
-                Button(action: { viewModel.timelineZoom = max(20, viewModel.timelineZoom - 20) }) {
+                Button(action: { viewModel.zoomTimelineOut() }) {
                     Image(systemName: "minus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel(NSLocalizedString("타임라인 축소", comment: ""))
                 .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
-                Button(action: { viewModel.timelineZoom = min(300, viewModel.timelineZoom + 20) }) {
+                Button(action: { viewModel.zoomTimelineIn() }) {
                     Image(systemName: "plus.magnifyingglass")
                 }
                 .buttonStyle(.borderless)

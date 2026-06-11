@@ -81,7 +81,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 마그네틱 타임라인(자동 밀착) (P1) — Add/Move/Duplicate/Delete command path가 `RestoreTrackClipsCommand` track snapshot을 남기고, Add/Move/Duplicate/Delete 후 same-track magnetic packing으로 클립을 0초부터 end-to-start로 밀착한다. Undo는 이전 track snapshot/range를 복원한다.
 - [x] ✅ 멀티트랙 레이어링 + 클립별 zIndex (P1) — persisted `Clip.zIndex`가 legacy JSON에서 기본값 0으로 decode되고 round-trip encode된다. `TimelineView`는 `clipsForDisplay(track)`와 `.zIndex(Double(clip.zIndex))` 기반 TimelineView display ordering/layer actions를 사용하며 Bring to Front / Send to Back context action으로 선택 클립 layer를 조정한다. Caveat: 클립 그룹/링크는 P2 별도 항목으로 남긴다.
 - [ ] ❌ 클립 그룹/링크(영상+오디오 묶음) (P2)
-- [ ] ❌ 키보드 단축키 맵 전체 (P2)
+- [x] ✅ 키보드 단축키 맵 전체 (P2) — `MovieCutMacApp.commands` now owns the F-05 Playback/Timeline/Edit shortcut map: Space, Cmd+B, Q/W, Delete, Shift+Delete, Cmd+D, frame/1s arrows, clip-boundary Up/Down, +/- zoom, M, and Cmd+Z/Shift+Cmd+Z. Toolbar/background duplicate shortcut registrations were removed from `ContentView`, and Help exposes "MovieCut Keyboard Shortcuts." Caveat: text-entry-sensitive unmodified shortcuts use a centralized AppKit first-responder guard rather than a full SwiftUI FocusState router; GUI text-field regression remains host verification.
 
 ### C. 비디오 효과 (Visual)
 - [x] ✅ 색보정(밝기/대비/채도) **실제 픽셀 처리** (P0) — `ColorCorrectionPixelProcessor`가 `CIColorControls`로 밝기/대비/채도를 적용하고, Mac `CustomVideoCompositor`가 preview/export 공통 경로에서 이를 사용한다. SwiftPM static contract가 `PlaybackEngine`/`ExportEngine`의 custom compositor 라우팅을 확인한다. 현재 sandbox에서는 `CIContext`가 non-black fixture도 transparent black으로 렌더해 pixel assertion은 guarded; 정상 CoreImage runner에서는 identity/brightness/saturation pixel sampling 테스트가 실행된다. warmth/tint는 후속 보강 대상.
@@ -142,7 +142,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ## 4. 권장 작업 순서
 
 1. **P0 묶음 완료 확인** — 라이브러리→타임라인 드래그앤드롭은 2026-06-10 실기기 GUI 검증까지 완료됐고, 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)도 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
-2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A), speed ramp preview+export(G), 텍스트 스타일 편집 UI(D), 보이스오버 실녹음(F), 페이드 duration 편집 UI(F), 마그네틱 타임라인 / 클립별 zIndex(B)는 닫혔다. F-01 비파일 드래그 소스(Photos/브라우저 이미지 드래그)는 `.image`/`.movie` payload materialization과 NSItemProvider behavioral test까지 통과했으며, 다음 1순위는 F-01 실제 Photos/Safari GUI 드래그 검증이다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
+2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A), speed ramp preview+export(G), 텍스트 스타일 편집 UI(D), 보이스오버 실녹음(F), 페이드 duration 편집 UI(F), 마그네틱 타임라인 / 클립별 zIndex(B), 키보드 단축키 맵(F-05)은 닫혔다. F-01 비파일 드래그 소스(Photos/브라우저 이미지 드래그)는 `.image`/`.movie` payload materialization과 NSItemProvider behavioral test까지 통과했고 실제 GUI 드래그 검증은 별도 잔여다. 다음 1순위는 F-06 임포트 메타데이터(해상도/fps) 완성이다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
 3. **"🟡 배선만" → 실제 알고리즘 채우기** — 명령/메타데이터 경로가 이미 있으므로, compositor에 CIFilter/Vision/AVAudioUnit 처리만 붙이면 됨. 신규 배선보다 ROI 높음.
 4. **갭 문서 재작성** — "코드 존재"가 아니라 "preview+export 결과 확인"을 완료 기준으로.
 

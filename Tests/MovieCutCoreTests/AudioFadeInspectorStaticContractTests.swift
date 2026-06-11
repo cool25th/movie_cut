@@ -158,7 +158,7 @@ struct AudioFadeInspectorStaticContractTests {
         #expect(backlog.contains("Seconds `TextField`"))
         #expect(backlog.contains("Reset Fades/None/Soft/Long"))
         #expect(backlog.contains("`updateSelectedAudioFade` → `AudioFadeCommand`"))
-        #expect(backlog.contains("다음 1순위는 F-01 실제 Photos/Safari GUI 드래그 검증"))
+        #expect(backlog.contains("다음 1순위는 F-06 임포트 메타데이터(해상도/fps) 완성"))
         #expect(!backlog.contains("- [ ] 🟡 페이드 duration 편집 UI"))
         #expect(!backlog.contains("다음 1순위는 페이드 duration 편집 UI"))
 
@@ -166,7 +166,7 @@ struct AudioFadeInspectorStaticContractTests {
         #expect(handoff.contains("Fade Duration"))
         #expect(handoff.contains("Reset Fades/None/Soft/Long"))
         #expect(handoff.contains("`updateSelectedAudioFade` → `AudioFadeCommand`"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
+        #expect(handoff.contains("| 1 | **F-06 임포트 메타데이터(해상도/fps)**"))
         #expect(handoff.contains("| 완료 | ✅ **페이드 duration 편집 UI**"))
     }
 }

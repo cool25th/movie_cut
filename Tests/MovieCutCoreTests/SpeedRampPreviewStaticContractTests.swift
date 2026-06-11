@@ -71,7 +71,7 @@ struct SpeedRampPreviewStaticContractTests {
         #expect(source.contains("scaleTimeRange"))
         #expect(source.contains("audio preview path"))
         #expect(source.contains("- [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)"))
-        #expect(source.contains("다음 1순위는 F-01 실제 Photos/Safari GUI 드래그 검증"))
+        #expect(source.contains("다음 1순위는 F-06 임포트 메타데이터(해상도/fps) 완성"))
         #expect(!source.contains("preview 미반영"))
         #expect(!source.contains("다음 1순위는 speed ramp preview"))
     }

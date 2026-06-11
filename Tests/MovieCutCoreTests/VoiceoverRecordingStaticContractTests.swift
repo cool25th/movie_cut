@@ -123,7 +123,7 @@ struct VoiceoverRecordingStaticContractTests {
         #expect(backlog.contains("Mac `VoiceoverRecordingView`"))
         #expect(backlog.contains("NSMicrophoneUsageDescription"))
         #expect(backlog.contains("fallbackDuration"))
-        #expect(backlog.contains("다음 1순위는 F-01 실제 Photos/Safari GUI 드래그 검증"))
+        #expect(backlog.contains("다음 1순위는 F-06 임포트 메타데이터(해상도/fps) 완성"))
         #expect(!backlog.contains("- [ ] 🟡 보이스오버 실제 마이크 녹음 (P1)"))
         #expect(!backlog.contains("다음 1순위는 보이스오버 실녹음"))
 
@@ -131,7 +131,7 @@ struct VoiceoverRecordingStaticContractTests {
         #expect(handoff.contains("macOS Microphone 권한"))
         #expect(handoff.contains("실제 입력 하드웨어"))
         #expect(handoff.contains("| 완료 | ✅ **보이스오버 실녹음**"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
+        #expect(handoff.contains("| 1 | **F-06 임포트 메타데이터(해상도/fps)**"))
     }
 }
 

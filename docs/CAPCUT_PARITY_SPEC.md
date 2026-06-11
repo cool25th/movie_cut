@@ -115,10 +115,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: `Clip`에 `zIndexOverride: Int?`, `groupId: UUID?` 추가(A5 준수). compositor 정렬 키를 `(track.zIndex, clip.zIndexOverride ?? 0)`으로 확장. 그룹: 컨텍스트 메뉴 "Group/Ungroup", `moveClip`/`trimClip`이 같은 groupId 클립에 델타 전파(단일 undo 단위 batch dispatch).
 - **AC**: ① 두 텍스트 오버레이의 앞뒤 순서를 클립 단위로 변경 → preview/export 동일 ② 그룹 이동 시 상대 오프셋 유지 ③ ungroup 후 개별 동작 ④ 구버전 프로젝트 로드 호환.
 
-#### F-05. 키보드 단축키 맵
+#### F-05. 키보드 단축키 맵 — ✅ 구현+정적 계약 완료(2026-06-11), GUI 실동작 검증 별도
 - **요구사항**: CapCut 표준 단축키. Space(재생/정지), Cmd+B(분할), Q/W(playhead 기준 앞/뒤 트림), Delete(삭제), Shift+Delete(ripple), Cmd+D(복제), ←/→(프레임), Shift+←/→(1초), ↑/↓(클립 점프), +/-(줌), M(마커), Cmd+Z/Shift+Cmd+Z.
-- **구현**: `MovieCutMacApp`에 `.commands { }` 메뉴 정의(메뉴 표기 겸 단축키 등록) + `EditorViewModel` 기존 메서드 호출. 텍스트 입력 포커스 중 비활성(`@FocusState` 분기).
-- **AC**: ① 전 단축키 동작 + 메뉴 표기 ② 텍스트 필드 편집 중 단축키 미발동 ③ Help 메뉴에 목록.
+- **구현**: `MovieCutMacApp`의 `.commands`가 `Playback`/`Timeline` 메뉴와 Edit undo/redo replacement로 F-05 키맵을 단일 등록한다. `EditorViewModel`은 Q/W trim-to-playhead, Shift+Delete ripple delete, Cmd+D duplicate, Shift+Arrow 1초 seek, Up/Down clip-boundary jump, +/- timeline zoom을 기존 command/dispatch 흐름 또는 ViewModel playback/selection state로 노출한다. `ContentView`의 toolbar/background shortcut 중복 등록은 제거하고 toolbar 버튼은 클릭 액션만 유지한다. Help 메뉴에는 "MovieCut Keyboard Shortcuts" 목록을 추가했다.
+- **텍스트 입력 caveat**: full SwiftUI `@FocusState` command router는 아직 도입하지 않았다. 대신 Space/Q/W/Delete/Arrow/+/-/M 같은 text-entry-sensitive command actions는 `MovieCutShortcutGuard`에서 AppKit first responder(`NSTextView`/`NSTextField`)를 확인해 중앙 차단하고, static contract로 잠근다.
+- **AC 상태**: ① 메뉴 표기와 전 shortcut 등록은 static contract로 완료 ② 텍스트 필드 충돌은 guard 기반 best-effort 완료, 실제 텍스트 편집 GUI 회귀는 호스트 확인 필요 ③ Help 메뉴 목록 구현 완료. **GUI 실동작 검증은 이번 완료 범위에 포함하지 않음.**
 
 #### F-06. 임포트 메타데이터 완성 (해상도/fps)
 - **요구사항**: duration만 읽는 현재 probe를 확장해 해상도/fps/코덱을 `MediaMetadata`에 기록, 라이브러리 행과 Inspector에 표시.

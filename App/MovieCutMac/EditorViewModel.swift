@@ -60,7 +60,19 @@ final class EditorViewModel {
         }
     }
 
+    private struct TimelineNavigationPoint {
+        var time: TimeInterval
+        var clipId: UUID
+        var trackIndex: Int
+        var clipIndex: Int
+        var isEnd: Bool
+    }
+
     private static let minimumVoiceoverDuration: TimeInterval = 0.1
+    private static let minimumTimelineClipDuration: TimeInterval = 0.1
+    private static let timelineZoomStep: Double = 20
+    private static let minimumTimelineZoom: Double = 20
+    private static let maximumTimelineZoom: Double = 300
 
     static let textTemplates: [TextTemplate] = [
         TextTemplate(id: "title", name: "Title", fontName: "HelveticaNeue-Bold", fontSize: 36, isBold: true, alignment: .center, animation: .fadeIn),
@@ -1058,6 +1070,72 @@ final class EditorViewModel {
         )
     }
 
+    func trimSelectedClipStartToPlayhead() async {
+        guard let selectedClipId, let selectedClip else { return }
+        let trimTime = playheadTime
+
+        guard trimTime > selectedClip.timelineRange.start,
+              trimTime < selectedClip.timelineRange.end
+        else {
+            lastErrorMessage = "Move the playhead inside the selected clip to trim its start."
+            return
+        }
+
+        let newDuration = selectedClip.timelineRange.end - trimTime
+        guard newDuration >= Self.minimumTimelineClipDuration else {
+            lastErrorMessage = "Trimmed clip would be too short."
+            return
+        }
+
+        let playbackRate = min(max(selectedClip.playbackRate, 0.25), 4.0)
+        let sourceDelta = (trimTime - selectedClip.timelineRange.start) * playbackRate
+        let newSourceStart = min(selectedClip.sourceRange.end, selectedClip.sourceRange.start + sourceDelta)
+        let newSourceDuration = selectedClip.sourceRange.end - newSourceStart
+        guard newSourceDuration > 0 else {
+            lastErrorMessage = "Trimmed source range would be empty."
+            return
+        }
+
+        await trimClip(
+            clipId: selectedClipId,
+            trackId: selectedClipTrackId,
+            sourceRange: TimeRange(start: newSourceStart, duration: newSourceDuration),
+            timelineRange: TimeRange(start: trimTime, duration: newDuration)
+        )
+    }
+
+    func trimSelectedClipEndToPlayhead() async {
+        guard let selectedClipId, let selectedClip else { return }
+        let trimTime = playheadTime
+
+        guard trimTime > selectedClip.timelineRange.start,
+              trimTime < selectedClip.timelineRange.end
+        else {
+            lastErrorMessage = "Move the playhead inside the selected clip to trim its end."
+            return
+        }
+
+        let newDuration = trimTime - selectedClip.timelineRange.start
+        guard newDuration >= Self.minimumTimelineClipDuration else {
+            lastErrorMessage = "Trimmed clip would be too short."
+            return
+        }
+
+        let playbackRate = min(max(selectedClip.playbackRate, 0.25), 4.0)
+        let newSourceDuration = min(selectedClip.sourceRange.duration, newDuration * playbackRate)
+        guard newSourceDuration > 0 else {
+            lastErrorMessage = "Trimmed source range would be empty."
+            return
+        }
+
+        await trimClip(
+            clipId: selectedClipId,
+            trackId: selectedClipTrackId,
+            sourceRange: TimeRange(start: selectedClip.sourceRange.start, duration: newSourceDuration),
+            timelineRange: TimeRange(start: selectedClip.timelineRange.start, duration: newDuration)
+        )
+    }
+
     func moveClip(
         clipId: UUID,
         sourceTrackId: UUID?,
@@ -1185,6 +1263,48 @@ final class EditorViewModel {
 
         let duration = max(0, currentProject.timeline.duration)
         playheadTime = min(max(0, playheadTime + Double(frameCount) * frameDuration), duration)
+    }
+
+    func seekBySeconds(_ seconds: TimeInterval) {
+        if playbackEngine.playerItem != nil {
+            let nextPlaybackTime = playbackEngine.currentTime + seconds
+            playbackEngine.seek(to: max(0, nextPlaybackTime))
+            syncTimelinePlayhead(to: playbackEngine.currentTime)
+            return
+        }
+
+        let duration = max(0, currentProject.timeline.duration)
+        playheadTime = min(max(0, playheadTime + seconds), duration)
+    }
+
+    func jumpToPreviousClipBoundary() {
+        guard let point = timelineNavigationPoints()
+            .last(where: { $0.time < playheadTime - 0.001 })
+        else {
+            return
+        }
+
+        selectedClipId = point.clipId
+        seekPlayhead(to: point.time)
+    }
+
+    func jumpToNextClipBoundary() {
+        guard let point = timelineNavigationPoints()
+            .first(where: { $0.time > playheadTime + 0.001 })
+        else {
+            return
+        }
+
+        selectedClipId = point.clipId
+        seekPlayhead(to: point.time)
+    }
+
+    func zoomTimelineIn() {
+        timelineZoom = min(Self.maximumTimelineZoom, timelineZoom + Self.timelineZoomStep)
+    }
+
+    func zoomTimelineOut() {
+        timelineZoom = max(Self.minimumTimelineZoom, timelineZoom - Self.timelineZoomStep)
     }
 
     func updateSelectedTransform(_ transform: ClipTransform) async {
@@ -2655,6 +2775,46 @@ final class EditorViewModel {
             }
         }
         return orderedClipIds
+    }
+
+    private func timelineNavigationPoints() -> [TimelineNavigationPoint] {
+        var points: [TimelineNavigationPoint] = []
+
+        for (trackIndex, track) in currentProject.timeline.tracks.enumerated() {
+            for (clipIndex, clip) in track.clips.enumerated() {
+                points.append(
+                    TimelineNavigationPoint(
+                        time: clip.timelineRange.start,
+                        clipId: clip.id,
+                        trackIndex: trackIndex,
+                        clipIndex: clipIndex,
+                        isEnd: false
+                    )
+                )
+                points.append(
+                    TimelineNavigationPoint(
+                        time: clip.timelineRange.end,
+                        clipId: clip.id,
+                        trackIndex: trackIndex,
+                        clipIndex: clipIndex,
+                        isEnd: true
+                    )
+                )
+            }
+        }
+
+        return points.sorted {
+            if $0.time != $1.time {
+                return $0.time < $1.time
+            }
+            if $0.trackIndex != $1.trackIndex {
+                return $0.trackIndex < $1.trackIndex
+            }
+            if $0.clipIndex != $1.clipIndex {
+                return $0.clipIndex < $1.clipIndex
+            }
+            return !$0.isEnd && $1.isEnd
+        }
     }
 
     private func syncTimelinePlayhead(to playbackTime: TimeInterval) {

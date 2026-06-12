@@ -127,7 +127,12 @@ public enum TextOverlayPixelProcessor {
 
         let fontSize = max(CGFloat(textContent.fontSize), 1)
         let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
-        let font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
+        let font = resolvedFont(
+            name: fontName,
+            size: fontSize,
+            bold: textContent.isBold,
+            italic: textContent.isItalic
+        )
         let textColor = cgColor(hexRGB: textContent.fontColor)
         let attributedString = attributedText(
             textState.text,
@@ -177,6 +182,43 @@ public enum TextOverlayPixelProcessor {
         let path = CGMutablePath()
         path.addRect(textRect)
         context.textMatrix = .identity
+
+        // Drop shadow applies to the glyph passes only, not the background box.
+        if let shadowColor = textContent.shadowColor {
+            let offset = textContent.shadowOffset ?? CGPoint(x: 2, y: 2)
+            let blur = CGFloat(textContent.shadowBlur ?? 4)
+            // The CG context is bottom-left origin; UI-positive y (downward)
+            // becomes a negative CG y offset.
+            context.setShadow(
+                offset: CGSize(width: offset.x, height: -offset.y),
+                blur: blur,
+                color: cgColor(hexRGB: shadowColor)
+            )
+        }
+
+        // Outline pass first so the fill sits on top of the stroke.
+        if let strokeColor = textContent.strokeColor,
+           let strokeWidth = textContent.strokeWidth,
+           strokeWidth > 0 {
+            // CoreText stroke width is a percentage of the font point size.
+            let strokePercent = strokeWidth / Double(fontSize) * 100
+            let strokeString = attributedText(
+                textState.text,
+                font: font,
+                color: textColor,
+                alignment: textContent.alignment,
+                stroke: (color: cgColor(hexRGB: strokeColor), widthPercent: strokePercent)
+            )
+            let strokeFramesetter = CTFramesetterCreateWithAttributedString(strokeString)
+            let strokeFrame = CTFramesetterCreateFrame(
+                strokeFramesetter,
+                CFRange(location: 0, length: strokeString.length),
+                path,
+                nil
+            )
+            CTFrameDraw(strokeFrame, context)
+        }
+
         let frame = CTFramesetterCreateFrame(
             framesetter,
             CFRange(location: 0, length: attributedString.length),
@@ -185,6 +227,26 @@ public enum TextOverlayPixelProcessor {
         )
         CTFrameDraw(frame, context)
         context.restoreGState()
+    }
+
+    /// Resolves the font with bold/italic symbolic traits when the face
+    /// supports them, falling back to the plain font otherwise.
+    private static func resolvedFont(
+        name: String,
+        size: CGFloat,
+        bold: Bool,
+        italic: Bool
+    ) -> CTFont {
+        let base = CTFontCreateWithName(name as CFString, size, nil)
+        var traits: CTFontSymbolicTraits = []
+        if bold { traits.insert(.boldTrait) }
+        if italic { traits.insert(.italicTrait) }
+        guard !traits.isEmpty else { return base }
+
+        if let styled = CTFontCreateCopyWithSymbolicTraits(base, size, nil, traits, traits) {
+            return styled
+        }
+        return base
     }
 
     private static func animatedTextState(
@@ -241,7 +303,8 @@ public enum TextOverlayPixelProcessor {
         _ text: String,
         font: CTFont,
         color: CGColor,
-        alignment: TextAlignment
+        alignment: TextAlignment,
+        stroke: (color: CGColor, widthPercent: Double)? = nil
     ) -> NSAttributedString {
         var ctAlignment = coreTextAlignment(for: alignment)
         return withUnsafePointer(to: &ctAlignment) { alignmentPointer in
@@ -253,14 +316,18 @@ public enum TextOverlayPixelProcessor {
                 )
             ], 1)
 
-            return NSAttributedString(
-                string: text,
-                attributes: [
-                    NSAttributedString.Key(kCTFontAttributeName as String): font,
-                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
-                    NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
-                ]
-            )
+            var attributes: [NSAttributedString.Key: Any] = [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
+            ]
+            if let stroke {
+                // Positive stroke width renders stroke-only glyphs.
+                attributes[NSAttributedString.Key(kCTStrokeColorAttributeName as String)] = stroke.color
+                attributes[NSAttributedString.Key(kCTStrokeWidthAttributeName as String)] = stroke.widthPercent
+            }
+
+            return NSAttributedString(string: text, attributes: attributes)
         }
     }
 

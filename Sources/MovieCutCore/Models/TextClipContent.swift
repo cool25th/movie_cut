@@ -59,6 +59,27 @@ public struct TextClipContent: Codable, Sendable, Equatable {
     /// Optional image source for image-backed sticker overlays.
     public var stickerImageURL: URL?
 
+    /// Optional outline color hex. Nil disables the stroke (F-12R).
+    public var strokeColor: String?
+
+    /// Outline width in points. Used only when `strokeColor` is set.
+    public var strokeWidth: Double?
+
+    /// Optional drop-shadow color hex. Nil disables the shadow (F-12R).
+    public var shadowColor: String?
+
+    /// Shadow offset in canvas points (positive y draws downward).
+    public var shadowOffset: CGPoint?
+
+    /// Shadow blur radius in points.
+    public var shadowBlur: Double?
+
+    /// Renders the font with a bold trait when available.
+    public var isBold: Bool
+
+    /// Renders the font with an italic trait when available.
+    public var isItalic: Bool
+
     /// Whether this text payload should be treated as a sticker overlay.
     public var isSticker: Bool {
         contentKind == .sticker
@@ -76,6 +97,13 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         case contentKind
         case stickerAssetID
         case stickerImageURL
+        case strokeColor
+        case strokeWidth
+        case shadowColor
+        case shadowOffset
+        case shadowBlur
+        case isBold
+        case isItalic
     }
 
     private struct LegacyPoint: Decodable {
@@ -95,7 +123,14 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         animation: TextAnimation? = nil,
         contentKind: TextClipContentKind = .text,
         stickerAssetID: UUID? = nil,
-        stickerImageURL: URL? = nil
+        stickerImageURL: URL? = nil,
+        strokeColor: String? = nil,
+        strokeWidth: Double? = nil,
+        shadowColor: String? = nil,
+        shadowOffset: CGPoint? = nil,
+        shadowBlur: Double? = nil,
+        isBold: Bool = false,
+        isItalic: Bool = false
     ) {
         self.text = text
         self.fontFamily = fontFamily
@@ -108,6 +143,13 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         self.contentKind = contentKind
         self.stickerAssetID = stickerAssetID
         self.stickerImageURL = stickerImageURL
+        self.strokeColor = strokeColor
+        self.strokeWidth = strokeWidth
+        self.shadowColor = shadowColor
+        self.shadowOffset = shadowOffset
+        self.shadowBlur = shadowBlur
+        self.isBold = isBold
+        self.isItalic = isItalic
     }
 
     public init(from decoder: any Decoder) throws {
@@ -123,6 +165,13 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         contentKind = try container.decodeIfPresent(TextClipContentKind.self, forKey: .contentKind) ?? .text
         stickerAssetID = try container.decodeIfPresent(UUID.self, forKey: .stickerAssetID)
         stickerImageURL = try container.decodeIfPresent(URL.self, forKey: .stickerImageURL)
+        strokeColor = try container.decodeIfPresent(String.self, forKey: .strokeColor)
+        strokeWidth = try container.decodeIfPresent(Double.self, forKey: .strokeWidth)
+        shadowColor = try container.decodeIfPresent(String.self, forKey: .shadowColor)
+        shadowOffset = try Self.decodePointIfPresent(in: container, forKey: .shadowOffset)
+        shadowBlur = try container.decodeIfPresent(Double.self, forKey: .shadowBlur)
+        isBold = try container.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
+        isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -138,6 +187,26 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         try container.encode(contentKind, forKey: .contentKind)
         try container.encodeIfPresent(stickerAssetID, forKey: .stickerAssetID)
         try container.encodeIfPresent(stickerImageURL, forKey: .stickerImageURL)
+        try container.encodeIfPresent(strokeColor, forKey: .strokeColor)
+        try container.encodeIfPresent(strokeWidth, forKey: .strokeWidth)
+        try container.encodeIfPresent(shadowColor, forKey: .shadowColor)
+        try container.encodeIfPresent(shadowOffset, forKey: .shadowOffset)
+        try container.encodeIfPresent(shadowBlur, forKey: .shadowBlur)
+        if isBold { try container.encode(isBold, forKey: .isBold) }
+        if isItalic { try container.encode(isItalic, forKey: .isItalic) }
+    }
+
+    private static func decodePointIfPresent(
+        in container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> CGPoint? {
+        if let point = try? container.decodeIfPresent(CGPoint.self, forKey: key) {
+            return point
+        }
+        if let point = try? container.decodeIfPresent(LegacyPoint.self, forKey: key) {
+            return CGPoint(x: point.x, y: point.y)
+        }
+        return nil
     }
 
     private static func decodePosition(from container: KeyedDecodingContainer<CodingKeys>) -> CGPoint {

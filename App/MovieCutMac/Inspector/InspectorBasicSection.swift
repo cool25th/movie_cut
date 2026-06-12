@@ -325,7 +325,165 @@ struct InspectorBasicSection: View {
             }
 
             textBackgroundControls(textContent)
+            textDecorationControls(textContent)
             textQuickStylePresets(textContent)
+            userStylePresetControls(textContent)
+        }
+    }
+
+    /// Bold/italic, outline, and drop-shadow editing (F-12R).
+    private func textDecorationControls(_ textContent: TextClipContent) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { textContent.isBold },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.isBold = newValue
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                )) {
+                    Image(systemName: "bold")
+                }
+                .toggleStyle(.button)
+                .accessibilityLabel("Bold text")
+
+                Toggle(isOn: Binding(
+                    get: { textContent.isItalic },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.isItalic = newValue
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                )) {
+                    Image(systemName: "italic")
+                }
+                .toggleStyle(.button)
+                .accessibilityLabel("Italic text")
+
+                Spacer()
+            }
+
+            HStack(spacing: 6) {
+                Text("Outline")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ColorPicker("", selection: Binding(
+                    get: { colorFromHex(textContent.strokeColor ?? "#000000") },
+                    set: { newValue in
+                        var updated = textContent
+                        updated.strokeColor = hexFromColor(newValue)
+                        if updated.strokeWidth == nil || updated.strokeWidth == 0 {
+                            updated.strokeWidth = 2
+                        }
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                ))
+                .labelsHidden()
+                .accessibilityLabel("Outline color")
+
+                Slider(value: Binding(
+                    get: { textContent.strokeWidth ?? 0 },
+                    set: { newValue in
+                        var updated = textContent
+                        if newValue <= 0.01 {
+                            updated.strokeWidth = nil
+                            updated.strokeColor = nil
+                        } else {
+                            updated.strokeWidth = newValue
+                            if updated.strokeColor == nil {
+                                updated.strokeColor = "#000000"
+                            }
+                        }
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                ), in: 0 ... 8)
+                .accessibilityLabel("Outline width")
+
+                Text(String(format: "%.1f", textContent.strokeWidth ?? 0))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 28, alignment: .trailing)
+            }
+
+            HStack(spacing: 6) {
+                Toggle("Shadow", isOn: Binding(
+                    get: { textContent.shadowColor != nil },
+                    set: { enabled in
+                        var updated = textContent
+                        if enabled {
+                            updated.shadowColor = updated.shadowColor ?? "#000000"
+                            updated.shadowBlur = updated.shadowBlur ?? 4
+                            updated.shadowOffset = updated.shadowOffset ?? CGPoint(x: 2, y: 2)
+                        } else {
+                            updated.shadowColor = nil
+                            updated.shadowBlur = nil
+                            updated.shadowOffset = nil
+                        }
+                        Task { await viewModel.updateSelectedTextContent(updated) }
+                    }
+                ))
+                .font(.caption)
+                .accessibilityLabel("Text shadow")
+
+                if textContent.shadowColor != nil {
+                    Slider(value: Binding(
+                        get: { textContent.shadowBlur ?? 4 },
+                        set: { newValue in
+                            var updated = textContent
+                            updated.shadowBlur = newValue
+                            Task { await viewModel.updateSelectedTextContent(updated) }
+                        }
+                    ), in: 0 ... 20)
+                    .accessibilityLabel("Shadow blur")
+
+                    Text(String(format: "%.0f", textContent.shadowBlur ?? 4))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(width: 22, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    /// Saved user presets: capture the current style or apply/delete one.
+    private func userStylePresetControls(_ textContent: TextClipContent) -> some View {
+        HStack(spacing: 6) {
+            Menu("My Styles") {
+                if viewModel.userTextStylePresets.isEmpty {
+                    Text("No saved styles")
+                }
+                ForEach(viewModel.userTextStylePresets) { preset in
+                    Button(preset.name) {
+                        Task { await viewModel.applyUserTextStylePreset(preset) }
+                    }
+                }
+                if !viewModel.userTextStylePresets.isEmpty {
+                    Divider()
+                    Menu("Delete") {
+                        ForEach(viewModel.userTextStylePresets) { preset in
+                            Button(preset.name, role: .destructive) {
+                                viewModel.deleteUserTextStylePreset(preset.id)
+                            }
+                        }
+                    }
+                }
+            }
+            .controlSize(.small)
+            .frame(maxWidth: 120)
+            .accessibilityLabel("Saved text styles")
+            .onAppear {
+                viewModel.loadUserTextStylePresets()
+            }
+
+            Button("Save Style") {
+                viewModel.saveSelectedTextStyleAsPreset()
+            }
+            .controlSize(.small)
+            .accessibilityLabel("Save current text style as preset")
+            .accessibilityHint("Captures font, colors, outline, and shadow for reuse.")
         }
     }
 

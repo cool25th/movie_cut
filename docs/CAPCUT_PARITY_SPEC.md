@@ -161,10 +161,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 
 ### M3. 오디오 & 텍스트
 
-#### F-12R. 텍스트 스타일 잔여분 (외곽선/그림자/프리셋 저장)
+#### F-12R. 텍스트 스타일 잔여분 (외곽선/그림자/프리셋 저장) — 🟡 구현+픽셀 테스트 완료(2026-06-11), 실기기 확인 잔여
 - **상태**: 본문/폰트/크기/정렬/전경·배경색/quick preset은 `4a2bad8`에서 완료. 잔여: 외곽선(stroke), 그림자(shadow), 굵기/이탤릭, 사용자 프리셋 저장.
 - **구현**: `TextClipContent`에 stroke(색/두께)/shadow(색/오프셋/블러)/weight/italic 필드 추가(A5). `TextOverlayPixelProcessor` 확장(stroke=외곽 draw, shadow=offset draw). 사용자 프리셋 `~/Library/Application Support/MovieCut/TextStyles.json`.
 - **AC**: ① stroke/shadow 유무가 export 픽셀 테스트로 구분 ② 프리셋 저장→새 텍스트 1클릭 적용 ③ 구버전 프로젝트 호환.
+- **검증 기록(2026-06-11)**: `TextClipContent`에 strokeColor/strokeWidth(pt), shadowColor/shadowOffset/shadowBlur, isBold/isItalic 추가(A5 + legacy 디코딩 테스트). shared `TextOverlayPixelProcessor`가 bold/italic을 `CTFontCreateCopyWithSymbolicTraits`로, 외곽선을 CoreText stroke 2-pass(stroke-only 후 fill — width는 폰트 크기 % 환산)로, 그림자를 `CGContext.setShadow`(배경 박스 제외, CG 좌표 y 반전 처리)로 렌더 — Mac/iOS compositor가 이 프로세서를 위임하므로 양 플랫폼 preview/export 자동 일치(A2/A3). `UserTextStylePreset`(+`Store`, App Support/TextStyles.json) — 스타일만 캡처/적용(text/position/animation 보존). Inspector에 Bold/Italic 토글, Outline 색+폭 슬라이더(0→해제), Shadow 토글+블러, My Styles 메뉴(적용/삭제)+Save Style. 픽셀 테스트: 빨간 외곽선 픽셀 증가(AC①), 그림자 오프셋 픽셀, bold 커버리지 증가 — 실제 RGBA 비트맵 스캔 방식. `TextDecorationTests` 9개 + 필터 스위트 165개 + Mac 빌드 통과. Caveat: 실기기 GUI 확인과 export 파일 검증 잔여 — DoD §1.3에 따라 ✅ 보류. 프리셋 이름 사용자 지정은 후속.
 
 #### F-13. 자막 편집 워크플로우 완성 — 🟡 구현+테스트 완료(2026-06-11), W3 실기기 완주 잔여
 - **요구사항**: STT 결과를 리스트에서 텍스트 수정·타이밍 조정·분할/병합 후 일괄 스타일 적용. SRT import/export.

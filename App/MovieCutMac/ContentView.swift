@@ -237,6 +237,26 @@ private struct QuickToolsPanel: View {
                 }
 
                 quickButton(
+                    .beatDetect,
+                    title: "Detect Beats",
+                    systemImage: "metronome",
+                    isEnabled: viewModel.canDetectBeats
+                ) {
+                    await viewModel.detectBeats()
+                }
+
+                if viewModel.hasBeatMarkers {
+                    quickButton(
+                        .beatClear,
+                        title: "Clear Beats",
+                        systemImage: "metronome.fill",
+                        isEnabled: true
+                    ) {
+                        await viewModel.clearBeatMarkers()
+                    }
+                }
+
+                quickButton(
                     .reframe,
                     title: "Auto Reframe",
                     systemImage: "viewfinder",
@@ -418,6 +438,8 @@ private enum QuickTool: Equatable {
     case sticker
     case autoCut
     case sceneDetect
+    case beatDetect
+    case beatClear
     case reframe
     case noiseReduction
     case extractAudio
@@ -432,6 +454,10 @@ private enum QuickTool: Equatable {
             return "Analyzing silence..."
         case .sceneDetect:
             return "Detecting scene changes..."
+        case .beatDetect:
+            return "Detecting beats..."
+        case .beatClear:
+            return "Removing beat markers..."
         case .reframe:
             return "Tracking crop frames..."
         case .noiseReduction:

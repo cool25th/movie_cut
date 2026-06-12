@@ -222,13 +222,28 @@ struct TimelineView: View {
                 .frame(width: timelineContentWidth, height: rulerHeight)
 
                 ForEach(sortedMarkers) { marker in
-                    TimelineMarkerFlag(marker: marker)
-                        .frame(width: markerLabelWidth, height: rulerHeight, alignment: .leading)
-                        .offset(x: markerX(marker), y: 0)
-                        .onTapGesture {
-                            viewModel.goToMarker(marker)
-                        }
-                        .help(markerHelp(marker))
+                    if marker.kind == .beat {
+                        // Beat markers render as compact ticks: a full flag per
+                        // beat would flood the ruler on real music tracks.
+                        Rectangle()
+                            .fill(Color.orange.opacity(0.85))
+                            .frame(width: 2, height: rulerHeight / 3)
+                            .offset(x: markerX(marker), y: rulerHeight * 2 / 3)
+                            .onTapGesture {
+                                viewModel.goToMarker(marker)
+                            }
+                            .help(markerHelp(marker))
+                            .accessibilityLabel(NSLocalizedString("비트 마커", comment: ""))
+                            .accessibilityValue(timelineSecondsString(marker.time))
+                    } else {
+                        TimelineMarkerFlag(marker: marker)
+                            .frame(width: markerLabelWidth, height: rulerHeight, alignment: .leading)
+                            .offset(x: markerX(marker), y: 0)
+                            .onTapGesture {
+                                viewModel.goToMarker(marker)
+                            }
+                            .help(markerHelp(marker))
+                    }
                 }
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
@@ -265,7 +280,7 @@ struct TimelineView: View {
                     clipView(clip, trackKind: track.kind)
                 }
 
-                ForEach(sortedMarkers) { marker in
+                ForEach(sortedMarkers.filter { $0.kind != .beat }) { marker in
                     TimelineMarkerLine(marker: marker, height: trackHeight)
                         .offset(x: markerX(marker))
                         .onTapGesture {

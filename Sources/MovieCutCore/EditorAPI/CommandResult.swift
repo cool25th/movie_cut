@@ -37,6 +37,9 @@ public enum CommandResultValue: Sendable, Equatable {
 
     /// A canvas background snapshot.
     case canvasBackground(CanvasBackground)
+
+    /// Multiple marker snapshots.
+    case markers([Marker])
 }
 
 /// The observable result of applying an editor command.

@@ -181,10 +181,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 사인파 fixture FFT로 EQ 전후 스펙트럼 차이 확인 ② 덕킹 ramp가 파형으로 확인 ③ preview/export 청감 일치(수동 1회) ④ 모두 undo 가능.
 - **검증 기록(2026-06-11, 덕킹)**: Core `AudioDuckingPlanner`(silence 보집합→voice intervals, padding/merge/clip-local 변환 — 순수 수학, 행동 테스트 6개) + `Clip.duckingRanges`/`duckingLevel`(A5 하위호환 + 디코딩 테스트) + `SetAudioDuckingCommand`(다중 클립 단일 undo, clear+invert 복원). Mac Export/Playback 양 엔진의 `applyAudioVolumeAndFades`에 동일한 `applyDuckingRamps` 추가 — attack 0.12s/release 0.25s ramp, fade 창과 겹침 방지 클램프(A3: 같은 메타데이터 소비). ViewModel `autoDuckOtherAudio`(선택 음성 클립 silence 분석→타임라인 매핑→겹치는 오디오 클립에 일괄 적용, 기본 -12dB=0.25) + `clearDuckingOnSelectedClip`, Inspector Audio Ducking 그룹(Duck Other Audio/Clear + 범위·레벨 표시). `AudioDuckingTests` 14개 통과. Caveat: 실제 청감(preview 재생/export 파형) 확인과 EQ/노이즈 DSP는 잔여 — DoD §1.3에 따라 ✅ 보류. 속도 램프된 클립의 클립-로컬 시간 매핑은 미보정(후속).
 
-#### F-15. 비트 감지 (음악 동기 편집)
+#### F-15. 비트 감지 (음악 동기 편집) — 🟡 구현+합성 트랙 검증 완료(2026-06-11), 실음원 확인 잔여
 - **요구사항**: BGM 클립에서 비트 감지 → 타임라인 비트 마커 표시, 스냅 대상 포함.
 - **구현**: Core `Analysis/BeatDetectionProvider`(에너지 플럭스 onset, Accelerate vDSP). `Marker`에 `kind: .beat` 추가(A5). `TimelineView.snappedTime` snap point에 비트 마커 포함.
 - **AC**: ① 고정 BPM 테스트 트랙에서 비트 간격 오차 < 50ms ② 클립 드래그가 비트에 스냅 ③ 비트 마커 일괄 삭제.
+- **검증 기록(2026-06-11)**: Core `BeatDetectionProvider` — 에너지 플럭스 onset 검출(frame 1024/hop 512, 적응 임계 + 피크 에너지 10% 절대 하한으로 정상파 오탐 억제, 최소 비트 간격 피크 픽킹)을 **순수 함수**로 구현해 합성 클릭 트랙으로 행동 검증: 120BPM 8비트 간격 오차 <50ms(AC①), 80BPM 카운트, 무음/상수 톤 무오탐, 간격 억제, BPM 추정(±8). AVFoundation 래퍼는 무음 감지와 동일한 AVAssetReader 모노 PCM 읽기. `Marker.kind`(.standard/.beat, A5 하위호환+디코딩 테스트), `AddMarkersCommand`/`RemoveMarkersCommand(kind:)` 배치 단일 undo(테스트 포함). 타임라인: 비트는 룰러 하단 주황 틱으로 렌더(플래그 홍수 방지), 기존 marker-시간 스냅 경로에 자동 포함(AC②), Quick Tools `Detect Beats`(+BPM 상태 메시지)/`Clear Beats`(AC③). `BeatDetectionTests` 13개 + 필터 스위트 130개 + Mac 빌드 통과. Caveat: 실제 음악 파일 GUI 검증과 드래그 스냅 체감 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 #### F-17. TTS (텍스트→음성)
 - **요구사항**: 텍스트 클립에서 "음성 생성" → 합성 오디오 클립 생성(시스템 보이스 선택).

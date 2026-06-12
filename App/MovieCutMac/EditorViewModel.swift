@@ -1720,6 +1720,70 @@ final class EditorViewModel {
         lastStatusMessage = "Cleared audio ducking on the selected clip."
     }
 
+    /// F-15: detects beats in the selected audio/video clip and adds beat
+    /// markers, which immediately become drag snap targets.
+    func detectBeats() async {
+        guard let selectedClipId else {
+            lastErrorMessage = "Select a music clip to detect beats."
+            return
+        }
+
+        do {
+            let snapshot = await session.snapshot()
+            let (clip, asset) = try sourceClipAndAsset(for: selectedClipId, in: snapshot)
+            guard clip.kind == .audio || clip.kind == .video else {
+                lastErrorMessage = "Beat detection needs an audio or video clip selection."
+                return
+            }
+
+            lastErrorMessage = nil
+            lastStatusMessage = "Detecting beats..."
+
+            let provider = BeatDetectionProvider()
+            let beatTimes = try await provider.analyze(asset: asset)
+            let timelineBeats: [TimeInterval] = beatTimes.compactMap { time in
+                timelineMapping(
+                    for: TimeRange(start: time, duration: .ulpOfOne),
+                    in: clip
+                )?.timelineRange.start
+            }
+
+            guard !timelineBeats.isEmpty else {
+                lastStatusMessage = "No beats detected in the selected clip."
+                return
+            }
+
+            let markers = timelineBeats.enumerated().map { index, time in
+                Marker(time: time, name: "Beat \(index + 1)", color: "FF9F0A", kind: .beat)
+            }
+            try await session.dispatch(AddMarkersCommand(markers: markers))
+            try await refreshFromSession()
+
+            let bpmText = BeatDetectionProvider.estimatedBPM(from: beatTimes)
+                .map { String(format: " (~%.0f BPM)", $0) } ?? ""
+            lastStatusMessage = "Added \(markers.count) beat markers\(bpmText). Clips snap to beats while dragging."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Removes every generated beat marker in one undoable step.
+    func clearBeatMarkers() async {
+        guard hasBeatMarkers else { return }
+        await apply(RemoveMarkersCommand(kind: .beat))
+        lastStatusMessage = "Removed all beat markers."
+    }
+
+    var hasBeatMarkers: Bool {
+        currentProject.markers.contains { $0.kind == .beat }
+    }
+
+    var canDetectBeats: Bool {
+        guard let selectedClip else { return false }
+        return selectedClip.kind == .audio || selectedClip.kind == .video
+    }
+
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))

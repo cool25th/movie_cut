@@ -2137,6 +2137,105 @@ final class EditorViewModel {
         try await refreshFromSession()
     }
 
+    // MARK: - Auto cut preview (F-18)
+
+    /// Silence threshold in dB (lower = stricter; only quieter audio counts as silence).
+    var autoCutThresholdDB: Float = -40
+    /// Minimum silence length in seconds to consider for removal.
+    var autoCutMinSilence: TimeInterval = 0.5
+    /// Seconds preserved on each side of detected silence so speech edges survive.
+    var autoCutPadding: TimeInterval = 0.1
+    /// Removable timeline ranges currently shown as a preview (empty = no preview).
+    var autoCutPreviewRanges: [TimeRange] = []
+    /// The clip the active preview was computed for.
+    private(set) var autoCutPreviewClipId: UUID?
+
+    var hasAutoCutPreview: Bool { !autoCutPreviewRanges.isEmpty }
+
+    var autoCutPreviewTotalDuration: TimeInterval {
+        AutoCutPlanner.totalDuration(of: autoCutPreviewRanges)
+    }
+
+    /// Computes the removable silence ranges for the selected clip and stores
+    /// them as a preview WITHOUT modifying the timeline (F-18 AC②).
+    func previewAutoCutOnSelection() async {
+        guard let clipId = selectedClipId, canRunAutoCutOnSelection else {
+            lastErrorMessage = "Select an audio or video clip to auto cut silence."
+            return
+        }
+
+        lastErrorMessage = nil
+        lastStatusMessage = "Analyzing silence..."
+
+        do {
+            let snapshot = await session.snapshot()
+            let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
+            let provider = SilenceDetectionProvider(
+                silenceThresholdDB: autoCutThresholdDB,
+                minimumSilenceDuration: autoCutMinSilence
+            )
+            let result = try await provider.analyze(asset: asset, in: snapshot)
+            let silenceTimelineRanges: [TimeRange] = result.suggestions.flatMap { suggestion -> [TimeRange] in
+                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
+                return ranges.compactMap { timelineMapping(for: $0, in: clip)?.timelineRange }
+            }
+
+            let removable = AutoCutPlanner.removableRanges(
+                fromSilence: silenceTimelineRanges,
+                within: clip.timelineRange,
+                padding: autoCutPadding
+            )
+
+            autoCutPreviewRanges = removable
+            autoCutPreviewClipId = clipId
+
+            if removable.isEmpty {
+                lastStatusMessage = "No removable silence found with the current settings."
+            } else {
+                lastStatusMessage = String(
+                    format: "Preview: %d range(s), %.1fs removable. Review and Apply.",
+                    removable.count,
+                    autoCutPreviewTotalDuration
+                )
+            }
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Discards the auto-cut preview without changing the timeline (F-18 AC②).
+    func cancelAutoCutPreview() {
+        autoCutPreviewRanges = []
+        autoCutPreviewClipId = nil
+        lastStatusMessage = "Auto cut preview cancelled."
+    }
+
+    /// Applies the previewed removable ranges as a single undo unit (F-18 AC③).
+    func applyAutoCutPreview() async {
+        let ranges = autoCutPreviewRanges
+        guard !ranges.isEmpty else { return }
+
+        do {
+            try await session.dispatch(AutoCutCommand(removableRanges: ranges))
+            try await refreshFromSession()
+            let count = ranges.count
+            recordAnalysisResult(
+                action: "Auto Cut",
+                count: count,
+                message: "Removed \(count) silent \(count == 1 ? "range" : "ranges").",
+                clipId: autoCutPreviewClipId
+            )
+            lastErrorMessage = nil
+            lastStatusMessage = "Removed \(count) silent \(count == 1 ? "range" : "ranges")."
+            autoCutPreviewRanges = []
+            autoCutPreviewClipId = nil
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func runAutoCutOnSelection() async {
         guard let clipId = selectedClipId, canRunAutoCutOnSelection else {
             reportQuickToolFailure("Select an audio or video clip to auto cut silence.")

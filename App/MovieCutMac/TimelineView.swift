@@ -280,6 +280,17 @@ struct TimelineView: View {
                     clipView(clip, trackKind: track.kind)
                 }
 
+                // Auto-cut preview: ranges scheduled for removal (F-18).
+                ForEach(Array(viewModel.autoCutPreviewRanges.enumerated()), id: \.offset) { _, range in
+                    Rectangle()
+                        .fill(Color.red.opacity(0.28))
+                        .overlay(Rectangle().strokeBorder(Color.red.opacity(0.7), lineWidth: 1))
+                        .frame(width: max(1, CGFloat(range.duration) * CGFloat(pixelsPerSecond)), height: trackHeight)
+                        .offset(x: CGFloat(range.start) * CGFloat(pixelsPerSecond))
+                        .allowsHitTesting(false)
+                        .accessibilityLabel(NSLocalizedString("자동 컷 제거 예정 구간", comment: ""))
+                }
+
                 ForEach(sortedMarkers.filter { $0.kind != .beat }) { marker in
                     TimelineMarkerLine(marker: marker, height: trackHeight)
                         .offset(x: markerX(marker))

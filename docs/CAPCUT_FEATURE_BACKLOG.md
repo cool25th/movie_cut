@@ -123,7 +123,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)
 
 ### H. AI 기능 (CapCut 차별화)
-- [ ] 🟡 자동 컷(무음 제거) — Core 존재 (P1)
+- [ ] 🟡 자동 컷(무음 제거, F-18) (P1→preview/파라미터/단일undo 구현됨) — `AutoCutPlanner`(패딩으로 발화 보존) + `AutoCutCommand`(단일 undo) + ViewModel preview/apply/cancel + threshold/min/padding 슬라이더 + 타임라인 빨간 하이라이트. `AutoCutPlannerTests` 13개. Caveat: 실인터뷰 fixture 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 씬 변경 감지 자동 분할 — Core 존재 (P2)
 - [ ] 🟡 자동 리프레임(피사체 추적 crop) — Core 존재 (P2)
 - [ ] ❌ AI 어시스턴트(자연어 편집 명령) (P3)

@@ -22,6 +22,10 @@ struct InspectorBasicSection: View {
                 equalizerSection
             }
 
+            if clip.kind == .audio || clip.kind == .video {
+                autoCutSection
+            }
+
             if clip.kind.supportsSpeed {
                 speedSection
             }
@@ -29,6 +33,98 @@ struct InspectorBasicSection: View {
             if let textContent = clip.textContent {
                 textContentSection(textContent)
             }
+        }
+    }
+
+    /// Silence-based auto cut with parameters and preview/apply/cancel (F-18).
+    private var autoCutSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Auto Cut (Silence)")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            autoCutSlider(
+                title: "Threshold",
+                value: Binding(
+                    get: { Double(viewModel.autoCutThresholdDB) },
+                    set: { viewModel.autoCutThresholdDB = Float($0) }
+                ),
+                range: -60 ... -10,
+                step: 1,
+                format: "%.0f dB",
+                accessibility: "Silence threshold decibels"
+            )
+            autoCutSlider(
+                title: "Min Silence",
+                value: $viewModel.autoCutMinSilence,
+                range: 0.1 ... 3.0,
+                step: 0.1,
+                format: "%.1fs",
+                accessibility: "Minimum silence duration seconds"
+            )
+            autoCutSlider(
+                title: "Padding",
+                value: $viewModel.autoCutPadding,
+                range: 0 ... 1.0,
+                step: 0.05,
+                format: "%.2fs",
+                accessibility: "Speech padding seconds"
+            )
+
+            if viewModel.hasAutoCutPreview {
+                Text(String(
+                    format: "%d range(s), %.1fs removable",
+                    viewModel.autoCutPreviewRanges.count,
+                    viewModel.autoCutPreviewTotalDuration
+                ))
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 6) {
+                Button("Preview") {
+                    Task { await viewModel.previewAutoCutOnSelection() }
+                }
+                .controlSize(.small)
+                .accessibilityHint("Highlights silent ranges that would be removed without changing the timeline.")
+
+                if viewModel.hasAutoCutPreview {
+                    Button("Apply") {
+                        Task { await viewModel.applyAutoCutPreview() }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint("Removes the previewed silent ranges as a single undoable edit.")
+
+                    Button("Cancel") {
+                        viewModel.cancelAutoCutPreview()
+                    }
+                    .controlSize(.small)
+                    .accessibilityHint("Discards the auto cut preview.")
+                }
+            }
+        }
+    }
+
+    private func autoCutSlider(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        format: String,
+        accessibility: String
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 80, alignment: .leading)
+            Slider(value: value, in: range, step: step)
+                .accessibilityLabel(accessibility)
+            Text(String(format: format, value.wrappedValue))
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .trailing)
         }
     }
 

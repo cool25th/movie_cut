@@ -9,7 +9,26 @@ public struct AutoCutEngine: Sendable {
     ) throws -> [any EditorCommand] {
         var project = session.project
         var commands: [any EditorCommand] = []
+        try buildCommands(for: suggestions, to: &project, commands: &commands)
+        return commands
+    }
 
+    /// Applies the suggestions directly to a project in place. Used by
+    /// `AutoCutCommand` so an entire auto-cut pass is a single undo unit
+    /// (F-18 AC③).
+    public static func applyInline(
+        suggestions: [AnalysisSuggestion],
+        to project: inout Project
+    ) throws {
+        var commands: [any EditorCommand] = []
+        try buildCommands(for: suggestions, to: &project, commands: &commands)
+    }
+
+    private static func buildCommands(
+        for suggestions: [AnalysisSuggestion],
+        to project: inout Project,
+        commands: inout [any EditorCommand]
+    ) throws {
         for suggestion in suggestions {
             switch suggestion {
             case .silenceRemoval(let ranges):
@@ -20,8 +39,6 @@ public struct AutoCutEngine: Sendable {
                 try appendRemovalCommands(for: editedRanges, to: &project, commands: &commands)
             }
         }
-
-        return commands
     }
 
     private static func appendRemovalCommands(

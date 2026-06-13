@@ -196,10 +196,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 
 ### M4. 지능형 편집
 
-#### F-18. 자동 컷 E2E 신뢰성
+#### F-18. 자동 컷 E2E 신뢰성 — 🟡 파라미터+미리보기+단일undo 구현/테스트 완료(2026-06-11), 실인터뷰 fixture 청취 잔여
 - **요구사항**: 무음 제거가 실제 인터뷰 영상에서 유효(임계값/최소 구간/패딩 조절 UI + 적용 전 미리보기).
 - **구현**: 기존 `SilenceDetectionProvider` + 파라미터 UI(threshold dB, 최소 무음 길이, 앞뒤 패딩). 제거 예정 구간을 타임라인 하이라이트로 미리보기 → 확인 후 일괄 적용.
 - **AC**: ① 10분 인터뷰 fixture에서 발화 손실 없음(수동 1회 + 무음 비율 테스트) ② 미리보기→취소 시 무변경 ③ 일괄 적용 단일 undo.
+- **검증 기록(2026-06-11)**: 순수 `AutoCutPlanner.removableRanges`(무음→패딩으로 양측 trim해 발화 onset/offset 보존→너무 짧으면 drop→bounds clamp→merge)로 발화 손실 방지를 수학적으로 보장(행동 테스트 6개, AC① 정량 측면). `AutoCutCommand`가 제거 구간 전체를 단일 dispatch로 적용 → `EditorSession` 스냅샷 undo로 **단일 undo**(AC③ 테스트: 2구간 제거 후 undo 1회로 원본 단일 클립 복원). ViewModel `previewAutoCutOnSelection`(threshold dB/min silence/padding 파라미터로 분석만, 타임라인 미변경 = AC②) / `cancelAutoCutPreview`(무변경) / `applyAutoCutPreview`(단일 undo + 분석 히스토리 기록). 타임라인에 제거 예정 구간을 빨간 하이라이트로 렌더, Inspector에 3개 파라미터 슬라이더 + Preview/Apply/Cancel. `AutoCutPlannerTests` 13개 + 필터 스위트 171개 + Mac 빌드 통과. Caveat: 실제 10분 인터뷰 fixture의 발화 손실 수동 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류. 기존 one-shot `runAutoCutOnSelection`은 Quick Tools에서 유지.
 
 #### F-19. 씬 감지 & 자동 리프레임 E2E
 - **요구사항**: 씬 분할과 피사체 추적 리프레임(16:9→9:16)이 실제 영상에서 유효, 리프레임 결과 미리보기 후 확정.

@@ -1,7 +1,7 @@
 # 세션 핸드오프 — 다음 개발 세션 시작 가이드
 
 > 작성일: 2026-06-11 / 브랜치: `main` / 기준 커밋: `08db5a0` (magnetic timeline + clip z-index)
-> 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md`, **개발 명세서(F-ID별 요구사항/구현 방안/수용 기준/마일스톤/DoD)는 `docs/CAPCUT_PARITY_SPEC.md`** 참고. 신규 기능 작업은 명세서의 F-ID 단위로 진행.
+> **UI/UX 개선 작업은 `docs/UIUX_HANDOFF.md` 참고** (기능은 완료, 레이아웃·사용성 개선이 다음 큰 과제 — CapCut/OpenCut 대비 부족). 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md`, **개발 명세서(F-ID별 요구사항/구현 방안/수용 기준/마일스톤/DoD)는 `docs/CAPCUT_PARITY_SPEC.md`** 참고. 신규 기능 작업은 명세서의 F-ID 단위로 진행.
 
 ---
 

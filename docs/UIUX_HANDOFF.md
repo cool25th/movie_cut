@@ -1,0 +1,156 @@
+# UI/UX 개선 핸드오프 — CapCut/OpenCut 수준 사용성
+
+> 작성일: 2026-06-14 / 브랜치: `main` / 작성 근거: 2026-06-14 실기기 GUI 세션 직접 관찰 + 레이아웃 코드 분석
+> 이 문서만 읽고 UI/UX 개선 작업을 바로 시작할 수 있도록 작성됨.
+> **전제: 기능(F-01~F-24)은 구현·테스트 완료 상태다. 이 작업은 "기능 추가"가 아니라 "레이아웃·시각 계층·사용성"의 프레젠테이션 레이어 개선이다.** 명령/세션/렌더 아키텍처와 기존 테스트를 깨지 말 것.
+
+---
+
+## 0. 한 줄 요약
+
+기능은 다 있는데 **화면이 그 기능들을 못 보여준다.** 창이 최소 크기로 열려 모든 패널이 짜부라지고, Inspector 한 칸에 7~8개 섹션이 쌓여 클립 편집 UI에 접근조차 어렵다. CapCut/OpenCut의 **탭형 라이브러리 + 큰 프리뷰 + 맥락형 속성 패널 + 도구 바가 붙은 타임라인** 구조로 재배치하고, 간격·계층·다크 테마 폴리시를 입히는 것이 핵심이다.
+
+---
+
+## 1. 현재 레이아웃 지도 (코드 기준)
+
+`App/MovieCutMac/ContentView.swift:10-37`
+```
+VSplitView                                  // 상하 분할
+├─ VStack
+│  ├─ HSplitView                            // 좌·중·우 3분할
+│  │  ├─ MediaLibraryPanel  (minW 200, maxW 300)   // 얇은 좌측 라이브러리
+│  │  ├─ PreviewPanel       (minW 400)             // 중앙 프리뷰
+│  │  └─ InspectorPanel     (minW 240, maxW 320)   // 우측 인스펙터(과적재)
+│  ├─ QuickToolsPanel                        // 별도 빠른도구 스트립
+│  └─ statusBar
+└─ TimelineView            (minH 210)        // 하단 타임라인
+.frame(minWidth: 1024, minHeight: 460)
+```
+- 윈도우: `App/MovieCutMac/MovieCutMacApp.swift:11` `WindowGroup` — **`.defaultSize`/`.windowResizability` 없음** → 항상 최소 크기(1024×460)로 열림.
+- 핵심 뷰 파일: `ContentView.swift`(레이아웃+toolbar+QuickToolsPanel `:206`+statusBar `:179`), `MediaLibraryPanel.swift`, `PreviewPanel.swift`, `InspectorPanel.swift`, `TimelineView.swift`.
+
+---
+
+## 2. 관찰된 문제 (2026-06-14 실기기 세션 + 코드)
+
+| # | 문제 | 근거 |
+|---|---|---|
+| P1 | **창이 최소 크기로 열림** → 프리뷰만 크고 타임라인·상단 패널이 짜부라짐 | `WindowGroup`에 defaultSize 없음. 실측 시 ~490px 높이로 열려 트랙 3개가 겨우 보임 |
+| P2 | **Inspector 1칸 과적재** — Marker/Assistant/Highlights/Analysis/ClipInfo/Transform/Effects/ChromaKey/AutoCut/Reframe/Text/Export가 한 240~320px 컬럼에 세로로 다 쌓임 | `InspectorPanel.swift`. 창이 짧으면 Export 섹션만 보이고 **클립 편집 UI에 접근 불가** |
+| P3 | **거버넌스/면책 텍스트가 UI에 노출** — export 섹션에 "Golden status: no single-fixture..." 류 경고 문단이 그대로 보임 | 별도 세션의 `InspectorExportSection` 작업. 사용자 화면에 개발 내부 메모가 노출돼 비전문적으로 보임 |
+| P4 | **라이브러리가 얇은 컬럼** — "Drop media files here"가 구석에 작게. CapCut식 탭형 브라우저(Media/Audio/Text/Sticker/Effect/Transition/Filter) 부재 | `MediaLibraryPanel.swift` (Library/Media/Stickers/Music/SFX 탭은 있으나 좁고 비중 낮음) |
+| P5 | **도구가 흩어짐** — QuickToolsPanel(별도 스트립) + 타임라인 헤더 도구 + 컨텍스트 메뉴로 분산. CapCut은 타임라인 위 단일 도구 바에 집약 | `ContentView.swift:206` QuickToolsPanel |
+| P6 | **시각 계층·간격 부족** — 섹션 구분이 약하고 여백이 좁아 밀도가 높음. 다크 테마 폴리시(카드/구분선/아이콘+레이블) 약함 | 전반 |
+| P7 | **빈 상태/온보딩 부재** — 새 프로젝트 시 "무엇부터 할지" 안내 없음. CapCut은 큰 "미디어 추가" CTA | `PreviewPanel`/`MediaLibraryPanel` empty state 미약 |
+
+---
+
+## 3. 레퍼런스: CapCut / OpenCut 레이아웃 관례
+
+**CapCut 데스크탑**
+- 좌상단: **탭형 브라우저** (Media / Audio / Text / Stickers / Effects / Transitions / Filters / Captions …) — 콘텐츠 소스의 중심
+- 중앙상단: **큰 프리뷰** + 하단 트랜스포트(재생/프레임이동/타임코드) + 비율·해상도 표시
+- 우상단: **맥락형 속성 인스펙터** — 선택 대상에 따라 내용이 통째로 바뀜(비디오 조정 / 오디오 / 텍스트 스타일 / 애니메이션)
+- 하단: **풀폭 타임라인** + 그 위 **도구 바**(분할/삭제/크롭/미러/프리즈/속도/되돌리기/줌/자석)
+- 우상단 코너: **Export** 단일 버튼
+
+**OpenCut(오픈소스 웹 에디터)**
+- 좌측 탭 사이드바(Media/Text/Audio/Stickers/Effects) → 중앙 프리뷰 → 우측 속성 → 하단 타임라인
+- 미니멀·넓은 여백·모던 다크 테마, 드래그가 1급 인터랙션
+
+**공통 원칙(우리가 가져올 것)**: ① 콘텐츠는 탭형 브라우저로, ② 속성은 선택 맥락에 따라 바뀌는 단일 패널로, ③ 도구는 타임라인 위 한 줄로 집약, ④ 넉넉한 여백·명확한 구분·아이콘+레이블.
+
+---
+
+## 4. UX 백로그 (우선순위순)
+
+상태: ❌ 미착수 / 🟡 부분
+각 항목: **목표 → 구현 힌트(파일) → 수용 기준(AC)**. 기능 배선·명령·테스트를 깨지 않는 선에서 프레젠테이션만 변경.
+
+### Tier 0 — 즉시 효과 (quick wins, 반나절~1일)
+
+#### UX-01. 적절한 기본 창 크기 + 리사이즈 정책 ❌  **(가장 큰 체감 개선)**
+- **목표**: 앱이 충분히 큰 크기(예 1440×900)로 열리고, 모든 패널이 처음부터 보인다.
+- **구현**: `MovieCutMacApp.swift` `WindowGroup { … }`에 `.defaultSize(width: 1440, height: 900)` + `.windowResizability(.contentSize)`. `ContentView` minHeight를 720 이상으로.
+- **AC**: 새로 실행 시 라이브러리·프리뷰·인스펙터·타임라인이 모두 즉시 보이고, 타임라인 트랙 3개 + 클립 섬네일이 잘림 없이 보인다.
+
+#### UX-02. 거버넌스/면책 텍스트를 사용자 UI에서 제거 ❌
+- **목표**: export 패널의 개발 내부 경고 문단("Golden status…", "Do not claim…")을 사용자 화면에서 없앤다.
+- **구현**: `App/MovieCutMac/Inspector/InspectorExportSection.swift`의 해당 카피를 제거하거나 `#if DEBUG`/접근성 전용으로 숨김. ※ 이 파일은 다른 세션이 작업 중이므로 **그 세션과 조율 후** 진행(현재 미커밋 변경 상존).
+- **AC**: export 패널에 사용자용 정보(포맷/해상도/예상 크기)만 남고 개발 메모가 안 보인다.
+
+#### UX-03. Inspector를 "맥락형 단일 패널"로 정리 ❌
+- **목표**: 선택이 없으면 빈 안내, 클립 선택 시 그 클립 속성만, 비선택 전역 도구(Marker/Highlights/Assistant/Analysis)는 별도 탭/디스클로저로 접어 기본 숨김.
+- **구현**: `InspectorPanel.swift` — 전역 섹션(Marker/Assistant/Highlights/Analysis)을 상단 작은 탭 또는 `DisclosureGroup(isExpanded: false)` 기본 접힘으로. 클립 선택 시 `InspectorBasicSection`/`InspectorEffectsSection`이 최상단에 오도록 순서 변경. Export는 항상 하단 고정 유지.
+- **AC**: 클립 선택 즉시 Transform/Effects/색보정 등이 스크롤 없이 보인다(현재는 Export에 묻힘).
+
+### Tier 1 — 구조 개선 (2~4일)
+
+#### UX-04. 탭형 라이브러리/브라우저 (CapCut식) ❌
+- **목표**: 좌측을 Media/Audio/Text/Stickers/Effects/Transitions/Filters 탭 브라우저로 격상, 폭 확대(320~380).
+- **구현**: `MediaLibraryPanel.swift`의 기존 탭(Library/Media/Stickers/Music/SFX)을 확장 — Text/Effects/Transitions/Filters 탭 추가(이미 ViewModel에 텍스트 템플릿/효과/전환 추가 메서드 존재). 각 탭에서 드래그 또는 더블클릭으로 타임라인에 추가.
+- **AC**: 한 곳에서 모든 콘텐츠 소스를 탐색·추가할 수 있다. 드래그 인터랙션 유지.
+
+#### UX-05. 타임라인 위 단일 도구 바 ❌
+- **목표**: 분할/삭제/리플삭제/복제/줌/마커/자석/스냅을 타임라인 바로 위 한 줄 아이콘 바로 집약. QuickToolsPanel의 분석 도구(Auto Cut/Detect Scenes/Reframe/Beat 등)도 이 바 또는 라이브러리 탭으로 이동.
+- **구현**: `TimelineView.swift` 헤더 영역 확장 + `ContentView.swift:206` `QuickToolsPanel` 통합/이동. 기존 `selectedClipToolbar`(TimelineView)와 합치기.
+- **AC**: 편집 도구가 타임라인 근처 한 줄에 모이고, 흩어진 스트립이 사라진다.
+
+#### UX-06. 프리뷰 영역 폴리시 ❌
+- **목표**: 큰 프리뷰 + 하단 트랜스포트 정돈(타임코드/재생/프레임/볼륨/비율). 빈 상태에 "미디어 추가" CTA.
+- **구현**: `PreviewPanel.swift` — 컨트롤 바 간격·정렬 정리, empty state에 큰 import 버튼(드롭 영역과 연결).
+- **AC**: 프리뷰가 시각적 중심이 되고, 빈 상태에서 다음 행동이 명확하다.
+
+### Tier 2 — 시각 폴리시 (지속)
+
+#### UX-07. 디자인 토큰·간격·다크 테마 통일 ❌
+- **목표**: 섹션 카드, 일관된 패딩(8/12/16), 구분선, 아이콘+레이블, 색/타이포 스케일 통일.
+- **구현**: 공통 스타일 헬퍼(예 `InspectorShared.swift` 확장)로 섹션 헤더/카드 컴포넌트화. 하드코딩 spacing 정리.
+- **AC**: 패널 간 시각 언어가 일관되고 밀도가 CapCut 수준으로 쾌적.
+
+#### UX-08. 접근성·키보드 유지 ❌(회귀 방지)
+- **목표**: 재배치하면서 기존 accessibilityLabel/Value/Hint와 F-05 단축키가 유지되도록.
+- **AC**: VoiceOver 레이블 보존, 단축키 동작 유지.
+
+---
+
+## 5. 규칙 (반드시 지킬 것)
+
+- **프레젠테이션만 변경**: ViewModel 메서드·`EditorSession.dispatch(Command)`·렌더 파이프라인은 그대로. UI는 기존 메서드를 호출만.
+- **기존 테스트 깨지 마라**: static-contract 테스트가 특정 문자열/구조를 검사한다. 뷰를 옮길 때 깨지면 테스트도 같이 갱신(단, 의미 보존). `swift test` + `xcodebuild … MovieCutMac build`로 매번 확인.
+- **다른 세션과 충돌 주의**: 작업 트리에 `InspectorExportSection.swift`/`ExportFormatStaticContractTests.swift`/`scripts/verify_moviecut_export_golden.py` 미커밋 변경(export-golden 거버넌스, 별도 세션) 상존. UX-02는 그 세션 커밋 후 진행하거나 조율.
+- **iOS 동기화는 선택**: 이 UX 작업은 macOS 우선. iOS(`App/MovieCutiOS/`)는 별도.
+- **작은 PR 단위**: UX-01부터 하나씩. 각 항목 커밋 후 빌드/스크린샷 확인.
+
+---
+
+## 6. 권장 착수 순서
+
+1. **UX-01**(기본 창 크기) — 한 줄 수정으로 체감이 가장 큼. 여기부터.
+2. **UX-02**(거버넌스 텍스트 제거) — 비전문적 인상 즉시 제거(타 세션 조율).
+3. **UX-03**(Inspector 맥락 정리) — 클립 편집 접근성 확보.
+4. **UX-04/05**(탭 라이브러리 + 타임라인 도구 바) — 구조적 CapCut화.
+5. **UX-06/07**(프리뷰·디자인 폴리시) — 마감 품질.
+
+각 단계 후 실행→스크린샷으로 before/after 확인 권장.
+
+## 7. 빌드·검증
+
+```bash
+swift build
+swift test --filter 'StaticContract'   # 뷰 구조 검사 테스트
+xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build
+open ~/Library/Developer/Xcode/DerivedData/MovieCut-*/Build/Products/Debug/MovieCutMac.app
+```
+
+## 8. 핵심 파일 맵 (UI)
+| 영역 | 파일 |
+|---|---|
+| 윈도우/Scene/메뉴/단축키 | `App/MovieCutMac/MovieCutMacApp.swift` |
+| 전체 레이아웃·toolbar·QuickTools·statusBar | `App/MovieCutMac/ContentView.swift` |
+| 좌측 라이브러리(탭) | `App/MovieCutMac/MediaLibraryPanel.swift` |
+| 중앙 프리뷰·트랜스포트·오버레이 | `App/MovieCutMac/PreviewPanel.swift` |
+| 우측 인스펙터(섹션 집합) | `App/MovieCutMac/InspectorPanel.swift`, `App/MovieCutMac/Inspector/*` |
+| 타임라인·트랙·도구 | `App/MovieCutMac/TimelineView.swift` |
+| 공통 스타일/표시명 | `App/MovieCutMac/Inspector/InspectorShared.swift` |

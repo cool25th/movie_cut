@@ -92,6 +92,18 @@ struct ContentView: View {
                     Label("Templates", systemImage: "rectangle.stack.badge.plus")
                 }
 
+                Menu {
+                    Button("Export Package…") {
+                        Task { await viewModel.exportProjectPackage() }
+                    }
+                    Button("Import Package…") {
+                        Task { await viewModel.importProjectPackage() }
+                    }
+                } label: {
+                    Label("Package", systemImage: "shippingbox")
+                }
+                .help("Export or import a self-contained .mctemplate project package")
+
                 Divider()
 
                 Button(action: { Task { await viewModel.syncToCloud() } }) {

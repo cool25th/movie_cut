@@ -409,6 +409,64 @@ final class EditorViewModel {
         }
     }
 
+    // MARK: - Project package (F-23)
+
+    /// Exports the current project and its media as a `.mctemplate` package.
+    func exportProjectPackage() async {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).\(ProjectPackage.fileExtension)"
+        if let type = UTType(filenameExtension: ProjectPackage.fileExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let snapshot = await session.snapshot()
+            try ProjectPackage.export(snapshot, to: url)
+            lastErrorMessage = nil
+            lastStatusMessage = "Exported project package to \(url.lastPathComponent)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not export package: \(error.localizedDescription)"
+        }
+    }
+
+    /// Imports a `.mctemplate` package as the current project, resolving its
+    /// bundled media. The user can then replace media via normal import.
+    func importProjectPackage() async {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        if let type = UTType(filenameExtension: ProjectPackage.fileExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let project = try ProjectPackage.load(from: url)
+            session = EditorSession(project: project)
+            currentProject = project
+            currentProjectURL = nil
+            canvasSelection = project.canvas.aspectRatio
+            syncExportUI(from: project.exportSettings)
+            selectedClipId = nil
+            selectedAssetId = nil
+            playbackEngine.clear()
+            playheadTime = 0
+            clearGeneratedSubtitles()
+            clearClipProcessingState()
+            recentAnalysisResults = []
+            lastExportURL = nil
+            lastErrorMessage = nil
+            lastStatusMessage = "Imported \(url.lastPathComponent). Replace any missing media via the library."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not import package: \(error.localizedDescription)"
+        }
+    }
+
     func saveProject() async {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]

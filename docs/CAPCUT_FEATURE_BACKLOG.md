@@ -136,9 +136,10 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] ❌ 챕터/비트 마커 export 메타데이터 (P3)
 
 ### J. 협업/배포
-- [ ] 🟡 클라우드 동기화(인증/원격저장/충돌 처리) — 버튼만 (P3)
+- [ ] 🟡 클라우드 동기화(F-22) (P3→충돌 해소+테스트 완료) — `CloudSyncService` latestWins+백업(`resolveConflictKeepingBackup`/`writeConflictBackup`), `CloudConflictTests` 7개(2기기 시나리오). Caveat: 실 iCloud 2기기 GUI 검증 잔여.
 - [ ] 🟡 템플릿 마켓플레이스 — picker만 (P3)
-- [ ] ❌ 플랫폼 직접 게시 (P3)
+- [ ] 🟡 템플릿 패키지(F-23) (P3→구현됨) — `ProjectPackage` .mctemplate export/import + Package 메뉴, `ProjectPackageTests` 7개. Caveat: 실기기 GUI 잔여.
+- [x] ✅ 플랫폼 게시(F-24) — OS 공유 시트(ShareLink)로 충족. 직접 API 게시는 스펙 권고대로 범위 외.
 
 ---
 

@@ -225,9 +225,9 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **검증 기록(2026-06-11)**: 순수 `AssistantCommandParser`(동의어 사전 기반 target×action 매핑 + 퍼센트/초 숫자 파싱, 신규 ML/외부 API 없음). target: selection/allClips/video/audio/text, action: applyFilter(7종)/removeFilters/setVolume/setFade/removeFade/adjustBrightness·Contrast·Saturation/addMarker. **20개 intent 문장 시나리오가 정확한 target+action으로 매핑**되는 행동 테스트 통과(AC), 미해석 문장은 `exampleCommands` 안내 반환(AC), 숫자/동의어 파싱 테스트 포함. ViewModel `runAssistantCommand`가 파싱→대상 클립 해석→기존 명령(SetClipPropertyCommand/SetVolumeCommand/AudioFadeCommand/AddMarkerCommand)으로 실행. Inspector `AssistantSection`(TextField + Run + 결과/제안 클릭). `AssistantCommandParserTests` 8개 + 필터 스위트 149개 + Mac 빌드 통과. Caveat: 외부 LLM/온디바이스 Foundation Models 연동은 별도 합의(스펙대로 보류), "all clips" 다중 명령은 클립당 별도 undo(단일 undo 통합은 후속). DoD §1.3에 따라 ✅ 보류.
 
 ### M5. 생태계 (착수 전 별도 합의)
-- **F-22. iCloud 프로젝트 동기화**: 기존 `CloudSyncService` 완성 — conflict는 최신 수정 우선 + 백업 사본. AC: 두 기기 시나리오 시뮬레이션 테스트.
-- **F-23. 템플릿 패키지**: 프로젝트를 에셋 포함 `.mctemplate`(zip)로 export/import. AC: 템플릿 적용 후 미디어 교체 플로우 완주.
-- **F-24. 플랫폼 게시**: OS 공유 시트 유지(직접 API 게시는 범위 외 유지 권장).
+- **F-22. iCloud 프로젝트 동기화 — 🟡 충돌 해소(최신 우선+백업)+2기기 테스트 완료(2026-06-11), 실 iCloud 2기기 검증 잔여**: 기존 `CloudSyncService`(iCloud Drive + Application Support fallback, NSMetadataQuery watcher, autoSync)에 `ConflictStrategy.latestWins` + `resolveConflictKeepingBackup`(최신 updatedAt 우선, 패배 버전을 `ConflictResolution.backup`으로 보존) + `writeConflictBackup`(타임스탬프 백업 문서 영속) + `conflictBackupName`(결정론적·파일시스템 안전) 추가. `CloudConflictTests` 7개: 2기기 시나리오(remote/local newer 각각 승자+백업), 무충돌 무백업, latestWins, 백업 이름, 백업 문서 영속·재로딩. Caveat: 실제 iCloud 컨테이너 2기기 동기화 GUI 검증 잔여 — DoD §1.3에 따라 ✅ 보류.
+- **F-23. 템플릿 패키지 — 🟡 구현+round-trip 테스트 완료(2026-06-11), 실기기 GUI 잔여**: Core `ProjectPackage`가 프로젝트를 `.mctemplate` 패키지(project.json + media/ 복사본)로 export/load — 에셋 URL을 패키지 상대경로로 rewrite, load 시 절대경로 복원(zip 대신 패키지 디렉토리로 Core 의존성 0·테스트 가능; zip 래핑은 앱 공유 단계). ViewModel `exportProjectPackage`/`importProjectPackage` + ContentView Package 메뉴. `ProjectPackageTests` 7개: export→load round-trip(미디어 번들·클립 보존), 미디어 교체 플로우(asset 교체 후 clip assetId 유지), 덮어쓰기, manifest 누락 throw, 소스 누락 skip. Caveat: 실기기 export/import GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
+- **F-24. 플랫폼 게시 — ✅ 설계상 충족(2026-06-11)**: 스펙 권고대로 직접 플랫폼 API 게시는 구현하지 않고, export 산출물을 `ContentView`의 `ShareLink`(OS 공유 시트)로 공유. 외부 게시 API는 의도적 범위 외 유지.
 
 ---
 

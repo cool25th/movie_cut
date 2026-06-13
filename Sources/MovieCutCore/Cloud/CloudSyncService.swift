@@ -16,6 +16,23 @@ public enum ConflictStrategy: Sendable {
     case keepLocal
     case keepRemote
     case merge
+    /// Keep whichever version was modified most recently (F-22 default).
+    case latestWins
+}
+
+/// The outcome of resolving a sync conflict: the winning project plus the
+/// superseded version kept as a backup so no edits are lost (F-22).
+public struct ConflictResolution: Sendable, Equatable {
+    /// The version that becomes the active project.
+    public var resolved: Project
+    /// The superseded version to preserve as a backup, or nil when there was
+    /// no real conflict.
+    public var backup: Project?
+
+    public init(resolved: Project, backup: Project?) {
+        self.resolved = resolved
+        self.backup = backup
+    }
 }
 
 /// Lightweight metadata for a synced project document.
@@ -308,7 +325,44 @@ public final class CloudSyncService: ObservableObject, Sendable {
             return remote
         case .merge:
             return mergedProject(local: local, remote: remote)
+        case .latestWins:
+            return remote.updatedAt > local.updatedAt ? remote : local
         }
+    }
+
+    /// Resolves a conflict with the F-22 default policy: the most recently
+    /// modified version wins, and the superseded version is returned as a
+    /// backup. When there is no real conflict, `backup` is nil.
+    public func resolveConflictKeepingBackup(local: Project, remote: Project) -> ConflictResolution {
+        guard local.updatedAt != remote.updatedAt
+            || Self.encodedProjectSize(local) != Self.encodedProjectSize(remote) else {
+            return ConflictResolution(resolved: local, backup: nil)
+        }
+
+        if remote.updatedAt > local.updatedAt {
+            return ConflictResolution(resolved: remote, backup: local)
+        }
+        // Local is newer or ties; keep local and back up the remote copy.
+        return ConflictResolution(resolved: local, backup: remote)
+    }
+
+    /// Persists a superseded project version as a timestamped backup document
+    /// next to the synced projects, so a latest-wins resolution never discards
+    /// the other device's edits (F-22).
+    @discardableResult
+    public func writeConflictBackup(_ project: Project, at date: Date) async throws -> URL {
+        let backupName = Self.conflictBackupName(for: project.name, at: date)
+        let backupURL = try projectFileURL(name: backupName, createDirectory: true)
+        try await projectStore.save(project, to: backupURL)
+        return backupURL
+    }
+
+    /// Deterministic backup document name for a superseded version.
+    public static func conflictBackupName(for projectName: String, at date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]
+        let stamp = formatter.string(from: date).replacingOccurrences(of: ":", with: "-")
+        return "\(projectName) (conflict backup \(stamp))"
     }
 
     private func projectFileURL(name: String, createDirectory: Bool) throws -> URL {

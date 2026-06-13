@@ -26,12 +26,59 @@ struct InspectorBasicSection: View {
                 autoCutSection
             }
 
+            if clip.kind == .video {
+                autoReframeSection
+            }
+
             if clip.kind.supportsSpeed {
                 speedSection
             }
 
             if let textContent = clip.textContent {
                 textContentSection(textContent)
+            }
+        }
+    }
+
+    /// Subject-tracking auto reframe with preview/apply/cancel (F-19).
+    private var autoReframeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Auto Reframe")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Text("Tracks the subject and reframes to the current canvas with smoothed keyframes.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if viewModel.hasReframePreview {
+                Text("\(viewModel.reframePreviewFrames.count) crop frames previewed on the canvas")
+                    .font(.caption)
+                    .foregroundStyle(.yellow)
+            }
+
+            HStack(spacing: 6) {
+                Button("Preview") {
+                    Task { await viewModel.previewAutoReframeOnSelection() }
+                }
+                .controlSize(.small)
+                .accessibilityHint("Shows the smoothed crop path on the preview without changing the clip.")
+
+                if viewModel.hasReframePreview {
+                    Button("Apply") {
+                        Task { await viewModel.applyAutoReframePreview() }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint("Commits the previewed reframe keyframes to the clip.")
+
+                    Button("Cancel") {
+                        viewModel.cancelAutoReframePreview()
+                    }
+                    .controlSize(.small)
+                    .accessibilityHint("Discards the auto reframe preview.")
+                }
             }
         }
     }

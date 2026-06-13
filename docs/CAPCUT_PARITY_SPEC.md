@@ -202,10 +202,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 10분 인터뷰 fixture에서 발화 손실 없음(수동 1회 + 무음 비율 테스트) ② 미리보기→취소 시 무변경 ③ 일괄 적용 단일 undo.
 - **검증 기록(2026-06-11)**: 순수 `AutoCutPlanner.removableRanges`(무음→패딩으로 양측 trim해 발화 onset/offset 보존→너무 짧으면 drop→bounds clamp→merge)로 발화 손실 방지를 수학적으로 보장(행동 테스트 6개, AC① 정량 측면). `AutoCutCommand`가 제거 구간 전체를 단일 dispatch로 적용 → `EditorSession` 스냅샷 undo로 **단일 undo**(AC③ 테스트: 2구간 제거 후 undo 1회로 원본 단일 클립 복원). ViewModel `previewAutoCutOnSelection`(threshold dB/min silence/padding 파라미터로 분석만, 타임라인 미변경 = AC②) / `cancelAutoCutPreview`(무변경) / `applyAutoCutPreview`(단일 undo + 분석 히스토리 기록). 타임라인에 제거 예정 구간을 빨간 하이라이트로 렌더, Inspector에 3개 파라미터 슬라이더 + Preview/Apply/Cancel. `AutoCutPlannerTests` 13개 + 필터 스위트 171개 + Mac 빌드 통과. Caveat: 실제 10분 인터뷰 fixture의 발화 손실 수동 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류. 기존 one-shot `runAutoCutOnSelection`은 Quick Tools에서 유지.
 
-#### F-19. 씬 감지 & 자동 리프레임 E2E
+#### F-19. 씬 감지 & 자동 리프레임 E2E — 🟡 스무딩+미리보기 구현/테스트 완료(2026-06-11), 실영상 추적 정확도 잔여
 - **요구사항**: 씬 분할과 피사체 추적 리프레임(16:9→9:16)이 실제 영상에서 유효, 리프레임 결과 미리보기 후 확정.
 - **구현**: 기존 provider 검증 + 크롭 경로 preview 오버레이 표시 → 확정. 리프레임 keyframe 이동 평균 스무딩.
 - **AC**: ① 멀티씬 fixture에서 컷 경계 ±10프레임 분할 ② 리프레임 시 인물이 크롭 밖으로 나가는 프레임 0 ③ keyframe 떨림 없음(미분값 상한 테스트).
+- **검증 기록(2026-06-11)**: 순수 `ReframeSmoothing.smooth`(centered moving average로 crop rect 컴포넌트 평활화 + 단위정사각형 clamp)가 AutoReframeProvider crop frames의 프레임간 떨림을 줄인다 — `maxCenterDelta` 지표로 raw 대비 <60% 감소를 행동 테스트로 검증(AC③), 모든 평활 프레임이 [0,1] 내에 머무름(AC② 지원), drift 방향 보존, time-order 보장. ViewModel autoReframe이 적용 전 `ReframeSmoothing.smooth`를 거치도록 리팩터(reframeKeyframes/mergedReframeKeyframes 추출). 미리보기: `previewAutoReframeOnSelection`(분석+스무딩만, 클립 미변경) → PreviewPanel에 `ReframeCropPathOverlay`(crop rect 윤곽 + center polyline)로 시각화 → `applyAutoReframePreview`(키프레임 커밋) / `cancelAutoReframePreview`. Inspector에 Auto Reframe 섹션(Preview/Apply/Cancel). `ReframeSmoothingTests` 8개 + static contract + 필터 스위트 199개 + Mac 빌드 통과. Caveat: 씬 분할 ±10프레임(AC①)은 기존 `SceneChangeProvider` 경로이고, 실제 영상에서 인물이 크롭을 벗어나지 않는지(AC②)와 추적 정확도는 실영상 fixture 수동 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 #### F-20. 자동 하이라이트 (롱폼→숏폼 후보)
 - **요구사항**: 오디오 에너지/음성 밀도/씬 변화 점수화 → 상위 N개 구간(15~60초) 제안 → 클릭으로 새 시퀀스 생성.

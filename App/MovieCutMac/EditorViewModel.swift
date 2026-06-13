@@ -2815,15 +2815,29 @@ final class EditorViewModel {
 
         let provider = AutoReframeProvider()
         let avAsset = AVAsset(url: asset.originalURL)
-        let frames = await provider.calculateCropFrames(for: avAsset, targetAspect: targetAspect)
+        let rawFrames = await provider.calculateCropFrames(for: avAsset, targetAspect: targetAspect)
+        let frames = ReframeSmoothing.smooth(rawFrames)
         let canvasSize = effectiveCanvasSize(in: snapshot)
 
+        let generatedKeyframes = reframeKeyframes(from: frames, clip: clip, canvasSize: canvasSize)
+        guard !generatedKeyframes.isEmpty else {
+            lastErrorMessage = nil
+            return 0
+        }
+
+        let updatedKeyframes = mergedReframeKeyframes(existing: clip.keyframes, generated: generatedKeyframes)
+        // Persist auto-reframe keyframes on the clip; export forwards clip.keyframes to CustomVideoCompositor.
+        try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
+        try await refreshFromSession()
+        return generatedKeyframes.count
+    }
+
+    /// Maps smoothed crop frames to position/scale keyframes in clip-local time.
+    private func reframeKeyframes(from frames: [CropFrame], clip: Clip, canvasSize: CGSize) -> [Keyframe] {
         var generatedKeyframes: [Keyframe] = []
         for frame in frames {
             let pointRange = TimeRange(start: frame.time, duration: .ulpOfOne)
-            guard let mapping = timelineMapping(for: pointRange, in: clip) else {
-                continue
-            }
+            guard let mapping = timelineMapping(for: pointRange, in: clip) else { continue }
 
             let localTime = mapping.timelineRange.start - clip.timelineRange.start
             let posX = Double(frame.rect.midX - 0.5) * Double(canvasSize.width)
@@ -2835,25 +2849,119 @@ final class EditorViewModel {
             generatedKeyframes.append(Keyframe(property: .scaleX, time: localTime, value: scale))
             generatedKeyframes.append(Keyframe(property: .scaleY, time: localTime, value: scale))
         }
+        return generatedKeyframes
+    }
 
-        guard !generatedKeyframes.isEmpty else {
-            lastErrorMessage = nil
-            return 0
-        }
-
+    private func mergedReframeKeyframes(existing: [Keyframe], generated: [Keyframe]) -> [Keyframe] {
         let reframedProperties: Set<AnimatableProperty> = [.positionX, .positionY, .scaleX, .scaleY]
-        let preservedKeyframes = clip.keyframes.filter { !reframedProperties.contains($0.property) }
-        let updatedKeyframes = (preservedKeyframes + generatedKeyframes).sorted {
-            if $0.time == $1.time {
-                return $0.property.rawValue < $1.property.rawValue
-            }
-            return $0.time < $1.time
+        let preserved = existing.filter { !reframedProperties.contains($0.property) }
+        return (preserved + generated).sorted {
+            $0.time == $1.time ? $0.property.rawValue < $1.property.rawValue : $0.time < $1.time
+        }
+    }
+
+    // MARK: - Auto reframe preview (F-19)
+
+    /// Smoothed crop frames currently previewed (empty = no preview).
+    var reframePreviewFrames: [CropFrame] = []
+    private var reframePreviewKeyframes: [Keyframe] = []
+    private(set) var reframePreviewClipId: UUID?
+
+    var hasReframePreview: Bool { !reframePreviewFrames.isEmpty }
+
+    /// Computes smoothed reframe frames/keyframes for the selected video clip
+    /// and stores them as a preview WITHOUT modifying the clip (F-19 preview).
+    func previewAutoReframeOnSelection() async {
+        guard let clipId = selectedClipId, canAutoReframeSelection else {
+            lastErrorMessage = "Select a video clip to auto reframe."
+            return
         }
 
-        // Persist auto-reframe keyframes on the clip; export forwards clip.keyframes to CustomVideoCompositor.
-        try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
-        try await refreshFromSession()
-        return generatedKeyframes.count
+        lastErrorMessage = nil
+        lastStatusMessage = "Analyzing subject for reframe..."
+
+        do {
+            let snapshot = await session.snapshot()
+            let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
+            guard asset.kind == .video else {
+                lastErrorMessage = "Auto reframe needs a video clip."
+                return
+            }
+
+            let targetAspect = canvasAspectValue(in: snapshot)
+            let provider = AutoReframeProvider()
+            let avAsset = AVAsset(url: asset.originalURL)
+            let rawFrames = await provider.calculateCropFrames(for: avAsset, targetAspect: targetAspect)
+            let frames = ReframeSmoothing.smooth(rawFrames)
+            let canvasSize = effectiveCanvasSize(in: snapshot)
+            let keyframes = reframeKeyframes(from: frames, clip: clip, canvasSize: canvasSize)
+
+            guard !keyframes.isEmpty else {
+                reframePreviewFrames = []
+                reframePreviewKeyframes = []
+                reframePreviewClipId = nil
+                lastStatusMessage = "No subject frames detected; nothing to reframe."
+                return
+            }
+
+            reframePreviewFrames = frames
+            reframePreviewKeyframes = keyframes
+            reframePreviewClipId = clipId
+            lastStatusMessage = String(
+                format: "Preview: %d crop frames, %d keyframes. Review and Apply.",
+                frames.count,
+                keyframes.count
+            )
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Discards the reframe preview without changing the clip (F-19).
+    func cancelAutoReframePreview() {
+        reframePreviewFrames = []
+        reframePreviewKeyframes = []
+        reframePreviewClipId = nil
+        lastStatusMessage = "Auto reframe preview cancelled."
+    }
+
+    /// Commits the previewed reframe keyframes to the clip.
+    func applyAutoReframePreview() async {
+        guard let clipId = reframePreviewClipId, !reframePreviewKeyframes.isEmpty else { return }
+
+        do {
+            let snapshot = await session.snapshot()
+            guard let clip = snapshot.timeline.tracks.flatMap(\.clips).first(where: { $0.id == clipId }) else {
+                cancelAutoReframePreview()
+                return
+            }
+
+            let updated = mergedReframeKeyframes(existing: clip.keyframes, generated: reframePreviewKeyframes)
+            try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updated)))
+            try await refreshFromSession()
+
+            let count = reframePreviewKeyframes.count
+            recordAnalysisResult(
+                action: "Auto Reframe",
+                count: count,
+                message: "Applied \(count) reframe keyframes.",
+                clipId: clipId
+            )
+            lastErrorMessage = nil
+            lastStatusMessage = "Applied \(count) reframe keyframes."
+            reframePreviewFrames = []
+            reframePreviewKeyframes = []
+            reframePreviewClipId = nil
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func canvasAspectValue(in project: Project) -> CGFloat {
+        let size = effectiveCanvasSize(in: project)
+        return size.width / max(size.height, 1)
     }
 
     private func apply(_ command: any EditorCommand) async {

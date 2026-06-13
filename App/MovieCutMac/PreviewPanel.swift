@@ -131,6 +131,10 @@ struct PreviewPanel: View {
                 clipPlaceholder(for: clip)
             }
 
+            if viewModel.hasReframePreview, viewModel.reframePreviewClipId == clip.id {
+                ReframeCropPathOverlay(frames: viewModel.reframePreviewFrames)
+            }
+
             if viewModel.isMaskEditorActive {
                 MaskCanvasView(
                     mask: maskBinding(for: clip.id),
@@ -1446,5 +1450,53 @@ private struct CanvasTransformMetrics {
             x: min(max(point.x, 0), canvasSize.width),
             y: min(max(point.y, 0), canvasSize.height)
         )
+    }
+}
+
+/// Draws the smoothed auto-reframe crop path over the preview (F-19): each
+/// crop rect outline plus a polyline through the centers. Read-only overlay.
+private struct ReframeCropPathOverlay: View {
+    var frames: [CropFrame]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack {
+                // Crop rectangles (normalized 0...1 → view space).
+                ForEach(Array(frames.enumerated()), id: \.offset) { _, frame in
+                    let rect = viewRect(frame.rect, in: size)
+                    Rectangle()
+                        .strokeBorder(Color.yellow.opacity(0.35), lineWidth: 1)
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                }
+
+                // Center path.
+                Path { path in
+                    let points = frames.map { center(of: $0.rect, in: size) }
+                    guard let first = points.first else { return }
+                    path.move(to: first)
+                    for point in points.dropFirst() {
+                        path.addLine(to: point)
+                    }
+                }
+                .stroke(Color.yellow.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            .allowsHitTesting(false)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func viewRect(_ normalized: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: normalized.minX * size.width,
+            y: normalized.minY * size.height,
+            width: normalized.width * size.width,
+            height: normalized.height * size.height
+        )
+    }
+
+    private func center(of normalized: CGRect, in size: CGSize) -> CGPoint {
+        CGPoint(x: normalized.midX * size.width, y: normalized.midY * size.height)
     }
 }

@@ -1988,6 +1988,58 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .chromaKey(chromaKey)))
     }
 
+    // MARK: - Chroma key eyedropper (F-10)
+
+    /// Whether the preview is in eyedropper mode for picking the key color.
+    var isChromaKeyEyedropperActive = false
+
+    func toggleChromaKeyEyedropper() {
+        isChromaKeyEyedropperActive.toggle()
+        lastStatusMessage = isChromaKeyEyedropperActive
+            ? "Eyedropper on: click the preview to pick the key color."
+            : nil
+    }
+
+    /// Samples the selected video clip's frame at a normalized preview point and
+    /// sets it as the chroma key color (F-10 eyedropper).
+    func pickChromaKeyColor(atNormalizedPoint point: CGPoint) async {
+        defer { isChromaKeyEyedropperActive = false }
+
+        guard let selectedClipId, let clip = selectedClip, clip.kind == .video,
+              let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "Select a video clip to pick a key color."
+            return
+        }
+        _ = selectedClipId
+
+        let localTime = max(0, playheadTime - clip.timelineRange.start)
+        let sourceTime = clip.sourceRange.start + localTime
+        let avAsset = AVAsset(url: asset.originalURL)
+        let generator = AVAssetImageGenerator(asset: avAsset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+
+        do {
+            let cmTime = CMTime(seconds: sourceTime, preferredTimescale: 600)
+            let cgImage = try generator.copyCGImage(at: cmTime, actualTime: nil)
+            guard let color = PixelSampler.color(in: cgImage, atNormalizedPoint: point) else {
+                lastErrorMessage = "Couldn't sample that point."
+                return
+            }
+
+            let hex = PixelSampler.hexString(from: color)
+            var settings = clip.chromaKey ?? ChromaKeySettings.greenScreen()
+            settings.keyColor = hex
+            await updateSelectedChromaKey(settings)
+            lastErrorMessage = nil
+            lastStatusMessage = "Key color set to \(hex)."
+        } catch {
+            lastErrorMessage = "Couldn't read the frame: \(error.localizedDescription)"
+        }
+    }
+
     func updateSelectedColorCorrection(_ colorCorrection: ColorCorrection?) async {
         guard let selectedClipId else { return }
         await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: colorCorrection))

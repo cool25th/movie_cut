@@ -135,6 +135,12 @@ struct PreviewPanel: View {
                 ReframeCropPathOverlay(frames: viewModel.reframePreviewFrames)
             }
 
+            if viewModel.isChromaKeyEyedropperActive, clip.kind == .video {
+                ChromaKeyEyedropperOverlay { normalizedPoint in
+                    Task { await viewModel.pickChromaKeyColor(atNormalizedPoint: normalizedPoint) }
+                }
+            }
+
             if viewModel.isMaskEditorActive {
                 MaskCanvasView(
                     mask: maskBinding(for: clip.id),
@@ -1498,5 +1504,37 @@ private struct ReframeCropPathOverlay: View {
 
     private func center(of normalized: CGRect, in size: CGSize) -> CGPoint {
         CGPoint(x: normalized.midX * size.width, y: normalized.midY * size.height)
+    }
+}
+
+/// A transparent click-capture layer for the chroma-key eyedropper (F-10).
+/// Reports the click position as a normalized (0...1, top-left origin) point.
+private struct ChromaKeyEyedropperOverlay: View {
+    var onPick: (CGPoint) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            Rectangle()
+                .fill(Color.white.opacity(0.001))
+                .contentShape(Rectangle())
+                .onTapGesture { location in
+                    let size = proxy.size
+                    guard size.width > 0, size.height > 0 else { return }
+                    let normalized = CGPoint(
+                        x: min(max(location.x / size.width, 0), 1),
+                        y: min(max(location.y / size.height, 0), 1)
+                    )
+                    onPick(normalized)
+                }
+                .overlay(alignment: .topLeading) {
+                    Label("Eyedropper — click to pick key color", systemImage: "eyedropper")
+                        .font(.caption2)
+                        .padding(4)
+                        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
+                        .foregroundStyle(.white)
+                        .padding(6)
+                }
+        }
+        .accessibilityLabel("Chroma key eyedropper. Click the preview to pick the key color.")
     }
 }

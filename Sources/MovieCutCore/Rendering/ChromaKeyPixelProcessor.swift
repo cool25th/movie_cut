@@ -13,6 +13,7 @@ public enum ChromaKeyPixelProcessor {
             threshold: Float(settings.tolerance),
             softness: Float(settings.softness),
             spillSuppression: Float(settings.spillSuppression),
+            edgeShrink: Float(settings.edgeShrink),
             to: image
         )
     }
@@ -23,11 +24,15 @@ public enum ChromaKeyPixelProcessor {
         threshold: Float,
         softness: Float = Float(ChromaKeySettings.greenScreen().softness),
         spillSuppression: Float = Float(ChromaKeySettings.greenScreen().spillSuppression),
+        edgeShrink: Float = 0,
         to image: CIImage
     ) -> CIImage {
         let extent = image.extent
         let keyColor = clamped(keyColor)
-        let tolerance = clamped(threshold)
+        // Edge shrink raises the keying threshold so more near-key fringe
+        // pixels are removed, eroding the foreground edge inward (F-10). It is
+        // orthogonal to feathering.
+        let tolerance = clamped(threshold + clamped(edgeShrink) * 0.25)
         let feather = max(clamped(softness), 0.001)
         let spillStrength = clamped(spillSuppression)
 

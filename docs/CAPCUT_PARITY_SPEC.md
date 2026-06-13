@@ -150,10 +150,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 표준 33-size .cube 적용 시 preview/export 색 변화 일치(픽셀 테스트) ② 잘못된 파일 에러 메시지 ③ intensity 0~1 슬라이더.
 - **검증 기록(2026-06-11)**: Core `CubeLUTParser`(.cube 텍스트→RGBA float, red-fastest, 17/33/65 size, 주석/TITLE/DOMAIN 무시, 1D/크기초과/엔트리불일치 typed error). `EffectType.externalLUT` + `Effect.lutPath`(optional, synthesized Codable 하위호환). shared `VisualEffectPixelProcessor`가 `.externalLUT`를 `CIColorCube`로 적용(path 키 NSCache로 프레임당 재파싱 방지) + intensity 블렌드 — Mac/iOS compositor 공통 경로라 preview/export 자동 일치(A2/A3). ViewModel `importExternalLUT`(파싱 검증→App Support/MovieCut/LUTs 복사→effect 추가, 파싱 실패 시 구체 에러 메시지 AC②). Inspector Effects에 Import LUT…(NSOpenPanel .cube) + intensity 슬라이더 0~1(AC③). `CubeLUTTests` 10개: invert LUT가 빨강→시안으로 remap되는 **guarded 픽셀 테스트**(AC①), 17/33/65 파싱, 에러 케이스, zero-intensity passthrough. 필터 스위트 177개 + Mac 빌드 통과. Caveat: 실기기 .cube import GUI와 export 결과 비교 잔여 — DoD §1.3에 따라 ✅ 보류.
 
-#### F-10. 크로마키 스포이드 & 매트 보정
+#### F-10. 크로마키 스포이드 & 매트 보정 — 🟡 구현+테스트 완료(2026-06-11), 실기기 스포이드 GUI 잔여
 - **요구사항**: 미리보기에서 클릭으로 키 색상 추출(eyedropper), 매트 정리(shrink/feather).
 - **구현**: `PreviewPanel` eyedropper 모드(클릭 좌표 → 현재 프레임 픽셀 → `ChromaKeySettings.keyColor`). `ChromaKeyPixelProcessor`에 matte erode/feather 파라미터 추가(기존 softness와 직교).
 - **AC**: ① 그린스크린에서 스포이드 1클릭 → 즉시 키잉 ② edge fringe가 feather로 감소(픽셀 테스트) ③ 설정 프로젝트 저장/복원.
+- **검증 기록(2026-06-11)**: `ChromaKeySettings.edgeShrink`(matte erode, softness와 직교, Codable 하위호환+디코딩 테스트) → `ChromaKeyPixelProcessor`가 키잉 threshold를 안쪽으로 올려 near-key fringe 제거(AC②, guarded 알파 픽셀 테스트로 shrink가 알파 감소 확인). Core `PixelSampler`(CGImage 정규화 좌표→RGB, 1×1 sRGB 컨텍스트 렌더로 색공간 독립) — 순수 테스트(색 샘플·hex·범위 밖 nil). ViewModel `isChromaKeyEyedropperActive`/`pickChromaKeyColor`(AVAssetImageGenerator로 현재 소스 프레임→PixelSampler→keyColor 설정, AC①). PreviewPanel `ChromaKeyEyedropperOverlay`(클릭→정규화 좌표) + ChromaKeyView에 Pick 스포이드 버튼·Edge Shrink 슬라이더. keyColor/edgeShrink는 clip `ChromaKeySettings`로 영속(AC③). Mac compositor는 settings 경로라 edgeShrink 자동 반영(iOS는 legacy color 경로). `ChromaKeyEyedropperTests` 9개 + 필터 스위트 180개 + Mac 빌드 통과. Caveat: 실기기 그린스크린 스포이드 클릭/매트 결과 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 #### F-11. 캔버스 배경 (컬러/블러/이미지) — 🟡 구현+테스트+배선 완료(2026-06-11), 실기기/визual fixture 잔여
 - **요구사항**: 9:16 캔버스에 16:9 영상 배치 시 여백을 단색/소스 블러/이미지로 채움.

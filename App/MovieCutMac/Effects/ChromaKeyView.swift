@@ -4,7 +4,9 @@ import MovieCutCore
 
 struct ChromaKeyView: View {
     var clip: Clip
+    var isEyedropperActive: Bool = false
     var onChange: (ChromaKeySettings?) -> Void
+    var onPickColor: () -> Void = {}
 
     @State private var isExpanded = false
 
@@ -35,6 +37,14 @@ struct ChromaKeyView: View {
                         Button("Blue") {
                             onChange(.blueScreen())
                         }
+                        Button {
+                            onPickColor()
+                        } label: {
+                            Label("Pick", systemImage: "eyedropper")
+                        }
+                        .tint(isEyedropperActive ? .accentColor : nil)
+                        .help("Click the preview to sample the key color from the frame.")
+                        .accessibilityLabel("Pick key color with eyedropper")
                     }
                     .controlSize(.small)
 
@@ -51,6 +61,14 @@ struct ChromaKeyView: View {
                         value: activeSettings.softness,
                         onChange: { newValue in
                             updateSettings { $0.softness = newValue }
+                        }
+                    )
+
+                    slider(
+                        title: "Edge Shrink",
+                        value: activeSettings.edgeShrink,
+                        onChange: { newValue in
+                            updateSettings { $0.edgeShrink = newValue }
                         }
                     )
 

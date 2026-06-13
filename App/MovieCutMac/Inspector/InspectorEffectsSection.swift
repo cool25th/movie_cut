@@ -264,9 +264,16 @@ struct InspectorEffectsSection: View {
     }
 
     private var chromaKeySection: some View {
-        ChromaKeyView(clip: clip) { chromaKey in
-            Task { await viewModel.updateSelectedChromaKey(chromaKey) }
-        }
+        ChromaKeyView(
+            clip: clip,
+            isEyedropperActive: viewModel.isChromaKeyEyedropperActive,
+            onChange: { chromaKey in
+                Task { await viewModel.updateSelectedChromaKey(chromaKey) }
+            },
+            onPickColor: {
+                viewModel.toggleChromaKeyEyedropper()
+            }
+        )
     }
 
     private var reverseFreezeSection: some View {

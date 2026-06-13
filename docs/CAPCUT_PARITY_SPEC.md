@@ -214,10 +214,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: 30분 fixture에서 3개 후보 제안 → 선택 시 해당 구간만의 새 프로젝트 생성.
 - **검증 기록(2026-06-11)**: 순수 `HighlightScorer.scoreHighlights`가 silence(발화 밀도)/scene change(시각 활동)/beat(오디오 에너지 proxy) provider **출력만 조합**(신규 ML 없음). 15~60초 윈도우를 슬라이드하며 가중 점수화 후 top-N **비중첩** greedy 선택. 행동 테스트: 30분 합성 타임라인의 3개 활발 구간에서 비중첩 3개 후보 제안(AC) + 발화 구간이 무음 구간보다 고득점 + scene/energy 기여 + 점수 0~1 정규화 + 윈도우 길이 clamp. ViewModel `detectHighlights`(3개 provider 실행→타임라인 매핑→scorer) + `createSequenceFromHighlight`(후보 타임라인 윈도우→소스 시간 역매핑→canvas/export 복사한 **새 프로젝트 생성·세션 스왑**) + Inspector `HighlightsSection`(Find Highlights/후보 리스트/Create). `HighlightScorerTests` 8개 + 필터 스위트 163개 + Mac 빌드 통과. Caveat: 실제 30분 영상에서 후보의 주관적 적합성과 새 시퀀스 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류. speed ramp 무시한 비례 소스 역매핑은 휴리스틱.
 
-#### F-21. AI 어시스턴트 (로컬 명령 해석, 선택)
+#### F-21. AI 어시스턴트 (로컬 명령 해석, 선택) — 🟡 규칙기반 1단계 구현/테스트 완료(2026-06-11), 외부 LLM 연동은 별도 합의
 - **요구사항**: "모든 클립에 시네마틱 필터 적용해줘" 수준의 자연어를 기존 명령으로 매핑하는 패널. 외부 LLM API 연동은 별도 합의.
 - **구현 1단계**: 규칙 기반 intent 매핑(대상×동작 동의어 사전) → `EditorSession` 명령 시퀀스. 온디바이스 Foundation Models 연동은 후속 검토.
 - **AC**: 정의된 20개 intent 문장 시나리오 테스트 통과, 미해석 문장은 가능한 명령 안내.
+- **검증 기록(2026-06-11)**: 순수 `AssistantCommandParser`(동의어 사전 기반 target×action 매핑 + 퍼센트/초 숫자 파싱, 신규 ML/외부 API 없음). target: selection/allClips/video/audio/text, action: applyFilter(7종)/removeFilters/setVolume/setFade/removeFade/adjustBrightness·Contrast·Saturation/addMarker. **20개 intent 문장 시나리오가 정확한 target+action으로 매핑**되는 행동 테스트 통과(AC), 미해석 문장은 `exampleCommands` 안내 반환(AC), 숫자/동의어 파싱 테스트 포함. ViewModel `runAssistantCommand`가 파싱→대상 클립 해석→기존 명령(SetClipPropertyCommand/SetVolumeCommand/AudioFadeCommand/AddMarkerCommand)으로 실행. Inspector `AssistantSection`(TextField + Run + 결과/제안 클릭). `AssistantCommandParserTests` 8개 + 필터 스위트 149개 + Mac 빌드 통과. Caveat: 외부 LLM/온디바이스 Foundation Models 연동은 별도 합의(스펙대로 보류), "all clips" 다중 명령은 클립당 별도 undo(단일 undo 통합은 후속). DoD §1.3에 따라 ✅ 보류.
 
 ### M5. 생태계 (착수 전 별도 합의)
 - **F-22. iCloud 프로젝트 동기화**: 기존 `CloudSyncService` 완성 — conflict는 최신 수정 우선 + 백업 사본. AC: 두 기기 시나리오 시뮬레이션 테스트.

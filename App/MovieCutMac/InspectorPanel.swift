@@ -16,6 +16,7 @@ struct InspectorPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     MarkerManagementSection(viewModel: viewModel)
+                    AssistantSection(viewModel: viewModel)
                     HighlightsSection(viewModel: viewModel)
                     AnalysisResultsSection(viewModel: viewModel)
 
@@ -166,6 +167,66 @@ private struct MarkerManagementRow: View {
     private var canSaveName: Bool {
         let trimmedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmedName.isEmpty && trimmedName != marker.name
+    }
+}
+
+/// Natural-language assistant: maps an instruction to existing edits (F-21).
+private struct AssistantSection: View {
+    var viewModel: EditorViewModel
+    @State private var isExpanded = false
+    @State private var instruction = ""
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    TextField("e.g. apply cinematic filter to all clips", text: $instruction)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .onSubmit { run() }
+                        .accessibilityLabel("Assistant instruction")
+
+                    Button("Run") { run() }
+                        .controlSize(.small)
+                        .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                if let message = viewModel.assistantResultMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !viewModel.assistantSuggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.assistantSuggestions, id: \.self) { suggestion in
+                            Button {
+                                instruction = suggestion
+                                run()
+                            } label: {
+                                Text(suggestion)
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Use suggestion: \(suggestion)")
+                        }
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("AI Assistant", systemImage: "sparkles")
+                .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private func run() {
+        let text = instruction
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        Task { await viewModel.runAssistantCommand(text) }
     }
 }
 

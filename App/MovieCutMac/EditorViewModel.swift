@@ -3115,6 +3115,166 @@ final class EditorViewModel {
         TimeRange(start: range.start + delta, duration: range.duration)
     }
 
+    // MARK: - Assistant (F-21)
+
+    /// The last assistant outcome message shown in the panel.
+    var assistantResultMessage: String?
+    /// Suggestions shown when the last instruction was not understood.
+    var assistantSuggestions: [String] = []
+
+    /// Parses a natural-language instruction and executes the mapped intent
+    /// across the targeted clips using existing commands (F-21).
+    func runAssistantCommand(_ text: String) async {
+        assistantResultMessage = nil
+        assistantSuggestions = []
+
+        switch AssistantCommandParser.parse(text) {
+        case .unrecognized(let suggestions):
+            assistantSuggestions = suggestions
+            assistantResultMessage = "I couldn't map that to an edit. Try one of the examples."
+            lastStatusMessage = nil
+
+        case .recognized(let intent):
+            await executeAssistantIntent(intent)
+        }
+    }
+
+    private func executeAssistantIntent(_ intent: AssistantIntent) async {
+        do {
+            let snapshot = await session.snapshot()
+
+            if case .addMarker = intent.action {
+                let name = "Marker \(snapshot.markers.count + 1)"
+                try await session.dispatch(AddMarkerCommand(marker: Marker(time: playheadTime, name: name)))
+                try await refreshFromSession()
+                assistantResultMessage = "Added a marker at the playhead."
+                lastStatusMessage = assistantResultMessage
+                return
+            }
+
+            let clips = assistantTargetClips(intent.target, in: snapshot)
+            guard !clips.isEmpty else {
+                assistantResultMessage = "No matching clips for that instruction."
+                lastStatusMessage = nil
+                return
+            }
+
+            var applied = 0
+            for clip in clips {
+                if let command = assistantCommand(for: intent.action, clip: clip) {
+                    try await session.dispatch(command)
+                    applied += 1
+                }
+            }
+            try await refreshFromSession()
+
+            assistantResultMessage = applied == 0
+                ? "That instruction doesn't apply to the selected clips."
+                : "\(assistantActionLabel(intent.action)) applied to \(applied) clip(s)."
+            lastStatusMessage = assistantResultMessage
+        } catch {
+            assistantResultMessage = error.localizedDescription
+            lastStatusMessage = nil
+        }
+    }
+
+    private func assistantTargetClips(_ target: AssistantTarget, in project: Project) -> [Clip] {
+        let allClips = project.timeline.tracks.flatMap(\.clips)
+        switch target {
+        case .selection:
+            return allClips.filter { selectedClipIds.contains($0.id) }
+        case .allClips:
+            return allClips
+        case .videoClips:
+            return allClips.filter { $0.kind == .video }
+        case .audioClips:
+            return allClips.filter { $0.kind == .audio }
+        case .textClips:
+            return allClips.filter { $0.kind == .text }
+        }
+    }
+
+    private func assistantCommand(for action: AssistantAction, clip: Clip) -> (any EditorCommand)? {
+        switch action {
+        case .applyFilter(let type):
+            guard clip.kind == .video || clip.kind == .image else { return nil }
+            var effects = clip.effects.filter { $0.type != type }
+            effects.append(Effect(type: type))
+            return SetClipPropertyCommand(clipId: clip.id, property: .effects(effects))
+
+        case .removeFilters:
+            guard !clip.effects.isEmpty else { return nil }
+            return SetClipPropertyCommand(clipId: clip.id, property: .effects([]))
+
+        case .setVolume(let value):
+            guard clip.kind == .video || clip.kind == .audio else { return nil }
+            return SetVolumeCommand(clipId: clip.id, volume: value)
+
+        case .setFade(let seconds):
+            guard clip.kind == .video || clip.kind == .audio else { return nil }
+            let clamped = min(max(seconds, 0), clip.timelineRange.duration / 2)
+            return AudioFadeCommand(clipId: clip.id, fadeInDuration: clamped, fadeOutDuration: clamped)
+
+        case .removeFade:
+            guard clip.fadeInDuration > 0 || clip.fadeOutDuration > 0 else { return nil }
+            return AudioFadeCommand(clipId: clip.id, fadeInDuration: 0, fadeOutDuration: 0)
+
+        case .adjustBrightness(let delta):
+            guard clip.kind == .video || clip.kind == .image else { return nil }
+            let current = clip.colorCorrection ?? ColorCorrection()
+            // Reconstruct via init so the value re-clamps to its valid range.
+            let updated = ColorCorrection(
+                brightness: current.brightness + delta,
+                contrast: current.contrast,
+                saturation: current.saturation,
+                warmth: current.warmth,
+                tint: current.tint
+            )
+            return SetClipPropertyCommand(clipId: clip.id, property: .colorCorrection(updated))
+
+        case .adjustContrast(let delta):
+            guard clip.kind == .video || clip.kind == .image else { return nil }
+            let current = clip.colorCorrection ?? ColorCorrection()
+            let updated = ColorCorrection(
+                brightness: current.brightness,
+                contrast: current.contrast + delta,
+                saturation: current.saturation,
+                warmth: current.warmth,
+                tint: current.tint
+            )
+            return SetClipPropertyCommand(clipId: clip.id, property: .colorCorrection(updated))
+
+        case .adjustSaturation(let delta):
+            guard clip.kind == .video || clip.kind == .image else { return nil }
+            let current = clip.colorCorrection ?? ColorCorrection()
+            let updated = ColorCorrection(
+                brightness: current.brightness,
+                contrast: current.contrast,
+                saturation: current.saturation + delta,
+                warmth: current.warmth,
+                tint: current.tint
+            )
+            return SetClipPropertyCommand(clipId: clip.id, property: .colorCorrection(updated))
+
+        case .addMarker:
+            return nil
+        }
+    }
+
+    private func assistantActionLabel(_ action: AssistantAction) -> String {
+        switch action {
+        case .applyFilter(let type): return "Filter (\(type.rawValue))"
+        case .removeFilters: return "Remove filters"
+        case .setVolume(let value): return "Volume \(Int(value * 100))%"
+        case .setFade(let seconds): return String(format: "Fade %.1fs", seconds)
+        case .removeFade: return "Remove fade"
+        case .adjustBrightness: return "Brightness"
+        case .adjustContrast: return "Contrast"
+        case .adjustSaturation: return "Saturation"
+        case .addMarker: return "Marker"
+        }
+    }
+
     private func apply(_ command: any EditorCommand) async {
         do {
             try await session.dispatch(command)

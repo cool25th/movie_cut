@@ -141,6 +141,7 @@ extension EffectType {
         case .noirLUT: return "Noir LUT"
         case .vividLUT: return "Vivid LUT"
         case .coolLUT: return "Cool LUT"
+        case .externalLUT: return "Imported LUT"
         }
     }
 }

@@ -354,6 +354,7 @@ struct IOSEffectsInspectorView: View {
         case .noirLUT: return "moon"
         case .vividLUT: return "wand.and.stars"
         case .coolLUT: return "snowflake"
+        case .externalLUT: return "square.stack.3d.forward.dottedline"
         }
     }
 }

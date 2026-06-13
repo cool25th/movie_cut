@@ -25,7 +25,8 @@ public enum VisualEffectPixelProcessor {
              .vintageLUT,
              .noirLUT,
              .vividLUT,
-             .coolLUT:
+             .coolLUT,
+             .externalLUT:
             return true
         case .fadeIn, .fadeOut, .crossDissolve:
             return false
@@ -91,6 +92,8 @@ public enum VisualEffectPixelProcessor {
             output = applyLUTPreset(.vivid, effect: effect, to: image)
         case .coolLUT:
             output = applyLUTPreset(.cool, effect: effect, to: image)
+        case .externalLUT:
+            output = applyExternalLUT(effect, to: image)
         case .fadeIn, .fadeOut, .crossDissolve:
             output = image
         }
@@ -126,6 +129,36 @@ public enum VisualEffectPixelProcessor {
         let styleIndex = Int((effect.parameters["styleIndex"] ?? 1).rounded())
         let preset = LUTPreset(styleIndex: styleIndex)
         return applyLUTPreset(preset, effect: effect, to: image)
+    }
+
+    // Parsed cubes are cached by path so the .cube file is not re-read per frame.
+    private nonisolated(unsafe) static let cubeCache = NSCache<NSString, CubeLUTBox>()
+
+    private static func applyExternalLUT(_ effect: Effect, to image: CIImage) -> CIImage {
+        guard let path = effect.lutPath else { return image }
+        let intensity = clamped(effect.parameters["intensity"] ?? 1, lowerBound: 0, upperBound: 1)
+        guard intensity > 0, let cube = loadCube(path: path) else { return image }
+
+        guard let filter = CIFilter(name: "CIColorCube") else { return image }
+        filter.setValue(cube.dimension, forKey: "inputCubeDimension")
+        filter.setValue(cube.dataObject, forKey: "inputCubeData")
+        filter.setValue(image, forKey: kCIInputImageKey)
+        guard let styled = filter.outputImage else { return image }
+
+        return blend(original: image, styled: styled.cropped(to: image.extent), intensity: intensity)
+    }
+
+    private static func loadCube(path: String) -> CubeLUTBox? {
+        let key = path as NSString
+        if let cached = cubeCache.object(forKey: key) {
+            return cached
+        }
+        guard let lut = try? CubeLUTParser.parse(contentsOf: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        let box = CubeLUTBox(lut: lut)
+        cubeCache.setObject(box, forKey: key)
+        return box
     }
 
     private static func applyLUTPreset(_ preset: LUTPreset, effect: Effect, to image: CIImage) -> CIImage {

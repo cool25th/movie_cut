@@ -186,7 +186,7 @@ import Testing
 }
 
 @Test func effectTypeAllCases() {
-    #expect(EffectType.allCases.count == 17)
+    #expect(EffectType.allCases.count == 18)
 }
 
 @Test func effectCreation() {

@@ -1,5 +1,7 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
+import UniformTypeIdentifiers
 
 struct InspectorEffectsSection: View {
     @Bindable var viewModel: EditorViewModel
@@ -219,8 +221,16 @@ struct InspectorEffectsSection: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
+                Button {
+                    importLUT()
+                } label: {
+                    Label("Import LUT…", systemImage: "square.stack.3d.forward.dottedline")
+                }
+                .controlSize(.small)
+                .help("Import an external .cube color LUT and apply it to this clip.")
+
                 Menu {
-                    ForEach(EffectType.allCases, id: \.self) { type in
+                    ForEach(EffectType.allCases.filter { $0 != .externalLUT }, id: \.self) { type in
                         Button(type.displayName) {
                             addEffect(type)
                         }
@@ -468,6 +478,17 @@ struct InspectorEffectsSection: View {
         Task { await viewModel.updateSelectedEffects(effects) }
     }
 
+    private func importLUT() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if let cubeType = UTType(filenameExtension: "cube") {
+            panel.allowedContentTypes = [cubeType]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await viewModel.importExternalLUT(from: url) }
+    }
+
     private func removeEffect(_ effectId: UUID) {
         let effects = clip.effects.filter { $0.id != effectId }
         Task { await viewModel.updateSelectedEffects(effects) }
@@ -529,6 +550,8 @@ struct InspectorEffectsSection: View {
             return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.8)]
         case .noirLUT:
             return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
+        case .externalLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 1)]
         }
     }
 }

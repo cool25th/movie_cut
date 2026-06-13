@@ -144,10 +144,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **구현**: 기존 Vision 기반 segmentation(`b85a10a`)을 frame-by-frame 경로로 연결: `CustomVideoCompositor`에서 `backgroundRemoval` effect 클립에 `VNGeneratePersonSegmentationRequest` 마스크를 `MaskPixelProcessor`와 동일한 알파 합성으로 적용. preview는 fast quality+프레임 캐시, export는 accurate.
 - **AC**: ① 인물 영상 적용 시 preview 배경 투명(캔버스 배경 노출) ② export 동일 ③ 1080p preview 15fps 이상(프록시 병행) ④ 인물 없는 영상은 무변경 + 상태 메시지.
 
-#### F-09. 외부 LUT(.cube) 임포트
+#### F-09. 외부 LUT(.cube) 임포트 — 🟡 구현+픽셀 테스트 완료(2026-06-11), 실기기 import GUI 잔여
 - **요구사항**: .cube 파일을 가져와 필터로 적용·관리, 강도 조절.
 - **구현**: Core `Rendering/CubeLUTParser`(.cube 텍스트 → `CIColorCube` data, 17/33/65 size). `Effect`에 `lutURL` 파라미터. Inspector 필터 섹션 "Import LUT…"(NSOpenPanel) + `~/Library/Application Support/MovieCut/LUTs/` 보관.
 - **AC**: ① 표준 33-size .cube 적용 시 preview/export 색 변화 일치(픽셀 테스트) ② 잘못된 파일 에러 메시지 ③ intensity 0~1 슬라이더.
+- **검증 기록(2026-06-11)**: Core `CubeLUTParser`(.cube 텍스트→RGBA float, red-fastest, 17/33/65 size, 주석/TITLE/DOMAIN 무시, 1D/크기초과/엔트리불일치 typed error). `EffectType.externalLUT` + `Effect.lutPath`(optional, synthesized Codable 하위호환). shared `VisualEffectPixelProcessor`가 `.externalLUT`를 `CIColorCube`로 적용(path 키 NSCache로 프레임당 재파싱 방지) + intensity 블렌드 — Mac/iOS compositor 공통 경로라 preview/export 자동 일치(A2/A3). ViewModel `importExternalLUT`(파싱 검증→App Support/MovieCut/LUTs 복사→effect 추가, 파싱 실패 시 구체 에러 메시지 AC②). Inspector Effects에 Import LUT…(NSOpenPanel .cube) + intensity 슬라이더 0~1(AC③). `CubeLUTTests` 10개: invert LUT가 빨강→시안으로 remap되는 **guarded 픽셀 테스트**(AC①), 17/33/65 파싱, 에러 케이스, zero-intensity passthrough. 필터 스위트 177개 + Mac 빌드 통과. Caveat: 실기기 .cube import GUI와 export 결과 비교 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 #### F-10. 크로마키 스포이드 & 매트 보정
 - **요구사항**: 미리보기에서 클릭으로 키 색상 추출(eyedropper), 매트 정리(shrink/feather).

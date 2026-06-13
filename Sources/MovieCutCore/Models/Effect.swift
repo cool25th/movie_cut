@@ -52,6 +52,9 @@ public enum EffectType: String, Codable, Sendable, Equatable, Hashable, CaseIter
 
     /// Procedural cool LUT-style color remapping.
     case coolLUT
+
+    /// User-imported external .cube 3D LUT applied from `Effect.lutPath`.
+    case externalLUT
 }
 
 /// An effect instance and its numeric parameters.
@@ -65,15 +68,20 @@ public struct Effect: Codable, Sendable, Equatable, Identifiable {
     /// Named effect parameters.
     public var parameters: [String: Double]
 
+    /// Filesystem path to an imported `.cube` LUT for `.externalLUT` effects.
+    public var lutPath: String?
+
     /// Creates an effect instance.
     public init(
         id: UUID = UUID(),
         type: EffectType,
-        parameters: [String: Double] = [:]
+        parameters: [String: Double] = [:],
+        lutPath: String? = nil
     ) {
         self.id = id
         self.type = type
         self.parameters = parameters
+        self.lutPath = lutPath
     }
 }
 

@@ -2446,6 +2446,59 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
     }
 
+    /// Imports an external `.cube` LUT, validates it, copies it into Application
+    /// Support, and appends an `.externalLUT` effect to the selected clip (F-09).
+    func importExternalLUT(from url: URL) async {
+        guard let selectedClipId, let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to apply the LUT to."
+            return
+        }
+
+        do {
+            // Validate by parsing before copying so bad files report clearly.
+            let lut = try CubeLUTParser.parse(contentsOf: url)
+
+            let directory = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/LUTs", isDirectory: true)
+                ?? FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutLUTs", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+            let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: url, to: destination)
+
+            var effects = clip.effects
+            effects.append(Effect(
+                type: .externalLUT,
+                parameters: ["intensity": 1.0],
+                lutPath: destination.path
+            ))
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Imported \(url.lastPathComponent) (\(lut.dimension)-size LUT)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not import LUT: \(lutErrorDescription(error))"
+        }
+    }
+
+    private func lutErrorDescription(_ error: Error) -> String {
+        guard let parseError = error as? CubeLUTParser.ParseError else {
+            return error.localizedDescription
+        }
+        switch parseError {
+        case .missingSize: return "missing LUT_3D_SIZE."
+        case .unsupported1D: return "1D LUTs are not supported."
+        case .sizeOutOfRange(let size): return "unsupported cube size \(size)."
+        case .entryCountMismatch(let expected, let found): return "expected \(expected) entries, found \(found)."
+        case .malformedEntry(let line): return "malformed data line \"\(line)\"."
+        }
+    }
+
     func prepareSubtitles(for clipId: UUID) async throws {
         lastStatusMessage = nil
         lastErrorMessage = nil

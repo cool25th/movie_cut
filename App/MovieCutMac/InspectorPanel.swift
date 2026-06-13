@@ -16,6 +16,7 @@ struct InspectorPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     MarkerManagementSection(viewModel: viewModel)
+                    HighlightsSection(viewModel: viewModel)
                     AnalysisResultsSection(viewModel: viewModel)
 
                     if let clip = viewModel.selectedClip {
@@ -165,6 +166,95 @@ private struct MarkerManagementRow: View {
     private var canSaveName: Bool {
         let trimmedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmedName.isEmpty && trimmedName != marker.name
+    }
+}
+
+/// Auto-highlight candidates with create-sequence actions (F-20).
+private struct HighlightsSection: View {
+    var viewModel: EditorViewModel
+    @State private var isExpanded = true
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Button("Find Highlights") {
+                        Task { await viewModel.detectHighlights() }
+                    }
+                    .controlSize(.small)
+                    .disabled(!viewModel.canDetectHighlights)
+                    .accessibilityHint("Scores highlight candidates from speech, scene changes, and beats.")
+
+                    if !viewModel.highlightCandidates.isEmpty {
+                        Button("Clear") {
+                            viewModel.clearHighlights()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
+                if viewModel.highlightCandidates.isEmpty {
+                    Text("No highlights yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.highlightCandidates) { candidate in
+                        HighlightCandidateRow(viewModel: viewModel, candidate: candidate)
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            HStack(spacing: 6) {
+                Label("Auto Highlights", systemImage: "wand.and.stars")
+                Spacer()
+                if !viewModel.highlightCandidates.isEmpty {
+                    Text("\(viewModel.highlightCandidates.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+    }
+}
+
+private struct HighlightCandidateRow: View {
+    var viewModel: EditorViewModel
+    var candidate: HighlightCandidate
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(timeRangeText)
+                    .font(.caption.monospaced())
+                Text(String(
+                    format: "score %.0f%% · speech %.0f%%",
+                    candidate.score * 100,
+                    candidate.speechDensity * 100
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Create") {
+                Task { await viewModel.createSequenceFromHighlight(candidate) }
+            }
+            .controlSize(.small)
+            .accessibilityLabel("Create sequence from highlight")
+        }
+        .padding(6)
+        .background(Color(nsColor: .separatorColor).opacity(0.12))
+        .cornerRadius(6)
+    }
+
+    private var timeRangeText: String {
+        "\(timeText(candidate.range.start)) - \(timeText(candidate.range.end))"
+    }
+
+    private func timeText(_ time: TimeInterval) -> String {
+        let total = max(0, Int(time.rounded(.down)))
+        return String(format: "%02d:%02d", total / 60, total % 60)
     }
 }
 

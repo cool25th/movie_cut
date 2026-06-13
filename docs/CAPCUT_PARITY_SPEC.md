@@ -208,10 +208,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 멀티씬 fixture에서 컷 경계 ±10프레임 분할 ② 리프레임 시 인물이 크롭 밖으로 나가는 프레임 0 ③ keyframe 떨림 없음(미분값 상한 테스트).
 - **검증 기록(2026-06-11)**: 순수 `ReframeSmoothing.smooth`(centered moving average로 crop rect 컴포넌트 평활화 + 단위정사각형 clamp)가 AutoReframeProvider crop frames의 프레임간 떨림을 줄인다 — `maxCenterDelta` 지표로 raw 대비 <60% 감소를 행동 테스트로 검증(AC③), 모든 평활 프레임이 [0,1] 내에 머무름(AC② 지원), drift 방향 보존, time-order 보장. ViewModel autoReframe이 적용 전 `ReframeSmoothing.smooth`를 거치도록 리팩터(reframeKeyframes/mergedReframeKeyframes 추출). 미리보기: `previewAutoReframeOnSelection`(분석+스무딩만, 클립 미변경) → PreviewPanel에 `ReframeCropPathOverlay`(crop rect 윤곽 + center polyline)로 시각화 → `applyAutoReframePreview`(키프레임 커밋) / `cancelAutoReframePreview`. Inspector에 Auto Reframe 섹션(Preview/Apply/Cancel). `ReframeSmoothingTests` 8개 + static contract + 필터 스위트 199개 + Mac 빌드 통과. Caveat: 씬 분할 ±10프레임(AC①)은 기존 `SceneChangeProvider` 경로이고, 실제 영상에서 인물이 크롭을 벗어나지 않는지(AC②)와 추적 정확도는 실영상 fixture 수동 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
-#### F-20. 자동 하이라이트 (롱폼→숏폼 후보)
+#### F-20. 자동 하이라이트 (롱폼→숏폼 후보) — 🟡 구현+테스트 완료(2026-06-11), 실영상 후보 적합성 잔여
 - **요구사항**: 오디오 에너지/음성 밀도/씬 변화 점수화 → 상위 N개 구간(15~60초) 제안 → 클릭으로 새 시퀀스 생성.
 - **구현**: Core `Analysis/HighlightScorer`(기존 provider 출력 조합, 신규 ML 의존 없음). UI는 분석 히스토리 패널 확장.
 - **AC**: 30분 fixture에서 3개 후보 제안 → 선택 시 해당 구간만의 새 프로젝트 생성.
+- **검증 기록(2026-06-11)**: 순수 `HighlightScorer.scoreHighlights`가 silence(발화 밀도)/scene change(시각 활동)/beat(오디오 에너지 proxy) provider **출력만 조합**(신규 ML 없음). 15~60초 윈도우를 슬라이드하며 가중 점수화 후 top-N **비중첩** greedy 선택. 행동 테스트: 30분 합성 타임라인의 3개 활발 구간에서 비중첩 3개 후보 제안(AC) + 발화 구간이 무음 구간보다 고득점 + scene/energy 기여 + 점수 0~1 정규화 + 윈도우 길이 clamp. ViewModel `detectHighlights`(3개 provider 실행→타임라인 매핑→scorer) + `createSequenceFromHighlight`(후보 타임라인 윈도우→소스 시간 역매핑→canvas/export 복사한 **새 프로젝트 생성·세션 스왑**) + Inspector `HighlightsSection`(Find Highlights/후보 리스트/Create). `HighlightScorerTests` 8개 + 필터 스위트 163개 + Mac 빌드 통과. Caveat: 실제 30분 영상에서 후보의 주관적 적합성과 새 시퀀스 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류. speed ramp 무시한 비례 소스 역매핑은 휴리스틱.
 
 #### F-21. AI 어시스턴트 (로컬 명령 해석, 선택)
 - **요구사항**: "모든 클립에 시네마틱 필터 적용해줘" 수준의 자연어를 기존 명령으로 매핑하는 패널. 외부 LLM API 연동은 별도 합의.

@@ -127,7 +127,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] 🟡 씬 변경 감지 자동 분할 — Core 존재 (P2)
 - [ ] 🟡 자동 리프레임(피사체 추적 crop, F-19) (P2→스무딩/미리보기 구현됨) — `ReframeSmoothing`(moving average + clamp, AC③ 떨림 감소 테스트) + ViewModel preview/apply/cancel + PreviewPanel crop-path 오버레이 + Inspector 섹션. `ReframeSmoothingTests` 8개. Caveat: 실영상 추적 정확도(AC②) 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [ ] ❌ AI 어시스턴트(자연어 편집 명령) (P3)
-- [ ] ❌ 자동 하이라이트 / 롱폼→숏폼 (P3)
+- [ ] 🟡 자동 하이라이트(롱폼→숏폼, F-20) (P3→구현됨) — `HighlightScorer`(silence/scene/beat 출력 조합, 비중첩 top-N) + ViewModel detect/createSequence(새 프로젝트 스왑) + Inspector HighlightsSection. `HighlightScorerTests` 8개. Caveat: 실영상 후보 적합성 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 ### I. 캔버스/프로젝트
 - ✅ 비율 프리셋(16:9 / 9:16 / 1:1 / 4:5 / 21:9)

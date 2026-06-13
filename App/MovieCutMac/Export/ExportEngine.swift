@@ -240,7 +240,7 @@ final class ExportEngine {
                         stickerImageURL: stickerImageURL,
                         stickerFontSize: stickerFontSize,
                         keyframes: clip.keyframes,
-                        isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
+                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id)
                     ))
                 }
 
@@ -404,7 +404,7 @@ final class ExportEngine {
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
                         keyframes: clip.keyframes,
-                        isBackgroundRemoved: backgroundRemovedClipIds.contains(clip.id)
+                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id)
                     ))
                 }
 

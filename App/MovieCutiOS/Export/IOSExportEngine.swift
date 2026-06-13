@@ -178,7 +178,7 @@ final class IOSExportEngine {
                         mask: clip.mask,
                         effects: clip.effects,
                         textContent: clip.textContent,
-                        isBackgroundRemoved: false
+                        isBackgroundRemoved: clip.isBackgroundRemoved
                     ) else {
                         continue
                     }
@@ -213,7 +213,7 @@ final class IOSExportEngine {
                         textContent: exportTextContent,
                         stickerEmoji: stickerEmoji,
                         stickerFontSize: stickerFontSize,
-                        isBackgroundRemoved: false
+                        isBackgroundRemoved: clip.isBackgroundRemoved
                     ) else {
                         continue
                     }

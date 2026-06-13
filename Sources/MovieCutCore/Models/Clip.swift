@@ -113,6 +113,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Whether the clip should be played in reverse.
     public var isReversed: Bool
 
+    /// Whether the background is removed via person segmentation (F-08).
+    public var isBackgroundRemoved: Bool
+
     /// Optional color correction adjustments.
     public var colorCorrection: ColorCorrection?
 
@@ -149,6 +152,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case mask
         case effects
         case isReversed
+        case isBackgroundRemoved
         case colorCorrection
         case groupId
         case duckingRanges
@@ -179,6 +183,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         mask: Mask? = nil,
         effects: [Effect] = [],
         isReversed: Bool = false,
+        isBackgroundRemoved: Bool = false,
         colorCorrection: ColorCorrection? = nil,
         groupId: UUID? = nil,
         duckingRanges: [TimeRange] = [],
@@ -215,6 +220,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.mask = mask
         self.effects = effects
         self.isReversed = isReversed
+        self.isBackgroundRemoved = isBackgroundRemoved
         self.colorCorrection = colorCorrection
         self.groupId = groupId
         self.duckingRanges = duckingRanges
@@ -243,6 +249,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         mask = try container.decodeIfPresent(Mask.self, forKey: .mask)
         effects = try container.decodeIfPresent([Effect].self, forKey: .effects) ?? []
         isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
+        isBackgroundRemoved = try container.decodeIfPresent(Bool.self, forKey: .isBackgroundRemoved) ?? false
         colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
         groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
         duckingRanges = try container.decodeIfPresent([TimeRange].self, forKey: .duckingRanges) ?? []
@@ -271,6 +278,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encodeIfPresent(mask, forKey: .mask)
         try container.encode(effects, forKey: .effects)
         try container.encode(isReversed, forKey: .isReversed)
+        if isBackgroundRemoved { try container.encode(isBackgroundRemoved, forKey: .isBackgroundRemoved) }
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
         try container.encodeIfPresent(groupId, forKey: .groupId)
         if !duckingRanges.isEmpty {

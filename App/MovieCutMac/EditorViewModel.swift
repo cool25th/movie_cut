@@ -1593,7 +1593,7 @@ final class EditorViewModel {
     }
 
     func toggleBackgroundRemoval(_ enabled: Bool) async {
-        guard let clipId = selectedClipId else { return }
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
 
         isBackgroundRemoved = enabled
         if enabled {
@@ -1601,6 +1601,16 @@ final class EditorViewModel {
         } else {
             backgroundRemovedClipIds.remove(clipId)
         }
+
+        // Persist on the clip so preview and export both reflect it (F-08).
+        guard clip.kind == .video else {
+            lastErrorMessage = "Background removal applies to video clips."
+            return
+        }
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .isBackgroundRemoved(enabled)))
+        lastStatusMessage = enabled
+            ? "Background removal on. Frames without a detected person are left unchanged."
+            : "Background removal off."
     }
 
     func applyStyleTransfer(_ style: String) async {

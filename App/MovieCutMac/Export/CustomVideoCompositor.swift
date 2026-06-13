@@ -271,6 +271,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let clipEffects: [CustomCompositionClipEffect]
     let transitionEffects: [CustomCompositionTransitionEffect]
     let canvasBackground: CanvasBackground?
+    let prefersFastSegmentation: Bool
 
     init(
         timeRange: CMTimeRange,
@@ -284,7 +285,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil,
         transitionEffects: [CustomCompositionTransitionEffect] = [],
-        canvasBackground: CanvasBackground? = nil
+        canvasBackground: CanvasBackground? = nil,
+        prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -302,6 +304,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = []
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.prefersFastSegmentation = prefersFastSegmentation
     }
 
     init(
@@ -309,7 +312,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         trackIDs: [CMPersistentTrackID],
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
-        canvasBackground: CanvasBackground? = nil
+        canvasBackground: CanvasBackground? = nil,
+        prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -326,6 +330,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = clipEffects
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.prefersFastSegmentation = prefersFastSegmentation
     }
 
     func effect(for trackID: CMPersistentTrackID, at time: CMTime) -> CustomCompositionClipEffect? {
@@ -496,7 +501,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         if isBackgroundRemoved {
-            image = applyPersonSegmentation(to: image, request: request)
+            image = applyPersonSegmentation(
+                to: image,
+                request: request,
+                prefersFast: instruction.prefersFastSegmentation
+            )
         }
 
         if let colorCorrection {
@@ -934,57 +943,43 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     private func applyPersonSegmentation(
         to image: CIImage,
-        request: AVAsynchronousVideoCompositionRequest
+        request: AVAsynchronousVideoCompositionRequest,
+        prefersFast: Bool
     ) -> CIImage {
-        _ = request
-
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return image }
         guard let sourceImage = ciContext.createCGImage(image, from: extent) else {
-            return applyBackgroundRemoval(to: image)
+            // Vision unavailable on this frame: leave it unchanged (F-08 AC④).
+            return image
         }
 
         let segmentationRequest = VNGeneratePersonSegmentationRequest()
-        segmentationRequest.qualityLevel = .accurate
+        // Preview favors speed (fast quality + cache); export favors accuracy.
+        segmentationRequest.qualityLevel = prefersFast ? .fast : .accurate
         segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
 
         do {
             try personSegmentationHandler.perform([segmentationRequest], on: sourceImage)
         } catch {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
         guard let maskPixelBuffer = segmentationRequest.results?.first?.pixelBuffer else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
         let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
         guard !maskImage.extent.isEmpty else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
-        let scaleX = extent.width / maskImage.extent.width
-        let scaleY = extent.height / maskImage.extent.height
-        var scaledMask = maskImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-        scaledMask = scaledMask.transformed(by: CGAffineTransform(
-            translationX: extent.minX - scaledMask.extent.minX,
-            y: extent.minY - scaledMask.extent.minY
-        ))
-        let alignedMask = scaledMask.cropped(to: extent)
+        let alignedMask = PersonSegmentationCompositor.align(maskImage, to: extent)
+        // No person detected → leave the frame unchanged (F-08 AC④).
         guard maskContainsForeground(alignedMask, extent: extent) else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
-        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: extent)
-
-        return image.applyingFilter(
-            "CIBlendWithMask",
-            parameters: [
-                kCIInputMaskImageKey: alignedMask,
-                kCIInputBackgroundImageKey: backgroundColor
-            ]
-        ).cropped(to: extent)
+        return PersonSegmentationCompositor.removeBackground(from: image, mask: alignedMask)
     }
 
     private func maskContainsForeground(_ maskImage: CIImage, extent: CGRect) -> Bool {

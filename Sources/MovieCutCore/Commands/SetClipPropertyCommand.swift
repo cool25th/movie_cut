@@ -40,6 +40,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Replaces the clip's same-track layer order.
     case zIndex(Int)
+
+    /// Person-segmentation background removal toggle.
+    case isBackgroundRemoved(Bool)
 }
 
 /// Sets one editable clip property.
@@ -114,6 +117,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .zIndex(let zIndex):
             previousProperty = .zIndex(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].zIndex)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].zIndex = zIndex
+        case .isBackgroundRemoved(let isBackgroundRemoved):
+            previousProperty = .isBackgroundRemoved(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isBackgroundRemoved)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isBackgroundRemoved = isBackgroundRemoved
         }
 
         return CommandResult(

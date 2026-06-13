@@ -586,7 +586,8 @@ final class PlaybackEngine {
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
                             mask: clip.mask,
-                            effects: clip.effects
+                            effects: clip.effects,
+                            isBackgroundRemoved: clip.isBackgroundRemoved
                         ))
                     }
 
@@ -915,11 +916,13 @@ final class PlaybackEngine {
                                 chromaKeyColor: clipInstruction.chromaKeyColor,
                                 chromaKeyThreshold: clipInstruction.chromaKeyThreshold,
                                 mask: clipInstruction.mask,
-                                effects: clipInstruction.effects
+                                effects: clipInstruction.effects,
+                                isBackgroundRemoved: clipInstruction.isBackgroundRemoved
                             )
                         },
                         transitionEffects: transitionEffects,
-                        canvasBackground: project.canvasBackground
+                        canvasBackground: project.canvasBackground,
+                        prefersFastSegmentation: true
                     )
                 ]
             } else {
@@ -1228,4 +1231,5 @@ private struct PlaybackClipInstructionMetadata {
     var chromaKeyThreshold: Float
     var mask: Mask?
     var effects: [Effect]
+    var isBackgroundRemoved: Bool
 }

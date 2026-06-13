@@ -53,7 +53,7 @@
 - **임포트 메타데이터(F-06)**: 앱 레이어에서 video/audio duration, 해상도/fps/codec, audio sample rate/channel count, image dimensions를 best-effort로 probe하고 라이브러리 행/접근성 value에 노출
 
 ### 2.2 미완 (이 명세서의 대상)
-비파일 드래그 소스(F-01 실기기 검증), 클립 그룹/링크(F-04 잔여), 전환 visual fixture(F-07), 배경제거 실세그멘테이션(F-08), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
+비파일 드래그 소스(F-01 실기기 검증), 클립 그룹/링크(F-04 잔여), 전환 visual fixture(F-07), 외부 .cube LUT(F-09), 크로마키 스포이드(F-10), 캔버스 배경(F-11), 텍스트 외곽선/그림자·프리셋 저장(F-12R), 자막 편집/SRT(F-13), 오디오 DSP(F-14), 비트 감지(F-15), TTS(F-17), AI 도구 E2E(F-18~F-20), AI 어시스턴트(F-21), 생태계(F-22~F-24).
 
 ### 2.3 아키텍처 현황 (유지할 구조)
 ```
@@ -139,10 +139,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 12종 전환 각각 export 픽셀 fixture 통과 ② preview 스크럽과 시각 일치 ③ 전환 duration이 인접 클립 overlap과 일치.
 - **검증 기록(2026-06-11 targeted pass)**: `TransitionPixelProcessorTests`에 fade-through-black midpoint가 cross dissolve가 아니라 black boundary를 통과하는 픽셀 fixture와 0.25/0.75 boundary progression fixture를 추가했다. `InspectorEffectsSection`은 transition picker/duration accessibility와 `transitionVerificationNote`를 노출하여 accepted evidence, blocked claim, next artifact, owner를 명확히 표시한다. 이 기록은 **targeted transition confidence only**이며 export golden, device playback, full-suite, release-ready claim은 여전히 금지한다. 다음 산출물은 deterministic golden export sample(output path + hash)이다. Timeline minimum height는 header/ruler/3개 기본 lane이 GUI 검증 중 가려지지 않도록 210으로 올렸다.
 
-#### F-08. 배경 제거 (인물 세그멘테이션) 실동작
+#### F-08. 배경 제거 (인물 세그멘테이션) 실동작 — 🟡 preview 배선+품질분리+테스트 완료(2026-06-11), 실인물 영상 GUI 잔여
 - **요구사항**: 버튼 한 번으로 인물 외 배경 제거(알파) → preview/export 반영.
 - **구현**: 기존 Vision 기반 segmentation(`b85a10a`)을 frame-by-frame 경로로 연결: `CustomVideoCompositor`에서 `backgroundRemoval` effect 클립에 `VNGeneratePersonSegmentationRequest` 마스크를 `MaskPixelProcessor`와 동일한 알파 합성으로 적용. preview는 fast quality+프레임 캐시, export는 accurate.
 - **AC**: ① 인물 영상 적용 시 preview 배경 투명(캔버스 배경 노출) ② export 동일 ③ 1080p preview 15fps 이상(프록시 병행) ④ 인물 없는 영상은 무변경 + 상태 메시지.
+- **검증 기록(2026-06-11)**: Vision 세그멘테이션은 기존 export 경로(`b85a10a`)에 있었으나 **preview에는 미배선**이었음(AC① 깨짐). `isBackgroundRemoved`를 ViewModel-only set에서 **Clip 모델 속성**으로 승격(A5 하위호환+디코딩 테스트, `ClipProperty.isBackgroundRemoved` 명령+undo)해 preview/export가 같은 metadata를 소비(A3): PlaybackEngine `PlaybackClipInstructionMetadata.isBackgroundRemoved`→CustomCompositionClipEffect, ExportEngine은 `clip.isBackgroundRemoved || set` OR, iOS export도 `clip.isBackgroundRemoved`. 마스크 합성을 shared `PersonSegmentationCompositor`(align+CIBlendWithMask, 순수)로 추출 — guarded 픽셀 테스트로 인물(중앙) 불투명·배경(코너) 투명 확인(AC①/②). 품질 분리: instruction `prefersFastSegmentation`로 preview=`.fast`(AC③ 속도)·export=`.accurate`. **인물 미검출 프레임은 vignette fallback 대신 원본 그대로 반환**(AC④) + ViewModel toggle 상태 메시지. `BackgroundRemovalTests` 9개 + Clip-affected 스위트 144개 + Mac 빌드 통과. Caveat: 실제 인물 영상에서 preview 투명/15fps/export 결과 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류. 프레임 캐시는 미구현(`.fast`로 속도 확보).
 
 #### F-09. 외부 LUT(.cube) 임포트 — 🟡 구현+픽셀 테스트 완료(2026-06-11), 실기기 import GUI 잔여
 - **요구사항**: .cube 파일을 가져와 필터로 적용·관리, 강도 조절.

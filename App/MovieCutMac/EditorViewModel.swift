@@ -1829,6 +1829,83 @@ final class EditorViewModel {
         }
     }
 
+    // MARK: - Text-to-speech (F-17)
+
+    var ttsVoices: [TextToSpeechVoice] = []
+    var selectedTTSVoiceId: String?
+
+    var canGenerateSpeechFromSelection: Bool {
+        guard let content = selectedClip?.textContent, content.contentKind != .sticker else { return false }
+        return !content.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func loadTTSVoices() {
+        guard ttsVoices.isEmpty else { return }
+        ttsVoices = TextToSpeechSynthesizer.availableVoices()
+        if selectedTTSVoiceId == nil {
+            selectedTTSVoiceId = ttsVoices.first { $0.language.hasPrefix("en") }?.id ?? ttsVoices.first?.id
+        }
+    }
+
+    /// Synthesizes the selected text clip's text to a spoken audio clip aligned
+    /// to the text clip's timeline start, and inserts it on the audio track.
+    func generateSpeechFromSelectedText() async {
+        guard let textClip = selectedClip,
+              let content = textClip.textContent,
+              content.contentKind != .sticker else {
+            lastErrorMessage = "Select a text clip to generate speech."
+            return
+        }
+
+        let text = content.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            lastErrorMessage = "The selected text clip has no text to speak."
+            return
+        }
+
+        lastErrorMessage = nil
+        lastStatusMessage = "Generating speech..."
+
+        do {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("MovieCutTTS", isDirectory: true)
+            let url = directory.appendingPathComponent("\(UUID().uuidString).caf")
+
+            let synthesizer = TextToSpeechSynthesizer()
+            let options = TextToSpeechSynthesizer.Options(voiceIdentifier: selectedTTSVoiceId)
+            let duration = try await synthesizer.synthesize(text: text, to: url, options: options)
+
+            var asset = MediaImporter.probe(url: url)
+            let resolvedDuration = sanitizedDuration(audioDuration(for: url) ?? duration)
+                ?? max(duration, Self.minimumVoiceoverDuration)
+            asset.duration = resolvedDuration
+            try await session.dispatch(ImportMediaCommand(asset: asset))
+
+            let audioTrack = try await ensureTrack(for: .audio)
+            let clip = Clip(
+                assetId: asset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: resolvedDuration),
+                timelineRange: TimeRange(start: textClip.timelineRange.start, duration: resolvedDuration)
+            )
+            try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: clip))
+            selectedAssetId = asset.id
+            selectedClipId = clip.id
+            try await refreshFromSession()
+
+            lastStatusMessage = String(
+                format: "Generated %.1fs of speech aligned to the text clip.",
+                resolvedDuration
+            )
+        } catch TextToSpeechError.noAudioProduced {
+            lastStatusMessage = nil
+            lastErrorMessage = "No speech audio was produced. Check that a system voice is installed."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))

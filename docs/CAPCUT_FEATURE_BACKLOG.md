@@ -114,7 +114,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] 🟡 비트 감지(음악 동기 편집, F-15) (P2→구현됨) — `BeatDetectionProvider`(에너지 플럭스 onset, 합성 클릭 트랙으로 <50ms 간격 검증) + `Marker.kind(.beat)` + 배치 마커 명령(단일 undo) + 룰러 틱 렌더/스냅 포함 + Quick Tools Detect/Clear Beats. `BeatDetectionTests` 13개. Caveat: 실음원 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [x] ✅ 보이스오버 실제 마이크 녹음 (P1) — Mac `VoiceoverRecordingView`가 macOS `AVCaptureDevice` microphone 권한을 확인/요청하고, shared `VoiceoverRecorder`의 `AVAudioEngine` input tap 경로로 temp CAF에 실제 녹음한다. 녹음 UI는 timer/input level/saving progress/accessibility label·hint를 제공하고, stop 시 recorder elapsed time을 `fallbackDuration`으로 `EditorViewModel.addVoiceoverAudio(from:fallbackDuration:)`에 넘긴다. EditorViewModel은 `audioDuration(for:)`로 readable audio duration을 먼저 쓰고, recorder fallback duration, 0.1s minimum 순서로 duration을 확정해 playhead 위치에 audio clip을 추가/선택한다. `MediaImporter`는 voiceover CAF를 audio asset으로 분류한다. Caveat: 실제 마이크 접근은 `NSMicrophoneUsageDescription`, macOS Microphone 권한, 선택된 입력 하드웨어에 의존하므로 호스트에서 실제 녹음 검증이 필요하다.
 - [ ] 🟡 오디오 추출 (P2)
-- [ ] ❌ TTS(텍스트→음성) (P3)
+- [ ] 🟡 TTS(텍스트→음성, F-17) (P3→구현됨) — shared `TextToSpeechSynthesizer`(AVSpeechSynthesizer.write→CAF) + value-type voice 목록 + ViewModel 텍스트클립 정렬 오디오 클립 생성 + Inspector Voice 피커/Generate Voice. `TextToSpeechTests` 7개(실합성 통합 테스트가 실제 오디오 생성). Caveat: 실기기 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 ### G. 속도/시간
 - [x] ✅ 속도 조절 / speed ramp preview+export (P1) — Mac `PlaybackEngine` preview와 `ExportEngine` export가 `SpeedRampCurve(points: clip.speedRampPoints)`로 source segment를 나누고 `scaleTimeRange`로 composition time range를 조정한다. 비디오 클립의 audio preview path와 `.audio` track preview path도 같은 segment/scale 경로를 사용한다. Caveat: 고급 옵티컬 플로우 기반 부드러운 슬로우모션은 별도 P3 항목이며 아직 완료되지 않았다.

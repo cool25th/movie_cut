@@ -188,10 +188,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 - **AC**: ① 고정 BPM 테스트 트랙에서 비트 간격 오차 < 50ms ② 클립 드래그가 비트에 스냅 ③ 비트 마커 일괄 삭제.
 - **검증 기록(2026-06-11)**: Core `BeatDetectionProvider` — 에너지 플럭스 onset 검출(frame 1024/hop 512, 적응 임계 + 피크 에너지 10% 절대 하한으로 정상파 오탐 억제, 최소 비트 간격 피크 픽킹)을 **순수 함수**로 구현해 합성 클릭 트랙으로 행동 검증: 120BPM 8비트 간격 오차 <50ms(AC①), 80BPM 카운트, 무음/상수 톤 무오탐, 간격 억제, BPM 추정(±8). AVFoundation 래퍼는 무음 감지와 동일한 AVAssetReader 모노 PCM 읽기. `Marker.kind`(.standard/.beat, A5 하위호환+디코딩 테스트), `AddMarkersCommand`/`RemoveMarkersCommand(kind:)` 배치 단일 undo(테스트 포함). 타임라인: 비트는 룰러 하단 주황 틱으로 렌더(플래그 홍수 방지), 기존 marker-시간 스냅 경로에 자동 포함(AC②), Quick Tools `Detect Beats`(+BPM 상태 메시지)/`Clear Beats`(AC③). `BeatDetectionTests` 13개 + 필터 스위트 130개 + Mac 빌드 통과. Caveat: 실제 음악 파일 GUI 검증과 드래그 스냅 체감 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
-#### F-17. TTS (텍스트→음성)
+#### F-17. TTS (텍스트→음성) — 🟡 구현+실합성 검증 완료(2026-06-11), 실기기 GUI 확인 잔여
 - **요구사항**: 텍스트 클립에서 "음성 생성" → 합성 오디오 클립 생성(시스템 보이스 선택).
 - **구현**: `AVSpeechSynthesizer.write(_:toBufferCallback:)`로 파일 렌더 → 기존 import 경로 재사용.
 - **AC**: 텍스트 클립과 동기화된 오디오 클립 생성, export 포함.
+- **검증 기록(2026-06-11)**: shared `TextToSpeechSynthesizer`(Core/Audio) — `AVSpeechSynthesizer.write(_:toBufferCallback:)`로 PCM 버퍼를 `AVAudioFile`(CAF)에 누적, 빈 버퍼 완료 신호의 다중 콜백을 one-shot `Result?` 가드로 처리해 continuation 중복 resume 방지. `availableVoices()`는 `AVSpeechSynthesisVoice`를 value-type `TextToSpeechVoice`로 노출(언어→이름 정렬), `Options`(voice/rate/pitch/volume). ViewModel `generateSpeechFromSelectedText`가 선택 텍스트 클립의 text를 합성→오디오 트랙에 **텍스트 클립 timelineRange.start에 정렬된** 오디오 클립 삽입(기존 ImportMediaCommand/AddClipCommand 경로 재사용 → export 자동 포함). Inspector 텍스트 그룹에 Voice 피커 + Generate Voice 버튼. `TextToSpeechTests` 7개 — **실합성 통합 테스트가 이 호스트에서 skip 없이 실제 오디오 생성**(AVURLAsset duration이 보고값과 0.5s 이내 일치), 빈 텍스트 throw·voice 정렬·옵션 기본값 포함. 필터 스위트 126개 + Mac 빌드 통과. Caveat: 실기기 GUI 클릭 확인과 export 결과 청취 잔여 — DoD §1.3에 따라 ✅ 보류. iOS UI는 범위 외(Core 합성기는 공유 가능).
 
 ### M4. 지능형 편집
 

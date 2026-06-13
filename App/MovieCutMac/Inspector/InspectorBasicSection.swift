@@ -328,7 +328,44 @@ struct InspectorBasicSection: View {
             textDecorationControls(textContent)
             textQuickStylePresets(textContent)
             userStylePresetControls(textContent)
+            textToSpeechControls(textContent)
         }
+    }
+
+    /// Generates a spoken audio clip from the text using a system voice (F-17).
+    private func textToSpeechControls(_ textContent: TextClipContent) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+
+            Text("Text to Speech")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+                Picker("Voice", selection: Binding(
+                    get: { viewModel.selectedTTSVoiceId ?? "" },
+                    set: { viewModel.selectedTTSVoiceId = $0.isEmpty ? nil : $0 }
+                )) {
+                    ForEach(viewModel.ttsVoices) { voice in
+                        Text(voice.displayName).tag(voice.id)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 180)
+                .accessibilityLabel("Speech voice")
+
+                Button("Generate Voice") {
+                    Task { await viewModel.generateSpeechFromSelectedText() }
+                }
+                .controlSize(.small)
+                .disabled(!viewModel.canGenerateSpeechFromSelection)
+                .accessibilityLabel("Generate voice from text")
+                .accessibilityHint("Creates a spoken audio clip aligned to this text clip.")
+            }
+        }
+        .onAppear { viewModel.loadTTSVoices() }
     }
 
     /// Bold/italic, outline, and drop-shadow editing (F-12R).

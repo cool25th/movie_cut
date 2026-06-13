@@ -74,11 +74,16 @@ public enum TransitionType: String, Codable, Sendable, Equatable, Hashable, Case
     }
 
     /// True when full rendering requires both outgoing and incoming images for each transition frame.
+    ///
+    /// All visible transitions render through the shared `TransitionPixelProcessor`
+    /// two-source path so preview and export match (F-07). Only `.none` (a no-op
+    /// boundary) stays single-source.
     public var requiresTwoSourcePixelProcessing: Bool {
         switch self {
-        case .wipeLeft, .wipeUp, .wipeDown, .slideLeft, .slideRight, .zoomIn, .zoomOut, .glitch:
+        case .crossDissolve, .fadeThroughBlack, .wipeRight,
+             .wipeLeft, .wipeUp, .wipeDown, .slideLeft, .slideRight, .zoomIn, .zoomOut, .glitch:
             true
-        case .none, .crossDissolve, .fadeThroughBlack, .wipeRight:
+        case .none:
             false
         }
     }

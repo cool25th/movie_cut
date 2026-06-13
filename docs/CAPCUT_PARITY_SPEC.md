@@ -41,7 +41,7 @@
 - **드래그앤드롭**: Finder→타임라인(드롭 위치 클립 생성, 실제 duration), 라이브러리→타임라인 — **2026-06-10 실기기 GUI 드래그 검증 완료**
 - **썸네일/프록시**(`3933d94`): import 시 PNG 썸네일(라이브러리/타임라인 클립 표시), best-effort 프록시 생성 + Generate Proxy 액션
 - **픽셀 처리**(shared processor + Mac/iOS compositor): 색보정(밝기/대비/채도), 필터/LUT 프리셋 5종, 크로마키(tolerance/softness/spill), 마스크 6종(feather/invert/rotation), 텍스트/자막 burn-in
-- **전환**: 12종 `TransitionPixelProcessor` + two-source compositor 배선 (단, export visual fixture 검증은 미완 → F-07)
+- **전환**: 12종 `TransitionPixelProcessor` + two-source compositor 배선, 11종 가시 전환 모두 two-source 통일, deterministic visual fixture 12종 검증(F-07). 실 mp4 E2E는 잔여
 - **키프레임**(position/scale/rotation/opacity) preview+export, 역재생, 정지프레임(preview), 볼륨/페이드, 파형
 - **speed ramp**: export `scaleTimeRange` + preview parity contract(`71893cb`)
 - **텍스트**: 스타일 편집 UI(본문/폰트/크기/정렬/전경·배경색/quick preset, `4a2bad8`), 자동자막(Apple Speech STT)+타임라인 정렬
@@ -133,10 +133,11 @@ App/MovieCutiOS/               ← Mac과 동일 패턴 (compositor 포팅 유�
 
 ### M2. 비주얼 심화
 
-#### F-07. 전환효과 E2E 시각 검증 + 갭 마감
+#### F-07. 전환효과 E2E 시각 검증 + 갭 마감 — 🟡 12종 two-source 통일+visual fixture 완료(2026-06-11), 실 AVAssetExportSession E2E/GUI 잔여
 - **요구사항**: 12종 전환이 preview와 export에서 **시각적으로 동일**하게 렌더됨을 증명. crossDissolve/fadeThroughBlack/wipeRight도 layer-instruction ramp가 아닌 two-source 경로로 통일.
 - **구현**: ① 잔여 3종을 two-source 경로로 이관 ② **export visual fixture 테스트** 신설: 고정 색 합성 클립 2개 + 각 전환 1초 export → 중간 프레임 픽셀 샘플 기대값 비교(`TransitionExportFixtureTests`; sandbox CoreImage 불가 환경은 skip 마킹).
 - **AC**: ① 12종 전환 각각 export 픽셀 fixture 통과 ② preview 스크럽과 시각 일치 ③ 전환 duration이 인접 클립 overlap과 일치.
+- **검증 기록(2026-06-11)**: 잔여 3종(crossDissolve/fadeThroughBlack/wipeRight)을 `requiresTwoSourcePixelProcessing = true`로 이관 → **`.none`을 제외한 11종 가시 전환이 모두 공유 `TransitionPixelProcessor` two-source 경로로 통일**(preview/export 동일 머신러리, A3). layer-instruction ramp 근사(특히 wipeRight는 transform 슬라이드)는 line 512 guard로 비활성. `TransitionExportFixtureTests` 신설: 고정 색(red→blue) fixture로 **`TransitionType.allCases` 12종 전부**를 (a) progress 0→outgoing·1→incoming·extent 보존, (b) 결정론적 재현, (c) 타입별 중간 프레임 픽셀(dissolve 블렌드/fadeThroughBlack 흑색/wipe 방향/slide·zoom 차이/glitch 구별) 검증 — preview/export 공통 처리기의 결정론적 visual fixture(AC①/②). `Transition` 스위트 17개 + 필터 스위트 188개 + Mac 빌드 통과. Caveat: 실제 `AVAssetExportSession`으로 mp4를 뽑아 픽셀 비교하는 E2E와 preview 스크럽 GUI 확인은 유닛 테스트 범위 밖 — DoD §1.3에 따라 ✅ 보류. 별도 세션의 export-golden 증빙 거버넌스 작업(미커밋)과 독립적임.
 - **검증 기록(2026-06-11 targeted pass)**: `TransitionPixelProcessorTests`에 fade-through-black midpoint가 cross dissolve가 아니라 black boundary를 통과하는 픽셀 fixture와 0.25/0.75 boundary progression fixture를 추가했다. `InspectorEffectsSection`은 transition picker/duration accessibility와 `transitionVerificationNote`를 노출하여 accepted evidence, blocked claim, next artifact, owner를 명확히 표시한다. 이 기록은 **targeted transition confidence only**이며 export golden, device playback, full-suite, release-ready claim은 여전히 금지한다. 다음 산출물은 deterministic golden export sample(output path + hash)이다. Timeline minimum height는 header/ruler/3개 기본 lane이 GUI 검증 중 가려지지 않도록 210으로 올렸다.
 
 #### F-08. 배경 제거 (인물 세그멘테이션) 실동작 — 🟡 preview 배선+품질분리+테스트 완료(2026-06-11), 실인물 영상 GUI 잔여

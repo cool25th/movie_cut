@@ -4,28 +4,42 @@ import MovieCutCore
 
 struct InspectorPanel: View {
     @Bindable var viewModel: EditorViewModel
+    @State private var projectToolsExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Inspector")
-                .font(.headline)
-                .padding(12)
+            HStack(spacing: 6) {
+                Image(systemName: "slider.horizontal.3")
+                    .foregroundStyle(.secondary)
+                Text(viewModel.selectedClip == nil ? "Inspector" : "Clip")
+                    .font(.headline)
+            }
+            .padding(12)
 
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    MarkerManagementSection(viewModel: viewModel)
-                    AssistantSection(viewModel: viewModel)
-                    HighlightsSection(viewModel: viewModel)
-                    AnalysisResultsSection(viewModel: viewModel)
-
+                    // UX-03: when a clip is selected, its editing controls come
+                    // first so they are reachable without scrolling past the
+                    // project-wide tools; those collapse into a disclosure.
                     if let clip = viewModel.selectedClip {
                         InspectorBasicSection(viewModel: viewModel, clip: clip)
                         InspectorEffectsSection(viewModel: viewModel, clip: clip)
                         InspectorAnalysisSection(viewModel: viewModel, clip: clip)
+
+                        Divider()
+
+                        DisclosureGroup(isExpanded: $projectToolsExpanded) {
+                            projectToolsSections
+                                .padding(.top, 8)
+                        } label: {
+                            Label("Project Tools", systemImage: "wrench.and.screwdriver")
+                                .font(.subheadline.weight(.semibold))
+                        }
                     } else {
                         EmptyInspectorSelectionView()
+                        projectToolsSections
                     }
                 }
                 .padding(12)
@@ -37,6 +51,17 @@ struct InspectorPanel: View {
         }
         .frame(minWidth: 240)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    /// Project-wide tools that are not tied to the selected clip.
+    @ViewBuilder
+    private var projectToolsSections: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            MarkerManagementSection(viewModel: viewModel)
+            AssistantSection(viewModel: viewModel)
+            HighlightsSection(viewModel: viewModel)
+            AnalysisResultsSection(viewModel: viewModel)
+        }
     }
 }
 

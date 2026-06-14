@@ -70,7 +70,7 @@ VSplitView                                  // 상하 분할
 
 ### Tier 0 — 즉시 효과 (quick wins, 반나절~1일)
 
-#### UX-01. 적절한 기본 창 크기 + 리사이즈 정책 ❌  **(가장 큰 체감 개선)**
+#### UX-01. 적절한 기본 창 크기 + 리사이즈 정책 — 🟡 다른 세션이 구현(미커밋, 2026-06-14)  **(가장 큰 체감 개선)**
 - **목표**: 앱이 충분히 큰 크기(예 1440×900)로 열리고, 모든 패널이 처음부터 보인다.
 - **구현**: `MovieCutMacApp.swift` `WindowGroup { … }`에 `.defaultSize(width: 1440, height: 900)` + `.windowResizability(.contentSize)`. `ContentView` minHeight를 720 이상으로.
 - **AC**: 새로 실행 시 라이브러리·프리뷰·인스펙터·타임라인이 모두 즉시 보이고, 타임라인 트랙 3개 + 클립 섬네일이 잘림 없이 보인다.
@@ -80,10 +80,11 @@ VSplitView                                  // 상하 분할
 - **구현**: `App/MovieCutMac/Inspector/InspectorExportSection.swift`의 해당 카피를 제거하거나 `#if DEBUG`/접근성 전용으로 숨김. ※ 이 파일은 다른 세션이 작업 중이므로 **그 세션과 조율 후** 진행(현재 미커밋 변경 상존).
 - **AC**: export 패널에 사용자용 정보(포맷/해상도/예상 크기)만 남고 개발 메모가 안 보인다.
 
-#### UX-03. Inspector를 "맥락형 단일 패널"로 정리 ❌
+#### UX-03. Inspector를 "맥락형 단일 패널"로 정리 — ✅ 구현(2026-06-14)
 - **목표**: 선택이 없으면 빈 안내, 클립 선택 시 그 클립 속성만, 비선택 전역 도구(Marker/Highlights/Assistant/Analysis)는 별도 탭/디스클로저로 접어 기본 숨김.
 - **구현**: `InspectorPanel.swift` — 전역 섹션(Marker/Assistant/Highlights/Analysis)을 상단 작은 탭 또는 `DisclosureGroup(isExpanded: false)` 기본 접힘으로. 클립 선택 시 `InspectorBasicSection`/`InspectorEffectsSection`이 최상단에 오도록 순서 변경. Export는 항상 하단 고정 유지.
 - **AC**: 클립 선택 즉시 Transform/Effects/색보정 등이 스크롤 없이 보인다(현재는 Export에 묻힘).
+- **구현 완료(2026-06-14)**: `InspectorPanel.swift` — 클립 선택 시 `InspectorBasicSection`/`InspectorEffectsSection`/`InspectorAnalysisSection`을 **최상단**에 배치하고, 전역 도구(Marker/Assistant/Highlights/Analysis)는 `projectToolsSections`로 묶어 "Project Tools" `DisclosureGroup`(기본 접힘)으로 이동. 비선택 시엔 전역 도구를 펼쳐 보여줌. 헤더도 선택 맥락에 따라 "Inspector"↔"Clip"으로 전환. Export는 하단 고정 유지. 빌드·static-contract 테스트 통과. (참고: UX-01 창 크기는 다른 세션이 미커밋으로 적용 중 → 클립 편집 UI가 처음부터 넉넉히 보임.)
 
 ### Tier 1 — 구조 개선 (2~4일)
 

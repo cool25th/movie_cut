@@ -1343,6 +1343,18 @@ final class EditorViewModel {
         )
     }
 
+    func toggleTrackMute(_ track: Track) async {
+        await apply(SetTrackPropertyCommand(trackId: track.id, property: .isMuted(!track.isMuted)))
+    }
+
+    func toggleTrackLock(_ track: Track) async {
+        await apply(SetTrackPropertyCommand(trackId: track.id, property: .isLocked(!track.isLocked)))
+    }
+
+    func toggleTrackHidden(_ track: Track) async {
+        await apply(SetTrackPropertyCommand(trackId: track.id, property: .isHidden(!track.isHidden)))
+    }
+
     func rippleDeleteClip(clipId: UUID) async {
         selectedClipId = clipId
         await apply(RippleDeleteCommand(clipId: clipId))

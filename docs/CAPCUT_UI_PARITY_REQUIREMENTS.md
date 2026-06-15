@@ -40,7 +40,7 @@
 - ✅ **export 거버넌스 텍스트 제거**(R4-03/UX-02, 2026-06-16): `InspectorExportSection.swift` export summary는 포맷/해상도/코덱/품질/예상 크기/비트레이트 정보만 노출.
 - ❌ 라이브러리 **탭별 검색·썸네일 그리드·hover 미리보기**.
 - ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
-- ✅ 타임라인 **단일 도구 바 완성**(R5-01) + **줌 slider/fit**(R5-02): freeze/reverse가 타임라인 바에 승격됐고, zoomControls에 연속 slider와 Fit Timeline이 추가됨. R5-03 트랙 헤더 토글은 잔여.
+- ✅ 타임라인 **단일 도구 바 완성**(R5-01) + **줌 slider/fit**(R5-02) + **트랙 헤더 토글**(R5-03): freeze/reverse가 타임라인 바에 승격됐고, zoomControls에 연속 slider와 Fit Timeline이 추가됐으며, 트랙 헤더에 잠금·숨김·음소거 토글이 연결됨.
 - 🟡 디자인 토큰 기반 통일 완료, **CapCut 98% visual parity loop**(side-by-side 시각 폴리시 튜닝)는 잔여.
 - ❌ 상단 바 **프로젝트명·저장상태**.
 
@@ -104,7 +104,7 @@
 |---|---|---|---|---|
 | R5-01 | **단일 도구 바 집약** | ✅ 구현(2026-06-16, Codex R5-01): `TimelineView.swift` 헤더 한 줄에 Timeline/Edit/Quick Tools/Zoom이 있고 split/delete/ripple/duplicate/snap start·end/marker/text/sticker/auto tools/zoom에 Reverse Selected Clip/Freeze Selected Frame 버튼이 추가됨. Reverse는 `updateSelectedReversePlayback(!selectedClip.isReversed)`, Freeze는 `freezeSelectedFrame()` 기존 ViewModel 경로만 호출하며 visual clip 선택에만 활성화. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(155 tests / 40 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 룰러 바로 위 한 줄에 split/delete/ripple/duplicate/freeze/reverse/snap/마커 | P0 |
 | R5-02 | 줌 슬라이더 + fit | ✅ 구현(2026-06-16, Codex R5-02): `TimelineView.swift` `zoomControls`에 +/- 버튼, `Slider(value:` 기반 연속 줌, 현재 px/s 표시, `Fit Timeline` 버튼이 함께 노출됨. Fit은 실제 타임라인 viewport 폭을 `GeometryReader`로 읽어 `visibleTimelineDuration` 기준 px/s를 계산하고 20...300으로 clamp하는 presentation helper만 사용. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(160 tests / 41 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 연속 줌 슬라이더 + fit | P1 |
-| R5-03 | 트랙 헤더(잠금/숨김/음소거) | 🟡 `isMuted` | 트랙별 잠금·숨김·음소거 토글 3종 | P1 |
+| R5-03 | 트랙 헤더(잠금/숨김/음소거) | ✅ 구현(2026-06-16, Codex R5-03): `TimelineView.swift` 트랙 헤더가 `speaker/speaker.slash`, `eye/eye.slash`, `lock/lock.open` 3개 borderless `Button`을 노출하고 각 버튼은 `EditorViewModel`의 `toggleTrackMute(_:)`/`toggleTrackHidden(_:)`/`toggleTrackLock(_:)`를 호출. ViewModel은 기존 `SetTrackPropertyCommand`의 `.isMuted`, `.isHidden`, `.isLocked`만 사용. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(164 tests / 42 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 트랙별 잠금·숨김·음소거 토글 3종 | P1 |
 | R5-04 | 메인 비디오 트랙 개념 | 🟡 | 메인 트랙 시각 구분 | P3 |
 
 ### R6. 횡단(cross-cutting)
@@ -119,8 +119,8 @@
 ## 4. 우선순위 로드맵
 - **P0 완료** — R1-01, R3-04, R4-01, R4-03, R5-01.
 - **P0 잔여** — 없음.
-- **P1 완료** — R4-02, R5-02.
-- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감, R5-03, R1-02.
+- **P1 완료** — R4-02, R5-02, R5-03.
+- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감, R1-02.
 - **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R1-03, R2-01, R3-02/03.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 

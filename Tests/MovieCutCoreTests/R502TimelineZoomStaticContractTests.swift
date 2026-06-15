@@ -94,14 +94,14 @@ struct R502TimelineZoomStaticContractTests {
         #expect(!helper.contains("Command"))
     }
 
-    @Test("R5-02 parity row is marked implemented without overclaiming R5-03")
-    func r502ParityRowIsMarkedImplementedWithoutOverclaimingR503() throws {
+    @Test("R5-02 parity row is marked implemented without overclaiming R5-04")
+    func r502ParityRowIsMarkedImplementedWithoutOverclaimingR504() throws {
         let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
 
         #expect(docs.contains("| R5-02 | 줌 슬라이더 + fit | ✅ 구현(2026-06-16, Codex R5-02):"))
         #expect(docs.contains("`TimelineView.swift` `zoomControls`에 +/- 버튼, `Slider(value:`"))
         #expect(docs.contains("Fit Timeline"))
-        #expect(docs.contains("| R5-03 | 트랙 헤더(잠금/숨김/음소거) | 🟡 `isMuted` |"))
+        #expect(docs.contains("| R5-04 | 메인 비디오 트랙 개념 | 🟡 |"))
         #expect(!docs.contains("| R5-02 | 줌 슬라이더 + fit | 🟡 +/- 버튼 |"))
     }
 }

@@ -396,18 +396,12 @@ struct TimelineView: View {
                 Text(track.name)
                     .font(.caption)
                     .lineLimit(1)
-                HStack(spacing: MovieCutSpacing.xSmall) {
-                    Image(systemName: track.isMuted ? "speaker.slash" : "speaker.wave.2")
-                        .font(.caption2)
-                    Image(systemName: track.isLocked ? "lock" : "lock.open")
-                        .font(.caption2)
-                }
-                .foregroundStyle(.secondary)
+                trackHeaderControls(for: track)
             }
             .frame(width: 80, alignment: .leading)
             .padding(.horizontal, MovieCutSpacing.small)
             .background(MovieCutTheme.panelBackground)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             .accessibilityLabel(trackHeaderAccessibilityLabel(for: track))
 
             // Clips area
@@ -462,6 +456,48 @@ struct TimelineView: View {
             Divider()
                 .overlay(MovieCutTheme.divider)
         }
+    }
+
+    private func trackHeaderControls(for track: Track) -> some View {
+        HStack(spacing: 2) {
+            Button {
+                Task { await viewModel.toggleTrackMute(track) }
+            } label: {
+                Image(systemName: track.isMuted ? "speaker.slash" : "speaker.wave.2")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.borderless)
+            .help(track.isMuted ? "Unmute Track" : "Mute Track")
+            .accessibilityLabel(NSLocalizedString("Mute track", comment: ""))
+            .accessibilityValue(track.isMuted ? NSLocalizedString("Muted", comment: "") : NSLocalizedString("Audible", comment: ""))
+            .accessibilityHint(NSLocalizedString("Toggles audio playback for this track.", comment: ""))
+
+            Button {
+                Task { await viewModel.toggleTrackHidden(track) }
+            } label: {
+                Image(systemName: track.isHidden ? "eye.slash" : "eye")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.borderless)
+            .help(track.isHidden ? "Show Track" : "Hide Track")
+            .accessibilityLabel(NSLocalizedString("Hide track", comment: ""))
+            .accessibilityValue(track.isHidden ? NSLocalizedString("Hidden", comment: "") : NSLocalizedString("Visible", comment: ""))
+            .accessibilityHint(NSLocalizedString("Toggles visual output for this track.", comment: ""))
+
+            Button {
+                Task { await viewModel.toggleTrackLock(track) }
+            } label: {
+                Image(systemName: track.isLocked ? "lock" : "lock.open")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.borderless)
+            .help(track.isLocked ? "Unlock Track" : "Lock Track")
+            .accessibilityLabel(NSLocalizedString("Lock track", comment: ""))
+            .accessibilityValue(track.isLocked ? NSLocalizedString("Locked", comment: "") : NSLocalizedString("Unlocked", comment: ""))
+            .accessibilityHint(NSLocalizedString("Toggles editing protection for this track.", comment: ""))
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 
     @MainActor

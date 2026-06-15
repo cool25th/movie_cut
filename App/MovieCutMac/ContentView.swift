@@ -21,6 +21,7 @@ struct ContentView: View {
                 }
 
                 Divider()
+                    .overlay(MovieCutTheme.divider)
 
                 statusBar
             }
@@ -197,7 +198,7 @@ struct ContentView: View {
     }
 
     private var statusBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MovieCutSpacing.medium) {
             Label(canvasSizeText, systemImage: "rectangle")
             Text(viewModel.currentProject.canvas.frameRate.statusDisplayName)
             Spacer()
@@ -213,9 +214,9 @@ struct ContentView: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .padding(.horizontal, MovieCutSpacing.medium)
+        .padding(.vertical, MovieCutSpacing.xSmall)
+        .background(MovieCutTheme.panelBackground)
     }
 
     private var canvasSizeText: String {
@@ -236,13 +237,14 @@ struct QuickToolsPanel: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: MovieCutSpacing.small) {
                 Text("Quick Tools")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
                 Divider()
                     .frame(height: 20)
+                    .overlay(MovieCutTheme.divider)
 
                 textTemplateMenu
                 stickerBrowserButton
@@ -250,6 +252,7 @@ struct QuickToolsPanel: View {
 
                 Divider()
                     .frame(height: 20)
+                    .overlay(MovieCutTheme.divider)
 
                 quickButton(
                     .autoCut,
@@ -318,10 +321,10 @@ struct QuickToolsPanel: View {
 
                 feedbackView
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, MovieCutSpacing.small)
+            .padding(.vertical, MovieCutSpacing.xSmall)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.clear)
     }
 
     private var textTemplateMenu: some View {
@@ -373,7 +376,7 @@ struct QuickToolsPanel: View {
     }
 
     private var markerControls: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: MovieCutSpacing.xSmall) {
             Button {
                 viewModel.goToPreviousMarker()
             } label: {
@@ -419,9 +422,10 @@ struct QuickToolsPanel: View {
     }
 
     private func feedbackLabel(_ message: String, systemImage: String, color: Color) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MovieCutSpacing.small) {
             Divider()
                 .frame(height: 20)
+                .overlay(MovieCutTheme.divider)
             Label(message, systemImage: systemImage)
                 .font(.caption)
                 .foregroundStyle(color)
@@ -439,7 +443,7 @@ struct QuickToolsPanel: View {
         Button {
             run(tool, action: action)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: MovieCutSpacing.xSmall) {
                 if runningTool == tool {
                     ProgressView()
                         .controlSize(.small)
@@ -505,7 +509,7 @@ struct ExportSheet: View {
     var viewModel: EditorViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
             Text("Exporting")
                 .font(.headline)
             ProgressView(value: viewModel.exportEngine.exportProgress)
@@ -528,7 +532,7 @@ struct ExportSheet: View {
             .help("Cancel the current export")
             .accessibilityHint("Stops the running export. It does not delete previously exported files.")
         }
-        .padding(16)
+        .padding(MovieCutSpacing.large)
     }
 
     private var exportProgressAccessibilityValue: String {

@@ -11,21 +11,14 @@ struct MediaLibraryPanel: View {
     @State private var selectedLibraryTab: LibraryTab = .media
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(NSLocalizedString("Library", comment: ""))
-                        .font(.headline)
-                    Text(selectedLibraryTab.subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer()
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            MovieCutPanelHeader(
+                title: NSLocalizedString("Library", comment: ""),
+                systemImage: "rectangle.stack",
+                subtitle: selectedLibraryTab.subtitle
+            ) {
                 headerActions
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
 
             libraryTabBar
 
@@ -50,7 +43,7 @@ struct MediaLibraryPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 320)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .movieCutPanelBackground()
         .onDrop(of: [.fileURL, .movie, .image], isTargeted: nil) { providers in
             handleDrop(providers)
             return true
@@ -59,7 +52,7 @@ struct MediaLibraryPanel: View {
         .accessibilityLabel(NSLocalizedString("Library", comment: ""))
         .accessibilityHint(NSLocalizedString("Drop media files here to import them.", comment: ""))
         .sheet(isPresented: $isAddingText) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
                 Text(NSLocalizedString("Add Text", comment: ""))
                     .font(.headline)
                 TextField(NSLocalizedString("Text", comment: ""), text: $textClipText)
@@ -83,14 +76,14 @@ struct MediaLibraryPanel: View {
                     .accessibilityHint(NSLocalizedString("Adds the text clip to the timeline.", comment: ""))
                 }
             }
-            .padding(16)
+            .padding(MovieCutSpacing.large)
             .accessibilityElement(children: .contain)
         }
     }
 
     @ViewBuilder
     private var headerActions: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: MovieCutSpacing.small) {
             if selectedLibraryTab == .media {
                 Button(action: openImportPanel) {
                     Image(systemName: "plus")
@@ -113,7 +106,7 @@ struct MediaLibraryPanel: View {
 
     private var libraryTabBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: MovieCutSpacing.small) {
                 ForEach(LibraryTab.allCases) { tab in
                     Button {
                         selectedLibraryTab = tab
@@ -121,11 +114,11 @@ struct MediaLibraryPanel: View {
                         Label(tab.displayName, systemImage: tab.systemImage)
                             .font(.caption.weight(selectedLibraryTab == tab ? .semibold : .medium))
                             .labelStyle(.titleAndIcon)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, MovieCutSpacing.medium)
+                            .padding(.vertical, MovieCutSpacing.small)
                             .background(
-                                RoundedRectangle(cornerRadius: 9)
-                                    .fill(selectedLibraryTab == tab ? Color.accentColor.opacity(0.18) : Color(nsColor: .separatorColor).opacity(0.10))
+                                RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.cardBackground)
                             )
                             .foregroundStyle(selectedLibraryTab == tab ? Color.accentColor : Color.primary)
                     }
@@ -134,15 +127,15 @@ struct MediaLibraryPanel: View {
                     .accessibilityHint(tab.accessibilityHint)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 2)
+            .padding(.horizontal, MovieCutSpacing.medium)
+            .padding(.vertical, MovieCutSpacing.xSmall)
         }
         .accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))
     }
 
     @ViewBuilder
     private var mediaTabContent: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MovieCutSpacing.small) {
             mediaContent
 
             if viewModel.selectedAsset != nil {
@@ -151,8 +144,8 @@ struct MediaLibraryPanel: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
+                .padding(.horizontal, MovieCutSpacing.medium)
+                .padding(.bottom, MovieCutSpacing.small)
                 .accessibilityLabel(NSLocalizedString("Add to Timeline", comment: ""))
                 .accessibilityHint(NSLocalizedString("Adds the selected library asset to the timeline.", comment: ""))
             }
@@ -161,7 +154,7 @@ struct MediaLibraryPanel: View {
 
     private var audioTabContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
                 librarySection(title: NSLocalizedString("Music", comment: ""), systemImage: "music.note.list") {
                     MusicLibraryView(viewModel: viewModel)
                 }
@@ -170,15 +163,15 @@ struct MediaLibraryPanel: View {
                     SFXPickerView(viewModel: viewModel)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 12)
+            .padding(.horizontal, MovieCutSpacing.medium)
+            .padding(.bottom, MovieCutSpacing.medium)
         }
         .accessibilityLabel(NSLocalizedString("Audio browser", comment: ""))
     }
 
     private var textTabContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 Button {
                     openTextSheet()
                 } label: {
@@ -207,7 +200,7 @@ struct MediaLibraryPanel: View {
                     .accessibilityHint(NSLocalizedString("Adds this text template to the timeline.", comment: ""))
                 }
             }
-            .padding(10)
+            .padding(MovieCutSpacing.medium)
         }
         .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
     }
@@ -239,7 +232,7 @@ struct MediaLibraryPanel: View {
 
     private var transitionsTabContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 if viewModel.selectedClip == nil {
                     selectClipEmptyState(message: NSLocalizedString("Select a clip to apply a transition.", comment: ""))
                 }
@@ -260,7 +253,7 @@ struct MediaLibraryPanel: View {
                     .accessibilityHint(NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
                 }
             }
-            .padding(10)
+            .padding(MovieCutSpacing.medium)
         }
         .accessibilityLabel(NSLocalizedString("Transition browser", comment: ""))
     }
@@ -268,7 +261,7 @@ struct MediaLibraryPanel: View {
     @ViewBuilder
     private func effectList(title: String, systemImage: String, types: [EffectType], emptyMessage: String) -> some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 if viewModel.selectedClip == nil {
                     selectClipEmptyState(message: emptyMessage)
                 }
@@ -289,14 +282,14 @@ struct MediaLibraryPanel: View {
                     .accessibilityHint(String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
                 }
             }
-            .padding(10)
+            .padding(MovieCutSpacing.medium)
         }
         .accessibilityLabel(title)
     }
 
     @ViewBuilder
     private func selectClipEmptyState(message: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MovieCutSpacing.small) {
             Image(systemName: "cursorarrow.click.2")
                 .font(.title2)
                 .foregroundStyle(.secondary)
@@ -306,8 +299,7 @@ struct MediaLibraryPanel: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.10)))
+        .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -316,18 +308,13 @@ struct MediaLibraryPanel: View {
         systemImage: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        MovieCutSectionCard(title: title, systemImage: systemImage) {
             content()
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.08)))
     }
 
     private func browserActionRow(title: String, subtitle: String, systemImage: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
@@ -345,15 +332,14 @@ struct MediaLibraryPanel: View {
             Image(systemName: "plus.circle.fill")
                 .foregroundStyle(Color.accentColor.opacity(0.75))
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.10)))
+        .movieCutCard(background: MovieCutTheme.cardBackground)
         .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private var mediaContent: some View {
         if viewModel.mediaAssets.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: MovieCutSpacing.small) {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
@@ -366,27 +352,30 @@ struct MediaLibraryPanel: View {
             .accessibilityLabel(NSLocalizedString("Drop media files here", comment: ""))
         } else {
             ScrollView {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: MovieCutSpacing.xSmall) {
                     ForEach(viewModel.mediaAssets) { asset in
                         assetRow(asset)
                     }
                 }
-                .padding(4)
+                .padding(MovieCutSpacing.small)
             }
             .accessibilityLabel(NSLocalizedString("Asset List", comment: ""))
         }
     }
 
     private func assetRow(_ asset: MediaAsset) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MovieCutSpacing.small) {
             assetThumbnailView(asset)
             assetInfoView(asset)
             Spacer()
             proxyButton(asset)
         }
-        .padding(6)
-        .background(asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.2) : Color.clear)
-        .cornerRadius(6)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.selectedFill : Color.clear,
+            border: asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.35) : Color.clear
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             viewModel.selectedAssetId = asset.id
@@ -629,7 +618,7 @@ struct MediaLibraryPanel: View {
     @ViewBuilder
     private func assetThumbnailView(_ asset: MediaAsset) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: MovieCutRadius.small)
                 .fill(Color.secondary.opacity(0.2))
 
             if let image = thumbnailImage(for: asset) {
@@ -637,7 +626,7 @@ struct MediaLibraryPanel: View {
                     .resizable()
                     .scaledToFill()
                     .frame(width: 48, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small))
             } else {
                 Image(systemName: iconForKind(asset.kind))
                     .foregroundStyle(.secondary)

@@ -1,5 +1,158 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
+
+enum MovieCutSpacing {
+    static let xSmall: CGFloat = 4
+    static let small: CGFloat = 8
+    static let medium: CGFloat = 12
+    static let large: CGFloat = 16
+}
+
+enum MovieCutRadius {
+    static let small: CGFloat = 6
+    static let medium: CGFloat = 8
+    static let large: CGFloat = 12
+}
+
+enum MovieCutTheme {
+    static var panelBackground: Color { Color(nsColor: .controlBackgroundColor) }
+    static var editorBackground: Color { Color(nsColor: .textBackgroundColor) }
+    static var cardBackground: Color { Color(nsColor: .separatorColor).opacity(0.10) }
+    static var elevatedCardBackground: Color { Color(nsColor: .separatorColor).opacity(0.14) }
+    static var divider: Color { Color(nsColor: .separatorColor).opacity(0.70) }
+    static var border: Color { Color(nsColor: .separatorColor).opacity(0.42) }
+    static var selectedFill: Color { Color.accentColor.opacity(0.20) }
+}
+
+struct MovieCutIconTitle: View {
+    let title: String
+    let systemImage: String
+    var subtitle: String?
+    var iconColor: Color = .secondary
+    var titleFont: Font = .headline
+
+    var body: some View {
+        HStack(alignment: subtitle == nil ? .center : .top, spacing: MovieCutSpacing.small) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 16)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                Text(title)
+                    .font(titleFont)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+}
+
+struct MovieCutPanelHeader<Trailing: View>: View {
+    let title: String
+    let systemImage: String
+    var subtitle: String?
+    let trailing: Trailing
+
+    init(
+        title: String,
+        systemImage: String,
+        subtitle: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.subtitle = subtitle
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: MovieCutSpacing.small) {
+            MovieCutIconTitle(title: title, systemImage: systemImage, subtitle: subtitle)
+            Spacer(minLength: MovieCutSpacing.small)
+            trailing
+        }
+        .padding(.horizontal, MovieCutSpacing.medium)
+        .padding(.vertical, MovieCutSpacing.small)
+        .background(MovieCutTheme.panelBackground)
+    }
+}
+
+extension MovieCutPanelHeader where Trailing == EmptyView {
+    init(title: String, systemImage: String, subtitle: String? = nil) {
+        self.title = title
+        self.systemImage = systemImage
+        self.subtitle = subtitle
+        self.trailing = EmptyView()
+    }
+}
+
+struct MovieCutSectionCard<Content: View>: View {
+    let title: String
+    let systemImage: String
+    let content: Content
+
+    init(title: String, systemImage: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            MovieCutIconTitle(title: title, systemImage: systemImage, titleFont: .caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content
+        }
+        .movieCutCard()
+    }
+}
+
+private struct MovieCutCardModifier: ViewModifier {
+    let padding: CGFloat
+    let cornerRadius: CGFloat
+    let background: Color
+    let border: Color
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(background)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(border, lineWidth: 0.5)
+            )
+    }
+}
+
+extension View {
+    func movieCutCard(
+        padding: CGFloat = MovieCutSpacing.medium,
+        cornerRadius: CGFloat = MovieCutRadius.medium,
+        background: Color = MovieCutTheme.cardBackground,
+        border: Color = MovieCutTheme.border
+    ) -> some View {
+        modifier(MovieCutCardModifier(
+            padding: padding,
+            cornerRadius: cornerRadius,
+            background: background,
+            border: border
+        ))
+    }
+
+    func movieCutPanelBackground() -> some View {
+        background(MovieCutTheme.panelBackground)
+    }
+}
 
 struct EffectParameterDefinition: Identifiable {
     var id: String { key }
@@ -17,7 +170,7 @@ struct EffectRowView: View {
     let onParameterChange: (String, Double) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             HStack {
                 Text(effect.type.displayName)
                     .font(.caption)
@@ -42,9 +195,11 @@ struct EffectRowView: View {
                 )
             }
         }
-        .padding(8)
-        .background(Color(nsColor: .separatorColor).opacity(0.12))
-        .cornerRadius(6)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.elevatedCardBackground
+        )
     }
 }
 

@@ -108,14 +108,16 @@ VSplitView                                  // 상하 분할
 
 ### Tier 2 — 시각 폴리시 (지속)
 
-#### UX-07. 디자인 토큰·간격·다크 테마 통일 ❌
+#### UX-07. 디자인 토큰·간격·다크 테마 통일 ✅ 구현(2026-06-16)
 - **목표**: 섹션 카드, 일관된 패딩(8/12/16), 구분선, 아이콘+레이블, 색/타이포 스케일 통일.
 - **구현**: 공통 스타일 헬퍼(예 `InspectorShared.swift` 확장)로 섹션 헤더/카드 컴포넌트화. 하드코딩 spacing 정리.
 - **AC**: 패널 간 시각 언어가 일관되고 밀도가 CapCut 수준으로 쾌적.
+- **구현 완료(2026-06-16)**: `App/MovieCutMac/Inspector/InspectorShared.swift`에 `MovieCutSpacing`(4/8/12/16), `MovieCutRadius`, `MovieCutTheme`, `MovieCutPanelHeader`, `MovieCutSectionCard`, `movieCutCard`/panel background helper를 추가. `InspectorPanel.swift`는 헤더/스크롤 섹션/Project Tools/Export를 카드·토큰 기반으로 정리했고, `MediaLibraryPanel.swift`는 Library 헤더, 탭, 브라우저 액션 row, empty state, audio 섹션, asset row를 같은 토큰으로 통일. `TimelineView.swift`는 타임라인 헤더/구분선/track surface/clip radius를 토큰화했고, `ContentView.swift`는 status bar와 Quick Tools spacing/background/divider를 통일. `PreviewPanel.swift`의 UX-06 Import Media CTA/transport behavior는 변경하지 않음. 검증: `git diff --check` PASS, `swift build` PASS, `swift test --filter StaticContract` PASS(135 tests / 36 suites), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED. 스크린샷 캡처는 `/tmp/moviecut-ui-evidence/ux07_design_tokens.png`로 시도했으나 현재 macOS 캡처 환경이 검은 프레임만 반환해 시각 AC는 코드/빌드 검증과 별도 경계로 둠.
 
-#### UX-08. 접근성·키보드 유지 ❌(회귀 방지)
+#### UX-08. 접근성·키보드 유지 ✅ 구현(2026-06-16)
 - **목표**: 재배치하면서 기존 accessibilityLabel/Value/Hint와 F-05 단축키가 유지되도록.
 - **AC**: VoiceOver 레이블 보존, 단축키 동작 유지.
+- **구현 완료(2026-06-16)**: `TimelineView.swift`의 선택 클립 도구바 아이콘 버튼(Snap start/end, Split, Duplicate, layer front/back, Delete, Ripple Delete)에 명시적 `accessibilityLabel`/`accessibilityHint`를 추가해 UX-05/07 재배치 이후에도 VoiceOver가 이미지 이름에 의존하지 않도록 보강. `Tests/MovieCutCoreTests/UIUXAccessibilityRegressionStaticContractTests.swift`를 추가해 `MovieCutMacApp.swift`의 F-05 `CommandMenu("Playback")`/`CommandMenu("Timeline")` 및 주요 shortcut marker, `PreviewPanel.swift`의 Preview/timecode/transport/canvas ratio/volume/import 접근성 marker, `MediaLibraryPanel.swift`의 Library/import/text/tabs/Add to Timeline/asset metadata 접근성 marker, `TimelineView.swift`의 timeline/track/drop/selected toolbar/zoom/clip trim marker, `InspectorPanel.swift`/`InspectorShared.swift`의 Inspector/Clip/Project Tools/Markers/AI Assistant/Auto Highlights/Analysis Results 섹션 label marker를 정적 계약으로 고정. 검증: `git diff --check` PASS, `swift build` PASS, `swift test --filter StaticContract` PASS(141 tests / 37 suites), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED. VoiceOver 실기기 리딩·스크린샷 검증은 별도 검증 범위로 두며, 여기서는 라이브 VoiceOver 또는 화면 캡처 증거를 주장하지 않음.
 
 ---
 

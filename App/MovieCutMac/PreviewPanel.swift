@@ -28,6 +28,11 @@ struct PreviewPanel: View {
                 } else {
                     previewEmptyState
                 }
+
+                VStack {
+                    previewTransportBar
+                    Spacer(minLength: 0)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .combine)
@@ -46,92 +51,103 @@ struct PreviewPanel: View {
                 syncTimelinePlayhead(to: currentTime)
             }
 
-            HStack(spacing: 14) {
-                previewTimeBadge(
-                    title: NSLocalizedString("Current", comment: ""),
-                    value: timecodeString(playbackEngine.currentTime),
-                    accessibilityLabel: NSLocalizedString("Current Time", comment: "")
-                )
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    Button(action: {
-                        seekByFrames(-1)
-                    }) {
-                        Image(systemName: "backward.frame")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(playbackEngine.playerItem == nil)
-                    .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
-
-                    Button(action: { playbackEngine.togglePlayPause() }) {
-                        Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.title3.weight(.semibold))
-                            .frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(playbackEngine.playerItem == nil)
-                    .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
-
-                    Button(action: {
-                        seekByFrames(1)
-                    }) {
-                        Image(systemName: "forward.frame")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(playbackEngine.playerItem == nil)
-                    .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
-                )
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
-
-                Spacer(minLength: 12)
-
-                previewTimeBadge(
-                    title: NSLocalizedString("Duration", comment: ""),
-                    value: timecodeString(playbackEngine.duration),
-                    accessibilityLabel: NSLocalizedString("Duration", comment: "")
-                )
-
-                Label(canvasRatioText, systemImage: "rectangle.ratio")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .accessibilityLabel(NSLocalizedString("Canvas ratio", comment: ""))
-                    .accessibilityValue(canvasRatioText)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "speaker.wave.2")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Slider(value: Binding(
-                        get: { previewVolume },
-                        set: { newValue in
-                            previewVolume = newValue
-                            playbackEngine.player.volume = Float(newValue)
-                        }
-                    ), in: 0 ... 1)
-                    .frame(width: 84)
-                    .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
-                    .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
-                    .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .accessibilityElement(children: .contain)
         }
+    }
+
+    private var previewTransportBar: some View {
+        HStack(spacing: 14) {
+            previewTimeBadge(
+                title: NSLocalizedString("Current", comment: ""),
+                value: timecodeString(playbackEngine.currentTime),
+                accessibilityLabel: NSLocalizedString("Current Time", comment: "")
+            )
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                Button(action: {
+                    seekByFrames(-1)
+                }) {
+                    Image(systemName: "backward.frame")
+                }
+                .buttonStyle(.borderless)
+                .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
+                .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
+
+                Button(action: { playbackEngine.togglePlayPause() }) {
+                    Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.borderless)
+                .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
+                .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
+
+                Button(action: {
+                    seekByFrames(1)
+                }) {
+                    Image(systemName: "forward.frame")
+                }
+                .buttonStyle(.borderless)
+                .disabled(playbackEngine.playerItem == nil)
+                .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
+                .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
+
+            Spacer(minLength: 12)
+
+            previewTimeBadge(
+                title: NSLocalizedString("Duration", comment: ""),
+                value: timecodeString(playbackEngine.duration),
+                accessibilityLabel: NSLocalizedString("Duration", comment: "")
+            )
+
+            Label(canvasRatioText, systemImage: "rectangle.ratio")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .accessibilityLabel(NSLocalizedString("Canvas ratio", comment: ""))
+                .accessibilityValue(canvasRatioText)
+
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Slider(value: Binding(
+                    get: { previewVolume },
+                    set: { newValue in
+                        previewVolume = newValue
+                        playbackEngine.player.volume = Float(newValue)
+                    }
+                ), in: 0 ... 1)
+                .frame(width: 84)
+                .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
+                .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
+                .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Preview transport controls", comment: ""))
     }
 
     private var canvasAspectRatio: CGFloat {

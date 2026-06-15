@@ -8,66 +8,87 @@ struct InspectorPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "slider.horizontal.3")
-                    .foregroundStyle(.secondary)
-                Text(viewModel.selectedClip == nil ? "Inspector" : "Clip")
-                    .font(.headline)
-            }
-            .padding(12)
+            MovieCutPanelHeader(
+                title: viewModel.selectedClip == nil ? "Inspector" : "Clip",
+                systemImage: "slider.horizontal.3"
+            )
 
             Divider()
+                .overlay(MovieCutTheme.divider)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
                     // UX-03: when a clip is selected, its editing controls come
                     // first so they are reachable without scrolling past the
                     // project-wide tools; those collapse into a disclosure.
                     if let clip = viewModel.selectedClip {
                         InspectorBasicSection(viewModel: viewModel, clip: clip)
+                            .movieCutCard()
                         InspectorEffectsSection(viewModel: viewModel, clip: clip)
+                            .movieCutCard()
                         InspectorAnalysisSection(viewModel: viewModel, clip: clip)
+                            .movieCutCard()
 
                         Divider()
+                            .overlay(MovieCutTheme.divider)
 
                         DisclosureGroup(isExpanded: $projectToolsExpanded) {
-                            projectToolsSections
-                                .padding(.top, 8)
+                            projectToolsSections(carded: false)
+                                .padding(.top, MovieCutSpacing.small)
                         } label: {
-                            Label("Project Tools", systemImage: "wrench.and.screwdriver")
-                                .font(.subheadline.weight(.semibold))
+                            MovieCutIconTitle(
+                                title: "Project Tools",
+                                systemImage: "wrench.and.screwdriver",
+                                titleFont: .subheadline.weight(.semibold)
+                            )
                         }
+                        .movieCutCard()
                     } else {
                         EmptyInspectorSelectionView()
-                        projectToolsSections
+                            .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
+                        projectToolsSections(carded: true)
                     }
                 }
-                .padding(12)
+                .padding(MovieCutSpacing.medium)
             }
 
             Divider()
+                .overlay(MovieCutTheme.divider)
 
             InspectorExportSection(viewModel: viewModel)
+                .movieCutCard(padding: 0)
+                .padding(MovieCutSpacing.small)
         }
         .frame(minWidth: 240)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .movieCutPanelBackground()
     }
 
     /// Project-wide tools that are not tied to the selected clip.
     @ViewBuilder
-    private var projectToolsSections: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            MarkerManagementSection(viewModel: viewModel)
-            AssistantSection(viewModel: viewModel)
-            HighlightsSection(viewModel: viewModel)
-            AnalysisResultsSection(viewModel: viewModel)
+    private func projectToolsSections(carded: Bool) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+            if carded {
+                MarkerManagementSection(viewModel: viewModel)
+                    .movieCutCard()
+                AssistantSection(viewModel: viewModel)
+                    .movieCutCard()
+                HighlightsSection(viewModel: viewModel)
+                    .movieCutCard()
+                AnalysisResultsSection(viewModel: viewModel)
+                    .movieCutCard()
+            } else {
+                MarkerManagementSection(viewModel: viewModel)
+                AssistantSection(viewModel: viewModel)
+                HighlightsSection(viewModel: viewModel)
+                AnalysisResultsSection(viewModel: viewModel)
+            }
         }
     }
 }
 
 private struct EmptyInspectorSelectionView: View {
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MovieCutSpacing.small) {
             Image(systemName: "info.circle")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
@@ -76,7 +97,7 @@ private struct EmptyInspectorSelectionView: View {
                 .font(.caption)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
+        .padding(.vertical, MovieCutSpacing.large)
     }
 }
 
@@ -102,15 +123,15 @@ private struct MarkerManagementSection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 6)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                     ForEach(sortedMarkers) { marker in
                         MarkerManagementRow(viewModel: viewModel, marker: marker)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, MovieCutSpacing.small)
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: MovieCutSpacing.small) {
                 Label("Markers", systemImage: "flag.fill")
                 Spacer()
                 Text("\(sortedMarkers.count)")
@@ -134,13 +155,13 @@ private struct MarkerManagementRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MovieCutSpacing.small) {
             Circle()
                 .fill(Color.markerHex(marker.color) ?? .yellow)
                 .frame(width: 9, height: 9)
                 .overlay(Circle().stroke(Color.black.opacity(0.18), lineWidth: 0.5))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
                 TextField("Marker name", text: $draftName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
@@ -203,8 +224,8 @@ private struct AssistantSection: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                HStack(spacing: MovieCutSpacing.small) {
                     TextField("e.g. apply cinematic filter to all clips", text: $instruction)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
@@ -224,7 +245,7 @@ private struct AssistantSection: View {
                 }
 
                 if !viewModel.assistantSuggestions.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
                         ForEach(viewModel.assistantSuggestions, id: \.self) { suggestion in
                             Button {
                                 instruction = suggestion
@@ -241,7 +262,7 @@ private struct AssistantSection: View {
                     }
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, MovieCutSpacing.small)
         } label: {
             Label("AI Assistant", systemImage: "sparkles")
                 .font(.subheadline.weight(.semibold))
@@ -262,8 +283,8 @@ private struct HighlightsSection: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                HStack(spacing: MovieCutSpacing.small) {
                     Button("Find Highlights") {
                         Task { await viewModel.detectHighlights() }
                     }
@@ -289,9 +310,9 @@ private struct HighlightsSection: View {
                     }
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, MovieCutSpacing.small)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: MovieCutSpacing.small) {
                 Label("Auto Highlights", systemImage: "wand.and.stars")
                 Spacer()
                 if !viewModel.highlightCandidates.isEmpty {
@@ -310,7 +331,7 @@ private struct HighlightCandidateRow: View {
     var candidate: HighlightCandidate
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MovieCutSpacing.small) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(timeRangeText)
                     .font(.caption.monospaced())
@@ -329,9 +350,11 @@ private struct HighlightCandidateRow: View {
             .controlSize(.small)
             .accessibilityLabel("Create sequence from highlight")
         }
-        .padding(6)
-        .background(Color(nsColor: .separatorColor).opacity(0.12))
-        .cornerRadius(6)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.elevatedCardBackground
+        )
     }
 
     private var timeRangeText: String {
@@ -357,15 +380,15 @@ private struct AnalysisResultsSection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 6)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                     ForEach(viewModel.recentAnalysisResults) { item in
                         AnalysisResultHistoryRow(item: item)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, MovieCutSpacing.small)
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: MovieCutSpacing.small) {
                 Label("Analysis Results", systemImage: "chart.line.uptrend.xyaxis")
                 Spacer()
                 Text("\(viewModel.recentAnalysisResults.count)")
@@ -381,13 +404,13 @@ private struct AnalysisResultHistoryRow: View {
     let item: EditorViewModel.AnalysisHistoryItem
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: MovieCutSpacing.small) {
             Image(systemName: iconName)
                 .frame(width: 16)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+                HStack(spacing: MovieCutSpacing.small) {
                     Text(item.action)
                         .font(.caption.weight(.semibold))
                     if let count = item.count {
@@ -405,7 +428,7 @@ private struct AnalysisResultHistoryRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
-                HStack(spacing: 6) {
+                HStack(spacing: MovieCutSpacing.small) {
                     if let clipDescription = item.clipDescription {
                         Text(clipDescription)
                     }

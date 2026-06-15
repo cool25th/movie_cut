@@ -38,9 +38,11 @@ struct TimelineView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text(NSLocalizedString("Timeline", comment: ""))
-                    .font(.headline)
+            HStack(spacing: MovieCutSpacing.small) {
+                MovieCutIconTitle(
+                    title: NSLocalizedString("Timeline", comment: ""),
+                    systemImage: "timeline.selection"
+                )
                 if !sortedMarkers.isEmpty {
                     Text("\(sortedMarkers.count) markers")
                         .font(.caption)
@@ -49,25 +51,29 @@ struct TimelineView: View {
 
                 Divider()
                     .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
 
                 selectedClipToolbar
 
                 Divider()
                     .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
 
                 QuickToolsPanel(viewModel: viewModel)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Divider()
                     .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
 
                 zoomControls
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .padding(.horizontal, MovieCutSpacing.medium)
+            .padding(.vertical, MovieCutSpacing.small)
+            .background(MovieCutTheme.panelBackground)
 
             Divider()
+                .overlay(MovieCutTheme.divider)
 
             ScrollView([.horizontal, .vertical]) {
                 VStack(spacing: 0) {
@@ -81,13 +87,13 @@ struct TimelineView: View {
         }
         // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
         .frame(minHeight: 210)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(MovieCutTheme.editorBackground)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
     }
 
     private var selectedClipToolbar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: MovieCutSpacing.xSmall) {
             Text(NSLocalizedString("Edit", comment: ""))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -100,6 +106,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(viewModel.selectedClip == nil)
             .help("Snap Playhead to Clip Start")
+            .accessibilityLabel(NSLocalizedString("Snap Playhead to Clip Start", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the playhead to the selected clip start.", comment: ""))
 
             Button {
                 viewModel.snapPlayheadToSelectedClipEnd()
@@ -109,6 +117,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(viewModel.selectedClip == nil)
             .help("Snap Playhead to Clip End")
+            .accessibilityLabel(NSLocalizedString("Snap Playhead to Clip End", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the playhead to the selected clip end.", comment: ""))
 
             Button {
                 Task { await viewModel.splitClip() }
@@ -118,6 +128,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(!viewModel.canSplitSelectedClip)
             .help("Split at Playhead")
+            .accessibilityLabel(NSLocalizedString("Split at Playhead", comment: ""))
+            .accessibilityHint(NSLocalizedString("Splits the selected clip at the playhead.", comment: ""))
 
             Button {
                 Task { await viewModel.duplicateSelectedClips() }
@@ -127,6 +139,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(!viewModel.hasSelectedClips)
             .help("Duplicate Selected Clips")
+            .accessibilityLabel(NSLocalizedString("Duplicate Selected Clips", comment: ""))
+            .accessibilityHint(NSLocalizedString("Duplicates the selected clips on the timeline.", comment: ""))
 
             Button {
                 Task { await viewModel.sendSelectedClipLayerToBack() }
@@ -136,6 +150,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(viewModel.selectedClip == nil)
             .help("Send Selected Clip to Back")
+            .accessibilityLabel(NSLocalizedString("Send Selected Clip to Back", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the selected clip behind the other tracks.", comment: ""))
 
             Button {
                 Task { await viewModel.bringSelectedClipLayerToFront() }
@@ -145,6 +161,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(viewModel.selectedClip == nil)
             .help("Bring Selected Clip to Front")
+            .accessibilityLabel(NSLocalizedString("Bring Selected Clip to Front", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the selected clip in front of the other tracks.", comment: ""))
 
             Button {
                 Task { await viewModel.deleteClip() }
@@ -154,6 +172,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(!viewModel.hasSelectedClips)
             .help("Delete Selected Clips")
+            .accessibilityLabel(NSLocalizedString("Delete Selected Clips", comment: ""))
+            .accessibilityHint(NSLocalizedString("Deletes the selected clips from the timeline.", comment: ""))
 
             Button {
                 Task { await viewModel.rippleDeleteSelectedClip() }
@@ -163,6 +183,8 @@ struct TimelineView: View {
             .buttonStyle(.borderless)
             .disabled(viewModel.selectedClip == nil)
             .help("Ripple Delete Selected Clip")
+            .accessibilityLabel(NSLocalizedString("Ripple Delete Selected Clip", comment: ""))
+            .accessibilityHint(NSLocalizedString("Deletes the selected clip and closes the resulting gap.", comment: ""))
         }
         .font(.caption)
         .accessibilityElement(children: .contain)
@@ -170,7 +192,7 @@ struct TimelineView: View {
     }
 
     private var zoomControls: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: MovieCutSpacing.xSmall) {
             Text(NSLocalizedString("Zoom", comment: ""))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -197,13 +219,13 @@ struct TimelineView: View {
     private var timeRuler: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                .fill(MovieCutTheme.panelBackground.opacity(0.55))
                 .frame(width: 80, height: rulerHeight)
                 .overlay(alignment: .leading) {
                     Text(NSLocalizedString("Time", comment: ""))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
-                        .padding(.leading, 4)
+                        .padding(.leading, MovieCutSpacing.xSmall)
                 }
 
             ZStack(alignment: .topLeading) {
@@ -274,7 +296,7 @@ struct TimelineView: View {
                 Text(track.name)
                     .font(.caption)
                     .lineLimit(1)
-                HStack(spacing: 4) {
+                HStack(spacing: MovieCutSpacing.xSmall) {
                     Image(systemName: track.isMuted ? "speaker.slash" : "speaker.wave.2")
                         .font(.caption2)
                     Image(systemName: track.isLocked ? "lock" : "lock.open")
@@ -283,15 +305,15 @@ struct TimelineView: View {
                 .foregroundStyle(.secondary)
             }
             .frame(width: 80, alignment: .leading)
-            .padding(.horizontal, 6)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .padding(.horizontal, MovieCutSpacing.small)
+            .background(MovieCutTheme.panelBackground)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(trackHeaderAccessibilityLabel(for: track))
 
             // Clips area
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(Color(nsColor: .textBackgroundColor))
+                    .fill(MovieCutTheme.editorBackground)
 
                 ForEach(clipsForDisplay(track)) { clip in
                     clipView(clip, trackKind: track.kind)
@@ -336,7 +358,10 @@ struct TimelineView: View {
             .accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))
         }
         .frame(height: trackHeight)
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) {
+            Divider()
+                .overlay(MovieCutTheme.divider)
+        }
     }
 
     @MainActor
@@ -347,18 +372,18 @@ struct TimelineView: View {
         let isActiveDrag = isDragging && draggedClipId == clip.id
 
         return ZStack {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: MovieCutRadius.small)
                 .fill(colorForClip(clip: clip, trackKind: trackKind, selected: isSelected))
                 .overlay {
                     clipMediaBackground(for: clip, trackKind: trackKind, selected: isSelected)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small))
                 }
                 .overlay(alignment: .leading) {
                     Text(clipLabel(clip))
                         .font(.system(size: 10))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, MovieCutSpacing.xSmall)
                 }
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 2) {
@@ -374,11 +399,11 @@ struct TimelineView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                         }
                     }
-                    .padding(.trailing, 4)
+                    .padding(.trailing, MovieCutSpacing.xSmall)
                 }
                 .overlay {
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: MovieCutRadius.small)
                             .stroke(Color.white.opacity(0.9), lineWidth: 1)
                     }
                 }

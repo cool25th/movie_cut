@@ -31,9 +31,9 @@
 - 🟡 **프리뷰 폴리시**(`PreviewPanel.swift`)·**타임라인 도구**(`TimelineView.swift`) 일부.
 - ✅ **인스펙터 clip-first**: 선택 시 `InspectorBasicSection`/`InspectorEffectsSection` 상단, 전역도구 `DisclosureGroup` 접힘(`InspectorPanel.swift`).
 
-**아직 안 된 핵심:**
+**핵심 상태:**
 - ❌ 인스펙터 **선택종류별 패널 스왑**(video/audio/text 구분) + **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
-- ❌ **export 거버넌스 텍스트 노출**(`InspectorExportSection.swift`에 "Golden status…" 류 24곳 잔존 — UX-02 제거 대상).
+- ✅ **export 거버넌스 텍스트 제거**(R4-03/UX-02, 2026-06-16): `InspectorExportSection.swift` export summary는 포맷/해상도/코덱/품질/예상 크기/비트레이트 정보만 노출.
 - ❌ 라이브러리 **탭별 검색·썸네일 그리드·hover 미리보기**.
 - 🟡 타임라인 **단일 도구 바 집약**(현재 `selectedClipToolbar`+`zoomControls` 분산).
 - ❌ 프리뷰 **빈 상태 CTA**, 상단 바 **단일 Export·프로젝트명·저장상태**.
@@ -90,7 +90,7 @@
 |---|---|---|---|---|
 | R4-01 | **선택종류별 패널 스왑** | ✅ 구현(2026-06-16): `InspectorPanel.swift`가 `clip.kind`로 `InspectorBasicMode.audio`/`.text`/`.visual` 컨텍스트를 선택. 오디오는 Volume/Fade Duration/Equalizer/Noise Reduction 중심, 텍스트는 Style 중심, 비디오/이미지는 Transform/Adjust/Effects/Analysis 카드 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | 오디오→Volume/Fade/Denoise만, 텍스트→Style만, 비디오→Transform/Adjust/Effects | P0 |
 | R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ❌ DisclosureGroup만 | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
-| R4-03 | **거버넌스 텍스트 제거(UX-02)** | ❌ `InspectorExportSection.swift` 24곳 | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
+| R4-03 | **거버넌스 텍스트 제거(UX-02)** | ✅ 구현(2026-06-16): `InspectorExportSection.swift` export summary의 export-golden 거버넌스 문단/접근성 copy/helper 제거. `ExportFormatStaticContractTests.swift`는 금지 문자열 부재와 사용자용 export controls 유지 계약으로 갱신. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
 | R4-04 | 전역도구 접힘 + Export 하단 고정 | ✅ | 유지 | — |
 
 ### R5. 하단 타임라인 + 도구 바 — `App/MovieCutMac/TimelineView.swift`
@@ -149,7 +149,7 @@ open ~/Library/Developer/Xcode/DerivedData/MovieCut-*/Build/Products/Debug/Movie
 - **프레젠테이션만 변경**: ViewModel 메서드·`EditorSession.dispatch(Command)`·렌더 파이프라인은 호출만.
 - **정적계약 테스트 동기화**: `Tests/MovieCutCoreTests/*StaticContractTests.swift`가 특정 문자열/구조를 검사. 뷰 이동 시 의미 보존하며 테스트도 갱신.
 - **작은 PR 단위**: 항목(R*-NN) 하나씩 커밋. 커밋은 `feat:`/`refactor:` conventional 형식, **attribution 미포함**(전역 git-workflow 규칙).
-- **R4-03(거버넌스 텍스트 제거)는 조율 필요**: 해당 텍스트는 별도 세션의 export-golden 거버넌스 산출물(`InspectorExportSection.swift`, `ExportFormatStaticContractTests.swift`)이므로, 제거 시 그 정적계약 테스트도 함께 갱신하고 해당 세션과 조율.
+- **R4-03(거버넌스 텍스트 제거) 완료**: `InspectorExportSection.swift`의 export-golden 거버넌스 copy를 제거했고, `ExportFormatStaticContractTests.swift`는 사용자-facing export summary/control 계약과 금지 문자열 부재를 검사하도록 갱신됨.
 
 ### 5.5 검증 체크리스트 (DoD)
 - [ ] side-by-side 스크린샷(CapCut vs 앱) — 영역·상태별

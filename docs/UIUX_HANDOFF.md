@@ -75,9 +75,9 @@ VSplitView                                  // 상하 분할
 - **구현**: `MovieCutMacApp.swift` `WindowGroup { … }`에 `.defaultSize(width: 1440, height: 900)` + `.windowResizability(.contentSize)`. `ContentView` minHeight를 720 이상으로.
 - **AC**: 새로 실행 시 라이브러리·프리뷰·인스펙터·타임라인이 모두 즉시 보이고, 타임라인 트랙 3개 + 클립 섬네일이 잘림 없이 보인다.
 
-#### UX-02. 거버넌스/면책 텍스트를 사용자 UI에서 제거 ❌
+#### UX-02. 거버넌스/면책 텍스트를 사용자 UI에서 제거 ✅ 구현(2026-06-16)
 - **목표**: export 패널의 개발 내부 경고 문단("Golden status…", "Do not claim…")을 사용자 화면에서 없앤다.
-- **구현**: `App/MovieCutMac/Inspector/InspectorExportSection.swift`의 해당 카피를 제거하거나 `#if DEBUG`/접근성 전용으로 숨김. ※ 이 파일은 다른 세션이 작업 중이므로 **그 세션과 조율 후** 진행(현재 미커밋 변경 상존).
+- **구현**: `App/MovieCutMac/Inspector/InspectorExportSection.swift`의 export-golden 거버넌스 문단, 관련 helper property, visible/accessibility copy를 제거. export summary와 picker/custom bitrate 접근성은 포맷/해상도/프레임레이트/코덱/품질/예상 크기/비트레이트 중심의 사용자용 문구로 유지. `Tests/MovieCutCoreTests/ExportFormatStaticContractTests.swift`는 금지 문자열 부재와 사용자용 export control 보존을 검사하도록 갱신. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED.
 - **AC**: export 패널에 사용자용 정보(포맷/해상도/예상 크기)만 남고 개발 메모가 안 보인다.
 
 #### UX-03. Inspector를 "맥락형 단일 패널"로 정리 — ✅ 구현(2026-06-14)
@@ -125,7 +125,7 @@ VSplitView                                  // 상하 분할
 
 - **프레젠테이션만 변경**: ViewModel 메서드·`EditorSession.dispatch(Command)`·렌더 파이프라인은 그대로. UI는 기존 메서드를 호출만.
 - **기존 테스트 깨지 마라**: static-contract 테스트가 특정 문자열/구조를 검사한다. 뷰를 옮길 때 깨지면 테스트도 같이 갱신(단, 의미 보존). `swift test` + `xcodebuild … MovieCutMac build`로 매번 확인.
-- **다른 세션과 충돌 주의**: 작업 트리에 `InspectorExportSection.swift`/`ExportFormatStaticContractTests.swift`/`scripts/verify_moviecut_export_golden.py` 미커밋 변경(export-golden 거버넌스, 별도 세션) 상존. UX-02는 그 세션 커밋 후 진행하거나 조율.
+- **R4-03/UX-02 완료**: `InspectorExportSection.swift`/`ExportFormatStaticContractTests.swift`의 export-golden 거버넌스 copy 제거와 정적계약 갱신은 2026-06-16에 완료됨.
 - **iOS 동기화는 선택**: 이 UX 작업은 macOS 우선. iOS(`App/MovieCutiOS/`)는 별도.
 - **작은 PR 단위**: UX-01부터 하나씩. 각 항목 커밋 후 빌드/스크린샷 확인.
 
@@ -134,7 +134,7 @@ VSplitView                                  // 상하 분할
 ## 6. 권장 착수 순서
 
 1. **UX-01**(기본 창 크기) — 한 줄 수정으로 체감이 가장 큼. 여기부터.
-2. **UX-02**(거버넌스 텍스트 제거) — 비전문적 인상 즉시 제거(타 세션 조율).
+2. **UX-02**(거버넌스 텍스트 제거) — 완료(2026-06-16).
 3. **UX-03**(Inspector 맥락 정리) — 클립 편집 접근성 확보.
 4. **UX-04/05**(탭 라이브러리 + 타임라인 도구 바) — 구조적 CapCut화.
 5. **UX-06/07**(프리뷰·디자인 폴리시) — 마감 품질.

@@ -143,9 +143,9 @@ final class EditorViewModel {
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = ProjectStore()
-    @ObservationIgnored private var currentProjectURL: URL?
+    private var currentProjectURL: URL?
     @ObservationIgnored private var isAutoSaveRunning = false
-    @ObservationIgnored private var isSavingCurrentProject = false
+    private var isSavingCurrentProject = false
     @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
     @ObservationIgnored private var clipEQPresets: [UUID: String] = [:]
     @ObservationIgnored private var noiseReductionClipIds: Set<UUID> = []
@@ -175,6 +175,35 @@ final class EditorViewModel {
         }
 
         startAutoSave()
+    }
+
+    var projectDisplayName: String {
+        let trimmedName = currentProject.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName.isEmpty ? "Untitled" : trimmedName
+    }
+
+    var projectSaveStatusLabel: String {
+        if isSavingCurrentProject {
+            return "Saving…"
+        }
+
+        if currentProjectURL != nil {
+            return "Saved"
+        }
+
+        return "Autosave on"
+    }
+
+    var projectSaveStatusSystemImage: String {
+        if isSavingCurrentProject {
+            return "arrow.triangle.2.circlepath"
+        }
+
+        if currentProjectURL != nil {
+            return "checkmark.circle"
+        }
+
+        return "arrow.clockwise.circle"
     }
 
     var mediaAssets: [MediaAsset] {

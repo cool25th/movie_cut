@@ -69,7 +69,7 @@
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
 | R1-01 | 우상단 **단일 Export**(주 버튼 + ▾ 포맷) | ✅ 구현(2026-06-16): 단일 `ControlGroup`(Export + 포맷 ▾), Share는 export 결과 후 드롭다운 내부 노출. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(141 tests / 37 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. 스크린샷: `/tmp/moviecut-ui-evidence/r1-01_single_export.png`, crop `/tmp/moviecut-ui-evidence/r1-01_single_export_toolbar_crop.png` | 주 Export 1개 + 드롭다운에 포맷, Share는 결과 후 노출 | P0 |
-| R1-02 | 프로젝트명 + **저장상태** 인디케이터 | ❌ | 타이틀 영역에 프로젝트명, "저장됨/저장 중" 표시 | P1 |
+| R1-02 | 프로젝트명 + **저장상태** 인디케이터 | ✅ 구현(2026-06-16, Codex R1-02): `ContentView.swift` principal toolbar가 프로젝트명과 저장 상태(`projectDisplayName`, `projectSaveStatusLabel`, `projectSaveStatusSystemImage`)를 표시하고 accessibility label/value/hint를 제공. `EditorViewModel.swift` read-only presentation properties만 추가했으며 save/autosave persistence semantics는 변경 없음. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(168 tests / 43 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 타이틀 영역에 프로젝트명, "저장됨/저장 중" 표시 | P1 |
 | R1-03 | 비율/해상도 배지 | 🟡 canvas picker | 현재 캔버스 비율 + export 해상도 한눈에 | P2 |
 | R1-04 | undo/redo 좌측 클러스터 | ✅ | 유지 | — |
 
@@ -119,8 +119,8 @@
 ## 4. 우선순위 로드맵
 - **P0 완료** — R1-01, R3-04, R4-01, R4-03, R5-01.
 - **P0 잔여** — 없음.
-- **P1 완료** — R4-02, R5-02, R5-03.
-- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감, R1-02.
+- **P1 완료** — R1-02, R4-02, R5-02, R5-03.
+- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감.
 - **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R1-03, R2-01, R3-02/03.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 

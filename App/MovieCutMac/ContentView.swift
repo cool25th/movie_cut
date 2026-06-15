@@ -33,6 +33,10 @@ struct ContentView: View {
         }
         .frame(minWidth: 1024, minHeight: 720)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                projectStatusToolbarItem
+            }
+
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { Task { await viewModel.undo() } }) {
                     Label("Undo", systemImage: "arrow.uturn.backward")
@@ -126,6 +130,26 @@ struct ContentView: View {
         .sheet(isPresented: $isTemplatePickerPresented) {
             TemplatePickerView(viewModel: viewModel)
         }
+    }
+
+    private var projectStatusToolbarItem: some View {
+        HStack(spacing: MovieCutSpacing.small) {
+            Text(viewModel.projectDisplayName)
+                .font(.headline.weight(.semibold))
+                .lineLimit(1)
+
+            Label {
+                Text(viewModel.projectSaveStatusLabel)
+            } icon: {
+                Image(systemName: viewModel.projectSaveStatusSystemImage)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(NSLocalizedString("Project save status", comment: ""))
+        .accessibilityValue("\(viewModel.projectDisplayName), \(viewModel.projectSaveStatusLabel)")
+        .accessibilityHint(NSLocalizedString("Shows the current project name and save or autosave status.", comment: ""))
     }
 
     private var exportToolbarControl: some View {

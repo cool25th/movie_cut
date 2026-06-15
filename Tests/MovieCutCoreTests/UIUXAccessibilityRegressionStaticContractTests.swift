@@ -156,7 +156,10 @@ struct UIUXAccessibilityRegressionStaticContractTests {
             #"Label("AI Assistant", systemImage: "sparkles")"#,
             #"Label("Auto Highlights", systemImage: "wand.and.stars")"#,
             #"Label("Analysis Results", systemImage: "chart.line.uptrend.xyaxis")"#,
-            #"InspectorBasicSection(viewModel: viewModel, clip: clip)"#,
+            #"selectedClipInspectorSections(for: clip)"#,
+            #"mode: InspectorBasicMode.audio"#,
+            #"mode: InspectorBasicMode.text"#,
+            #"mode: InspectorBasicMode.visual"#,
             #"InspectorEffectsSection(viewModel: viewModel, clip: clip)"#,
             #"InspectorAnalysisSection(viewModel: viewModel, clip: clip)"#,
         ] {

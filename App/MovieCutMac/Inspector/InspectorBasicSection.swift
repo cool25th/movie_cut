@@ -1,43 +1,122 @@
 import SwiftUI
 import MovieCutCore
 
+enum InspectorBasicMode {
+    case full
+    case visual
+    case audio
+    case text
+}
+
 struct InspectorBasicSection: View {
     @Bindable var viewModel: EditorViewModel
     let clip: Clip
+    let mode: InspectorBasicMode
 
     private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
 
+    init(viewModel: EditorViewModel, clip: Clip, mode: InspectorBasicMode = .full) {
+        self.viewModel = viewModel
+        self.clip = clip
+        self.mode = mode
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            clipInfoSection
-            transformSection
-            if isStickerClip {
-                stickerTransformSection
-            }
-            opacitySection
-
-            if clip.kind.supportsVolume {
-                volumeSection
-                fadeDurationSection
-                equalizerSection
-            }
-
-            if clip.kind == .audio || clip.kind == .video {
-                autoCutSection
-            }
-
-            if clip.kind == .video {
-                autoReframeSection
-            }
-
-            if clip.kind.supportsSpeed {
-                speedSection
-            }
-
-            if let textContent = clip.textContent {
-                textContentSection(textContent)
+            switch mode {
+            case .full:
+                fullSections
+            case .visual:
+                visualSections
+            case .audio:
+                audioSections
+            case .text:
+                textSections
             }
         }
+    }
+
+    @ViewBuilder
+    private var fullSections: some View {
+        clipInfoSection
+        transformSection
+        if isStickerClip {
+            stickerTransformSection
+        }
+        opacitySection
+
+        if clip.kind.supportsVolume {
+            volumeSection
+            fadeDurationSection
+            equalizerSection
+        }
+
+        if clip.kind == .audio || clip.kind == .video {
+            autoCutSection
+        }
+
+        if clip.kind == .video {
+            autoReframeSection
+        }
+
+        if clip.kind.supportsSpeed {
+            speedSection
+        }
+
+        if let textContent = clip.textContent {
+            textContentSection(textContent)
+        }
+    }
+
+    @ViewBuilder
+    private var visualSections: some View {
+        clipInfoSection
+        transformSection
+        if isStickerClip {
+            stickerTransformSection
+        }
+        opacitySection
+
+        if clip.kind.supportsSpeed {
+            speedSection
+        }
+
+        if clip.kind == .video {
+            autoReframeSection
+        }
+    }
+
+    @ViewBuilder
+    private var audioSections: some View {
+        clipInfoSection
+
+        if clip.kind.supportsVolume {
+            volumeSection
+            fadeDurationSection
+            equalizerSection
+        }
+
+        if clip.kind == .audio || clip.kind == .video {
+            autoCutSection
+        }
+
+        if clip.kind.supportsSpeed {
+            speedSection
+        }
+    }
+
+    @ViewBuilder
+    private var textSections: some View {
+        if let textContent = clip.textContent {
+            textContentSection(textContent)
+        }
+
+        clipInfoSection
+        transformSection
+        if isStickerClip {
+            stickerTransformSection
+        }
+        opacitySection
     }
 
     /// Subject-tracking auto reframe with preview/apply/cancel (F-19).
@@ -441,7 +520,7 @@ struct InspectorBasicSection: View {
 
     private func textContentSection(_ textContent: TextClipContent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(isStickerClip ? "Sticker" : "Text")
+            Text(isStickerClip ? "Sticker" : "Style")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 

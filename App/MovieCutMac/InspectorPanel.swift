@@ -22,12 +22,7 @@ struct InspectorPanel: View {
                     // first so they are reachable without scrolling past the
                     // project-wide tools; those collapse into a disclosure.
                     if let clip = viewModel.selectedClip {
-                        InspectorBasicSection(viewModel: viewModel, clip: clip)
-                            .movieCutCard()
-                        InspectorEffectsSection(viewModel: viewModel, clip: clip)
-                            .movieCutCard()
-                        InspectorAnalysisSection(viewModel: viewModel, clip: clip)
-                            .movieCutCard()
+                        selectedClipInspectorSections(for: clip)
 
                         Divider()
                             .overlay(MovieCutTheme.divider)
@@ -61,6 +56,27 @@ struct InspectorPanel: View {
         }
         .frame(minWidth: 240)
         .movieCutPanelBackground()
+    }
+
+    /// R4-01: selected clip inspectors swap by ClipKind instead of showing
+    /// the all-purpose clip inspector as the first/default surface.
+    @ViewBuilder
+    private func selectedClipInspectorSections(for clip: Clip) -> some View {
+        switch clip.kind {
+        case .audio:
+            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
+                .movieCutCard()
+        case .text:
+            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
+                .movieCutCard()
+        case .video, .image:
+            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)
+                .movieCutCard()
+            InspectorEffectsSection(viewModel: viewModel, clip: clip)
+                .movieCutCard()
+            InspectorAnalysisSection(viewModel: viewModel, clip: clip)
+                .movieCutCard()
+        }
     }
 
     /// Project-wide tools that are not tied to the selected clip.

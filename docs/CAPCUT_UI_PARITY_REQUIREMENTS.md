@@ -88,7 +88,7 @@
 ### R4. 우측 인스펙터 — `App/MovieCutMac/InspectorPanel.swift`, `Inspector/*`
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
-| R4-01 | **선택종류별 패널 스왑** | 🟡 clip-first 단일 | 오디오→Volume/Fade/Denoise만, 텍스트→Style만, 비디오→Transform/Adjust/Effects | P0 |
+| R4-01 | **선택종류별 패널 스왑** | ✅ 구현(2026-06-16): `InspectorPanel.swift`가 `clip.kind`로 `InspectorBasicMode.audio`/`.text`/`.visual` 컨텍스트를 선택. 오디오는 Volume/Fade Duration/Equalizer/Noise Reduction 중심, 텍스트는 Style 중심, 비디오/이미지는 Transform/Adjust/Effects/Analysis 카드 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | 오디오→Volume/Fade/Denoise만, 텍스트→Style만, 비디오→Transform/Adjust/Effects | P0 |
 | R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ❌ DisclosureGroup만 | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
 | R4-03 | **거버넌스 텍스트 제거(UX-02)** | ❌ `InspectorExportSection.swift` 24곳 | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
 | R4-04 | 전역도구 접힘 + Export 하단 고정 | ✅ | 유지 | — |

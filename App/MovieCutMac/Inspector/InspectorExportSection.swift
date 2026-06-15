@@ -210,6 +210,102 @@ struct InspectorExportSection: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Text(exportGoldenStatusCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export golden status")
+                .accessibilityValue(exportGoldenStatusAccessibilityValue)
+                .accessibilityHint("Use this status to avoid calling a settings preview a verified export. Attach an actual export artifact path and hash before using single fixture verified wording.")
+
+            Text(exportGoldenEvidenceRequirementCopy)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export golden evidence requirement")
+                .accessibilityValue(exportGoldenEvidenceRequirementAccessibilityValue)
+                .accessibilityHint("This is the minimum evidence checklist before reporting single fixture export verified. It still does not allow full-suite, device, or release-ready claims.")
+
+            Text(exportArtifactIdentityGuardCopy)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export artifact identity guard")
+                .accessibilityValue(exportArtifactIdentityGuardAccessibilityValue)
+                .accessibilityHint("Use this identity guard before citing the artifact in QA notes. Copied manifests or mismatched artifact stems must stay blocked evidence.")
+
+            Text(exportEvidenceScopeCopy)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export evidence scope")
+                .accessibilityValue(exportEvidenceScopeAccessibilityValue)
+                .accessibilityHint("Use this scope label when discussing the latest QA artifact. It limits the claim to one preflight fixture and blocks broader release claims.")
+
+            Text(exportGoldenNextActionCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export golden next action")
+                .accessibilityValue(exportGoldenNextActionAccessibilityValue)
+                .accessibilityHint("Follow this next action before upgrading the report from preflight evidence to product ExportEngine evidence.")
+
+            Text(exportCloseoutDecisionCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export closeout decision")
+                .accessibilityValue(exportCloseoutDecisionAccessibilityValue)
+                .accessibilityHint("Use this closeout decision in the final report so preflight success is not mistaken for product ExportEngine, device, or release-ready evidence.")
+
+            Text(exportRetroClaimCopy)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export retro claim boundary")
+                .accessibilityValue(exportRetroClaimAccessibilityValue)
+                .accessibilityHint("Use this one-line boundary in retro notes. It keeps accepted preflight evidence separate from blocked product export claims.")
+
+            Text(exportRetroCitationCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export retro citation")
+                .accessibilityValue(exportRetroCitationAccessibilityValue)
+                .accessibilityHint("Read this exact citation line before sending 21:00 retro notes. It prevents using the preflight MP4 as a product ExportEngine or release-ready claim.")
+
+            Text(exportFreezeHandoffCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export freeze handoff")
+                .accessibilityValue(exportFreezeHandoffAccessibilityValue)
+                .accessibilityHint("Use this handoff row at evidence freeze. It names the next owner and prevents additional fixtures or release claims after scope lock.")
+
+            Text(exportFinalReportBoundaryCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export final report boundary")
+                .accessibilityValue(exportFinalReportBoundaryAccessibilityValue)
+                .accessibilityHint("Use this final report boundary when preparing the 21:00 retro so the accepted preflight evidence and blocked product claims stay in separate rows.")
+
+            Text(exportFreezeReviewCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export freeze review gate")
+                .accessibilityValue(exportFreezeReviewAccessibilityValue)
+                .accessibilityHint("At 17:00 evidence freeze, read this gate before changing the export status. If the verifier output or artifact identity is missing, keep the claim blocked.")
+
+            Text(exportFinalOperatorHandoffCopy)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Export final operator handoff")
+                .accessibilityValue(exportFinalOperatorHandoffAccessibilityValue)
+                .accessibilityHint("Use this handoff before the last operator report so the accepted preflight artifact is not merged with product ExportEngine, device, or release-ready evidence.")
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Export summary")
@@ -290,7 +386,103 @@ struct InspectorExportSection: View {
     }
 
     private var exportSummaryAccessibilityValue: String {
-        "\(summaryLine). Video \(videoCodecLabel), \(qualityLabel). Audio \(audioCodecLabel). Format \(viewModel.currentProject.exportSettings.containerFormat.displayName). Estimated size \(estimatedFileSizeLabel)."
+        "\(summaryLine). Video \(videoCodecLabel), \(qualityLabel). Audio \(audioCodecLabel). Format \(viewModel.currentProject.exportSettings.containerFormat.displayName). Estimated size \(estimatedFileSizeLabel). \(exportGoldenStatusAccessibilityValue). \(exportGoldenEvidenceRequirementAccessibilityValue). \(exportArtifactIdentityGuardAccessibilityValue). \(exportEvidenceScopeAccessibilityValue). \(exportGoldenNextActionAccessibilityValue). \(exportCloseoutDecisionAccessibilityValue). \(exportRetroClaimAccessibilityValue). \(exportRetroCitationAccessibilityValue). \(exportFreezeHandoffAccessibilityValue). \(exportFinalReportBoundaryAccessibilityValue). \(exportFreezeReviewAccessibilityValue). \(exportFinalOperatorHandoffAccessibilityValue)."
+    }
+
+    private var exportGoldenStatusCopy: String {
+        "Golden status: no single-fixture export artifact is attached yet. Do not claim full-suite, device, or release-ready verification."
+    }
+
+    private var exportGoldenStatusAccessibilityValue: String {
+        "No single fixture export artifact path or hash is attached. Settings are ready for the next export attempt only, not verified output evidence."
+    }
+
+    private var exportGoldenEvidenceRequirementCopy: String {
+        "Verified wording requires fixture id, artifact path, hash or pixel checksum, expected spec, and failure bucket equal to null."
+    }
+
+    private var exportGoldenEvidenceRequirementAccessibilityValue: String {
+        "Minimum evidence: fixture id, export artifact path, hash or pixel checksum, expected spec, and failure bucket null. Single fixture only; not full-suite, device, or release-ready evidence."
+    }
+
+    private var exportArtifactIdentityGuardCopy: String {
+        "Evidence identity guard: cite only a qa-evidence manifest and MP4 pair with matching moviecut-export-golden-2026-06-12-* stems."
+    }
+
+    private var exportArtifactIdentityGuardAccessibilityValue: String {
+        "Verifier requires qa-evidence storage, canonical manifest and MP4 basenames, and matching stems before the preflight artifact can be cited in QA notes."
+    }
+
+    private var exportEvidenceScopeCopy: String {
+        "Latest QA label: single fixture preflight evidence only; ExportEngine E2E, iOS device, full-suite, and release-ready claims remain blocked."
+    }
+
+    private var exportEvidenceScopeAccessibilityValue: String {
+        "Accepted scope is single fixture preflight evidence only. Blocked claims are ExportEngine end to end, iOS device, full-suite, and release-ready verification."
+    }
+
+    private var exportGoldenNextActionCopy: String {
+        "Next: keep the preflight artifact path and hash attached. Upgrade only after a product ExportEngine artifact is captured and verified separately."
+    }
+
+    private var exportGoldenNextActionAccessibilityValue: String {
+        "Do not upgrade this row to ExportEngine verified until a separate product ExportEngine artifact path, hash, expected spec, and failure bucket null are attached."
+    }
+
+    private var exportCloseoutDecisionCopy: String {
+        "Closeout label: preflight artifact accepted · product ExportEngine evidence blocked. Keep this split in 21:00 retro notes."
+    }
+
+    private var exportCloseoutDecisionAccessibilityValue: String {
+        "Accepted evidence is the single fixture preflight artifact only. Blocked evidence remains product ExportEngine artifact, device smoke, full-suite, and release-ready verification."
+    }
+
+    private var exportRetroClaimCopy: String {
+        "Retro claim: cite the AVAssetWriter single-fixture preflight artifact only; keep product ExportEngine E2E, full-suite, device, and release-ready claims blocked."
+    }
+
+    private var exportRetroClaimAccessibilityValue: String {
+        "For retro notes, accepted wording is AVAssetWriter single fixture preflight evidence accepted. Blocked wording is product ExportEngine end to end, full-suite, device, and release-ready evidence."
+    }
+
+    private var exportRetroCitationCopy: String {
+        "Retro citation: artifact path/hash may support single-fixture preflight only; quote the verifier failures as [] and keep ExportEngine E2E/device/release-ready blocked."
+    }
+
+    private var exportRetroCitationAccessibilityValue: String {
+        "Use this citation only with the canonical qa-evidence manifest and MP4. If the path, hash, or verifier output is missing, report export evidence as pending instead of verified."
+    }
+
+    private var exportFreezeHandoffCopy: String {
+        "Freeze handoff: no new fixture, suite, or device claim after scope lock. Next owner should attach the existing verifier output or keep export evidence pending."
+    }
+
+    private var exportFreezeHandoffAccessibilityValue: String {
+        "After evidence freeze, do not broaden the preflight result. Next owner is PM or QA reviewer, who must cite the existing verifier output, artifact path, and hash, or leave the claim blocked."
+    }
+
+    private var exportFinalReportBoundaryCopy: String {
+        "Final report boundary: accepted row = single-fixture preflight artifact; blocked row = product ExportEngine E2E, iOS device, full-suite, and release-ready evidence."
+    }
+
+    private var exportFinalReportBoundaryAccessibilityValue: String {
+        "For the 21:00 retro table, keep accepted evidence and blocked claims in separate rows. Do not merge the preflight artifact into product export, device, full-suite, or release-ready status."
+    }
+
+    private var exportFreezeReviewCopy: String {
+        "17:00 freeze review: accepted only when verifier failures are [] and manifest/MP4 identity matches; otherwise keep product ExportEngine and release claims blocked."
+    }
+
+    private var exportFreezeReviewAccessibilityValue: String {
+        "Evidence freeze requires verifier failures empty, matching qa-evidence manifest and MP4 stems, canonical hash, and failure bucket null. Missing any item means the preflight evidence stays pending and broader export claims remain blocked."
+    }
+
+    private var exportFinalOperatorHandoffCopy: String {
+        "Final operator handoff: quote accepted preflight artifact path/hash separately from blocked product ExportEngine, device, full-suite, and release-ready claims."
+    }
+
+    private var exportFinalOperatorHandoffAccessibilityValue: String {
+        "Before the final report, the operator must cite the canonical verifier output and keep product ExportEngine end to end, iOS device, full-suite, and release-ready evidence in the blocked row."
     }
 
     private var estimatedVideoBitrateMbps: Double {

@@ -15,12 +15,17 @@ struct TimelineView: View {
     @State private var draggedClipId: UUID? = nil
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
+    @State private var timelineViewportWidth: CGFloat = 900
 
     private let trackHeight: CGFloat = 50
     private let rulerHeight: CGFloat = 24
     private let trimHandleWidth: CGFloat = 8
     private let minimumClipDuration: TimeInterval = 0.1
     private let markerLabelWidth: CGFloat = 132
+    private let minimumTimelineContentWidth: CGFloat = 900
+    private let timelineZoomRange: ClosedRange<Double> = 20...300
+    private let fitTimelineFallbackWidth: CGFloat = 900
+    private let minimumFitDuration: TimeInterval = 0.1
 
     private var pixelsPerSecond: Double {
         viewModel.timelineZoom
@@ -33,7 +38,7 @@ struct TimelineView: View {
     private var timelineContentWidth: CGFloat {
         let markerEnd = sortedMarkers.map(\.time).max() ?? 0
         let visibleSeconds = max(viewModel.visibleTimelineDuration, markerEnd + 2)
-        return max(900, CGFloat(visibleSeconds) * CGFloat(pixelsPerSecond) + markerLabelWidth)
+        return max(minimumTimelineContentWidth, CGFloat(visibleSeconds) * CGFloat(pixelsPerSecond) + markerLabelWidth)
     }
 
     var body: some View {
@@ -88,8 +93,21 @@ struct TimelineView: View {
         // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
         .frame(minHeight: 210)
         .background(MovieCutTheme.editorBackground)
+        .background(timelineViewportWidthReader)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
+    }
+
+    private var timelineViewportWidthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear {
+                    timelineViewportWidth = proxy.size.width
+                }
+                .onChange(of: proxy.size.width) { _, newWidth in
+                    timelineViewportWidth = newWidth
+                }
+        }
     }
 
     private var selectedClipToolbar: some View {
@@ -234,16 +252,68 @@ struct TimelineView: View {
             .accessibilityLabel(NSLocalizedString("타임라인 축소", comment: ""))
             .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
 
+            Slider(value: Binding(
+                    get: { viewModel.timelineZoom },
+                    set: { viewModel.timelineZoom = clampedTimelineZoom($0) }
+                ),
+                in: timelineZoomRange
+            )
+            .frame(width: 120)
+            .controlSize(.small)
+            .accessibilityLabel(NSLocalizedString("Timeline zoom slider", comment: ""))
+            .accessibilityHint(NSLocalizedString("Adjusts pixels per second in the timeline.", comment: ""))
+
             Button(action: { viewModel.zoomTimelineIn() }) {
                 Image(systemName: "plus.magnifyingglass")
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(NSLocalizedString("타임라인 확대", comment: ""))
             .accessibilityHint(NSLocalizedString("Zooms the timeline in.", comment: ""))
+
+            Text(timelineZoomDisplay)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 54, alignment: .trailing)
+                .accessibilityLabel(NSLocalizedString("Timeline zoom", comment: ""))
+                .accessibilityValue(timelineZoomDisplay)
+
+            Button {
+                fitTimelineToAvailableWidth(timelineViewportWidth)
+            } label: {
+                Label(NSLocalizedString("Fit", comment: ""), systemImage: "arrow.left.and.right")
+            }
+            .buttonStyle(.borderless)
+            .help("Fit Timeline")
+            .accessibilityLabel(NSLocalizedString("Fit Timeline", comment: ""))
+            .accessibilityHint(NSLocalizedString("Fits the visible timeline duration in the available timeline width.", comment: ""))
         }
         .font(.caption)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Timeline zoom controls", comment: ""))
+    }
+
+    private var timelineZoomDisplay: String {
+        "\(Int(clampedTimelineZoom(viewModel.timelineZoom).rounded())) px/s"
+    }
+
+    private func fitTimelineToAvailableWidth(_ availableWidth: CGFloat) {
+        viewModel.timelineZoom = fittedTimelineZoom(for: availableWidth)
+    }
+
+    private func fittedTimelineZoom(for availableWidth: CGFloat) -> Double {
+        let safeAvailableWidth = availableWidth.isFinite && availableWidth > 0 ? availableWidth : fitTimelineFallbackWidth
+        let trackHeaderWidth = 80 + MovieCutSpacing.small * 2
+        let availableContentWidth = max(1, safeAvailableWidth - trackHeaderWidth)
+        let targetContentWidth = max(minimumTimelineContentWidth, availableContentWidth)
+        let timelinePixelsWidth = max(1, targetContentWidth - markerLabelWidth)
+        let duration = max(viewModel.visibleTimelineDuration, minimumFitDuration)
+
+        return clampedTimelineZoom(Double(timelinePixelsWidth / CGFloat(duration)))
+    }
+
+    private func clampedTimelineZoom(_ zoom: Double) -> Double {
+        guard zoom.isFinite else { return timelineZoomRange.lowerBound }
+        return min(timelineZoomRange.upperBound, max(timelineZoomRange.lowerBound, zoom))
     }
 
     private var timeRuler: some View {

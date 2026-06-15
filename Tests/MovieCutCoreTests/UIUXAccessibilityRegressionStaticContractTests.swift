@@ -159,8 +159,10 @@ struct UIUXAccessibilityRegressionStaticContractTests {
             #"selectedClipInspectorSections(for: clip)"#,
             #"mode: InspectorBasicMode.audio"#,
             #"mode: InspectorBasicMode.text"#,
-            #"mode: InspectorBasicMode.visual"#,
-            #"InspectorEffectsSection(viewModel: viewModel, clip: clip)"#,
+            #"visualClipInspectorSections(for: clip)"#,
+            #"Picker("Inspector section", selection: $selectedInspectorSubtab)"#,
+            #".accessibilityLabel("Inspector section")"#,
+            #".accessibilityHint("Switches between clip inspector sections.")"#,
             #"InspectorAnalysisSection(viewModel: viewModel, clip: clip)"#,
         ] {
             #expect(inspector.contains(marker))

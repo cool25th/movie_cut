@@ -2,9 +2,20 @@ import AppKit
 import SwiftUI
 import MovieCutCore
 
+private enum InspectorSubtab: String, CaseIterable, Identifiable {
+    case basic = "Basic"
+    case speed = "Speed"
+    case animation = "Animation"
+    case adjustment = "Adjustment"
+    case mask = "Mask"
+
+    var id: Self { self }
+}
+
 struct InspectorPanel: View {
     @Bindable var viewModel: EditorViewModel
     @State private var projectToolsExpanded = false
+    @State private var selectedInspectorSubtab: InspectorSubtab = .basic
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,6 +67,9 @@ struct InspectorPanel: View {
         }
         .frame(minWidth: 240)
         .movieCutPanelBackground()
+        .onChange(of: viewModel.selectedClipId) { _, _ in
+            selectedInspectorSubtab = .basic
+        }
     }
 
     /// R4-01: selected clip inspectors swap by ClipKind instead of showing
@@ -70,13 +84,43 @@ struct InspectorPanel: View {
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
                 .movieCutCard()
         case .video, .image:
+            visualClipInspectorSections(for: clip)
+        }
+    }
+
+    /// R4-02: visual clips use Inspector subtabs instead of rendering every
+    /// visual/effects/mask/animation control at once.
+    @ViewBuilder
+    private func visualClipInspectorSections(for clip: Clip) -> some View {
+        Picker("Inspector section", selection: $selectedInspectorSubtab) {
+            ForEach(InspectorSubtab.allCases) { subtab in
+                Text(subtab.rawValue).tag(subtab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Inspector section")
+        .accessibilityHint("Switches between clip inspector sections.")
+
+        switch selectedInspectorSubtab {
+        case .basic:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)
                 .movieCutCard()
-            InspectorEffectsSection(viewModel: viewModel, clip: clip)
+        case .speed:
+            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.speed)
                 .movieCutCard()
-            InspectorAnalysisSection(viewModel: viewModel, clip: clip)
+        case .adjustment:
+            InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.adjustment)
+                .movieCutCard()
+        case .mask:
+            InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.mask)
+                .movieCutCard()
+        case .animation:
+            InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.animation)
                 .movieCutCard()
         }
+
+        InspectorAnalysisSection(viewModel: viewModel, clip: clip)
+            .movieCutCard()
     }
 
     /// Project-wide tools that are not tied to the selected clip.

@@ -4,6 +4,7 @@ import MovieCutCore
 enum InspectorBasicMode {
     case full
     case visual
+    case speed
     case audio
     case text
 }
@@ -28,6 +29,8 @@ struct InspectorBasicSection: View {
                 fullSections
             case .visual:
                 visualSections
+            case .speed:
+                speedSections
             case .audio:
                 audioSections
             case .text:
@@ -77,12 +80,19 @@ struct InspectorBasicSection: View {
         }
         opacitySection
 
-        if clip.kind.supportsSpeed {
-            speedSection
-        }
-
         if clip.kind == .video {
             autoReframeSection
+        }
+    }
+
+    @ViewBuilder
+    private var speedSections: some View {
+        clipInfoSection
+
+        if clip.kind.supportsSpeed {
+            speedSection
+        } else {
+            speedUnavailableSection
         }
     }
 
@@ -456,6 +466,13 @@ struct InspectorBasicSection: View {
                 }
             }
         }
+    }
+
+    private var speedUnavailableSection: some View {
+        Text("This clip type does not support speed controls.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private let fontFamilies = [

@@ -3,33 +3,86 @@ import SwiftUI
 import MovieCutCore
 import UniformTypeIdentifiers
 
+enum InspectorEffectsMode {
+    case full
+    case adjustment
+    case mask
+    case animation
+}
+
 struct InspectorEffectsSection: View {
     @Bindable var viewModel: EditorViewModel
     let clip: Clip
+    let mode: InspectorEffectsMode
 
     @State private var isTransitionExpanded = false
     @State private var isAnimationExpanded = false
     @State private var selectedKeyframeId: UUID?
 
+    init(viewModel: EditorViewModel, clip: Clip, mode: InspectorEffectsMode = .full) {
+        self.viewModel = viewModel
+        self.clip = clip
+        self.mode = mode
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            colorCorrectionSection
-            maskSection
-            backgroundRemovalSection
-            styleTransferSection
-            effectsSection
-
-            if clip.kind == .video {
-                chromaKeySection
+            switch mode {
+            case .full:
+                fullSections
+            case .adjustment:
+                adjustmentSections
+            case .mask:
+                maskSections
+            case .animation:
+                animationSections
             }
-
-            reverseFreezeSection
-            transitionSection
-            animationSection
         }
         .onChange(of: viewModel.selectedClipId) { _, _ in
             selectedKeyframeId = nil
         }
+    }
+
+    @ViewBuilder
+    private var fullSections: some View {
+        colorCorrectionSection
+        maskSection
+        backgroundRemovalSection
+        styleTransferSection
+        effectsSection
+
+        if clip.kind == .video {
+            chromaKeySection
+        }
+
+        reverseFreezeSection
+        transitionSection
+        animationSection
+    }
+
+    @ViewBuilder
+    private var adjustmentSections: some View {
+        colorCorrectionSection
+        backgroundRemovalSection
+        styleTransferSection
+        effectsSection
+
+        if clip.kind == .video {
+            chromaKeySection
+        }
+
+        reverseFreezeSection
+    }
+
+    @ViewBuilder
+    private var maskSections: some View {
+        maskSection
+    }
+
+    @ViewBuilder
+    private var animationSections: some View {
+        transitionSection
+        animationSection
     }
 
     private var colorCorrectionSection: some View {

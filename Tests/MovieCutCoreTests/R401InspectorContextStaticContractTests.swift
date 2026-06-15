@@ -45,11 +45,21 @@ struct R401InspectorContextStaticContractTests {
         let visualBranch = try section(
             in: panel,
             from: "case .video, .image:",
+            to: "    }\n\n    /// R4-02"
+        )
+        #expect(visualBranch.contains("visualClipInspectorSections(for: clip)"))
+
+        let visualHelper = try section(
+            in: panel,
+            from: "private func visualClipInspectorSections(for clip: Clip) -> some View",
             to: "    }\n\n    /// Project-wide tools"
         )
-        #expect(visualBranch.contains("mode: InspectorBasicMode.visual"))
-        #expect(visualBranch.contains("InspectorEffectsSection(viewModel: viewModel, clip: clip)"))
-        #expect(visualBranch.contains("InspectorAnalysisSection(viewModel: viewModel, clip: clip)"))
+        #expect(visualHelper.contains("mode: InspectorBasicMode.visual"))
+        #expect(visualHelper.contains("mode: InspectorBasicMode.speed"))
+        #expect(visualHelper.contains("mode: InspectorEffectsMode.adjustment"))
+        #expect(visualHelper.contains("mode: InspectorEffectsMode.mask"))
+        #expect(visualHelper.contains("mode: InspectorEffectsMode.animation"))
+        #expect(visualHelper.contains("InspectorAnalysisSection(viewModel: viewModel, clip: clip)"))
     }
 
     @Test("InspectorBasicMode.audio routes to volume fade denoise and equalizer controls")

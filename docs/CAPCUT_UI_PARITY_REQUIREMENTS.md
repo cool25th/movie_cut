@@ -32,12 +32,13 @@
 - ✅ **프리뷰 빈 상태 CTA + 트랜스포트 기본 정돈**(R3-04/UX-06): `PreviewPanel.swift` empty state의 `Import Media` CTA가 `NSOpenPanel`→`viewModel.importMedia(_:)` 경로로 연결됨.
 - 🟡 **타임라인 단일 도구 바 집약 코어**(R5-01/UX-05): `TimelineView.swift` 상단 한 줄에 Edit/Quick Tools/Zoom이 모였고 split/delete/ripple/duplicate/snap/marker/quick tools가 노출됨. 단, freeze/reverse는 아직 타임라인 바가 아니라 Inspector Effects의 `Reverse & Freeze`에 남아 있음.
 - ✅ **인스펙터 clip-first + 선택종류별 패널 스왑**(R4-01): 선택 시 `clip.kind`에 따라 audio/text/visual 인스펙터 컨텍스트 분기, 전역도구 `DisclosureGroup` 접힘(`InspectorPanel.swift`).
+- ✅ **인스펙터 서브탭**(R4-02): 비디오/이미지 선택 시 `InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask 세그먼트로 Basic/Speed/Adjustment/Mask/Animation 섹션 전환.
 - ✅ **디자인 토큰·접근성 정적 계약**(UX-07/UX-08): `MovieCutSpacing`/`MovieCutRadius`/`MovieCutTheme`/카드·헤더 헬퍼와 `UIUXAccessibilityRegressionStaticContractTests.swift` 반영.
 
 **핵심 상태:**
 - ✅ **export 거버넌스 텍스트 제거**(R4-03/UX-02, 2026-06-16): `InspectorExportSection.swift` export summary는 포맷/해상도/코덱/품질/예상 크기/비트레이트 정보만 노출.
 - ❌ 라이브러리 **탭별 검색·썸네일 그리드·hover 미리보기**.
-- ❌ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
+- ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
 - 🟡 타임라인 **단일 도구 바 완성**: 코어 집약은 완료, freeze/reverse 타임라인 바 승격과 줌 slider/fit은 잔여.
 - 🟡 디자인 토큰 기반 통일 완료, **CapCut 98% visual parity loop**(side-by-side 시각 폴리시 튜닝)는 잔여.
 - ❌ 상단 바 **프로젝트명·저장상태**.
@@ -93,7 +94,7 @@
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
 | R4-01 | **선택종류별 패널 스왑** | ✅ 구현(2026-06-16): `InspectorPanel.swift`가 `clip.kind`로 `InspectorBasicMode.audio`/`.text`/`.visual` 컨텍스트를 선택. 오디오는 Volume/Fade Duration/Equalizer/Noise Reduction 중심, 텍스트는 Style 중심, 비디오/이미지는 Transform/Adjust/Effects/Analysis 카드 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | 오디오→Volume/Fade/Denoise만, 텍스트→Style만, 비디오→Transform/Adjust/Effects | P0 |
-| R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ❌ DisclosureGroup만 | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
+| R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ✅ 구현(2026-06-16): `InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask 세그먼트가 비디오/이미지 선택 클립에만 노출되고, `InspectorBasicMode.speed` 및 `InspectorEffectsMode.adjustment`/`.mask`/`.animation`으로 기존 섹션을 전환. 오디오/텍스트는 R4-01 컨텍스트별 표면 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(151 tests / 39 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
 | R4-03 | **거버넌스 텍스트 제거(UX-02)** | ✅ 구현(2026-06-16): `InspectorExportSection.swift` export summary의 export-golden 거버넌스 문단/접근성 copy/helper 제거. `ExportFormatStaticContractTests.swift`는 금지 문자열 부재와 사용자용 export controls 유지 계약으로 갱신. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
 | R4-04 | 전역도구 접힘 + Export 하단 고정 | ✅ | 유지 | — |
 
@@ -117,7 +118,8 @@
 ## 4. 우선순위 로드맵
 - **P0 완료** — R1-01, R3-04, R4-01, R4-03.
 - **P0 잔여** — R5-01: 단일 행 집약 코어는 완료, freeze/reverse를 타임라인 바에 승격하는 후속만 남음.
-- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감, R4-02, R5-02/03, R1-02.
+- **P1 완료** — R4-02.
+- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감, R5-02/03, R1-02.
 - **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R1-03, R2-01, R3-02/03.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 

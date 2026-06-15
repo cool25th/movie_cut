@@ -11,7 +11,7 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 HSplitView {
                     MediaLibraryPanel(viewModel: viewModel)
-                        .frame(minWidth: 200, maxWidth: 300)
+                        .frame(minWidth: 320, idealWidth: 340, maxWidth: 380)
 
                     PreviewPanel(viewModel: viewModel)
                         .frame(minWidth: 400)
@@ -19,10 +19,6 @@ struct ContentView: View {
                     InspectorPanel(viewModel: viewModel)
                         .frame(minWidth: 240, maxWidth: 320)
                 }
-
-                Divider()
-
-                QuickToolsPanel(viewModel: viewModel)
 
                 Divider()
 
@@ -34,7 +30,7 @@ struct ContentView: View {
             TimelineView(viewModel: viewModel)
                 .frame(minHeight: 210, idealHeight: 260, maxHeight: .infinity)
         }
-        .frame(minWidth: 1024, minHeight: 460)
+        .frame(minWidth: 1024, minHeight: 720)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { Task { await viewModel.undo() } }) {
@@ -228,7 +224,7 @@ struct ContentView: View {
     }
 }
 
-private struct QuickToolsPanel: View {
+struct QuickToolsPanel: View {
     var viewModel: EditorViewModel
 
     @State private var runningTool: QuickTool?

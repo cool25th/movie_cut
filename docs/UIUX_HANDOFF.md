@@ -88,20 +88,23 @@ VSplitView                                  // 상하 분할
 
 ### Tier 1 — 구조 개선 (2~4일)
 
-#### UX-04. 탭형 라이브러리/브라우저 (CapCut식) ❌
+#### UX-04. 탭형 라이브러리/브라우저 (CapCut식) ✅ 구현(2026-06-15)
 - **목표**: 좌측을 Media/Audio/Text/Stickers/Effects/Transitions/Filters 탭 브라우저로 격상, 폭 확대(320~380).
 - **구현**: `MediaLibraryPanel.swift`의 기존 탭(Library/Media/Stickers/Music/SFX)을 확장 — Text/Effects/Transitions/Filters 탭 추가(이미 ViewModel에 텍스트 템플릿/효과/전환 추가 메서드 존재). 각 탭에서 드래그 또는 더블클릭으로 타임라인에 추가.
 - **AC**: 한 곳에서 모든 콘텐츠 소스를 탐색·추가할 수 있다. 드래그 인터랙션 유지.
+- **구현 완료(2026-06-15)**: `MediaLibraryPanel.swift` — 브라우저 탭을 **Media / Audio / Text / Stickers / Effects / Transitions / Filters** 7개로 재구성. Media의 import/drop/asset drag/Add to Timeline 유지, Audio는 Music+SFX를 한 탭에 그룹화, Text는 Custom Text + `TextTemplate.builtIn` 템플릿 추가, Stickers는 기존 `StickerPickerView` 유지, Effects/Filters/Transitions는 선택 클립에 기존 `updateSelectedEffects`/`updateSelectedTransition` 경로로 적용하고 비선택 시 select-clip empty state 표시. `ContentView.swift`의 좌측 브라우저 폭을 320~380으로 확대. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(127 tests PASS), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
 
-#### UX-05. 타임라인 위 단일 도구 바 ❌
+#### UX-05. 타임라인 위 단일 도구 바 ✅ 구현(2026-06-15)
 - **목표**: 분할/삭제/리플삭제/복제/줌/마커/자석/스냅을 타임라인 바로 위 한 줄 아이콘 바로 집약. QuickToolsPanel의 분석 도구(Auto Cut/Detect Scenes/Reframe/Beat 등)도 이 바 또는 라이브러리 탭으로 이동.
 - **구현**: `TimelineView.swift` 헤더 영역 확장 + `ContentView.swift:206` `QuickToolsPanel` 통합/이동. 기존 `selectedClipToolbar`(TimelineView)와 합치기.
 - **AC**: 편집 도구가 타임라인 근처 한 줄에 모이고, 흩어진 스트립이 사라진다.
+- **구현 완료(2026-06-15)**: `ContentView.swift`의 별도 Quick Tools 스트립을 제거하고, `TimelineView.swift` 헤더를 **Timeline / Edit / Quick Tools / Zoom** 단일 행으로 재구성. 기존 selected clip 도구(스냅 시작/끝, Split, Duplicate, layer front/back, Delete, Ripple Delete), QuickToolsPanel 분석 도구(Auto Cut, Detect Scenes, Detect Beats, Clear Beats, Auto Reframe, Noise Reduce, Extract Audio), Marker 컨트롤, Zoom 컨트롤을 타임라인 바로 위로 통합. 기존 ViewModel/Command/렌더 경로는 변경하지 않고 UI 호출 위치만 이동. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(135 tests PASS), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
 
-#### UX-06. 프리뷰 영역 폴리시 ❌
+#### UX-06. 프리뷰 영역 폴리시 ✅ 구현(2026-06-15)
 - **목표**: 큰 프리뷰 + 하단 트랜스포트 정돈(타임코드/재생/프레임/볼륨/비율). 빈 상태에 "미디어 추가" CTA.
 - **구현**: `PreviewPanel.swift` — 컨트롤 바 간격·정렬 정리, empty state에 큰 import 버튼(드롭 영역과 연결).
 - **AC**: 프리뷰가 시각적 중심이 되고, 빈 상태에서 다음 행동이 명확하다.
+- **구현 완료(2026-06-15)**: `PreviewPanel.swift` — 빈 프리뷰 상태를 아이콘/설명/`Import Media` CTA가 있는 centered empty state로 교체하고, CTA는 `NSOpenPanel`→`viewModel.importMedia(_:)` 기존 import 경로에 연결. 하단 트랜스포트는 Current/Duration timecode badge, 중앙 frame-back/play/frame-forward capsule, canvas ratio label, volume slider로 정돈. 선택된 클립 overlay/playback wiring은 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(135 tests PASS), `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build` BUILD SUCCEEDED.
 
 ### Tier 2 — 시각 폴리시 (지속)
 

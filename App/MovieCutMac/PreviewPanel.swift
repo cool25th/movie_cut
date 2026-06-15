@@ -1,5 +1,7 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
+import UniformTypeIdentifiers
 
 struct PreviewPanel: View {
     var viewModel: EditorViewModel
@@ -24,9 +26,7 @@ struct PreviewPanel: View {
                             previewOverlay(for: clip)
                         }
                 } else {
-                    Text(NSLocalizedString("No clip selected", comment: ""))
-                        .foregroundStyle(.white.opacity(0.4))
-                        .font(.title3)
+                    previewEmptyState
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -46,54 +46,69 @@ struct PreviewPanel: View {
                 syncTimelinePlayhead(to: currentTime)
             }
 
-            HStack(spacing: 12) {
-                Text(timecodeString(playbackEngine.currentTime))
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(width: 80)
-                    .accessibilityElement()
-                    .accessibilityLabel(NSLocalizedString("Current Time", comment: ""))
-                    .accessibilityValue(timecodeString(playbackEngine.currentTime))
+            HStack(spacing: 14) {
+                previewTimeBadge(
+                    title: NSLocalizedString("Current", comment: ""),
+                    value: timecodeString(playbackEngine.currentTime),
+                    accessibilityLabel: NSLocalizedString("Current Time", comment: "")
+                )
 
-                Spacer()
+                Spacer(minLength: 12)
 
-                Button(action: { playbackEngine.togglePlayPause() }) {
-                    Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
+                HStack(spacing: 8) {
+                    Button(action: {
+                        seekByFrames(-1)
+                    }) {
+                        Image(systemName: "backward.frame")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(playbackEngine.playerItem == nil)
+                    .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
+
+                    Button(action: { playbackEngine.togglePlayPause() }) {
+                        Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title3.weight(.semibold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(playbackEngine.playerItem == nil)
+                    .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
+
+                    Button(action: {
+                        seekByFrames(1)
+                    }) {
+                        Image(systemName: "forward.frame")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(playbackEngine.playerItem == nil)
+                    .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
+                    .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
                 }
-                .buttonStyle(.borderless)
-                .font(.title3)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
-                .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+                )
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
 
-                Button(action: {
-                    seekByFrames(-1)
-                }) {
-                    Image(systemName: "backward.frame")
-                }
-                .buttonStyle(.borderless)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
-                .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
+                Spacer(minLength: 12)
 
-                Button(action: {
-                    seekByFrames(1)
-                }) {
-                    Image(systemName: "forward.frame")
-                }
-                .buttonStyle(.borderless)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
-                .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
+                previewTimeBadge(
+                    title: NSLocalizedString("Duration", comment: ""),
+                    value: timecodeString(playbackEngine.duration),
+                    accessibilityLabel: NSLocalizedString("Duration", comment: "")
+                )
 
-                Spacer()
-
-                Text(timecodeString(playbackEngine.duration))
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(width: 80)
+                Label(canvasRatioText, systemImage: "rectangle.ratio")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityElement()
-                    .accessibilityLabel(NSLocalizedString("Duration", comment: ""))
-                    .accessibilityValue(timecodeString(playbackEngine.duration))
+                    .lineLimit(1)
+                    .accessibilityLabel(NSLocalizedString("Canvas ratio", comment: ""))
+                    .accessibilityValue(canvasRatioText)
 
                 HStack(spacing: 6) {
                     Image(systemName: "speaker.wave.2")
@@ -122,6 +137,76 @@ struct PreviewPanel: View {
     private var canvasAspectRatio: CGFloat {
         let size = viewModel.currentProject.canvas.size
         return size.width / max(size.height, 1)
+    }
+
+    private var canvasRatioText: String {
+        viewModel.currentProject.canvas.aspectRatio.displayName
+    }
+
+    private var hasImportedMedia: Bool {
+        !viewModel.currentProject.mediaLibrary.assets.isEmpty
+    }
+
+    private var emptyStateTitle: String {
+        hasImportedMedia
+            ? NSLocalizedString("Select a clip to preview", comment: "")
+            : NSLocalizedString("Add media to start editing", comment: "")
+    }
+
+    private var emptyStateMessage: String {
+        hasImportedMedia
+            ? NSLocalizedString("Choose a timeline clip to see playback, overlays, and frame controls here.", comment: "")
+            : NSLocalizedString("Import video, audio, or images, then drag them to the timeline.", comment: "")
+    }
+
+    private var previewEmptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: hasImportedMedia ? "play.rectangle" : "plus.rectangle.on.rectangle")
+                .font(.system(size: 46, weight: .light))
+                .foregroundStyle(.white.opacity(0.55))
+                .accessibilityHidden(true)
+
+            VStack(spacing: 5) {
+                Text(emptyStateTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.86))
+                Text(emptyStateMessage)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+
+            Button {
+                openImportPanel()
+            } label: {
+                Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
+                    .font(.callout.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+            .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
+        }
+        .padding(24)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(emptyStateTitle)
+        .accessibilityHint(emptyStateMessage)
+    }
+
+    private func previewTimeBadge(title: String, value: String, accessibilityLabel: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.caption, design: .monospaced).weight(.medium))
+                .foregroundStyle(.primary)
+        }
+        .frame(width: 86, alignment: .leading)
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(value)
     }
 
     @ViewBuilder
@@ -252,7 +337,21 @@ struct PreviewPanel: View {
         if let clip = viewModel.selectedClip {
             return String(format: NSLocalizedString("Selected clip %@", comment: ""), String(describing: clip.kind))
         }
-        return NSLocalizedString("No clip selected", comment: "")
+        return emptyStateTitle
+    }
+
+    private func openImportPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.movie, .video, .audio, .image]
+        if panel.runModal() == .OK {
+            let urls = panel.urls
+            Task { @MainActor in
+                await viewModel.importMedia(urls)
+            }
+        }
     }
 
     private func loadSelectedClipAsset() {

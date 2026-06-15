@@ -38,7 +38,7 @@ struct TimelineView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text(NSLocalizedString("Timeline", comment: ""))
                     .font(.headline)
                 if !sortedMarkers.isEmpty {
@@ -46,36 +46,22 @@ struct TimelineView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if viewModel.hasSelectedClips {
-                    Divider()
-                        .frame(height: 16)
-                    selectedClipToolbar
-                }
-                Spacer()
-                Button(action: { viewModel.goToPreviousMarker() }) {
-                    Image(systemName: "backward.end.fill")
-                }
-                .buttonStyle(.borderless)
-                .disabled(viewModel.previousMarker == nil)
-                .help("Previous Marker")
-                Button(action: { viewModel.goToNextMarker() }) {
-                    Image(systemName: "forward.end.fill")
-                }
-                .buttonStyle(.borderless)
-                .disabled(viewModel.nextMarker == nil)
-                .help("Next Marker")
-                Button(action: { viewModel.zoomTimelineOut() }) {
-                    Image(systemName: "minus.magnifyingglass")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(NSLocalizedString("타임라인 축소", comment: ""))
-                .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
-                Button(action: { viewModel.zoomTimelineIn() }) {
-                    Image(systemName: "plus.magnifyingglass")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(NSLocalizedString("타임라인 확대", comment: ""))
-                .accessibilityHint(NSLocalizedString("Zooms the timeline in.", comment: ""))
+
+                Divider()
+                    .frame(height: 22)
+
+                selectedClipToolbar
+
+                Divider()
+                    .frame(height: 22)
+
+                QuickToolsPanel(viewModel: viewModel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Divider()
+                    .frame(height: 22)
+
+                zoomControls
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -102,6 +88,10 @@ struct TimelineView: View {
 
     private var selectedClipToolbar: some View {
         HStack(spacing: 4) {
+            Text(NSLocalizedString("Edit", comment: ""))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
             Button {
                 viewModel.snapPlayheadToSelectedClipStart()
             } label: {
@@ -175,6 +165,33 @@ struct TimelineView: View {
             .help("Ripple Delete Selected Clip")
         }
         .font(.caption)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 4) {
+            Text(NSLocalizedString("Zoom", comment: ""))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Button(action: { viewModel.zoomTimelineOut() }) {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(NSLocalizedString("타임라인 축소", comment: ""))
+            .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
+
+            Button(action: { viewModel.zoomTimelineIn() }) {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(NSLocalizedString("타임라인 확대", comment: ""))
+            .accessibilityHint(NSLocalizedString("Zooms the timeline in.", comment: ""))
+        }
+        .font(.caption)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Timeline zoom controls", comment: ""))
     }
 
     private var timeRuler: some View {

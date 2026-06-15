@@ -13,62 +13,43 @@ struct MediaLibraryPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(NSLocalizedString("Library", comment: ""))
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(NSLocalizedString("Library", comment: ""))
+                        .font(.headline)
+                    Text(selectedLibraryTab.subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
-                if selectedLibraryTab == .media {
-                    Button(action: openImportPanel) {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(NSLocalizedString("Import", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Opens a file picker to import media.", comment: ""))
-                    Button(action: openTextSheet) {
-                        Image(systemName: "textformat")
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(NSLocalizedString("Add Text", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Creates a new text clip.", comment: ""))
+                headerActions
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+
+            libraryTabBar
+
+            Group {
+                switch selectedLibraryTab {
+                case .media:
+                    mediaTabContent
+                case .audio:
+                    audioTabContent
+                case .text:
+                    textTabContent
+                case .stickers:
+                    stickersTabContent
+                case .effects:
+                    effectsTabContent
+                case .transitions:
+                    transitionsTabContent
+                case .filters:
+                    filtersTabContent
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-
-            Picker(NSLocalizedString("Library", comment: ""), selection: $selectedLibraryTab) {
-                ForEach(LibraryTab.allCases) { tab in
-                    Text(tab.displayName).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 8)
-            .accessibilityLabel(NSLocalizedString("Library", comment: ""))
-
-            switch selectedLibraryTab {
-            case .media:
-                mediaContent
-
-                if viewModel.selectedAsset != nil {
-                    Button(NSLocalizedString("Add to Timeline", comment: "")) {
-                        Task { await viewModel.addClipToTimeline() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
-                    .accessibilityLabel(NSLocalizedString("Add to Timeline", comment: ""))
-                    .accessibilityHint(NSLocalizedString("Adds the selected library asset to the timeline.", comment: ""))
-                }
-            case .stickers:
-                StickerPickerView { sticker in
-                    Task { await viewModel.addSticker(sticker) }
-                }
-            case .music:
-                MusicLibraryView(viewModel: viewModel)
-            case .sfx:
-                SFXPickerView(viewModel: viewModel)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 200)
+        .frame(minWidth: 320)
         .background(Color(nsColor: .controlBackgroundColor))
         .onDrop(of: [.fileURL, .movie, .image], isTargeted: nil) { providers in
             handleDrop(providers)
@@ -105,6 +86,268 @@ struct MediaLibraryPanel: View {
             .padding(16)
             .accessibilityElement(children: .contain)
         }
+    }
+
+    @ViewBuilder
+    private var headerActions: some View {
+        HStack(spacing: 6) {
+            if selectedLibraryTab == .media {
+                Button(action: openImportPanel) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("Import", comment: ""))
+                .accessibilityHint(NSLocalizedString("Opens a file picker to import media.", comment: ""))
+            }
+
+            if selectedLibraryTab == .text {
+                Button(action: openTextSheet) {
+                    Image(systemName: "textformat")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("Add Text", comment: ""))
+                .accessibilityHint(NSLocalizedString("Creates a new text clip.", comment: ""))
+            }
+        }
+    }
+
+    private var libraryTabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(LibraryTab.allCases) { tab in
+                    Button {
+                        selectedLibraryTab = tab
+                    } label: {
+                        Label(tab.displayName, systemImage: tab.systemImage)
+                            .font(.caption.weight(selectedLibraryTab == tab ? .semibold : .medium))
+                            .labelStyle(.titleAndIcon)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(selectedLibraryTab == tab ? Color.accentColor.opacity(0.18) : Color(nsColor: .separatorColor).opacity(0.10))
+                            )
+                            .foregroundStyle(selectedLibraryTab == tab ? Color.accentColor : Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.displayName)
+                    .accessibilityHint(tab.accessibilityHint)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+        }
+        .accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))
+    }
+
+    @ViewBuilder
+    private var mediaTabContent: some View {
+        VStack(spacing: 8) {
+            mediaContent
+
+            if viewModel.selectedAsset != nil {
+                Button(NSLocalizedString("Add to Timeline", comment: "")) {
+                    Task { await viewModel.addClipToTimeline() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+                .accessibilityLabel(NSLocalizedString("Add to Timeline", comment: ""))
+                .accessibilityHint(NSLocalizedString("Adds the selected library asset to the timeline.", comment: ""))
+            }
+        }
+    }
+
+    private var audioTabContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                librarySection(title: NSLocalizedString("Music", comment: ""), systemImage: "music.note.list") {
+                    MusicLibraryView(viewModel: viewModel)
+                }
+
+                librarySection(title: NSLocalizedString("Sound Effects", comment: ""), systemImage: "waveform.badge.plus") {
+                    SFXPickerView(viewModel: viewModel)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 12)
+        }
+        .accessibilityLabel(NSLocalizedString("Audio browser", comment: ""))
+    }
+
+    private var textTabContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                Button {
+                    openTextSheet()
+                } label: {
+                    browserActionRow(
+                        title: NSLocalizedString("Custom Text", comment: ""),
+                        subtitle: NSLocalizedString("Type a custom text clip at the playhead", comment: ""),
+                        systemImage: "textformat"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("Add custom text", comment: ""))
+                .accessibilityHint(NSLocalizedString("Opens the text clip creation sheet.", comment: ""))
+
+                ForEach(MovieCutCore.TextTemplate.builtIn) { template in
+                    Button {
+                        Task { await viewModel.addTextTemplateClip(template) }
+                    } label: {
+                        browserActionRow(
+                            title: template.name,
+                            subtitle: textTemplateSubtitle(template),
+                            systemImage: "text.badge.plus"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(format: NSLocalizedString("Add %@ text template", comment: ""), template.name))
+                    .accessibilityHint(NSLocalizedString("Adds this text template to the timeline.", comment: ""))
+                }
+            }
+            .padding(10)
+        }
+        .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
+    }
+
+    private var stickersTabContent: some View {
+        StickerPickerView { sticker in
+            Task { await viewModel.addSticker(sticker) }
+        }
+        .accessibilityLabel(NSLocalizedString("Sticker browser", comment: ""))
+    }
+
+    private var effectsTabContent: some View {
+        effectList(
+            title: NSLocalizedString("Effects", comment: ""),
+            systemImage: "sparkles",
+            types: EffectType.allCases.filter { $0 != .externalLUT },
+            emptyMessage: NSLocalizedString("Select a clip to apply effects.", comment: "")
+        )
+    }
+
+    private var filtersTabContent: some View {
+        effectList(
+            title: NSLocalizedString("Filters", comment: ""),
+            systemImage: "camera.filters",
+            types: filterEffectTypes,
+            emptyMessage: NSLocalizedString("Select a clip to apply filters.", comment: "")
+        )
+    }
+
+    private var transitionsTabContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if viewModel.selectedClip == nil {
+                    selectClipEmptyState(message: NSLocalizedString("Select a clip to apply a transition.", comment: ""))
+                }
+
+                ForEach(TransitionType.allCases, id: \.self) { type in
+                    Button {
+                        applyTransition(type)
+                    } label: {
+                        browserActionRow(
+                            title: type.displayName,
+                            subtitle: transitionSubtitle(type),
+                            systemImage: type == .none ? "nosign" : "rectangle.2.swap"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.selectedClip == nil)
+                    .accessibilityLabel(type.displayName)
+                    .accessibilityHint(NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
+                }
+            }
+            .padding(10)
+        }
+        .accessibilityLabel(NSLocalizedString("Transition browser", comment: ""))
+    }
+
+    @ViewBuilder
+    private func effectList(title: String, systemImage: String, types: [EffectType], emptyMessage: String) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if viewModel.selectedClip == nil {
+                    selectClipEmptyState(message: emptyMessage)
+                }
+
+                ForEach(types, id: \.self) { type in
+                    Button {
+                        applyEffect(type)
+                    } label: {
+                        browserActionRow(
+                            title: type.displayName,
+                            subtitle: effectSubtitle(type),
+                            systemImage: systemImage
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.selectedClip == nil)
+                    .accessibilityLabel(type.displayName)
+                    .accessibilityHint(String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
+                }
+            }
+            .padding(10)
+        }
+        .accessibilityLabel(title)
+    }
+
+    @ViewBuilder
+    private func selectClipEmptyState(message: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "cursorarrow.click.2")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.10)))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func librarySection<Content: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.08)))
+    }
+
+    private func browserActionRow(title: String, subtitle: String, systemImage: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(Color.accentColor.opacity(0.75))
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .separatorColor).opacity(0.10)))
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -212,6 +455,118 @@ struct MediaLibraryPanel: View {
             .accessibilityLabel(NSLocalizedString("Generate Proxy", comment: ""))
             .accessibilityValue(proxyStateText(asset))
             .accessibilityHint(NSLocalizedString("Creates a lower-resolution proxy file for smoother editing.", comment: ""))
+        }
+    }
+
+    private var filterEffectTypes: [EffectType] {
+        [.cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT, .grayscale, .sepia]
+    }
+
+    private func textTemplateSubtitle(_ template: MovieCutCore.TextTemplate) -> String {
+        let animation = template.animation.map { textAnimationName($0.type) } ?? NSLocalizedString("No animation", comment: "")
+        return String(format: NSLocalizedString("%@ · %.0f pt · %@", comment: ""), template.content.fontFamily, template.content.fontSize, animation)
+    }
+
+    private func effectSubtitle(_ type: EffectType) -> String {
+        switch type {
+        case .brightness, .contrast, .saturation, .temperature, .exposure:
+            return NSLocalizedString("Color adjustment for the selected clip", comment: "")
+        case .fadeIn, .fadeOut, .crossDissolve:
+            return NSLocalizedString("Timing effect for the selected clip", comment: "")
+        case .grayscale, .sepia, .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT:
+            return NSLocalizedString("Visual look filter for the selected clip", comment: "")
+        case .blur, .styleTransfer:
+            return NSLocalizedString("Creative effect for the selected clip", comment: "")
+        case .externalLUT:
+            return NSLocalizedString("Imported LUT effect", comment: "")
+        }
+    }
+
+    private func transitionSubtitle(_ type: TransitionType) -> String {
+        if type == .none {
+            return NSLocalizedString("Remove the selected clip transition", comment: "")
+        }
+        return String(format: NSLocalizedString("%@ transition · 0.5s default", comment: ""), transitionCategoryName(type.category))
+    }
+
+    private func textAnimationName(_ type: TextAnimationType) -> String {
+        switch type {
+        case .fadeIn: return NSLocalizedString("Fade In", comment: "")
+        case .fadeOut: return NSLocalizedString("Fade Out", comment: "")
+        case .typewriter: return NSLocalizedString("Typewriter", comment: "")
+        case .bounce: return NSLocalizedString("Bounce", comment: "")
+        case .slideUp: return NSLocalizedString("Slide Up", comment: "")
+        case .slideDown: return NSLocalizedString("Slide Down", comment: "")
+        case .scale: return NSLocalizedString("Scale", comment: "")
+        }
+    }
+
+    private func transitionCategoryName(_ category: TransitionCategory) -> String {
+        switch category {
+        case .basic: return NSLocalizedString("Basic", comment: "")
+        case .wipe: return NSLocalizedString("Wipe", comment: "")
+        case .slide: return NSLocalizedString("Slide", comment: "")
+        case .zoom: return NSLocalizedString("Zoom", comment: "")
+        case .stylized: return NSLocalizedString("Stylized", comment: "")
+        }
+    }
+
+    private func applyEffect(_ type: EffectType) {
+        guard let clip = viewModel.selectedClip else { return }
+        let parameters = Dictionary(
+            uniqueKeysWithValues: parameterDefinitions(for: type).map { ($0.key, $0.defaultValue) }
+        )
+        var effects = clip.effects
+        effects.append(Effect(type: type, parameters: parameters))
+        Task { await viewModel.updateSelectedEffects(effects) }
+    }
+
+    private func applyTransition(_ type: TransitionType) {
+        guard let clip = viewModel.selectedClip else { return }
+        let transition: MovieCutCore.Transition?
+        if type == .none {
+            transition = nil
+        } else {
+            transition = MovieCutCore.Transition(
+                id: clip.transition?.id ?? UUID(),
+                type: type,
+                duration: clip.transition?.duration ?? 0.5
+            )
+        }
+        Task { await viewModel.updateSelectedTransition(transition) }
+    }
+
+    private func parameterDefinitions(for type: EffectType) -> [EffectParameterDefinition] {
+        switch type {
+        case .brightness:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -1 ... 1, defaultValue: 0)]
+        case .contrast:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: 0 ... 2, defaultValue: 1)]
+        case .saturation:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: 0 ... 2, defaultValue: 1)]
+        case .temperature:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -1 ... 1, defaultValue: 0)]
+        case .exposure:
+            return [EffectParameterDefinition(key: "amount", title: "Amount", range: -2 ... 2, defaultValue: 0)]
+        case .fadeIn, .fadeOut, .crossDissolve:
+            return [EffectParameterDefinition(key: "duration", title: "Duration", range: 0.1 ... 3, defaultValue: 0.5, valueFormat: "%.1fs")]
+        case .grayscale:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 1)]
+        case .sepia:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
+        case .blur:
+            return [EffectParameterDefinition(key: "radius", title: "Radius", range: 1 ... 12, defaultValue: 1, valueFormat: "%.0f")]
+        case .styleTransfer:
+            return [
+                EffectParameterDefinition(key: "styleIndex", title: "Style", range: 1 ... 5, defaultValue: 1, valueFormat: "%.0f"),
+                EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.75)
+            ]
+        case .cinematicLUT, .vintageLUT, .vividLUT, .coolLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.8)]
+        case .noirLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
+        case .externalLUT:
+            return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 1)]
         }
     }
 
@@ -453,9 +808,12 @@ struct MediaLibraryPanel: View {
 
 private enum LibraryTab: CaseIterable, Identifiable {
     case media
+    case audio
+    case text
     case stickers
-    case music
-    case sfx
+    case effects
+    case transitions
+    case filters
 
     var id: Self { self }
 
@@ -463,12 +821,53 @@ private enum LibraryTab: CaseIterable, Identifiable {
         switch self {
         case .media:
             return NSLocalizedString("Media", comment: "")
+        case .audio:
+            return NSLocalizedString("Audio", comment: "")
+        case .text:
+            return NSLocalizedString("Text", comment: "")
         case .stickers:
             return NSLocalizedString("Stickers", comment: "")
-        case .music:
-            return NSLocalizedString("Music", comment: "")
-        case .sfx:
-            return NSLocalizedString("SFX", comment: "")
+        case .effects:
+            return NSLocalizedString("Effects", comment: "")
+        case .transitions:
+            return NSLocalizedString("Transitions", comment: "")
+        case .filters:
+            return NSLocalizedString("Filters", comment: "")
         }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .media:
+            return NSLocalizedString("Import and drag clips", comment: "")
+        case .audio:
+            return NSLocalizedString("Music and sound effects", comment: "")
+        case .text:
+            return NSLocalizedString("Titles and captions", comment: "")
+        case .stickers:
+            return NSLocalizedString("Emoji and visual stickers", comment: "")
+        case .effects:
+            return NSLocalizedString("Clip effects", comment: "")
+        case .transitions:
+            return NSLocalizedString("Clip boundary motion", comment: "")
+        case .filters:
+            return NSLocalizedString("Looks and LUT-style filters", comment: "")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .media: return "photo.on.rectangle.angled"
+        case .audio: return "waveform"
+        case .text: return "textformat"
+        case .stickers: return "face.smiling"
+        case .effects: return "sparkles"
+        case .transitions: return "rectangle.2.swap"
+        case .filters: return "camera.filters"
+        }
+    }
+
+    var accessibilityHint: String {
+        String(format: NSLocalizedString("Shows the %@ library browser.", comment: ""), displayName)
     }
 }

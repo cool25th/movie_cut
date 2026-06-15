@@ -11,6 +11,8 @@ struct MovieCutMacApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel)
         }
+        .defaultSize(width: 1440, height: 900)
+        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Project") {

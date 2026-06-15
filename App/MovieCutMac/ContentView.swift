@@ -126,6 +126,31 @@ struct ContentView: View {
                 .accessibilityValue(exportButtonAccessibilityValue)
                 .accessibilityHint(exportButtonHelpText)
 
+                Menu {
+                    Button("Video (Explicit Bitrate)…") {
+                        Task { await viewModel.exportWithExplicitBitrate() }
+                    }
+                    Button("ProRes Master…") {
+                        Task { await viewModel.exportProResMaster() }
+                    }
+                    Divider()
+                    Button("Audio Only (M4A)…") {
+                        Task { await viewModel.exportAudioOnly() }
+                    }
+                    Button("Animated GIF…") {
+                        Task { await viewModel.exportAnimatedGIF() }
+                    }
+                    Button("Still Frame (PNG)…") {
+                        Task { await viewModel.exportStillFrame() }
+                    }
+                } label: {
+                    Label("Export As", systemImage: "square.and.arrow.up.on.square")
+                }
+                .disabled(viewModel.exportEngine.isExporting)
+                .help("Export to additional formats: explicit-bitrate video, ProRes master, audio-only M4A, animated GIF, or a still-frame PNG")
+                .accessibilityLabel("Export as other format")
+                .accessibilityHint("Choose explicit-bitrate video, ProRes, audio-only, animated GIF, or a still frame.")
+
                 if let exportURL = viewModel.lastExportURL {
                     ShareLink(item: exportURL) {
                         Label("Share", systemImage: "square.and.arrow.up")

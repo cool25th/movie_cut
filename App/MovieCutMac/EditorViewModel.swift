@@ -660,6 +660,135 @@ final class EditorViewModel {
         }
     }
 
+    /// Exports the project to a movie with an explicit average video bitrate via
+    /// the planner-backed `AVAssetWriter` path, instead of the preset approximation.
+    func exportWithExplicitBitrate() async {
+        let reconciledSettings = reconciledExportSettingsFromLegacyUI()
+        if currentProject.exportSettings != reconciledSettings {
+            await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
+            guard lastErrorMessage == nil else { return }
+        }
+
+        let settings = currentProject.exportSettings
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).\(settings.containerFormat.fileExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
+                project: snapshot,
+                to: url,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Exports a ProRes 422 master in a QuickTime container.
+    func exportProResMaster() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.quickTimeMovie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name)-prores.mov"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
+                project: snapshot,
+                to: url,
+                profileOverride: .proRes422,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Exports the project's mixed audio as a standalone `.m4a` file.
+    func exportAudioOnly() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "m4a") ?? .audio]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).m4a"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportAudioOnly(
+                project: snapshot,
+                to: url,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Exports an animated GIF rendered from the timeline.
+    func exportAnimatedGIF() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.gif]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name).gif"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportAnimatedGIF(
+                project: snapshot,
+                to: url,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Renders the frame at the playhead to a PNG still image.
+    func exportStillFrame() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name)-frame.png"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportStillFrame(
+                project: snapshot,
+                at: playheadTime,
+                to: url,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func cancelExport() {
         exportEngine.cancelExport()
     }

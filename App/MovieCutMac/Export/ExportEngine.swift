@@ -1,9 +1,11 @@
 import AVFoundation
 import AppKit
 import Foundation
+import ImageIO
 import MovieCutCore
 import Observation
 import QuartzCore
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -21,6 +23,10 @@ final class ExportEngine {
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
+
+    /// Centralized export decision engine: render size, explicit bitrate, codec
+    /// profile, file type, and writer output settings (see `MovieCutCore.ExportPlanner`).
+    @ObservationIgnored private let exportPlanner = ExportPlanner()
 
     @discardableResult
     func export(project: Project, to url: URL, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> URL {
@@ -1059,6 +1065,420 @@ final class ExportEngine {
         }
     }
 
+    // MARK: - Additional export kinds (ExportPlanner-backed)
+
+    /// Exports the project's mixed audio as a standalone AAC `.m4a` file.
+    ///
+    /// Reuses the same composition/audio-mix builder as the video path so
+    /// volume, fades, ducking, and EQ are preserved, then muxes audio only.
+    @discardableResult
+    func exportAudioOnly(
+        project: Project,
+        to url: URL,
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    ) async throws -> URL {
+        isExporting = true
+        exportProgress = 0
+        exportError = nil
+        lastExportURL = nil
+
+        do {
+            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            guard !exportPackage.composition.tracks(withMediaType: .audio).isEmpty else {
+                throw ExportEngineError.noExportableMedia
+            }
+            guard let exportSession = AVAssetExportSession(
+                asset: exportPackage.composition,
+                presetName: AVAssetExportPresetAppleM4A
+            ) else {
+                throw ExportEngineError.exportSessionCreationFailed
+            }
+
+            exportSession.audioMix = exportPackage.audioMix
+            activeExportSession = exportSession
+            startProgressPolling()
+
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+
+            try await exportSession.export(to: url, as: .m4a)
+            exportProgress = 1
+            lastExportURL = url
+            finishExport()
+            return url
+        } catch {
+            exportError = error.localizedDescription
+            finishExport()
+            throw error
+        }
+    }
+
+    /// Renders a single fully-composited still frame to a PNG at the requested
+    /// timeline time. Effects, transforms, and overlays render through the same
+    /// video composition used by export.
+    @discardableResult
+    func exportStillFrame(
+        project: Project,
+        at timeSeconds: Double,
+        to url: URL,
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    ) async throws -> URL {
+        let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+        guard !exportPackage.composition.tracks(withMediaType: .video).isEmpty else {
+            throw ExportEngineError.noExportableMedia
+        }
+
+        let generator = AVAssetImageGenerator(asset: exportPackage.composition)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        if let videoComposition = exportPackage.videoComposition {
+            generator.videoComposition = videoComposition
+        }
+
+        let clampedTime = min(max(timeSeconds, 0), max(project.timeline.duration, 0))
+        let requestedTime = CMTime(seconds: clampedTime, preferredTimescale: 600)
+        let cgImage = try generator.copyCGImage(at: requestedTime, actualTime: nil)
+
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        try writeImage(cgImage, to: url, type: UTType.png)
+        lastExportURL = url
+        return url
+    }
+
+    /// Renders an animated GIF by sampling composited frames across the timeline.
+    @discardableResult
+    func exportAnimatedGIF(
+        project: Project,
+        to url: URL,
+        frameRate: Int = 12,
+        maxEdge: Int = 480,
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    ) async throws -> URL {
+        isExporting = true
+        exportProgress = 0
+        exportError = nil
+        lastExportURL = nil
+
+        do {
+            let plan = exportPlanner.plan(
+                settings: project.exportSettings,
+                canvas: project.canvas,
+                mediaKind: .animatedGIF,
+                options: ExportPlanOptions(gifFrameRate: frameRate, gifMaxEdge: maxEdge)
+            )
+            guard let gif = plan.gif else {
+                throw ExportEngineError.exportSessionCreationFailed
+            }
+
+            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            let duration = project.timeline.duration
+            guard duration > 0, !exportPackage.composition.tracks(withMediaType: .video).isEmpty else {
+                throw ExportEngineError.noExportableMedia
+            }
+
+            let generator = AVAssetImageGenerator(asset: exportPackage.composition)
+            generator.appliesPreferredTrackTransform = true
+            generator.requestedTimeToleranceBefore = CMTime(seconds: gif.frameDelaySeconds / 2, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: gif.frameDelaySeconds / 2, preferredTimescale: 600)
+            generator.maximumSize = CGSize(width: gif.width, height: gif.height)
+            if let videoComposition = exportPackage.videoComposition {
+                generator.videoComposition = videoComposition
+            }
+
+            let frameCount = max(1, Int((duration * Double(gif.frameRate)).rounded(.down)))
+
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            guard let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                UTType.gif.identifier as CFString,
+                frameCount,
+                nil
+            ) else {
+                throw ExportEngineError.exportSessionCreationFailed
+            }
+
+            let fileProperties = [
+                kCGImagePropertyGIFDictionary as String: [
+                    kCGImagePropertyGIFLoopCount as String: gif.loopForever ? 0 : 1
+                ]
+            ] as CFDictionary
+            CGImageDestinationSetProperties(destination, fileProperties)
+
+            let frameProperties = [
+                kCGImagePropertyGIFDictionary as String: [
+                    kCGImagePropertyGIFDelayTime as String: gif.frameDelaySeconds
+                ]
+            ] as CFDictionary
+
+            for frameIndex in 0..<frameCount {
+                let time = CMTime(seconds: Double(frameIndex) / Double(gif.frameRate), preferredTimescale: 600)
+                let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+                CGImageDestinationAddImage(destination, cgImage, frameProperties)
+                exportProgress = Double(frameIndex + 1) / Double(frameCount)
+            }
+
+            guard CGImageDestinationFinalize(destination) else {
+                throw ExportEngineError.exportSessionCreationFailed
+            }
+
+            exportProgress = 1
+            lastExportURL = url
+            finishExport()
+            return url
+        } catch {
+            exportError = error.localizedDescription
+            finishExport()
+            throw error
+        }
+    }
+
+    /// Exports the project to a movie using an explicit average video bitrate.
+    ///
+    /// Unlike the preset-based `export(project:to:)` path, this drives an
+    /// `AVAssetWriter` with the planner's resolved `outputSettings`, so the
+    /// selected target bitrate (and ProRes mastering, when overridden) is
+    /// applied precisely instead of being approximated by `fileLengthLimit`.
+    @discardableResult
+    func exportVideoWithExplicitBitrate(
+        project: Project,
+        to url: URL,
+        profileOverride: VideoCompressionProfile? = nil,
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    ) async throws -> URL {
+        isExporting = true
+        exportProgress = 0
+        exportError = nil
+        lastExportURL = nil
+
+        do {
+            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            guard !exportPackage.composition.tracks.isEmpty else {
+                throw ExportEngineError.noExportableMedia
+            }
+
+            let plan = exportPlanner.plan(
+                settings: project.exportSettings,
+                canvas: project.canvas,
+                mediaKind: .video,
+                options: ExportPlanOptions(videoProfileOverride: profileOverride)
+            )
+            guard let videoOutputSettings = exportPlanner.assetWriterVideoOutputSettings(for: plan) else {
+                throw ExportEngineError.exportSessionCreationFailed
+            }
+
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+
+            let fileType: AVFileType = plan.fileExtension == "mov" ? .mov : .mp4
+            let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
+            let reader = try AVAssetReader(asset: exportPackage.composition)
+
+            let videoTracks = exportPackage.composition.tracks(withMediaType: .video)
+            var videoReaderOutput: AVAssetReaderVideoCompositionOutput?
+            var writerVideoInput: AVAssetWriterInput?
+            if !videoTracks.isEmpty {
+                let readerOutput = AVAssetReaderVideoCompositionOutput(
+                    videoTracks: videoTracks,
+                    videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                )
+                readerOutput.alwaysCopiesSampleData = false
+                if let videoComposition = exportPackage.videoComposition {
+                    readerOutput.videoComposition = videoComposition
+                } else {
+                    readerOutput.videoComposition = makeDefaultVideoComposition(for: exportPackage.composition, project: project)
+                }
+                guard reader.canAdd(readerOutput) else {
+                    throw ExportEngineError.exportSessionCreationFailed
+                }
+                reader.add(readerOutput)
+                videoReaderOutput = readerOutput
+
+                let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoOutputSettings)
+                input.expectsMediaDataInRealTime = false
+                guard writer.canAdd(input) else {
+                    throw ExportEngineError.exportSessionCreationFailed
+                }
+                writer.add(input)
+                writerVideoInput = input
+            }
+
+            let audioTracks = exportPackage.composition.tracks(withMediaType: .audio)
+            var audioReaderOutput: AVAssetReaderAudioMixOutput?
+            var writerAudioInput: AVAssetWriterInput?
+            if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
+                let readerOutput = AVAssetReaderAudioMixOutput(
+                    audioTracks: audioTracks,
+                    audioSettings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM,
+                        AVLinearPCMBitDepthKey: 16,
+                        AVLinearPCMIsFloatKey: false,
+                        AVLinearPCMIsBigEndianKey: false,
+                        AVLinearPCMIsNonInterleaved: false
+                    ]
+                )
+                readerOutput.audioMix = exportPackage.audioMix
+                if reader.canAdd(readerOutput) {
+                    reader.add(readerOutput)
+                    audioReaderOutput = readerOutput
+
+                    let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
+                    input.expectsMediaDataInRealTime = false
+                    if writer.canAdd(input) {
+                        writer.add(input)
+                        writerAudioInput = input
+                    }
+                }
+            }
+
+            guard reader.startReading() else {
+                throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            guard writer.startWriting() else {
+                throw writer.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            writer.startSession(atSourceTime: .zero)
+
+            let totalDuration = max(project.timeline.duration, 1.0 / 600.0)
+            if let writerVideoInput, let videoReaderOutput {
+                try await pumpSamples(
+                    output: UncheckedSendable(videoReaderOutput),
+                    input: UncheckedSendable(writerVideoInput),
+                    queueLabel: "moviecut.export.writer.video",
+                    totalDuration: totalDuration,
+                    reportsProgress: true
+                )
+            }
+            if let writerAudioInput, let audioReaderOutput {
+                try await pumpSamples(
+                    output: UncheckedSendable(audioReaderOutput),
+                    input: UncheckedSendable(writerAudioInput),
+                    queueLabel: "moviecut.export.writer.audio",
+                    totalDuration: totalDuration,
+                    reportsProgress: false
+                )
+            }
+
+            guard reader.status != .failed else {
+                throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+
+            await finishWriting(UncheckedSendable(writer))
+            guard writer.status == .completed else {
+                throw writer.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+
+            exportProgress = 1
+            lastExportURL = url
+            finishExport()
+            return url
+        } catch {
+            exportError = error.localizedDescription
+            finishExport()
+            throw error
+        }
+    }
+
+    /// Streams sample buffers from a reader output into a writer input, driving
+    /// the writer's pull model and updating progress from presentation time.
+    ///
+    /// AVFoundation reader outputs and writer inputs are not `Sendable`, but this
+    /// pump owns them for the duration of the transfer and serializes all access
+    /// through the writer's request queue, so they are passed in `@unchecked
+    /// Sendable` boxes.
+    private nonisolated func pumpSamples(
+        output: UncheckedSendable<AVAssetReaderOutput>,
+        input: UncheckedSendable<AVAssetWriterInput>,
+        queueLabel: String,
+        totalDuration: Double,
+        reportsProgress: Bool
+    ) async throws {
+        let queue = DispatchQueue(label: queueLabel)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
+                let writerInput = input.value
+                let readerOutput = output.value
+                while writerInput.isReadyForMoreMediaData {
+                    guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
+                        writerInput.markAsFinished()
+                        continuation.resume(returning: ())
+                        return
+                    }
+
+                    if reportsProgress, totalDuration > 0 {
+                        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                        if presentationTime.isFinite {
+                            let progress = min(max(presentationTime / totalDuration, 0), 1)
+                            Task { @MainActor [weak self] in
+                                self?.exportProgress = progress
+                            }
+                        }
+                    }
+
+                    if !writerInput.append(sampleBuffer) {
+                        continuation.resume(throwing: ExportEngineError.exportSessionCreationFailed)
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    /// Awaits an `AVAssetWriter`'s completion handler. The writer is passed in an
+    /// `@unchecked Sendable` box because it is not `Sendable` but is only touched
+    /// from this single awaiting continuation.
+    private nonisolated func finishWriting(_ writer: UncheckedSendable<AVAssetWriter>) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writer.value.finishWriting {
+                continuation.resume(returning: ())
+            }
+        }
+    }
+
+    /// Builds a default video composition for the explicit-bitrate reader path
+    /// when the export package has no custom composition (passthrough render).
+    private func makeDefaultVideoComposition(
+        for composition: AVComposition,
+        project: Project
+    ) -> AVMutableVideoComposition {
+        let videoComposition = AVMutableVideoComposition()
+        videoComposition.renderSize = exportPlanner.renderSize(for: project.exportSettings.resolution, canvas: project.canvas)
+        videoComposition.frameDuration = CMTime(
+            value: 1,
+            timescale: CMTimeScale(project.exportSettings.frameRate.framesPerSecond)
+        )
+
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
+        instruction.layerInstructions = composition.tracks(withMediaType: .video).map {
+            AVMutableVideoCompositionLayerInstruction(assetTrack: $0)
+        }
+        videoComposition.instructions = [instruction]
+        return videoComposition
+    }
+
+    /// Writes a single `CGImage` to disk as the supplied image type.
+    private func writeImage(_ image: CGImage, to url: URL, type: UTType) throws {
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL,
+            type.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw ExportEngineError.exportSessionCreationFailed
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw ExportEngineError.exportSessionCreationFailed
+        }
+    }
+
     func cancelExport() {
         activeExportSession?.cancelExport()
         progressTask?.cancel()
@@ -1080,6 +1500,17 @@ private struct ExportPackage {
     var composition: AVMutableComposition
     var videoComposition: AVMutableVideoComposition?
     var audioMix: AVMutableAudioMix?
+}
+
+/// Carries a non-`Sendable` value across a concurrency boundary when the caller
+/// guarantees exclusive, serialized access (used for AVFoundation reader/writer
+/// objects in the explicit-bitrate export pump).
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
 }
 
 private struct ExportClipInstructionMetadata {

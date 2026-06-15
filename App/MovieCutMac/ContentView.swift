@@ -114,48 +114,7 @@ struct ContentView: View {
 
                 Divider()
 
-                Button(action: { Task { await viewModel.exportProject() } }) {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
-                .disabled(viewModel.exportEngine.isExporting)
-                .help(exportButtonHelpText)
-                .accessibilityLabel("Export project")
-                .accessibilityValue(exportButtonAccessibilityValue)
-                .accessibilityHint(exportButtonHelpText)
-
-                Menu {
-                    Button("Video (Explicit Bitrate)…") {
-                        Task { await viewModel.exportWithExplicitBitrate() }
-                    }
-                    Button("ProRes Master…") {
-                        Task { await viewModel.exportProResMaster() }
-                    }
-                    Divider()
-                    Button("Audio Only (M4A)…") {
-                        Task { await viewModel.exportAudioOnly() }
-                    }
-                    Button("Animated GIF…") {
-                        Task { await viewModel.exportAnimatedGIF() }
-                    }
-                    Button("Still Frame (PNG)…") {
-                        Task { await viewModel.exportStillFrame() }
-                    }
-                } label: {
-                    Label("Export As", systemImage: "square.and.arrow.up.on.square")
-                }
-                .disabled(viewModel.exportEngine.isExporting)
-                .help("Export to additional formats: explicit-bitrate video, ProRes master, audio-only M4A, animated GIF, or a still-frame PNG")
-                .accessibilityLabel("Export as other format")
-                .accessibilityHint("Choose explicit-bitrate video, ProRes, audio-only, animated GIF, or a still frame.")
-
-                if let exportURL = viewModel.lastExportURL {
-                    ShareLink(item: exportURL) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share the most recent export file")
-                    .accessibilityLabel("Share latest export")
-                    .accessibilityValue(exportURL.lastPathComponent)
-                }
+                exportToolbarControl
             }
         }
         .sheet(isPresented: Binding(
@@ -167,6 +126,53 @@ struct ContentView: View {
         .sheet(isPresented: $isTemplatePickerPresented) {
             TemplatePickerView(viewModel: viewModel)
         }
+    }
+
+    private var exportToolbarControl: some View {
+        ControlGroup {
+            Button(action: { Task { await viewModel.exportProject() } }) {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+            .help(exportButtonHelpText)
+            .accessibilityLabel("Export project")
+            .accessibilityValue(exportButtonAccessibilityValue)
+            .accessibilityHint(exportButtonHelpText)
+
+            Menu {
+                Button("Video (Explicit Bitrate)…") {
+                    Task { await viewModel.exportWithExplicitBitrate() }
+                }
+                Button("ProRes Master…") {
+                    Task { await viewModel.exportProResMaster() }
+                }
+                Divider()
+                Button("Audio Only (M4A)…") {
+                    Task { await viewModel.exportAudioOnly() }
+                }
+                Button("Animated GIF…") {
+                    Task { await viewModel.exportAnimatedGIF() }
+                }
+                Button("Still Frame (PNG)…") {
+                    Task { await viewModel.exportStillFrame() }
+                }
+
+                if let exportURL = viewModel.lastExportURL {
+                    Divider()
+                    ShareLink(item: exportURL) {
+                        Label("Share latest export", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share the most recent export file")
+                    .accessibilityLabel("Share latest export")
+                    .accessibilityValue(exportURL.lastPathComponent)
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .help("Choose an export format or share the latest export.")
+            .accessibilityLabel("Export formats")
+            .accessibilityHint("Choose explicit-bitrate video, ProRes, audio-only, animated GIF, still frame, or share the latest export.")
+        }
+        .disabled(viewModel.exportEngine.isExporting)
     }
 
     private var toolbarCanvasPresets: [AspectRatio] {

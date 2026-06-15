@@ -87,6 +87,44 @@ public struct ThumbnailGenerator: Sendable {
     #endif
 }
 
+extension ThumbnailGenerator {
+    /// Returns a thumbnail from the cache, generating and caching it on a miss.
+    ///
+    /// The cache key is a cheap path-independent fingerprint (file size +
+    /// modification date + thumbnail parameters), so identical source media
+    /// reuses a single cached thumbnail and edits to the source invalidate it.
+    /// Generation falls back to the uncached path if the source cannot be
+    /// fingerprinted.
+    public static func cachedThumbnail(
+        for asset: MediaAsset,
+        at time: TimeInterval,
+        size: CGSize = defaultSize,
+        cache: RenderCache
+    ) async -> Data? {
+        let parameters = [
+            "thumbnail",
+            String(format: "%.3f", time),
+            "\(Int(size.width))x\(Int(size.height))"
+        ]
+        guard let key = try? RenderContentHasher.key(
+            fingerprintOfFileAt: asset.originalURL,
+            parameters: parameters
+        ) else {
+            return generate(for: asset, at: time, size: size)
+        }
+
+        if let cached = await cache.data(for: key) {
+            return cached
+        }
+
+        guard let data = generate(for: asset, at: time, size: size) else {
+            return nil
+        }
+        try? await cache.store(data, for: key)
+        return data
+    }
+}
+
 /// Deterministic target metadata for a generated video proxy.
 public struct ProxyGenerationPlan: Sendable, Equatable {
     /// The source media URL used to create the proxy.

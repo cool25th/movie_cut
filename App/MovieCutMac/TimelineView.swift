@@ -132,6 +132,31 @@ struct TimelineView: View {
             .accessibilityHint(NSLocalizedString("Splits the selected clip at the playhead.", comment: ""))
 
             Button {
+                Task {
+                    guard let selectedClip = viewModel.selectedClip else { return }
+                    await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)
+                }
+            } label: {
+                Image(systemName: "backward.fill")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!selectedClipSupportsVisualTimelineEffect)
+            .help("Reverse Selected Clip")
+            .accessibilityLabel(NSLocalizedString("Reverse Selected Clip", comment: ""))
+            .accessibilityHint(NSLocalizedString("Reverse Selected Clip toggles reverse playback for the selected visual clip.", comment: ""))
+
+            Button {
+                Task { await viewModel.freezeSelectedFrame() }
+            } label: {
+                Image(systemName: "snowflake")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!selectedClipSupportsVisualTimelineEffect)
+            .help("Freeze Selected Frame")
+            .accessibilityLabel(NSLocalizedString("Freeze Selected Frame", comment: ""))
+            .accessibilityHint(NSLocalizedString("Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.", comment: ""))
+
+            Button {
                 Task { await viewModel.duplicateSelectedClips() }
             } label: {
                 Image(systemName: "square.on.square")
@@ -189,6 +214,11 @@ struct TimelineView: View {
         .font(.caption)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))
+    }
+
+    private var selectedClipSupportsVisualTimelineEffect: Bool {
+        guard let selectedClip = viewModel.selectedClip else { return false }
+        return selectedClip.kind == .video || selectedClip.kind == .image
     }
 
     private var zoomControls: some View {

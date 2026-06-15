@@ -1,0 +1,164 @@
+# CapCut UI 유사도 — 요구사항 & 작업 가이드
+
+> 작성일: 2026-06-16 / 기준 브랜치: `feat/core-backend-expansion` / 관련 커밋: `a4d6116`(CapCut-style UI layout overhaul)
+> **이 문서만 읽고 다른 세션에서 바로 작업을 시작할 수 있도록 작성됨.** UX 백로그 원본은 `docs/UIUX_HANDOFF.md`, 기능 명세는 `docs/CAPCUT_PARITY_SPEC.md` 참고.
+> **전제: 기능(F-01~F-24)과 백엔드는 구현 완료 상태다. 이 작업은 "기능 추가"가 아니라 CapCut 데스크탑 UI에 맞춘 "구조·인터랙션·시각" 프레젠테이션 정렬이다.** 명령/세션/렌더 아키텍처와 기존 테스트를 깨지 말 것.
+
+---
+
+## 0. 목표 — "유사도"를 3계층으로 정의
+
+| 계층 | 의미 | 판정 |
+|---|---|---|
+| **구조(IA)** | 화면 영역 배치·패널 구성 | 영역 인벤토리 일치 |
+| **인터랙션** | 드래그/더블클릭/hover/스냅/단축키 | 표준 워크플로 완주 |
+| **시각(폴리시)** | 다크 팔레트·간격·타이포·아이콘·밀도 | 디자인 토큰 체크 |
+
+**원칙**: 픽셀 카피가 아니라 **패턴 재현**.
+
+**가드레일**
+- **IP**: CapCut 독점 아이콘/로고/정확한 색/에셋/문구 복제 금지 → 자체·라이선스 자산, SF Symbols 매핑.
+- **네이티브 우선**: SwiftUI 네이티브 컨트롤로 CapCut 패턴 재현(웹/Electron 모방 X). macOS 타이틀바/스플릿뷰는 유지.
+- **아키텍처 불변**: 프레젠테이션만 변경. `EditorSession.dispatch(Command)`·렌더 파이프라인·ViewModel 메서드는 호출만.
+
+---
+
+## 1. 현재 상태 스냅샷 (이미 된 것 / 남은 것)
+
+**`a4d6116`에서 이미 반영됨 — 중복 작업 금지:**
+- ✅ 좌측 **탭형 브라우저 7종**: Media/Audio/Text/Stickers/Effects/Transitions/Filters (`MediaLibraryPanel.swift` `LibraryTab`), 라이브러리→타임라인 `onDrag` 존재.
+- ✅ **창 기본 크기/리사이즈**: `MovieCutMacApp.swift` `.defaultSize(1440×900)` + `.windowResizability`.
+- 🟡 **프리뷰 폴리시**(`PreviewPanel.swift`)·**타임라인 도구**(`TimelineView.swift`) 일부.
+- ✅ **인스펙터 clip-first**: 선택 시 `InspectorBasicSection`/`InspectorEffectsSection` 상단, 전역도구 `DisclosureGroup` 접힘(`InspectorPanel.swift`).
+
+**아직 안 된 핵심:**
+- ❌ 인스펙터 **선택종류별 패널 스왑**(video/audio/text 구분) + **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
+- ❌ **export 거버넌스 텍스트 노출**(`InspectorExportSection.swift`에 "Golden status…" 류 24곳 잔존 — UX-02 제거 대상).
+- ❌ 라이브러리 **탭별 검색·썸네일 그리드·hover 미리보기**.
+- 🟡 타임라인 **단일 도구 바 집약**(현재 `selectedClipToolbar`+`zoomControls` 분산).
+- ❌ 프리뷰 **빈 상태 CTA**, 상단 바 **단일 Export·프로젝트명·저장상태**.
+
+---
+
+## 2. 요구사항 도출 방법론 (반복 가능한 7단계)
+
+1. **레퍼런스 캡처 + UI 표면 인벤토리** — CapCut 데스크탑을 상태별(선택없음/비디오/오디오/텍스트/재생중)로 스크린샷, 보이는 컨트롤 전수 라벨링 → `영역 × 상태` 매트릭스.
+2. **정보구조(IA) 분해** — 5영역 고정(R1 상단 바 / R2 좌측 브라우저 / R3 중앙 프리뷰 / R4 우측 인스펙터 / R5 하단 타임라인+도구바).
+3. **인터랙션 명세** — 드래그드롭·더블클릭/＋추가·hover 미리보기·컨텍스트 메뉴·선택 모델·스냅·단축키.
+4. **갭 매핑** — 컴포넌트별 ✅/🟡/❌ + 근거(파일:라인).
+5. **시각 토큰화** — 다크 팔레트·spacing(4/8/12/16)·타이포·아이콘셋·패널 비율·구분선·밀도.
+6. **수용기준(AC)** — 각 항목에 측정 가능한 AC.
+7. **우선순위·검증** — P0 구조 → P1 인터랙션 → P2 시각 → P3 심층. side-by-side + 워크플로 완주.
+
+**요구사항 항목 형식**
+```
+[R<영역>-NN] 목표 | 현재(✅/🟡/❌) | 구현 힌트(파일) | AC | 우선순위
+```
+
+---
+
+## 3. 요구사항 (R1~R6)
+
+### R1. 상단 바 — `App/MovieCutMac/ContentView.swift`(toolbar)
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R1-01 | 우상단 **단일 Export**(주 버튼 + ▾ 포맷) | 🟡 Export/Export As/Share 분리 | 주 Export 1개 + 드롭다운에 포맷, Share는 결과 후 노출 | P0 |
+| R1-02 | 프로젝트명 + **저장상태** 인디케이터 | ❌ | 타이틀 영역에 프로젝트명, "저장됨/저장 중" 표시 | P1 |
+| R1-03 | 비율/해상도 배지 | 🟡 canvas picker | 현재 캔버스 비율 + export 해상도 한눈에 | P2 |
+| R1-04 | undo/redo 좌측 클러스터 | ✅ | 유지 | — |
+
+### R2. 좌측 탭 브라우저 — `App/MovieCutMac/MediaLibraryPanel.swift`
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R2-01 | 탭 7종 + Captions/Adjustment 보강 | ✅ 7탭(`LibraryTab`) | 9탭, 활성탭 강조 | P2 |
+| R2-02 | 탭별 검색바 | ❌ | 각 탭 상단 검색 → 그리드 필터 | P1 |
+| R2-03 | 썸네일 그리드 | 🟡 | 2~3열 그리드 썸네일/아이콘 | P1 |
+| R2-04 | hover 미리듣기/미리보기 | ❌ | 오디오 hover 재생, 효과/전환 hover 미리보기 | P1 |
+| R2-05 | 드래그 **또는** ＋/더블클릭 추가 | 🟡 `onDrag` 존재 | 드래그 드롭 + 더블클릭/＋ 둘 다 동작 | P1 |
+
+### R3. 중앙 프리뷰 — `App/MovieCutMac/PreviewPanel.swift`
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R3-01 | 트랜스포트 정렬 + 타임코드(현재/전체) | 🟡 | `mm:ss:ff` 현재/전체, 재생/프레임 이동 정렬 | P1 |
+| R3-02 | zoom-to-fit + 줌 | 🟡 | fit 버튼 + 줌 배율 표시 | P2 |
+| R3-03 | 비율/해상도 배지 | 🟡 | 캔버스 비율·해상도 표시 | P2 |
+| R3-04 | **빈 상태 CTA** | ❌ | 미디어 없을 때 "미디어 추가" 큰 버튼(드롭영역 연결) | P0 |
+| R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` | on/off 토글 노출 | P3 |
+
+### R4. 우측 인스펙터 — `App/MovieCutMac/InspectorPanel.swift`, `Inspector/*`
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R4-01 | **선택종류별 패널 스왑** | 🟡 clip-first 단일 | 오디오→Volume/Fade/Denoise만, 텍스트→Style만, 비디오→Transform/Adjust/Effects | P0 |
+| R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ❌ DisclosureGroup만 | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
+| R4-03 | **거버넌스 텍스트 제거(UX-02)** | ❌ `InspectorExportSection.swift` 24곳 | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
+| R4-04 | 전역도구 접힘 + Export 하단 고정 | ✅ | 유지 | — |
+
+### R5. 하단 타임라인 + 도구 바 — `App/MovieCutMac/TimelineView.swift`
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R5-01 | **단일 도구 바 집약** | 🟡 `selectedClipToolbar`+`zoomControls` 분산 | 룰러 바로 위 한 줄에 split/delete/ripple/duplicate/freeze/reverse/snap/마커 | P0 |
+| R5-02 | 줌 슬라이더 + fit | 🟡 +/- 버튼 | 연속 줌 슬라이더 + fit | P1 |
+| R5-03 | 트랙 헤더(잠금/숨김/음소거) | 🟡 `isMuted` | 트랙별 잠금·숨김·음소거 토글 3종 | P1 |
+| R5-04 | 메인 비디오 트랙 개념 | 🟡 | 메인 트랙 시각 구분 | P3 |
+
+### R6. 횡단(cross-cutting)
+| ID | 목표 | 현재 | AC | P |
+|---|---|---|---|---|
+| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
+| R6-02 | 인터랙션 컨벤션 통일 | 🟡 | 드래그/더블클릭/컨텍스트/스냅 동작 일관 | P2 |
+| R6-03 | 단축키·VoiceOver 회귀 방지 | ✅ | 재배치 후 라벨/단축키 보존(정적계약 테스트로 잠금) | — |
+
+---
+
+## 4. 우선순위 로드맵
+- **P0 구조 정합** — R1-01, R3-04, R4-01, R4-03, R5-01
+- **P1 인터랙션** — R2-02/03/04/05, R3-01, R4-02, R5-02/03, R1-02
+- **P2 시각 폴리시** — R6-01/02, R1-03, R2-01, R3-02/03
+- **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등)
+
+---
+
+## 5. 작업 방법 (how to work)
+
+### 5.1 착수 순서
+1. 이 문서 + `docs/UIUX_HANDOFF.md` 읽기 → §1 현재 상태 스냅샷으로 중복 방지.
+2. **P0 항목부터** 하나씩(작은 변경 단위). 각 항목 시작 전 해당 파일의 현재 구조 확인.
+3. 변경 후 빌드/테스트/실행 스크린샷으로 before/after 확인.
+
+### 5.2 핵심 파일 맵
+| 영역 | 파일 |
+|---|---|
+| 윈도우/Scene/단축키 | `App/MovieCutMac/MovieCutMacApp.swift` |
+| 전체 레이아웃·toolbar | `App/MovieCutMac/ContentView.swift` |
+| 좌측 탭 브라우저 | `App/MovieCutMac/MediaLibraryPanel.swift` (`LibraryTab`) |
+| 중앙 프리뷰·트랜스포트 | `App/MovieCutMac/PreviewPanel.swift` |
+| 우측 인스펙터 | `App/MovieCutMac/InspectorPanel.swift`, `App/MovieCutMac/Inspector/*` |
+| export 패널(거버넌스 제거) | `App/MovieCutMac/Inspector/InspectorExportSection.swift` |
+| 타임라인·도구·트랙 | `App/MovieCutMac/TimelineView.swift` |
+| 공통 스타일/토큰 | `App/MovieCutMac/Inspector/InspectorShared.swift` |
+
+### 5.3 빌드·검증 명령
+```bash
+swift build
+swift test --filter 'StaticContract'   # 뷰 구조 검사 테스트(재배치 시 함께 갱신)
+xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build
+open ~/Library/Developer/Xcode/DerivedData/MovieCut-*/Build/Products/Debug/MovieCutMac.app
+```
+
+### 5.4 규칙 (반드시)
+- **프레젠테이션만 변경**: ViewModel 메서드·`EditorSession.dispatch(Command)`·렌더 파이프라인은 호출만.
+- **정적계약 테스트 동기화**: `Tests/MovieCutCoreTests/*StaticContractTests.swift`가 특정 문자열/구조를 검사. 뷰 이동 시 의미 보존하며 테스트도 갱신.
+- **작은 PR 단위**: 항목(R*-NN) 하나씩 커밋. 커밋은 `feat:`/`refactor:` conventional 형식, **attribution 미포함**(전역 git-workflow 규칙).
+- **R4-03(거버넌스 텍스트 제거)는 조율 필요**: 해당 텍스트는 별도 세션의 export-golden 거버넌스 산출물(`InspectorExportSection.swift`, `ExportFormatStaticContractTests.swift`)이므로, 제거 시 그 정적계약 테스트도 함께 갱신하고 해당 세션과 조율.
+
+### 5.5 검증 체크리스트 (DoD)
+- [ ] side-by-side 스크린샷(CapCut vs 앱) — 영역·상태별
+- [ ] 표준 워크플로 완주: ① 미디어 추가→컷→텍스트→BGM→Export ② 자동 자막→스타일
+- [ ] `swift test --filter 'StaticContract'` + `xcodebuild … build` 통과
+- [ ] VoiceOver 라벨·F-05 단축키 보존
+
+---
+
+## 6. 비고
+- macOS 우선. iOS(`App/MovieCutiOS/`)는 별도 후속.
+- `docs/UIUX_HANDOFF.md`의 UX-01~08과 본 문서 R1~R6은 대응 관계(예: UX-02 ↔ R4-03, UX-04 ↔ R2, UX-05 ↔ R5, UX-06 ↔ R3). 본 문서가 CapCut 영역 기준의 상세판이다.

@@ -95,7 +95,7 @@ struct UIUXAccessibilityRegressionStaticContractTests {
             #"accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))"#,
             #"accessibilityLabel(NSLocalizedString("Add to Timeline", comment: ""))"#,
             #"accessibilityHint(NSLocalizedString("Adds the selected library asset to the timeline.", comment: ""))"#,
-            #"accessibilityLabel(NSLocalizedString("Asset List", comment: ""))"#,
+            #"accessibilityLabel(NSLocalizedString("Asset Grid", comment: ""))"#,
             #"accessibilityValue(assetAccessibilityValue(asset))"#,
             #"private func assetAccessibilityValue(_ asset: MediaAsset) -> String"#,
             #"if let metadata = metadataSummary(asset)"#,

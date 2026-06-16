@@ -9,6 +9,12 @@ struct MediaLibraryPanel: View {
     @State private var isAddingText = false
     @State private var textClipText = NSLocalizedString("Text", comment: "")
     @State private var selectedLibraryTab: LibraryTab = .media
+    @State private var librarySearchText = ""
+
+    private let libraryGridColumns = [
+        GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small),
+        GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small)
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
@@ -21,6 +27,7 @@ struct MediaLibraryPanel: View {
             }
 
             libraryTabBar
+            librarySearchField
 
             Group {
                 switch selectedLibraryTab {
@@ -109,6 +116,9 @@ struct MediaLibraryPanel: View {
             HStack(spacing: MovieCutSpacing.small) {
                 ForEach(LibraryTab.allCases) { tab in
                     Button {
+                        if selectedLibraryTab != tab {
+                            librarySearchText = ""
+                        }
                         selectedLibraryTab = tab
                     } label: {
                         Label(tab.displayName, systemImage: tab.systemImage)
@@ -133,6 +143,37 @@ struct MediaLibraryPanel: View {
         .accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))
     }
 
+    private var librarySearchField: some View {
+        HStack(spacing: MovieCutSpacing.small) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField(librarySearchPlaceholder, text: $librarySearchText)
+                .textFieldStyle(.plain)
+                .accessibilityLabel(String(format: NSLocalizedString("Search %@", comment: ""), selectedLibraryTab.displayName))
+                .accessibilityHint(NSLocalizedString("Filters the selected library tab.", comment: ""))
+
+            if !librarySearchQuery.isEmpty {
+                Button {
+                    librarySearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("Clear library search", comment: ""))
+            }
+        }
+        .padding(.horizontal, MovieCutSpacing.medium)
+        .padding(.vertical, MovieCutSpacing.small)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.cardBackground)
+        )
+        .padding(.horizontal, MovieCutSpacing.medium)
+        .accessibilityElement(children: .contain)
+    }
+
     @ViewBuilder
     private var mediaTabContent: some View {
         VStack(spacing: MovieCutSpacing.small) {
@@ -153,67 +194,87 @@ struct MediaLibraryPanel: View {
     }
 
     private var audioTabContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
-                librarySection(title: NSLocalizedString("Music", comment: ""), systemImage: "music.note.list") {
-                    MusicLibraryView(viewModel: viewModel)
-                }
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            embeddedLibrarySearchNote
 
-                librarySection(title: NSLocalizedString("Sound Effects", comment: ""), systemImage: "waveform.badge.plus") {
-                    SFXPickerView(viewModel: viewModel)
+            ScrollView {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+                    librarySection(title: NSLocalizedString("Music", comment: ""), systemImage: "music.note.list") {
+                        MusicLibraryView(viewModel: viewModel)
+                    }
+
+                    librarySection(title: NSLocalizedString("Sound Effects", comment: ""), systemImage: "waveform.badge.plus") {
+                        SFXPickerView(viewModel: viewModel)
+                    }
                 }
+                .padding(.horizontal, MovieCutSpacing.medium)
+                .padding(.bottom, MovieCutSpacing.medium)
             }
-            .padding(.horizontal, MovieCutSpacing.medium)
-            .padding(.bottom, MovieCutSpacing.medium)
         }
         .accessibilityLabel(NSLocalizedString("Audio browser", comment: ""))
     }
 
+    @ViewBuilder
     private var textTabContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
-                Button {
-                    openTextSheet()
-                } label: {
-                    browserActionRow(
-                        title: NSLocalizedString("Custom Text", comment: ""),
-                        subtitle: NSLocalizedString("Type a custom text clip at the playhead", comment: ""),
-                        systemImage: "textformat"
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("Add custom text", comment: ""))
-                .accessibilityHint(NSLocalizedString("Opens the text clip creation sheet.", comment: ""))
+        let templates = filteredTextTemplates
+        let showsCustomTextAction = shouldShowCustomTextAction
 
-                ForEach(MovieCutCore.TextTemplate.builtIn) { template in
-                    Button {
-                        Task { await viewModel.addTextTemplateClip(template) }
-                    } label: {
-                        browserActionRow(
-                            title: template.name,
-                            subtitle: textTemplateSubtitle(template),
-                            systemImage: "text.badge.plus"
-                        )
+        Group {
+            if templates.isEmpty && !showsCustomTextAction {
+                librarySearchEmptyState()
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                        if showsCustomTextAction {
+                            Button {
+                                openTextSheet()
+                            } label: {
+                                browserGridCard(
+                                    title: NSLocalizedString("Custom Text", comment: ""),
+                                    subtitle: NSLocalizedString("Type a custom text clip at the playhead", comment: ""),
+                                    systemImage: "textformat"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(NSLocalizedString("Add custom text", comment: ""))
+                            .accessibilityHint(NSLocalizedString("Opens the text clip creation sheet.", comment: ""))
+                        }
+
+                        ForEach(templates) { template in
+                            Button {
+                                Task { await viewModel.addTextTemplateClip(template) }
+                            } label: {
+                                browserGridCard(
+                                    title: template.name,
+                                    subtitle: textTemplateSubtitle(template),
+                                    systemImage: "text.badge.plus"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(format: NSLocalizedString("Add %@ text template", comment: ""), template.name))
+                            .accessibilityHint(NSLocalizedString("Adds this text template to the timeline.", comment: ""))
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(format: NSLocalizedString("Add %@ text template", comment: ""), template.name))
-                    .accessibilityHint(NSLocalizedString("Adds this text template to the timeline.", comment: ""))
+                    .padding(MovieCutSpacing.medium)
                 }
             }
-            .padding(MovieCutSpacing.medium)
         }
         .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
     }
 
     private var stickersTabContent: some View {
-        StickerPickerView { sticker in
-            Task { await viewModel.addSticker(sticker) }
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            embeddedLibrarySearchNote
+
+            StickerPickerView { sticker in
+                Task { await viewModel.addSticker(sticker) }
+            }
         }
         .accessibilityLabel(NSLocalizedString("Sticker browser", comment: ""))
     }
 
     private var effectsTabContent: some View {
-        effectList(
+        effectGrid(
             title: NSLocalizedString("Effects", comment: ""),
             systemImage: "sparkles",
             types: EffectType.allCases.filter { $0 != .externalLUT },
@@ -222,7 +283,7 @@ struct MediaLibraryPanel: View {
     }
 
     private var filtersTabContent: some View {
-        effectList(
+        effectGrid(
             title: NSLocalizedString("Filters", comment: ""),
             systemImage: "camera.filters",
             types: filterEffectTypes,
@@ -230,27 +291,36 @@ struct MediaLibraryPanel: View {
         )
     }
 
+    @ViewBuilder
     private var transitionsTabContent: some View {
+        let transitions = filteredTransitionTypes
+
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 if viewModel.selectedClip == nil {
                     selectClipEmptyState(message: NSLocalizedString("Select a clip to apply a transition.", comment: ""))
                 }
 
-                ForEach(TransitionType.allCases, id: \.self) { type in
-                    Button {
-                        applyTransition(type)
-                    } label: {
-                        browserActionRow(
-                            title: type.displayName,
-                            subtitle: transitionSubtitle(type),
-                            systemImage: type == .none ? "nosign" : "rectangle.2.swap"
-                        )
+                if transitions.isEmpty {
+                    librarySearchEmptyState()
+                } else {
+                    LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                        ForEach(transitions, id: \.self) { type in
+                            Button {
+                                applyTransition(type)
+                            } label: {
+                                browserGridCard(
+                                    title: type.displayName,
+                                    subtitle: transitionSubtitle(type),
+                                    systemImage: type == .none ? "nosign" : "rectangle.2.swap"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.selectedClip == nil)
+                            .accessibilityLabel(type.displayName)
+                            .accessibilityHint(NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.selectedClip == nil)
-                    .accessibilityLabel(type.displayName)
-                    .accessibilityHint(NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
                 }
             }
             .padding(MovieCutSpacing.medium)
@@ -259,32 +329,71 @@ struct MediaLibraryPanel: View {
     }
 
     @ViewBuilder
-    private func effectList(title: String, systemImage: String, types: [EffectType], emptyMessage: String) -> some View {
+    private var embeddedLibrarySearchNote: some View {
+        if !librarySearchQuery.isEmpty {
+            HStack(spacing: MovieCutSpacing.xSmall) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                Text(embeddedLibrarySearchNoteText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, MovieCutSpacing.medium)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    @ViewBuilder
+    private func effectGrid(title: String, systemImage: String, types: [EffectType], emptyMessage: String) -> some View {
+        let effects = filteredEffectTypes(types)
+
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 if viewModel.selectedClip == nil {
                     selectClipEmptyState(message: emptyMessage)
                 }
 
-                ForEach(types, id: \.self) { type in
-                    Button {
-                        applyEffect(type)
-                    } label: {
-                        browserActionRow(
-                            title: type.displayName,
-                            subtitle: effectSubtitle(type),
-                            systemImage: systemImage
-                        )
+                if effects.isEmpty {
+                    librarySearchEmptyState()
+                } else {
+                    LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                        ForEach(effects, id: \.self) { type in
+                            Button {
+                                applyEffect(type)
+                            } label: {
+                                browserGridCard(
+                                    title: type.displayName,
+                                    subtitle: effectSubtitle(type),
+                                    systemImage: systemImage
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.selectedClip == nil)
+                            .accessibilityLabel(type.displayName)
+                            .accessibilityHint(String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.selectedClip == nil)
-                    .accessibilityLabel(type.displayName)
-                    .accessibilityHint(String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
                 }
             }
             .padding(MovieCutSpacing.medium)
         }
         .accessibilityLabel(title)
+    }
+
+    @ViewBuilder
+    private func librarySearchEmptyState() -> some View {
+        VStack(spacing: MovieCutSpacing.small) {
+            Image(systemName: "magnifyingglass")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(String(format: NSLocalizedString("No results for \"%@\"", comment: ""), librarySearchQuery))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -313,31 +422,44 @@ struct MediaLibraryPanel: View {
         }
     }
 
-    private func browserActionRow(title: String, subtitle: String, systemImage: String) -> some View {
-        HStack(spacing: MovieCutSpacing.small) {
+    private func browserGridCard(title: String, subtitle: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                .frame(width: 28, height: 28)
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(Color.accentColor.opacity(0.75))
             }
-            Spacer(minLength: 8)
-            Image(systemName: "plus.circle.fill")
-                .foregroundStyle(Color.accentColor.opacity(0.75))
         }
-        .movieCutCard(background: MovieCutTheme.cardBackground)
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.cardBackground
+        )
         .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private var mediaContent: some View {
+        let assets = filteredMediaAssets
+
         if viewModel.mediaAssets.isEmpty {
             VStack(spacing: MovieCutSpacing.small) {
                 Image(systemName: "photo.on.rectangle.angled")
@@ -350,30 +472,44 @@ struct MediaLibraryPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(NSLocalizedString("Drop media files here", comment: ""))
+        } else if assets.isEmpty {
+            librarySearchEmptyState()
         } else {
             ScrollView {
-                LazyVStack(spacing: MovieCutSpacing.xSmall) {
-                    ForEach(viewModel.mediaAssets) { asset in
-                        assetRow(asset)
+                LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                    ForEach(assets) { asset in
+                        assetGridCard(asset)
                     }
                 }
-                .padding(MovieCutSpacing.small)
+                .padding(MovieCutSpacing.medium)
             }
-            .accessibilityLabel(NSLocalizedString("Asset List", comment: ""))
+            .accessibilityLabel(NSLocalizedString("Asset Grid", comment: ""))
         }
     }
 
-    private func assetRow(_ asset: MediaAsset) -> some View {
-        HStack(spacing: MovieCutSpacing.small) {
-            assetThumbnailView(asset)
+    private func assetGridCard(_ asset: MediaAsset) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            ZStack(alignment: .topTrailing) {
+                assetGridThumbnailView(asset)
+
+                proxyButton(asset)
+                    .padding(MovieCutSpacing.xSmall)
+                    .background(
+                        Circle()
+                            .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
+                    )
+            }
+
             assetInfoView(asset)
-            Spacer()
-            proxyButton(asset)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            assetStateText(asset)
         }
+        .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.selectedFill : Color.clear,
+            background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.selectedFill : MovieCutTheme.cardBackground,
             border: asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.35) : Color.clear
         )
         .contentShape(Rectangle())
@@ -444,6 +580,93 @@ struct MediaLibraryPanel: View {
             .accessibilityLabel(NSLocalizedString("Generate Proxy", comment: ""))
             .accessibilityValue(proxyStateText(asset))
             .accessibilityHint(NSLocalizedString("Creates a lower-resolution proxy file for smoother editing.", comment: ""))
+        }
+    }
+
+    private var librarySearchPlaceholder: String {
+        String(format: NSLocalizedString("Search %@", comment: ""), selectedLibraryTab.displayName)
+    }
+
+    private var librarySearchQuery: String {
+        librarySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var filteredMediaAssets: [MediaAsset] {
+        viewModel.mediaAssets.filter(assetMatchesLibrarySearch)
+    }
+
+    private var filteredTextTemplates: [MovieCutCore.TextTemplate] {
+        MovieCutCore.TextTemplate.builtIn.filter(textTemplateMatchesLibrarySearch)
+    }
+
+    private var shouldShowCustomTextAction: Bool {
+        librarySearchMatches([
+            NSLocalizedString("Custom Text", comment: ""),
+            NSLocalizedString("custom", comment: ""),
+            NSLocalizedString("text", comment: ""),
+            NSLocalizedString("Type a custom text clip at the playhead", comment: "")
+        ])
+    }
+
+    private func filteredEffectTypes(_ types: [EffectType]) -> [EffectType] {
+        types.filter(effectTypeMatchesLibrarySearch)
+    }
+
+    private var filteredTransitionTypes: [TransitionType] {
+        TransitionType.allCases.filter(transitionTypeMatchesLibrarySearch)
+    }
+
+    private var embeddedLibrarySearchNoteText: String {
+        switch selectedLibraryTab {
+        case .audio:
+            return NSLocalizedString("Use the Music and Sound Effects search fields below to filter audio.", comment: "")
+        case .stickers:
+            return NSLocalizedString("Use the sticker search field below to filter stickers.", comment: "")
+        case .media, .text, .effects, .transitions, .filters:
+            return ""
+        }
+    }
+
+    private func assetMatchesLibrarySearch(_ asset: MediaAsset) -> Bool {
+        librarySearchMatches([
+            asset.originalURL.lastPathComponent,
+            String(describing: asset.kind),
+            assetDetailSummary(asset) ?? "",
+            metadataSummary(asset) ?? "",
+            thumbnailStateText(asset),
+            proxyStateText(asset)
+        ])
+    }
+
+    private func textTemplateMatchesLibrarySearch(_ template: MovieCutCore.TextTemplate) -> Bool {
+        librarySearchMatches([
+            template.name,
+            template.content.text,
+            textTemplateSubtitle(template)
+        ])
+    }
+
+    private func effectTypeMatchesLibrarySearch(_ type: EffectType) -> Bool {
+        librarySearchMatches([
+            type.displayName,
+            effectSubtitle(type)
+        ])
+    }
+
+    private func transitionTypeMatchesLibrarySearch(_ type: TransitionType) -> Bool {
+        librarySearchMatches([
+            type.displayName,
+            transitionSubtitle(type),
+            transitionCategoryName(type.category)
+        ])
+    }
+
+    private func librarySearchMatches(_ values: [String]) -> Bool {
+        let query = librarySearchQuery
+        guard !query.isEmpty else { return true }
+
+        return values.contains { value in
+            value.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
         }
     }
 
@@ -613,6 +836,29 @@ struct MediaLibraryPanel: View {
             return nil
         }
         return provider
+    }
+
+    @ViewBuilder
+    private func assetGridThumbnailView(_ asset: MediaAsset) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                .fill(Color.secondary.opacity(0.2))
+
+            if let image = thumbnailImage(for: asset) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: iconForKind(asset.kind))
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .aspectRatio(16 / 9, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
+        .clipped()
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder

@@ -102,8 +102,8 @@ struct R102ProjectStatusStaticContractTests {
         #expect(r102Row.contains("검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(168 tests / 43 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
         #expect(docs.contains("| R1-03 | 비율/해상도 배지 | 🟡 canvas picker |"))
         #expect(!docs.contains("| R1-03 | 비율/해상도 배지 | ✅"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션** — R2-02/03/04/05, R3-01 세부 마감."))
+        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R4-02, R5-02, R5-03."))
+        #expect(docs.contains("- **P1 인터랙션** — R2-04/05, R3-01 세부 마감."))
         #expect(!docs.contains("R3-01 세부 마감, R1-02"))
     }
 }

@@ -81,7 +81,7 @@
 | R2-02 | 탭별 검색바 | ✅ 구현(2026-06-16, Codex R2-02/R2-03): `MediaLibraryPanel.swift`에 `librarySearchText`와 selected tab 기반 `Search Media`/`Search Audio` placeholder 검색장을 추가. Media는 파일명·종류·duration/metadata/proxy/thumbnail 상태, Text는 custom action·template name/subtitle, Effects/Filters는 displayName/subtitle, Transitions는 displayName/subtitle/category로 필터한다. Audio/Stickers는 기존 `MusicLibraryView`/`SFXPickerView`/`StickerPickerView` 내부 검색 API를 깨지 않도록 유지하고 top-level 검색 입력 시 embedded search 안내만 표시. 검증: `git diff --check`, `swift test --filter StaticContract`(173 tests / 44 suites), `swift build`, `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 각 탭 상단 검색 → 그리드 필터 | P1 |
 | R2-03 | 썸네일 그리드 | ✅ 구현(2026-06-16, Codex R2-02/R2-03): Media/Text/Effects/Filters/Transitions가 `LazyVGrid(columns: libraryGridColumns)` 기반 compact 2열 card surface를 사용한다. Media card는 큰 16:9 thumbnail/icon, metadata, thumbnail/proxy state, select/onDrag/context proxy action을 유지하고, browser action cards는 기존 add/apply actions를 그대로 호출한다. 검증: `git diff --check`, `swift test --filter StaticContract`(173 tests / 44 suites), `swift build`, `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 2~3열 그리드 썸네일/아이콘 | P1 |
 | R2-04 | hover 미리듣기/미리보기 | ❌ | 오디오 hover 재생, 효과/전환 hover 미리보기 | P1 |
-| R2-05 | 드래그 **또는** ＋/더블클릭 추가 | 🟡 `onDrag` 존재 | 드래그 드롭 + 더블클릭/＋ 둘 다 동작 | P1 |
+| R2-05 | 드래그 **또는** ＋/더블클릭 추가 | ✅ 구현(2026-06-16, Codex R2-05): Media card는 기존 single-select/onDrag/`assetDragProvider(for:)`/proxy context를 유지하면서 더블클릭과 per-card ＋ 버튼이 `selectedAssetId` 설정 후 `addClipToTimeline()`을 호출한다. Text/Effects/Filters/Transitions card는 기존 click add/apply 동작과 ＋ affordance/accessibility hint를 유지한다. 검증: `git diff --check`, `swift test --filter StaticContract`(177 tests / 45 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 드래그 드롭 + 더블클릭/＋ 둘 다 동작 | P1 |
 
 ### R3. 중앙 프리뷰 — `App/MovieCutMac/PreviewPanel.swift`
 | ID | 목표 | 현재 | AC | P |
@@ -120,8 +120,8 @@
 ## 4. 우선순위 로드맵
 - **P0 완료** — R1-01, R3-04, R4-01, R4-03, R5-01.
 - **P0 잔여** — 없음.
-- **P1 완료** — R1-02, R2-02, R2-03, R4-02, R5-02, R5-03.
-- **P1 인터랙션** — R2-04/05, R3-01 세부 마감.
+- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R4-02, R5-02, R5-03.
+- **P1 인터랙션** — R2-04, R3-01 세부 마감.
 - **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R1-03, R2-01, R3-02/03.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 

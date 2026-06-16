@@ -492,12 +492,11 @@ struct MediaLibraryPanel: View {
             ZStack(alignment: .topTrailing) {
                 assetGridThumbnailView(asset)
 
-                proxyButton(asset)
-                    .padding(MovieCutSpacing.xSmall)
-                    .background(
-                        Circle()
-                            .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
-                    )
+                HStack(spacing: MovieCutSpacing.xSmall) {
+                    assetAddButton(asset)
+                    proxyButton(asset)
+                }
+                .padding(MovieCutSpacing.xSmall)
             }
 
             assetInfoView(asset)
@@ -516,6 +515,10 @@ struct MediaLibraryPanel: View {
         .onTapGesture {
             viewModel.selectedAssetId = asset.id
         }
+        .onTapGesture(count: 2) {
+            viewModel.selectedAssetId = asset.id
+            Task { await viewModel.addClipToTimeline() }
+        }
         .onDrag {
             viewModel.selectedAssetId = asset.id
             return assetDragProvider(for: asset)
@@ -523,7 +526,7 @@ struct MediaLibraryPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(asset.originalURL.lastPathComponent)
         .accessibilityValue(assetAccessibilityValue(asset))
-        .accessibilityHint(NSLocalizedString("Selects this asset. Drag it to the timeline to create a clip.", comment: ""))
+        .accessibilityHint(NSLocalizedString("Selects this asset. Drag it to the timeline to create a clip, double-click it, or use its Add button.", comment: ""))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
             viewModel.selectedAssetId = asset.id
@@ -536,6 +539,26 @@ struct MediaLibraryPanel: View {
                 }
             }
         }
+    }
+
+    private func assetAddButton(_ asset: MediaAsset) -> some View {
+        Button {
+            viewModel.selectedAssetId = asset.id
+            Task { await viewModel.addClipToTimeline() }
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(Color.accentColor)
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .frame(width: 24, height: 24)
+        .background(
+            Circle()
+                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
+        )
+        .help(NSLocalizedString("Add to Timeline", comment: ""))
+        .accessibilityLabel(String(format: NSLocalizedString("Add %@ to timeline", comment: ""), asset.originalURL.lastPathComponent))
+        .accessibilityHint(NSLocalizedString("Adds this asset to the timeline.", comment: ""))
     }
 
     private func assetInfoView(_ asset: MediaAsset) -> some View {
@@ -576,6 +599,12 @@ struct MediaLibraryPanel: View {
                 Image(systemName: asset.proxy?.proxyURL == nil ? "film" : "checkmark.circle")
             }
             .buttonStyle(.borderless)
+            .controlSize(.small)
+            .frame(width: 24, height: 24)
+            .background(
+                Circle()
+                    .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
+            )
             .help(NSLocalizedString("Generate Proxy", comment: ""))
             .accessibilityLabel(NSLocalizedString("Generate Proxy", comment: ""))
             .accessibilityValue(proxyStateText(asset))

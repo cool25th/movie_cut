@@ -92,7 +92,7 @@ struct R503TrackHeaderStaticContractTests {
         #expect(docs.contains("`toggleTrackMute(_:)`/`toggleTrackHidden(_:)`/`toggleTrackLock(_:)`"))
         #expect(docs.contains("`SetTrackPropertyCommand`"))
         #expect(docs.contains("| R5-04 | 메인 비디오 트랙 개념 | 🟡 |"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R4-02, R5-02, R5-03."))
+        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R4-02, R5-02, R5-03."))
         #expect(!docs.contains("R5-03, R1-02"))
         #expect(!docs.contains("| R5-03 | 트랙 헤더(잠금/숨김/음소거) | 🟡 `isMuted` |"))
     }

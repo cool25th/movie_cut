@@ -74,6 +74,8 @@ struct ContentView: View {
                     }
                 }
 
+                toolbarCanvasResolutionBadge
+
                 Button(action: { isCanvasSettingsPresented.toggle() }) {
                     Label("Canvas", systemImage: "rectangle.dashed")
                 }
@@ -150,6 +152,34 @@ struct ContentView: View {
         .accessibilityLabel(NSLocalizedString("Project save status", comment: ""))
         .accessibilityValue("\(viewModel.projectDisplayName), \(viewModel.projectSaveStatusLabel)")
         .accessibilityHint(NSLocalizedString("Shows the current project name and save or autosave status.", comment: ""))
+    }
+
+    private var toolbarCanvasResolutionBadge: some View {
+        Label {
+            Text(viewModel.canvasResolutionBadgeText)
+                .lineLimit(1)
+                .monospacedDigit()
+        } icon: {
+            Image(systemName: "rectangle.ratio")
+                .accessibilityHidden(true)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(MovieCutTheme.cardBackground)
+        )
+        .overlay(
+            Capsule()
+                .stroke(MovieCutTheme.border, lineWidth: 0.5)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(NSLocalizedString("Canvas and export resolution", comment: ""))
+        .accessibilityValue(viewModel.canvasResolutionBadgeText)
+        .accessibilityHint(NSLocalizedString("Shows the current canvas aspect ratio and computed export render size.", comment: ""))
     }
 
     private var exportToolbarControl: some View {

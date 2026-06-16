@@ -112,12 +112,7 @@ struct PreviewPanel: View {
                 accessibilityLabel: NSLocalizedString("Duration", comment: "")
             )
 
-            Label(canvasRatioText, systemImage: "rectangle.ratio")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .accessibilityLabel(NSLocalizedString("Canvas ratio", comment: ""))
-                .accessibilityValue(canvasRatioText)
+            previewCanvasResolutionBadge
 
             HStack(spacing: 6) {
                 Image(systemName: "speaker.wave.2")
@@ -153,10 +148,6 @@ struct PreviewPanel: View {
     private var canvasAspectRatio: CGFloat {
         let size = viewModel.currentProject.canvas.size
         return size.width / max(size.height, 1)
-    }
-
-    private var canvasRatioText: String {
-        viewModel.currentProject.canvas.aspectRatio.displayName
     }
 
     private var hasImportedMedia: Bool {
@@ -223,6 +214,34 @@ struct PreviewPanel: View {
         .accessibilityElement()
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(value)
+    }
+
+    private var previewCanvasResolutionBadge: some View {
+        Label {
+            Text(viewModel.canvasResolutionBadgeText)
+                .lineLimit(1)
+                .monospacedDigit()
+        } icon: {
+            Image(systemName: "rectangle.ratio")
+                .accessibilityHidden(true)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(NSLocalizedString("Preview canvas and export resolution", comment: ""))
+        .accessibilityValue(viewModel.canvasResolutionBadgeText)
+        .accessibilityHint(NSLocalizedString("Shows the preview canvas ratio and computed export render size.", comment: ""))
     }
 
     @ViewBuilder

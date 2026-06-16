@@ -206,6 +206,22 @@ final class EditorViewModel {
         return "arrow.clockwise.circle"
     }
 
+    var canvasAspectBadgeText: String {
+        Self.aspectRatioBadgeText(for: currentProject.canvas)
+    }
+
+    var exportResolutionBadgeText: String {
+        let renderSize = ExportPlanner().renderSize(
+            for: currentProject.exportSettings.resolution,
+            canvas: currentProject.canvas
+        )
+        return "\(Self.pixelDimensionText(renderSize.width))×\(Self.pixelDimensionText(renderSize.height))"
+    }
+
+    var canvasResolutionBadgeText: String {
+        "\(canvasAspectBadgeText) · \(exportResolutionBadgeText)"
+    }
+
     var mediaAssets: [MediaAsset] {
         currentProject.mediaLibrary.assets.values.sorted {
             $0.originalURL.lastPathComponent.localizedStandardCompare($1.originalURL.lastPathComponent) == .orderedAscending
@@ -4889,6 +4905,43 @@ final class EditorViewModel {
         default:
             return nil
         }
+    }
+
+    private static func aspectRatioBadgeText(for canvas: CanvasPreset) -> String {
+        switch canvas.aspectRatio {
+        case .landscape16x9:
+            return "16:9"
+        case .portrait9x16:
+            return "9:16"
+        case .portrait4x5:
+            return "4:5"
+        case .square1x1:
+            return "1:1"
+        case .wide21x9, .ultrawide21x9:
+            return "21:9"
+        case .custom:
+            let width = max(Int(canvas.size.width.rounded()), 1)
+            let height = max(Int(canvas.size.height.rounded()), 1)
+            let divisor = greatestCommonDivisor(width, height)
+            return "\(width / divisor):\(height / divisor)"
+        }
+    }
+
+    private static func pixelDimensionText(_ value: CGFloat) -> String {
+        "\(max(Int(value.rounded()), 1))"
+    }
+
+    private static func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
+        var a = abs(lhs)
+        var b = abs(rhs)
+
+        while b != 0 {
+            let remainder = a % b
+            a = b
+            b = remainder
+        }
+
+        return max(a, 1)
     }
 
     private static func ensureDefaultTracks(in project: Project) -> Project {

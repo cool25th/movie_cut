@@ -71,7 +71,7 @@
 |---|---|---|---|---|
 | R1-01 | 우상단 **단일 Export**(주 버튼 + ▾ 포맷) | ✅ 구현(2026-06-16): 단일 `ControlGroup`(Export + 포맷 ▾), Share는 export 결과 후 드롭다운 내부 노출. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(141 tests / 37 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. 스크린샷: `/tmp/moviecut-ui-evidence/r1-01_single_export.png`, crop `/tmp/moviecut-ui-evidence/r1-01_single_export_toolbar_crop.png` | 주 Export 1개 + 드롭다운에 포맷, Share는 결과 후 노출 | P0 |
 | R1-02 | 프로젝트명 + **저장상태** 인디케이터 | ✅ 구현(2026-06-16, Codex R1-02): `ContentView.swift` principal toolbar가 프로젝트명과 저장 상태(`projectDisplayName`, `projectSaveStatusLabel`, `projectSaveStatusSystemImage`)를 표시하고 accessibility label/value/hint를 제공. `EditorViewModel.swift` read-only presentation properties만 추가했으며 save/autosave persistence semantics는 변경 없음. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(168 tests / 43 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 타이틀 영역에 프로젝트명, "저장됨/저장 중" 표시 | P1 |
-| R1-03 | 비율/해상도 배지 | 🟡 canvas picker | 현재 캔버스 비율 + export 해상도 한눈에 | P2 |
+| R1-03 | 비율/해상도 배지 | ✅ 구현(2026-06-16, Codex R1-03/R3-03): `EditorViewModel.swift` read-only badge helpers가 현재 캔버스 비율과 `ExportPlanner().renderSize(for:canvas:)` 기반 export render size를 `16:9 · 1920×1080` 형태로 제공. `ContentView.swift` toolbar Canvas controls 옆 compact capsule badge가 ratio/resolution과 accessibility label/value/hint를 표시하며 export/render semantics 변경 없음. 검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 현재 캔버스 비율 + export 해상도 한눈에 | P2 |
 | R1-04 | undo/redo 좌측 클러스터 | ✅ | 유지 | — |
 
 ### R2. 좌측 탭 브라우저 — `App/MovieCutMac/MediaLibraryPanel.swift`
@@ -88,7 +88,7 @@
 |---|---|---|---|---|
 | R3-01 | 트랜스포트 정렬 + 타임코드(현재/전체) | 🟡 UX-06에서 Current/Duration `mm:ss:ff` badge, frame back/play/frame forward capsule, ratio/volume row 정돈 완료. zoom-to-fit 등 프리뷰 세부 폴리시는 별도 잔여 | `mm:ss:ff` 현재/전체, 재생/프레임 이동 정렬 | P1 |
 | R3-02 | zoom-to-fit + 줌 | 🟡 | fit 버튼 + 줌 배율 표시 | P2 |
-| R3-03 | 비율/해상도 배지 | 🟡 | 캔버스 비율·해상도 표시 | P2 |
+| R3-03 | 비율/해상도 배지 | ✅ 구현(2026-06-16, Codex R1-03/R3-03): `PreviewPanel.swift` transport bar의 ratio-only label을 preview canvas/export resolution badge로 확장. Current/Duration/playback/frame/volume controls는 유지하고, badge는 `viewModel.canvasResolutionBadgeText`와 accessibility label/value/hint로 캔버스 비율 및 계산된 export render size를 표시. R3-02 zoom-to-fit 및 R3-05 safe-zone toggle은 별도 잔여. 검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 캔버스 비율·해상도 표시 | P2 |
 | R3-04 | **빈 상태 CTA** | ✅ 구현(2026-06-15, UX-06): `PreviewPanel.swift` empty state에 `Import Media` CTA가 있고 `openImportPanel()`→`viewModel.importMedia(urls)` 기존 import 경로로 연결. 검증: UIUX_HANDOFF UX-06의 `git diff --check`, `swift build`, `swift test --filter StaticContract`(135 tests PASS), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. 스크린샷: `/tmp/moviecut-ui-evidence/ux06_preview_policy_final.png`, 최근 빈 상태 증거 `/tmp/moviecut-ui-evidence/r4-01_inspector_context_empty.png`, `/tmp/moviecut-ui-evidence/r1-01_single_export_verify2.png` | 미디어 없을 때 "미디어 추가" 큰 버튼 + 기존 import 경로 연결 | P0 |
 | R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` | on/off 토글 노출 | P3 |
 
@@ -122,7 +122,8 @@
 - **P0 잔여** — 없음.
 - **P1 완료** — R1-02, R2-02, R2-03, R2-05, R4-02, R5-02, R5-03.
 - **P1 인터랙션** — R2-04, R3-01 세부 마감.
-- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R1-03, R2-01, R3-02/03.
+- **P2 완료** — R1-03, R3-03.
+- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01, R3-02.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 
 ---

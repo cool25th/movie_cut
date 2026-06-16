@@ -134,14 +134,13 @@ struct R103R303CanvasResolutionBadgeStaticContractTests {
         #expect(r303Row.contains("✅ 구현(2026-06-16, Codex R1-03/R3-03):"))
         #expect(r303Row.contains("`PreviewPanel.swift` transport bar"))
         #expect(r303Row.contains("Current/Duration/playback/frame/volume controls는 유지"))
-        #expect(r303Row.contains("R3-02 zoom-to-fit 및 R3-05 safe-zone toggle은 별도 잔여"))
+        #expect(r303Row.contains("R3-05 safe-zone toggle은 별도 잔여"))
         #expect(r303Row.contains("검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(docs.contains("| R3-02 | zoom-to-fit + 줌 | 🟡 |"))
+        #expect(docs.contains("| R3-02 | zoom-to-fit + 줌 | ✅ 구현(2026-06-16, Codex R3-01/R3-02):"))
         #expect(docs.contains("| R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` |"))
-        #expect(docs.contains("- **P2 완료** — R1-03, R3-03."))
-        #expect(docs.contains("- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01, R3-02."))
+        #expect(docs.contains("- **P2 완료** — R1-03, R3-02, R3-03."))
+        #expect(docs.contains("- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01."))
         #expect(!docs.contains("R3-02/03"))
-        #expect(!docs.contains("| R3-02 | zoom-to-fit + 줌 | ✅"))
         #expect(!docs.contains("| R3-05 | 안전영역 토글 | ✅"))
     }
 }

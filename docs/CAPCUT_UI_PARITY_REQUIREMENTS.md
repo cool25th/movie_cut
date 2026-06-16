@@ -86,9 +86,9 @@
 ### R3. 중앙 프리뷰 — `App/MovieCutMac/PreviewPanel.swift`
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
-| R3-01 | 트랜스포트 정렬 + 타임코드(현재/전체) | 🟡 UX-06에서 Current/Duration `mm:ss:ff` badge, frame back/play/frame forward capsule, ratio/volume row 정돈 완료. zoom-to-fit 등 프리뷰 세부 폴리시는 별도 잔여 | `mm:ss:ff` 현재/전체, 재생/프레임 이동 정렬 | P1 |
-| R3-02 | zoom-to-fit + 줌 | 🟡 | fit 버튼 + 줌 배율 표시 | P2 |
-| R3-03 | 비율/해상도 배지 | ✅ 구현(2026-06-16, Codex R1-03/R3-03): `PreviewPanel.swift` transport bar의 ratio-only label을 preview canvas/export resolution badge로 확장. Current/Duration/playback/frame/volume controls는 유지하고, badge는 `viewModel.canvasResolutionBadgeText`와 accessibility label/value/hint로 캔버스 비율 및 계산된 export render size를 표시. R3-02 zoom-to-fit 및 R3-05 safe-zone toggle은 별도 잔여. 검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 캔버스 비율·해상도 표시 | P2 |
+| R3-01 | 트랜스포트 정렬 + 타임코드(현재/전체) | ✅ 구현(2026-06-16, Codex R3-01/R3-02): `PreviewPanel.swift` transport가 Current/Duration `mm:ss:ff` badge와 frame back/play/frame forward capsule을 유지하고, preview canvas/export badge·zoom·volume controls를 같은 adaptive transport bar에 정렬. 기존 Current/Duration/Playback/frame/play-pause accessibility label/hint 유지. 검증: `git diff --check`, `swift test --filter StaticContract`(185 tests / 47 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | `mm:ss:ff` 현재/전체, 재생/프레임 이동 정렬 | P1 |
+| R3-02 | zoom-to-fit + 줌 | ✅ 구현(2026-06-16, Codex R3-01/R3-02): `PreviewPanel.swift`에 `previewZoom`/`isPreviewZoomFit` presentation state, `Fit Preview` reset, `Text(previewZoomDisplay)` percentage readout, +/- buttons, `Slider(value:)` zoom control을 추가. selected preview surface는 `.aspectRatio(canvasAspectRatio, contentMode: .fit)`를 유지하고 `.scaleEffect(previewZoom)`만 적용해 export/render/canvas semantics를 변경하지 않음. 검증: `git diff --check`, `swift test --filter StaticContract`(185 tests / 47 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | fit 버튼 + 줌 배율 표시 | P2 |
+| R3-03 | 비율/해상도 배지 | ✅ 구현(2026-06-16, Codex R1-03/R3-03): `PreviewPanel.swift` transport bar의 ratio-only label을 preview canvas/export resolution badge로 확장. Current/Duration/playback/frame/volume controls는 유지하고, badge는 `viewModel.canvasResolutionBadgeText`와 accessibility label/value/hint로 캔버스 비율 및 계산된 export render size를 표시. R3-05 safe-zone toggle은 별도 잔여. 검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. | 캔버스 비율·해상도 표시 | P2 |
 | R3-04 | **빈 상태 CTA** | ✅ 구현(2026-06-15, UX-06): `PreviewPanel.swift` empty state에 `Import Media` CTA가 있고 `openImportPanel()`→`viewModel.importMedia(urls)` 기존 import 경로로 연결. 검증: UIUX_HANDOFF UX-06의 `git diff --check`, `swift build`, `swift test --filter StaticContract`(135 tests PASS), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED. 스크린샷: `/tmp/moviecut-ui-evidence/ux06_preview_policy_final.png`, 최근 빈 상태 증거 `/tmp/moviecut-ui-evidence/r4-01_inspector_context_empty.png`, `/tmp/moviecut-ui-evidence/r1-01_single_export_verify2.png` | 미디어 없을 때 "미디어 추가" 큰 버튼 + 기존 import 경로 연결 | P0 |
 | R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` | on/off 토글 노출 | P3 |
 
@@ -120,10 +120,10 @@
 ## 4. 우선순위 로드맵
 - **P0 완료** — R1-01, R3-04, R4-01, R4-03, R5-01.
 - **P0 잔여** — 없음.
-- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R4-02, R5-02, R5-03.
-- **P1 인터랙션** — R2-04, R3-01 세부 마감.
-- **P2 완료** — R1-03, R3-03.
-- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01, R3-02.
+- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R3-01, R4-02, R5-02, R5-03.
+- **P1 인터랙션** — R2-04.
+- **P2 완료** — R1-03, R3-02, R3-03.
+- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01.
 - **P3 심층** — R3-05, R5-04, R4 서브탭 깊이(Speed 곡선 등).
 
 ---

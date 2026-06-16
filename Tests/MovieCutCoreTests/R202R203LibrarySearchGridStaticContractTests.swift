@@ -132,8 +132,8 @@ struct R202R203LibrarySearchGridStaticContractTests {
         #expect(docs.contains("검증: `git diff --check`, `swift test --filter StaticContract`"))
         #expect(docs.contains("| R2-04 | hover 미리듣기/미리보기 | ❌ |"))
         #expect(docs.contains("| R2-05 | 드래그 **또는** ＋/더블클릭 추가 | ✅ 구현(2026-06-16, Codex R2-05):"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션** — R2-04, R3-01 세부 마감."))
+        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-05, R3-01, R4-02, R5-02, R5-03."))
+        #expect(docs.contains("- **P1 인터랙션** — R2-04."))
         #expect(!docs.contains("| R2-04 | hover 미리듣기/미리보기 | ✅"))
     }
 }

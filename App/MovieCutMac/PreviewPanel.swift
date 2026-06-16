@@ -8,6 +8,11 @@ struct PreviewPanel: View {
     @State private var playbackEngine: PlaybackEngine
     @State private var loadedAssetId: UUID?
     @State private var previewVolume: Double = 1
+    @State private var previewZoom: Double = 1
+    @State private var isPreviewZoomFit = true
+
+    private let previewZoomRange: ClosedRange<Double> = 0.5...2
+    private let previewZoomStep: Double = 0.25
 
     init(viewModel: EditorViewModel) {
         self.viewModel = viewModel
@@ -20,11 +25,7 @@ struct PreviewPanel: View {
                 Color.black
 
                 if let clip = viewModel.selectedClip {
-                    VideoPreviewView(player: playbackEngine.player)
-                        .aspectRatio(canvasAspectRatio, contentMode: .fit)
-                        .overlay {
-                            previewOverlay(for: clip)
-                        }
+                    previewSurface(for: clip)
                 } else {
                     previewEmptyState
                 }
@@ -55,80 +56,63 @@ struct PreviewPanel: View {
     }
 
     private var previewTransportBar: some View {
-        HStack(spacing: 14) {
-            previewTimeBadge(
-                title: NSLocalizedString("Current", comment: ""),
-                value: timecodeString(playbackEngine.currentTime),
-                accessibilityLabel: NSLocalizedString("Current Time", comment: "")
-            )
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                previewTimeBadge(
+                    title: NSLocalizedString("Current", comment: ""),
+                    value: timecodeString(playbackEngine.currentTime),
+                    accessibilityLabel: NSLocalizedString("Current Time", comment: "")
+                )
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-            HStack(spacing: 8) {
-                Button(action: {
-                    seekByFrames(-1)
-                }) {
-                    Image(systemName: "backward.frame")
-                }
-                .buttonStyle(.borderless)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
-                .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
+                playbackTransportCapsule
 
-                Button(action: { playbackEngine.togglePlayPause() }) {
-                    Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title3.weight(.semibold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.borderless)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
-                .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
+                Spacer(minLength: 12)
 
-                Button(action: {
-                    seekByFrames(1)
-                }) {
-                    Image(systemName: "forward.frame")
-                }
-                .buttonStyle(.borderless)
-                .disabled(playbackEngine.playerItem == nil)
-                .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
-                .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
+                previewTimeBadge(
+                    title: NSLocalizedString("Duration", comment: ""),
+                    value: timecodeString(playbackEngine.duration),
+                    accessibilityLabel: NSLocalizedString("Duration", comment: "")
+                )
+
+                previewCanvasResolutionBadge
+                previewZoomControls
+                previewVolumeControl
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
-            )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
 
-            Spacer(minLength: 12)
+            VStack(spacing: 8) {
+                HStack(spacing: 14) {
+                    previewTimeBadge(
+                        title: NSLocalizedString("Current", comment: ""),
+                        value: timecodeString(playbackEngine.currentTime),
+                        accessibilityLabel: NSLocalizedString("Current Time", comment: "")
+                    )
 
-            previewTimeBadge(
-                title: NSLocalizedString("Duration", comment: ""),
-                value: timecodeString(playbackEngine.duration),
-                accessibilityLabel: NSLocalizedString("Duration", comment: "")
-            )
+                    Spacer(minLength: 12)
 
-            previewCanvasResolutionBadge
+                    playbackTransportCapsule
 
-            HStack(spacing: 6) {
-                Image(systemName: "speaker.wave.2")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Slider(value: Binding(
-                    get: { previewVolume },
-                    set: { newValue in
-                        previewVolume = newValue
-                        playbackEngine.player.volume = Float(newValue)
-                    }
-                ), in: 0 ... 1)
-                .frame(width: 84)
-                .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
-                .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
-                .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
+                    Spacer(minLength: 12)
+
+                    previewTimeBadge(
+                        title: NSLocalizedString("Duration", comment: ""),
+                        value: timecodeString(playbackEngine.duration),
+                        accessibilityLabel: NSLocalizedString("Duration", comment: "")
+                    )
+                }
+
+                HStack(spacing: 10) {
+                    previewCanvasResolutionBadge
+
+                    Spacer(minLength: 8)
+
+                    previewZoomControls
+
+                    Spacer(minLength: 8)
+
+                    previewVolumeControl
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -143,6 +127,167 @@ struct PreviewPanel: View {
         .padding(.top, 12)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview transport controls", comment: ""))
+    }
+
+    private var playbackTransportCapsule: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                seekByFrames(-1)
+            }) {
+                Image(systemName: "backward.frame")
+            }
+            .buttonStyle(.borderless)
+            .disabled(playbackEngine.playerItem == nil)
+            .accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))
+
+            Button(action: { playbackEngine.togglePlayPause() }) {
+                Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.title3.weight(.semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.borderless)
+            .disabled(playbackEngine.playerItem == nil)
+            .accessibilityLabel(playbackEngine.isPlaying ? NSLocalizedString("Pause", comment: "") : NSLocalizedString("Play", comment: ""))
+            .accessibilityHint(NSLocalizedString("Starts or pauses preview playback.", comment: ""))
+
+            Button(action: {
+                seekByFrames(1)
+            }) {
+                Image(systemName: "forward.frame")
+            }
+            .buttonStyle(.borderless)
+            .disabled(playbackEngine.playerItem == nil)
+            .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
+            .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
+    }
+
+    private var previewVolumeControl: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "speaker.wave.2")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Slider(value: Binding(
+                get: { previewVolume },
+                set: { newValue in
+                    previewVolume = newValue
+                    playbackEngine.player.volume = Float(newValue)
+                }
+            ), in: 0 ... 1)
+            .frame(width: 84)
+            .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
+            .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
+            .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
+        }
+    }
+
+    private var previewZoomControls: some View {
+        HStack(spacing: 6) {
+            Button(action: resetPreviewZoomToFit) {
+                Label(NSLocalizedString("Fit", comment: ""), systemImage: "arrow.up.left.and.down.right")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderless)
+            .help("Fit Preview")
+            .accessibilityLabel(NSLocalizedString("Fit Preview", comment: ""))
+            .accessibilityValue(previewZoomAccessibilityValue)
+            .accessibilityHint(NSLocalizedString("Resets preview zoom to fit the canvas in the preview.", comment: ""))
+
+            Button(action: { adjustPreviewZoom(by: -previewZoomStep) }) {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .disabled(previewZoom <= previewZoomRange.lowerBound)
+            .help("Zoom Preview Out")
+            .accessibilityLabel(NSLocalizedString("Zoom Preview Out", comment: ""))
+            .accessibilityHint(NSLocalizedString("Decreases the preview zoom.", comment: ""))
+
+            Text(previewZoomDisplay)
+                .font(.caption.monospacedDigit().weight(.medium))
+                .frame(width: 42, alignment: .trailing)
+                .accessibilityLabel(NSLocalizedString("Preview zoom", comment: ""))
+                .accessibilityValue(previewZoomDisplay)
+
+            Slider(value: Binding(
+                get: { previewZoom },
+                set: { newValue in
+                    setManualPreviewZoom(newValue)
+                }
+            ), in: previewZoomRange, step: 0.05)
+            .frame(width: 78)
+            .accessibilityLabel(NSLocalizedString("Preview zoom slider", comment: ""))
+            .accessibilityValue(previewZoomDisplay)
+            .accessibilityHint(NSLocalizedString("Adjusts preview zoom without changing export or canvas settings.", comment: ""))
+
+            Button(action: { adjustPreviewZoom(by: previewZoomStep) }) {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .disabled(previewZoom >= previewZoomRange.upperBound)
+            .help("Zoom Preview In")
+            .accessibilityLabel(NSLocalizedString("Zoom Preview In", comment: ""))
+            .accessibilityHint(NSLocalizedString("Increases the preview zoom.", comment: ""))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Preview zoom controls", comment: ""))
+    }
+
+    private var previewZoomDisplay: String {
+        String(format: NSLocalizedString("%.0f%%", comment: ""), clampedPreviewZoom(previewZoom) * 100)
+    }
+
+    private var previewZoomAccessibilityValue: String {
+        if isPreviewZoomFit {
+            return String(format: NSLocalizedString("%@, fit", comment: ""), previewZoomDisplay)
+        }
+        return previewZoomDisplay
+    }
+
+    private func resetPreviewZoomToFit() {
+        previewZoom = 1
+        isPreviewZoomFit = true
+    }
+
+    private func setManualPreviewZoom(_ zoom: Double) {
+        previewZoom = clampedPreviewZoom(zoom)
+        isPreviewZoomFit = false
+    }
+
+    private func adjustPreviewZoom(by delta: Double) {
+        setManualPreviewZoom(previewZoom + delta)
+    }
+
+    private func clampedPreviewZoom(_ zoom: Double) -> Double {
+        min(previewZoomRange.upperBound, max(previewZoomRange.lowerBound, zoom))
+    }
+
+    private func previewSurface(for clip: Clip) -> some View {
+        VideoPreviewView(player: playbackEngine.player)
+            .aspectRatio(canvasAspectRatio, contentMode: .fit)
+            .overlay {
+                previewOverlay(for: clip)
+            }
+            .scaleEffect(previewZoom)
+            .accessibilityValue(previewZoomAccessibilityValue)
     }
 
     private var canvasAspectRatio: CGFloat {

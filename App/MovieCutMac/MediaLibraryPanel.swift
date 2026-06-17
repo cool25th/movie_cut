@@ -339,11 +339,30 @@ struct MediaLibraryPanel: View {
     }
 
     private var stickersTabContent: some View {
-        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
-            embeddedLibrarySearchNote
+        let stickers = filteredStickerAssets
 
-            StickerPickerView { sticker in
-                Task { await viewModel.addSticker(sticker) }
+        return Group {
+            if stickers.isEmpty {
+                librarySearchEmptyState()
+                    .padding(MovieCutSpacing.medium)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                        ForEach(stickers) { sticker in
+                            Button {
+                                Task { await viewModel.addSticker(sticker) }
+                            } label: {
+                                stickerGridCard(sticker)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(format: NSLocalizedString("Add %@ sticker", comment: ""), sticker.name))
+                            .accessibilityValue(stickerCategoryName(sticker))
+                            .accessibilityHint(NSLocalizedString("Adds this sticker to the timeline.", comment: ""))
+                        }
+                    }
+                    .padding(MovieCutSpacing.medium)
+                }
+                .movieCutScrollBackground(MovieCutTheme.panelBackground)
             }
         }
         .accessibilityLabel(NSLocalizedString("Sticker browser", comment: ""))
@@ -577,6 +596,9 @@ struct MediaLibraryPanel: View {
     @ViewBuilder
     private var transitionsTabContent: some View {
         let transitions = filteredTransitionTypes
+        let disabledReason = viewModel.selectedClip == nil
+            ? NSLocalizedString("Select a clip to apply a transition.", comment: "")
+            : nil
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
@@ -596,16 +618,16 @@ struct MediaLibraryPanel: View {
                                     title: type.displayName,
                                     subtitle: transitionSubtitle(type),
                                     systemImage: type == .none ? "nosign" : "rectangle.2.swap",
-                                    previewKind: .transition
+                                    previewKind: .transition,
+                                    disabledReason: disabledReason
                                 )
                                 .onHover { isHovering in
                                     setLibraryHoverPreview(isHovering, title: type.displayName, kind: .transition)
                                 }
                             }
                             .buttonStyle(.plain)
-                            .disabled(viewModel.selectedClip == nil)
                             .accessibilityLabel(type.displayName)
-                            .accessibilityHint(NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
+                            .accessibilityHint(disabledReason ?? NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
                         }
                     }
                 }
@@ -640,6 +662,7 @@ struct MediaLibraryPanel: View {
         emptyMessage: String
     ) -> some View {
         let effects = filteredEffectTypes(types)
+        let disabledReason = viewModel.selectedClip == nil ? emptyMessage : nil
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MovieCutSpacing.small) {
@@ -659,16 +682,16 @@ struct MediaLibraryPanel: View {
                                     title: type.displayName,
                                     subtitle: effectSubtitle(type),
                                     systemImage: systemImage,
-                                    previewKind: previewKind
+                                    previewKind: previewKind,
+                                    disabledReason: disabledReason
                                 )
                                 .onHover { isHovering in
                                     setLibraryHoverPreview(isHovering, title: type.displayName, kind: previewKind)
                                 }
                             }
                             .buttonStyle(.plain)
-                            .disabled(viewModel.selectedClip == nil)
                             .accessibilityLabel(type.displayName)
-                            .accessibilityHint(String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
+                            .accessibilityHint(disabledReason ?? String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
                         }
                     }
                 }
@@ -725,12 +748,15 @@ struct MediaLibraryPanel: View {
         title: String,
         subtitle: String,
         systemImage: String,
-        previewKind: LibraryHoverPreviewKind? = nil
+        previewKind: LibraryHoverPreviewKind? = nil,
+        affordanceSystemImage: String = "plus.circle.fill",
+        affordanceText: String? = nil,
+        disabledReason: String? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(MovieCutTheme.accentCyan)
+                .foregroundStyle(disabledReason == nil ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
                 .frame(width: 28, height: 28)
 
             Text(title)
@@ -745,10 +771,22 @@ struct MediaLibraryPanel: View {
 
             Spacer(minLength: 0)
 
-            HStack {
-                Spacer()
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
+            if let disabledReason {
+                Label(disabledReason, systemImage: "info.circle")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else {
+                HStack(spacing: MovieCutSpacing.xSmall) {
+                    Spacer()
+                    if let affordanceText {
+                        Text(affordanceText)
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    Image(systemName: affordanceSystemImage)
+                }
+                .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
             }
         }
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
@@ -766,6 +804,71 @@ struct MediaLibraryPanel: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private func stickerGridCard(_ sticker: StickerAsset) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            HStack(alignment: .top, spacing: MovieCutSpacing.small) {
+                stickerPreviewGlyph(sticker)
+                    .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(sticker.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+
+                    Label(stickerCategoryName(sticker), systemImage: stickerSystemImage(sticker))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Text(stickerDescription(sticker))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: MovieCutSpacing.xSmall) {
+                Spacer()
+                Text(NSLocalizedString("Add", comment: ""))
+                    .font(.caption2.weight(.semibold))
+                Image(systemName: "plus.circle.fill")
+            }
+            .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
+        }
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.cardBackground
+        )
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func stickerPreviewGlyph(_ sticker: StickerAsset) -> some View {
+        if let emoji = sticker.emoji, !sticker.isImageBacked {
+            Text(emoji)
+                .font(.system(size: 30))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let image = StickerImageProvider.previewImage(for: sticker) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.controlSurface)
+                Image(systemName: stickerSystemImage(sticker))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func libraryHoverPreviewAffordance(title: String, kind: LibraryHoverPreviewKind) -> some View {
@@ -982,13 +1085,15 @@ struct MediaLibraryPanel: View {
         TransitionType.allCases.filter(transitionTypeMatchesLibrarySearch)
     }
 
+    private var filteredStickerAssets: [StickerAsset] {
+        StickerLibrary.builtIn().stickers.filter(stickerMatchesLibrarySearch)
+    }
+
     private var embeddedLibrarySearchNoteText: String {
         switch selectedLibraryTab {
         case .audio:
             return NSLocalizedString("Use the Music and Sound Effects search fields below to filter audio.", comment: "")
-        case .stickers:
-            return NSLocalizedString("Use the sticker search field below to filter stickers.", comment: "")
-        case .media, .text, .captions, .effects, .transitions, .filters, .adjustment, .smart:
+        case .media, .text, .captions, .stickers, .effects, .transitions, .filters, .adjustment, .smart:
             return ""
         }
     }
@@ -1024,6 +1129,16 @@ struct MediaLibraryPanel: View {
             type.displayName,
             transitionSubtitle(type),
             transitionCategoryName(type.category)
+        ])
+    }
+
+    private func stickerMatchesLibrarySearch(_ sticker: StickerAsset) -> Bool {
+        librarySearchMatches([
+            sticker.name,
+            stickerCategoryName(sticker),
+            stickerDescription(sticker),
+            sticker.emoji ?? "",
+            NSLocalizedString("Sticker", comment: "")
         ])
     }
 
@@ -1091,6 +1206,22 @@ struct MediaLibraryPanel: View {
         case .zoom: return NSLocalizedString("Zoom", comment: "")
         case .stylized: return NSLocalizedString("Stylized", comment: "")
         }
+    }
+
+    private func stickerCategoryName(_ sticker: StickerAsset) -> String {
+        sticker.isImageBacked
+            ? NSLocalizedString("Badge/Image", comment: "")
+            : NSLocalizedString("Emoji", comment: "")
+    }
+
+    private func stickerDescription(_ sticker: StickerAsset) -> String {
+        sticker.isImageBacked
+            ? NSLocalizedString("Image-backed badge overlay that can be placed on the timeline.", comment: "")
+            : NSLocalizedString("Emoji sticker overlay that can be placed on the timeline.", comment: "")
+    }
+
+    private func stickerSystemImage(_ sticker: StickerAsset) -> String {
+        sticker.isImageBacked ? "photo.on.rectangle" : "face.smiling"
     }
 
     private func setLibraryHoverPreview(_ isHovering: Bool, title: String, kind: LibraryHoverPreviewKind) {

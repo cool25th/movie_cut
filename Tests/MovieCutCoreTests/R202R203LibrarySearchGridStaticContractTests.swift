@@ -58,10 +58,12 @@ struct R202R203LibrarySearchGridStaticContractTests {
             "private var shouldShowCustomTextAction: Bool",
             "private func filteredEffectTypes(_ types: [EffectType]) -> [EffectType]",
             "private var filteredTransitionTypes: [TransitionType]",
+            "private var filteredStickerAssets: [StickerAsset]",
             "private func assetMatchesLibrarySearch(_ asset: MediaAsset) -> Bool",
             "private func textTemplateMatchesLibrarySearch(_ template: MovieCutCore.TextTemplate) -> Bool",
             "private func effectTypeMatchesLibrarySearch(_ type: EffectType) -> Bool",
             "private func transitionTypeMatchesLibrarySearch(_ type: TransitionType) -> Bool",
+            "private func stickerMatchesLibrarySearch(_ sticker: StickerAsset) -> Bool",
             "private func librarySearchMatches(_ values: [String]) -> Bool"
         ] {
             #expect(filters.contains(marker))
@@ -77,6 +79,9 @@ struct R202R203LibrarySearchGridStaticContractTests {
         #expect(filters.contains("effectSubtitle(type)"))
         #expect(filters.contains("transitionSubtitle(type)"))
         #expect(filters.contains("transitionCategoryName(type.category)"))
+        #expect(filters.contains("sticker.name"))
+        #expect(filters.contains("stickerCategoryName(sticker)"))
+        #expect(filters.contains("stickerDescription(sticker)"))
         #expect(filters.contains(".caseInsensitive"))
         #expect(filters.contains(".diacriticInsensitive"))
     }
@@ -118,10 +123,12 @@ struct R202R203LibrarySearchGridStaticContractTests {
         #expect(source.contains("applyTransition(type)"))
         #expect(source.contains("MusicLibraryView(viewModel: viewModel)"))
         #expect(source.contains("SFXPickerView(viewModel: viewModel)"))
-        #expect(source.contains("StickerPickerView { sticker in"))
+        #expect(source.contains("stickerGridCard(sticker)"))
+        #expect(source.contains("Task { await viewModel.addSticker(sticker) }"))
+        #expect(source.contains("StickerLibrary.builtIn().stickers.filter(stickerMatchesLibrarySearch)"))
         #expect(source.contains("embeddedLibrarySearchNote"))
         #expect(source.contains("Use the Music and Sound Effects search fields below to filter audio."))
-        #expect(source.contains("Use the sticker search field below to filter stickers."))
+        #expect(!source.contains("Use the sticker search field below to filter stickers."))
     }
 
     @Test("R2 search grid rows remain implemented after hover preview completion")

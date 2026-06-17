@@ -55,6 +55,8 @@ struct R502TimelineZoomStaticContractTests {
         #expect(zoomControls.contains("Button(action: { viewModel.zoomTimelineOut() })"))
         #expect(zoomControls.contains("Button(action: { viewModel.zoomTimelineIn() })"))
         #expect(zoomControls.contains("Text(timelineZoomDisplay)"))
+        #expect(zoomControls.contains(#".help("Zoom Timeline Out")"#))
+        #expect(zoomControls.contains(#".help("Zoom Timeline In")"#))
         #expect(display.contains(#""\(Int(clampedTimelineZoom(viewModel.timelineZoom).rounded())) px/s""#))
     }
 
@@ -68,7 +70,8 @@ struct R502TimelineZoomStaticContractTests {
         )
 
         #expect(zoomControls.contains("fitTimelineToAvailableWidth(timelineViewportWidth)"))
-        #expect(zoomControls.contains(#"Label(NSLocalizedString("Fit", comment: ""), systemImage: "arrow.left.and.right")"#))
+        #expect(zoomControls.contains(#"Image(systemName: "arrow.left.and.right")"#))
+        #expect(!zoomControls.contains(#"Label(NSLocalizedString("Fit", comment: ""), systemImage: "arrow.left.and.right")"#))
         #expect(zoomControls.contains(#".help("Fit Timeline")"#))
         #expect(zoomControls.contains(#"accessibilityLabel(NSLocalizedString("Fit Timeline", comment: ""))"#))
         #expect(zoomControls.contains(#"accessibilityHint(NSLocalizedString("Fits the visible timeline duration in the available timeline width.", comment: ""))"#))

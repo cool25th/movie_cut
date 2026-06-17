@@ -164,7 +164,9 @@ struct Phase01LibraryRailStaticContractTests {
         #expect(handoff.contains("Phase01LibraryRailStaticContractTests"))
         #expect(handoff.contains("Phase 0-2 implemented"))
         #expect(handoff.contains("Phase 0-3 implemented"))
-        #expect(handoff.contains("Phase 0-4 remains pending"))
+        #expect(handoff.contains("Phase 0-4 implemented"))
+        #expect(handoff.contains("Phase 0 complete"))
+        #expect(!handoff.contains("Phase 0-4 remains pending"))
     }
 }
 

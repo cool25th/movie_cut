@@ -128,16 +128,18 @@ struct Phase03BrowseableCardsStaticContractTests {
         #expect(applyTransition.contains("Task { await viewModel.updateSelectedTransition(transition) }"))
     }
 
-    @Test("Handoff marks Phase 0-3 implemented and keeps Phase 0-4 pending")
-    func handoffMarksPhase03ImplementedAndKeepsPhase04Pending() throws {
+    @Test("Handoff marks Phase 0-3 and Phase 0-4 implemented")
+    func handoffMarksPhase03AndPhase04Implemented() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 0-1 implemented"))
         #expect(handoff.contains("Phase 0-2 implemented"))
         #expect(handoff.contains("Phase 0-3 implemented"))
         #expect(handoff.contains("Phase03BrowseableCardsStaticContractTests"))
-        #expect(handoff.contains("Phase 0-4 remains pending"))
+        #expect(handoff.contains("Phase 0-4 implemented"))
+        #expect(handoff.contains("Phase 0 complete"))
         #expect(!handoff.contains("Phase 0-3/0-4 remain pending"))
+        #expect(!handoff.contains("Phase 0-4 remains pending"))
     }
 }
 

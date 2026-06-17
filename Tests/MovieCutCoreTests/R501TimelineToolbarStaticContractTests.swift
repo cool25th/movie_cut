@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// R5-01 keeps CapCut-style clip actions in one timeline header row while
+/// R5-01 keeps CapCut-style edit actions in one timeline header row while
 /// leaving timeline commands and rendering semantics owned by the ViewModel.
 @Suite("R5-01 Timeline Toolbar StaticContract")
 struct R501TimelineToolbarStaticContractTests {
@@ -21,64 +21,64 @@ struct R501TimelineToolbarStaticContractTests {
         return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
-    @Test("Timeline header keeps edit quick tools marker and zoom in one row")
+    @Test("Timeline header keeps edit marker and zoom controls in one row")
     func timelineHeaderKeepsSingleToolbarRow() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
-        let content = try source("App/MovieCutMac/ContentView.swift")
         let header = try section(
             in: timeline,
             from: "HStack(spacing: MovieCutSpacing.small) {",
             to: "            }\n            .padding(.horizontal, MovieCutSpacing.medium)"
         )
-        let quickTools = try section(
-            in: content,
-            from: "struct QuickToolsPanel: View",
-            to: "struct ExportSheet: View"
-        )
 
         #expect(header.contains(#"title: NSLocalizedString("Timeline", comment: "")"#))
         #expect(header.contains("selectedClipToolbar"))
-        #expect(header.contains("QuickToolsPanel(viewModel: viewModel)"))
+        #expect(header.contains("timelineMarkerControls"))
         #expect(header.contains("zoomControls"))
-        #expect(quickTools.contains("markerControls"))
-        #expect(quickTools.contains(#"Label("Marker (\(viewModel.currentProject.markers.count))", systemImage: "flag.fill")"#))
-        #expect(quickTools.contains(#".help("Add Marker at Playhead")"#))
+        #expect(header.contains("Spacer(minLength: MovieCutSpacing.small)"))
+        #expect(!header.contains("QuickToolsPanel(viewModel: viewModel)"))
     }
 
-    @Test("Selected clip toolbar promotes split duplicate reverse freeze delete ripple snap")
+    @Test("Selected clip toolbar promotes split delete ripple duplicate snap freeze reverse")
     func selectedClipToolbarPromotesPrimaryClipActions() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
         let toolbar = try section(
             in: timeline,
             from: "private var selectedClipToolbar: some View",
-            to: "    private var zoomControls"
+            to: "    private var timelineMarkerControls"
         )
 
         for marker in [
-            #"Snap Playhead to Clip Start"#,
-            #"Snap Playhead to Clip End"#,
             #"Split at Playhead"#,
-            #"Duplicate Selected Clips"#,
-            #"Reverse Selected Clip"#,
-            #"Freeze Selected Frame"#,
             #"Delete Selected Clips"#,
             #"Ripple Delete Selected Clip"#,
+            #"Duplicate Selected Clips"#,
+            #"Snap Playhead to Clip Start"#,
+            #"Snap Playhead to Clip End"#,
+            #"Freeze Selected Frame"#,
+            #"Reverse Selected Clip"#,
         ] {
             #expect(toolbar.contains(marker))
         }
 
         let split = try #require(toolbar.range(of: #"Split at Playhead"#))
-        let reverse = try #require(toolbar.range(of: #"Reverse Selected Clip"#))
-        let freeze = try #require(toolbar.range(of: #"Freeze Selected Frame"#))
-        let duplicate = try #require(toolbar.range(of: #"Duplicate Selected Clips"#))
         let delete = try #require(toolbar.range(of: #"Delete Selected Clips"#))
         let ripple = try #require(toolbar.range(of: #"Ripple Delete Selected Clip"#))
+        let duplicate = try #require(toolbar.range(of: #"Duplicate Selected Clips"#))
+        let snapStart = try #require(toolbar.range(of: #"Snap Playhead to Clip Start"#))
+        let snapEnd = try #require(toolbar.range(of: #"Snap Playhead to Clip End"#))
+        let freeze = try #require(toolbar.range(of: #"Freeze Selected Frame"#))
+        let reverse = try #require(toolbar.range(of: #"Reverse Selected Clip"#))
 
-        #expect(split.lowerBound < reverse.lowerBound)
-        #expect(reverse.lowerBound < freeze.lowerBound)
-        #expect(freeze.lowerBound < duplicate.lowerBound)
-        #expect(duplicate.lowerBound < delete.lowerBound)
+        #expect(split.lowerBound < delete.lowerBound)
         #expect(delete.lowerBound < ripple.lowerBound)
+        #expect(ripple.lowerBound < duplicate.lowerBound)
+        #expect(duplicate.lowerBound < snapStart.lowerBound)
+        #expect(snapStart.lowerBound < snapEnd.lowerBound)
+        #expect(snapEnd.lowerBound < freeze.lowerBound)
+        #expect(freeze.lowerBound < reverse.lowerBound)
+        #expect(!toolbar.contains("sendSelectedClipLayerToBack()"))
+        #expect(!toolbar.contains("bringSelectedClipLayerToFront()"))
+        #expect(!toolbar.contains(#"Text(NSLocalizedString("Edit", comment: ""))"#))
     }
 
     @Test("Reverse and freeze buttons call existing ViewModel presentation hooks")
@@ -87,7 +87,7 @@ struct R501TimelineToolbarStaticContractTests {
         let toolbar = try section(
             in: timeline,
             from: "private var selectedClipToolbar: some View",
-            to: "    private var zoomControls"
+            to: "    private var timelineMarkerControls"
         )
 
         #expect(toolbar.contains("guard let selectedClip = viewModel.selectedClip else { return }"))

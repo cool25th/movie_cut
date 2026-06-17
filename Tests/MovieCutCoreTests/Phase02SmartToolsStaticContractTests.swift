@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// Phase 0-2 moves the Smart/AI automation entry points into the left library
-/// as presentation-only cards while leaving timeline quick tools for Phase 0-4.
+/// as presentation-only cards.
 @Suite("Phase 0-2 Smart Tools StaticContract")
 struct Phase02SmartToolsStaticContractTests {
     private func source(_ path: String) throws -> String {
@@ -131,16 +131,15 @@ struct Phase02SmartToolsStaticContractTests {
         }
     }
 
-    @Test("Timeline QuickToolsPanel remains pending for Phase 0-4")
-    func timelineQuickToolsPanelRemainsPendingForPhase04() throws {
+    @Test("Timeline no longer embeds QuickToolsPanel after Phase 0-4")
+    func timelineNoLongerEmbedsQuickToolsPanelAfterPhase04() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
-        let content = try source("App/MovieCutMac/ContentView.swift")
 
-        #expect(timeline.contains("QuickToolsPanel(viewModel: viewModel)") || content.contains("QuickToolsPanel(viewModel: viewModel)"))
+        #expect(!timeline.contains("QuickToolsPanel(viewModel: viewModel)"))
     }
 
-    @Test("Handoff marks Phase 0-2 and Phase 0-3 implemented with Phase 0-4 pending")
-    func handoffMarksPhase02AndPhase03ImplementedWithPhase04Pending() throws {
+    @Test("Handoff marks Phase 0-2 through Phase 0-4 implemented")
+    func handoffMarksPhase02ThroughPhase04Implemented() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 0-1 implemented"))
@@ -148,9 +147,12 @@ struct Phase02SmartToolsStaticContractTests {
         #expect(handoff.contains("Phase02SmartToolsStaticContractTests"))
         #expect(handoff.contains("Phase 0-3 implemented"))
         #expect(handoff.contains("Phase03BrowseableCardsStaticContractTests"))
-        #expect(handoff.contains("Phase 0-4 remains pending"))
+        #expect(handoff.contains("Phase 0-4 implemented"))
+        #expect(handoff.contains("Phase04TimelineEditToolbarStaticContractTests"))
+        #expect(handoff.contains("Phase 0 complete"))
         #expect(!handoff.contains("Phase 0-2/0-3/0-4 remain pending"))
         #expect(!handoff.contains("Phase 0-3/0-4 remain pending"))
+        #expect(!handoff.contains("Phase 0-4 remains pending"))
     }
 }
 

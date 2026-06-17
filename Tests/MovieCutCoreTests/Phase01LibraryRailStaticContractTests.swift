@@ -145,8 +145,7 @@ struct Phase01LibraryRailStaticContractTests {
         #expect(source.contains("private var adjustmentEffectTypes: [EffectType]"))
         #expect(source.contains("[.brightness, .contrast, .saturation, .temperature, .exposure]"))
         #expect(source.contains("private var smartTabContent: some View"))
-        #expect(source.contains("Smart tools move here next."))
-        #expect(source.contains("Quick Tools remain in the timeline for Phase 0-1."))
+        #expect(!source.contains("Smart tools move here next."))
         #expect(!source.contains("QuickToolsPanel(viewModel: viewModel)"))
     }
 
@@ -157,13 +156,14 @@ struct Phase01LibraryRailStaticContractTests {
         #expect(content.contains(".frame(minWidth: 360, idealWidth: 380, maxWidth: 430)"))
     }
 
-    @Test("Handoff marks only Phase 0-1 progress")
-    func handoffMarksOnlyPhase01Progress() throws {
+    @Test("Handoff keeps Phase 0-1 progress noted")
+    func handoffKeepsPhase01ProgressNoted() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 0-1 implemented"))
         #expect(handoff.contains("Phase01LibraryRailStaticContractTests"))
-        #expect(handoff.contains("Phase 0-2/0-3/0-4 remain pending"))
+        #expect(handoff.contains("Phase 0-2 implemented"))
+        #expect(handoff.contains("Phase 0-3/0-4 remain pending"))
     }
 }
 

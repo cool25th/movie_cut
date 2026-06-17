@@ -12,6 +12,7 @@ struct MediaLibraryPanel: View {
     @State private var librarySearchText = ""
     @State private var hoveredLibraryPreviewTitle: String?
     @State private var hoveredLibraryPreviewKind: LibraryHoverPreviewKind?
+    @State private var runningSmartTool: SmartLibraryTool?
 
     private let libraryRailWidth: CGFloat = 60
     private let libraryRailItemHeight: CGFloat = 32
@@ -381,33 +382,196 @@ struct MediaLibraryPanel: View {
     private var smartTabContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
-                VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(MovieCutTheme.accentCyan)
-                        .frame(width: 32, height: 32)
+                smartFeedbackView
 
-                    Text(NSLocalizedString("Smart tools move here next.", comment: ""))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-
-                    Text(NSLocalizedString("Quick Tools remain in the timeline for Phase 0-1.", comment: ""))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                    ForEach(SmartLibraryTool.allCases) { tool in
+                        smartToolButton(tool)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .movieCutCard(
-                    padding: MovieCutSpacing.medium,
-                    cornerRadius: MovieCutRadius.medium,
-                    background: MovieCutTheme.cardBackground,
-                    border: MovieCutTheme.border.opacity(0.72)
-                )
             }
             .padding(MovieCutSpacing.medium)
         }
         .movieCutScrollBackground(MovieCutTheme.panelBackground)
         .accessibilityLabel(NSLocalizedString("Smart tools browser", comment: ""))
+    }
+
+    @ViewBuilder
+    private var smartFeedbackView: some View {
+        if let message = viewModel.quickToolProgressMessage {
+            smartFeedbackLabel(message, systemImage: "hourglass", color: .secondary)
+        } else if let message = viewModel.lastStatusMessage {
+            smartFeedbackLabel(message, systemImage: "checkmark.circle", color: .secondary)
+        } else if let message = viewModel.lastErrorMessage {
+            smartFeedbackLabel(message, systemImage: "exclamationmark.triangle", color: .red)
+        }
+    }
+
+    private func smartFeedbackLabel(_ message: String, systemImage: String, color: Color) -> some View {
+        Label(message, systemImage: systemImage)
+            .font(.caption)
+            .foregroundStyle(color)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .movieCutCard(
+                padding: MovieCutSpacing.small,
+                cornerRadius: MovieCutRadius.small,
+                background: MovieCutTheme.elevatedCardBackground,
+                border: MovieCutTheme.border.opacity(0.52)
+            )
+            .accessibilityElement(children: .combine)
+    }
+
+    private func smartToolButton(_ tool: SmartLibraryTool) -> some View {
+        let isEnabled = isSmartToolEnabled(tool)
+        let isRunning = runningSmartTool == tool
+        let isBlockedByRunningTool = runningSmartTool != nil && !isRunning
+
+        return Button {
+            runSmartTool(tool)
+        } label: {
+            smartToolCard(
+                tool,
+                isEnabled: isEnabled,
+                isRunning: isRunning,
+                isBlockedByRunningTool: isBlockedByRunningTool
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled || isBlockedByRunningTool)
+        .help(isEnabled ? tool.title : tool.disabledReason)
+        .accessibilityLabel(tool.title)
+        .accessibilityHint(isEnabled ? NSLocalizedString("Runs this Smart tool.", comment: "") : tool.disabledReason)
+    }
+
+    private func smartToolCard(
+        _ tool: SmartLibraryTool,
+        isEnabled: Bool,
+        isRunning: Bool,
+        isBlockedByRunningTool: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            HStack(alignment: .top, spacing: MovieCutSpacing.small) {
+                Image(systemName: tool.systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isEnabled ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
+                    .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(tool.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+
+                    Text(tool.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            smartToolAffordance(
+                tool,
+                isEnabled: isEnabled,
+                isRunning: isRunning,
+                isBlockedByRunningTool: isBlockedByRunningTool
+            )
+        }
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+        .movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.cardBackground,
+            border: isEnabled ? MovieCutTheme.border.opacity(0.52) : MovieCutTheme.border.opacity(0.32)
+        )
+        .opacity(isEnabled || isRunning ? 1 : 0.68)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func smartToolAffordance(
+        _ tool: SmartLibraryTool,
+        isEnabled: Bool,
+        isRunning: Bool,
+        isBlockedByRunningTool: Bool
+    ) -> some View {
+        if isRunning {
+            HStack(spacing: MovieCutSpacing.xSmall) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(tool.progressMessage)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } else if !isEnabled {
+            Label(tool.disabledReason, systemImage: "info.circle")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        } else if isBlockedByRunningTool {
+            Label(NSLocalizedString("Waiting for current Smart tool.", comment: ""), systemImage: "hourglass")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        } else {
+            HStack(spacing: MovieCutSpacing.xSmall) {
+                Text(NSLocalizedString("Execute", comment: ""))
+                    .font(.caption2.weight(.semibold))
+                Image(systemName: "play.circle.fill")
+            }
+            .foregroundStyle(MovieCutTheme.accentCyan)
+        }
+    }
+
+    private func isSmartToolEnabled(_ tool: SmartLibraryTool) -> Bool {
+        switch tool {
+        case .autoCut:
+            return viewModel.canRunAutoCutOnSelection
+        case .sceneDetect:
+            return viewModel.canDetectSceneChangesForSelection
+        case .beatDetect:
+            return viewModel.canDetectBeats
+        case .reframe:
+            return viewModel.canAutoReframeSelection
+        case .noiseReduction:
+            return viewModel.canApplyNoiseReductionToSelection
+        case .extractAudio:
+            return viewModel.canExtractAudioFromSelection
+        }
+    }
+
+    private func runSmartTool(_ tool: SmartLibraryTool) {
+        guard runningSmartTool == nil else { return }
+        runningSmartTool = tool
+        viewModel.quickToolProgressMessage = tool.progressMessage
+        Task { @MainActor in
+            await performSmartTool(tool)
+            if viewModel.quickToolProgressMessage == tool.progressMessage {
+                viewModel.quickToolProgressMessage = nil
+            }
+            runningSmartTool = nil
+        }
+    }
+
+    @MainActor
+    private func performSmartTool(_ tool: SmartLibraryTool) async {
+        switch tool {
+        case .autoCut:
+            await viewModel.runAutoCutOnSelection()
+        case .sceneDetect:
+            await viewModel.detectSceneChangesForSelection()
+        case .beatDetect:
+            await viewModel.detectBeats()
+        case .reframe:
+            await viewModel.autoReframeSelection()
+        case .noiseReduction:
+            await viewModel.applyNoiseReductionToSelection()
+        case .extractAudio:
+            await viewModel.extractAudioFromSelection()
+        }
     }
 
     @ViewBuilder
@@ -1254,6 +1418,94 @@ struct MediaLibraryPanel: View {
         }
         states.append(NSLocalizedString("draggable to timeline", comment: ""))
         return states.joined(separator: ", ")
+    }
+}
+
+private enum SmartLibraryTool: CaseIterable, Identifiable, Equatable {
+    case autoCut
+    case sceneDetect
+    case beatDetect
+    case reframe
+    case noiseReduction
+    case extractAudio
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .autoCut:
+            return NSLocalizedString("Auto Cut", comment: "")
+        case .sceneDetect:
+            return NSLocalizedString("Detect Scenes", comment: "")
+        case .beatDetect:
+            return NSLocalizedString("Detect Beats", comment: "")
+        case .reframe:
+            return NSLocalizedString("Auto Reframe", comment: "")
+        case .noiseReduction:
+            return NSLocalizedString("Noise Reduce", comment: "")
+        case .extractAudio:
+            return NSLocalizedString("Extract Audio", comment: "")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .autoCut:
+            return "speaker.slash"
+        case .sceneDetect:
+            return "film.stack"
+        case .beatDetect:
+            return "metronome"
+        case .reframe:
+            return "viewfinder"
+        case .noiseReduction:
+            return "waveform.badge.minus"
+        case .extractAudio:
+            return "waveform"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .autoCut:
+            return NSLocalizedString("Analyze silence and prepare automatic cuts for the selected clip.", comment: "")
+        case .sceneDetect:
+            return NSLocalizedString("Find visual scene changes and add cut markers for review.", comment: "")
+        case .beatDetect:
+            return NSLocalizedString("Detect beats and add timeline markers for music edits.", comment: "")
+        case .reframe:
+            return NSLocalizedString("Track the subject and write crop keyframes for the canvas.", comment: "")
+        case .noiseReduction:
+            return NSLocalizedString("Render a denoised audio version for the selected clip.", comment: "")
+        case .extractAudio:
+            return NSLocalizedString("Extract the selected video clip's audio onto the timeline.", comment: "")
+        }
+    }
+
+    var disabledReason: String {
+        switch self {
+        case .autoCut, .beatDetect, .noiseReduction:
+            return NSLocalizedString("Select an audio or video clip.", comment: "")
+        case .sceneDetect, .reframe, .extractAudio:
+            return NSLocalizedString("Select a video clip.", comment: "")
+        }
+    }
+
+    var progressMessage: String {
+        switch self {
+        case .autoCut:
+            return NSLocalizedString("Analyzing silence...", comment: "")
+        case .sceneDetect:
+            return NSLocalizedString("Detecting scene changes...", comment: "")
+        case .beatDetect:
+            return NSLocalizedString("Detecting beats...", comment: "")
+        case .reframe:
+            return NSLocalizedString("Tracking crop frames...", comment: "")
+        case .noiseReduction:
+            return NSLocalizedString("Rendering denoised audio...", comment: "")
+        case .extractAudio:
+            return NSLocalizedString("Extracting audio...", comment: "")
+        }
     }
 }
 

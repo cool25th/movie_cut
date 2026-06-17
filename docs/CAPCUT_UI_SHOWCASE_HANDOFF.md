@@ -30,7 +30,7 @@
 | 0-3 | Effects/Filters/Transitions/Stickers를 **선택 전에도 카드 갤러리 브라우징** | `MediaLibraryPanel.swift:296` `effectsTabContent`~`filtersTabContent`/`transitionsTabContent` | 선택 없어도 카탈로그 노출, 적용만 비활성 힌트 |
 | 0-4 | 타임라인 툴바에서 AI 도구 제거 → split/delete/ripple/duplicate/snap/marker/freeze/reverse/zoom만 | `TimelineView.swift:44-78`, `QuickToolsPanel` 사용처 `:67` | 편집 도구만 한 줄, 텍스트 라벨→아이콘+툴팁 |
 
-Progress note (2026-06-17): Phase 0-1 implemented with the 60px library rail and verified by `Phase01LibraryRailStaticContractTests`; Phase 0-2/0-3/0-4 remain pending.
+Progress note (2026-06-17): Phase 0-1 implemented with the 60px library rail and verified by `Phase01LibraryRailStaticContractTests`; Phase 0-2 implemented with Smart tab 2-column cards for Auto Cut, Detect Scenes, Detect Beats, Auto Reframe, Noise Reduce, and Extract Audio, verified by `Phase02SmartToolsStaticContractTests`. Phase 0-3/0-4 remain pending.
 
 ### Phase 1 — 다크 셸 정합 (P0/P1)
 | ID | 작업 | 파일·앵커 | 수용기준 |

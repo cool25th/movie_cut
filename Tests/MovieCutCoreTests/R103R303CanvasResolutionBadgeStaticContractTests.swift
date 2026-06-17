@@ -141,8 +141,8 @@ struct R103R303CanvasResolutionBadgeStaticContractTests {
         #expect(docs.contains("`SafeZoneGuide.standard`"))
         #expect(docs.contains("- **P2 완료** — R1-03, R3-02, R3-03."))
         #expect(docs.contains("- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01."))
-        #expect(docs.contains("- **P3 완료** — R5-04."))
-        #expect(docs.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
+        #expect(docs.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
+        #expect(docs.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
         #expect(!docs.contains("R3-02/03"))
         #expect(!docs.contains("R3-05 safe-zone toggle은 별도 잔여"))
     }

@@ -167,8 +167,8 @@ struct R305SafeZoneToggleStaticContractTests {
         }
     }
 
-    @Test("R3-05 docs stay implemented while R5-04 is complete and speed curve is pending")
-    func r305DocsStayImplementedWhileR504IsCompleteAndSpeedCurveIsPending() throws {
+    @Test("R3-05 docs stay implemented while R5-04 and speed curve are complete")
+    func r305DocsStayImplementedWhileR504AndSpeedCurveAreComplete() throws {
         let parity = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
         let r305Row = try section(
@@ -182,12 +182,14 @@ struct R305SafeZoneToggleStaticContractTests {
         #expect(r305Row.contains("`SafeZoneGuide.standard`"))
         #expect(r305Row.contains("render/export/playback/session semantics 변경 없음"))
         #expect(parity.contains("| R5-04 | 메인 비디오 트랙 개념 | ✅ 구현(2026-06-17, Codex R5-04):"))
-        #expect(parity.contains("- **P3 완료** — R5-04."))
-        #expect(parity.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
+        #expect(parity.contains("| R4-05 | **서브탭 깊이: Speed 곡선 에디터** | ✅ 구현(2026-06-18, Codex Phase 3-3):"))
+        #expect(parity.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
+        #expect(parity.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
         #expect(!parity.contains("| R5-04 | 메인 비디오 트랙 개념 | 🟡 |"))
         #expect(handoff.contains("Phase 3-1/R3-05 implemented"))
         #expect(handoff.contains("Phase 3-2/R5-04 implemented"))
-        #expect(handoff.contains("Speed 곡선 에디터 remains pending"))
+        #expect(handoff.contains("Phase 3-3/R4 subtab depth implemented"))
+        #expect(!handoff.contains("Speed 곡선 에디터 remains pending"))
     }
 }
 

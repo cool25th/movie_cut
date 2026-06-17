@@ -165,8 +165,8 @@ struct R504MainVideoTrackStaticContractTests {
         }
     }
 
-    @Test("R5-04 docs are implemented while speed curve remains pending")
-    func r504DocsAreImplementedWhileSpeedCurveRemainsPending() throws {
+    @Test("R5-04 docs are implemented while speed curve is complete")
+    func r504DocsAreImplementedWhileSpeedCurveIsComplete() throws {
         let parity = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
         let r504Row = try section(
@@ -181,11 +181,13 @@ struct R504MainVideoTrackStaticContractTests {
         #expect(r504Row.contains("compact `Main` 배지"))
         #expect(r504Row.contains("`.allowsHitTesting(false)`"))
         #expect(r504Row.contains("track ordering/model/import/export/playback/session semantics 변경 없음"))
-        #expect(parity.contains("- **P3 완료** — R5-04."))
-        #expect(parity.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
+        #expect(parity.contains("| R4-05 | **서브탭 깊이: Speed 곡선 에디터** | ✅ 구현(2026-06-18, Codex Phase 3-3):"))
+        #expect(parity.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
+        #expect(parity.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
         #expect(!parity.contains("| R5-04 | 메인 비디오 트랙 개념 | 🟡 |"))
         #expect(handoff.contains("Phase 3-2/R5-04 implemented"))
-        #expect(handoff.contains("Speed 곡선 에디터 remains pending"))
+        #expect(handoff.contains("Phase 3-3/R4 subtab depth implemented"))
+        #expect(!handoff.contains("Speed 곡선 에디터 remains pending"))
         #expect(!handoff.contains("R5-04 메인 트랙 시각 구분 and Speed 곡선 에디터 remain pending"))
     }
 }

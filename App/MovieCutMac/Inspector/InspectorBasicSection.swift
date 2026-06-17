@@ -15,6 +15,52 @@ struct InspectorBasicSection: View {
     let mode: InspectorBasicMode
 
     private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
+    private let minimumSpeedCurvePointCount = 2
+
+    private struct SpeedCurvePreset: Identifiable {
+        var id: String
+        var name: String
+        var systemImage: String
+        var points: [SpeedRampPoint]
+    }
+
+    private let speedCurvePresets: [SpeedCurvePreset] = [
+        SpeedCurvePreset(
+            id: "easeIn",
+            name: "Ease In",
+            systemImage: "speedometer",
+            points: [
+                SpeedRampPoint(time: 0.00, rate: 0.50),
+                SpeedRampPoint(time: 0.35, rate: 0.80),
+                SpeedRampPoint(time: 0.70, rate: 1.35),
+                SpeedRampPoint(time: 1.00, rate: 2.00)
+            ]
+        ),
+        SpeedCurvePreset(
+            id: "easeOut",
+            name: "Ease Out",
+            systemImage: "gauge.with.dots.needle.100percent",
+            points: [
+                SpeedRampPoint(time: 0.00, rate: 2.00),
+                SpeedRampPoint(time: 0.30, rate: 1.35),
+                SpeedRampPoint(time: 0.65, rate: 0.80),
+                SpeedRampPoint(time: 1.00, rate: 0.50)
+            ]
+        ),
+        SpeedCurvePreset(
+            id: "montageFlash",
+            name: "Flash",
+            systemImage: "bolt.fill",
+            points: [
+                SpeedRampPoint(time: 0.00, rate: 1.00),
+                SpeedRampPoint(time: 0.18, rate: 3.00),
+                SpeedRampPoint(time: 0.38, rate: 0.55),
+                SpeedRampPoint(time: 0.62, rate: 3.25),
+                SpeedRampPoint(time: 0.82, rate: 0.75),
+                SpeedRampPoint(time: 1.00, rate: 1.25)
+            ]
+        )
+    ]
 
     init(viewModel: EditorViewModel, clip: Clip, mode: InspectorBasicMode = .full) {
         self.viewModel = viewModel
@@ -456,6 +502,9 @@ struct InspectorBasicSection: View {
                     Task { await viewModel.updateSelectedPlaybackRate(newValue) }
                 }
             ), in: 0.25 ... 4.0)
+            .accessibilityLabel("Constant speed")
+            .accessibilityValue(String(format: "%.0f%%", clip.playbackRate * 100))
+            .accessibilityHint("Adjusts the selected clip constant playback speed.")
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 6)], spacing: 6) {
                 ForEach(speedPresets, id: \.self) { preset in
@@ -463,9 +512,289 @@ struct InspectorBasicSection: View {
                         Task { await viewModel.updateSelectedPlaybackRate(preset) }
                     }
                     .controlSize(.small)
+                    .accessibilityLabel("Constant speed \(speedPresetLabel(preset))")
+                    .accessibilityHint("Applies this constant speed to the selected clip.")
+                }
+            }
+
+            Divider()
+
+            speedCurveEditor
+        }
+    }
+
+    private var speedCurveEditor: some View {
+        let points = normalizedSpeedRampPoints(clip.speedRampPoints)
+
+        return VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            HStack {
+                Text("Speed Curve")
+                    .font(MovieCutTypography.cardTitle)
+                Spacer()
+                Text(speedCurveStatusText(points))
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Speed Curve")
+            .accessibilityValue(speedCurveStatusText(points))
+            .accessibilityHint("Edits the selected clip normalized speed ramp curve.")
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: MovieCutSpacing.xSmall)], spacing: MovieCutSpacing.xSmall) {
+                ForEach(speedCurvePresets) { preset in
+                    Button {
+                        applySpeedCurvePreset(preset)
+                    } label: {
+                        Label(preset.name, systemImage: preset.systemImage)
+                    }
+                    .controlSize(.small)
+                    .accessibilityLabel("Apply \(preset.name) Speed Curve")
+                    .accessibilityHint("Replaces the selected clip speed curve with the \(preset.name) preset.")
+                }
+            }
+
+            HStack(spacing: MovieCutSpacing.xSmall) {
+                Button {
+                    addSpeedCurvePoint()
+                } label: {
+                    Label("Add Point", systemImage: "plus")
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Add Speed Curve Point")
+                .accessibilityHint("Adds a normalized point using a safe time and rate.")
+
+                Button {
+                    resetSpeedCurve()
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .controlSize(.small)
+                .disabled(points.isEmpty)
+                .accessibilityLabel("Reset Speed Curve")
+                .accessibilityHint("Clears the curve so the selected clip uses constant speed.")
+            }
+
+            if points.isEmpty {
+                Text("Constant playback rate is active.")
+                    .font(MovieCutTypography.panelSubtitle)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Speed Curve Constant")
+                    .accessibilityValue(String(format: "%.0f%%", clip.playbackRate * 100))
+            } else {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                    ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
+                        speedCurvePointRow(
+                            point,
+                            index: index,
+                            canDelete: points.count > minimumSpeedCurvePointCount
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private func speedCurvePointRow(
+        _ point: SpeedRampPoint,
+        index: Int,
+        canDelete: Bool
+    ) -> some View {
+        let pointNumber = index + 1
+
+        return VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            HStack(spacing: MovieCutSpacing.small) {
+                Text("Point \(pointNumber)")
+                    .font(MovieCutTypography.metadata.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(speedCurvePointSummary(point))
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Button(role: .destructive) {
+                    deleteSpeedCurvePoint(point.id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(!canDelete)
+                .accessibilityLabel("Speed curve point delete")
+                .accessibilityValue("Point \(pointNumber)")
+                .accessibilityHint(canDelete ? "Deletes this speed curve point." : "Keep at least two curve points, or reset the curve.")
+            }
+
+            HStack(spacing: MovieCutSpacing.small) {
+                Text("Time")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, alignment: .leading)
+                Slider(
+                    value: Binding(
+                        get: { point.time },
+                        set: { newValue in
+                            updateSpeedCurvePoint(point.id, time: newValue, rate: point.rate)
+                        }
+                    ),
+                    in: 0 ... 1,
+                    step: 0.01
+                )
+                .accessibilityLabel("Speed curve point time")
+                .accessibilityValue(speedCurveTimeLabel(point.time))
+                .accessibilityHint("Sets this point position from the beginning to the end of the clip.")
+                Text(speedCurveTimeLabel(point.time))
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 38, alignment: .trailing)
+            }
+
+            HStack(spacing: MovieCutSpacing.small) {
+                Text("Rate")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, alignment: .leading)
+                Slider(
+                    value: Binding(
+                        get: { point.rate },
+                        set: { newValue in
+                            updateSpeedCurvePoint(point.id, time: point.time, rate: newValue)
+                        }
+                    ),
+                    in: 0.25 ... 4.0,
+                    step: 0.05
+                )
+                .accessibilityLabel("Speed curve point rate")
+                .accessibilityValue(speedCurveRateLabel(point.rate))
+                .accessibilityHint("Sets the playback speed at this point.")
+                Text(speedCurveRateLabel(point.rate))
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 38, alignment: .trailing)
+            }
+        }
+        .padding(MovieCutSpacing.xSmall)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.controlSurface.opacity(0.60))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.border, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Speed curve point \(pointNumber)")
+        .accessibilityValue(speedCurvePointSummary(point))
+    }
+
+    private func normalizedSpeedRampPoints(_ points: [SpeedRampPoint]) -> [SpeedRampPoint] {
+        points
+            .map { point in
+                SpeedRampPoint(id: point.id, time: point.time, rate: point.rate)
+            }
+            .sorted { lhs, rhs in
+                if lhs.time == rhs.time {
+                    return lhs.id.uuidString < rhs.id.uuidString
+                }
+
+                return lhs.time < rhs.time
+            }
+    }
+
+    private func applySpeedCurvePreset(_ preset: SpeedCurvePreset) {
+        let points = normalizedSpeedRampPoints(preset.points)
+        Task { await viewModel.updateSelectedSpeedRampPoints(points) }
+    }
+
+    private func addSpeedCurvePoint() {
+        var points = normalizedSpeedRampPoints(clip.speedRampPoints)
+        let newPoint = SpeedRampPoint(
+            time: defaultSpeedCurvePointTime(in: points),
+            rate: clampedSpeedCurveRate(clip.playbackRate)
+        )
+        points.append(newPoint)
+
+        Task { await viewModel.updateSelectedSpeedRampPoints(normalizedSpeedRampPoints(points)) }
+    }
+
+    private func updateSpeedCurvePoint(_ id: SpeedRampPoint.ID, time: Double, rate: Double) {
+        let points = normalizedSpeedRampPoints(clip.speedRampPoints).map { point in
+            if point.id == id {
+                return SpeedRampPoint(id: point.id, time: time, rate: rate)
+            }
+
+            return point
+        }
+
+        Task { await viewModel.updateSelectedSpeedRampPoints(normalizedSpeedRampPoints(points)) }
+    }
+
+    private func deleteSpeedCurvePoint(_ id: SpeedRampPoint.ID) {
+        let points = normalizedSpeedRampPoints(clip.speedRampPoints)
+        guard points.count > minimumSpeedCurvePointCount else { return }
+
+        Task {
+            await viewModel.updateSelectedSpeedRampPoints(
+                normalizedSpeedRampPoints(points.filter { $0.id != id })
+            )
+        }
+    }
+
+    private func resetSpeedCurve() {
+        Task { await viewModel.updateSelectedSpeedRampPoints([]) }
+    }
+
+    private func defaultSpeedCurvePointTime(in points: [SpeedRampPoint]) -> Double {
+        guard !points.isEmpty else { return 0.50 }
+
+        let sortedTimes = points.map(\.time).sorted()
+        var bestStart = 0.0
+        var bestEnd = sortedTimes[0]
+
+        for (left, right) in zip(sortedTimes, sortedTimes.dropFirst()) {
+            if right - left > bestEnd - bestStart {
+                bestStart = left
+                bestEnd = right
+            }
+        }
+
+        if 1.0 - (sortedTimes.last ?? 1.0) > bestEnd - bestStart {
+            bestStart = sortedTimes.last ?? 0.0
+            bestEnd = 1.0
+        }
+
+        return clampedSpeedCurveTime((bestStart + bestEnd) * 0.5)
+    }
+
+    private func clampedSpeedCurveTime(_ time: Double) -> Double {
+        min(max(time, 0), 1)
+    }
+
+    private func clampedSpeedCurveRate(_ rate: Double) -> Double {
+        min(max(rate, 0.25), 4.0)
+    }
+
+    private func speedCurveStatusText(_ points: [SpeedRampPoint]) -> String {
+        if points.isEmpty {
+            return "Constant"
+        }
+
+        return "\(points.count) points"
+    }
+
+    private func speedCurveTimeLabel(_ time: Double) -> String {
+        String(format: "%.0f%%", clampedSpeedCurveTime(time) * 100)
+    }
+
+    private func speedCurveRateLabel(_ rate: Double) -> String {
+        String(format: "%.2gx", clampedSpeedCurveRate(rate))
+    }
+
+    private func speedCurvePointSummary(_ point: SpeedRampPoint) -> String {
+        "\(speedCurveTimeLabel(point.time)) · \(speedCurveRateLabel(point.rate))"
     }
 
     private var speedUnavailableSection: some View {

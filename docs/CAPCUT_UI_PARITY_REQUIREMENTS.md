@@ -33,14 +33,14 @@
 - ✅ **타임라인 단일 도구 바 집약**(R5-01/UX-05): `TimelineView.swift` 상단 한 줄에 Timeline/Edit/Quick Tools/Zoom이 모였고 split/delete/ripple/duplicate/snap/marker/freeze/reverse/quick tools가 노출됨.
 - ✅ **타임라인 줌 슬라이더 + Fit**(R5-02): `TimelineView.swift` `zoomControls`가 +/- 버튼, 연속 `Slider`, 현재 px/s 표시, Fit Timeline 버튼을 한 줄에 노출.
 - ✅ **인스펙터 clip-first + 선택종류별 패널 스왑**(R4-01): 선택 시 `clip.kind`에 따라 audio/text/visual 인스펙터 컨텍스트 분기, 전역도구 `DisclosureGroup` 접힘(`InspectorPanel.swift`).
-- ✅ **인스펙터 서브탭**(R4-02): 비디오/이미지 선택 시 `InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask 세그먼트로 Basic/Speed/Adjustment/Mask/Animation 섹션 전환.
+- ✅ **인스펙터 서브탭**(R4-02): 비디오/이미지 선택 시 `InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask 세그먼트로 Basic/Speed/Adjustment/Mask/Animation 섹션 전환. Speed 서브탭은 constant speed와 Speed Curve editor를 함께 노출.
 - ✅ **디자인 토큰·접근성 정적 계약**(UX-07/UX-08): `MovieCutSpacing`/`MovieCutRadius`/`MovieCutTheme`/카드·헤더 헬퍼와 `UIUXAccessibilityRegressionStaticContractTests.swift` 반영.
 
 **핵심 상태:**
 - ✅ **export 거버넌스 텍스트 제거**(R4-03/UX-02, 2026-06-16): `InspectorExportSection.swift` export summary는 포맷/해상도/코덱/품질/예상 크기/비트레이트 정보만 노출.
 - ✅ 라이브러리 **탭별 검색·썸네일 그리드**(R2-02/R2-03, 2026-06-16): `MediaLibraryPanel.swift`에 탭명 기반 검색 placeholder, Media/Text/Effects/Transitions/Filters 필터, 2열 card/grid 브라우저가 반영됨.
 - ❌ 라이브러리 **hover 미리보기**.
-- ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask).
+- ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask) + **Speed 곡선 에디터**(presets/add/reset/point edit).
 - ✅ 타임라인 **단일 도구 바 완성**(R5-01) + **줌 slider/fit**(R5-02) + **트랙 헤더 토글**(R5-03) + **메인 비디오 트랙 시각 구분**(R5-04): freeze/reverse가 타임라인 바에 승격됐고, zoomControls에 연속 slider와 Fit Timeline이 추가됐으며, 트랙 헤더에 잠금·숨김·음소거 토글과 첫 `.video` 트랙의 Main 배지/액센트가 연결됨.
 - 🟡 디자인 토큰 기반 통일 완료, **CapCut 98% visual parity loop**(side-by-side 시각 폴리시 튜닝)는 잔여.
 - ❌ 상단 바 **프로젝트명·저장상태**.
@@ -99,6 +99,7 @@
 | R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ✅ 구현(2026-06-16): `InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask 세그먼트가 비디오/이미지 선택 클립에만 노출되고, `InspectorBasicMode.speed` 및 `InspectorEffectsMode.adjustment`/`.mask`/`.animation`으로 기존 섹션을 전환. 오디오/텍스트는 R4-01 컨텍스트별 표면 유지. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(151 tests / 39 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | 상단 세그먼트 탭으로 서브섹션 전환 | P1 |
 | R4-03 | **거버넌스 텍스트 제거(UX-02)** | ✅ 구현(2026-06-16): `InspectorExportSection.swift` export summary의 export-golden 거버넌스 문단/접근성 copy/helper 제거. `ExportFormatStaticContractTests.swift`는 금지 문자열 부재와 사용자용 export controls 유지 계약으로 갱신. 검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED | export 패널에 사용자 정보만(포맷/해상도/예상크기), 개발 메모 `#if DEBUG`/제거 | P0 |
 | R4-04 | 전역도구 접힘 + Export 하단 고정 | ✅ | 유지 | — |
+| R4-05 | **서브탭 깊이: Speed 곡선 에디터** | ✅ 구현(2026-06-18, Codex Phase 3-3): `InspectorBasicSection.swift`의 기존 constant speed slider/presets 아래에 Speed Curve editor를 추가. `SpeedCurvePreset` 기반 Ease In/Ease Out/Flash presets, Add/Reset, normalized time/rate sliders, point delete(최소 유효 곡선 크기 초과 시), accessibility label/hint/value를 제공한다. 모든 편집은 presentation helper가 `SpeedRampPoint`를 clamp/sort한 뒤 기존 `EditorViewModel.updateSelectedSpeedRampPoints(_:)`만 호출하며 `SpeedRampCurve`/export/playback/command/model semantics 변경 없음. Optical-flow smooth slow motion은 별도 기능 backlog로 유지. | Speed 서브탭에서 곡선 point 실편집 | P3 |
 
 ### R5. 하단 타임라인 + 도구 바 — `App/MovieCutMac/TimelineView.swift`
 | ID | 목표 | 현재 | AC | P |
@@ -124,8 +125,8 @@
 - **P1 인터랙션 잔여** — 없음.
 - **P2 완료** — R1-03, R3-02, R3-03.
 - **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01.
-- **P3 완료** — R5-04.
-- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등).
+- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터).
+- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog).
 
 ---
 

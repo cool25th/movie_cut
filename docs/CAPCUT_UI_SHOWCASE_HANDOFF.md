@@ -40,6 +40,8 @@ Progress note (2026-06-17): Phase 0-1 implemented with the 60px library rail and
 | 1-3 | 카드/보더 밀도↓로 dark_fill 상승(elevated 카드 다발→near-flat 행, border opacity↓) | `Inspector/InspectorShared.swift:18` 토큰 + 사용처 | 타임라인/인스펙터 `dark_fill` CapCut ±0.15 |
 | 1-4 | 타임라인 트랙/클립 unselected 밝기↓, 룰러·그리드 대비 정리 | `TimelineView.swift:83-93`, 토큰 `trackBackground` | 타임라인 brightness 157→<60 |
 
+Progress note (2026-06-17): Phase 1-1 implemented with native macOS `.toolbarBackground` modifiers forcing `MovieCutTheme.panelBackgroundRaised` visible for `.windowToolbar`; existing toolbar items, VoiceOver markers, and `MovieCutMacApp.swift` command shortcuts remain in place, verified by `Phase11DarkTopToolbarStaticContractTests`. Phase 1-2/1-3/1-4 remain pending.
+
 ### Phase 2 — 인터랙션·폴리시 (P1/P2)
 - 2-1 좌측 미디어 빈 상태 → 큰 Import CTA 카드(`MediaLibraryPanel` mediaTabContent).
 - 2-2 hover 미리보기 강화(effects/filters 텍스트 affordance → 실제 미리보기).

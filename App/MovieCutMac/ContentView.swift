@@ -127,6 +127,8 @@ struct ContentView: View {
                 exportToolbarControl
             }
         }
+        .toolbarBackground(MovieCutTheme.panelBackgroundRaised, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
         .sheet(isPresented: Binding(
             get: { viewModel.exportEngine.isExporting },
             set: { _ in }

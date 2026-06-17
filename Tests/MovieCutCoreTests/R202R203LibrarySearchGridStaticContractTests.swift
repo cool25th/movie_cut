@@ -86,7 +86,7 @@ struct R202R203LibrarySearchGridStaticContractTests {
         let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
 
         #expect(source.contains("private let libraryGridColumns = ["))
-        #expect(source.contains("GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small)"))
+        #expect(source.contains("GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small)"))
         #expect(source.contains("LazyVGrid(columns: libraryGridColumns"))
         #expect(source.contains("private func assetGridCard(_ asset: MediaAsset) -> some View"))
         #expect(source.contains("private func assetGridThumbnailView(_ asset: MediaAsset) -> some View"))

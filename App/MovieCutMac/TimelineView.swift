@@ -74,8 +74,8 @@ struct TimelineView: View {
                 zoomControls
             }
             .padding(.horizontal, MovieCutSpacing.medium)
-            .padding(.vertical, MovieCutSpacing.small)
-            .background(MovieCutTheme.panelBackground)
+            .padding(.vertical, MovieCutSpacing.xSmall)
+            .background(MovieCutTheme.panelBackgroundRaised)
 
             Divider()
                 .overlay(MovieCutTheme.divider)
@@ -88,11 +88,13 @@ struct TimelineView: View {
                         trackLane(track)
                     }
                 }
+                .background(MovieCutTheme.timelineBackground)
             }
+            .movieCutScrollBackground(MovieCutTheme.timelineBackground)
         }
         // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
         .frame(minHeight: 210)
-        .background(MovieCutTheme.editorBackground)
+        .background(MovieCutTheme.timelineBackground)
         .background(timelineViewportWidthReader)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
@@ -319,12 +321,12 @@ struct TimelineView: View {
     private var timeRuler: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(MovieCutTheme.panelBackground.opacity(0.55))
+                .fill(MovieCutTheme.rulerBackground)
                 .frame(width: 80, height: rulerHeight)
                 .overlay(alignment: .leading) {
                     Text(NSLocalizedString("Time", comment: ""))
                         .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MovieCutTheme.mutedText)
                         .padding(.leading, MovieCutSpacing.xSmall)
                 }
 
@@ -343,14 +345,14 @@ struct TimelineView: View {
                                 p.move(to: CGPoint(x: x, y: rulerHeight))
                                 p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
                             },
-                            with: .color(.secondary),
+                            with: .color(isMajor ? MovieCutTheme.divider : MovieCutTheme.timelineGrid),
                             lineWidth: isMajor ? 1 : 0.5
                         )
 
                         if isMajor {
                             let text = Text("\(Int(time))s")
                                 .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(MovieCutTheme.mutedText)
                             context.draw(text, at: CGPoint(x: x + 4, y: 8))
                         }
 
@@ -386,7 +388,33 @@ struct TimelineView: View {
                 }
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
+            .background(MovieCutTheme.rulerBackground)
         }
+    }
+
+    private func timelineGridLines(height: CGFloat) -> some View {
+        Canvas { context, size in
+            var x: CGFloat = 0
+            var time: TimeInterval = 0
+            let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+
+            while x < size.width {
+                let isMajor = Int(time) % 10 == 0
+                context.stroke(
+                    Path { path in
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: height))
+                    },
+                    with: .color(isMajor ? MovieCutTheme.divider.opacity(0.44) : MovieCutTheme.timelineGrid),
+                    lineWidth: isMajor ? 0.6 : 0.4
+                )
+
+                time += interval
+                x = CGFloat(time) * CGFloat(pixelsPerSecond)
+            }
+        }
+        .frame(width: timelineContentWidth, height: height)
+        .allowsHitTesting(false)
     }
 
     private func trackLane(_ track: Track) -> some View {
@@ -400,14 +428,15 @@ struct TimelineView: View {
             }
             .frame(width: 80, alignment: .leading)
             .padding(.horizontal, MovieCutSpacing.small)
-            .background(MovieCutTheme.panelBackground)
+            .background(MovieCutTheme.trackHeaderBackground)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(trackHeaderAccessibilityLabel(for: track))
 
             // Clips area
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(MovieCutTheme.editorBackground)
+                    .fill(MovieCutTheme.trackBackground)
+                timelineGridLines(height: trackHeight)
 
                 ForEach(clipsForDisplay(track)) { clip in
                     clipView(clip, trackKind: track.kind)

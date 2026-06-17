@@ -22,7 +22,7 @@ struct PreviewPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                Color.black
+                MovieCutTheme.previewBackground
 
                 if let clip = viewModel.selectedClip {
                     previewSurface(for: clip)
@@ -36,6 +36,7 @@ struct PreviewPanel: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(MovieCutTheme.previewBackground)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(NSLocalizedString("Preview", comment: ""))
             .accessibilityValue(previewAccessibilityValue)
@@ -57,18 +58,18 @@ struct PreviewPanel: View {
 
     private var previewTransportBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 previewTimeBadge(
                     title: NSLocalizedString("Current", comment: ""),
                     value: timecodeString(playbackEngine.currentTime),
                     accessibilityLabel: NSLocalizedString("Current Time", comment: "")
                 )
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
 
                 playbackTransportCapsule
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
 
                 previewTimeBadge(
                     title: NSLocalizedString("Duration", comment: ""),
@@ -115,16 +116,16 @@ struct PreviewPanel: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(MovieCutTheme.controlSurface.opacity(0.90))
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
         )
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview transport controls", comment: ""))
     }
@@ -165,7 +166,7 @@ struct PreviewPanel: View {
         .padding(.vertical, 5)
         .background(
             Capsule()
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+                .fill(MovieCutTheme.elevatedCardBackground)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
@@ -241,11 +242,11 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+                .fill(MovieCutTheme.elevatedCardBackground)
         )
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview zoom controls", comment: ""))
@@ -301,46 +302,52 @@ struct PreviewPanel: View {
 
     private var emptyStateTitle: String {
         hasImportedMedia
-            ? NSLocalizedString("Select a clip to preview", comment: "")
-            : NSLocalizedString("Add media to start editing", comment: "")
+            ? NSLocalizedString("Select a clip", comment: "")
+            : NSLocalizedString("Import media", comment: "")
     }
 
     private var emptyStateMessage: String {
         hasImportedMedia
-            ? NSLocalizedString("Choose a timeline clip to see playback, overlays, and frame controls here.", comment: "")
-            : NSLocalizedString("Import video, audio, or images, then drag them to the timeline.", comment: "")
+            ? NSLocalizedString("Choose a timeline clip to preview it.", comment: "")
+            : NSLocalizedString("Import media, then drag it to the timeline.", comment: "")
     }
 
     private var previewEmptyState: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: MovieCutSpacing.small) {
             Image(systemName: hasImportedMedia ? "play.rectangle" : "plus.rectangle.on.rectangle")
-                .font(.system(size: 46, weight: .light))
+                .font(.system(size: 32, weight: .light))
                 .foregroundStyle(.white.opacity(0.55))
                 .accessibilityHidden(true)
 
-            VStack(spacing: 5) {
+            VStack(spacing: 3) {
                 Text(emptyStateTitle)
-                    .font(.title3.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.86))
                 Text(emptyStateMessage)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.55))
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
+                    .frame(maxWidth: 260)
             }
 
             Button {
                 openImportPanel()
             } label: {
                 Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
-                    .font(.callout.weight(.semibold))
+                    .font(.caption.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .controlSize(.regular)
             .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
             .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
         }
-        .padding(24)
+        .frame(maxWidth: 280)
+        .movieCutCard(
+            padding: 14,
+            cornerRadius: MovieCutRadius.medium,
+            background: MovieCutTheme.previewEmptyStateBackground,
+            border: MovieCutTheme.border.opacity(0.55)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(emptyStateTitle)
         .accessibilityHint(emptyStateMessage)
@@ -376,11 +383,11 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+                .fill(MovieCutTheme.elevatedCardBackground)
         )
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
         )
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)

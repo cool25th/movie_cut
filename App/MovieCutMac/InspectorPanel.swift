@@ -28,7 +28,7 @@ struct InspectorPanel: View {
                 .overlay(MovieCutTheme.divider)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                     // UX-03: when a clip is selected, its editing controls come
                     // first so they are reachable without scrolling past the
                     // project-wide tools; those collapse into a disclosure.
@@ -55,14 +55,15 @@ struct InspectorPanel: View {
                         projectToolsSections(carded: true)
                     }
                 }
-                .padding(MovieCutSpacing.medium)
+                .padding(MovieCutSpacing.small)
             }
+            .movieCutScrollBackground(MovieCutTheme.panelBackground)
 
             Divider()
                 .overlay(MovieCutTheme.divider)
 
             InspectorExportSection(viewModel: viewModel)
-                .movieCutCard(padding: 0)
+                .movieCutCard(padding: 0, background: MovieCutTheme.cardBackground)
                 .padding(MovieCutSpacing.small)
         }
         .frame(minWidth: 240)
@@ -98,6 +99,7 @@ struct InspectorPanel: View {
             }
         }
         .pickerStyle(.segmented)
+        .tint(MovieCutTheme.accentCyan)
         .accessibilityLabel("Inspector section")
         .accessibilityHint("Switches between clip inspector sections.")
 
@@ -157,7 +159,7 @@ private struct EmptyInspectorSelectionView: View {
                 .font(.caption)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, MovieCutSpacing.large)
+        .padding(.vertical, MovieCutSpacing.medium)
     }
 }
 
@@ -223,7 +225,7 @@ private struct MarkerManagementRow: View {
 
             VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
                 TextField("Marker name", text: $draftName)
-                    .textFieldStyle(.roundedBorder)
+                    .movieCutInputField()
                     .onSubmit {
                         viewModel.renameMarker(marker, to: draftName)
                     }
@@ -287,7 +289,7 @@ private struct AssistantSection: View {
             VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 HStack(spacing: MovieCutSpacing.small) {
                     TextField("e.g. apply cinematic filter to all clips", text: $instruction)
-                        .textFieldStyle(.roundedBorder)
+                        .movieCutInputField()
                         .controlSize(.small)
                         .onSubmit { run() }
                         .accessibilityLabel("Assistant instruction")

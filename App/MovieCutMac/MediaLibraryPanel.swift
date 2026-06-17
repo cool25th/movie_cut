@@ -14,12 +14,12 @@ struct MediaLibraryPanel: View {
     @State private var hoveredLibraryPreviewKind: LibraryHoverPreviewKind?
 
     private let libraryGridColumns = [
-        GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small),
-        GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small)
+        GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small),
+        GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small)
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
             MovieCutPanelHeader(
                 title: NSLocalizedString("Library", comment: ""),
                 systemImage: "rectangle.stack",
@@ -65,7 +65,7 @@ struct MediaLibraryPanel: View {
                 Text(NSLocalizedString("Add Text", comment: ""))
                     .font(.headline)
                 TextField(NSLocalizedString("Text", comment: ""), text: $textClipText)
-                    .textFieldStyle(.roundedBorder)
+                    .movieCutInputField()
                     .frame(width: 260)
                     .accessibilityLabel(NSLocalizedString("Text", comment: ""))
                 HStack {
@@ -86,6 +86,7 @@ struct MediaLibraryPanel: View {
                 }
             }
             .padding(MovieCutSpacing.large)
+            .background(MovieCutTheme.panelBackground)
             .accessibilityElement(children: .contain)
         }
     }
@@ -128,13 +129,20 @@ struct MediaLibraryPanel: View {
                         Label(tab.displayName, systemImage: tab.systemImage)
                             .font(.caption.weight(selectedLibraryTab == tab ? .semibold : .medium))
                             .labelStyle(.titleAndIcon)
-                            .padding(.horizontal, MovieCutSpacing.medium)
-                            .padding(.vertical, MovieCutSpacing.small)
+                            .padding(.horizontal, MovieCutSpacing.small)
+                            .padding(.vertical, MovieCutSpacing.xSmall)
                             .background(
                                 RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.cardBackground)
+                                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)
                             )
-                            .foregroundStyle(selectedLibraryTab == tab ? Color.accentColor : Color.primary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                                    .stroke(
+                                        selectedLibraryTab == tab ? MovieCutTheme.accentCyan.opacity(0.38) : MovieCutTheme.border.opacity(0.55),
+                                        lineWidth: 0.5
+                                    )
+                            )
+                            .foregroundStyle(selectedLibraryTab == tab ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(tab.displayName)
@@ -144,6 +152,7 @@ struct MediaLibraryPanel: View {
             .padding(.horizontal, MovieCutSpacing.medium)
             .padding(.vertical, MovieCutSpacing.xSmall)
         }
+        .movieCutScrollBackground(MovieCutTheme.panelBackground)
         .accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))
     }
 
@@ -154,6 +163,7 @@ struct MediaLibraryPanel: View {
 
             TextField(librarySearchPlaceholder, text: $librarySearchText)
                 .textFieldStyle(.plain)
+                .foregroundStyle(.primary)
                 .accessibilityLabel(String(format: NSLocalizedString("Search %@", comment: ""), selectedLibraryTab.displayName))
                 .accessibilityHint(NSLocalizedString("Filters the selected library tab.", comment: ""))
 
@@ -172,7 +182,11 @@ struct MediaLibraryPanel: View {
         .padding(.vertical, MovieCutSpacing.small)
         .background(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.cardBackground)
+                .fill(MovieCutTheme.controlSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.72), lineWidth: 0.5)
         )
         .padding(.horizontal, MovieCutSpacing.medium)
         .accessibilityElement(children: .contain)
@@ -214,6 +228,7 @@ struct MediaLibraryPanel: View {
                 .padding(.horizontal, MovieCutSpacing.medium)
                 .padding(.bottom, MovieCutSpacing.medium)
             }
+            .movieCutScrollBackground(MovieCutTheme.panelBackground)
         }
         .accessibilityLabel(NSLocalizedString("Audio browser", comment: ""))
     }
@@ -261,6 +276,7 @@ struct MediaLibraryPanel: View {
                     }
                     .padding(MovieCutSpacing.medium)
                 }
+                .movieCutScrollBackground(MovieCutTheme.panelBackground)
             }
         }
         .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
@@ -335,6 +351,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
+        .movieCutScrollBackground(MovieCutTheme.panelBackground)
         .accessibilityLabel(NSLocalizedString("Transition browser", comment: ""))
     }
 
@@ -397,6 +414,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
+        .movieCutScrollBackground(MovieCutTheme.panelBackground)
         .accessibilityLabel(title)
     }
 
@@ -451,7 +469,7 @@ struct MediaLibraryPanel: View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(MovieCutTheme.accentCyan)
                 .frame(width: 28, height: 28)
 
             Text(title)
@@ -469,10 +487,10 @@ struct MediaLibraryPanel: View {
             HStack {
                 Spacer()
                 Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Color.accentColor.opacity(0.75))
+                    .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
@@ -499,14 +517,14 @@ struct MediaLibraryPanel: View {
         }
         .padding(.horizontal, MovieCutSpacing.small)
         .padding(.vertical, 3)
-        .foregroundStyle(Color.accentColor)
+        .foregroundStyle(MovieCutTheme.accentCyan)
         .background(
             Capsule(style: .continuous)
                 .fill(MovieCutTheme.elevatedCardBackground.opacity(0.95))
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+                .stroke(MovieCutTheme.accentCyan.opacity(0.28), lineWidth: 1)
         )
     }
 
@@ -517,13 +535,16 @@ struct MediaLibraryPanel: View {
         if viewModel.mediaAssets.isEmpty {
             VStack(spacing: MovieCutSpacing.small) {
                 Image(systemName: "photo.on.rectangle.angled")
-                    .font(.largeTitle)
+                    .font(.title2)
                     .foregroundStyle(.secondary)
                 Text(NSLocalizedString("Drop media files here", comment: ""))
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
+            .frame(maxWidth: 220)
+            .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(MovieCutSpacing.medium)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(NSLocalizedString("Drop media files here", comment: ""))
         } else if assets.isEmpty {
@@ -537,6 +558,7 @@ struct MediaLibraryPanel: View {
                 }
                 .padding(MovieCutSpacing.medium)
             }
+            .movieCutScrollBackground(MovieCutTheme.panelBackground)
             .accessibilityLabel(NSLocalizedString("Asset Grid", comment: ""))
         }
     }
@@ -558,12 +580,12 @@ struct MediaLibraryPanel: View {
 
             assetStateText(asset)
         }
-        .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
             background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.selectedFill : MovieCutTheme.cardBackground,
-            border: asset.id == viewModel.selectedAssetId ? Color.accentColor.opacity(0.35) : Color.clear
+            border: asset.id == viewModel.selectedAssetId ? MovieCutTheme.accentCyan.opacity(0.45) : Color.clear
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -601,7 +623,7 @@ struct MediaLibraryPanel: View {
             Task { await viewModel.addClipToTimeline() }
         } label: {
             Image(systemName: "plus.circle.fill")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(MovieCutTheme.accentCyan)
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
@@ -935,7 +957,7 @@ struct MediaLibraryPanel: View {
     private func assetGridThumbnailView(_ asset: MediaAsset) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                .fill(Color.secondary.opacity(0.2))
+                .fill(MovieCutTheme.controlSurface)
 
             if let image = thumbnailImage(for: asset) {
                 Image(nsImage: image)
@@ -958,7 +980,7 @@ struct MediaLibraryPanel: View {
     private func assetThumbnailView(_ asset: MediaAsset) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                .fill(Color.secondary.opacity(0.2))
+                .fill(MovieCutTheme.controlSurface)
 
             if let image = thumbnailImage(for: asset) {
                 Image(nsImage: image)

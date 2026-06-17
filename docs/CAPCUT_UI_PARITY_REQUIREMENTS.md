@@ -111,7 +111,7 @@
 ### R6. 횡단(cross-cutting)
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
-| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 UX-07 구현: `InspectorShared.swift`에 `MovieCutSpacing`(4/8/12/16), `MovieCutRadius`, `MovieCutTheme`, `MovieCutPanelHeader`, `MovieCutSectionCard`, `movieCutCard`/panel background helper 추가. Inspector/MediaLibrary/Timeline/ContentView의 토큰 기반 통일 완료, CapCut 98% visual parity loop 잔여 | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
+| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 UX-07 + Loop 1 partial visual-polish implementation: `InspectorShared.swift`의 `MovieCutTheme`를 명시적 CapCut-like dark semantic tokens로 전환하고 `ContentView` dark shell, Library compact dark tabs/cards, Inspector dark compact cards/inputs, Timeline dark ruler/track/grid, Preview black canvas + compact import empty state를 적용. Loop 1 dark-shell polish implemented; quantitative side-by-side still pending/looping. | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
 | R6-02 | 인터랙션 컨벤션 통일 | 🟡 | 드래그/더블클릭/컨텍스트/스냅 동작 일관 | P2 |
 | R6-03 | 단축키·VoiceOver 회귀 방지 | ✅ 구현(2026-06-16, UX-08): 타임라인 선택 클립 도구 accessibility label/hint 보강, `UIUXAccessibilityRegressionStaticContractTests.swift`로 Playback/Timeline command menu, Preview/Library/Timeline/Inspector 주요 label marker 고정 | 재배치 후 라벨/단축키 보존(정적계약 테스트로 잠금) | — |
 

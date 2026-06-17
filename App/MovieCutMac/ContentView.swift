@@ -19,6 +19,7 @@ struct ContentView: View {
                     InspectorPanel(viewModel: viewModel)
                         .frame(minWidth: 240, maxWidth: 320)
                 }
+                .background(MovieCutTheme.editorBackground)
 
                 Divider()
                     .overlay(MovieCutTheme.divider)
@@ -32,6 +33,9 @@ struct ContentView: View {
                 .frame(minHeight: 210, idealHeight: 260, maxHeight: .infinity)
         }
         .frame(minWidth: 1024, minHeight: 720)
+        .background(MovieCutTheme.editorBackground.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .tint(MovieCutTheme.accentCyan)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 projectStatusToolbarItem
@@ -169,7 +173,7 @@ struct ContentView: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(MovieCutTheme.cardBackground)
+                .fill(MovieCutTheme.controlSurface)
         )
         .overlay(
             Capsule()
@@ -276,7 +280,7 @@ struct ContentView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, MovieCutSpacing.medium)
         .padding(.vertical, MovieCutSpacing.xSmall)
-        .background(MovieCutTheme.panelBackground)
+        .background(MovieCutTheme.panelBackgroundRaised)
     }
 
     private var canvasSizeText: String {
@@ -384,7 +388,7 @@ struct QuickToolsPanel: View {
             .padding(.horizontal, MovieCutSpacing.small)
             .padding(.vertical, MovieCutSpacing.xSmall)
         }
-        .background(Color.clear)
+        .movieCutScrollBackground(MovieCutTheme.panelBackgroundRaised)
     }
 
     private var textTemplateMenu: some View {

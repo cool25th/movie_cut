@@ -23,7 +23,7 @@ struct InspectorBasicSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             switch mode {
             case .full:
                 fullSections
@@ -775,7 +775,7 @@ struct InspectorBasicSection: View {
                 Task { await viewModel.updateSelectedTextContent(updated) }
             }
         ))
-        .textFieldStyle(.roundedBorder)
+        .movieCutInputField()
     }
 
     private func fontPicker(_ textContent: TextClipContent) -> some View {
@@ -1180,7 +1180,7 @@ private struct AudioFadeDurationEditor: View {
 
             HStack(spacing: 6) {
                 TextField("Seconds", value: binding, format: .number.precision(.fractionLength(2)))
-                    .textFieldStyle(.roundedBorder)
+                    .movieCutInputField()
                     .frame(width: 76)
                     .disabled(fadeDurationMaximum == 0)
                     .accessibilityLabel("\(accessibilityLabel) value")

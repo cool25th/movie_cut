@@ -16,13 +16,28 @@ enum MovieCutRadius {
 }
 
 enum MovieCutTheme {
-    static var panelBackground: Color { Color(nsColor: .controlBackgroundColor) }
-    static var editorBackground: Color { Color(nsColor: .textBackgroundColor) }
-    static var cardBackground: Color { Color(nsColor: .separatorColor).opacity(0.10) }
-    static var elevatedCardBackground: Color { Color(nsColor: .separatorColor).opacity(0.14) }
-    static var divider: Color { Color(nsColor: .separatorColor).opacity(0.70) }
-    static var border: Color { Color(nsColor: .separatorColor).opacity(0.42) }
-    static var selectedFill: Color { Color.accentColor.opacity(0.20) }
+    static let editorBackground: Color = rgb(0x0F, 0x0F, 0x10)
+    static let panelBackground: Color = rgb(0x17, 0x18, 0x1A)
+    static let panelBackgroundRaised: Color = rgb(0x1B, 0x1C, 0x1F)
+    static let cardBackground: Color = rgb(0x24, 0x25, 0x28)
+    static let elevatedCardBackground: Color = rgb(0x2F, 0x30, 0x34)
+    static let controlSurface: Color = rgb(0x28, 0x2A, 0x2D)
+    static let previewBackground: Color = rgb(0x03, 0x03, 0x04)
+    static let previewEmptyStateBackground: Color = rgb(0x16, 0x17, 0x19, opacity: 0.86)
+    static let timelineBackground: Color = rgb(0x10, 0x11, 0x14)
+    static let rulerBackground: Color = rgb(0x1C, 0x1D, 0x20)
+    static let trackBackground: Color = rgb(0x14, 0x15, 0x18)
+    static let trackHeaderBackground: Color = rgb(0x1B, 0x1C, 0x1F)
+    static let timelineGrid: Color = rgb(0x38, 0x3A, 0x3F, opacity: 0.34)
+    static let divider: Color = rgb(0x3A, 0x3B, 0x3F, opacity: 0.72)
+    static let border: Color = rgb(0x48, 0x4B, 0x52, opacity: 0.62)
+    static let accentCyan: Color = rgb(0x36, 0xD7, 0xFF)
+    static let selectedFill: Color = accentCyan.opacity(0.22)
+    static let mutedText: Color = rgb(0x9A, 0xA0, 0xA6)
+
+    private static func rgb(_ red: Double, _ green: Double, _ blue: Double, opacity: Double = 1) -> Color {
+        Color(.sRGB, red: red / 255.0, green: green / 255.0, blue: blue / 255.0, opacity: opacity)
+    }
 }
 
 struct MovieCutIconTitle: View {
@@ -79,8 +94,8 @@ struct MovieCutPanelHeader<Trailing: View>: View {
             trailing
         }
         .padding(.horizontal, MovieCutSpacing.medium)
-        .padding(.vertical, MovieCutSpacing.small)
-        .background(MovieCutTheme.panelBackground)
+        .padding(.vertical, MovieCutSpacing.xSmall)
+        .background(MovieCutTheme.panelBackgroundRaised)
     }
 }
 
@@ -136,7 +151,7 @@ private struct MovieCutCardModifier: ViewModifier {
 
 extension View {
     func movieCutCard(
-        padding: CGFloat = MovieCutSpacing.medium,
+        padding: CGFloat = MovieCutSpacing.small,
         cornerRadius: CGFloat = MovieCutRadius.medium,
         background: Color = MovieCutTheme.cardBackground,
         border: Color = MovieCutTheme.border
@@ -151,6 +166,25 @@ extension View {
 
     func movieCutPanelBackground() -> some View {
         background(MovieCutTheme.panelBackground)
+    }
+
+    func movieCutScrollBackground(_ background: Color = MovieCutTheme.panelBackground) -> some View {
+        scrollContentBackground(.hidden)
+            .background(background)
+    }
+
+    func movieCutInputField() -> some View {
+        textFieldStyle(.plain)
+            .padding(.horizontal, MovieCutSpacing.small)
+            .padding(.vertical, MovieCutSpacing.xSmall)
+            .background(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.controlSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .stroke(MovieCutTheme.border, lineWidth: 0.5)
+            )
     }
 }
 

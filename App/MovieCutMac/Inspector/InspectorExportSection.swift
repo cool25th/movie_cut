@@ -304,6 +304,7 @@ struct InspectorExportSection: View {
                 .accessibilityValue("\(customBitrateMbpsBinding.wrappedValue) Mbps")
                 .accessibilityHint("Adjusts the target video bitrate used for export size and quality.")
             TextField("Mbps", value: customBitrateMbpsBinding, format: .number)
+                .movieCutInputField()
                 .frame(width: 64)
                 .multilineTextAlignment(.trailing)
                 .accessibilityLabel("Custom bitrate value")

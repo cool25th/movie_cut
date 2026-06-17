@@ -143,7 +143,8 @@ struct Phase22HoverVisualPreviewStaticContractTests {
         #expect(handoff.contains("Phase 2-1 implemented"))
         #expect(handoff.contains("Phase 2-2 implemented"))
         #expect(handoff.contains("Phase22HoverVisualPreviewStaticContractTests"))
-        #expect(handoff.contains("Phase 2-3 and Phase 2-4 remain pending"))
+        #expect(handoff.contains("Phase 2-3 implemented"))
+        #expect(handoff.contains("Phase 2-4 remains pending"))
         #expect(!handoff.contains("Phase 2 complete"))
     }
 }

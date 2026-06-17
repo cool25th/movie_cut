@@ -47,6 +47,8 @@ struct R501TimelineToolbarStaticContractTests {
             to: "    private var timelineMarkerControls"
         )
 
+        #expect(toolbar.components(separatedBy: "timelineToolbarIconButton(").count - 1 == 8)
+
         for marker in [
             #"Split at Playhead"#,
             #"Delete Selected Clips"#,
@@ -93,13 +95,20 @@ struct R501TimelineToolbarStaticContractTests {
         #expect(toolbar.contains("guard let selectedClip = viewModel.selectedClip else { return }"))
         #expect(toolbar.contains("await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)"))
         #expect(toolbar.contains("Task { await viewModel.freezeSelectedFrame() }"))
-        #expect(toolbar.contains(".disabled(!selectedClipSupportsVisualTimelineEffect)"))
-        #expect(toolbar.contains(#".help("Reverse Selected Clip")"#))
-        #expect(toolbar.contains(#".accessibilityLabel(NSLocalizedString("Reverse Selected Clip", comment: ""))"#))
-        #expect(toolbar.contains(#".accessibilityHint(NSLocalizedString("Reverse Selected Clip toggles reverse playback for the selected visual clip.", comment: ""))"#))
-        #expect(toolbar.contains(#".help("Freeze Selected Frame")"#))
-        #expect(toolbar.contains(#".accessibilityLabel(NSLocalizedString("Freeze Selected Frame", comment: ""))"#))
-        #expect(toolbar.contains(#".accessibilityHint(NSLocalizedString("Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.", comment: ""))"#))
+        #expect(toolbar.contains("isDisabled: !selectedClipSupportsVisualTimelineEffect"))
+        #expect(toolbar.contains(#"title: "Reverse Selected Clip""#))
+        #expect(toolbar.contains(#"hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.""#))
+        #expect(toolbar.contains(#"title: "Freeze Selected Frame""#))
+        #expect(toolbar.contains(#"hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.""#))
+
+        let helper = try section(
+            in: timeline,
+            from: "private func timelineToolbarIconButton(",
+            to: "    private var selectedClipToolbar"
+        )
+        #expect(helper.contains("let localizedAccessibilityLabel = accessibilityLabel.map { NSLocalizedString($0, comment: \"\") } ?? localizedTitle"))
+        #expect(helper.contains(".accessibilityLabel(localizedAccessibilityLabel)"))
+        #expect(helper.contains(".accessibilityHint(localizedHint)"))
     }
 
     @Test("Reverse and freeze toolbar enablement remains presentation scoped")

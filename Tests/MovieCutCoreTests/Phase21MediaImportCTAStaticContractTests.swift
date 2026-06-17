@@ -96,14 +96,15 @@ struct Phase21MediaImportCTAStaticContractTests {
         #expect(mediaContent.contains("let assets = filteredMediaAssets"))
     }
 
-    @Test("Handoff marks only Phase 2-1 implemented")
-    func handoffKeepsPhase21ImplementedAfterPhase22Completion() throws {
+    @Test("Handoff keeps Phase 2 progress current without claiming complete")
+    func handoffKeepsPhase2ProgressCurrentWithoutClaimingComplete() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 2-1 implemented"))
         #expect(handoff.contains("Phase21MediaImportCTAStaticContractTests"))
         #expect(handoff.contains("Phase 2-2 implemented"))
-        #expect(handoff.contains("Phase 2-3 and Phase 2-4 remain pending"))
+        #expect(handoff.contains("Phase 2-3 implemented"))
+        #expect(handoff.contains("Phase 2-4 remains pending"))
         #expect(!handoff.contains("Phase 2 complete"))
     }
 }

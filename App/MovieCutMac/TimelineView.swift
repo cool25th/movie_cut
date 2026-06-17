@@ -113,102 +113,121 @@ struct TimelineView: View {
         }
     }
 
+    @ViewBuilder
+    private func timelineToolbarIconButton(
+        systemImage: String,
+        title: String,
+        accessibilityLabel: String? = nil,
+        hint: String,
+        accessibilityValue: String? = nil,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        let localizedTitle = NSLocalizedString(title, comment: "")
+        let localizedAccessibilityLabel = accessibilityLabel.map { NSLocalizedString($0, comment: "") } ?? localizedTitle
+        let localizedHint = NSLocalizedString(hint, comment: "")
+
+        let button = Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .disabled(isDisabled)
+        .foregroundStyle(isDisabled ? MovieCutTheme.mutedText.opacity(0.56) : Color.primary)
+        .contentShape(Rectangle())
+        .help(localizedTitle)
+        .accessibilityLabel(localizedAccessibilityLabel)
+        .accessibilityHint(localizedHint)
+
+        if let accessibilityValue {
+            button.accessibilityValue(accessibilityValue)
+        } else {
+            button
+        }
+    }
+
     private var selectedClipToolbar: some View {
         HStack(spacing: MovieCutSpacing.xSmall) {
             Image(systemName: "slider.horizontal.3")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "scissors",
+                title: "Split at Playhead",
+                hint: "Splits the selected clip at the playhead.",
+                isDisabled: !viewModel.canSplitSelectedClip
+            ) {
                 Task { await viewModel.splitClip() }
-            } label: {
-                Image(systemName: "scissors")
             }
-            .buttonStyle(.borderless)
-            .disabled(!viewModel.canSplitSelectedClip)
-            .help("Split at Playhead")
-            .accessibilityLabel(NSLocalizedString("Split at Playhead", comment: ""))
-            .accessibilityHint(NSLocalizedString("Splits the selected clip at the playhead.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "trash",
+                title: "Delete Selected Clips",
+                hint: "Deletes the selected clips from the timeline.",
+                isDisabled: !viewModel.hasSelectedClips
+            ) {
                 Task { await viewModel.deleteClip() }
-            } label: {
-                Image(systemName: "trash")
             }
-            .buttonStyle(.borderless)
-            .disabled(!viewModel.hasSelectedClips)
-            .help("Delete Selected Clips")
-            .accessibilityLabel(NSLocalizedString("Delete Selected Clips", comment: ""))
-            .accessibilityHint(NSLocalizedString("Deletes the selected clips from the timeline.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "delete.left",
+                title: "Ripple Delete Selected Clip",
+                hint: "Deletes the selected clip and closes the resulting gap.",
+                isDisabled: viewModel.selectedClip == nil
+            ) {
                 Task { await viewModel.rippleDeleteSelectedClip() }
-            } label: {
-                Image(systemName: "delete.left")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.selectedClip == nil)
-            .help("Ripple Delete Selected Clip")
-            .accessibilityLabel(NSLocalizedString("Ripple Delete Selected Clip", comment: ""))
-            .accessibilityHint(NSLocalizedString("Deletes the selected clip and closes the resulting gap.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "square.on.square",
+                title: "Duplicate Selected Clips",
+                hint: "Duplicates the selected clips on the timeline.",
+                isDisabled: !viewModel.hasSelectedClips
+            ) {
                 Task { await viewModel.duplicateSelectedClips() }
-            } label: {
-                Image(systemName: "square.on.square")
             }
-            .buttonStyle(.borderless)
-            .disabled(!viewModel.hasSelectedClips)
-            .help("Duplicate Selected Clips")
-            .accessibilityLabel(NSLocalizedString("Duplicate Selected Clips", comment: ""))
-            .accessibilityHint(NSLocalizedString("Duplicates the selected clips on the timeline.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "arrow.left.to.line.compact",
+                title: "Snap Playhead to Clip Start",
+                hint: "Moves the playhead to the selected clip start.",
+                isDisabled: viewModel.selectedClip == nil
+            ) {
                 viewModel.snapPlayheadToSelectedClipStart()
-            } label: {
-                Image(systemName: "arrow.left.to.line.compact")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.selectedClip == nil)
-            .help("Snap Playhead to Clip Start")
-            .accessibilityLabel(NSLocalizedString("Snap Playhead to Clip Start", comment: ""))
-            .accessibilityHint(NSLocalizedString("Moves the playhead to the selected clip start.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "arrow.right.to.line.compact",
+                title: "Snap Playhead to Clip End",
+                hint: "Moves the playhead to the selected clip end.",
+                isDisabled: viewModel.selectedClip == nil
+            ) {
                 viewModel.snapPlayheadToSelectedClipEnd()
-            } label: {
-                Image(systemName: "arrow.right.to.line.compact")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.selectedClip == nil)
-            .help("Snap Playhead to Clip End")
-            .accessibilityLabel(NSLocalizedString("Snap Playhead to Clip End", comment: ""))
-            .accessibilityHint(NSLocalizedString("Moves the playhead to the selected clip end.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "snowflake",
+                title: "Freeze Selected Frame",
+                hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.",
+                isDisabled: !selectedClipSupportsVisualTimelineEffect
+            ) {
                 Task { await viewModel.freezeSelectedFrame() }
-            } label: {
-                Image(systemName: "snowflake")
             }
-            .buttonStyle(.borderless)
-            .disabled(!selectedClipSupportsVisualTimelineEffect)
-            .help("Freeze Selected Frame")
-            .accessibilityLabel(NSLocalizedString("Freeze Selected Frame", comment: ""))
-            .accessibilityHint(NSLocalizedString("Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "backward.fill",
+                title: "Reverse Selected Clip",
+                hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.",
+                isDisabled: !selectedClipSupportsVisualTimelineEffect
+            ) {
                 Task {
                     guard let selectedClip = viewModel.selectedClip else { return }
                     await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)
                 }
-            } label: {
-                Image(systemName: "backward.fill")
             }
-            .buttonStyle(.borderless)
-            .disabled(!selectedClipSupportsVisualTimelineEffect)
-            .help("Reverse Selected Clip")
-            .accessibilityLabel(NSLocalizedString("Reverse Selected Clip", comment: ""))
-            .accessibilityHint(NSLocalizedString("Reverse Selected Clip toggles reverse playback for the selected visual clip.", comment: ""))
         }
         .font(.caption)
         .accessibilityElement(children: .contain)
@@ -221,38 +240,32 @@ struct TimelineView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "backward.end.fill",
+                title: "Previous Marker",
+                hint: "Moves the playhead to the previous marker.",
+                isDisabled: viewModel.previousMarker == nil
+            ) {
                 viewModel.goToPreviousMarker()
-            } label: {
-                Image(systemName: "backward.end.fill")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.previousMarker == nil)
-            .help("Previous Marker")
-            .accessibilityLabel(NSLocalizedString("Previous Marker", comment: ""))
-            .accessibilityHint(NSLocalizedString("Moves the playhead to the previous marker.", comment: ""))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "flag.fill",
+                title: "Add Marker at Playhead",
+                hint: "Adds a marker at the current playhead time.",
+                accessibilityValue: String(format: NSLocalizedString("%d markers", comment: ""), sortedMarkers.count)
+            ) {
                 viewModel.addMarkerAtPlayhead()
-            } label: {
-                Image(systemName: "flag.fill")
             }
-            .buttonStyle(.borderless)
-            .help("Add Marker at Playhead")
-            .accessibilityLabel(NSLocalizedString("Add Marker at Playhead", comment: ""))
-            .accessibilityHint(NSLocalizedString("Adds a marker at the current playhead time.", comment: ""))
-            .accessibilityValue(String(format: NSLocalizedString("%d markers", comment: ""), sortedMarkers.count))
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "forward.end.fill",
+                title: "Next Marker",
+                hint: "Moves the playhead to the next marker.",
+                isDisabled: viewModel.nextMarker == nil
+            ) {
                 viewModel.goToNextMarker()
-            } label: {
-                Image(systemName: "forward.end.fill")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.nextMarker == nil)
-            .help("Next Marker")
-            .accessibilityLabel(NSLocalizedString("Next Marker", comment: ""))
-            .accessibilityHint(NSLocalizedString("Moves the playhead to the next marker.", comment: ""))
         }
         .font(.caption)
         .accessibilityElement(children: .contain)
@@ -270,13 +283,14 @@ struct TimelineView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            Button(action: { viewModel.zoomTimelineOut() }) {
-                Image(systemName: "minus.magnifyingglass")
+            timelineToolbarIconButton(
+                systemImage: "minus.magnifyingglass",
+                title: "Zoom Timeline Out",
+                accessibilityLabel: "타임라인 축소",
+                hint: "Zooms the timeline out."
+            ) {
+                viewModel.zoomTimelineOut()
             }
-            .buttonStyle(.borderless)
-            .help("Zoom Timeline Out")
-            .accessibilityLabel(NSLocalizedString("타임라인 축소", comment: ""))
-            .accessibilityHint(NSLocalizedString("Zooms the timeline out.", comment: ""))
 
             Slider(value: Binding(
                     get: { viewModel.timelineZoom },
@@ -289,13 +303,14 @@ struct TimelineView: View {
             .accessibilityLabel(NSLocalizedString("Timeline zoom slider", comment: ""))
             .accessibilityHint(NSLocalizedString("Adjusts pixels per second in the timeline.", comment: ""))
 
-            Button(action: { viewModel.zoomTimelineIn() }) {
-                Image(systemName: "plus.magnifyingglass")
+            timelineToolbarIconButton(
+                systemImage: "plus.magnifyingglass",
+                title: "Zoom Timeline In",
+                accessibilityLabel: "타임라인 확대",
+                hint: "Zooms the timeline in."
+            ) {
+                viewModel.zoomTimelineIn()
             }
-            .buttonStyle(.borderless)
-            .help("Zoom Timeline In")
-            .accessibilityLabel(NSLocalizedString("타임라인 확대", comment: ""))
-            .accessibilityHint(NSLocalizedString("Zooms the timeline in.", comment: ""))
 
             Text(timelineZoomDisplay)
                 .font(.caption2.monospacedDigit())
@@ -304,15 +319,13 @@ struct TimelineView: View {
                 .accessibilityLabel(NSLocalizedString("Timeline zoom", comment: ""))
                 .accessibilityValue(timelineZoomDisplay)
 
-            Button {
+            timelineToolbarIconButton(
+                systemImage: "arrow.left.and.right",
+                title: "Fit Timeline",
+                hint: "Fits the visible timeline duration in the available timeline width."
+            ) {
                 fitTimelineToAvailableWidth(timelineViewportWidth)
-            } label: {
-                Image(systemName: "arrow.left.and.right")
             }
-            .buttonStyle(.borderless)
-            .help("Fit Timeline")
-            .accessibilityLabel(NSLocalizedString("Fit Timeline", comment: ""))
-            .accessibilityHint(NSLocalizedString("Fits the visible timeline duration in the available timeline width.", comment: ""))
         }
         .font(.caption)
         .accessibilityElement(children: .contain)

@@ -52,11 +52,14 @@ struct R502TimelineZoomStaticContractTests {
             to: "    private func fitTimelineToAvailableWidth"
         )
 
-        #expect(zoomControls.contains("Button(action: { viewModel.zoomTimelineOut() })"))
-        #expect(zoomControls.contains("Button(action: { viewModel.zoomTimelineIn() })"))
+        #expect(zoomControls.components(separatedBy: "timelineToolbarIconButton(").count - 1 == 3)
+        #expect(zoomControls.contains("viewModel.zoomTimelineOut()"))
+        #expect(zoomControls.contains("viewModel.zoomTimelineIn()"))
         #expect(zoomControls.contains("Text(timelineZoomDisplay)"))
-        #expect(zoomControls.contains(#".help("Zoom Timeline Out")"#))
-        #expect(zoomControls.contains(#".help("Zoom Timeline In")"#))
+        #expect(zoomControls.contains(#"title: "Zoom Timeline Out""#))
+        #expect(zoomControls.contains(#"title: "Zoom Timeline In""#))
+        #expect(zoomControls.contains(#"accessibilityLabel: "타임라인 축소""#))
+        #expect(zoomControls.contains(#"accessibilityLabel: "타임라인 확대""#))
         #expect(display.contains(#""\(Int(clampedTimelineZoom(viewModel.timelineZoom).rounded())) px/s""#))
     }
 
@@ -70,11 +73,19 @@ struct R502TimelineZoomStaticContractTests {
         )
 
         #expect(zoomControls.contains("fitTimelineToAvailableWidth(timelineViewportWidth)"))
-        #expect(zoomControls.contains(#"Image(systemName: "arrow.left.and.right")"#))
+        #expect(zoomControls.contains(#"systemImage: "arrow.left.and.right""#))
         #expect(!zoomControls.contains(#"Label(NSLocalizedString("Fit", comment: ""), systemImage: "arrow.left.and.right")"#))
-        #expect(zoomControls.contains(#".help("Fit Timeline")"#))
-        #expect(zoomControls.contains(#"accessibilityLabel(NSLocalizedString("Fit Timeline", comment: ""))"#))
-        #expect(zoomControls.contains(#"accessibilityHint(NSLocalizedString("Fits the visible timeline duration in the available timeline width.", comment: ""))"#))
+        #expect(zoomControls.contains(#"title: "Fit Timeline""#))
+        #expect(zoomControls.contains(#"hint: "Fits the visible timeline duration in the available timeline width.""#))
+
+        let helper = try section(
+            in: timeline,
+            from: "private func timelineToolbarIconButton(",
+            to: "    private var selectedClipToolbar"
+        )
+        #expect(helper.contains(".help(localizedTitle)"))
+        #expect(helper.contains(".accessibilityLabel(localizedAccessibilityLabel)"))
+        #expect(helper.contains(".accessibilityHint(localizedHint)"))
     }
 
     @Test("Fit helper computes and clamps timelineZoom in presentation layer")

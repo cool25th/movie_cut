@@ -69,6 +69,8 @@ struct Phase04TimelineEditToolbarStaticContractTests {
             to: "    private var timelineMarkerControls"
         )
 
+        #expect(toolbar.components(separatedBy: "timelineToolbarIconButton(").count - 1 == 8)
+
         for marker in [
             "await viewModel.splitClip()",
             "await viewModel.deleteClip()",
@@ -78,14 +80,22 @@ struct Phase04TimelineEditToolbarStaticContractTests {
             "viewModel.snapPlayheadToSelectedClipEnd()",
             "await viewModel.freezeSelectedFrame()",
             "await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)",
-            #".help("Split at Playhead")"#,
-            #".help("Delete Selected Clips")"#,
-            #".help("Ripple Delete Selected Clip")"#,
-            #".help("Duplicate Selected Clips")"#,
-            #".help("Snap Playhead to Clip Start")"#,
-            #".help("Snap Playhead to Clip End")"#,
-            #".help("Freeze Selected Frame")"#,
-            #".help("Reverse Selected Clip")"#,
+            #"title: "Split at Playhead""#,
+            #"title: "Delete Selected Clips""#,
+            #"title: "Ripple Delete Selected Clip""#,
+            #"title: "Duplicate Selected Clips""#,
+            #"title: "Snap Playhead to Clip Start""#,
+            #"title: "Snap Playhead to Clip End""#,
+            #"title: "Freeze Selected Frame""#,
+            #"title: "Reverse Selected Clip""#,
+            #"hint: "Splits the selected clip at the playhead.""#,
+            #"hint: "Deletes the selected clips from the timeline.""#,
+            #"hint: "Deletes the selected clip and closes the resulting gap.""#,
+            #"hint: "Duplicates the selected clips on the timeline.""#,
+            #"hint: "Moves the playhead to the selected clip start.""#,
+            #"hint: "Moves the playhead to the selected clip end.""#,
+            #"hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.""#,
+            #"hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.""#,
             #"accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))"#
         ] {
             #expect(toolbar.contains(marker))
@@ -110,18 +120,20 @@ struct Phase04TimelineEditToolbarStaticContractTests {
             to: "    private var selectedClipSupportsVisualTimelineEffect"
         )
 
+        #expect(controls.components(separatedBy: "timelineToolbarIconButton(").count - 1 == 3)
+
         for marker in [
             "viewModel.goToPreviousMarker()",
             "viewModel.addMarkerAtPlayhead()",
             "viewModel.goToNextMarker()",
             "viewModel.previousMarker == nil",
             "viewModel.nextMarker == nil",
-            #".help("Previous Marker")"#,
-            #".help("Add Marker at Playhead")"#,
-            #".help("Next Marker")"#,
-            #"accessibilityLabel(NSLocalizedString("Previous Marker", comment: ""))"#,
-            #"accessibilityLabel(NSLocalizedString("Add Marker at Playhead", comment: ""))"#,
-            #"accessibilityLabel(NSLocalizedString("Next Marker", comment: ""))"#,
+            #"title: "Previous Marker""#,
+            #"title: "Add Marker at Playhead""#,
+            #"title: "Next Marker""#,
+            #"hint: "Moves the playhead to the previous marker.""#,
+            #"hint: "Adds a marker at the current playhead time.""#,
+            #"hint: "Moves the playhead to the next marker.""#,
             #"accessibilityLabel(NSLocalizedString("Timeline marker controls", comment: ""))"#
         ] {
             #expect(controls.contains(marker))
@@ -137,15 +149,22 @@ struct Phase04TimelineEditToolbarStaticContractTests {
             to: "    private var timelineZoomDisplay"
         )
 
+        #expect(zoom.components(separatedBy: "timelineToolbarIconButton(").count - 1 == 3)
+
         for marker in [
             "viewModel.zoomTimelineOut()",
             "viewModel.zoomTimelineIn()",
             "Slider(value:",
             "Text(timelineZoomDisplay)",
             "fitTimelineToAvailableWidth(timelineViewportWidth)",
-            #".help("Zoom Timeline Out")"#,
-            #".help("Zoom Timeline In")"#,
-            #".help("Fit Timeline")"#,
+            #"title: "Zoom Timeline Out""#,
+            #"title: "Zoom Timeline In""#,
+            #"title: "Fit Timeline""#,
+            #"accessibilityLabel: "타임라인 축소""#,
+            #"accessibilityLabel: "타임라인 확대""#,
+            #"hint: "Zooms the timeline out.""#,
+            #"hint: "Zooms the timeline in.""#,
+            #"hint: "Fits the visible timeline duration in the available timeline width.""#,
             #"accessibilityLabel(NSLocalizedString("Timeline zoom controls", comment: ""))"#
         ] {
             #expect(zoom.contains(marker))

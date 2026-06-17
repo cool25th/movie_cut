@@ -128,13 +128,13 @@ struct Phase12InspectorDefaultStaticContractTests {
         }
     }
 
-    @Test("Phase 1-2 docs are marked implemented without advancing later phases")
-    func phase12DocsAreMarkedImplementedWithoutAdvancingLaterPhases() throws {
+    @Test("Phase 1-2 docs remain marked implemented after later Phase 1 polish")
+    func phase12DocsRemainMarkedImplementedAfterLaterPhaseOnePolish() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 1-2 implemented with a compact ProjectOverviewInspectorView"))
         #expect(handoff.contains("verified by `Phase12InspectorDefaultStaticContractTests`"))
-        #expect(handoff.contains("Phase 1-3/1-4 remain pending"))
+        #expect(handoff.contains("Phase 1-4 remains pending"))
         #expect(!handoff.contains("Phase 1-2/1-3/1-4 remain pending"))
     }
 }

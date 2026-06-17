@@ -134,7 +134,7 @@ struct Phase12InspectorDefaultStaticContractTests {
 
         #expect(handoff.contains("Phase 1-2 implemented with a compact ProjectOverviewInspectorView"))
         #expect(handoff.contains("verified by `Phase12InspectorDefaultStaticContractTests`"))
-        #expect(handoff.contains("Phase 1-4 remains pending"))
+        #expect(handoff.contains("Phase 1 complete."))
         #expect(!handoff.contains("Phase 1-2/1-3/1-4 remain pending"))
     }
 }

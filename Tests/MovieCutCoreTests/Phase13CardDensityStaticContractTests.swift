@@ -44,35 +44,37 @@ struct Phase13CardDensityStaticContractTests {
         }
     }
 
-    @Test("Phase 1-4 timeline track ruler and grid tokens remain unchanged")
-    func phase14TimelineTrackRulerAndGridTokensRemainUnchanged() throws {
+    @Test("Phase 1-4 darkens timeline tokens after Phase 1-3 card density")
+    func phase14DarkensTimelineTokensAfterPhase13CardDensity() throws {
         let shared = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
 
         for marker in [
-            #"static let rulerBackground: Color = rgb(0x1C, 0x1D, 0x20)"#,
-            #"static let trackBackground: Color = rgb(0x14, 0x15, 0x18)"#,
-            #"static let timelineGrid: Color = rgb(0x38, 0x3A, 0x3F, opacity: 0.34)"#,
+            #"static let rulerBackground: Color = rgb(0x17, 0x18, 0x1B)"#,
+            #"static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)"#,
+            #"static let trackHeaderBackground: Color = rgb(0x18, 0x19, 0x1C)"#,
+            #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
         ] {
             #expect(shared.contains(marker))
         }
 
         for marker in [
             #".fill(MovieCutTheme.rulerBackground)"#,
-            #"with: .color(isMajor ? MovieCutTheme.divider.opacity(0.44) : MovieCutTheme.timelineGrid)"#,
+            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36))"#,
             #".fill(MovieCutTheme.trackBackground)"#,
         ] {
             #expect(timeline.contains(marker))
         }
     }
 
-    @Test("Phase 1-3 docs are marked implemented without advancing Phase 1-4")
-    func phase13DocsAreMarkedImplementedWithoutAdvancingPhase14() throws {
+    @Test("Phase 1-3 docs remain marked implemented after Phase 1-4")
+    func phase13DocsRemainMarkedImplementedAfterPhase14() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 1-3 implemented with darker near-flat shared card tokens"))
         #expect(handoff.contains("verified by `Phase13CardDensityStaticContractTests`"))
-        #expect(handoff.contains("Phase 1-4 remains pending"))
+        #expect(handoff.contains("Phase 1-4 implemented with darker timeline track/ruler tokens"))
+        #expect(handoff.contains("Phase 1 complete."))
         #expect(!handoff.contains("Phase 1-3/1-4 remain pending"))
     }
 }

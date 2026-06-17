@@ -370,8 +370,8 @@ struct TimelineView: View {
                                 p.move(to: CGPoint(x: x, y: rulerHeight))
                                 p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
                             },
-                            with: .color(isMajor ? MovieCutTheme.divider : MovieCutTheme.timelineGrid),
-                            lineWidth: isMajor ? 1 : 0.5
+                            with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.82) : MovieCutTheme.timelineGrid.opacity(0.48)),
+                            lineWidth: isMajor ? 0.8 : 0.4
                         )
 
                         if isMajor {
@@ -430,8 +430,8 @@ struct TimelineView: View {
                         path.move(to: CGPoint(x: x, y: 0))
                         path.addLine(to: CGPoint(x: x, y: height))
                     },
-                    with: .color(isMajor ? MovieCutTheme.divider.opacity(0.44) : MovieCutTheme.timelineGrid),
-                    lineWidth: isMajor ? 0.6 : 0.4
+                    with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36)),
+                    lineWidth: isMajor ? 0.5 : 0.35
                 )
 
                 time += interval
@@ -964,13 +964,13 @@ struct TimelineView: View {
 
     private func colorForClip(clip: Clip, trackKind: TrackKind, selected: Bool) -> Color {
         if isStickerClip(clip) {
-            return selected ? .pink : .pink.opacity(0.68)
+            return selected ? .pink : .pink.opacity(0.46)
         }
 
         switch trackKind {
-        case .video: return selected ? .blue : .blue.opacity(0.6)
-        case .audio: return selected ? .green : .green.opacity(0.6)
-        case .text: return selected ? .orange : .orange.opacity(0.6)
+        case .video: return selected ? .blue : .blue.opacity(0.42)
+        case .audio: return selected ? .green : .green.opacity(0.42)
+        case .text: return selected ? .orange : .orange.opacity(0.42)
         }
     }
 

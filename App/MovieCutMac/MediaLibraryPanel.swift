@@ -10,6 +10,8 @@ struct MediaLibraryPanel: View {
     @State private var textClipText = NSLocalizedString("Text", comment: "")
     @State private var selectedLibraryTab: LibraryTab = .media
     @State private var librarySearchText = ""
+    @State private var hoveredLibraryPreviewTitle: String?
+    @State private var hoveredLibraryPreviewKind: LibraryHoverPreviewKind?
 
     private let libraryGridColumns = [
         GridItem(.flexible(minimum: 120), spacing: MovieCutSpacing.small),
@@ -118,6 +120,8 @@ struct MediaLibraryPanel: View {
                     Button {
                         if selectedLibraryTab != tab {
                             librarySearchText = ""
+                            hoveredLibraryPreviewTitle = nil
+                            hoveredLibraryPreviewKind = nil
                         }
                         selectedLibraryTab = tab
                     } label: {
@@ -277,6 +281,7 @@ struct MediaLibraryPanel: View {
         effectGrid(
             title: NSLocalizedString("Effects", comment: ""),
             systemImage: "sparkles",
+            previewKind: .effect,
             types: EffectType.allCases.filter { $0 != .externalLUT },
             emptyMessage: NSLocalizedString("Select a clip to apply effects.", comment: "")
         )
@@ -286,6 +291,7 @@ struct MediaLibraryPanel: View {
         effectGrid(
             title: NSLocalizedString("Filters", comment: ""),
             systemImage: "camera.filters",
+            previewKind: .filter,
             types: filterEffectTypes,
             emptyMessage: NSLocalizedString("Select a clip to apply filters.", comment: "")
         )
@@ -312,8 +318,12 @@ struct MediaLibraryPanel: View {
                                 browserGridCard(
                                     title: type.displayName,
                                     subtitle: transitionSubtitle(type),
-                                    systemImage: type == .none ? "nosign" : "rectangle.2.swap"
+                                    systemImage: type == .none ? "nosign" : "rectangle.2.swap",
+                                    previewKind: .transition
                                 )
+                                .onHover { isHovering in
+                                    setLibraryHoverPreview(isHovering, title: type.displayName, kind: .transition)
+                                }
                             }
                             .buttonStyle(.plain)
                             .disabled(viewModel.selectedClip == nil)
@@ -344,7 +354,13 @@ struct MediaLibraryPanel: View {
     }
 
     @ViewBuilder
-    private func effectGrid(title: String, systemImage: String, types: [EffectType], emptyMessage: String) -> some View {
+    private func effectGrid(
+        title: String,
+        systemImage: String,
+        previewKind: LibraryHoverPreviewKind,
+        types: [EffectType],
+        emptyMessage: String
+    ) -> some View {
         let effects = filteredEffectTypes(types)
 
         ScrollView {
@@ -364,8 +380,12 @@ struct MediaLibraryPanel: View {
                                 browserGridCard(
                                     title: type.displayName,
                                     subtitle: effectSubtitle(type),
-                                    systemImage: systemImage
+                                    systemImage: systemImage,
+                                    previewKind: previewKind
                                 )
+                                .onHover { isHovering in
+                                    setLibraryHoverPreview(isHovering, title: type.displayName, kind: previewKind)
+                                }
                             }
                             .buttonStyle(.plain)
                             .disabled(viewModel.selectedClip == nil)
@@ -422,7 +442,12 @@ struct MediaLibraryPanel: View {
         }
     }
 
-    private func browserGridCard(title: String, subtitle: String, systemImage: String) -> some View {
+    private func browserGridCard(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        previewKind: LibraryHoverPreviewKind? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .semibold))
@@ -453,7 +478,36 @@ struct MediaLibraryPanel: View {
             cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.cardBackground
         )
+        .overlay(alignment: .bottomLeading) {
+            if let previewKind,
+               hoveredLibraryPreviewTitle == title,
+               hoveredLibraryPreviewKind == previewKind {
+                libraryHoverPreviewAffordance(title: title, kind: previewKind)
+                    .padding(MovieCutSpacing.xSmall)
+            }
+        }
         .contentShape(Rectangle())
+    }
+
+    private func libraryHoverPreviewAffordance(title: String, kind: LibraryHoverPreviewKind) -> some View {
+        HStack(spacing: MovieCutSpacing.xSmall) {
+            Image(systemName: kind.systemImage)
+                .font(.caption2.weight(.semibold))
+            Text(kind.previewLabel(for: title))
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, MovieCutSpacing.small)
+        .padding(.vertical, 3)
+        .foregroundStyle(Color.accentColor)
+        .background(
+            Capsule(style: .continuous)
+                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.95))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -749,6 +803,16 @@ struct MediaLibraryPanel: View {
         case .slide: return NSLocalizedString("Slide", comment: "")
         case .zoom: return NSLocalizedString("Zoom", comment: "")
         case .stylized: return NSLocalizedString("Stylized", comment: "")
+        }
+    }
+
+    private func setLibraryHoverPreview(_ isHovering: Bool, title: String, kind: LibraryHoverPreviewKind) {
+        if isHovering {
+            hoveredLibraryPreviewTitle = title
+            hoveredLibraryPreviewKind = kind
+        } else if hoveredLibraryPreviewTitle == title && hoveredLibraryPreviewKind == kind {
+            hoveredLibraryPreviewTitle = nil
+            hoveredLibraryPreviewKind = nil
         }
     }
 
@@ -1067,6 +1131,34 @@ struct MediaLibraryPanel: View {
         }
         states.append(NSLocalizedString("draggable to timeline", comment: ""))
         return states.joined(separator: ", ")
+    }
+}
+
+private enum LibraryHoverPreviewKind {
+    case effect
+    case filter
+    case transition
+
+    var systemImage: String {
+        switch self {
+        case .effect:
+            return "sparkles"
+        case .filter:
+            return "camera.filters"
+        case .transition:
+            return "rectangle.2.swap"
+        }
+    }
+
+    func previewLabel(for title: String) -> String {
+        switch self {
+        case .effect:
+            return String(format: NSLocalizedString("Preview effect: %@", comment: ""), title)
+        case .filter:
+            return String(format: NSLocalizedString("Preview filter: %@", comment: ""), title)
+        case .transition:
+            return String(format: NSLocalizedString("Preview transition: %@", comment: ""), title)
+        }
     }
 }
 

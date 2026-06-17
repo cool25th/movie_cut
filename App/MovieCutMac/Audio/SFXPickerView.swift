@@ -7,6 +7,7 @@ struct SFXPickerView: View {
 
     @State private var searchText = ""
     @State private var previewItemId: UUID?
+    @State private var hoverPreviewItemId: UUID?
     @State private var previewPlayer: AVAudioPlayer?
 
     private let columns = [
@@ -45,6 +46,8 @@ struct SFXPickerView: View {
                                             item: item,
                                             isPreviewing: isPreviewing(item),
                                             previewAction: { togglePreview(for: item) },
+                                            hoverPreviewAction: { startHoverPreview(for: item) },
+                                            hoverStopAction: { stopHoverPreview(for: item) },
                                             addAction: {
                                                 Task { await viewModel.addSFXToTimeline(item) }
                                             }
@@ -90,11 +93,30 @@ struct SFXPickerView: View {
     private func togglePreview(for item: SFXItem) {
         if previewItemId == item.id, let player = previewPlayer, player.isPlaying {
             player.pause()
+            hoverPreviewItemId = nil
             return
         }
 
-        stopPreview()
+        hoverPreviewItemId = nil
+        startPreview(for: item)
+    }
 
+    private func startHoverPreview(for item: SFXItem) {
+        guard !isPreviewing(item) else { return }
+
+        startPreview(for: item)
+        if isPreviewing(item) {
+            hoverPreviewItemId = item.id
+        }
+    }
+
+    private func stopHoverPreview(for item: SFXItem) {
+        guard hoverPreviewItemId == item.id else { return }
+        stopPreview()
+    }
+
+    private func startPreview(for item: SFXItem) {
+        stopPreview()
         guard let url = viewModel.sfxURL(for: item) else {
             viewModel.lastErrorMessage = "Missing bundled sound effect: \(item.fileName)"
             return
@@ -110,6 +132,7 @@ struct SFXPickerView: View {
         } catch {
             previewPlayer = nil
             previewItemId = nil
+            hoverPreviewItemId = nil
             viewModel.lastErrorMessage = error.localizedDescription
         }
     }
@@ -118,6 +141,7 @@ struct SFXPickerView: View {
         previewPlayer?.stop()
         previewPlayer = nil
         previewItemId = nil
+        hoverPreviewItemId = nil
     }
 
     private func isPreviewing(_ item: SFXItem) -> Bool {
@@ -140,6 +164,8 @@ private struct SFXItemButton: View {
     let item: SFXItem
     let isPreviewing: Bool
     let previewAction: () -> Void
+    let hoverPreviewAction: () -> Void
+    let hoverStopAction: () -> Void
     let addAction: () -> Void
 
     var body: some View {
@@ -164,7 +190,7 @@ private struct SFXItemButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(item.name)
-            .accessibilityHint("Adds this sound effect to the timeline.")
+            .accessibilityHint("Hover to listen. Click to add this sound effect to the timeline.")
 
             Button(action: previewAction) {
                 Image(systemName: isPreviewing ? "pause.fill" : "play.fill")
@@ -174,6 +200,14 @@ private struct SFXItemButton: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(isPreviewing ? "Pause \(item.name)" : "Preview \(item.name)")
+            .accessibilityHint("Toggles sound effect preview playback. Hover over the card to listen.")
+        }
+        .onHover { isHovering in
+            if isHovering {
+                hoverPreviewAction()
+            } else {
+                hoverStopAction()
+            }
         }
     }
 

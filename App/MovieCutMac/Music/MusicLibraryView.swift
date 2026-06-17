@@ -7,6 +7,7 @@ struct MusicLibraryView: View {
 
     @State private var searchQuery = ""
     @State private var previewTrackId: UUID?
+    @State private var hoverPreviewTrackId: UUID?
     @State private var previewPlayer: AVAudioPlayer?
 
     var body: some View {
@@ -65,6 +66,14 @@ struct MusicLibraryView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    .onHover { isHovering in
+                        if isHovering {
+                            startHoverPreview(for: track)
+                        } else {
+                            stopHoverPreview(for: track)
+                        }
+                    }
+                    .accessibilityHint("Hover to listen. Use the preview button to toggle playback, or Add to place this track on the timeline.")
                 }
                 .listStyle(.plain)
             }
@@ -81,11 +90,30 @@ struct MusicLibraryView: View {
     private func togglePreview(for track: MovieCutCore.MusicTrack) {
         if previewTrackId == track.id, let player = previewPlayer, player.isPlaying {
             player.pause()
+            hoverPreviewTrackId = nil
             return
         }
 
-        stopPreview()
+        hoverPreviewTrackId = nil
+        startPreview(for: track)
+    }
 
+    private func startHoverPreview(for track: MovieCutCore.MusicTrack) {
+        guard !isPreviewing(track) else { return }
+
+        startPreview(for: track)
+        if isPreviewing(track) {
+            hoverPreviewTrackId = track.id
+        }
+    }
+
+    private func stopHoverPreview(for track: MovieCutCore.MusicTrack) {
+        guard hoverPreviewTrackId == track.id else { return }
+        stopPreview()
+    }
+
+    private func startPreview(for track: MovieCutCore.MusicTrack) {
+        stopPreview()
         do {
             let player = try AVAudioPlayer(contentsOf: track.fileURL)
             player.numberOfLoops = 0
@@ -96,6 +124,7 @@ struct MusicLibraryView: View {
         } catch {
             previewPlayer = nil
             previewTrackId = nil
+            hoverPreviewTrackId = nil
         }
     }
 
@@ -103,13 +132,18 @@ struct MusicLibraryView: View {
         previewPlayer?.stop()
         previewPlayer = nil
         previewTrackId = nil
+        hoverPreviewTrackId = nil
     }
 
     private func previewIcon(for track: MovieCutCore.MusicTrack) -> String {
-        if previewTrackId == track.id, let player = previewPlayer, player.isPlaying {
+        if isPreviewing(track) {
             return "pause.fill"
         }
         return "play.fill"
+    }
+
+    private func isPreviewing(_ track: MovieCutCore.MusicTrack) -> Bool {
+        previewTrackId == track.id && (previewPlayer?.isPlaying ?? false)
     }
 
     private func durationText(_ duration: TimeInterval) -> String {

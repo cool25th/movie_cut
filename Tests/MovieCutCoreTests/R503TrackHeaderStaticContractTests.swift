@@ -84,14 +84,14 @@ struct R503TrackHeaderStaticContractTests {
         #expect(!methods.contains("session.dispatch"))
     }
 
-    @Test("R5-03 docs are implemented without overclaiming R5-04")
-    func r503DocsAreImplementedWithoutOverclaimingR504() throws {
+    @Test("R5-03 docs stay implemented alongside R5-04")
+    func r503DocsStayImplementedAlongsideR504() throws {
         let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
 
         #expect(docs.contains("| R5-03 | 트랙 헤더(잠금/숨김/음소거) | ✅ 구현(2026-06-16, Codex R5-03):"))
         #expect(docs.contains("`toggleTrackMute(_:)`/`toggleTrackHidden(_:)`/`toggleTrackLock(_:)`"))
         #expect(docs.contains("`SetTrackPropertyCommand`"))
-        #expect(docs.contains("| R5-04 | 메인 비디오 트랙 개념 | 🟡 |"))
+        #expect(docs.contains("| R5-04 | 메인 비디오 트랙 개념 | ✅ 구현(2026-06-17, Codex R5-04):"))
         #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
         #expect(!docs.contains("R5-03, R1-02"))
         #expect(!docs.contains("| R5-03 | 트랙 헤더(잠금/숨김/음소거) | 🟡 `isMuted` |"))

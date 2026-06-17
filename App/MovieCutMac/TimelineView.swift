@@ -35,6 +35,14 @@ struct TimelineView: View {
         viewModel.currentProject.markers.sorted { $0.time < $1.time }
     }
 
+    private var mainVideoTrackId: Track.ID? {
+        viewModel.currentProject.timeline.tracks.first { $0.kind == .video }?.id
+    }
+
+    private func isMainVideoTrack(_ track: Track) -> Bool {
+        track.id == mainVideoTrackId
+    }
+
     private var timelineContentWidth: CGFloat {
         let markerEnd = sortedMarkers.map(\.time).max() ?? 0
         let visibleSeconds = max(viewModel.visibleTimelineDuration, markerEnd + 2)
@@ -456,18 +464,78 @@ struct TimelineView: View {
         .allowsHitTesting(false)
     }
 
+    private var mainVideoTrackBadge: some View {
+        Text(NSLocalizedString("Main", comment: ""))
+            .font(MovieCutTypography.micro.weight(.semibold))
+            .foregroundStyle(MovieCutTheme.accentCyan)
+            .lineLimit(1)
+            .padding(.horizontal, MovieCutSpacing.xSmall)
+            .padding(.vertical, 1)
+            .background {
+                Capsule()
+                    .fill(MovieCutTheme.accentCyan.opacity(0.12))
+            }
+            .overlay {
+                Capsule()
+                    .stroke(MovieCutTheme.accentCyan.opacity(0.32), lineWidth: 0.5)
+            }
+            .layoutPriority(1)
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func mainVideoTrackHeaderAccent(isMainVideo: Bool) -> some View {
+        if isMainVideo {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                    .strokeBorder(MovieCutTheme.accentCyan.opacity(0.20), lineWidth: 1)
+                Rectangle()
+                    .fill(MovieCutTheme.accentCyan.opacity(0.60))
+                    .frame(width: 2)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func mainVideoTrackLaneHighlight(isMainVideo: Bool) -> some View {
+        if isMainVideo {
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(MovieCutTheme.accentCyan.opacity(0.035))
+                Rectangle()
+                    .strokeBorder(MovieCutTheme.accentCyan.opacity(0.14), lineWidth: 1)
+                Rectangle()
+                    .fill(MovieCutTheme.accentCyan.opacity(0.36))
+                    .frame(width: 2)
+            }
+            .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
+            .allowsHitTesting(false)
+        }
+    }
+
     private func trackLane(_ track: Track) -> some View {
-        HStack(spacing: 0) {
+        let isMainVideo = isMainVideoTrack(track)
+
+        return HStack(spacing: 0) {
             // Track header
             VStack(alignment: .leading, spacing: 2) {
-                Text(track.name)
-                    .font(MovieCutTypography.cardTitle)
-                    .lineLimit(1)
+                HStack(spacing: MovieCutSpacing.xSmall) {
+                    Text(track.name)
+                        .font(MovieCutTypography.cardTitle)
+                        .lineLimit(1)
+                    if isMainVideo {
+                        mainVideoTrackBadge
+                    }
+                }
                 trackHeaderControls(for: track)
             }
             .frame(width: 80, alignment: .leading)
             .padding(.horizontal, MovieCutSpacing.small)
             .background(MovieCutTheme.trackHeaderBackground)
+            .overlay(alignment: .leading) {
+                mainVideoTrackHeaderAccent(isMainVideo: isMainVideo)
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(trackHeaderAccessibilityLabel(for: track))
 
@@ -475,6 +543,7 @@ struct TimelineView: View {
             ZStack(alignment: .leading) {
                 Rectangle()
                     .fill(MovieCutTheme.trackBackground)
+                mainVideoTrackLaneHighlight(isMainVideo: isMainVideo)
                 timelineGridLines(height: trackHeight)
 
                 ForEach(clipsForDisplay(track)) { clip in
@@ -1029,6 +1098,10 @@ struct TimelineView: View {
     }
 
     private func trackHeaderAccessibilityLabel(for track: Track) -> String {
+        if isMainVideoTrack(track) {
+            return String(format: NSLocalizedString("Main video track, %@", comment: ""), track.name)
+        }
+
         switch track.kind {
         case .video:
             return NSLocalizedString("비디오 트랙 헤더", comment: "")

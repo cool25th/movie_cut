@@ -118,7 +118,8 @@ struct R301R302PreviewTransportZoomStaticContractTests {
         #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
         #expect(docs.contains("- **P2 완료** — R1-03, R3-02, R3-03."))
         #expect(docs.contains("- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01."))
-        #expect(docs.contains("- **P3 심층** — R5-04, R4 서브탭 깊이(Speed 곡선 등)."))
+        #expect(docs.contains("- **P3 완료** — R5-04."))
+        #expect(docs.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
         #expect(!docs.contains("| R3-05 | 안전영역 토글 | 🟡"))
     }
 }

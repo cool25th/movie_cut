@@ -16,7 +16,7 @@ struct MediaLibraryPanel: View {
 
     private let libraryRailWidth: CGFloat = 60
     private let libraryRailItemHeight: CGFloat = 32
-    private let libraryRailItemSpacing: CGFloat = 2
+    private let libraryRailItemSpacing: CGFloat = MovieCutSpacing.xxSmall
     private let libraryRailTopInset: CGFloat = 112
 
     private let libraryGridColumns = [
@@ -60,7 +60,7 @@ struct MediaLibraryPanel: View {
         .sheet(isPresented: $isAddingText) {
             VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
                 Text(NSLocalizedString("Add Text", comment: ""))
-                    .font(.headline)
+                    .font(MovieCutTypography.panelTitle)
                 TextField(NSLocalizedString("Text", comment: ""), text: $textClipText)
                     .movieCutInputField()
                     .frame(width: 260)
@@ -157,14 +157,14 @@ struct MediaLibraryPanel: View {
         Button {
             selectLibraryTab(tab)
         } label: {
-            VStack(spacing: 2) {
+            VStack(spacing: MovieCutSpacing.xxSmall) {
                 Image(systemName: tab.systemImage)
                     .font(.system(size: 15, weight: .semibold))
                     .frame(height: 16)
                     .accessibilityHidden(true)
 
                 Text(tab.railLabel)
-                    .font(.system(size: 9, weight: selectedLibraryTab == tab ? .semibold : .medium))
+                    .font(selectedLibraryTab == tab ? MovieCutTypography.micro.weight(.semibold) : MovieCutTypography.micro)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
@@ -201,10 +201,12 @@ struct MediaLibraryPanel: View {
     private var librarySearchField: some View {
         HStack(spacing: MovieCutSpacing.small) {
             Image(systemName: "magnifyingglass")
+                .font(MovieCutTypography.toolbar)
                 .foregroundStyle(.secondary)
 
             TextField(librarySearchPlaceholder, text: $librarySearchText)
                 .textFieldStyle(.plain)
+                .font(MovieCutTypography.cardBody)
                 .foregroundStyle(.primary)
                 .accessibilityLabel(String(format: NSLocalizedString("Search %@", comment: ""), selectedLibraryTab.displayName))
                 .accessibilityHint(NSLocalizedString("Filters the selected library tab.", comment: ""))
@@ -428,7 +430,7 @@ struct MediaLibraryPanel: View {
 
     private func smartFeedbackLabel(_ message: String, systemImage: String, color: Color) -> some View {
         Label(message, systemImage: systemImage)
-            .font(.caption)
+            .font(MovieCutTypography.metadata)
             .foregroundStyle(color)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -476,14 +478,14 @@ struct MediaLibraryPanel: View {
                     .foregroundStyle(isEnabled ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
                     .frame(width: 28, height: 28)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
                     Text(tool.title)
-                        .font(.caption.weight(.semibold))
+                        .font(MovieCutTypography.cardTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
 
                     Text(tool.description)
-                        .font(.caption2)
+                        .font(MovieCutTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
@@ -521,24 +523,24 @@ struct MediaLibraryPanel: View {
                 ProgressView()
                     .controlSize(.small)
                 Text(tool.progressMessage)
-                    .font(.caption2.weight(.semibold))
+                    .font(MovieCutTypography.metadata.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         } else if !isEnabled {
             Label(tool.disabledReason, systemImage: "info.circle")
-                .font(.caption2)
+                .font(MovieCutTypography.metadata)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         } else if isBlockedByRunningTool {
             Label(NSLocalizedString("Waiting for current Smart tool.", comment: ""), systemImage: "hourglass")
-                .font(.caption2)
+                .font(MovieCutTypography.metadata)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         } else {
             HStack(spacing: MovieCutSpacing.xSmall) {
                 Text(NSLocalizedString("Execute", comment: ""))
-                    .font(.caption2.weight(.semibold))
+                    .font(MovieCutTypography.metadata.weight(.semibold))
                 Image(systemName: "play.circle.fill")
             }
             .foregroundStyle(MovieCutTheme.accentCyan)
@@ -646,7 +648,7 @@ struct MediaLibraryPanel: View {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
                 Text(embeddedLibrarySearchNoteText)
-                    .font(.caption2)
+                    .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, MovieCutSpacing.medium)
@@ -711,7 +713,7 @@ struct MediaLibraryPanel: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text(String(format: NSLocalizedString("No results for \"%@\"", comment: ""), librarySearchQuery))
-                .font(.caption)
+                .font(MovieCutTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -727,7 +729,7 @@ struct MediaLibraryPanel: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text(message)
-                .font(.caption)
+                .font(MovieCutTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -780,12 +782,12 @@ struct MediaLibraryPanel: View {
             }
 
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(MovieCutTypography.cardTitle)
                 .foregroundStyle(.primary)
                 .lineLimit(2)
 
             Text(subtitle)
-                .font(.caption2)
+                .font(MovieCutTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
 
@@ -793,7 +795,7 @@ struct MediaLibraryPanel: View {
 
             if let disabledReason {
                 Label(disabledReason, systemImage: "info.circle")
-                    .font(.caption2.weight(.semibold))
+                    .font(MovieCutTypography.metadata.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             } else {
@@ -801,7 +803,7 @@ struct MediaLibraryPanel: View {
                     Spacer()
                     if let affordanceText {
                         Text(affordanceText)
-                            .font(.caption2.weight(.semibold))
+                            .font(MovieCutTypography.metadata.weight(.semibold))
                             .lineLimit(1)
                     }
                     Image(systemName: affordanceSystemImage)
@@ -825,21 +827,21 @@ struct MediaLibraryPanel: View {
                 stickerPreviewGlyph(sticker)
                     .frame(width: 42, height: 42)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
                     Text(sticker.name)
-                        .font(.caption.weight(.semibold))
+                        .font(MovieCutTypography.cardTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
 
                     Label(stickerCategoryName(sticker), systemImage: stickerSystemImage(sticker))
-                        .font(.caption2)
+                        .font(MovieCutTypography.metadata)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
 
             Text(stickerDescription(sticker))
-                .font(.caption2)
+                .font(MovieCutTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
 
@@ -848,7 +850,7 @@ struct MediaLibraryPanel: View {
             HStack(spacing: MovieCutSpacing.xSmall) {
                 Spacer()
                 Text(NSLocalizedString("Add", comment: ""))
-                    .font(.caption2.weight(.semibold))
+                    .font(MovieCutTypography.metadata.weight(.semibold))
                 Image(systemName: "plus.circle.fill")
             }
             .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
@@ -965,7 +967,7 @@ struct MediaLibraryPanel: View {
 
                 HStack(alignment: .bottom) {
                     Text(title)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(MovieCutTypography.micro.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -1032,7 +1034,7 @@ struct MediaLibraryPanel: View {
                     Image(systemName: LibraryHoverPreviewKind.transition.systemImage)
                         .font(.system(size: 8, weight: .bold))
                     Text(title)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(MovieCutTypography.micro.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -1099,10 +1101,10 @@ struct MediaLibraryPanel: View {
 
                 VStack(spacing: MovieCutSpacing.xSmall) {
                     Text(NSLocalizedString("Import media", comment: ""))
-                        .font(.headline.weight(.semibold))
+                        .font(MovieCutTypography.cardTitle)
                         .foregroundStyle(.primary)
                     Text(NSLocalizedString("Drag media files here or choose files to start editing", comment: ""))
-                        .font(.callout)
+                        .font(MovieCutTypography.cardBody)
                         .foregroundStyle(MovieCutTheme.mutedText)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 280)
@@ -1112,7 +1114,7 @@ struct MediaLibraryPanel: View {
                     openImportPanel()
                 } label: {
                     Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
-                        .font(.callout.weight(.semibold))
+                        .font(MovieCutTypography.toolbar.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -1121,7 +1123,7 @@ struct MediaLibraryPanel: View {
                 .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
 
                 Text(NSLocalizedString("Accepted: video, audio, images", comment: ""))
-                    .font(.caption)
+                    .font(MovieCutTypography.metadata)
                     .foregroundStyle(MovieCutTheme.mutedText)
             }
             .frame(maxWidth: .infinity, minHeight: 220)
@@ -1218,11 +1220,11 @@ struct MediaLibraryPanel: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(asset.originalURL.lastPathComponent)
                 .lineLimit(1)
-                .font(.caption)
+                .font(MovieCutTypography.cardTitle)
             if let detail = assetDetailSummary(asset) {
                 Text(detail)
                     .lineLimit(1)
-                    .font(.caption2)
+                    .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
             }
             assetStateText(asset)
@@ -1233,11 +1235,11 @@ struct MediaLibraryPanel: View {
     private func assetStateText(_ asset: MediaAsset) -> some View {
         if asset.kind == .video {
             Text(proxyStateText(asset))
-                .font(.caption2)
+                .font(MovieCutTypography.metadata)
                 .foregroundStyle(asset.proxy?.proxyURL == nil ? Color.secondary : Color.green)
         } else if asset.kind == .image {
             Text(thumbnailStateText(asset))
-                .font(.caption2)
+                .font(MovieCutTypography.metadata)
                 .foregroundStyle(.secondary)
         }
     }

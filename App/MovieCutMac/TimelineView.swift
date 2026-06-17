@@ -50,7 +50,7 @@ struct TimelineView: View {
                 )
                 if !sortedMarkers.isEmpty {
                     Text("\(sortedMarkers.count) markers")
-                        .font(.caption)
+                        .font(MovieCutTypography.metadata)
                         .foregroundStyle(.secondary)
                 }
 
@@ -136,6 +136,7 @@ struct TimelineView: View {
         .controlSize(.small)
         .disabled(isDisabled)
         .foregroundStyle(isDisabled ? MovieCutTheme.mutedText.opacity(0.56) : Color.primary)
+        .font(MovieCutTypography.toolbar)
         .contentShape(Rectangle())
         .help(localizedTitle)
         .accessibilityLabel(localizedAccessibilityLabel)
@@ -229,7 +230,7 @@ struct TimelineView: View {
                 }
             }
         }
-        .font(.caption)
+        .font(MovieCutTypography.toolbar)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))
     }
@@ -267,7 +268,7 @@ struct TimelineView: View {
                 viewModel.goToNextMarker()
             }
         }
-        .font(.caption)
+        .font(MovieCutTypography.toolbar)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Timeline marker controls", comment: ""))
     }
@@ -313,7 +314,7 @@ struct TimelineView: View {
             }
 
             Text(timelineZoomDisplay)
-                .font(.caption2.monospacedDigit())
+                .font(MovieCutTypography.metadata.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 54, alignment: .trailing)
                 .accessibilityLabel(NSLocalizedString("Timeline zoom", comment: ""))
@@ -327,7 +328,7 @@ struct TimelineView: View {
                 fitTimelineToAvailableWidth(timelineViewportWidth)
             }
         }
-        .font(.caption)
+        .font(MovieCutTypography.toolbar)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Timeline zoom controls", comment: ""))
     }
@@ -363,7 +364,7 @@ struct TimelineView: View {
                 .frame(width: 80, height: rulerHeight)
                 .overlay(alignment: .leading) {
                     Text(NSLocalizedString("Time", comment: ""))
-                        .font(.system(size: 9))
+                        .font(MovieCutTypography.micro)
                         .foregroundStyle(MovieCutTheme.mutedText)
                         .padding(.leading, MovieCutSpacing.xSmall)
                 }
@@ -389,7 +390,7 @@ struct TimelineView: View {
 
                         if isMajor {
                             let text = Text("\(Int(time))s")
-                                .font(.system(size: 9))
+                                .font(MovieCutTypography.micro)
                                 .foregroundStyle(MovieCutTheme.mutedText)
                             context.draw(text, at: CGPoint(x: x + 4, y: 8))
                         }
@@ -460,7 +461,7 @@ struct TimelineView: View {
             // Track header
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.name)
-                    .font(.caption)
+                    .font(MovieCutTypography.cardTitle)
                     .lineLimit(1)
                 trackHeaderControls(for: track)
             }
@@ -563,7 +564,7 @@ struct TimelineView: View {
             .accessibilityValue(track.isLocked ? NSLocalizedString("Locked", comment: "") : NSLocalizedString("Unlocked", comment: ""))
             .accessibilityHint(NSLocalizedString("Toggles editing protection for this track.", comment: ""))
         }
-        .font(.caption2)
+        .font(MovieCutTypography.metadata)
         .foregroundStyle(.secondary)
     }
 
@@ -583,7 +584,7 @@ struct TimelineView: View {
                 }
                 .overlay(alignment: .leading) {
                     Text(clipLabel(clip))
-                        .font(.system(size: 10))
+                        .font(MovieCutTypography.micro)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .padding(.horizontal, MovieCutSpacing.xSmall)
@@ -592,13 +593,13 @@ struct TimelineView: View {
                     HStack(spacing: 2) {
                         if clip.groupId != nil {
                             Image(systemName: "link")
-                                .font(.caption2)
+                                .font(MovieCutTypography.metadata)
                                 .foregroundStyle(.white.opacity(0.85))
                                 .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
                         }
                         if isStickerClip(clip) {
                             Image(systemName: "face.smiling")
-                                .font(.caption2)
+                                .font(MovieCutTypography.metadata)
                                 .foregroundStyle(.white.opacity(0.85))
                         }
                     }
@@ -1149,14 +1150,14 @@ private struct TimelineMarkerFlag: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "flag.fill")
-                .font(.system(size: 9, weight: .semibold))
+                .font(MovieCutTypography.micro.weight(.semibold))
                 .foregroundStyle(.yellow)
             VStack(alignment: .leading, spacing: 0) {
                 Text(marker.name)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(MovieCutTypography.micro.weight(.semibold))
                     .lineLimit(1)
                 Text(String(format: "%.1fs", marker.time))
-                    .font(.system(size: 8))
+                    .font(MovieCutTypography.micro)
                     .foregroundStyle(.secondary)
             }
         }

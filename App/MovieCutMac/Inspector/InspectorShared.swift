@@ -3,6 +3,7 @@ import SwiftUI
 import MovieCutCore
 
 enum MovieCutSpacing {
+    static let xxSmall: CGFloat = 2
     static let xSmall: CGFloat = 4
     static let small: CGFloat = 8
     static let medium: CGFloat = 12
@@ -13,6 +14,16 @@ enum MovieCutRadius {
     static let small: CGFloat = 6
     static let medium: CGFloat = 8
     static let large: CGFloat = 12
+}
+
+enum MovieCutTypography {
+    static let panelTitle: Font = .caption.weight(.semibold)
+    static let panelSubtitle: Font = .caption2
+    static let cardTitle: Font = .caption.weight(.semibold)
+    static let cardBody: Font = .caption2
+    static let metadata: Font = .caption2
+    static let toolbar: Font = .caption
+    static let micro: Font = .system(size: 9, weight: .medium)
 }
 
 enum MovieCutTheme {
@@ -45,12 +56,12 @@ struct MovieCutIconTitle: View {
     let systemImage: String
     var subtitle: String?
     var iconColor: Color = .secondary
-    var titleFont: Font = .headline
+    var titleFont: Font = MovieCutTypography.panelTitle
 
     var body: some View {
         HStack(alignment: subtitle == nil ? .center : .top, spacing: MovieCutSpacing.small) {
             Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
+                .font(MovieCutTypography.toolbar.weight(.semibold))
                 .foregroundStyle(iconColor)
                 .frame(width: 16)
                 .accessibilityHidden(true)
@@ -58,11 +69,13 @@ struct MovieCutIconTitle: View {
             VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
                 Text(title)
                     .font(titleFont)
+                    .lineSpacing(0)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption2)
+                        .font(MovieCutTypography.panelSubtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .lineSpacing(0)
                 }
             }
         }
@@ -121,7 +134,7 @@ struct MovieCutSectionCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
-            MovieCutIconTitle(title: title, systemImage: systemImage, titleFont: .caption.weight(.semibold))
+            MovieCutIconTitle(title: title, systemImage: systemImage, titleFont: MovieCutTypography.cardTitle)
                 .foregroundStyle(.secondary)
             content
         }
@@ -175,6 +188,7 @@ extension View {
 
     func movieCutInputField() -> some View {
         textFieldStyle(.plain)
+            .font(MovieCutTypography.cardBody)
             .padding(.horizontal, MovieCutSpacing.small)
             .padding(.vertical, MovieCutSpacing.xSmall)
             .background(
@@ -207,8 +221,7 @@ struct EffectRowView: View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             HStack {
                 Text(effect.type.displayName)
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .font(MovieCutTypography.cardTitle)
                 Spacer()
                 Button {
                     onRemove()
@@ -243,14 +256,14 @@ struct EffectParameterRow: View {
     let onChange: (Double) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
             HStack {
                 Text(definition.title)
-                    .font(.caption2)
+                    .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(String(format: definition.valueFormat, value))
-                    .font(.caption2)
+                    .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
             }
             Slider(value: Binding(

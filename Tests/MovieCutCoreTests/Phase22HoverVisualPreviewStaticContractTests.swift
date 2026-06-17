@@ -136,16 +136,17 @@ struct Phase22HoverVisualPreviewStaticContractTests {
         #expect(browserCard.contains("Label(disabledReason, systemImage: \"info.circle\")"))
     }
 
-    @Test("Handoff marks Phase 2-2 implemented without claiming Phase 2 complete")
-    func handoffMarksPhase22ImplementedWithoutClaimingPhase2Complete() throws {
+    @Test("Handoff marks Phase 2-2 implemented through Phase 2 completion")
+    func handoffMarksPhase22ImplementedThroughPhase2Completion() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 2-1 implemented"))
         #expect(handoff.contains("Phase 2-2 implemented"))
         #expect(handoff.contains("Phase22HoverVisualPreviewStaticContractTests"))
         #expect(handoff.contains("Phase 2-3 implemented"))
-        #expect(handoff.contains("Phase 2-4 remains pending"))
-        #expect(!handoff.contains("Phase 2 complete"))
+        #expect(handoff.contains("Phase 2-4 implemented"))
+        #expect(handoff.contains("Phase 2 complete."))
+        #expect(!handoff.contains("Phase 2-4 remains pending"))
     }
 }
 

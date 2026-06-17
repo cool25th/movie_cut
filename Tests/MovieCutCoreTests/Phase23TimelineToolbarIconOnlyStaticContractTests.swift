@@ -228,17 +228,19 @@ struct Phase23TimelineToolbarIconOnlyStaticContractTests {
         }
     }
 
-    @Test("Handoff marks Phase 2-3 implemented and leaves Phase 2-4 pending")
-    func handoffMarksPhase23ImplementedAndLeavesPhase24Pending() throws {
+    @Test("Handoff marks Phase 2-3 implemented through Phase 2 completion")
+    func handoffMarksPhase23ImplementedThroughPhase2Completion() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
         #expect(handoff.contains("Phase 2-1 implemented"))
         #expect(handoff.contains("Phase 2-2 implemented"))
         #expect(handoff.contains("Phase 2-3 implemented"))
         #expect(handoff.contains("Phase23TimelineToolbarIconOnlyStaticContractTests"))
-        #expect(handoff.contains("Phase 2-4 remains pending"))
+        #expect(handoff.contains("Phase 2-4 implemented"))
+        #expect(handoff.contains("Phase24TypographyDensityStaticContractTests"))
         #expect(!handoff.contains("Phase 2-3 and Phase 2-4 remain pending"))
-        #expect(!handoff.contains("Phase 2 complete"))
+        #expect(handoff.contains("Phase 2 complete."))
+        #expect(!handoff.contains("Phase 2-4 remains pending"))
     }
 }
 

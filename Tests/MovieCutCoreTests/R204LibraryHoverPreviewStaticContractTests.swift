@@ -146,7 +146,9 @@ struct R204LibraryHoverPreviewStaticContractTests {
         #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
         #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
         #expect(docs.contains("| R2-01 | 탭 7종 + Captions/Adjustment 보강 | ✅ 7탭(`LibraryTab`) | 9탭, 활성탭 강조 | P2 |"))
-        #expect(docs.contains("| R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` | on/off 토글 노출 | P3 |"))
+        #expect(docs.contains("| R3-05 | 안전영역 토글 | ✅ 구현(2026-06-17, Codex R3-05):"))
+        #expect(docs.contains("`SafeZoneGuide.standard`"))
+        #expect(docs.contains("- **P3 심층** — R5-04, R4 서브탭 깊이(Speed 곡선 등)."))
         #expect(!docs.contains("| R2-04 | hover 미리듣기/미리보기 | ❌ |"))
     }
 }

@@ -51,7 +51,9 @@ Progress note (2026-06-17): Phase 1-1 implemented with native macOS `.toolbarBac
 Progress note (2026-06-17): Phase 2-1 implemented with a large Media tab import/drop CTA card, prominent `Import Media` button calling the existing import panel, accepted media hints, and preserved panel-level drop import behavior, verified by `Phase21MediaImportCTAStaticContractTests`. Phase 2-2 implemented with deterministic local visual hover preview swatches for Effects, Filters, Adjustments, and Transitions while preserving click-to-apply behavior, verified by `Phase22HoverVisualPreviewStaticContractTests`. Phase 2-3 implemented with shared compact icon-only timeline toolbar buttons for edit, marker, and zoom actions, localized help, and preserved accessibility labels and hints, verified by `Phase23TimelineToolbarIconOnlyStaticContractTests`. Phase 2-4 implemented with shared `MovieCutTypography` and `MovieCutSpacing.xxSmall` density tokens applied narrowly to panel headers, shared cards, input fields, Media library browser/CTA/card text, and Timeline toolbar/readout text while preserving existing commands and accessibility strings, verified by `Phase24TypographyDensityStaticContractTests`. Phase 2 complete.
 
 ### Phase 3 — 심층 (P2/P3, 잔여)
-- R3-05 안전영역 토글 · R5-04 메인 트랙 시각 구분 · Speed 곡선 에디터.
+- R5-04 메인 트랙 시각 구분 · Speed 곡선 에디터.
+
+Progress note (2026-06-17): Phase 3-1/R3-05 implemented with a compact Preview transport safe-zone toggle and non-exporting `SafeZoneGuide.standard` Title Safe/Action Safe overlays anchored to the fitted preview canvas. Existing clip placeholder, reframe, chroma key eyedropper, mask, multi-selection, text transform, zoom, resolution, playback, and volume controls are preserved. R5-04 메인 트랙 시각 구분 and Speed 곡선 에디터 remain pending.
 
 ---
 

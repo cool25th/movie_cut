@@ -105,19 +105,21 @@ struct R301R302PreviewTransportZoomStaticContractTests {
         #expect(helpers.contains("min(previewZoomRange.upperBound, max(previewZoomRange.lowerBound, zoom))"))
     }
 
-    @Test("R3-01 and R3-02 docs complete without overclaiming safe zones")
-    func r301AndR302DocsCompleteWithoutOverclaimingSafeZones() throws {
+    @Test("R3-01 and R3-02 docs complete while R3-05 is implemented separately")
+    func r301AndR302DocsCompleteWhileR305IsImplementedSeparately() throws {
         let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
 
         #expect(docs.contains("| R3-01 | 트랜스포트 정렬 + 타임코드(현재/전체) | ✅ 구현(2026-06-16, Codex R3-01/R3-02):"))
         #expect(docs.contains("| R3-02 | zoom-to-fit + 줌 | ✅ 구현(2026-06-16, Codex R3-01/R3-02):"))
         #expect(docs.contains("`.scaleEffect(previewZoom)`만 적용해 export/render/canvas semantics를 변경하지 않음"))
-        #expect(docs.contains("| R3-05 | 안전영역 토글 | 🟡 `SafeZoneGuide` |"))
+        #expect(docs.contains("| R3-05 | 안전영역 토글 | ✅ 구현(2026-06-17, Codex R3-05):"))
+        #expect(docs.contains("`SafeZoneGuide.standard`"))
         #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
         #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
         #expect(docs.contains("- **P2 완료** — R1-03, R3-02, R3-03."))
         #expect(docs.contains("- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01."))
-        #expect(!docs.contains("| R3-05 | 안전영역 토글 | ✅"))
+        #expect(docs.contains("- **P3 심층** — R5-04, R4 서브탭 깊이(Speed 곡선 등)."))
+        #expect(!docs.contains("| R3-05 | 안전영역 토글 | 🟡"))
     }
 }
 

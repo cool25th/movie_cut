@@ -10,6 +10,7 @@ struct PreviewPanel: View {
     @State private var previewVolume: Double = 1
     @State private var previewZoom: Double = 1
     @State private var isPreviewZoomFit = true
+    @State private var showsSafeZoneGuides = false
 
     private let previewZoomRange: ClosedRange<Double> = 0.5...2
     private let previewZoomStep: Double = 0.25
@@ -78,6 +79,7 @@ struct PreviewPanel: View {
                 )
 
                 previewCanvasResolutionBadge
+                previewSafeZoneToggle
                 previewZoomControls
                 previewVolumeControl
             }
@@ -105,6 +107,7 @@ struct PreviewPanel: View {
 
                 HStack(spacing: 10) {
                     previewCanvasResolutionBadge
+                    previewSafeZoneToggle
 
                     Spacer(minLength: 8)
 
@@ -250,6 +253,34 @@ struct PreviewPanel: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview zoom controls", comment: ""))
+    }
+
+    private var previewSafeZoneToggle: some View {
+        Button(action: { showsSafeZoneGuides.toggle() }) {
+            Image(systemName: showsSafeZoneGuides ? "rectangle.inset.filled" : "rectangle.dashed")
+                .font(.caption.weight(.semibold))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(showsSafeZoneGuides ? MovieCutTheme.accentCyan : Color.secondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.16) : MovieCutTheme.elevatedCardBackground)
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.42) : MovieCutTheme.border.opacity(0.70),
+                    lineWidth: 0.5
+                )
+        )
+        .help(showsSafeZoneGuides ? "Hide Safe Zones" : "Show Safe Zones")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(NSLocalizedString("Safe zone guides", comment: ""))
+        .accessibilityValue(showsSafeZoneGuides ? NSLocalizedString("On", comment: "") : NSLocalizedString("Off", comment: ""))
+        .accessibilityHint(NSLocalizedString("Shows or hides non-exporting title and action safe guides on the preview canvas.", comment: ""))
     }
 
     private var previewZoomDisplay: String {
@@ -403,6 +434,10 @@ struct PreviewPanel: View {
                 clipPlaceholder(for: clip)
             }
 
+            if showsSafeZoneGuides {
+                safeZoneGuideOverlay(guides: SafeZoneGuide.standard)
+            }
+
             if viewModel.hasReframePreview, viewModel.reframePreviewClipId == clip.id {
                 ReframeCropPathOverlay(frames: viewModel.reframePreviewFrames)
             }
@@ -463,6 +498,64 @@ struct PreviewPanel: View {
                 }
             }
         }
+    }
+
+    private func safeZoneGuideOverlay(guides: [SafeZoneGuide]) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(guides.enumerated()), id: \.offset) { index, guide in
+                    let rect = safeZoneRect(for: guide, in: proxy.size)
+                    let color = safeZoneColor(for: guide)
+
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .stroke(
+                            color.opacity(0.78),
+                            style: StrokeStyle(lineWidth: 1, dash: index == 0 ? [5, 4] : [3, 3])
+                        )
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+
+                    Text(guide.name)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(color.opacity(0.86))
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.34))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(color.opacity(0.34), lineWidth: 0.5)
+                        )
+                        .fixedSize()
+                        .offset(x: rect.minX + 7, y: rect.minY + 7)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func safeZoneRect(for guide: SafeZoneGuide, in size: CGSize) -> CGRect {
+        let insets = guide.insets
+        let minX = size.width * CGFloat(insets.leading)
+        let minY = size.height * CGFloat(insets.top)
+        let maxX = size.width * (1 - CGFloat(insets.trailing))
+        let maxY = size.height * (1 - CGFloat(insets.bottom))
+
+        return CGRect(
+            x: minX,
+            y: minY,
+            width: max(0, maxX - minX),
+            height: max(0, maxY - minY)
+        )
+    }
+
+    private func safeZoneColor(for guide: SafeZoneGuide) -> Color {
+        Color(hex: guide.colorHex)
     }
 
     private func maskBinding(for clipId: UUID) -> Binding<Mask?> {
@@ -588,6 +681,20 @@ struct PreviewPanel: View {
         let seconds = totalSeconds % 60
         let frames = Int((t - Double(totalSeconds)) * 30)
         return String(format: "%02d:%02d:%02d", minutes, seconds, abs(frames))
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let cleanHex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let value = UInt64(cleanHex, radix: 16) ?? 0xFFFFFF
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255,
+            opacity: 1
+        )
     }
 }
 

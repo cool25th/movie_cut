@@ -13,6 +13,11 @@ struct MediaLibraryPanel: View {
     @State private var hoveredLibraryPreviewTitle: String?
     @State private var hoveredLibraryPreviewKind: LibraryHoverPreviewKind?
 
+    private let libraryRailWidth: CGFloat = 60
+    private let libraryRailItemHeight: CGFloat = 32
+    private let libraryRailItemSpacing: CGFloat = 2
+    private let libraryRailTopInset: CGFloat = 112
+
     private let libraryGridColumns = [
         GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small),
         GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small)
@@ -28,30 +33,21 @@ struct MediaLibraryPanel: View {
                 headerActions
             }
 
-            libraryTabBar
-            librarySearchField
+            HStack(spacing: 0) {
+                libraryTabRail
 
-            Group {
-                switch selectedLibraryTab {
-                case .media:
-                    mediaTabContent
-                case .audio:
-                    audioTabContent
-                case .text:
-                    textTabContent
-                case .stickers:
-                    stickersTabContent
-                case .effects:
-                    effectsTabContent
-                case .transitions:
-                    transitionsTabContent
-                case .filters:
-                    filtersTabContent
+                Divider()
+                    .overlay(MovieCutTheme.divider)
+
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                    librarySearchField
+                    selectedLibraryTabContent
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 320)
+        .frame(minWidth: 360)
         .movieCutPanelBackground()
         .onDrop(of: [.fileURL, .movie, .image], isTargeted: nil) { providers in
             handleDrop(providers)
@@ -114,46 +110,91 @@ struct MediaLibraryPanel: View {
         }
     }
 
-    private var libraryTabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: MovieCutSpacing.small) {
-                ForEach(LibraryTab.allCases) { tab in
-                    Button {
-                        if selectedLibraryTab != tab {
-                            librarySearchText = ""
-                            hoveredLibraryPreviewTitle = nil
-                            hoveredLibraryPreviewKind = nil
-                        }
-                        selectedLibraryTab = tab
-                    } label: {
-                        Label(tab.displayName, systemImage: tab.systemImage)
-                            .font(.caption.weight(selectedLibraryTab == tab ? .semibold : .medium))
-                            .labelStyle(.titleAndIcon)
-                            .padding(.horizontal, MovieCutSpacing.small)
-                            .padding(.vertical, MovieCutSpacing.xSmall)
-                            .background(
-                                RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                                    .stroke(
-                                        selectedLibraryTab == tab ? MovieCutTheme.accentCyan.opacity(0.38) : MovieCutTheme.border.opacity(0.55),
-                                        lineWidth: 0.5
-                                    )
-                            )
-                            .foregroundStyle(selectedLibraryTab == tab ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(tab.displayName)
-                    .accessibilityHint(tab.accessibilityHint)
-                }
-            }
-            .padding(.horizontal, MovieCutSpacing.medium)
-            .padding(.vertical, MovieCutSpacing.xSmall)
+    @ViewBuilder
+    private var selectedLibraryTabContent: some View {
+        switch selectedLibraryTab {
+        case .media:
+            mediaTabContent
+        case .audio:
+            audioTabContent
+        case .text:
+            textTabContent
+        case .captions:
+            captionsTabContent
+        case .stickers:
+            stickersTabContent
+        case .effects:
+            effectsTabContent
+        case .transitions:
+            transitionsTabContent
+        case .filters:
+            filtersTabContent
+        case .adjustment:
+            adjustmentTabContent
+        case .smart:
+            smartTabContent
         }
-        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+    }
+
+    private var libraryTabRail: some View {
+        VStack(spacing: libraryRailItemSpacing) {
+            ForEach(LibraryTab.allCases) { tab in
+                libraryRailButton(for: tab)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, libraryRailTopInset)
+        .padding(.bottom, MovieCutSpacing.xSmall)
+        .frame(width: libraryRailWidth)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(MovieCutTheme.panelBackgroundRaised)
         .accessibilityLabel(NSLocalizedString("Library browser tabs", comment: ""))
+    }
+
+    private func libraryRailButton(for tab: LibraryTab) -> some View {
+        Button {
+            selectLibraryTab(tab)
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(height: 16)
+                    .accessibilityHidden(true)
+
+                Text(tab.railLabel)
+                    .font(.system(size: 9, weight: selectedLibraryTab == tab ? .semibold : .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(width: libraryRailWidth - MovieCutSpacing.small, height: libraryRailItemHeight)
+            .background(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .stroke(
+                        selectedLibraryTab == tab ? MovieCutTheme.accentCyan.opacity(0.62) : MovieCutTheme.border.opacity(0.46),
+                        lineWidth: selectedLibraryTab == tab ? 1 : 0.5
+                    )
+            )
+            .foregroundStyle(selectedLibraryTab == tab ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
+            .contentShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.displayName)
+        .accessibilityHint(tab.accessibilityHint)
+        .accessibilityValue(selectedLibraryTab == tab ? NSLocalizedString("Selected", comment: "") : NSLocalizedString("Not selected", comment: ""))
+    }
+
+    private func selectLibraryTab(_ tab: LibraryTab) {
+        if selectedLibraryTab != tab {
+            librarySearchText = ""
+            hoveredLibraryPreviewTitle = nil
+            hoveredLibraryPreviewKind = nil
+        }
+        selectedLibraryTab = tab
     }
 
     private var librarySearchField: some View {
@@ -282,6 +323,20 @@ struct MediaLibraryPanel: View {
         .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
     }
 
+    private var captionsTabContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+                librarySection(title: NSLocalizedString("Captions", comment: ""), systemImage: "captions.bubble") {
+                    AutoSubtitlesView(viewModel: viewModel)
+                        .tint(MovieCutTheme.accentCyan)
+                }
+            }
+            .padding(MovieCutSpacing.medium)
+        }
+        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .accessibilityLabel(NSLocalizedString("Captions browser", comment: ""))
+    }
+
     private var stickersTabContent: some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
             embeddedLibrarySearchNote
@@ -311,6 +366,48 @@ struct MediaLibraryPanel: View {
             types: filterEffectTypes,
             emptyMessage: NSLocalizedString("Select a clip to apply filters.", comment: "")
         )
+    }
+
+    private var adjustmentTabContent: some View {
+        effectGrid(
+            title: NSLocalizedString("Adjustments", comment: ""),
+            systemImage: "slider.horizontal.3",
+            previewKind: .adjustment,
+            types: adjustmentEffectTypes,
+            emptyMessage: NSLocalizedString("Select a clip to apply adjustment presets.", comment: "")
+        )
+    }
+
+    private var smartTabContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(MovieCutTheme.accentCyan)
+                        .frame(width: 32, height: 32)
+
+                    Text(NSLocalizedString("Smart tools move here next.", comment: ""))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(NSLocalizedString("Quick Tools remain in the timeline for Phase 0-1.", comment: ""))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .movieCutCard(
+                    padding: MovieCutSpacing.medium,
+                    cornerRadius: MovieCutRadius.medium,
+                    background: MovieCutTheme.cardBackground,
+                    border: MovieCutTheme.border.opacity(0.72)
+                )
+            }
+            .padding(MovieCutSpacing.medium)
+        }
+        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .accessibilityLabel(NSLocalizedString("Smart tools browser", comment: ""))
     }
 
     @ViewBuilder
@@ -727,7 +824,7 @@ struct MediaLibraryPanel: View {
             return NSLocalizedString("Use the Music and Sound Effects search fields below to filter audio.", comment: "")
         case .stickers:
             return NSLocalizedString("Use the sticker search field below to filter stickers.", comment: "")
-        case .media, .text, .effects, .transitions, .filters:
+        case .media, .text, .captions, .effects, .transitions, .filters, .adjustment, .smart:
             return ""
         }
     }
@@ -777,6 +874,10 @@ struct MediaLibraryPanel: View {
 
     private var filterEffectTypes: [EffectType] {
         [.cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT, .grayscale, .sepia]
+    }
+
+    private var adjustmentEffectTypes: [EffectType] {
+        [.brightness, .contrast, .saturation, .temperature, .exposure]
     }
 
     private func textTemplateSubtitle(_ template: MovieCutCore.TextTemplate) -> String {
@@ -1159,6 +1260,7 @@ struct MediaLibraryPanel: View {
 private enum LibraryHoverPreviewKind {
     case effect
     case filter
+    case adjustment
     case transition
 
     var systemImage: String {
@@ -1167,6 +1269,8 @@ private enum LibraryHoverPreviewKind {
             return "sparkles"
         case .filter:
             return "camera.filters"
+        case .adjustment:
+            return "slider.horizontal.3"
         case .transition:
             return "rectangle.2.swap"
         }
@@ -1178,6 +1282,8 @@ private enum LibraryHoverPreviewKind {
             return String(format: NSLocalizedString("Preview effect: %@", comment: ""), title)
         case .filter:
             return String(format: NSLocalizedString("Preview filter: %@", comment: ""), title)
+        case .adjustment:
+            return String(format: NSLocalizedString("Preview adjustment: %@", comment: ""), title)
         case .transition:
             return String(format: NSLocalizedString("Preview transition: %@", comment: ""), title)
         }
@@ -1188,10 +1294,13 @@ private enum LibraryTab: CaseIterable, Identifiable {
     case media
     case audio
     case text
+    case captions
     case stickers
     case effects
     case transitions
     case filters
+    case adjustment
+    case smart
 
     var id: Self { self }
 
@@ -1203,6 +1312,8 @@ private enum LibraryTab: CaseIterable, Identifiable {
             return NSLocalizedString("Audio", comment: "")
         case .text:
             return NSLocalizedString("Text", comment: "")
+        case .captions:
+            return NSLocalizedString("Captions", comment: "")
         case .stickers:
             return NSLocalizedString("Stickers", comment: "")
         case .effects:
@@ -1211,6 +1322,10 @@ private enum LibraryTab: CaseIterable, Identifiable {
             return NSLocalizedString("Transitions", comment: "")
         case .filters:
             return NSLocalizedString("Filters", comment: "")
+        case .adjustment:
+            return NSLocalizedString("Adjust", comment: "")
+        case .smart:
+            return NSLocalizedString("Smart", comment: "")
         }
     }
 
@@ -1222,6 +1337,8 @@ private enum LibraryTab: CaseIterable, Identifiable {
             return NSLocalizedString("Music and sound effects", comment: "")
         case .text:
             return NSLocalizedString("Titles and captions", comment: "")
+        case .captions:
+            return NSLocalizedString("Auto subtitles and SRT", comment: "")
         case .stickers:
             return NSLocalizedString("Emoji and visual stickers", comment: "")
         case .effects:
@@ -1230,6 +1347,10 @@ private enum LibraryTab: CaseIterable, Identifiable {
             return NSLocalizedString("Clip boundary motion", comment: "")
         case .filters:
             return NSLocalizedString("Looks and LUT-style filters", comment: "")
+        case .adjustment:
+            return NSLocalizedString("Color and look controls", comment: "")
+        case .smart:
+            return NSLocalizedString("AI tools and automation", comment: "")
         }
     }
 
@@ -1238,10 +1359,38 @@ private enum LibraryTab: CaseIterable, Identifiable {
         case .media: return "photo.on.rectangle.angled"
         case .audio: return "waveform"
         case .text: return "textformat"
+        case .captions: return "captions.bubble"
         case .stickers: return "face.smiling"
         case .effects: return "sparkles"
         case .transitions: return "rectangle.2.swap"
         case .filters: return "camera.filters"
+        case .adjustment: return "slider.horizontal.3"
+        case .smart: return "wand.and.stars"
+        }
+    }
+
+    var railLabel: String {
+        switch self {
+        case .media:
+            return NSLocalizedString("Media", comment: "")
+        case .audio:
+            return NSLocalizedString("Audio", comment: "")
+        case .text:
+            return NSLocalizedString("Text", comment: "")
+        case .captions:
+            return NSLocalizedString("Caps", comment: "")
+        case .stickers:
+            return NSLocalizedString("Sticker", comment: "")
+        case .effects:
+            return NSLocalizedString("FX", comment: "")
+        case .transitions:
+            return NSLocalizedString("Trans", comment: "")
+        case .filters:
+            return NSLocalizedString("Filter", comment: "")
+        case .adjustment:
+            return NSLocalizedString("Adjust", comment: "")
+        case .smart:
+            return NSLocalizedString("Smart", comment: "")
         }
     }
 

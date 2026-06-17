@@ -11,7 +11,7 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 HSplitView {
                     MediaLibraryPanel(viewModel: viewModel)
-                        .frame(minWidth: 320, idealWidth: 340, maxWidth: 380)
+                        .frame(minWidth: 360, idealWidth: 380, maxWidth: 430)
 
                     PreviewPanel(viewModel: viewModel)
                         .frame(minWidth: 400)

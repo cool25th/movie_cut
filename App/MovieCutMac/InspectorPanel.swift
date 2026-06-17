@@ -50,21 +50,13 @@ struct InspectorPanel: View {
                         }
                         .movieCutCard()
                     } else {
-                        EmptyInspectorSelectionView()
-                            .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
+                        ProjectOverviewInspectorView(viewModel: viewModel)
                         projectToolsSections(carded: true)
                     }
                 }
                 .padding(MovieCutSpacing.small)
             }
             .movieCutScrollBackground(MovieCutTheme.panelBackground)
-
-            Divider()
-                .overlay(MovieCutTheme.divider)
-
-            InspectorExportSection(viewModel: viewModel)
-                .movieCutCard(padding: 0, background: MovieCutTheme.cardBackground)
-                .padding(MovieCutSpacing.small)
         }
         .frame(minWidth: 240)
         .movieCutPanelBackground()
@@ -148,18 +140,242 @@ struct InspectorPanel: View {
     }
 }
 
-private struct EmptyInspectorSelectionView: View {
+private struct ProjectOverviewInspectorView: View {
+    var viewModel: EditorViewModel
+
     var body: some View {
-        VStack(spacing: MovieCutSpacing.small) {
-            Image(systemName: "info.circle")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("Select a clip to inspect")
-                .foregroundStyle(.secondary)
-                .font(.caption)
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            ProjectOverviewInfoCard(
+                title: "Project",
+                systemImage: "doc.text",
+                accessibilityLabel: "Project information",
+                accessibilityValue: projectAccessibilityValue,
+                accessibilityHint: "Shows the current project name and save status."
+            ) {
+                ProjectOverviewRow(title: "Name", value: viewModel.projectDisplayName)
+                ProjectOverviewRow(title: "Status", value: viewModel.projectSaveStatusLabel)
+                ProjectOverviewRow(title: "Media", value: countText(viewModel.currentProject.mediaLibrary.assets.count, singular: "asset"))
+            }
+
+            ProjectOverviewInfoCard(
+                title: "Canvas",
+                systemImage: "rectangle.ratio",
+                accessibilityLabel: "Canvas information",
+                accessibilityValue: canvasAccessibilityValue,
+                accessibilityHint: "Shows canvas aspect ratio, canvas size, and frame rate."
+            ) {
+                ProjectOverviewRow(title: "Aspect", value: viewModel.currentProject.canvas.aspectRatio.displayName)
+                ProjectOverviewRow(title: "Canvas Size", value: canvasSizeText)
+                ProjectOverviewRow(title: "Frame Rate", value: viewModel.currentProject.canvas.frameRate.inspectorDisplayName)
+            }
+
+            ProjectOverviewInfoCard(
+                title: "Timeline",
+                systemImage: "timeline.selection",
+                accessibilityLabel: "Timeline information",
+                accessibilityValue: timelineAccessibilityValue,
+                accessibilityHint: "Shows track, clip, marker, and duration totals."
+            ) {
+                ProjectOverviewRow(title: "Tracks", value: countText(trackCount, singular: "track"))
+                ProjectOverviewRow(title: "Clips", value: countText(clipCount, singular: "clip"))
+                ProjectOverviewRow(title: "Markers", value: countText(markerCount, singular: "marker"))
+                ProjectOverviewRow(title: "Duration", value: durationText)
+            }
+
+            ProjectOverviewInfoCard(
+                title: "Export Summary",
+                systemImage: "square.and.arrow.up",
+                accessibilityLabel: "Export summary",
+                accessibilityValue: exportAccessibilityValue,
+                accessibilityHint: "Summarizes read-only settings for the next export. Use the top-right export control to export or choose formats."
+            ) {
+                ProjectOverviewRow(title: "Output", value: viewModel.canvasResolutionBadgeText)
+                ProjectOverviewRow(title: "Format", value: viewModel.currentProject.exportSettings.containerFormat.displayName)
+                ProjectOverviewRow(title: "Video", value: videoSummaryText)
+                ProjectOverviewRow(title: "Audio", value: viewModel.currentProject.exportSettings.audioCodec.inspectorDisplayName)
+            }
+
+            ProjectOverviewSelectionHint()
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, MovieCutSpacing.medium)
+    }
+
+    private var projectAccessibilityValue: String {
+        "\(viewModel.projectDisplayName), \(viewModel.projectSaveStatusLabel), \(countText(viewModel.currentProject.mediaLibrary.assets.count, singular: "asset"))."
+    }
+
+    private var canvasAccessibilityValue: String {
+        "\(viewModel.currentProject.canvas.aspectRatio.displayName), \(canvasSizeText), \(viewModel.currentProject.canvas.frameRate.inspectorDisplayName)."
+    }
+
+    private var timelineAccessibilityValue: String {
+        "\(countText(trackCount, singular: "track")), \(countText(clipCount, singular: "clip")), \(countText(markerCount, singular: "marker")), \(durationText)."
+    }
+
+    private var exportAccessibilityValue: String {
+        "\(viewModel.canvasResolutionBadgeText), \(viewModel.currentProject.exportSettings.containerFormat.displayName), \(videoSummaryText), \(viewModel.currentProject.exportSettings.audioCodec.inspectorDisplayName)."
+    }
+
+    private var canvasSizeText: String {
+        let size = viewModel.currentProject.canvas.size
+        return "\(Int(size.width)) x \(Int(size.height))"
+    }
+
+    private var trackCount: Int {
+        viewModel.currentProject.timeline.tracks.count
+    }
+
+    private var clipCount: Int {
+        viewModel.currentProject.timeline.tracks.flatMap(\.clips).count
+    }
+
+    private var markerCount: Int {
+        viewModel.currentProject.markers.count + viewModel.currentProject.timeline.markers.count
+    }
+
+    private var durationText: String {
+        let duration = max(0, viewModel.currentProject.timeline.duration)
+        let totalSeconds = Int(duration.rounded(.down))
+        return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private var videoSummaryText: String {
+        let settings = viewModel.currentProject.exportSettings
+        let bitrate = settings.resolvedVideoBitrateMbps.map { "\($0) Mbps" } ?? "Auto bitrate"
+        return "\(settings.codec.inspectorDisplayName) · \(settings.quality.displayName) · \(bitrate)"
+    }
+
+    private func countText(_ count: Int, singular: String) -> String {
+        "\(count) \(singular)\(count == 1 ? "" : "s")"
+    }
+}
+
+private struct ProjectOverviewInfoCard<Content: View>: View {
+    let title: String
+    let systemImage: String
+    let accessibilityLabel: String
+    let accessibilityValue: String
+    let accessibilityHint: String
+    let content: Content
+
+    init(
+        title: String,
+        systemImage: String,
+        accessibilityLabel: String,
+        accessibilityValue: String,
+        accessibilityHint: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityValue = accessibilityValue
+        self.accessibilityHint = accessibilityHint
+        self.content = content()
+    }
+
+    var body: some View {
+        MovieCutSectionCard(title: title, systemImage: systemImage) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                content
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(accessibilityHint)
+    }
+}
+
+private struct ProjectOverviewRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MovieCutSpacing.small) {
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(MovieCutTheme.mutedText)
+                .lineLimit(1)
+
+            Spacer(minLength: MovieCutSpacing.small)
+
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, MovieCutSpacing.small)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.controlSurface)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
+    }
+}
+
+private struct ProjectOverviewSelectionHint: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: MovieCutSpacing.small) {
+            Image(systemName: "cursorarrow.click.2")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MovieCutTheme.accentCyan)
+                .frame(width: 16)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                Text("Select a clip")
+                    .font(.caption.weight(.semibold))
+                Text("Clip controls appear here when a timeline clip is selected.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .movieCutCard(background: MovieCutTheme.controlSurface)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Select a clip")
+        .accessibilityHint("Select a timeline clip to show clip-specific inspector controls.")
+    }
+}
+
+private extension ExportCodec {
+    var inspectorDisplayName: String {
+        switch self {
+        case .h264:
+            return "H.264"
+        case .hevc:
+            return "HEVC"
+        }
+    }
+}
+
+private extension MovieCutCore.AudioCodec {
+    var inspectorDisplayName: String {
+        switch self {
+        case .aac:
+            return "AAC"
+        case .pcm:
+            return "PCM"
+        }
+    }
+}
+
+private extension ExportFrameRate {
+    var inspectorDisplayName: String {
+        switch self {
+        case .fps24:
+            return "24 fps"
+        case .fps30:
+            return "30 fps"
+        case .fps60:
+            return "60 fps"
+        }
     }
 }
 

@@ -71,7 +71,8 @@ struct R601VisualParityDarkShellStaticContractTests {
         let export = try source("App/MovieCutMac/Inspector/InspectorExportSection.swift")
 
         #expect(inspector.contains(".movieCutScrollBackground(MovieCutTheme.panelBackground)"))
-        #expect(inspector.contains(".movieCutCard(padding: 0, background: MovieCutTheme.cardBackground)"))
+        #expect(inspector.contains("ProjectOverviewInspectorView(viewModel: viewModel)"))
+        #expect(inspector.contains(".movieCutCard(background: MovieCutTheme.controlSurface)"))
         #expect(inspector.contains(".tint(MovieCutTheme.accentCyan)"))
         #expect(inspector.contains(".movieCutInputField()"))
         #expect(basic.contains("VStack(alignment: .leading, spacing: MovieCutSpacing.small)"))

@@ -897,20 +897,7 @@ struct MediaLibraryPanel: View {
         let assets = filteredMediaAssets
 
         if viewModel.mediaAssets.isEmpty {
-            VStack(spacing: MovieCutSpacing.small) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                Text(NSLocalizedString("Drop media files here", comment: ""))
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-            }
-            .frame(maxWidth: 220)
-            .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(MovieCutSpacing.medium)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(NSLocalizedString("Drop media files here", comment: ""))
+            mediaImportCTAEmptyState
         } else if assets.isEmpty {
             librarySearchEmptyState()
         } else {
@@ -925,6 +912,64 @@ struct MediaLibraryPanel: View {
             .movieCutScrollBackground(MovieCutTheme.panelBackground)
             .accessibilityLabel(NSLocalizedString("Asset Grid", comment: ""))
         }
+    }
+
+    private var mediaImportCTAEmptyState: some View {
+        VStack {
+            Spacer(minLength: 0)
+
+            VStack(spacing: MovieCutSpacing.medium) {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 44, weight: .semibold))
+                    .foregroundStyle(MovieCutTheme.accentCyan)
+                    .frame(width: 72, height: 72)
+                    .background(
+                        Circle()
+                            .fill(MovieCutTheme.accentCyan.opacity(0.14))
+                    )
+                    .accessibilityHidden(true)
+
+                VStack(spacing: MovieCutSpacing.xSmall) {
+                    Text(NSLocalizedString("Import media", comment: ""))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(NSLocalizedString("Drag media files here or choose files to start editing", comment: ""))
+                        .font(.callout)
+                        .foregroundStyle(MovieCutTheme.mutedText)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+
+                Button {
+                    openImportPanel()
+                } label: {
+                    Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
+                        .font(.callout.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(MovieCutTheme.accentCyan)
+                .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+                .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
+
+                Text(NSLocalizedString("Accepted: video, audio, images", comment: ""))
+                    .font(.caption)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+            }
+            .frame(maxWidth: .infinity, minHeight: 220)
+            .movieCutCard(
+                padding: MovieCutSpacing.large,
+                background: MovieCutTheme.elevatedCardBackground,
+                border: MovieCutTheme.accentCyan.opacity(0.28)
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+            .accessibilityHint(NSLocalizedString("Drop media files here to import them, or use the Import Media button.", comment: ""))
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(MovieCutSpacing.medium)
     }
 
     private func assetGridCard(_ asset: MediaAsset) -> some View {

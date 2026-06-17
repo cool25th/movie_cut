@@ -83,8 +83,8 @@ struct R204LibraryHoverPreviewStaticContractTests {
         #expect(itemButton.contains("Hover to listen"))
     }
 
-    @Test("Effect filter and transition cards expose hover preview affordance without applying on hover")
-    func effectFilterAndTransitionCardsExposeHoverPreviewAffordance() throws {
+    @Test("Effect filter and transition cards expose hover preview surface without applying on hover")
+    func effectFilterAndTransitionCardsExposeHoverPreviewSurface() throws {
         let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
         let transitionContent = try section(
             in: source,
@@ -111,12 +111,17 @@ struct R204LibraryHoverPreviewStaticContractTests {
         #expect(effectGrid.contains("setLibraryHoverPreview(isHovering, title: type.displayName, kind: previewKind)"))
         #expect(transitionContent.contains(".onHover { isHovering in"))
         #expect(transitionContent.contains("setLibraryHoverPreview(isHovering, title: type.displayName, kind: .transition)"))
-        #expect(browserCard.contains("private func libraryHoverPreviewAffordance(title: String, kind: LibraryHoverPreviewKind) -> some View"))
+        #expect(browserCard.contains("private func libraryHoverVisualPreview(title: String, kind: LibraryHoverPreviewKind) -> some View"))
+        #expect(browserCard.contains("libraryPreviewPlaceholder(systemImage: systemImage, kind: previewKind, disabledReason: disabledReason)"))
+        #expect(browserCard.contains("libraryHoverVisualPreview(title: title, kind: previewKind)"))
+        #expect(!browserCard.contains("libraryHoverPreviewAffordance"))
         #expect(browserCard.contains("hoveredLibraryPreviewTitle == title"))
-        #expect(browserCard.contains("hoveredLibraryPreviewKind == previewKind"))
+        #expect(browserCard.contains("hoveredLibraryPreviewKind == kind"))
         #expect(source.contains(#"NSLocalizedString("Preview effect: %@", comment: "")"#))
         #expect(source.contains(#"NSLocalizedString("Preview filter: %@", comment: "")"#))
         #expect(source.contains(#"NSLocalizedString("Preview transition: %@", comment: "")"#))
+        #expect(source.contains("Hover shows a visual-only effect preview"))
+        #expect(source.contains("Hover shows a visual-only A/B transition preview"))
         #expect(source.contains("private func setLibraryHoverPreview(_ isHovering: Bool, title: String, kind: LibraryHoverPreviewKind)"))
         #expect(source.contains("applyEffect(type)"))
         #expect(source.contains("applyTransition(type)"))

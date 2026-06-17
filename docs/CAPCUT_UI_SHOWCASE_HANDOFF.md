@@ -48,7 +48,7 @@ Progress note (2026-06-17): Phase 1-1 implemented with native macOS `.toolbarBac
 - 2-3 타임라인 툴바 아이콘 전용 + 일관 툴팁(R6-02).
 - 2-4 타이포/간격 토큰 CapCut 밀도 미세조정.
 
-Progress note (2026-06-17): Phase 2-1 implemented with a large Media tab import/drop CTA card, prominent `Import Media` button calling the existing import panel, accepted media hints, and preserved panel-level drop import behavior, verified by `Phase21MediaImportCTAStaticContractTests`. Phase 2-2, Phase 2-3, and Phase 2-4 remain pending.
+Progress note (2026-06-17): Phase 2-1 implemented with a large Media tab import/drop CTA card, prominent `Import Media` button calling the existing import panel, accepted media hints, and preserved panel-level drop import behavior, verified by `Phase21MediaImportCTAStaticContractTests`. Phase 2-2 implemented with deterministic local visual hover preview swatches for Effects, Filters, Adjustments, and Transitions while preserving click-to-apply behavior, verified by `Phase22HoverVisualPreviewStaticContractTests`. Phase 2-3 and Phase 2-4 remain pending.
 
 ### Phase 3 — 심층 (P2/P3, 잔여)
 - R3-05 안전영역 토글 · R5-04 메인 트랙 시각 구분 · Speed 곡선 에디터.

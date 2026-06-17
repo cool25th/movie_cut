@@ -87,8 +87,10 @@ struct R205LibraryAddInteractionStaticContractTests {
         #expect(source.contains("applyEffect(type)"))
         #expect(source.contains("applyTransition(type)"))
         #expect(source.contains(#".accessibilityHint(NSLocalizedString("Adds this text template to the timeline.", comment: ""))"#))
-        #expect(source.contains(#".accessibilityHint(disabledReason ?? String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))"#))
-        #expect(source.contains(#".accessibilityHint(disabledReason ?? NSLocalizedString("Applies this transition to the selected clip.", comment: ""))"#))
+        #expect(source.contains(".accessibilityHint(previewKind.previewHelp(for: type.displayName, disabledReason: disabledReason))"))
+        #expect(source.contains(".accessibilityHint(LibraryHoverPreviewKind.transition.previewHelp(for: type.displayName, disabledReason: disabledReason))"))
+        #expect(source.contains("Click applies the %@ effect to the selected clip."))
+        #expect(source.contains("Click applies this transition to the selected clip."))
     }
 
     @Test("R2-05 docs remain complete after R2-04 hover preview completion")

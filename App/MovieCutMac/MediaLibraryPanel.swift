@@ -627,7 +627,8 @@ struct MediaLibraryPanel: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(type.displayName)
-                            .accessibilityHint(disabledReason ?? NSLocalizedString("Applies this transition to the selected clip.", comment: ""))
+                            .accessibilityHint(LibraryHoverPreviewKind.transition.previewHelp(for: type.displayName, disabledReason: disabledReason))
+                            .help(LibraryHoverPreviewKind.transition.previewHelp(for: type.displayName, disabledReason: disabledReason))
                         }
                     }
                 }
@@ -691,7 +692,8 @@ struct MediaLibraryPanel: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(type.displayName)
-                            .accessibilityHint(disabledReason ?? String(format: NSLocalizedString("Applies the %@ effect to the selected clip.", comment: ""), type.displayName))
+                            .accessibilityHint(previewKind.previewHelp(for: type.displayName, disabledReason: disabledReason))
+                            .help(previewKind.previewHelp(for: type.displayName, disabledReason: disabledReason))
                         }
                     }
                 }
@@ -753,11 +755,29 @@ struct MediaLibraryPanel: View {
         affordanceText: String? = nil,
         disabledReason: String? = nil
     ) -> some View {
-        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(disabledReason == nil ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
-                .frame(width: 28, height: 28)
+        let isPreviewHovered = previewKind.map { kind in
+            hoveredLibraryPreviewTitle == title && hoveredLibraryPreviewKind == kind
+        } ?? false
+
+        return VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            if let previewKind {
+                ZStack {
+                    libraryPreviewPlaceholder(systemImage: systemImage, kind: previewKind, disabledReason: disabledReason)
+
+                    if isPreviewHovered {
+                        libraryHoverVisualPreview(title: title, kind: previewKind)
+                    }
+                }
+                .frame(height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
+                .accessibilityLabel(previewKind.previewLabel(for: title))
+                .accessibilityHint(previewKind.previewHelp(for: title, disabledReason: disabledReason))
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(disabledReason == nil ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
+                    .frame(width: 28, height: 28)
+            }
 
             Text(title)
                 .font(.caption.weight(.semibold))
@@ -789,20 +809,13 @@ struct MediaLibraryPanel: View {
                 .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: previewKind == nil ? 104 : 148, alignment: .topLeading)
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.cardBackground
         )
-        .overlay(alignment: .bottomLeading) {
-            if let previewKind,
-               hoveredLibraryPreviewTitle == title,
-               hoveredLibraryPreviewKind == previewKind {
-                libraryHoverPreviewAffordance(title: title, kind: previewKind)
-                    .padding(MovieCutSpacing.xSmall)
-            }
-        }
+        .help(libraryPreviewHelp(title: title, kind: previewKind, disabledReason: disabledReason))
         .contentShape(Rectangle())
     }
 
@@ -871,25 +884,180 @@ struct MediaLibraryPanel: View {
         }
     }
 
-    private func libraryHoverPreviewAffordance(title: String, kind: LibraryHoverPreviewKind) -> some View {
-        HStack(spacing: MovieCutSpacing.xSmall) {
-            Image(systemName: kind.systemImage)
-                .font(.caption2.weight(.semibold))
-            Text(kind.previewLabel(for: title))
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
+    private func libraryPreviewPlaceholder(
+        systemImage: String,
+        kind: LibraryHoverPreviewKind,
+        disabledReason: String?
+    ) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.controlSurface.opacity(disabledReason == nil ? 0.88 : 0.5))
+            LinearGradient(
+                colors: [
+                    kind.previewAccent.opacity(disabledReason == nil ? 0.16 : 0.08),
+                    MovieCutTheme.cardBackground.opacity(0.65)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(disabledReason == nil ? kind.previewAccent.opacity(0.82) : MovieCutTheme.mutedText)
         }
-        .padding(.horizontal, MovieCutSpacing.small)
-        .padding(.vertical, 3)
-        .foregroundStyle(MovieCutTheme.accentCyan)
-        .background(
-            Capsule(style: .continuous)
-                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.95))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(MovieCutTheme.accentCyan.opacity(0.28), lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private func libraryHoverVisualPreview(title: String, kind: LibraryHoverPreviewKind) -> some View {
+        switch kind {
+        case .transition:
+            transitionPreviewSwatch(title: title)
+        case .effect, .filter, .adjustment:
+            effectFilterPreviewSwatch(title: title, kind: kind)
+        }
+    }
+
+    private func effectFilterPreviewSwatch(title: String, kind: LibraryHoverPreviewKind) -> some View {
+        ZStack {
+            HStack(spacing: 0) {
+                LinearGradient(
+                    colors: [
+                        MovieCutTheme.controlSurface,
+                        MovieCutTheme.cardBackground,
+                        Color.gray.opacity(0.2)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                LinearGradient(
+                    colors: [
+                        kind.previewAccent.opacity(0.34),
+                        MovieCutTheme.accentCyan.opacity(kind == .filter ? 0.3 : 0.16),
+                        MovieCutTheme.elevatedCardBackground
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+
+            Rectangle()
+                .fill(Color.white.opacity(0.38))
+                .frame(width: 1)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    Text(NSLocalizedString("Before", comment: ""))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(kind.previewToken)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(kind.previewAccent)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.86))
+                        )
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .bottom) {
+                    Text(title)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Spacer()
+                    Text(NSLocalizedString("After", comment: ""))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(kind.previewAccent)
+                }
+            }
+            .padding(6)
+
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(kind.previewAccent.opacity(0.46), lineWidth: 1)
+        }
+    }
+
+    private func transitionPreviewSwatch(title: String) -> some View {
+        ZStack {
+            HStack(spacing: 0) {
+                LinearGradient(
+                    colors: [
+                        MovieCutTheme.controlSurface,
+                        Color.blue.opacity(0.18)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                LinearGradient(
+                    colors: [
+                        MovieCutTheme.accentCyan.opacity(0.28),
+                        MovieCutTheme.elevatedCardBackground
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+
+            HStack(spacing: 0) {
+                Text(NSLocalizedString("A", comment: ""))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.primary.opacity(0.78))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(MovieCutTheme.accentCyan.opacity(0.28))
+                        .frame(width: 14)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(MovieCutTheme.accentCyan)
+                }
+                .frame(width: 22)
+
+                Text(NSLocalizedString("B", comment: ""))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(MovieCutTheme.accentCyan)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            VStack {
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: LibraryHoverPreviewKind.transition.systemImage)
+                        .font(.system(size: 8, weight: .bold))
+                    Text(title)
+                        .font(.system(size: 9, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MovieCutTheme.elevatedCardBackground.opacity(0.72))
+            }
+
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.accentCyan.opacity(0.48), lineWidth: 1)
+        }
+    }
+
+    private func libraryPreviewHelp(
+        title: String,
+        kind: LibraryHoverPreviewKind?,
+        disabledReason: String?
+    ) -> String {
+        guard let kind else {
+            return disabledReason ?? ""
+        }
+
+        return kind.previewHelp(for: title, disabledReason: disabledReason)
     }
 
     @ViewBuilder
@@ -1704,6 +1872,32 @@ private enum LibraryHoverPreviewKind {
         }
     }
 
+    var previewAccent: Color {
+        switch self {
+        case .effect:
+            return MovieCutTheme.accentCyan
+        case .filter:
+            return Color.purple
+        case .adjustment:
+            return Color.orange
+        case .transition:
+            return MovieCutTheme.accentCyan
+        }
+    }
+
+    var previewToken: String {
+        switch self {
+        case .effect:
+            return NSLocalizedString("FX", comment: "")
+        case .filter:
+            return NSLocalizedString("Filter", comment: "")
+        case .adjustment:
+            return NSLocalizedString("Adjust", comment: "")
+        case .transition:
+            return NSLocalizedString("A/B", comment: "")
+        }
+    }
+
     func previewLabel(for title: String) -> String {
         switch self {
         case .effect:
@@ -1715,6 +1909,28 @@ private enum LibraryHoverPreviewKind {
         case .transition:
             return String(format: NSLocalizedString("Preview transition: %@", comment: ""), title)
         }
+    }
+
+    func previewHelp(for title: String, disabledReason: String? = nil) -> String {
+        let previewMessage: String
+        let applyMessage: String
+
+        switch self {
+        case .effect:
+            previewMessage = String(format: NSLocalizedString("Hover shows a visual-only effect preview for %@.", comment: ""), title)
+            applyMessage = String(format: NSLocalizedString("Click applies the %@ effect to the selected clip.", comment: ""), title)
+        case .filter:
+            previewMessage = String(format: NSLocalizedString("Hover shows a visual-only filter preview for %@.", comment: ""), title)
+            applyMessage = String(format: NSLocalizedString("Click applies the %@ filter to the selected clip.", comment: ""), title)
+        case .adjustment:
+            previewMessage = String(format: NSLocalizedString("Hover shows a visual-only adjustment preview for %@.", comment: ""), title)
+            applyMessage = String(format: NSLocalizedString("Click applies the %@ adjustment to the selected clip.", comment: ""), title)
+        case .transition:
+            previewMessage = String(format: NSLocalizedString("Hover shows a visual-only A/B transition preview for %@.", comment: ""), title)
+            applyMessage = NSLocalizedString("Click applies this transition to the selected clip.", comment: "")
+        }
+
+        return [previewMessage, disabledReason ?? applyMessage].joined(separator: " ")
     }
 }
 

@@ -23,12 +23,16 @@ struct PreviewPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                MovieCutTheme.previewBackground
+                MovieCutTheme.previewWellBackground
 
                 if let clip = viewModel.selectedClip {
-                    previewSurface(for: clip)
+                    previewCanvasWell {
+                        previewSurface(for: clip)
+                    }
                 } else {
-                    previewEmptyState
+                    previewCanvasWell {
+                        previewEmptyState
+                    }
                 }
 
                 VStack {
@@ -37,7 +41,7 @@ struct PreviewPanel: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(MovieCutTheme.previewBackground)
+            .background(MovieCutTheme.previewWellBackground)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(NSLocalizedString("Preview", comment: ""))
             .accessibilityValue(previewAccessibilityValue)
@@ -55,6 +59,25 @@ struct PreviewPanel: View {
             }
 
         }
+    }
+
+    private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ZStack {
+            content()
+                .padding(MovieCutSpacing.large)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.large, style: .continuous)
+                .fill(MovieCutTheme.previewBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.large, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.62), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 24)
+        .padding(.top, 58)
+        .padding(.bottom, 22)
     }
 
     private var previewTransportBar: some View {
@@ -372,7 +395,7 @@ struct PreviewPanel: View {
             .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
             .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
         }
-        .frame(maxWidth: 280)
+        .frame(maxWidth: 300)
         .movieCutCard(
             padding: 14,
             cornerRadius: MovieCutRadius.medium,

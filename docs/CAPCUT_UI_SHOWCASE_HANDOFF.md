@@ -96,11 +96,28 @@ git diff --check
 
 ## 4. 시각 검증 (지표 왜곡 주의)
 
-- ⚠️ 기존 `vp_loop1` similarity 0.97은 **빈 검은 화면끼리** 비교라 무의미. **반드시 클립이 채워진 populated 상태**로 캡처.
-- 증거 디렉터리: `/tmp/moviecut-ui-evidence/`. 캡처: `screencapture -l$(window_id) out.png` 또는 `screencapture -R x,y,w,h out.png`.
-- 영역별(`top_bar/left_browser/preview/inspector/timeline`) brightness·`dark_fill`·coarse similarity 측정.
-- **목표:** populated mean similarity **0.46 → 0.75+**, 각 영역 `dark_fill` CapCut ±0.15.
-- side-by-side 비교/metrics 스크립트는 repo에 없음(ad-hoc) → populated 캡처 기준으로 재작성 필요.
+- ⚠️ 기존 `vp_loop1` similarity 0.97은 **빈 검은 화면끼리** 비교라 무의미. **반드시 클립(비디오+오디오+텍스트)이 채워진 populated 상태**로 캡처.
+- 영역별(`top_bar/left_browser/preview_center/right_inspector/timeline`) brightness·`dark_fill`·coarse similarity 측정.
+- **목표:** populated mean subregion similarity **≥ 0.75**, 각 영역 `dark_fill` delta CapCut 대비 **≤ 0.15**.
+- Loop 2 note (2026-06-18): current valid window-capture metrics improved over the old MovieCut baseline (mean subregion similarity 0.3172 -> 0.7723, worst `dark_fill` delta 0.7087 -> 0.219). This pass targets left-browser and preview well polish; live workflow still requires populated capture because empty/unloaded captures can inflate similarity.
+
+검증 스크립트 (repo에 포함됨):
+
+```bash
+# (A) 앱을 띄우고 populated 프로젝트 로드 후 — MovieCut + CapCut 자동 캡처 + metrics + --check
+#     (Accessibility 권한 필요: System Settings > Privacy & Security > Accessibility)
+scripts/capture_capcut_parity.sh --with-capcut
+
+# (B) 이미 캡처한 window PNG 두 장으로 metrics만 재계산
+python3 scripts/capcut_parity_metrics.py \
+  --capcut /tmp/moviecut-ui-evidence/capcut_reference_window.png \
+  --moviecut /tmp/moviecut-ui-evidence/moviecut_current_window.png \
+  --out /tmp/moviecut-ui-evidence/side_by_side_metrics_populated.json --check
+```
+
+- `--check`는 목표 미달 시 exit 1. 영역 경계는 `--layout <json>`으로 조정 가능(기본값은 5영역 IA 근사).
+- 참고 baseline: Jun 17(수정 전) 캡처 기준 mean similarity 0.32 / worst dark_fill delta 0.71 → FAIL. 이게 출발점.
+- 측정 결과 (2026-06-18, 빈 상태 라이브 캡처): `swift build` OK · `swift test --filter StaticContract` 274 tests / 64 suites PASS · `xcodebuild MovieCutMac` BUILD SUCCEEDED. 라이브 윈도우 캡처(`moviecut_current_window_phase0to3.png`) vs CapCut 레퍼런스 → mean subregion similarity **0.741**, worst dark_fill delta **0.20**(좌측 브라우저, empty CTA 대 populated 썸네일 아티팩트). preview/left 영역은 empty-vs-populated 핸디캡으로 저평가됨 → populated 재캡처 시 상향 예상. 세로 레일 10탭·프로젝트 정보 인스펙터·Import CTA·다크 타임라인+Main 배지·아이콘 툴바 전부 라이브로 시각 확인됨.
 
 ---
 

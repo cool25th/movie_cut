@@ -40,11 +40,7 @@ struct MediaLibraryPanel: View {
                 Divider()
                     .overlay(MovieCutTheme.divider)
 
-                VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
-                    librarySearchField
-                    selectedLibraryTabContent
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                libraryContentWell
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -86,6 +82,23 @@ struct MediaLibraryPanel: View {
             .background(MovieCutTheme.panelBackground)
             .accessibilityElement(children: .contain)
         }
+    }
+
+    private var libraryContentWell: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            librarySearchField
+            selectedLibraryTabContent
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .fill(MovieCutTheme.libraryWellBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.58), lineWidth: 0.5)
+        )
+        .padding(MovieCutSpacing.small)
     }
 
     @ViewBuilder
@@ -272,7 +285,7 @@ struct MediaLibraryPanel: View {
                 .padding(.horizontal, MovieCutSpacing.medium)
                 .padding(.bottom, MovieCutSpacing.medium)
             }
-            .movieCutScrollBackground(MovieCutTheme.panelBackground)
+            .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
         }
         .accessibilityLabel(NSLocalizedString("Audio browser", comment: ""))
     }
@@ -320,7 +333,7 @@ struct MediaLibraryPanel: View {
                     }
                     .padding(MovieCutSpacing.medium)
                 }
-                .movieCutScrollBackground(MovieCutTheme.panelBackground)
+                .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
             }
         }
         .accessibilityLabel(NSLocalizedString("Text template browser", comment: ""))
@@ -336,7 +349,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
-        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
         .accessibilityLabel(NSLocalizedString("Captions browser", comment: ""))
     }
 
@@ -364,7 +377,7 @@ struct MediaLibraryPanel: View {
                     }
                     .padding(MovieCutSpacing.medium)
                 }
-                .movieCutScrollBackground(MovieCutTheme.panelBackground)
+                .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
             }
         }
         .accessibilityLabel(NSLocalizedString("Sticker browser", comment: ""))
@@ -413,7 +426,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
-        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
         .accessibilityLabel(NSLocalizedString("Smart tools browser", comment: ""))
     }
 
@@ -637,7 +650,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
-        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
         .accessibilityLabel(NSLocalizedString("Transition browser", comment: ""))
     }
 
@@ -702,7 +715,7 @@ struct MediaLibraryPanel: View {
             }
             .padding(MovieCutSpacing.medium)
         }
-        .movieCutScrollBackground(MovieCutTheme.panelBackground)
+        .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
         .accessibilityLabel(title)
     }
 
@@ -1079,7 +1092,7 @@ struct MediaLibraryPanel: View {
                 }
                 .padding(MovieCutSpacing.medium)
             }
-            .movieCutScrollBackground(MovieCutTheme.panelBackground)
+            .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
             .accessibilityLabel(NSLocalizedString("Asset Grid", comment: ""))
         }
     }

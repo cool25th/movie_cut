@@ -48,7 +48,7 @@ struct InspectorPanel: View {
                                 titleFont: .subheadline.weight(.semibold)
                             )
                         }
-                        .movieCutCard()
+                        .movieCutInspectorSelectedCard()
                     } else {
                         ProjectOverviewInspectorView(viewModel: viewModel)
                         projectToolsSections(carded: true)
@@ -56,7 +56,7 @@ struct InspectorPanel: View {
                 }
                 .padding(MovieCutSpacing.small)
             }
-            .movieCutScrollBackground(MovieCutTheme.panelBackground)
+            .movieCutScrollBackground(viewModel.selectedClip == nil ? MovieCutTheme.panelBackground : MovieCutTheme.inspectorSelectedPanelBackground)
         }
         .frame(minWidth: 240)
         .movieCutPanelBackground()
@@ -72,10 +72,10 @@ struct InspectorPanel: View {
         switch clip.kind {
         case .audio:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .text:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .video, .image:
             visualClipInspectorSections(for: clip)
         }
@@ -92,29 +92,38 @@ struct InspectorPanel: View {
         }
         .pickerStyle(.segmented)
         .tint(MovieCutTheme.accentCyan)
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.inspectorSelectedBorder, lineWidth: 0.5)
+        )
         .accessibilityLabel("Inspector section")
         .accessibilityHint("Switches between clip inspector sections.")
 
         switch selectedInspectorSubtab {
         case .basic:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .speed:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.speed)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .adjustment:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.adjustment)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .mask:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.mask)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         case .animation:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.animation)
-                .movieCutCard()
+                .movieCutInspectorSelectedCard()
         }
 
         InspectorAnalysisSection(viewModel: viewModel, clip: clip)
-            .movieCutCard()
+            .movieCutInspectorSelectedCard()
     }
 
     /// Project-wide tools that are not tied to the selected clip.

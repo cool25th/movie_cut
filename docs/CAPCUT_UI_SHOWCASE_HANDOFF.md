@@ -100,6 +100,7 @@ git diff --check
 - 영역별(`top_bar/left_browser/preview_center/right_inspector/timeline`) brightness·`dark_fill`·coarse similarity 측정.
 - **목표:** populated mean subregion similarity **≥ 0.75**, 각 영역 `dark_fill` delta CapCut 대비 **≤ 0.15**.
 - Loop 2 note (2026-06-18): current valid window-capture metrics improved over the old MovieCut baseline (mean subregion similarity 0.3172 -> 0.7723, worst `dark_fill` delta 0.7087 -> 0.219). This pass targets left-browser and preview well polish; live workflow still requires populated capture because empty/unloaded captures can inflate similarity.
+- Loop 3 note (2026-06-19): current populated-state captures show mean subregion similarity **0.6302** and worst `dark_fill` delta **0.2845**. Measured weak regions: left_browser sim 0.619 with MovieCut too uniformly near-black (CapCut dark_fill 0.690 vs MovieCut 0.924), preview_center sim 0.568 with content dominance (CapCut dark_fill 0.793 vs MovieCut 0.508), right_inspector sim 0.561 with selected inspector too bright/card-heavy (CapCut dark_fill 0.982 vs MovieCut 0.865), and timeline sim 0.657 with slightly bright/saturated clip surfaces (CapCut dark_fill 0.849 vs MovieCut 0.803). Loop 3 implementation targets medium-dark library card and thumbnail wells, near-black selected inspector cards, muted timeline clip tokens, and a darker/tighter preview well while preserving Command/Session/render/export/playback paths.
 
 검증 스크립트 (repo에 포함됨):
 
@@ -118,6 +119,7 @@ python3 scripts/capcut_parity_metrics.py \
 - `--check`는 목표 미달 시 exit 1. 영역 경계는 `--layout <json>`으로 조정 가능(기본값은 5영역 IA 근사).
 - 참고 baseline: Jun 17(수정 전) 캡처 기준 mean similarity 0.32 / worst dark_fill delta 0.71 → FAIL. 이게 출발점.
 - 측정 결과 (2026-06-18, 빈 상태 라이브 캡처): `swift build` OK · `swift test --filter StaticContract` 274 tests / 64 suites PASS · `xcodebuild MovieCutMac` BUILD SUCCEEDED. 라이브 윈도우 캡처(`moviecut_current_window_phase0to3.png`) vs CapCut 레퍼런스 → mean subregion similarity **0.741**, worst dark_fill delta **0.20**(좌측 브라우저, empty CTA 대 populated 썸네일 아티팩트). preview/left 영역은 empty-vs-populated 핸디캡으로 저평가됨 → populated 재캡처 시 상향 예상. 세로 레일 10탭·프로젝트 정보 인스펙터·Import CTA·다크 타임라인+Main 배지·아이콘 툴바 전부 라이브로 시각 확인됨.
+- Populated 라이브 캡처 (2026-06-19): ffmpeg 합성 영상+오디오+텍스트("Sample Title") 3클립을 Finder 드래그로 타임라인에 올려 실제 편집 상태 캡처(`/tmp/moviecut-ui-evidence/moviecut_current_window_populated.png`). 5개 영역 전부 콘텐츠로 채워짐(프리뷰=영상 프레임, 타임라인=3클립, 라이브러리=텍스트 템플릿, 인스펙터=Video 클립, 세로 레일 10탭). 한쪽(MovieCut-only) dark_fill: top_bar **0.86** · left_browser **0.95** · right_inspector **0.92**(크롬 전부 다크 유지) / preview 0.42 · timeline 0.41(콘텐츠로 밝아진 것 — CapCut populated와 동일 양상). Loop 3의 "left_browser가 CapCut보다 너무 near-black(0.924 vs 0.690)" 진단과 일치 → 그 방향 폴리시가 맞음. CapCut 대비 A/B 재계산은 `/tmp` 레퍼런스가 시스템 tmp 정리로 삭제되어 보류(`scripts/capture_capcut_parity.sh --with-capcut`로 재현).
 
 ---
 

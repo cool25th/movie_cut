@@ -64,20 +64,20 @@ struct PreviewPanel: View {
     private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
             content()
-                .padding(MovieCutSpacing.large)
+                .padding(MovieCutSpacing.large + MovieCutSpacing.medium)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: MovieCutRadius.large, style: .continuous)
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
                 .fill(MovieCutTheme.previewBackground)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: MovieCutRadius.large, style: .continuous)
-                .stroke(MovieCutTheme.border.opacity(0.62), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.80), lineWidth: 0.5)
         )
-        .padding(.horizontal, 24)
-        .padding(.top, 58)
-        .padding(.bottom, 22)
+        .padding(.horizontal, 18)
+        .padding(.top, 54)
+        .padding(.bottom, 16)
     }
 
     private var previewTransportBar: some View {
@@ -143,12 +143,12 @@ struct PreviewPanel: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(MovieCutTheme.controlSurface.opacity(0.90))
+        .padding(.vertical, 5)
+        .background(MovieCutTheme.previewControlBackground)
         .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
         )
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -192,7 +192,7 @@ struct PreviewPanel: View {
         .padding(.vertical, 5)
         .background(
             Capsule()
-                .fill(MovieCutTheme.elevatedCardBackground)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Playback transport", comment: ""))
@@ -268,11 +268,11 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(MovieCutTheme.elevatedCardBackground)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface)
         )
         .overlay(
             Capsule()
-                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview zoom controls", comment: ""))
@@ -290,12 +290,12 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.16) : MovieCutTheme.elevatedCardBackground)
+                .fill(showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.16) : MovieCutTheme.inspectorSelectedControlSurface)
         )
         .overlay(
             Capsule()
                 .stroke(
-                    showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.42) : MovieCutTheme.border.opacity(0.70),
+                    showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.42) : MovieCutTheme.inspectorSelectedBorder.opacity(0.82),
                     lineWidth: 0.5
                 )
         )
@@ -437,11 +437,11 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(MovieCutTheme.elevatedCardBackground)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface)
         )
         .overlay(
             Capsule()
-                .stroke(MovieCutTheme.border.opacity(0.70), lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
         )
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)

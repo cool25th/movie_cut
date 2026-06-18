@@ -42,7 +42,7 @@
 - ❌ 라이브러리 **hover 미리보기**.
 - ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask) + **Speed 곡선 에디터**(presets/add/reset/point edit).
 - ✅ 타임라인 **단일 도구 바 완성**(R5-01) + **줌 slider/fit**(R5-02) + **트랙 헤더 토글**(R5-03) + **메인 비디오 트랙 시각 구분**(R5-04): freeze/reverse가 타임라인 바에 승격됐고, zoomControls에 연속 slider와 Fit Timeline이 추가됐으며, 트랙 헤더에 잠금·숨김·음소거 토글과 첫 `.video` 트랙의 Main 배지/액센트가 연결됨.
-- 🟡 디자인 토큰 기반 통일 완료, **CapCut visual parity loop**는 Loop 2 진행 중. Loop 2 targets left-browser/preview well polish; mean subregion similarity 0.3172 -> 0.7723 vs the old MovieCut baseline, worst `dark_fill` delta 0.7087 -> 0.219, but live workflow still requires populated capture.
+- 🟡 디자인 토큰 기반 통일 완료, **CapCut visual parity loop**는 Loop 3 진행 중. Loop 3 targets measured populated-state gaps: mean subregion similarity 0.6302(target >= 0.75), worst `dark_fill` delta 0.2845(target <= 0.15), with left_browser sim 0.619/too uniformly dark, preview_center sim 0.568/content-dominant, right_inspector sim 0.561/too bright-carded, and timeline sim 0.657/slightly bright-saturated.
 - ❌ 상단 바 **프로젝트명·저장상태**.
 
 ---
@@ -112,7 +112,7 @@
 ### R6. 횡단(cross-cutting)
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
-| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 UX-07 + Loop 2 visual-polish implementation: `InspectorShared.swift`의 `MovieCutTheme`를 명시적 CapCut-like dark semantic tokens로 전환하고 `ContentView` dark shell, Library compact dark tabs/cards, Inspector dark compact cards/inputs, Timeline dark ruler/track/grid, Preview black canvas + compact import empty state를 적용. Loop 2 targets left-browser/preview well polish with `libraryWellBackground` and `previewWellBackground`; mean subregion similarity 0.3172 -> 0.7723 vs the old MovieCut baseline, worst `dark_fill` delta 0.7087 -> 0.219, but live workflow still requires populated capture. | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
+| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 UX-07 + Loop 3 visual-polish implementation: `InspectorShared.swift`의 `MovieCutTheme`는 CapCut-like dark semantic tokens를 유지하면서 Loop 3 measured populated-state gaps를 겨냥한다. Left browser는 `libraryCardBackground`/`libraryThumbnailBackground`의 medium-dark 카드·썸네일 well로 near-black fill을 낮추고, selected inspector는 `inspectorSelectedCardBackground`/`inspectorSelectedControlSurface`로 near-black flat panel에 가깝게 낮춘다. Timeline은 muted clip tokens(`timelineVideoClip`/`timelineAudioClip`/`timelineTextClip`)와 accent-only selection으로 saturation을 줄이고, Preview는 darker `previewWellBackground`/`previewControlBackground`와 tighter black matte로 content dominance를 낮춘다. Current weakness before Loop 3: mean subregion similarity 0.6302, worst `dark_fill` delta 0.2845, left_browser sim 0.619, preview_center sim 0.568, right_inspector sim 0.561, timeline sim 0.657. | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
 | R6-02 | 인터랙션 컨벤션 통일 | 🟡 | 드래그/더블클릭/컨텍스트/스냅 동작 일관 | P2 |
 | R6-03 | 단축키·VoiceOver 회귀 방지 | ✅ 구현(2026-06-16, UX-08): 타임라인 선택 클립 도구 accessibility label/hint 보강, `UIUXAccessibilityRegressionStaticContractTests.swift`로 Playback/Timeline command menu, Preview/Library/Timeline/Inspector 주요 label marker 고정 | 재배치 후 라벨/단축키 보존(정적계약 테스트로 잠금) | — |
 

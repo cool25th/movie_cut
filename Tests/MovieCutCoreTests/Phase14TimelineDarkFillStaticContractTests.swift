@@ -31,6 +31,10 @@ struct Phase14TimelineDarkFillStaticContractTests {
             #"static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)"#,
             #"static let trackHeaderBackground: Color = rgb(0x18, 0x19, 0x1C)"#,
             #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
+            #"static let timelineVideoClip: Color = rgb(0x1D, 0x30, 0x38)"#,
+            #"static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)"#,
+            #"static let timelineTextClip: Color = rgb(0x3A, 0x2B, 0x1F)"#,
+            #"static let timelineStickerClip: Color = rgb(0x38, 0x25, 0x35)"#,
         ] {
             #expect(shared.contains(marker))
         }
@@ -66,8 +70,8 @@ struct Phase14TimelineDarkFillStaticContractTests {
         #expect(!grid.contains("isMajor ? MovieCutTheme.divider"))
     }
 
-    @Test("Unselected clips are dimmed while selected colors remain unchanged")
-    func unselectedClipsAreDimmedWhileSelectedColorsRemainUnchanged() throws {
+    @Test("Timeline clips use muted tokens with accent-only selection")
+    func timelineClipsUseMutedTokensWithAccentOnlySelection() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
         let colors = try section(
             in: timeline,
@@ -75,11 +79,15 @@ struct Phase14TimelineDarkFillStaticContractTests {
             to: "    private func clipLabel(_ clip: Clip) -> String"
         )
 
-        #expect(colors.contains("return selected ? .pink : .pink.opacity(0.46)"))
-        #expect(colors.contains("case .video: return selected ? .blue : .blue.opacity(0.42)"))
-        #expect(colors.contains("case .audio: return selected ? .green : .green.opacity(0.42)"))
-        #expect(colors.contains("case .text: return selected ? .orange : .orange.opacity(0.42)"))
+        #expect(colors.contains("return MovieCutTheme.timelineStickerClip.opacity(selected ? 1 : 0.88)"))
+        #expect(colors.contains("case .video: return MovieCutTheme.timelineVideoClip.opacity(selected ? 1 : 0.88)"))
+        #expect(colors.contains("case .audio: return MovieCutTheme.timelineAudioClip.opacity(selected ? 1 : 0.88)"))
+        #expect(colors.contains("case .text: return MovieCutTheme.timelineTextClip.opacity(selected ? 1 : 0.88)"))
+        #expect(colors.contains("private func accentForClip(clip: Clip, trackKind: TrackKind) -> Color"))
+        #expect(colors.contains("case .video: return MovieCutTheme.accentCyan"))
 
+        #expect(!colors.contains("return selected ? .pink : .pink.opacity(0.46)"))
+        #expect(!colors.contains("case .video: return selected ? .blue : .blue.opacity(0.42)"))
         #expect(!colors.contains(".blue.opacity(0.6)"))
         #expect(!colors.contains(".green.opacity(0.6)"))
         #expect(!colors.contains(".orange.opacity(0.6)"))
@@ -105,7 +113,10 @@ struct Phase14TimelineDarkFillStaticContractTests {
             to: "    @MainActor"
         )
 
-        #expect(clip.contains(".stroke(Color.white.opacity(0.9), lineWidth: 1)"))
+        #expect(clip.contains("let clipAccent = accentForClip(clip: clip, trackKind: trackKind)"))
+        #expect(clip.contains(".fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))"))
+        #expect(clip.contains(".stroke(clipAccent.opacity(0.86), lineWidth: 1)"))
+        #expect(clip.contains(".stroke(Color.white.opacity(0.08), lineWidth: 0.5)"))
         #expect(lane.contains(".background(MovieCutTheme.trackHeaderBackground)"))
         #expect(lane.contains("trackHeaderControls(for: track)"))
         #expect(lane.contains(".accessibilityElement(children: .contain)"))

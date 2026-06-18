@@ -64,7 +64,7 @@ struct Phase01LibraryRailStaticContractTests {
 
         #expect(button.contains("Image(systemName: tab.systemImage)"))
         #expect(button.contains("Text(tab.railLabel)"))
-        #expect(button.contains(".fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)"))
+        #expect(button.contains(".fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.libraryRailButtonBackground)"))
         #expect(button.contains("selectedLibraryTab == tab ? MovieCutTheme.accentCyan.opacity(0.62) : MovieCutTheme.border.opacity(0.46)"))
         #expect(button.contains(".foregroundStyle(selectedLibraryTab == tab ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)"))
         #expect(button.contains(".accessibilityLabel(tab.displayName)"))

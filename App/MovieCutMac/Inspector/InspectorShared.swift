@@ -30,18 +30,32 @@ enum MovieCutTheme {
     static let editorBackground: Color = rgb(0x0F, 0x0F, 0x10)
     static let panelBackground: Color = rgb(0x17, 0x18, 0x1A)
     static let panelBackgroundRaised: Color = rgb(0x1B, 0x1C, 0x1F)
-    static let cardBackground: Color = rgb(0x1E, 0x1F, 0x22)
-    static let elevatedCardBackground: Color = rgb(0x22, 0x23, 0x26)
-    static let controlSurface: Color = rgb(0x24, 0x25, 0x28)
-    static let libraryWellBackground: Color = rgb(0x1C, 0x1D, 0x20)
+    static let cardBackground: Color = rgb(0x18, 0x19, 0x1B)
+    static let elevatedCardBackground: Color = rgb(0x1B, 0x1C, 0x1E)
+    static let controlSurface: Color = rgb(0x1A, 0x1B, 0x1D)
+    static let libraryWellBackground: Color = rgb(0x22, 0x23, 0x26)
+    static let libraryRailButtonBackground: Color = rgb(0x2D, 0x2E, 0x32)
+    static let libraryCardBackground: Color = rgb(0x32, 0x33, 0x36)
+    static let libraryRaisedCardBackground: Color = rgb(0x38, 0x39, 0x3D)
+    static let libraryThumbnailBackground: Color = rgb(0x36, 0x38, 0x3C)
+    static let libraryThumbnailStripe: Color = rgb(0x46, 0x48, 0x4D, opacity: 0.42)
+    static let inspectorSelectedPanelBackground: Color = rgb(0x10, 0x11, 0x13)
+    static let inspectorSelectedCardBackground: Color = rgb(0x13, 0x14, 0x16)
+    static let inspectorSelectedControlSurface: Color = rgb(0x17, 0x18, 0x1A)
+    static let inspectorSelectedBorder: Color = rgb(0x2E, 0x31, 0x36, opacity: 0.22)
     static let previewBackground: Color = rgb(0x03, 0x03, 0x04)
-    static let previewWellBackground: Color = rgb(0x13, 0x14, 0x17)
-    static let previewEmptyStateBackground: Color = rgb(0x1A, 0x1B, 0x1E, opacity: 0.92)
+    static let previewWellBackground: Color = rgb(0x0F, 0x10, 0x12)
+    static let previewControlBackground: Color = rgb(0x13, 0x14, 0x16, opacity: 0.82)
+    static let previewEmptyStateBackground: Color = rgb(0x12, 0x13, 0x15, opacity: 0.94)
     static let timelineBackground: Color = rgb(0x10, 0x11, 0x14)
     static let rulerBackground: Color = rgb(0x17, 0x18, 0x1B)
     static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)
     static let trackHeaderBackground: Color = rgb(0x18, 0x19, 0x1C)
     static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)
+    static let timelineVideoClip: Color = rgb(0x1D, 0x30, 0x38)
+    static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)
+    static let timelineTextClip: Color = rgb(0x3A, 0x2B, 0x1F)
+    static let timelineStickerClip: Color = rgb(0x38, 0x25, 0x35)
     static let divider: Color = rgb(0x35, 0x36, 0x3A, opacity: 0.46)
     static let border: Color = rgb(0x3D, 0x40, 0x46, opacity: 0.34)
     static let accentCyan: Color = rgb(0x36, 0xD7, 0xFF)
@@ -195,12 +209,21 @@ extension View {
             .padding(.vertical, MovieCutSpacing.xSmall)
             .background(
                 RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                    .fill(MovieCutTheme.controlSurface)
+                    .fill(MovieCutTheme.inspectorSelectedControlSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                    .stroke(MovieCutTheme.border, lineWidth: 0.5)
+                    .stroke(MovieCutTheme.inspectorSelectedBorder, lineWidth: 0.5)
             )
+    }
+
+    func movieCutInspectorSelectedCard() -> some View {
+        movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.medium,
+            background: MovieCutTheme.inspectorSelectedCardBackground,
+            border: MovieCutTheme.inspectorSelectedBorder
+        )
     }
 }
 

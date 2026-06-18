@@ -15,20 +15,29 @@ struct R601VisualParityDarkShellStaticContractTests {
             #"static let editorBackground: Color = rgb(0x0F, 0x0F, 0x10)"#,
             #"static let panelBackground: Color = rgb(0x17, 0x18, 0x1A)"#,
             #"static let panelBackgroundRaised: Color = rgb(0x1B, 0x1C, 0x1F)"#,
-            #"static let cardBackground: Color = rgb(0x1E, 0x1F, 0x22)"#,
-            #"static let elevatedCardBackground: Color = rgb(0x22, 0x23, 0x26)"#,
-            #"static let controlSurface: Color = rgb(0x24, 0x25, 0x28)"#,
-            #"static let libraryWellBackground: Color = rgb(0x1C, 0x1D, 0x20)"#,
+            #"static let cardBackground: Color = rgb(0x18, 0x19, 0x1B)"#,
+            #"static let elevatedCardBackground: Color = rgb(0x1B, 0x1C, 0x1E)"#,
+            #"static let controlSurface: Color = rgb(0x1A, 0x1B, 0x1D)"#,
+            #"static let libraryWellBackground: Color = rgb(0x22, 0x23, 0x26)"#,
+            #"static let libraryRailButtonBackground: Color = rgb(0x2D, 0x2E, 0x32)"#,
+            #"static let libraryCardBackground: Color = rgb(0x32, 0x33, 0x36)"#,
+            #"static let libraryRaisedCardBackground: Color = rgb(0x38, 0x39, 0x3D)"#,
+            #"static let libraryThumbnailBackground: Color = rgb(0x36, 0x38, 0x3C)"#,
+            #"static let inspectorSelectedCardBackground: Color = rgb(0x13, 0x14, 0x16)"#,
+            #"static let inspectorSelectedControlSurface: Color = rgb(0x17, 0x18, 0x1A)"#,
             #"static let previewBackground: Color = rgb(0x03, 0x03, 0x04)"#,
-            #"static let previewWellBackground: Color = rgb(0x13, 0x14, 0x17)"#,
-            #"static let previewEmptyStateBackground: Color = rgb(0x1A, 0x1B, 0x1E, opacity: 0.92)"#,
+            #"static let previewWellBackground: Color = rgb(0x0F, 0x10, 0x12)"#,
+            #"static let previewControlBackground: Color = rgb(0x13, 0x14, 0x16, opacity: 0.82)"#,
+            #"static let previewEmptyStateBackground: Color = rgb(0x12, 0x13, 0x15, opacity: 0.94)"#,
             #"static let timelineBackground: Color = rgb(0x10, 0x11, 0x14)"#,
             #"static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)"#,
+            #"static let timelineVideoClip: Color = rgb(0x1D, 0x30, 0x38)"#,
             #"static let accentCyan: Color = rgb(0x36, 0xD7, 0xFF)"#,
             #"static let selectedFill: Color = accentCyan.opacity(0.22)"#,
             #"func movieCutScrollBackground(_ background: Color = MovieCutTheme.panelBackground) -> some View"#,
             #"scrollContentBackground(.hidden)"#,
             #"func movieCutInputField() -> some View"#,
+            #"func movieCutInspectorSelectedCard() -> some View"#,
         ] {
             #expect(shared.contains(marker))
         }
@@ -55,13 +64,15 @@ struct R601VisualParityDarkShellStaticContractTests {
 
         for marker in [
             #"GridItem(.flexible(minimum: 112), spacing: MovieCutSpacing.small)"#,
-            #".fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)"#,
+            #".fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.libraryRailButtonBackground)"#,
             #"selectedLibraryTab == tab ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText"#,
-            #".fill(MovieCutTheme.controlSurface)"#,
+            #".fill(MovieCutTheme.libraryRailButtonBackground)"#,
             #"private var libraryContentWell: some View"#,
             #".fill(MovieCutTheme.libraryWellBackground)"#,
             #".movieCutScrollBackground(MovieCutTheme.libraryWellBackground)"#,
-            #".movieCutCard(background: MovieCutTheme.elevatedCardBackground)"#,
+            #"private func libraryStaticThumbnailWell(systemImage: String, disabledReason: String?) -> some View"#,
+            #"MovieCutTheme.libraryThumbnailBackground"#,
+            #"MovieCutTheme.libraryCardBackground"#,
             #".frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)"#,
         ] {
             #expect(library.contains(marker))
@@ -75,9 +86,12 @@ struct R601VisualParityDarkShellStaticContractTests {
         let effects = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
         let export = try source("App/MovieCutMac/Inspector/InspectorExportSection.swift")
 
-        #expect(inspector.contains(".movieCutScrollBackground(MovieCutTheme.panelBackground)"))
+        #expect(inspector.contains(".movieCutScrollBackground(viewModel.selectedClip == nil ? MovieCutTheme.panelBackground : MovieCutTheme.inspectorSelectedPanelBackground)"))
         #expect(inspector.contains("ProjectOverviewInspectorView(viewModel: viewModel)"))
         #expect(inspector.contains(".movieCutCard(background: MovieCutTheme.controlSurface)"))
+        #expect(inspector.contains(".movieCutInspectorSelectedCard()"))
+        #expect(inspector.contains("MovieCutTheme.inspectorSelectedControlSurface"))
+        #expect(inspector.contains("MovieCutTheme.inspectorSelectedBorder"))
         #expect(inspector.contains(".tint(MovieCutTheme.accentCyan)"))
         #expect(inspector.contains(".movieCutInputField()"))
         #expect(basic.contains("VStack(alignment: .leading, spacing: MovieCutSpacing.small)"))
@@ -98,6 +112,10 @@ struct R601VisualParityDarkShellStaticContractTests {
             #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36))"#,
             #".background(MovieCutTheme.trackHeaderBackground)"#,
             #".fill(MovieCutTheme.trackBackground)"#,
+            #"MovieCutTheme.timelineVideoClip"#,
+            #"MovieCutTheme.timelineAudioClip"#,
+            #"MovieCutTheme.timelineTextClip"#,
+            #".fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))"#,
             #"timelineGridLines(height: trackHeight)"#,
         ] {
             #expect(timeline.contains(marker))
@@ -111,9 +129,11 @@ struct R601VisualParityDarkShellStaticContractTests {
         for marker in [
             #"MovieCutTheme.previewBackground"#,
             #"MovieCutTheme.previewWellBackground"#,
+            #"MovieCutTheme.previewControlBackground"#,
             #"private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View"#,
             #".fill(MovieCutTheme.previewBackground)"#,
-            #"MovieCutTheme.controlSurface.opacity(0.90)"#,
+            #".padding(MovieCutSpacing.large + MovieCutSpacing.medium)"#,
+            #"MovieCutTheme.inspectorSelectedControlSurface"#,
             #"MovieCutTheme.previewEmptyStateBackground"#,
             #"NSLocalizedString("Import media", comment: "")"#,
             #"NSLocalizedString("Import media, then drag it to the timeline.", comment: "")"#,
@@ -127,17 +147,18 @@ struct R601VisualParityDarkShellStaticContractTests {
         }
     }
 
-    @Test("R6-01 docs record loop two visual polish targets")
-    func docsRecordLoopTwoVisualPolishTargets() throws {
+    @Test("R6-01 docs record loop three visual polish targets")
+    func docsRecordLoopThreeVisualPolishTargets() throws {
         let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
-        #expect(docs.contains("Loop 2 targets left-browser/preview well polish"))
-        #expect(docs.contains("mean subregion similarity 0.3172 -> 0.7723"))
-        #expect(docs.contains("live workflow still requires populated capture"))
-        #expect(handoff.contains("Loop 2 note (2026-06-18)"))
-        #expect(handoff.contains("left-browser and preview well polish"))
-        #expect(handoff.contains("live workflow still requires populated capture"))
+        #expect(docs.contains("Loop 3 targets measured populated-state gaps"))
+        #expect(docs.contains("mean subregion similarity 0.6302"))
+        #expect(docs.contains("left_browser sim 0.619"))
+        #expect(docs.contains("right_inspector sim 0.561"))
+        #expect(handoff.contains("Loop 3 note (2026-06-19)"))
+        #expect(handoff.contains("medium-dark library card and thumbnail wells"))
+        #expect(handoff.contains("near-black selected inspector cards"))
         #expect(!docs.contains("CapCut 98% visual parity loop 잔여"))
     }
 }

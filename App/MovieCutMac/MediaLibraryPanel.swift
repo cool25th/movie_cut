@@ -184,7 +184,7 @@ struct MediaLibraryPanel: View {
             .frame(width: libraryRailWidth - MovieCutSpacing.small, height: libraryRailItemHeight)
             .background(
                 RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.controlSurface)
+                    .fill(selectedLibraryTab == tab ? MovieCutTheme.selectedFill : MovieCutTheme.libraryRailButtonBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
@@ -239,7 +239,7 @@ struct MediaLibraryPanel: View {
         .padding(.vertical, MovieCutSpacing.small)
         .background(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.controlSurface)
+                .fill(MovieCutTheme.libraryRailButtonBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
@@ -450,7 +450,7 @@ struct MediaLibraryPanel: View {
             .movieCutCard(
                 padding: MovieCutSpacing.small,
                 cornerRadius: MovieCutRadius.small,
-                background: MovieCutTheme.elevatedCardBackground,
+                background: MovieCutTheme.libraryCardBackground,
                 border: MovieCutTheme.border.opacity(0.52)
             )
             .accessibilityElement(children: .combine)
@@ -517,7 +517,7 @@ struct MediaLibraryPanel: View {
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: MovieCutTheme.cardBackground,
+            background: MovieCutTheme.libraryCardBackground,
             border: isEnabled ? MovieCutTheme.border.opacity(0.52) : MovieCutTheme.border.opacity(0.32)
         )
         .opacity(isEnabled || isRunning ? 1 : 0.68)
@@ -731,7 +731,7 @@ struct MediaLibraryPanel: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
+        .movieCutCard(background: MovieCutTheme.libraryCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -747,7 +747,7 @@ struct MediaLibraryPanel: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .movieCutCard(background: MovieCutTheme.elevatedCardBackground)
+        .movieCutCard(background: MovieCutTheme.libraryCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -788,10 +788,10 @@ struct MediaLibraryPanel: View {
                 .accessibilityLabel(previewKind.previewLabel(for: title))
                 .accessibilityHint(previewKind.previewHelp(for: title, disabledReason: disabledReason))
             } else {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(disabledReason == nil ? MovieCutTheme.accentCyan : MovieCutTheme.mutedText)
-                    .frame(width: 28, height: 28)
+                libraryStaticThumbnailWell(systemImage: systemImage, disabledReason: disabledReason)
+                    .frame(height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
             }
 
             Text(title)
@@ -828,10 +828,30 @@ struct MediaLibraryPanel: View {
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: MovieCutTheme.cardBackground
+            background: MovieCutTheme.libraryCardBackground
         )
         .help(libraryPreviewHelp(title: title, kind: previewKind, disabledReason: disabledReason))
         .contentShape(Rectangle())
+    }
+
+    private func libraryStaticThumbnailWell(systemImage: String, disabledReason: String?) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.libraryThumbnailBackground.opacity(disabledReason == nil ? 1 : 0.72))
+
+            HStack(spacing: 5) {
+                ForEach(0..<3, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(MovieCutTheme.libraryThumbnailStripe.opacity(index == 1 ? 0.72 : 0.42))
+                        .frame(width: 14 + CGFloat(index * 5), height: 34 - CGFloat(index * 4))
+                }
+            }
+            .offset(x: 18, y: 8)
+
+            Image(systemName: systemImage)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(disabledReason == nil ? MovieCutTheme.accentCyan.opacity(0.88) : MovieCutTheme.mutedText)
+        }
     }
 
     private func stickerGridCard(_ sticker: StickerAsset) -> some View {
@@ -872,7 +892,7 @@ struct MediaLibraryPanel: View {
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: MovieCutTheme.cardBackground
+            background: MovieCutTheme.libraryCardBackground
         )
         .contentShape(Rectangle())
     }
@@ -891,7 +911,7 @@ struct MediaLibraryPanel: View {
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                    .fill(MovieCutTheme.controlSurface)
+                    .fill(MovieCutTheme.libraryThumbnailBackground)
                 Image(systemName: stickerSystemImage(sticker))
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -906,11 +926,11 @@ struct MediaLibraryPanel: View {
     ) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.controlSurface.opacity(disabledReason == nil ? 0.88 : 0.5))
+                .fill(MovieCutTheme.libraryThumbnailBackground.opacity(disabledReason == nil ? 1 : 0.62))
             LinearGradient(
                 colors: [
                     kind.previewAccent.opacity(disabledReason == nil ? 0.16 : 0.08),
-                    MovieCutTheme.cardBackground.opacity(0.65)
+                    MovieCutTheme.libraryCardBackground.opacity(0.68)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -936,8 +956,8 @@ struct MediaLibraryPanel: View {
             HStack(spacing: 0) {
                 LinearGradient(
                     colors: [
-                        MovieCutTheme.controlSurface,
-                        MovieCutTheme.cardBackground,
+                        MovieCutTheme.libraryThumbnailBackground,
+                        MovieCutTheme.libraryCardBackground,
                         Color.gray.opacity(0.2)
                     ],
                     startPoint: .topLeading,
@@ -948,7 +968,7 @@ struct MediaLibraryPanel: View {
                     colors: [
                         kind.previewAccent.opacity(0.34),
                         MovieCutTheme.accentCyan.opacity(kind == .filter ? 0.3 : 0.16),
-                        MovieCutTheme.elevatedCardBackground
+                        MovieCutTheme.libraryRaisedCardBackground
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -972,7 +992,7 @@ struct MediaLibraryPanel: View {
                         .padding(.vertical, 2)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.86))
+                                .fill(MovieCutTheme.libraryRaisedCardBackground.opacity(0.86))
                         )
                 }
 
@@ -1002,7 +1022,7 @@ struct MediaLibraryPanel: View {
             HStack(spacing: 0) {
                 LinearGradient(
                     colors: [
-                        MovieCutTheme.controlSurface,
+                        MovieCutTheme.libraryThumbnailBackground,
                         Color.blue.opacity(0.18)
                     ],
                     startPoint: .topLeading,
@@ -1012,7 +1032,7 @@ struct MediaLibraryPanel: View {
                 LinearGradient(
                     colors: [
                         MovieCutTheme.accentCyan.opacity(0.28),
-                        MovieCutTheme.elevatedCardBackground
+                        MovieCutTheme.libraryRaisedCardBackground
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -1055,7 +1075,7 @@ struct MediaLibraryPanel: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(MovieCutTheme.elevatedCardBackground.opacity(0.72))
+                .background(MovieCutTheme.libraryRaisedCardBackground.opacity(0.72))
             }
 
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
@@ -1142,7 +1162,7 @@ struct MediaLibraryPanel: View {
             .frame(maxWidth: .infinity, minHeight: 220)
             .movieCutCard(
                 padding: MovieCutSpacing.large,
-                background: MovieCutTheme.elevatedCardBackground,
+                background: MovieCutTheme.libraryRaisedCardBackground,
                 border: MovieCutTheme.accentCyan.opacity(0.28)
             )
             .accessibilityElement(children: .contain)
@@ -1176,7 +1196,7 @@ struct MediaLibraryPanel: View {
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.selectedFill : MovieCutTheme.cardBackground,
+            background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.libraryRaisedCardBackground : MovieCutTheme.libraryCardBackground,
             border: asset.id == viewModel.selectedAssetId ? MovieCutTheme.accentCyan.opacity(0.45) : Color.clear
         )
         .contentShape(Rectangle())
@@ -1222,7 +1242,7 @@ struct MediaLibraryPanel: View {
         .frame(width: 24, height: 24)
         .background(
             Circle()
-                .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
+                .fill(MovieCutTheme.libraryRaisedCardBackground.opacity(0.85))
         )
         .help(NSLocalizedString("Add to Timeline", comment: ""))
         .accessibilityLabel(String(format: NSLocalizedString("Add %@ to timeline", comment: ""), asset.originalURL.lastPathComponent))
@@ -1271,7 +1291,7 @@ struct MediaLibraryPanel: View {
             .frame(width: 24, height: 24)
             .background(
                 Circle()
-                    .fill(MovieCutTheme.elevatedCardBackground.opacity(0.85))
+                    .fill(MovieCutTheme.libraryRaisedCardBackground.opacity(0.85))
             )
             .help(NSLocalizedString("Generate Proxy", comment: ""))
             .accessibilityLabel(NSLocalizedString("Generate Proxy", comment: ""))
@@ -1581,12 +1601,13 @@ struct MediaLibraryPanel: View {
     private func assetGridThumbnailView(_ asset: MediaAsset) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                .fill(MovieCutTheme.controlSurface)
+                .fill(MovieCutTheme.libraryThumbnailBackground)
 
             if let image = thumbnailImage(for: asset) {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFill()
+                    .overlay(Color.black.opacity(0.10))
             } else {
                 Image(systemName: iconForKind(asset.kind))
                     .font(.title2)
@@ -1604,7 +1625,7 @@ struct MediaLibraryPanel: View {
     private func assetThumbnailView(_ asset: MediaAsset) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                .fill(MovieCutTheme.controlSurface)
+                .fill(MovieCutTheme.libraryThumbnailBackground)
 
             if let image = thumbnailImage(for: asset) {
                 Image(nsImage: image)

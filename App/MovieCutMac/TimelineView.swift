@@ -643,6 +643,7 @@ struct TimelineView: View {
         let width = CGFloat(clip.timelineRange.duration) * CGFloat(pixelsPerSecond)
         let isSelected = viewModel.selectedClipIds.contains(clip.id)
         let isActiveDrag = isDragging && draggedClipId == clip.id
+        let clipAccent = accentForClip(clip: clip, trackKind: trackKind)
 
         return ZStack {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
@@ -664,7 +665,7 @@ struct TimelineView: View {
                             Image(systemName: "link")
                                 .font(MovieCutTypography.metadata)
                                 .foregroundStyle(.white.opacity(0.85))
-                                .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
+                        .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
                         }
                         if isStickerClip(clip) {
                             Image(systemName: "face.smiling")
@@ -674,10 +675,18 @@ struct TimelineView: View {
                     }
                     .padding(.trailing, MovieCutSpacing.xSmall)
                 }
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))
+                        .frame(width: isSelected ? 3 : 2)
+                }
                 .overlay {
                     if isSelected {
                         RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                            .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                            .stroke(clipAccent.opacity(0.86), lineWidth: 1)
+                    } else {
+                        RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                     }
                 }
                 .contentShape(Rectangle())
@@ -789,10 +798,12 @@ struct TimelineView: View {
     private func clipMediaBackground(for clip: Clip, trackKind: TrackKind, selected: Bool) -> some View {
         if let image = thumbnailImage(for: clip) {
             thumbnailStrip(image)
-            Color.black.opacity(selected ? 0.28 : 0.16)
+            Color.black.opacity(selected ? 0.46 : 0.34)
                 .allowsHitTesting(false)
         } else if shouldRenderWaveform(for: clip, trackKind: trackKind) {
             waveformCanvas(for: clip)
+            Color.black.opacity(selected ? 0.20 : 0.28)
+                .allowsHitTesting(false)
         }
     }
 
@@ -846,7 +857,7 @@ struct TimelineView: View {
                     width: max(1, barWidth - 0.5),
                     height: barHeight
                 )
-                context.fill(Path(rect), with: .color(.white.opacity(0.4)))
+                context.fill(Path(rect), with: .color(.white.opacity(0.28)))
             }
         }
         .allowsHitTesting(false)
@@ -1047,13 +1058,25 @@ struct TimelineView: View {
 
     private func colorForClip(clip: Clip, trackKind: TrackKind, selected: Bool) -> Color {
         if isStickerClip(clip) {
-            return selected ? .pink : .pink.opacity(0.46)
+            return MovieCutTheme.timelineStickerClip.opacity(selected ? 1 : 0.88)
         }
 
         switch trackKind {
-        case .video: return selected ? .blue : .blue.opacity(0.42)
-        case .audio: return selected ? .green : .green.opacity(0.42)
-        case .text: return selected ? .orange : .orange.opacity(0.42)
+        case .video: return MovieCutTheme.timelineVideoClip.opacity(selected ? 1 : 0.88)
+        case .audio: return MovieCutTheme.timelineAudioClip.opacity(selected ? 1 : 0.88)
+        case .text: return MovieCutTheme.timelineTextClip.opacity(selected ? 1 : 0.88)
+        }
+    }
+
+    private func accentForClip(clip: Clip, trackKind: TrackKind) -> Color {
+        if isStickerClip(clip) {
+            return .pink
+        }
+
+        switch trackKind {
+        case .video: return MovieCutTheme.accentCyan
+        case .audio: return .green
+        case .text: return .orange
         }
     }
 

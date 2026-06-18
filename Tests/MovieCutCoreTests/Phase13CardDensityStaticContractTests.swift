@@ -18,9 +18,11 @@ struct Phase13CardDensityStaticContractTests {
             #"static let cardBackground: Color = rgb(0x18, 0x19, 0x1B)"#,
             #"static let elevatedCardBackground: Color = rgb(0x1B, 0x1C, 0x1E)"#,
             #"static let controlSurface: Color = rgb(0x1A, 0x1B, 0x1D)"#,
-            #"static let inspectorSelectedCardBackground: Color = rgb(0x13, 0x14, 0x16)"#,
-            #"static let inspectorSelectedControlSurface: Color = rgb(0x17, 0x18, 0x1A)"#,
-            #"static let inspectorSelectedBorder: Color = rgb(0x2E, 0x31, 0x36, opacity: 0.22)"#,
+            #"static let inspectorSelectedPanelBackground: Color = rgb(0x21, 0x22, 0x25)"#,
+            #"static let inspectorSelectedCardBackground: Color = rgb(0x22, 0x23, 0x26)"#,
+            #"static let inspectorSelectedRowBackground: Color = rgb(0x26, 0x27, 0x2A)"#,
+            #"static let inspectorSelectedControlSurface: Color = rgb(0x2A, 0x2C, 0x30)"#,
+            #"static let inspectorSelectedBorder: Color = rgb(0x46, 0x49, 0x50, opacity: 0.10)"#,
             #"static let divider: Color = rgb(0x35, 0x36, 0x3A, opacity: 0.46)"#,
             #"static let border: Color = rgb(0x3D, 0x40, 0x46, opacity: 0.34)"#,
         ] {
@@ -45,6 +47,9 @@ struct Phase13CardDensityStaticContractTests {
             #"func movieCutInspectorSelectedCard() -> some View"#,
             #"background: MovieCutTheme.inspectorSelectedCardBackground"#,
             #"border: MovieCutTheme.inspectorSelectedBorder"#,
+            #"func movieCutInspectorSelectedFlatRow() -> some View"#,
+            #"background: MovieCutTheme.inspectorSelectedRowBackground"#,
+            #"border: MovieCutTheme.inspectorSelectedBorder.opacity(0.35)"#,
         ] {
             #expect(shared.contains(marker))
         }
@@ -56,9 +61,9 @@ struct Phase13CardDensityStaticContractTests {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
 
         for marker in [
-            #"static let rulerBackground: Color = rgb(0x17, 0x18, 0x1B)"#,
-            #"static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)"#,
-            #"static let trackHeaderBackground: Color = rgb(0x18, 0x19, 0x1C)"#,
+            #"static let rulerBackground: Color = rgb(0x24, 0x26, 0x2B)"#,
+            #"static let trackBackground: Color = rgb(0x1A, 0x1C, 0x20)"#,
+            #"static let trackHeaderBackground: Color = rgb(0x2A, 0x2D, 0x32)"#,
             #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
         ] {
             #expect(shared.contains(marker))

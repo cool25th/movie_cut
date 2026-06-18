@@ -63,14 +63,16 @@ struct PreviewPanel: View {
 
     private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .fill(MovieCutTheme.previewLoop4WellSurface)
+
+            PreviewLoop4WellTexture()
+
             content()
                 .padding(MovieCutSpacing.large + MovieCutSpacing.medium)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                .fill(MovieCutTheme.previewBackground)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
                 .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.80), lineWidth: 0.5)
@@ -336,7 +338,16 @@ struct PreviewPanel: View {
     }
 
     private func previewSurface(for clip: Clip) -> some View {
-        VideoPreviewView(player: playbackEngine.player)
+        ZStack {
+            if usesLoop4PreviewEditorialMatte(for: clip) {
+                PreviewLoop4EditorialMatte(
+                    clipKind: clip.kind,
+                    textContent: clip.textContent
+                )
+            } else {
+                VideoPreviewView(player: playbackEngine.player)
+            }
+        }
             .aspectRatio(canvasAspectRatio, contentMode: .fit)
             .overlay {
                 previewOverlay(for: clip)
@@ -352,6 +363,15 @@ struct PreviewPanel: View {
 
     private var hasImportedMedia: Bool {
         !viewModel.currentProject.mediaLibrary.assets.isEmpty
+    }
+
+    private func usesLoop4PreviewEditorialMatte(for clip: Clip) -> Bool {
+        switch clip.kind {
+        case .audio, .text:
+            return true
+        case .video, .image:
+            return clip.assetId == nil
+        }
     }
 
     private var emptyStateTitle: String {
@@ -717,6 +737,290 @@ private extension Color {
             green: Double((value >> 8) & 0xFF) / 255,
             blue: Double(value & 0xFF) / 255,
             opacity: 1
+        )
+    }
+}
+
+private struct PreviewLoop4WellTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<7 {
+                let x = size.width * (0.08 + CGFloat(index) * 0.17)
+                let y = size.height * (0.18 + CGFloat(index % 2) * 0.08)
+                let rect = CGRect(
+                    x: x,
+                    y: y,
+                    width: size.width * 0.13,
+                    height: size.height * 0.08
+                )
+                context.fill(
+                    Self.roundedRectPath(rect, radius: 5),
+                    with: .color(MovieCutTheme.previewLoop4MatteBlock.opacity(index.isMultiple(of: 2) ? 0.66 : 0.48))
+                )
+            }
+
+            for index in 0..<8 {
+                let x = size.width * (0.14 + CGFloat(index) * 0.10)
+                var line = Path()
+                line.move(to: CGPoint(x: x, y: size.height * 0.10))
+                line.addLine(to: CGPoint(x: x + size.width * 0.10, y: size.height * 0.90))
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.58)), lineWidth: 0.9)
+            }
+
+            for index in 0..<6 {
+                let y = size.height * (0.22 + CGFloat(index) * 0.10)
+                var line = Path()
+                line.move(to: CGPoint(x: size.width * 0.08, y: y))
+                line.addLine(to: CGPoint(x: size.width * 0.92, y: y))
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.36)), lineWidth: 0.8)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private static func roundedRectPath(_ rect: CGRect, radius: CGFloat) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+        return path
+    }
+}
+
+private struct PreviewLoop4EditorialMatte: View {
+    var clipKind: ClipKind
+    var textContent: TextClipContent?
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    MovieCutTheme.previewLoop4MatteBase,
+                    MovieCutTheme.previewLoop4WellSurface,
+                    MovieCutTheme.previewLoop4MatteBase
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            PreviewLoop4MattePattern()
+
+            VStack(spacing: 0) {
+                statusChips
+                Spacer(minLength: 12)
+                centerScaffold
+                Spacer(minLength: 12)
+                bottomStrip
+            }
+            .padding(18)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(MovieCutTheme.previewLoop4MatteLine.opacity(0.42), lineWidth: 0.8)
+        )
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var statusChips: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(MovieCutTheme.previewLoop4MatteBlock.opacity(index == 0 ? 0.95 : 0.55))
+                    .frame(width: index == 0 ? 54 : 32, height: 7)
+            }
+
+            Spacer(minLength: 12)
+
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(MovieCutTheme.previewLoop4MatteLine.opacity(index == 1 ? 0.72 : 0.38))
+                    .frame(width: 7, height: 7)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var centerScaffold: some View {
+        if let textContent {
+            PreviewLoop4TextSelectionScaffold(textContent: textContent)
+        } else {
+            PreviewLoop4LowContentScaffold(clipKind: clipKind)
+        }
+    }
+
+    private var bottomStrip: some View {
+        HStack(alignment: .center, spacing: 4) {
+            ForEach(0..<24, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(MovieCutTheme.previewLoop4MatteLine.opacity(0.38 + Double(index % 4) * 0.08))
+                    .frame(width: CGFloat(5 + (index % 5) * 2), height: CGFloat(5 + (index % 6)))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(MovieCutTheme.previewLoop4MatteBlock.opacity(0.40))
+        )
+    }
+}
+
+private struct PreviewLoop4MattePattern: View {
+    var body: some View {
+        Canvas { context, size in
+            let posterRect = CGRect(
+                x: size.width * 0.37,
+                y: size.height * 0.12,
+                width: size.width * 0.30,
+                height: size.height * 0.64
+            )
+            context.fill(Self.roundedRectPath(posterRect, radius: 7), with: .color(MovieCutTheme.previewLoop4MatteBlock.opacity(0.95)))
+
+            for index in 0..<6 {
+                let rect = CGRect(
+                    x: posterRect.minX + posterRect.width * 0.10,
+                    y: posterRect.minY + posterRect.height * (0.12 + CGFloat(index) * 0.11),
+                    width: posterRect.width * (index.isMultiple(of: 2) ? 0.78 : 0.56),
+                    height: posterRect.height * 0.045
+                )
+                context.fill(Self.roundedRectPath(rect, radius: 3), with: .color(MovieCutTheme.previewLoop4MatteBase.opacity(0.42)))
+            }
+
+            let sideRects = [
+                CGRect(x: size.width * 0.08, y: size.height * 0.16, width: size.width * 0.20, height: size.height * 0.15),
+                CGRect(x: size.width * 0.12, y: size.height * 0.38, width: size.width * 0.18, height: size.height * 0.14),
+                CGRect(x: size.width * 0.68, y: size.height * 0.18, width: size.width * 0.20, height: size.height * 0.14),
+                CGRect(x: size.width * 0.66, y: size.height * 0.42, width: size.width * 0.22, height: size.height * 0.17),
+                CGRect(x: size.width * 0.23, y: size.height * 0.72, width: size.width * 0.54, height: size.height * 0.08),
+            ]
+
+            for (index, rect) in sideRects.enumerated() {
+                context.fill(
+                    Self.roundedRectPath(rect, radius: 6),
+                    with: .color(MovieCutTheme.previewLoop4MatteBlock.opacity(index.isMultiple(of: 2) ? 0.76 : 0.58))
+                )
+            }
+
+            for index in 0..<9 {
+                let x = size.width * (0.10 + CGFloat(index) * 0.09)
+                var line = Path()
+                line.move(to: CGPoint(x: x, y: size.height * 0.09))
+                line.addLine(to: CGPoint(x: x + size.width * 0.16, y: size.height * 0.88))
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.94)), lineWidth: 1.0)
+            }
+
+            for index in 0..<5 {
+                let y = size.height * (0.18 + CGFloat(index) * 0.13)
+                var line = Path()
+                line.move(to: CGPoint(x: size.width * 0.08, y: y))
+                line.addLine(to: CGPoint(x: size.width * 0.92, y: y))
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.72)), lineWidth: 0.9)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static func roundedRectPath(_ rect: CGRect, radius: CGFloat) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+        return path
+    }
+}
+
+private struct PreviewLoop4TextSelectionScaffold: View {
+    var textContent: TextClipContent
+
+    private var displayText: String {
+        textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.28))
+
+                if displayText.isEmpty {
+                    VStack(spacing: 6) {
+                        ForEach(0..<3, id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(MovieCutTheme.previewLoop4MatteLine.opacity(0.58))
+                                .frame(width: CGFloat(130 - index * 18), height: 8)
+                        }
+                    }
+                } else {
+                    Text(displayText)
+                        .font(.system(size: displayFontSize, weight: textContent.isBold ? .bold : .semibold))
+                        .foregroundStyle(Color.white.opacity(0.76))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.62)
+                        .padding(.horizontal, 18)
+                }
+            }
+            .frame(width: 260, height: 96)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        MovieCutTheme.previewLoop4MatteLine.opacity(0.86),
+                        style: StrokeStyle(lineWidth: 1.2, dash: [7, 5])
+                    )
+            )
+
+            HStack(spacing: 12) {
+                ForEach(0..<5, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(MovieCutTheme.previewLoop4MatteBlock.opacity(index == 2 ? 0.92 : 0.48))
+                        .frame(width: index == 2 ? 46 : 28, height: 7)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(MovieCutTheme.previewLoop4MatteBase.opacity(0.44))
+        )
+    }
+
+    private var displayFontSize: CGFloat {
+        min(max(CGFloat(textContent.fontSize) * 0.26, 17), 30)
+    }
+}
+
+private struct PreviewLoop4LowContentScaffold: View {
+    var clipKind: ClipKind
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 4) {
+                ForEach(0..<38, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(MovieCutTheme.previewLoop4MatteLine.opacity(0.44 + Double(index % 5) * 0.07))
+                        .frame(width: 4, height: CGFloat(12 + ((index * 7) % 34)))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(MovieCutTheme.previewLoop4MatteBlock.opacity(0.50))
+            )
+
+            HStack(spacing: 8) {
+                ForEach(0..<6, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(MovieCutTheme.previewLoop4MatteBlock.opacity(index.isMultiple(of: 2) ? 0.76 : 0.42))
+                        .frame(width: index == 0 ? 42 : 28, height: 8)
+                }
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(MovieCutTheme.previewLoop4MatteBase.opacity(0.34))
         )
     }
 }

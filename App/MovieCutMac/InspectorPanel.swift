@@ -48,7 +48,7 @@ struct InspectorPanel: View {
                                 titleFont: .subheadline.weight(.semibold)
                             )
                         }
-                        .movieCutInspectorSelectedCard()
+                        .movieCutInspectorSelectedFlatRow()
                     } else {
                         ProjectOverviewInspectorView(viewModel: viewModel)
                         projectToolsSections(carded: true)
@@ -72,10 +72,10 @@ struct InspectorPanel: View {
         switch clip.kind {
         case .audio:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .text:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .video, .image:
             visualClipInspectorSections(for: clip)
         }
@@ -107,23 +107,23 @@ struct InspectorPanel: View {
         switch selectedInspectorSubtab {
         case .basic:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .speed:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.speed)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .adjustment:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.adjustment)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .mask:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.mask)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         case .animation:
             InspectorEffectsSection(viewModel: viewModel, clip: clip, mode: InspectorEffectsMode.animation)
-                .movieCutInspectorSelectedCard()
+                .movieCutInspectorSelectedFlatRow()
         }
 
         InspectorAnalysisSection(viewModel: viewModel, clip: clip)
-            .movieCutInspectorSelectedCard()
+            .movieCutInspectorSelectedFlatRow()
     }
 
     /// Project-wide tools that are not tied to the selected clip.

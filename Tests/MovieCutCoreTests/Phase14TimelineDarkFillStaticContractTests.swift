@@ -26,10 +26,10 @@ struct Phase14TimelineDarkFillStaticContractTests {
         let shared = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
 
         for marker in [
-            #"static let timelineBackground: Color = rgb(0x10, 0x11, 0x14)"#,
-            #"static let rulerBackground: Color = rgb(0x17, 0x18, 0x1B)"#,
-            #"static let trackBackground: Color = rgb(0x0E, 0x0F, 0x12)"#,
-            #"static let trackHeaderBackground: Color = rgb(0x18, 0x19, 0x1C)"#,
+            #"static let timelineBackground: Color = rgb(0x1D, 0x1F, 0x23)"#,
+            #"static let rulerBackground: Color = rgb(0x24, 0x26, 0x2B)"#,
+            #"static let trackBackground: Color = rgb(0x1A, 0x1C, 0x20)"#,
+            #"static let trackHeaderBackground: Color = rgb(0x2A, 0x2D, 0x32)"#,
             #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
             #"static let timelineVideoClip: Color = rgb(0x1D, 0x30, 0x38)"#,
             #"static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)"#,

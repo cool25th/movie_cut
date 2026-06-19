@@ -35,6 +35,7 @@ struct Phase14TimelineDarkFillStaticContractTests {
             #"static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)"#,
             #"static let timelineTextClip: Color = rgb(0x3A, 0x2B, 0x1F)"#,
             #"static let timelineStickerClip: Color = rgb(0x38, 0x25, 0x35)"#,
+            #"static let timelineSelectedClipFill: Color = rgb(0x36, 0xD7, 0xFF, opacity: 0.10)"#,
         ] {
             #expect(shared.contains(marker))
         }
@@ -59,13 +60,13 @@ struct Phase14TimelineDarkFillStaticContractTests {
             to: "    private func trackLane(_ track: Track) -> some View"
         )
 
-        #expect(ruler.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.82) : MovieCutTheme.timelineGrid.opacity(0.48))"#))
-        #expect(ruler.contains("lineWidth: isMajor ? 0.8 : 0.4"))
+        #expect(ruler.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.58) : MovieCutTheme.timelineGrid.opacity(0.28))"#))
+        #expect(ruler.contains("lineWidth: isMajor ? 0.6 : 0.3"))
         #expect(!ruler.contains("isMajor ? MovieCutTheme.divider"))
         #expect(!ruler.contains("MovieCutTheme.divider : MovieCutTheme.timelineGrid"))
 
-        #expect(grid.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36))"#))
-        #expect(grid.contains("lineWidth: isMajor ? 0.5 : 0.35"))
+        #expect(grid.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18))"#))
+        #expect(grid.contains("lineWidth: isMajor ? 0.4 : 0.25"))
         #expect(!grid.contains("MovieCutTheme.divider.opacity(0.44)"))
         #expect(!grid.contains("isMajor ? MovieCutTheme.divider"))
     }
@@ -114,10 +115,13 @@ struct Phase14TimelineDarkFillStaticContractTests {
         )
 
         #expect(clip.contains("let clipAccent = accentForClip(clip: clip, trackKind: trackKind)"))
-        #expect(clip.contains(".fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))"))
-        #expect(clip.contains(".stroke(clipAccent.opacity(0.86), lineWidth: 1)"))
+        #expect(clip.contains("MovieCutTheme.timelineSelectedClipFill"))
+        #expect(clip.contains("clipMediaTypeStripe(accent: clipAccent, selected: isSelected)"))
+        #expect(clip.contains(".fill(clipAccent.opacity(isSelected ? 0.92 : 0.42))"))
+        #expect(clip.contains(".strokeBorder(clipAccent.opacity(0.98), lineWidth: 1.6)"))
         #expect(clip.contains(".stroke(Color.white.opacity(0.08), lineWidth: 0.5)"))
-        #expect(lane.contains(".background(MovieCutTheme.trackHeaderBackground)"))
+        #expect(clip.contains("clipTrimHandle(selected: isSelected)"))
+        #expect(lane.contains(".background(MovieCutTheme.trackHeaderBackground.opacity(0.74))"))
         #expect(lane.contains("trackHeaderControls(for: track)"))
         #expect(lane.contains(".accessibilityElement(children: .contain)"))
         #expect(controls.contains("Task { await viewModel.toggleTrackMute(track) }"))

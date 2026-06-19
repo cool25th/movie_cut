@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 
-/// Phase 2-1 makes the true empty Media tab a large import/drop call-to-action
-/// while preserving the existing panel drop path and filtered-search empty state.
+/// Phase 2-1/P0 keeps the true empty Media tab importable while making it read
+/// as a compact browser surface instead of one oversized onboarding card.
 @Suite("Phase 2-1 Media Import CTA StaticContract")
 struct Phase21MediaImportCTAStaticContractTests {
     private func source(_ path: String) throws -> String {
@@ -21,8 +21,8 @@ struct Phase21MediaImportCTAStaticContractTests {
         return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
-    @Test("Media tab true empty state uses the large import CTA helper")
-    func mediaTabTrueEmptyStateUsesImportCTAHelper() throws {
+    @Test("Media tab true empty state uses compact browser surface helpers")
+    func mediaTabTrueEmptyStateUsesCompactBrowserSurfaceHelpers() throws {
         let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
         let mediaContent = try section(
             in: source,
@@ -42,25 +42,41 @@ struct Phase21MediaImportCTAStaticContractTests {
         #expect(!mediaContent.contains(".frame(maxWidth: 220)"))
 
         for marker in [
-            "Image(systemName: \"square.and.arrow.down\")",
-            ".font(.system(size: 44, weight: .semibold))",
-            "MovieCutTheme.accentCyan",
-            #"Text(NSLocalizedString("Import media", comment: ""))"#,
-            #"Drag media files here or choose files to start editing"#,
-            #"Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")"#,
+            "private var mediaCompactImportSourceRow: some View",
+            "private var mediaCompactDropTile: some View",
+            "private var mediaEmptyGridRhythm: some View",
+            "private func mediaEmptySkeletonCard(index: Int) -> some View",
+            "mediaCompactImportSourceRow",
+            "mediaCompactDropTile",
+            "mediaEmptyGridRhythm",
+            #"Label(NSLocalizedString("Local media", comment: ""), systemImage: "folder")"#,
+            #"Label(NSLocalizedString("Import", comment: ""), systemImage: "square.and.arrow.down")"#,
+            #"Text(NSLocalizedString("Drop files to import", comment: ""))"#,
+            #"Video, audio, and image assets appear in this grid."#,
             "openImportPanel()",
-            ".buttonStyle(.borderedProminent)",
-            ".controlSize(.large)",
-            #"Accepted: video, audio, images"#,
-            ".frame(maxWidth: .infinity, minHeight: 220)",
-            "padding: MovieCutSpacing.large"
+            "LazyVGrid(columns: libraryGridColumns",
+            "ForEach(0..<6, id: \\.self)",
+            ".frame(maxWidth: .infinity, minHeight: 82",
+            "MovieCutTheme.librarySourceRowBackground",
+            "MovieCutTheme.librarySkeletonFill",
+            ".movieCutLibraryBrowserCard("
         ] {
             #expect(importCTA.contains(marker))
         }
+
+        for oldLargeCardMarker in [
+            ".font(.system(size: 44, weight: .semibold))",
+            ".buttonStyle(.borderedProminent)",
+            ".controlSize(.large)",
+            ".frame(maxWidth: .infinity, minHeight: 220)",
+            "padding: MovieCutSpacing.large"
+        ] {
+            #expect(!importCTA.contains(oldLargeCardMarker))
+        }
     }
 
-    @Test("Media import CTA exposes accessible labels and drop hints")
-    func mediaImportCTAExposesAccessibleLabelsAndDropHints() throws {
+    @Test("Compact media import surface exposes accessible labels and drop hints")
+    func compactMediaImportSurfaceExposesAccessibleLabelsAndDropHints() throws {
         let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
         let importCTA = try section(
             in: source,

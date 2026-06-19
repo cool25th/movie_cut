@@ -37,6 +37,8 @@ enum MovieCutTheme {
     static let libraryRailButtonBackground: Color = rgb(0x2D, 0x2E, 0x32)
     static let libraryCardBackground: Color = rgb(0x32, 0x33, 0x36)
     static let libraryRaisedCardBackground: Color = rgb(0x38, 0x39, 0x3D)
+    static let librarySourceRowBackground: Color = rgb(0x28, 0x29, 0x2D)
+    static let librarySkeletonFill: Color = rgb(0x3A, 0x3B, 0x3F, opacity: 0.62)
     static let libraryThumbnailBackground: Color = rgb(0x36, 0x38, 0x3C)
     static let libraryThumbnailStripe: Color = rgb(0x46, 0x48, 0x4D, opacity: 0.42)
     static let inspectorSelectedPanelBackground: Color = rgb(0x21, 0x22, 0x25)
@@ -61,6 +63,7 @@ enum MovieCutTheme {
     static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)
     static let timelineTextClip: Color = rgb(0x3A, 0x2B, 0x1F)
     static let timelineStickerClip: Color = rgb(0x38, 0x25, 0x35)
+    static let timelineSelectedClipFill: Color = rgb(0x36, 0xD7, 0xFF, opacity: 0.10)
     static let divider: Color = rgb(0x35, 0x36, 0x3A, opacity: 0.46)
     static let border: Color = rgb(0x3D, 0x40, 0x46, opacity: 0.34)
     static let accentCyan: Color = rgb(0x36, 0xD7, 0xFF)
@@ -237,6 +240,20 @@ extension View {
             cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.inspectorSelectedRowBackground,
             border: MovieCutTheme.inspectorSelectedBorder.opacity(0.35)
+        )
+    }
+
+    func movieCutLibraryBrowserCard(
+        padding: CGFloat = MovieCutSpacing.small,
+        background: Color = MovieCutTheme.libraryCardBackground,
+        border: Color = MovieCutTheme.border.opacity(0.18),
+        isSelected: Bool = false
+    ) -> some View {
+        movieCutCard(
+            padding: padding,
+            cornerRadius: MovieCutRadius.small,
+            background: background,
+            border: isSelected ? MovieCutTheme.accentCyan.opacity(0.50) : border
         )
     }
 }

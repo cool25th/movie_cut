@@ -183,6 +183,11 @@ Acceptance criteria:
 - `git diff --check`, `swift build`, `swift test --filter StaticContract`, `xcodebuild ... build` pass.
 - New side-by-side screenshot stored under `/tmp/moviecut-ui-evidence/current-loop/`.
 
+Implementation note (2026-06-19):
+- P0 browser polish converted the empty Media tab from a single large import card into a compact local source row, smaller drop/import tile, and placeholder asset-grid rhythm using shared library-card styling.
+- P0 timeline polish made populated lanes more clip-first with quieter ruler/grid/header contrast, stronger selected clip outlines/fill, media-type striping, selected trim-handle affordances, and fallback thumbnail/waveform/text rhythms when generated media previews are unavailable.
+- Verification requirement for this pass remains `git diff --check`, `swift build`, and `swift test --filter StaticContract`; side-by-side screenshot capture should be refreshed separately when a matching populated MovieCut state is available.
+
 ### P1 — Preview + inspector hierarchy polish
 
 Why:

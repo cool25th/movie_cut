@@ -118,13 +118,14 @@ struct R601VisualParityDarkShellStaticContractTests {
             #".background(MovieCutTheme.timelineBackground)"#,
             #".fill(MovieCutTheme.rulerBackground)"#,
             #"private func timelineGridLines(height: CGFloat) -> some View"#,
-            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36))"#,
-            #".background(MovieCutTheme.trackHeaderBackground)"#,
+            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18))"#,
+            #".background(MovieCutTheme.trackHeaderBackground.opacity(0.74))"#,
             #".fill(MovieCutTheme.trackBackground)"#,
             #"MovieCutTheme.timelineVideoClip"#,
             #"MovieCutTheme.timelineAudioClip"#,
             #"MovieCutTheme.timelineTextClip"#,
-            #".fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))"#,
+            #".fill(clipAccent.opacity(isSelected ? 0.92 : 0.42))"#,
+            #"MovieCutTheme.timelineSelectedClipFill"#,
             #"timelineGridLines(height: trackHeight)"#,
         ] {
             #expect(timeline.contains(marker))

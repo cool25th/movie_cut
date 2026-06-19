@@ -71,7 +71,7 @@ struct Phase13CardDensityStaticContractTests {
 
         for marker in [
             #".fill(MovieCutTheme.rulerBackground)"#,
-            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36))"#,
+            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18))"#,
             #".fill(MovieCutTheme.trackBackground)"#,
         ] {
             #expect(timeline.contains(marker))

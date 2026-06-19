@@ -88,7 +88,7 @@ struct R504MainVideoTrackStaticContractTests {
         )
 
         for marker in [
-            ".background(MovieCutTheme.trackHeaderBackground)",
+            ".background(MovieCutTheme.trackHeaderBackground.opacity(0.74))",
             "trackHeaderControls(for: track)",
             "Rectangle()\n                    .fill(MovieCutTheme.trackBackground)",
             "timelineGridLines(height: trackHeight)",

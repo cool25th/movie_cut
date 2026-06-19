@@ -130,12 +130,13 @@ struct Phase24TypographyDensityStaticContractTests {
         }
 
         for marker in [
-            #"Text(NSLocalizedString("Import media", comment: ""))"#,
-            #"Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")"#,
+            #"Label(NSLocalizedString("Local media", comment: ""), systemImage: "folder")"#,
+            #"Label(NSLocalizedString("Import", comment: ""), systemImage: "square.and.arrow.down")"#,
+            #"Text(NSLocalizedString("Drop files to import", comment: ""))"#,
             ".font(MovieCutTypography.cardTitle)",
             ".font(MovieCutTypography.cardBody)",
-            ".font(MovieCutTypography.toolbar.weight(.semibold))",
-            ".font(MovieCutTypography.metadata)",
+            ".font(MovieCutTypography.metadata.weight(.semibold))",
+            "mediaEmptySkeletonCard(index: index)",
             "openImportPanel()"
         ] {
             #expect(importCTA.contains(marker))

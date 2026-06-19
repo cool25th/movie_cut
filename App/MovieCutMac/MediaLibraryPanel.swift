@@ -447,9 +447,8 @@ struct MediaLibraryPanel: View {
             .foregroundStyle(color)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .movieCutCard(
+            .movieCutLibraryBrowserCard(
                 padding: MovieCutSpacing.small,
-                cornerRadius: MovieCutRadius.small,
                 background: MovieCutTheme.libraryCardBackground,
                 border: MovieCutTheme.border.opacity(0.52)
             )
@@ -514,9 +513,8 @@ struct MediaLibraryPanel: View {
             )
         }
         .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
-        .movieCutCard(
+        .movieCutLibraryBrowserCard(
             padding: MovieCutSpacing.small,
-            cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.libraryCardBackground,
             border: isEnabled ? MovieCutTheme.border.opacity(0.52) : MovieCutTheme.border.opacity(0.32)
         )
@@ -731,7 +729,7 @@ struct MediaLibraryPanel: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .movieCutCard(background: MovieCutTheme.libraryCardBackground)
+        .movieCutLibraryBrowserCard(background: MovieCutTheme.libraryCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -747,7 +745,7 @@ struct MediaLibraryPanel: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .movieCutCard(background: MovieCutTheme.libraryCardBackground)
+        .movieCutLibraryBrowserCard(background: MovieCutTheme.libraryCardBackground)
         .accessibilityElement(children: .combine)
     }
 
@@ -825,9 +823,8 @@ struct MediaLibraryPanel: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: previewKind == nil ? 104 : 148, alignment: .topLeading)
-        .movieCutCard(
+        .movieCutLibraryBrowserCard(
             padding: MovieCutSpacing.small,
-            cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.libraryCardBackground
         )
         .help(libraryPreviewHelp(title: title, kind: previewKind, disabledReason: disabledReason))
@@ -889,9 +886,8 @@ struct MediaLibraryPanel: View {
             .foregroundStyle(MovieCutTheme.accentCyan.opacity(0.82))
         }
         .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
-        .movieCutCard(
+        .movieCutLibraryBrowserCard(
             padding: MovieCutSpacing.small,
-            cornerRadius: MovieCutRadius.small,
             background: MovieCutTheme.libraryCardBackground
         )
         .contentShape(Rectangle())
@@ -1118,61 +1114,133 @@ struct MediaLibraryPanel: View {
     }
 
     private var mediaImportCTAEmptyState: some View {
-        VStack {
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                mediaCompactImportSourceRow
+                mediaCompactDropTile
+                mediaEmptyGridRhythm
+            }
+            .padding(MovieCutSpacing.medium)
+        }
+        .movieCutScrollBackground(MovieCutTheme.libraryWellBackground)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+        .accessibilityHint(NSLocalizedString("Drop media files here to import them, or use the Import Media button.", comment: ""))
+    }
 
-            VStack(spacing: MovieCutSpacing.medium) {
+    private var mediaCompactImportSourceRow: some View {
+        HStack(spacing: MovieCutSpacing.small) {
+            Label(NSLocalizedString("Local media", comment: ""), systemImage: "folder")
+                .font(MovieCutTypography.metadata.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: MovieCutSpacing.small)
+
+            Button {
+                openImportPanel()
+            } label: {
+                Label(NSLocalizedString("Import", comment: ""), systemImage: "square.and.arrow.down")
+                    .font(MovieCutTypography.metadata.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(MovieCutTheme.accentCyan)
+            .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+            .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
+        }
+        .padding(.horizontal, MovieCutSpacing.small)
+        .padding(.vertical, MovieCutSpacing.xSmall)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.librarySourceRowBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.22), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var mediaCompactDropTile: some View {
+        Button {
+            openImportPanel()
+        } label: {
+            HStack(alignment: .center, spacing: MovieCutSpacing.medium) {
                 Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 44, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(MovieCutTheme.accentCyan)
-                    .frame(width: 72, height: 72)
+                    .frame(width: 36, height: 36)
                     .background(
                         Circle()
-                            .fill(MovieCutTheme.accentCyan.opacity(0.14))
+                            .fill(MovieCutTheme.accentCyan.opacity(0.12))
                     )
                     .accessibilityHidden(true)
 
-                VStack(spacing: MovieCutSpacing.xSmall) {
-                    Text(NSLocalizedString("Import media", comment: ""))
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
+                    Text(NSLocalizedString("Drop files to import", comment: ""))
                         .font(MovieCutTypography.cardTitle)
                         .foregroundStyle(.primary)
-                    Text(NSLocalizedString("Drag media files here or choose files to start editing", comment: ""))
+                        .lineLimit(1)
+                    Text(NSLocalizedString("Video, audio, and image assets appear in this grid.", comment: ""))
                         .font(MovieCutTypography.cardBody)
                         .foregroundStyle(MovieCutTheme.mutedText)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 280)
+                        .lineLimit(2)
                 }
 
-                Button {
-                    openImportPanel()
-                } label: {
-                    Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
-                        .font(MovieCutTypography.toolbar.weight(.semibold))
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .tint(MovieCutTheme.accentCyan)
-                .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
-                .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
-
-                Text(NSLocalizedString("Accepted: video, audio, images", comment: ""))
-                    .font(MovieCutTypography.metadata)
-                    .foregroundStyle(MovieCutTheme.mutedText)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 220)
-            .movieCutCard(
-                padding: MovieCutSpacing.large,
-                background: MovieCutTheme.libraryRaisedCardBackground,
-                border: MovieCutTheme.accentCyan.opacity(0.28)
-            )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
-            .accessibilityHint(NSLocalizedString("Drop media files here to import them, or use the Import Media button.", comment: ""))
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(MovieCutSpacing.medium)
+        .buttonStyle(.plain)
+        .movieCutLibraryBrowserCard(
+            padding: MovieCutSpacing.small,
+            background: MovieCutTheme.libraryRaisedCardBackground,
+            border: MovieCutTheme.accentCyan.opacity(0.24)
+        )
+        .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
+        .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
+    }
+
+    private var mediaEmptyGridRhythm: some View {
+        LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
+            ForEach(0..<6, id: \.self) { index in
+                mediaEmptySkeletonCard(index: index)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func mediaEmptySkeletonCard(index: Int) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.libraryThumbnailBackground.opacity(0.72))
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { column in
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(MovieCutTheme.librarySkeletonFill.opacity(column == index % 3 ? 0.86 : 0.54))
+                            .frame(width: 16 + CGFloat(column * 4), height: 24 + CGFloat((index + column) % 3) * 6)
+                    }
+                }
+                .padding(MovieCutSpacing.small)
+            }
+            .frame(height: 64)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(MovieCutTheme.librarySkeletonFill)
+                .frame(width: index.isMultiple(of: 2) ? 72 : 96, height: 6)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(MovieCutTheme.librarySkeletonFill.opacity(0.56))
+                .frame(width: 52, height: 5)
+        }
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .movieCutLibraryBrowserCard(
+            padding: MovieCutSpacing.small,
+            background: MovieCutTheme.libraryCardBackground.opacity(0.72),
+            border: MovieCutTheme.border.opacity(0.10)
+        )
     }
 
     private func assetGridCard(_ asset: MediaAsset) -> some View {
@@ -1193,9 +1261,8 @@ struct MediaLibraryPanel: View {
             assetStateText(asset)
         }
         .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
-        .movieCutCard(
+        .movieCutLibraryBrowserCard(
             padding: MovieCutSpacing.small,
-            cornerRadius: MovieCutRadius.small,
             background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.libraryRaisedCardBackground : MovieCutTheme.libraryCardBackground,
             border: asset.id == viewModel.selectedAssetId ? MovieCutTheme.accentCyan.opacity(0.45) : Color.clear
         )

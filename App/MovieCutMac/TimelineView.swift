@@ -187,11 +187,11 @@ struct TimelineView: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.controlSurface.opacity(0.78))
+                .fill(MovieCutTheme.controlSurface.opacity(0.52))
         )
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .stroke(MovieCutTheme.border.opacity(0.54), lineWidth: 0.5)
+                .stroke(MovieCutTheme.border.opacity(0.24), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: ""))
@@ -440,8 +440,8 @@ struct TimelineView: View {
                                 p.move(to: CGPoint(x: x, y: rulerHeight))
                                 p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
                             },
-                            with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.82) : MovieCutTheme.timelineGrid.opacity(0.48)),
-                            lineWidth: isMajor ? 0.8 : 0.4
+                            with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.58) : MovieCutTheme.timelineGrid.opacity(0.28)),
+                            lineWidth: isMajor ? 0.6 : 0.3
                         )
 
                         if isMajor {
@@ -500,8 +500,8 @@ struct TimelineView: View {
                         path.move(to: CGPoint(x: x, y: 0))
                         path.addLine(to: CGPoint(x: x, y: height))
                     },
-                    with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.64) : MovieCutTheme.timelineGrid.opacity(0.36)),
-                    lineWidth: isMajor ? 0.5 : 0.35
+                    with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18)),
+                    lineWidth: isMajor ? 0.4 : 0.25
                 )
 
                 time += interval
@@ -580,7 +580,12 @@ struct TimelineView: View {
             }
             .frame(width: 80, alignment: .leading)
             .padding(.horizontal, MovieCutSpacing.small)
-            .background(MovieCutTheme.trackHeaderBackground)
+            .background(MovieCutTheme.trackHeaderBackground.opacity(0.74))
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(MovieCutTheme.divider.opacity(0.42))
+                    .frame(width: 0.5)
+            }
             .overlay(alignment: .leading) {
                 mainVideoTrackHeaderAccent(isMainVideo: isMainVideo)
             }
@@ -681,8 +686,8 @@ struct TimelineView: View {
             .accessibilityValue(track.isLocked ? NSLocalizedString("Locked", comment: "") : NSLocalizedString("Unlocked", comment: ""))
             .accessibilityHint(NSLocalizedString("Toggles editing protection for this track.", comment: ""))
         }
-        .font(MovieCutTypography.metadata)
-        .foregroundStyle(.secondary)
+        .font(MovieCutTypography.metadata.weight(.medium))
+        .foregroundStyle(MovieCutTheme.mutedText.opacity(0.86))
     }
 
     @MainActor
@@ -697,8 +702,17 @@ struct TimelineView: View {
             RoundedRectangle(cornerRadius: MovieCutRadius.small)
                 .fill(colorForClip(clip: clip, trackKind: trackKind, selected: isSelected))
                 .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                            .fill(MovieCutTheme.timelineSelectedClipFill)
+                    }
+                }
+                .overlay {
                     clipMediaBackground(for: clip, trackKind: trackKind, selected: isSelected)
                         .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small))
+                }
+                .overlay(alignment: .top) {
+                    clipMediaTypeStripe(accent: clipAccent, selected: isSelected)
                 }
                 .overlay(alignment: .leading) {
                     Text(clipLabel(clip))
@@ -706,6 +720,12 @@ struct TimelineView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .padding(.horizontal, MovieCutSpacing.xSmall)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.black.opacity(isSelected ? 0.34 : 0.22))
+                        )
+                        .padding(.leading, MovieCutSpacing.xSmall)
                 }
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 2) {
@@ -725,18 +745,21 @@ struct TimelineView: View {
                 }
                 .overlay(alignment: .leading) {
                     Rectangle()
-                        .fill(clipAccent.opacity(isSelected ? 0.86 : 0.52))
-                        .frame(width: isSelected ? 3 : 2)
+                        .fill(clipAccent.opacity(isSelected ? 0.92 : 0.42))
+                        .frame(width: isSelected ? 4 : 2)
                 }
                 .overlay {
                     if isSelected {
                         RoundedRectangle(cornerRadius: MovieCutRadius.small)
-                            .stroke(clipAccent.opacity(0.86), lineWidth: 1)
+                            .strokeBorder(clipAccent.opacity(0.98), lineWidth: 1.6)
+                        RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                            .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.5)
                     } else {
                         RoundedRectangle(cornerRadius: MovieCutRadius.small)
                             .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                     }
                 }
+                .shadow(color: isSelected ? clipAccent.opacity(0.26) : Color.clear, radius: isSelected ? 3 : 0, x: 0, y: 0)
                 .contentShape(Rectangle())
                 .gesture(moveGesture(for: clip))
                 .accessibilityElement()
@@ -756,9 +779,7 @@ struct TimelineView: View {
                 }
 
             HStack(spacing: 0) {
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(width: trimHandleWidth)
+                clipTrimHandle(selected: isSelected)
                     .contentShape(Rectangle())
                     .gesture(leftTrimGesture(for: clip))
                     .accessibilityElement()
@@ -767,9 +788,7 @@ struct TimelineView: View {
 
                 Spacer(minLength: 0)
 
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(width: trimHandleWidth)
+                clipTrimHandle(selected: isSelected)
                     .contentShape(Rectangle())
                     .gesture(rightTrimGesture(for: clip))
                     .accessibilityElement()
@@ -842,6 +861,26 @@ struct TimelineView: View {
             }
     }
 
+    private func clipMediaTypeStripe(accent: Color, selected: Bool) -> some View {
+        Rectangle()
+            .fill(accent.opacity(selected ? 0.58 : 0.26))
+            .frame(height: selected ? 3 : 2)
+            .allowsHitTesting(false)
+    }
+
+    private func clipTrimHandle(selected: Bool) -> some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.clear)
+            if selected {
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.42))
+                    .frame(width: 2, height: 22)
+            }
+        }
+        .frame(width: trimHandleWidth)
+    }
+
     @ViewBuilder
     private func clipMediaBackground(for clip: Clip, trackKind: TrackKind, selected: Bool) -> some View {
         if let image = thumbnailImage(for: clip) {
@@ -849,9 +888,13 @@ struct TimelineView: View {
             Color.black.opacity(selected ? 0.46 : 0.34)
                 .allowsHitTesting(false)
         } else if shouldRenderWaveform(for: clip, trackKind: trackKind) {
-            waveformCanvas(for: clip)
+            waveformCanvas(for: clip, selected: selected)
             Color.black.opacity(selected ? 0.20 : 0.28)
                 .allowsHitTesting(false)
+        } else if trackKind == .text || clip.kind == .text {
+            textClipRhythmStrip(for: clip, selected: selected)
+        } else {
+            clipPlaceholderRhythm(accent: accentForClip(clip: clip, trackKind: trackKind), selected: selected)
         }
     }
 
@@ -889,15 +932,15 @@ struct TimelineView: View {
         trackKind != .text && (clip.kind == .audio || clip.kind == .video)
     }
 
-    private func waveformCanvas(for clip: Clip) -> some View {
+    private func waveformCanvas(for clip: Clip, selected: Bool) -> some View {
         Canvas { context, size in
             let samples = viewModel.waveform(for: clip)
-            guard !samples.isEmpty else { return }
-
-            let barWidth = max(1, size.width / CGFloat(samples.count))
+            let sampleCount = samples.isEmpty ? max(12, Int(size.width / 7)) : samples.count
+            let barWidth = max(1, size.width / CGFloat(sampleCount))
             let midY = size.height / 2
 
-            for (index, sample) in samples.enumerated() {
+            for index in 0..<sampleCount {
+                let sample = samples.isEmpty ? fallbackWaveformLevel(index: index) : samples[index]
                 let barHeight = CGFloat(sample) * size.height * 0.8
                 let rect = CGRect(
                     x: CGFloat(index) * barWidth,
@@ -905,8 +948,44 @@ struct TimelineView: View {
                     width: max(1, barWidth - 0.5),
                     height: barHeight
                 )
-                context.fill(Path(rect), with: .color(.white.opacity(0.28)))
+                context.fill(Path(rect), with: .color(.white.opacity(selected ? 0.36 : 0.24)))
             }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func fallbackWaveformLevel(index: Int) -> CGFloat {
+        let pattern: [CGFloat] = [0.22, 0.46, 0.32, 0.64, 0.38, 0.54, 0.28, 0.42]
+        return pattern[index % pattern.count]
+    }
+
+    private func textClipRhythmStrip(for clip: Clip, selected: Bool) -> some View {
+        GeometryReader { proxy in
+            let glyphCount = max(3, min(14, Int(proxy.size.width / 18)))
+            HStack(spacing: 4) {
+                ForEach(0..<glyphCount, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.white.opacity(index.isMultiple(of: 3) ? (selected ? 0.28 : 0.18) : (selected ? 0.18 : 0.12)))
+                        .frame(width: index.isMultiple(of: 4) ? 12 : 8, height: 12 + CGFloat(index % 3) * 3)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func clipPlaceholderRhythm(accent: Color, selected: Bool) -> some View {
+        GeometryReader { proxy in
+            let tileCount = max(2, min(10, Int(proxy.size.width / 36)))
+            HStack(spacing: 3) {
+                ForEach(0..<tileCount, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                        .fill(accent.opacity(index.isMultiple(of: 2) ? (selected ? 0.22 : 0.13) : (selected ? 0.14 : 0.08)))
+                        .frame(width: 28, height: max(14, proxy.size.height - 14))
+                }
+            }
+            .padding(.horizontal, MovieCutSpacing.small)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .allowsHitTesting(false)
     }

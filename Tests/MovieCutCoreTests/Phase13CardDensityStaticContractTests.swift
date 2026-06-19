@@ -48,8 +48,10 @@ struct Phase13CardDensityStaticContractTests {
             #"background: MovieCutTheme.inspectorSelectedCardBackground"#,
             #"border: MovieCutTheme.inspectorSelectedBorder"#,
             #"func movieCutInspectorSelectedFlatRow() -> some View"#,
-            #"background: MovieCutTheme.inspectorSelectedRowBackground"#,
-            #"border: MovieCutTheme.inspectorSelectedBorder.opacity(0.35)"#,
+            #"background: MovieCutTheme.inspectorSelectedRowBackground.opacity(0.74)"#,
+            #"border: MovieCutTheme.inspectorSelectedBorder.opacity(0.18)"#,
+            #"func movieCutInspectorSelectedHeader() -> some View"#,
+            #"func movieCutInspectorOverviewGroup("#,
         ] {
             #expect(shared.contains(marker))
         }

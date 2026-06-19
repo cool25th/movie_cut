@@ -679,11 +679,11 @@ struct InspectorBasicSection: View {
         .padding(MovieCutSpacing.xSmall)
         .background(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.controlSurface.opacity(0.60))
+                .fill(MovieCutTheme.inspectorSelectedControlSurface.opacity(0.58))
         )
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .stroke(MovieCutTheme.border, lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.18), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Speed curve point \(pointNumber)")

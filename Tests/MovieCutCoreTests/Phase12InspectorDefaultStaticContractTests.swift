@@ -31,14 +31,16 @@ struct Phase12InspectorDefaultStaticContractTests {
         )
 
         #expect(body.contains("ProjectOverviewInspectorView(viewModel: viewModel)"))
-        #expect(body.contains("projectToolsSections(carded: true)"))
+        #expect(body.contains("DisclosureGroup(isExpanded: $projectToolsExpanded)"))
+        #expect(body.contains("projectToolsSections(carded: false)"))
+        #expect(body.contains(".movieCutInspectorOverviewGroup("))
         #expect(!body.contains("EmptyInspectorSelectionView()"))
         #expect(!body.contains("InspectorExportSection(viewModel: viewModel)"))
         #expect(!body.contains(".movieCutCard(padding: 0, background: MovieCutTheme.cardBackground)"))
     }
 
-    @Test("Project overview contains compact cards and accessibility markers")
-    func projectOverviewContainsCompactCardsAndAccessibilityMarkers() throws {
+    @Test("Project overview contains compact groups and accessibility markers")
+    func projectOverviewContainsCompactGroupsAndAccessibilityMarkers() throws {
         let inspector = try source("App/MovieCutMac/InspectorPanel.swift")
         let overview = try section(
             in: inspector,
@@ -47,17 +49,21 @@ struct Phase12InspectorDefaultStaticContractTests {
         )
 
         for marker in [
+            "P1 inspector polish contract",
+            "ProjectOverviewHeader(",
+            "ProjectOverviewSummaryStrip(items:",
+            "@State private var isExportSummaryExpanded = false",
+            "DisclosureGroup(isExpanded: $isExportSummaryExpanded)",
             #"title: "Project""#,
             #"title: "Canvas""#,
             #"title: "Timeline""#,
             #"title: "Export Summary""#,
             #"Text("Select a clip")"#,
-            "MovieCutSectionCard(title: title, systemImage: systemImage)",
-            "MovieCutTheme.controlSurface",
+            "movieCutInspectorOverviewGroup",
             #"accessibilityLabel: "Project information""#,
             #"accessibilityLabel: "Canvas information""#,
             #"accessibilityLabel: "Timeline information""#,
-            #"accessibilityLabel: "Export summary""#,
+            #".accessibilityLabel("Export summary")"#,
             #".accessibilityLabel("Select a clip")"#,
             #".accessibilityHint("Select a timeline clip to show clip-specific inspector controls.")"#,
             #"Use the top-right export control to export or choose formats."#
@@ -82,6 +88,8 @@ struct Phase12InspectorDefaultStaticContractTests {
             to: "} else {"
         )
 
+        #expect(body.contains("SelectedClipHeaderView(clip: clip)"))
+        #expect(body.contains(".movieCutInspectorSelectedHeader()"))
         #expect(body.contains("selectedClipInspectorSections(for: clip)"))
         #expect(body.contains("DisclosureGroup(isExpanded: $projectToolsExpanded)"))
         #expect(body.contains("projectToolsSections(carded: false)"))

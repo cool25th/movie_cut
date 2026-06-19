@@ -160,8 +160,8 @@ struct IAMenuPositionStaticContractTests {
             "previewTransportBar"
         ])
         #expect(canvasWell.contains(".padding(.top, 16)"))
-        #expect(canvasWell.contains(".padding(.bottom, 76)"))
-        #expect(transport.contains(".padding(.bottom, 10)"))
+        #expect(canvasWell.contains(".padding(.bottom, 64)"))
+        #expect(transport.contains(".padding(.bottom, 8)"))
         #expect(!transport.contains(".padding(.top, 8)"))
     }
 

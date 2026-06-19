@@ -33,6 +33,9 @@ struct InspectorPanel: View {
                     // first so they are reachable without scrolling past the
                     // project-wide tools; those collapse into a disclosure.
                     if let clip = viewModel.selectedClip {
+                        SelectedClipHeaderView(clip: clip)
+                            .movieCutInspectorSelectedHeader()
+
                         selectedClipInspectorSections(for: clip)
 
                         Divider()
@@ -51,7 +54,20 @@ struct InspectorPanel: View {
                         .movieCutInspectorSelectedFlatRow()
                     } else {
                         ProjectOverviewInspectorView(viewModel: viewModel)
-                        projectToolsSections(carded: true)
+                        DisclosureGroup(isExpanded: $projectToolsExpanded) {
+                            projectToolsSections(carded: false)
+                                .padding(.top, MovieCutSpacing.small)
+                        } label: {
+                            MovieCutIconTitle(
+                                title: "Project Tools",
+                                systemImage: "wrench.and.screwdriver",
+                                titleFont: .caption.weight(.semibold)
+                            )
+                        }
+                        .movieCutInspectorOverviewGroup(
+                            background: MovieCutTheme.controlSurface.opacity(0.24),
+                            border: MovieCutTheme.border.opacity(0.08)
+                        )
                     }
                 }
                 .padding(MovieCutSpacing.small)
@@ -99,7 +115,7 @@ struct InspectorPanel: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .stroke(MovieCutTheme.inspectorSelectedBorder, lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.34), lineWidth: 0.5)
         )
         .accessibilityLabel("Inspector section")
         .accessibilityHint("Switches between clip inspector sections.")
@@ -151,9 +167,24 @@ struct InspectorPanel: View {
 
 private struct ProjectOverviewInspectorView: View {
     var viewModel: EditorViewModel
+    @State private var isExportSummaryExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            // P1 inspector polish contract: no-selection remains useful but
+            // reads as compact project context, not a dashboard card stack.
+            ProjectOverviewHeader(
+                projectName: viewModel.projectDisplayName,
+                status: viewModel.projectSaveStatusLabel,
+                mediaCount: countText(viewModel.currentProject.mediaLibrary.assets.count, singular: "asset")
+            )
+
+            ProjectOverviewSummaryStrip(items: [
+                ProjectOverviewSummaryItem(title: "Canvas", value: viewModel.canvasResolutionBadgeText),
+                ProjectOverviewSummaryItem(title: "Timeline", value: durationText),
+                ProjectOverviewSummaryItem(title: "Clips", value: countText(clipCount, singular: "clip"))
+            ])
+
             ProjectOverviewInfoCard(
                 title: "Project",
                 systemImage: "doc.text",
@@ -191,18 +222,45 @@ private struct ProjectOverviewInspectorView: View {
                 ProjectOverviewRow(title: "Duration", value: durationText)
             }
 
-            ProjectOverviewInfoCard(
-                title: "Export Summary",
-                systemImage: "square.and.arrow.up",
-                accessibilityLabel: "Export summary",
-                accessibilityValue: exportAccessibilityValue,
-                accessibilityHint: "Summarizes read-only settings for the next export. Use the top-right export control to export or choose formats."
-            ) {
-                ProjectOverviewRow(title: "Output", value: viewModel.canvasResolutionBadgeText)
-                ProjectOverviewRow(title: "Format", value: viewModel.currentProject.exportSettings.containerFormat.displayName)
-                ProjectOverviewRow(title: "Video", value: videoSummaryText)
-                ProjectOverviewRow(title: "Audio", value: viewModel.currentProject.exportSettings.audioCodec.inspectorDisplayName)
+            DisclosureGroup(isExpanded: $isExportSummaryExpanded) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                    ProjectOverviewRow(title: "Output", value: viewModel.canvasResolutionBadgeText)
+                    ProjectOverviewRow(title: "Format", value: viewModel.currentProject.exportSettings.containerFormat.displayName)
+                    ProjectOverviewRow(title: "Video", value: videoSummaryText)
+                    ProjectOverviewRow(title: "Audio", value: viewModel.currentProject.exportSettings.audioCodec.inspectorDisplayName)
+                }
+                .padding(.top, MovieCutSpacing.xSmall)
+            } label: {
+                HStack(spacing: MovieCutSpacing.small) {
+                    MovieCutIconTitle(
+                        title: "Export Summary",
+                        systemImage: "square.and.arrow.up",
+                        subtitle: "\(viewModel.canvasResolutionBadgeText) · \(viewModel.currentProject.exportSettings.containerFormat.displayName)",
+                        titleFont: MovieCutTypography.cardTitle
+                    )
+                    .foregroundStyle(.secondary)
+
+                    Spacer(minLength: MovieCutSpacing.small)
+
+                    Text("Export")
+                        .font(MovieCutTypography.micro)
+                        .foregroundStyle(MovieCutTheme.mutedText)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(MovieCutTheme.panelBackgroundRaised.opacity(0.72))
+                        )
+                }
             }
+            .movieCutInspectorOverviewGroup(
+                background: MovieCutTheme.controlSurface.opacity(0.26),
+                border: MovieCutTheme.border.opacity(0.08)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Export summary")
+            .accessibilityValue(exportAccessibilityValue)
+            .accessibilityHint("Summarizes read-only settings for the next export. Use the top-right export control to export or choose formats.")
 
             ProjectOverviewSelectionHint()
         }
@@ -258,6 +316,149 @@ private struct ProjectOverviewInspectorView: View {
     }
 }
 
+private struct SelectedClipHeaderView: View {
+    let clip: Clip
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MovieCutSpacing.small) {
+            MovieCutIconTitle(
+                title: selectedTitle,
+                systemImage: systemImage,
+                subtitle: selectedSubtitle,
+                iconColor: MovieCutTheme.accentCyan,
+                titleFont: .caption.weight(.semibold)
+            )
+
+            Spacer(minLength: MovieCutSpacing.small)
+
+            Text(kindBadgeText)
+                .font(MovieCutTypography.micro)
+                .foregroundStyle(MovieCutTheme.accentCyan)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(MovieCutTheme.accentCyan.opacity(0.12))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(MovieCutTheme.accentCyan.opacity(0.24), lineWidth: 0.5)
+                )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Selected clip")
+        .accessibilityValue("\(kindBadgeText), \(durationText)")
+        .accessibilityHint("Shows the active inspector context for the selected timeline clip.")
+    }
+
+    private var selectedTitle: String {
+        "\(kindBadgeText) Inspector"
+    }
+
+    private var selectedSubtitle: String {
+        "Duration \(durationText)"
+    }
+
+    private var kindBadgeText: String {
+        if clip.kind == .text, let textContent = clip.textContent, textContent.isSticker {
+            return "Sticker"
+        }
+
+        return clip.kind.rawValue.capitalized
+    }
+
+    private var systemImage: String {
+        switch clip.kind {
+        case .video:
+            return "film"
+        case .image:
+            return "photo"
+        case .audio:
+            return "waveform"
+        case .text:
+            return "textformat"
+        }
+    }
+
+    private var durationText: String {
+        String(format: "%.2fs", clip.timelineRange.duration)
+    }
+}
+
+private struct ProjectOverviewHeader: View {
+    let projectName: String
+    let status: String
+    let mediaCount: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MovieCutSpacing.small) {
+            MovieCutIconTitle(
+                title: projectName,
+                systemImage: "slider.horizontal.below.rectangle",
+                subtitle: mediaCount,
+                iconColor: MovieCutTheme.mutedText,
+                titleFont: .caption.weight(.semibold)
+            )
+
+            Spacer(minLength: MovieCutSpacing.small)
+
+            Text(status)
+                .font(MovieCutTypography.micro)
+                .foregroundStyle(MovieCutTheme.mutedText)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(MovieCutTheme.controlSurface.opacity(0.72))
+                )
+        }
+        .movieCutInspectorOverviewGroup(
+            background: MovieCutTheme.panelBackgroundRaised.opacity(0.56),
+            border: MovieCutTheme.border.opacity(0.08)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Project overview")
+        .accessibilityValue("\(projectName), \(status), \(mediaCount)")
+    }
+}
+
+private struct ProjectOverviewSummaryItem: Identifiable {
+    var id: String { title }
+    let title: String
+    let value: String
+}
+
+private struct ProjectOverviewSummaryStrip: View {
+    let items: [ProjectOverviewSummaryItem]
+
+    var body: some View {
+        HStack(spacing: MovieCutSpacing.xSmall) {
+            ForEach(items) { item in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.title)
+                        .font(MovieCutTypography.micro)
+                        .foregroundStyle(MovieCutTheme.mutedText)
+                    Text(item.value)
+                        .font(MovieCutTypography.metadata.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                        .fill(MovieCutTheme.controlSurface.opacity(0.42))
+                )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(item.title)
+                .accessibilityValue(item.value)
+            }
+        }
+    }
+}
+
 private struct ProjectOverviewInfoCard<Content: View>: View {
     let title: String
     let systemImage: String
@@ -283,11 +484,15 @@ private struct ProjectOverviewInfoCard<Content: View>: View {
     }
 
     var body: some View {
-        MovieCutSectionCard(title: title, systemImage: systemImage) {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            MovieCutIconTitle(title: title, systemImage: systemImage, titleFont: MovieCutTypography.cardTitle)
+                .foregroundStyle(.secondary)
+
             VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
                 content
             }
         }
+        .movieCutInspectorOverviewGroup()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
@@ -315,11 +520,11 @@ private struct ProjectOverviewRow: View {
                 .minimumScaleFactor(0.8)
                 .multilineTextAlignment(.trailing)
         }
-        .padding(.horizontal, MovieCutSpacing.small)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 0)
+        .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                .fill(MovieCutTheme.controlSurface)
+                .fill(Color.clear)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
@@ -346,7 +551,10 @@ private struct ProjectOverviewSelectionHint: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .movieCutCard(background: MovieCutTheme.controlSurface)
+        .movieCutInspectorOverviewGroup(
+            background: MovieCutTheme.controlSurface.opacity(0.34),
+            border: MovieCutTheme.border.opacity(0.08)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Select a clip")
         .accessibilityHint("Select a timeline clip to show clip-specific inspector controls.")

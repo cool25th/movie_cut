@@ -37,6 +37,8 @@ struct PreviewPanel: View {
 
                 // IA/menu-position contract: preview transport is bottom-docked
                 // near the timeline boundary, not top-docked above the canvas.
+                // P1 preview polish contract: compact bottom transport retained
+                // with a quiet empty matte and secondary preview import CTA.
                 VStack {
                     Spacer(minLength: 0)
                     previewTransportBar
@@ -68,10 +70,10 @@ struct PreviewPanel: View {
             RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
                 .fill(MovieCutTheme.previewLoop4WellSurface)
 
-            PreviewLoop4WellTexture()
+            PreviewLoop4WellTexture(intensity: 0.28)
 
             content()
-                .padding(MovieCutSpacing.large + MovieCutSpacing.medium)
+                .padding(MovieCutSpacing.large + MovieCutSpacing.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
@@ -81,12 +83,12 @@ struct PreviewPanel: View {
         )
         .padding(.horizontal, 18)
         .padding(.top, 16)
-        .padding(.bottom, 76)
+        .padding(.bottom, 64)
     }
 
     private var previewTransportBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 previewTimeBadge(
                     title: NSLocalizedString("Current", comment: ""),
                     value: timecodeString(playbackEngine.currentTime),
@@ -105,14 +107,18 @@ struct PreviewPanel: View {
                     accessibilityLabel: NSLocalizedString("Duration", comment: "")
                 )
 
+                Divider()
+                    .overlay(MovieCutTheme.divider.opacity(0.55))
+                    .frame(height: 20)
+
                 previewCanvasResolutionBadge
                 previewSafeZoneToggle
                 previewZoomControls
                 previewVolumeControl
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 14) {
+            VStack(spacing: 6) {
+                HStack(spacing: 10) {
                     previewTimeBadge(
                         title: NSLocalizedString("Current", comment: ""),
                         value: timecodeString(playbackEngine.currentTime),
@@ -132,7 +138,7 @@ struct PreviewPanel: View {
                     )
                 }
 
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     previewCanvasResolutionBadge
                     previewSafeZoneToggle
 
@@ -146,22 +152,22 @@ struct PreviewPanel: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
         .background(MovieCutTheme.previewControlBackground)
-        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
-                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.42), lineWidth: 0.5)
         )
         .padding(.horizontal, 12)
-        .padding(.bottom, 10)
+        .padding(.bottom, 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview transport controls", comment: ""))
     }
 
     private var playbackTransportCapsule: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Button(action: {
                 seekByFrames(-1)
             }) {
@@ -174,8 +180,8 @@ struct PreviewPanel: View {
 
             Button(action: { playbackEngine.togglePlayPause() }) {
                 Image(systemName: playbackEngine.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title3.weight(.semibold))
-                    .frame(width: 30, height: 30)
+                    .font(.body.weight(.semibold))
+                    .frame(width: 26, height: 26)
             }
             .buttonStyle(.borderless)
             .disabled(playbackEngine.playerItem == nil)
@@ -192,8 +198,8 @@ struct PreviewPanel: View {
             .accessibilityLabel(NSLocalizedString("Seek Forward One Frame", comment: ""))
             .accessibilityHint(NSLocalizedString("Moves the playhead forward by one frame.", comment: ""))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
         .background(
             Capsule()
                 .fill(MovieCutTheme.inspectorSelectedControlSurface)
@@ -214,7 +220,7 @@ struct PreviewPanel: View {
                     playbackEngine.player.volume = Float(newValue)
                 }
             ), in: 0 ... 1)
-            .frame(width: 84)
+            .frame(width: 72)
             .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
             .accessibilityValue(String(format: NSLocalizedString("%.0f%%", comment: ""), previewVolume * 100))
             .accessibilityHint(NSLocalizedString("Adjusts preview playback volume.", comment: ""))
@@ -254,7 +260,7 @@ struct PreviewPanel: View {
                     setManualPreviewZoom(newValue)
                 }
             ), in: previewZoomRange, step: 0.05)
-            .frame(width: 78)
+            .frame(width: 68)
             .accessibilityLabel(NSLocalizedString("Preview zoom slider", comment: ""))
             .accessibilityValue(previewZoomDisplay)
             .accessibilityHint(NSLocalizedString("Adjusts preview zoom without changing export or canvas settings.", comment: ""))
@@ -268,15 +274,15 @@ struct PreviewPanel: View {
             .accessibilityLabel(NSLocalizedString("Zoom Preview In", comment: ""))
             .accessibilityHint(NSLocalizedString("Increases the preview zoom.", comment: ""))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
         .background(
             Capsule()
-                .fill(MovieCutTheme.inspectorSelectedControlSurface)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface.opacity(0.88))
         )
         .overlay(
             Capsule()
-                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.40), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview zoom controls", comment: ""))
@@ -294,12 +300,12 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.16) : MovieCutTheme.inspectorSelectedControlSurface)
+                .fill(showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.16) : MovieCutTheme.inspectorSelectedControlSurface.opacity(0.88))
         )
         .overlay(
             Capsule()
                 .stroke(
-                    showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.42) : MovieCutTheme.inspectorSelectedBorder.opacity(0.82),
+                    showsSafeZoneGuides ? MovieCutTheme.accentCyan.opacity(0.42) : MovieCutTheme.inspectorSelectedBorder.opacity(0.40),
                     lineWidth: 0.5
                 )
         )
@@ -389,21 +395,21 @@ struct PreviewPanel: View {
     }
 
     private var previewEmptyState: some View {
-        VStack(spacing: MovieCutSpacing.small) {
+        VStack(spacing: MovieCutSpacing.xSmall) {
             Image(systemName: hasImportedMedia ? "play.rectangle" : "plus.rectangle.on.rectangle")
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(.white.opacity(0.55))
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(.white.opacity(0.44))
                 .accessibilityHidden(true)
 
             VStack(spacing: 3) {
                 Text(emptyStateTitle)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.86))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.78))
                 Text(emptyStateMessage)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.55))
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.50))
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 260)
+                    .frame(maxWidth: 220)
             }
 
             Button {
@@ -412,17 +418,17 @@ struct PreviewPanel: View {
                 Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")
                     .font(.caption.weight(.semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .accessibilityLabel(NSLocalizedString("Import media", comment: ""))
             .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
         }
-        .frame(maxWidth: 300)
+        .frame(maxWidth: 250)
         .movieCutCard(
-            padding: 14,
-            cornerRadius: MovieCutRadius.medium,
-            background: MovieCutTheme.previewEmptyStateBackground,
-            border: MovieCutTheme.border.opacity(0.55)
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.previewEmptyStateBackground.opacity(0.74),
+            border: MovieCutTheme.border.opacity(0.18)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(emptyStateTitle)
@@ -430,7 +436,7 @@ struct PreviewPanel: View {
     }
 
     private func previewTimeBadge(title: String, value: String, accessibilityLabel: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(title)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -438,7 +444,7 @@ struct PreviewPanel: View {
                 .font(.system(.caption, design: .monospaced).weight(.medium))
                 .foregroundStyle(.primary)
         }
-        .frame(width: 86, alignment: .leading)
+        .frame(width: 104, alignment: .leading)
         .accessibilityElement()
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(value)
@@ -459,11 +465,11 @@ struct PreviewPanel: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(MovieCutTheme.inspectorSelectedControlSurface)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface.opacity(0.88))
         )
         .overlay(
             Capsule()
-                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.40), lineWidth: 0.5)
         )
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
@@ -744,9 +750,11 @@ private extension Color {
 }
 
 private struct PreviewLoop4WellTexture: View {
+    var intensity: Double = 1
+
     var body: some View {
         Canvas { context, size in
-            for index in 0..<7 {
+            for index in 0..<5 {
                 let x = size.width * (0.08 + CGFloat(index) * 0.17)
                 let y = size.height * (0.18 + CGFloat(index % 2) * 0.08)
                 let rect = CGRect(
@@ -757,24 +765,24 @@ private struct PreviewLoop4WellTexture: View {
                 )
                 context.fill(
                     Self.roundedRectPath(rect, radius: 5),
-                    with: .color(MovieCutTheme.previewLoop4MatteBlock.opacity(index.isMultiple(of: 2) ? 0.66 : 0.48))
+                    with: .color(MovieCutTheme.previewLoop4MatteBlock.opacity((index.isMultiple(of: 2) ? 0.42 : 0.30) * intensity))
                 )
             }
 
-            for index in 0..<8 {
+            for index in 0..<6 {
                 let x = size.width * (0.14 + CGFloat(index) * 0.10)
                 var line = Path()
                 line.move(to: CGPoint(x: x, y: size.height * 0.10))
                 line.addLine(to: CGPoint(x: x + size.width * 0.10, y: size.height * 0.90))
-                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.58)), lineWidth: 0.9)
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.34 * intensity)), lineWidth: 0.7)
             }
 
-            for index in 0..<6 {
+            for index in 0..<4 {
                 let y = size.height * (0.22 + CGFloat(index) * 0.10)
                 var line = Path()
                 line.move(to: CGPoint(x: size.width * 0.08, y: y))
                 line.addLine(to: CGPoint(x: size.width * 0.92, y: y))
-                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.36)), lineWidth: 0.8)
+                context.stroke(line, with: .color(MovieCutTheme.previewLoop4MatteLine.opacity(0.24 * intensity)), lineWidth: 0.7)
             }
         }
         .allowsHitTesting(false)

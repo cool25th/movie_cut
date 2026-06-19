@@ -204,6 +204,11 @@ Acceptance criteria:
 - Inspector no-selection is useful but lower-noise.
 - Selected video/text/audio inspector states remain immediately understandable.
 
+Implementation note (2026-06-19):
+- P1 preview polish kept the transport bottom-docked while reducing transport padding, nested border emphasis, and empty preview CTA weight; the empty well now uses a quieter matte texture and a secondary import action that still opens the existing import panel.
+- P1 inspector polish converted the no-selection state into a compact project header, summary strip, flatter Project/Canvas/Timeline groups, collapsed Export Summary, and collapsed Project Tools group. Selected clip states now start with a clear selected-clip header while preserving visual subtabs and existing video/text/audio controls.
+- Static coverage was added for the compact bottom transport, quiet empty preview matte/CTA, collapsed no-selection export summary, and selected inspector header/row rhythm.
+
 ### P2 — Top chrome and micro-density polish
 
 Why:

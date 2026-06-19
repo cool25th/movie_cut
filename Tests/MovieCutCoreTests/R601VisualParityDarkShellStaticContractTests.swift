@@ -96,7 +96,12 @@ struct R601VisualParityDarkShellStaticContractTests {
 
         #expect(inspector.contains(".movieCutScrollBackground(viewModel.selectedClip == nil ? MovieCutTheme.panelBackground : MovieCutTheme.inspectorSelectedPanelBackground)"))
         #expect(inspector.contains("ProjectOverviewInspectorView(viewModel: viewModel)"))
-        #expect(inspector.contains(".movieCutCard(background: MovieCutTheme.controlSurface)"))
+        #expect(inspector.contains("ProjectOverviewHeader("))
+        #expect(inspector.contains("ProjectOverviewSummaryStrip(items:"))
+        #expect(inspector.contains("DisclosureGroup(isExpanded: $isExportSummaryExpanded)"))
+        #expect(inspector.contains(".movieCutInspectorOverviewGroup("))
+        #expect(inspector.contains("SelectedClipHeaderView(clip: clip)"))
+        #expect(inspector.contains(".movieCutInspectorSelectedHeader()"))
         #expect(inspector.contains(".movieCutInspectorSelectedFlatRow()"))
         #expect(inspector.contains("Project Tools"))
         #expect(inspector.contains("MovieCutTheme.inspectorSelectedControlSurface"))
@@ -139,11 +144,14 @@ struct R601VisualParityDarkShellStaticContractTests {
         for marker in [
             #"MovieCutTheme.previewWellBackground"#,
             #"MovieCutTheme.previewLoop4WellSurface"#,
-            #"PreviewLoop4WellTexture()"#,
+            #"PreviewLoop4WellTexture(intensity: 0.28)"#,
             #"MovieCutTheme.previewControlBackground"#,
+            #"P1 preview polish contract"#,
             #"private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View"#,
             #".fill(MovieCutTheme.previewLoop4WellSurface)"#,
-            #".padding(MovieCutSpacing.large + MovieCutSpacing.medium)"#,
+            #".padding(MovieCutSpacing.large + MovieCutSpacing.small)"#,
+            #".padding(.bottom, 64)"#,
+            #".padding(.bottom, 8)"#,
             #"MovieCutTheme.inspectorSelectedControlSurface"#,
             #"MovieCutTheme.previewEmptyStateBackground"#,
             #"private func usesLoop4PreviewEditorialMatte(for clip: Clip) -> Bool"#,
@@ -157,8 +165,9 @@ struct R601VisualParityDarkShellStaticContractTests {
             #"NSLocalizedString("Import media, then drag it to the timeline.", comment: "")"#,
             #"openImportPanel()"#,
             #"Label(NSLocalizedString("Import Media", comment: ""), systemImage: "square.and.arrow.down")"#,
-            #".controlSize(.regular)"#,
-            #".frame(maxWidth: 300)"#,
+            #".buttonStyle(.bordered)"#,
+            #".controlSize(.small)"#,
+            #".frame(maxWidth: 250)"#,
             #"await viewModel.importMedia(urls)"#,
         ] {
             #expect(preview.contains(marker))

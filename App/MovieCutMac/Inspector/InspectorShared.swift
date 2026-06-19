@@ -238,8 +238,29 @@ extension View {
         movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: MovieCutTheme.inspectorSelectedRowBackground,
-            border: MovieCutTheme.inspectorSelectedBorder.opacity(0.35)
+            background: MovieCutTheme.inspectorSelectedRowBackground.opacity(0.74),
+            border: MovieCutTheme.inspectorSelectedBorder.opacity(0.18)
+        )
+    }
+
+    func movieCutInspectorSelectedHeader() -> some View {
+        movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: MovieCutTheme.inspectorSelectedCardBackground.opacity(0.66),
+            border: MovieCutTheme.inspectorSelectedBorder.opacity(0.22)
+        )
+    }
+
+    func movieCutInspectorOverviewGroup(
+        background: Color = MovieCutTheme.controlSurface.opacity(0.42),
+        border: Color = MovieCutTheme.border.opacity(0.12)
+    ) -> some View {
+        movieCutCard(
+            padding: MovieCutSpacing.small,
+            cornerRadius: MovieCutRadius.small,
+            background: background,
+            border: border
         )
     }
 
@@ -301,7 +322,8 @@ struct EffectRowView: View {
         .movieCutCard(
             padding: MovieCutSpacing.small,
             cornerRadius: MovieCutRadius.small,
-            background: MovieCutTheme.elevatedCardBackground
+            background: MovieCutTheme.inspectorSelectedControlSurface.opacity(0.62),
+            border: MovieCutTheme.inspectorSelectedBorder.opacity(0.18)
         )
     }
 }
@@ -321,6 +343,7 @@ struct EffectParameterRow: View {
                 Text(String(format: definition.valueFormat, value))
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
             Slider(value: Binding(
                 get: { value },

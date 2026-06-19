@@ -482,6 +482,7 @@ struct InspectorEffectsSection: View {
                 Text(String(format: "%.2f", value))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
                     .frame(width: 38, alignment: .trailing)
             }
             Slider(value: binding, in: range, step: 0.01)

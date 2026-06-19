@@ -45,6 +45,8 @@
 - 🟡 디자인 토큰 기반 통일 완료, **CapCut visual parity loop**는 Loop 4 진행 중. Loop 4 targets the remaining metric blockers from the committed Loop 3 text-selected capture: mean subregion similarity 0.6746(target >= 0.75), worst `dark_fill` delta 0.1996(target <= 0.15), with preview_center sim 0.488/almost pure black and right_inspector sim 0.624/too edge-heavy. Top bar, left browser, and timeline are already near or above target and should not be disturbed.
 - ❌ 상단 바 **프로젝트명·저장상태**.
 
+**IA/menu-position pass (2026-06-19):** top toolbar no longer owns clip editing; Split/Delete/Add Marker are timeline-local. preview transport is bottom-docked near the timeline boundary. timeline is the edit command center with Edit, Markers, Quick Tools, and Zoom clusters.
+
 ---
 
 ## 2. 요구사항 도출 방법론 (반복 가능한 7단계)

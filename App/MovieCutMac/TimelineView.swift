@@ -157,84 +157,132 @@ struct TimelineView: View {
         }
     }
 
+    private func timelineToolbarGroupLabel(title: String, systemImage: String) -> some View {
+        let localizedTitle = NSLocalizedString(title, comment: "")
+
+        return HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(MovieCutTypography.micro.weight(.semibold))
+                .accessibilityHidden(true)
+            Text(localizedTitle)
+                .font(MovieCutTypography.micro.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(MovieCutTheme.mutedText)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityHidden(true)
+    }
+
+    private func timelineToolbarCluster<Content: View>(
+        title: String,
+        systemImage: String,
+        accessibilityLabel: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        return HStack(spacing: MovieCutSpacing.xSmall) {
+            timelineToolbarGroupLabel(title: title, systemImage: systemImage)
+            content()
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .fill(MovieCutTheme.controlSurface.opacity(0.78))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                .stroke(MovieCutTheme.border.opacity(0.54), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: ""))
+    }
+
     private var selectedClipToolbar: some View {
         HStack(spacing: MovieCutSpacing.xSmall) {
-            Image(systemName: "slider.horizontal.3")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            timelineToolbarIconButton(
-                systemImage: "scissors",
-                title: "Split at Playhead",
-                hint: "Splits the selected clip at the playhead.",
-                isDisabled: !viewModel.canSplitSelectedClip
+            timelineToolbarCluster(
+                title: "Edit",
+                systemImage: "slider.horizontal.3",
+                accessibilityLabel: "Timeline edit tools"
             ) {
-                Task { await viewModel.splitClip() }
+                timelineToolbarIconButton(
+                    systemImage: "scissors",
+                    title: "Split at Playhead",
+                    hint: "Splits the selected clip at the playhead.",
+                    isDisabled: !viewModel.canSplitSelectedClip
+                ) {
+                    Task { await viewModel.splitClip() }
+                }
+
+                timelineToolbarIconButton(
+                    systemImage: "trash",
+                    title: "Delete Selected Clips",
+                    hint: "Deletes the selected clips from the timeline.",
+                    isDisabled: !viewModel.hasSelectedClips
+                ) {
+                    Task { await viewModel.deleteClip() }
+                }
+
+                timelineToolbarIconButton(
+                    systemImage: "delete.left",
+                    title: "Ripple Delete Selected Clip",
+                    hint: "Deletes the selected clip and closes the resulting gap.",
+                    isDisabled: viewModel.selectedClip == nil
+                ) {
+                    Task { await viewModel.rippleDeleteSelectedClip() }
+                }
+
+                timelineToolbarIconButton(
+                    systemImage: "square.on.square",
+                    title: "Duplicate Selected Clips",
+                    hint: "Duplicates the selected clips on the timeline.",
+                    isDisabled: !viewModel.hasSelectedClips
+                ) {
+                    Task { await viewModel.duplicateSelectedClips() }
+                }
+
+                timelineToolbarIconButton(
+                    systemImage: "arrow.left.to.line.compact",
+                    title: "Snap Playhead to Clip Start",
+                    hint: "Moves the playhead to the selected clip start.",
+                    isDisabled: viewModel.selectedClip == nil
+                ) {
+                    viewModel.snapPlayheadToSelectedClipStart()
+                }
+
+                timelineToolbarIconButton(
+                    systemImage: "arrow.right.to.line.compact",
+                    title: "Snap Playhead to Clip End",
+                    hint: "Moves the playhead to the selected clip end.",
+                    isDisabled: viewModel.selectedClip == nil
+                ) {
+                    viewModel.snapPlayheadToSelectedClipEnd()
+                }
             }
 
-            timelineToolbarIconButton(
-                systemImage: "trash",
-                title: "Delete Selected Clips",
-                hint: "Deletes the selected clips from the timeline.",
-                isDisabled: !viewModel.hasSelectedClips
+            timelineToolbarCluster(
+                title: "Quick Tools",
+                systemImage: "bolt",
+                accessibilityLabel: "Timeline quick tools"
             ) {
-                Task { await viewModel.deleteClip() }
-            }
+                timelineToolbarIconButton(
+                    systemImage: "snowflake",
+                    title: "Freeze Selected Frame",
+                    hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.",
+                    isDisabled: !selectedClipSupportsVisualTimelineEffect
+                ) {
+                    Task { await viewModel.freezeSelectedFrame() }
+                }
 
-            timelineToolbarIconButton(
-                systemImage: "delete.left",
-                title: "Ripple Delete Selected Clip",
-                hint: "Deletes the selected clip and closes the resulting gap.",
-                isDisabled: viewModel.selectedClip == nil
-            ) {
-                Task { await viewModel.rippleDeleteSelectedClip() }
-            }
-
-            timelineToolbarIconButton(
-                systemImage: "square.on.square",
-                title: "Duplicate Selected Clips",
-                hint: "Duplicates the selected clips on the timeline.",
-                isDisabled: !viewModel.hasSelectedClips
-            ) {
-                Task { await viewModel.duplicateSelectedClips() }
-            }
-
-            timelineToolbarIconButton(
-                systemImage: "arrow.left.to.line.compact",
-                title: "Snap Playhead to Clip Start",
-                hint: "Moves the playhead to the selected clip start.",
-                isDisabled: viewModel.selectedClip == nil
-            ) {
-                viewModel.snapPlayheadToSelectedClipStart()
-            }
-
-            timelineToolbarIconButton(
-                systemImage: "arrow.right.to.line.compact",
-                title: "Snap Playhead to Clip End",
-                hint: "Moves the playhead to the selected clip end.",
-                isDisabled: viewModel.selectedClip == nil
-            ) {
-                viewModel.snapPlayheadToSelectedClipEnd()
-            }
-
-            timelineToolbarIconButton(
-                systemImage: "snowflake",
-                title: "Freeze Selected Frame",
-                hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.",
-                isDisabled: !selectedClipSupportsVisualTimelineEffect
-            ) {
-                Task { await viewModel.freezeSelectedFrame() }
-            }
-
-            timelineToolbarIconButton(
-                systemImage: "backward.fill",
-                title: "Reverse Selected Clip",
-                hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.",
-                isDisabled: !selectedClipSupportsVisualTimelineEffect
-            ) {
-                Task {
-                    guard let selectedClip = viewModel.selectedClip else { return }
-                    await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)
+                timelineToolbarIconButton(
+                    systemImage: "backward.fill",
+                    title: "Reverse Selected Clip",
+                    hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.",
+                    isDisabled: !selectedClipSupportsVisualTimelineEffect
+                ) {
+                    Task {
+                        guard let selectedClip = viewModel.selectedClip else { return }
+                        await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)
+                    }
                 }
             }
         }
@@ -244,11 +292,11 @@ struct TimelineView: View {
     }
 
     private var timelineMarkerControls: some View {
-        HStack(spacing: MovieCutSpacing.xSmall) {
-            Image(systemName: "flag")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
+        timelineToolbarCluster(
+            title: "Markers",
+            systemImage: "flag",
+            accessibilityLabel: "Timeline marker controls"
+        ) {
             timelineToolbarIconButton(
                 systemImage: "backward.end.fill",
                 title: "Previous Marker",
@@ -287,11 +335,11 @@ struct TimelineView: View {
     }
 
     private var zoomControls: some View {
-        HStack(spacing: MovieCutSpacing.xSmall) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
+        timelineToolbarCluster(
+            title: "Zoom",
+            systemImage: "magnifyingglass",
+            accessibilityLabel: "Timeline zoom controls"
+        ) {
             timelineToolbarIconButton(
                 systemImage: "minus.magnifyingglass",
                 title: "Zoom Timeline Out",

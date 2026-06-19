@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// Phase 1-1 keeps the macOS top toolbar visually aligned with the dark editor
-/// shell without moving commands out of their existing presentation surface.
+/// shell while preserving intentional command ownership.
 @Suite("Phase 1-1 Dark Top Toolbar StaticContract")
 struct Phase11DarkTopToolbarStaticContractTests {
     private func source(_ path: String) throws -> String {
@@ -43,12 +43,11 @@ struct Phase11DarkTopToolbarStaticContractTests {
         for marker in [
             "ToolbarItem(placement: .principal)",
             "projectStatusToolbarItem",
+            "ToolbarItemGroup(placement: .navigation)",
             "ToolbarItemGroup(placement: .primaryAction)",
             "await viewModel.undo()",
             "await viewModel.redo()",
-            "await viewModel.splitClip()",
-            "viewModel.addMarkerAtPlayhead()",
-            "await viewModel.deleteClip()",
+            "Clip editing actions are timeline-local",
             #"Picker("Canvas", selection: $viewModel.canvasSelection)"#,
             "toolbarCanvasResolutionBadge",
             "CanvasSettingsView(",
@@ -60,6 +59,17 @@ struct Phase11DarkTopToolbarStaticContractTests {
             "exportToolbarControl"
         ] {
             #expect(toolbar.contains(marker) || content.contains(marker))
+        }
+
+        for forbiddenTimelineAction in [
+            "await viewModel.splitClip()",
+            "viewModel.addMarkerAtPlayhead()",
+            "await viewModel.deleteClip()",
+            #"Label("Split", systemImage: "scissors")"#,
+            #"Label("Add Marker", systemImage: "flag.fill")"#,
+            #"Label("Delete", systemImage: "trash")"#
+        ] {
+            #expect(!toolbar.contains(forbiddenTimelineAction))
         }
     }
 

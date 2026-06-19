@@ -41,7 +41,9 @@ struct ContentView: View {
                 projectStatusToolbarItem
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
+            // IA/menu-position contract: the top toolbar owns project, view,
+            // sync, and export chrome. Clip editing actions are timeline-local.
+            ToolbarItemGroup(placement: .navigation) {
                 Button(action: { Task { await viewModel.undo() } }) {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
@@ -49,23 +51,9 @@ struct ContentView: View {
                 Button(action: { Task { await viewModel.redo() } }) {
                     Label("Redo", systemImage: "arrow.uturn.forward")
                 }
+            }
 
-                Divider()
-
-                Button(action: { Task { await viewModel.splitClip() } }) {
-                    Label("Split", systemImage: "scissors")
-                }
-
-                Button(action: { viewModel.addMarkerAtPlayhead() }) {
-                    Label("Add Marker", systemImage: "flag.fill")
-                }
-
-                Button(action: { Task { await viewModel.deleteClip() } }) {
-                    Label("Delete", systemImage: "trash")
-                }
-
-                Divider()
-
+            ToolbarItemGroup(placement: .primaryAction) {
                 Picker("Canvas", selection: $viewModel.canvasSelection) {
                     ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
                         Text(aspectRatio.displayName).tag(aspectRatio)

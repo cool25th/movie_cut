@@ -61,6 +61,12 @@ VSplitView                                  // 상하 분할
 
 **공통 원칙(우리가 가져올 것)**: ① 콘텐츠는 탭형 브라우저로, ② 속성은 선택 맥락에 따라 바뀌는 단일 패널로, ③ 도구는 타임라인 위 한 줄로 집약, ④ 넉넉한 여백·명확한 구분·아이콘+레이블.
 
+### IA/menu-position pass (2026-06-19)
+
+- top toolbar no longer owns clip editing: Split/Delete/Add Marker는 macOS 상단 toolbar가 아니라 timeline-local command로 고정한다.
+- preview transport is bottom-docked: Current/Duration, playback, safe-zone, zoom, volume은 preview 하단 overlay/strip에 두어 canvas 중심성을 유지한다.
+- timeline is the edit command center: Edit, Markers, Quick Tools, Zoom cluster가 timeline header에서 split/delete/ripple/duplicate/snap/freeze/reverse/marker 흐름을 담당한다.
+
 ---
 
 ## 4. UX 백로그 (우선순위순)

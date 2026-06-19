@@ -35,9 +35,11 @@ struct PreviewPanel: View {
                     }
                 }
 
+                // IA/menu-position contract: preview transport is bottom-docked
+                // near the timeline boundary, not top-docked above the canvas.
                 VStack {
-                    previewTransportBar
                     Spacer(minLength: 0)
+                    previewTransportBar
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -78,8 +80,8 @@ struct PreviewPanel: View {
                 .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.80), lineWidth: 0.5)
         )
         .padding(.horizontal, 18)
-        .padding(.top, 54)
-        .padding(.bottom, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 76)
     }
 
     private var previewTransportBar: some View {
@@ -153,7 +155,7 @@ struct PreviewPanel: View {
                 .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.82), lineWidth: 0.5)
         )
         .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.bottom, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("Preview transport controls", comment: ""))
     }

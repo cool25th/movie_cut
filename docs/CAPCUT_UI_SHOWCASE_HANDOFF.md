@@ -9,6 +9,12 @@
 
 기능은 50개 중 ~40개가 백엔드까지 구현됨. 문제는 **(1) 기능이 좌측 레일/카드가 아니라 타임라인 툴바에 텍스트로 흩어져 안 보이고, (2) 패널이 CapCut보다 너무 밝음**(populated 상태 coarse similarity 0.46, `dark_fill` 좌측 0.28 vs 0.60·인스펙터 0.39 vs 0.96·타임라인 0.38 vs 0.97). 이 작업은 **프레젠테이션만** 바꾼다 — `EditorSession.dispatch`/렌더 파이프라인/ViewModel 메서드는 호출만.
 
+### IA/menu-position pass (2026-06-19)
+
+- top toolbar no longer owns clip editing: Split/Delete/Add Marker는 timeline-local command로 유지하고 상단 chrome은 project/status, undo/redo, canvas/view, project controls, export에 집중한다.
+- preview transport is bottom-docked: Current/Duration, playback capsule, canvas resolution, safe-zone, zoom, volume controls는 preview 하단 overlay/strip에 둔다.
+- timeline is the edit command center: Edit, Markers, Quick Tools, Zoom cluster가 timeline header에서 편집 리듬을 만든다.
+
 ---
 
 ## 1. 가드레일 (반드시 준수)

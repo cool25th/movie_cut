@@ -47,70 +47,102 @@ struct ContentView: View {
                 Button(action: { Task { await viewModel.undo() } }) {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
+                .topChromeSecondaryToolbarStyle()
+                .help("Undo")
+                .accessibilityLabel("Undo")
+                .accessibilityHint("Undo the last edit.")
 
                 Button(action: { Task { await viewModel.redo() } }) {
                     Label("Redo", systemImage: "arrow.uturn.forward")
                 }
+                .topChromeSecondaryToolbarStyle()
+                .help("Redo")
+                .accessibilityLabel("Redo")
+                .accessibilityHint("Redo the last undone edit.")
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
-                Picker("Canvas", selection: $viewModel.canvasSelection) {
-                    ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
-                        Text(aspectRatio.displayName).tag(aspectRatio)
-                    }
-                }
-                .onChange(of: viewModel.canvasSelection) { _, newValue in
-                    guard viewModel.currentProject.canvas.aspectRatio != newValue else { return }
-                    Task {
-                        await viewModel.updateCanvas(CanvasPreset(aspectRatio: newValue))
-                    }
-                }
-
-                toolbarCanvasResolutionBadge
-
-                Button(action: { isCanvasSettingsPresented.toggle() }) {
-                    Label("Canvas", systemImage: "rectangle.dashed")
-                }
-                .popover(isPresented: $isCanvasSettingsPresented) {
-                    CanvasSettingsView(
-                        canvas: viewModel.currentProject.canvas,
-                        background: viewModel.currentProject.canvasBackground,
-                        onBackgroundChange: { background in
-                            Task { await viewModel.updateCanvasBackground(background) }
+                // P2 top chrome polish contract: compact secondary canvas/project
+                // helpers stay quiet so Export remains the primary toolbar action.
+                topChromeCompactCluster(accessibilityLabel: "Canvas view controls") {
+                    Picker("Canvas", selection: $viewModel.canvasSelection) {
+                        ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
+                            Text(aspectRatio.displayName).tag(aspectRatio)
                         }
-                    ) { canvas in
-                        Task { await viewModel.updateCanvas(canvas) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .help("Choose the canvas aspect ratio")
+                    .accessibilityLabel("Canvas")
+                    .accessibilityHint("Choose the current canvas aspect ratio.")
+                    .onChange(of: viewModel.canvasSelection) { _, newValue in
+                        guard viewModel.currentProject.canvas.aspectRatio != newValue else { return }
+                        Task {
+                            await viewModel.updateCanvas(CanvasPreset(aspectRatio: newValue))
+                        }
+                    }
+
+                    toolbarCanvasResolutionBadge
+
+                    Button(action: { isCanvasSettingsPresented.toggle() }) {
+                        Label("Canvas", systemImage: "rectangle.dashed")
+                    }
+                    .topChromeSecondaryToolbarStyle()
+                    .help("Canvas settings")
+                    .accessibilityLabel("Canvas")
+                    .accessibilityHint("Open canvas settings for aspect ratio, frame rate, and background.")
+                    .popover(isPresented: $isCanvasSettingsPresented) {
+                        CanvasSettingsView(
+                            canvas: viewModel.currentProject.canvas,
+                            background: viewModel.currentProject.canvasBackground,
+                            onBackgroundChange: { background in
+                                Task { await viewModel.updateCanvasBackground(background) }
+                            }
+                        ) { canvas in
+                            Task { await viewModel.updateCanvas(canvas) }
+                        }
                     }
                 }
 
-                Button(action: { isTemplatePickerPresented.toggle() }) {
-                    Label("Templates", systemImage: "rectangle.stack.badge.plus")
-                }
-
-                Menu {
-                    Button("Export Package…") {
-                        Task { await viewModel.exportProjectPackage() }
+                topChromeCompactCluster(accessibilityLabel: "Project helper controls") {
+                    Button(action: { isTemplatePickerPresented.toggle() }) {
+                        Label("Templates", systemImage: "rectangle.stack.badge.plus")
                     }
-                    Button("Import Package…") {
-                        Task { await viewModel.importProjectPackage() }
+                    .topChromeSecondaryToolbarStyle()
+                    .help("Templates")
+                    .accessibilityLabel("Templates")
+                    .accessibilityHint("Open template picker.")
+
+                    Menu {
+                        Button("Export Package…") {
+                            Task { await viewModel.exportProjectPackage() }
+                        }
+                        Button("Import Package…") {
+                            Task { await viewModel.importProjectPackage() }
+                        }
+                    } label: {
+                        Label("Package", systemImage: "shippingbox")
                     }
-                } label: {
-                    Label("Package", systemImage: "shippingbox")
-                }
-                .help("Export or import a self-contained .mctemplate project package")
+                    .topChromeSecondaryToolbarStyle()
+                    .help("Export or import a self-contained .mctemplate project package")
+                    .accessibilityLabel("Package")
+                    .accessibilityHint("Export or import a self-contained .mctemplate project package.")
 
-                Divider()
-
-                Button(action: { Task { await viewModel.syncToCloud() } }) {
-                    if viewModel.isCloudSyncing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "cloud.and.arrow.up")
+                    Button(action: { Task { await viewModel.syncToCloud() } }) {
+                        if viewModel.isCloudSyncing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Label("Sync to Cloud", systemImage: "cloud.and.arrow.up")
+                        }
                     }
+                    .topChromeSecondaryToolbarStyle()
+                    .help("Sync to Cloud")
+                    .accessibilityLabel("Sync to Cloud")
+                    .accessibilityHint("Sync the current project to Cloud.")
                 }
-                .help("Sync to Cloud")
-
-                Divider()
 
                 exportToolbarControl
             }
@@ -129,9 +161,9 @@ struct ContentView: View {
     }
 
     private var projectStatusToolbarItem: some View {
-        HStack(spacing: MovieCutSpacing.small) {
+        HStack(spacing: MovieCutSpacing.xSmall) {
             Text(viewModel.projectDisplayName)
-                .font(.headline.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
 
             Label {
@@ -139,8 +171,8 @@ struct ContentView: View {
             } icon: {
                 Image(systemName: viewModel.projectSaveStatusSystemImage)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(MovieCutTheme.mutedText)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(NSLocalizedString("Project save status", comment: ""))
@@ -157,17 +189,13 @@ struct ContentView: View {
             Image(systemName: "rectangle.ratio")
                 .accessibilityHidden(true)
         }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(MovieCutTheme.mutedText)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
         .background(
             Capsule()
-                .fill(MovieCutTheme.controlSurface)
-        )
-        .overlay(
-            Capsule()
-                .stroke(MovieCutTheme.border, lineWidth: 0.5)
+                .fill(MovieCutTheme.controlSurface.opacity(0.32))
         )
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
@@ -181,6 +209,8 @@ struct ContentView: View {
             Button(action: { Task { await viewModel.exportProject() } }) {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
+            .buttonStyle(.borderedProminent)
+            .tint(MovieCutTheme.accentCyan)
             .help(exportButtonHelpText)
             .accessibilityLabel("Export project")
             .accessibilityValue(exportButtonAccessibilityValue)
@@ -220,7 +250,26 @@ struct ContentView: View {
             .accessibilityLabel("Export formats")
             .accessibilityHint("Choose explicit-bitrate video, ProRes, audio-only, animated GIF, still frame, or share the latest export.")
         }
+        .controlSize(.regular)
         .disabled(viewModel.exportEngine.isExporting)
+    }
+
+    private func topChromeCompactCluster<Content: View>(
+        accessibilityLabel: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: MovieCutSpacing.xxSmall) {
+            content()
+        }
+        .controlSize(.small)
+        .padding(.horizontal, MovieCutSpacing.xSmall)
+        .padding(.vertical, 1)
+        .background(
+            Capsule()
+                .fill(MovieCutTheme.controlSurface.opacity(0.18))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: ""))
     }
 
     private var toolbarCanvasPresets: [AspectRatio] {
@@ -276,6 +325,15 @@ struct ContentView: View {
     private var canvasSizeText: String {
         let size = viewModel.currentProject.canvas.size
         return "\(Int(size.width)) x \(Int(size.height))"
+    }
+}
+
+private extension View {
+    func topChromeSecondaryToolbarStyle() -> some View {
+        labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.secondary)
     }
 }
 

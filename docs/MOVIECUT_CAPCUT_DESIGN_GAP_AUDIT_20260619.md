@@ -223,6 +223,10 @@ Acceptance criteria:
 - Top toolbar reads as project/view/export chrome, not a general command shelf.
 - No reintroduction of Split/Delete/Add Marker to top toolbar.
 
+Implementation note (2026-06-19):
+- P2 top chrome polish compacted the macOS toolbar by making undo/redo icon-only, quieting the principal project/status text, moving secondary canvas/project controls into quiet compact clusters, and reducing the canvas resolution badge chrome.
+- Export remains the distinct primary top-right action with the existing format menu and accessibility labels/hints preserved; Split/Delete/Add Marker remain timeline-local only.
+
 ### P3 — Documentation and verification cleanup
 
 Why:

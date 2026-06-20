@@ -38,12 +38,15 @@
 
 **핵심 상태:**
 - ✅ **export 거버넌스 텍스트 제거**(R4-03/UX-02, 2026-06-16): `InspectorExportSection.swift` export summary는 포맷/해상도/코덱/품질/예상 크기/비트레이트 정보만 노출.
+- ✅ 상단 바 **프로젝트명·저장상태**(R1-02, 2026-06-16): principal toolbar가 프로젝트명과 save/autosave 상태를 표시한다.
 - ✅ 라이브러리 **탭별 검색·썸네일 그리드**(R2-02/R2-03, 2026-06-16): `MediaLibraryPanel.swift`에 탭명 기반 검색 placeholder, Media/Text/Effects/Transitions/Filters 필터, 2열 card/grid 브라우저가 반영됨.
-- ❌ 라이브러리 **hover 미리보기**.
+- ✅ 라이브러리 **hover 미리듣기/미리보기**(R2-04, 2026-06-17): Music/SFX hover-to-listen과 Effects/Filters/Transitions visual hover preview surface가 구현됨.
 - ✅ 인스펙터 **서브탭**(Basic/Speed/Animation/Adjustment/Mask) + **Speed 곡선 에디터**(presets/add/reset/point edit).
 - ✅ 타임라인 **단일 도구 바 완성**(R5-01) + **줌 slider/fit**(R5-02) + **트랙 헤더 토글**(R5-03) + **메인 비디오 트랙 시각 구분**(R5-04): freeze/reverse가 타임라인 바에 승격됐고, zoomControls에 연속 slider와 Fit Timeline이 추가됐으며, 트랙 헤더에 잠금·숨김·음소거 토글과 첫 `.video` 트랙의 Main 배지/액센트가 연결됨.
-- 🟡 디자인 토큰 기반 통일 완료, **CapCut visual parity loop**는 Loop 4 진행 중. Loop 4 targets the remaining metric blockers from the committed Loop 3 text-selected capture: mean subregion similarity 0.6746(target >= 0.75), worst `dark_fill` delta 0.1996(target <= 0.15), with preview_center sim 0.488/almost pure black and right_inspector sim 0.624/too edge-heavy. Top bar, left browser, and timeline are already near or above target and should not be disturbed.
-- ❌ 상단 바 **프로젝트명·저장상태**.
+- ✅ **구조 IA/menu-position fixed**(2026-06-19): top toolbar는 project/status/view/export chrome에 집중하고 Split/Delete/Add Marker는 timeline-local이다. preview transport는 bottom-docked, timeline header는 Edit/Markers/Quick Tools/Zoom command center다.
+- ✅ **P0/P1/P2 polish implemented**: browser/timeline polish(P0), preview/inspector hierarchy polish(P1), top chrome micro-density polish(P2)가 반영됨. 관련 커밋: `060b0e5`, `05ca9a5`, `a2b86a0`.
+- ✅ **Visual metric latest pass**: Loop 6 populated/text-selected metrics passed at `/tmp/moviecut-ui-evidence/current-loop/resume-20260619-004321/metrics_capcut_vs_moviecut_loop6_text_selected.json` with mean subregion similarity **0.7528 >= 0.75** and worst `dark_fill` delta **0.0850 <= 0.15**.
+- 🟡 **검증 backlog**: IA/P0/P1/P2 이후의 matching populated side-by-side recapture/metrics, 표준 워크플로 walkthrough(미디어 추가→컷→텍스트→BGM→Export, 자동 자막→스타일), optional iOS sync decision은 아직 별도 검증 항목이다. Loop 6 metric은 최신 passing evidence지만, P2 이후 fresh populated recapture를 주장하지 않는다.
 
 **IA/menu-position pass (2026-06-19):** top toolbar no longer owns clip editing; Split/Delete/Add Marker are timeline-local. preview transport is bottom-docked near the timeline boundary. timeline is the edit command center with Edit, Markers, Quick Tools, and Zoom clusters.
 
@@ -114,8 +117,8 @@
 ### R6. 횡단(cross-cutting)
 | ID | 목표 | 현재 | AC | P |
 |---|---|---|---|---|
-| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | 🟡 UX-07 + Loop 4 visual-polish implementation: `InspectorShared.swift`의 `MovieCutTheme`는 CapCut-like dark semantic tokens를 유지하면서 Loop 4 measured populated-state blockers를 겨냥한다. Preview는 `previewLoop4WellSurface`/`previewLoop4Matte*` tokens와 `PreviewLoop4EditorialMatte` scaffold로 audio/text/no-source selected states가 pure black canvas가 되지 않도록 한다(프레젠테이션 전용, render/export/playback 미변경). Selected inspector는 `inspectorSelectedRowBackground`와 `movieCutInspectorSelectedFlatRow()`로 brighter flat rows and lower-opacity borders를 적용해 right_inspector edge density를 낮춘다. Current weakness before Loop 4: mean subregion similarity 0.6746, worst `dark_fill` delta 0.1996, preview_center sim 0.488, right_inspector sim 0.624. | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일 | P2 |
-| R6-02 | 인터랙션 컨벤션 통일 | 🟡 | 드래그/더블클릭/컨텍스트/스냅 동작 일관 | P2 |
+| R6-01 | 디자인 토큰(다크 팔레트/spacing/타이포/아이콘+레이블) | ✅ UX-07 + Loop 6 visual metric pass: `InspectorShared.swift`의 dark semantic tokens, preview matte/scaffold, selected inspector row flattening, P0/P1/P2 polish가 누적된 latest passing evidence는 `/tmp/moviecut-ui-evidence/current-loop/resume-20260619-004321/metrics_capcut_vs_moviecut_loop6_text_selected.json`이며 mean subregion similarity **0.7528 >= 0.75**, worst `dark_fill` delta **0.0850 <= 0.15**. Historical note: Loop 3/4 blockers(mean 0.6746, worst dark_fill 0.1996, preview_center 0.488, right_inspector 0.624)는 resolved metric history로만 취급한다. | 공통 스타일 헬퍼(`Inspector/InspectorShared.swift` 확장)로 카드/헤더/간격 통일. P2 이후 matching populated recapture는 별도 verification backlog. | P2 |
+| R6-02 | 인터랙션 컨벤션 통일 | ✅ IA/P0/P1/P2 pass implemented for current macOS editor surfaces; drag/double-click/hover/snap/toolbar command ownership is statically covered. 표준 워크플로 walkthrough는 verification backlog로 남김. | 드래그/더블클릭/컨텍스트/스냅 동작 일관 | P2 |
 | R6-03 | 단축키·VoiceOver 회귀 방지 | ✅ 구현(2026-06-16, UX-08): 타임라인 선택 클립 도구 accessibility label/hint 보강, `UIUXAccessibilityRegressionStaticContractTests.swift`로 Playback/Timeline command menu, Preview/Library/Timeline/Inspector 주요 label marker 고정 | 재배치 후 라벨/단축키 보존(정적계약 테스트로 잠금) | — |
 
 ---
@@ -125,10 +128,11 @@
 - **P0 잔여** — 없음.
 - **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03.
 - **P1 인터랙션 잔여** — 없음.
-- **P2 완료** — R1-03, R3-02, R3-03.
-- **P2 시각 폴리시** — R6-01 visual parity loop, R6-02, R2-01.
+- **P2 완료** — R1-03, R3-02, R3-03, R6-01 visual metric parity pass, R6-02 macOS interaction convention pass.
+- **P2 선택 backlog** — R2-01 9탭 확장과 Captions/Adjust panel depth는 product decision 후 진행(현재 7탭+Captions/Adjust visual parity가 충분한지 판단 필요).
 - **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터).
 - **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog).
+- **Verification backlog** — matching populated side-by-side recapture/metrics after IA/P0/P1/P2, standard workflow walkthroughs(미디어 추가→컷→텍스트→BGM→Export, 자동 자막→스타일), optional iOS sync decision. 현재 문서는 P2 이후 fresh populated recapture를 완료했다고 주장하지 않음.
 
 ---
 
@@ -136,8 +140,8 @@
 
 ### 5.1 착수 순서
 1. 이 문서 + `docs/UIUX_HANDOFF.md` 읽기 → §1 현재 상태 스냅샷으로 중복 방지.
-2. **P0 항목부터** 하나씩(작은 변경 단위). 각 항목 시작 전 해당 파일의 현재 구조 확인.
-3. 변경 후 빌드/테스트/실행 스크린샷으로 before/after 확인.
+2. 남은 **verification backlog**부터 하나씩: matching populated recapture/metrics, 표준 workflow walkthrough, optional iOS/R2-01 scope decision.
+3. 변경 후 빌드/테스트/증거 경로를 남기고, fresh populated recapture 없이는 post-P2 visual 완료를 주장하지 않는다.
 
 ### 5.2 핵심 파일 맵
 | 영역 | 파일 |

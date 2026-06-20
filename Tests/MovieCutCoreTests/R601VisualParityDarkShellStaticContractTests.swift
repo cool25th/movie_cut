@@ -174,18 +174,22 @@ struct R601VisualParityDarkShellStaticContractTests {
         }
     }
 
-    @Test("R6-01 docs record loop four visual polish targets")
-    func docsRecordLoopFourVisualPolishTargets() throws {
+    @Test("R6-01 docs record Loop 6 metric pass and historical Loop 3/4 context")
+    func docsRecordLoopSixMetricPassAndHistoricalContext() throws {
         let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
 
-        #expect(docs.contains("Loop 4 targets the remaining metric blockers"))
-        #expect(docs.contains("mean subregion similarity 0.6746"))
-        #expect(docs.contains("preview_center sim 0.488"))
-        #expect(docs.contains("right_inspector sim 0.624"))
-        #expect(handoff.contains("Loop 4 note (2026-06-19)"))
+        #expect(docs.contains("Loop 6 visual metric pass"))
+        #expect(docs.contains("/tmp/moviecut-ui-evidence/current-loop/resume-20260619-004321/metrics_capcut_vs_moviecut_loop6_text_selected.json"))
+        #expect(docs.contains("0.7528 >= 0.75"))
+        #expect(docs.contains("0.0850 <= 0.15"))
+        #expect(docs.contains("Loop 3/4 blockers(mean 0.6746, worst dark_fill 0.1996, preview_center 0.488, right_inspector 0.624)는 resolved metric history"))
+        #expect(docs.contains("P2 이후 matching populated recapture는 별도 verification backlog"))
+        #expect(handoff.contains("Historical Loop 4 note (2026-06-19)"))
         #expect(handoff.contains("presentation-only editorial preview matte"))
-        #expect(handoff.contains("flattened selected inspector rows"))
+        #expect(handoff.contains("flatter selected inspector rows"))
+        #expect(handoff.contains("Latest Loop 6 pass (2026-06-19)"))
+        #expect(handoff.contains("does **not** claim a fresh matching populated side-by-side recapture after P2"))
         #expect(!docs.contains("CapCut 98% visual parity loop 잔여"))
     }
 }

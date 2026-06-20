@@ -241,18 +241,23 @@ Acceptance criteria:
 - No stale ❌ entries for already-completed R1-02/R2-04/visual metric state.
 - Remaining backlog is explicit and prioritized.
 
+Implementation note (2026-06-20):
+- P3 documentation cleanup refreshed `CAPCUT_UI_PARITY_REQUIREMENTS.md`, `UIUX_HANDOFF.md`, and `CAPCUT_UI_SHOWCASE_HANDOFF.md` so R1-02/R2-04 no longer appear as stale blockers, Loop 6 is recorded as the latest passing metric evidence, and Loop 3/4 failure metrics are historical.
+- Current handoff docs now mark IA/menu-position plus P0/P1/P2 polish as implemented while keeping matching populated side-by-side recapture/metrics, standard workflow walkthroughs, optional R2-01/Captions/Adjust product decisions, and optional iOS sync as explicit backlog.
+- Static contracts should guard against reverting the recommended next prompt to P0 implementation or overclaiming post-P2 populated recapture.
+
 ## Recommended next implementation prompt
 
-Implement P0: left browser + timeline populated-state polish.
+Continue with prioritized verification/backlog cleanup, not P0 implementation.
 
 Constraints:
-- Presentation-layer only.
-- Prefer `MediaLibraryPanel.swift`, `TimelineView.swift`, and shared tokens in `InspectorShared.swift`.
+- Docs/tests only unless an explicit follow-up asks for UI implementation.
 - Do not touch render/export/playback/session/Core model behavior.
 - Preserve IA/menu-position contract from `IAMenuPositionStaticContractTests.swift`.
-- Verify with build/static contracts/xcodebuild and a current populated screenshot.
+- Do not claim fresh post-P2 populated visual verification until matching recapture evidence exists.
+- Verify with `git diff --check`, `swift build`, and `swift test --filter StaticContract`.
 
 Main goals:
-1. Make left browser feel like a CapCut-style content browser instead of a large import utility panel.
-2. Make populated timeline read clip-first with stronger selected/clip/media affordances and lower grid/header noise.
-3. Keep accessibility and existing ViewModel wiring intact.
+1. Rebuild matching populated side-by-side evidence after IA/P0/P1/P2: video + audio + text selected where possible, then rerun visual metrics.
+2. Complete standard workflow walkthroughs: media add -> cut -> text -> BGM -> Export, and auto captions -> style.
+3. Decide optional scope: R2-01 9-tab expansion/Captions/Adjust depth and iOS sync.

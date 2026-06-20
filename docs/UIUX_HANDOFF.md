@@ -12,7 +12,18 @@
 
 ---
 
-## 1. 현재 레이아웃 지도 (코드 기준)
+## 0.5 Current status addendum (2026-06-20)
+
+- ✅ **IA/menu-position pass complete**: top toolbar는 project/status/view/export chrome에 집중하고 Split/Delete/Add Marker는 timeline-local이다. preview transport는 bottom-docked, timeline header는 Edit/Markers/Quick Tools/Zoom command center다.
+- ✅ **P0/P1/P2 polish complete**: `060b0e5` browser/timeline surfaces, `05ca9a5` preview/inspector hierarchy, `a2b86a0` top chrome density가 반영됨.
+- ✅ **P3 docs cleanup performed**: CapCut UI docs now record R1-02/R2-04 as complete, Loop 6 as the latest passing visual metric, and older Loop 3/4 evidence as historical.
+- 🟡 **Remaining verification backlog**: standard workflow walkthroughs(미디어 추가→컷→텍스트→BGM→Export, 자동 자막→스타일), matching populated side-by-side recapture/metrics after IA/P0/P1/P2, optional iOS sync decision. Do not claim a fresh post-P2 populated recapture until new evidence exists.
+
+---
+
+## 1. Historical baseline layout map (2026-06-14, not current implementation)
+
+This section preserves the original baseline that motivated the UI/UX work. It is **not** the current implementation after the IA/menu-position pass and P0/P1/P2 polish; the separate `QuickToolsPanel` strip and old min-width map below are historical evidence only.
 
 `App/MovieCutMac/ContentView.swift:10-37`
 ```
@@ -133,19 +144,15 @@ VSplitView                                  // 상하 분할
 - **기존 테스트 깨지 마라**: static-contract 테스트가 특정 문자열/구조를 검사한다. 뷰를 옮길 때 깨지면 테스트도 같이 갱신(단, 의미 보존). `swift test` + `xcodebuild … MovieCutMac build`로 매번 확인.
 - **R4-03/UX-02 완료**: `InspectorExportSection.swift`/`ExportFormatStaticContractTests.swift`의 export-golden 거버넌스 copy 제거와 정적계약 갱신은 2026-06-16에 완료됨.
 - **iOS 동기화는 선택**: 이 UX 작업은 macOS 우선. iOS(`App/MovieCutiOS/`)는 별도.
-- **작은 PR 단위**: UX-01부터 하나씩. 각 항목 커밋 후 빌드/스크린샷 확인.
+- **작은 작업 단위**: 남은 verification/scope-decision 항목을 하나씩 처리하고, 각 항목 후 빌드/스크린샷/evidence 경로를 남긴다.
 
 ---
 
-## 6. 권장 착수 순서
+## 6. 현재 권장 작업 순서
 
-1. **UX-01**(기본 창 크기) — 한 줄 수정으로 체감이 가장 큼. 여기부터.
-2. **UX-02**(거버넌스 텍스트 제거) — 완료(2026-06-16).
-3. **UX-03**(Inspector 맥락 정리) — 클립 편집 접근성 확보.
-4. **UX-04/05**(탭 라이브러리 + 타임라인 도구 바) — 구조적 CapCut화.
-5. **UX-06/07**(프리뷰·디자인 폴리시) — 마감 품질.
-
-각 단계 후 실행→스크린샷으로 before/after 확인 권장.
+1. **Matching populated recapture/metrics** — IA/P0/P1/P2 이후 MovieCut과 CapCut을 가능한 같은 상태(video+audio+text selected)로 다시 캡처하고 Loop 6 기준을 재확인한다.
+2. **Standard workflow walkthroughs** — 미디어 추가→컷→텍스트→BGM→Export, 자동 자막→스타일을 실제 앱에서 완주하고 docs/evidence 경로를 남긴다.
+3. **Optional scope decisions** — R2-01 9탭 확장/Captions·Adjust depth와 iOS sync 여부를 product decision으로 분리한다.
 
 ## 7. 빌드·검증
 

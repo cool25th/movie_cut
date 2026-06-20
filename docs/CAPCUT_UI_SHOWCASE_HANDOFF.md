@@ -15,6 +15,13 @@
 - preview transport is bottom-docked: Current/Duration, playback capsule, canvas resolution, safe-zone, zoom, volume controls는 preview 하단 overlay/strip에 둔다.
 - timeline is the edit command center: Edit, Markers, Quick Tools, Zoom cluster가 timeline header에서 편집 리듬을 만든다.
 
+### Current polish/evidence state (2026-06-20)
+
+- ✅ IA/menu-position pass complete.
+- ✅ P0/P1/P2 polish complete: browser/timeline surfaces(`060b0e5`), preview/inspector hierarchy(`05ca9a5`), top chrome density(`a2b86a0`).
+- ✅ Latest passing visual metric: Loop 6 populated/text-selected metrics at `/tmp/moviecut-ui-evidence/current-loop/resume-20260619-004321/metrics_capcut_vs_moviecut_loop6_text_selected.json` passed with mean subregion similarity **0.7528 >= 0.75** and worst `dark_fill` delta **0.0850 <= 0.15**.
+- 🟡 Evidence caveat: no fresh matching populated side-by-side recapture/metrics after P2 is recorded in this doc. Treat matching populated recapture and standard workflow walkthroughs as verification backlog.
+
 ---
 
 ## 1. 가드레일 (반드시 준수)
@@ -106,8 +113,10 @@ git diff --check
 - 영역별(`top_bar/left_browser/preview_center/right_inspector/timeline`) brightness·`dark_fill`·coarse similarity 측정.
 - **목표:** populated mean subregion similarity **≥ 0.75**, 각 영역 `dark_fill` delta CapCut 대비 **≤ 0.15**.
 - Loop 2 note (2026-06-18): current valid window-capture metrics improved over the old MovieCut baseline (mean subregion similarity 0.3172 -> 0.7723, worst `dark_fill` delta 0.7087 -> 0.219). This pass targets left-browser and preview well polish; live workflow still requires populated capture because empty/unloaded captures can inflate similarity.
-- Loop 3 note (2026-06-19): current populated-state captures show mean subregion similarity **0.6302** and worst `dark_fill` delta **0.2845**. Measured weak regions: left_browser sim 0.619 with MovieCut too uniformly near-black (CapCut dark_fill 0.690 vs MovieCut 0.924), preview_center sim 0.568 with content dominance (CapCut dark_fill 0.793 vs MovieCut 0.508), right_inspector sim 0.561 with selected inspector too bright/card-heavy (CapCut dark_fill 0.982 vs MovieCut 0.865), and timeline sim 0.657 with slightly bright/saturated clip surfaces (CapCut dark_fill 0.849 vs MovieCut 0.803). Loop 3 implementation targets medium-dark library card and thumbnail wells, near-black selected inspector cards, muted timeline clip tokens, and a darker/tighter preview well while preserving Command/Session/render/export/playback paths.
-- Loop 4 note (2026-06-19): current committed Loop 3 text-selected metrics are mean subregion similarity **0.6746** and worst `dark_fill` delta **0.1996**. Main blockers are preview_center sim **0.488** with MovieCut almost pure black (dark_fill 0.993, brightness 6.69, edge 0.0065) versus CapCut's populated dark editor preview (dark_fill 0.793, brightness 51.49, edge 0.0956), and right_inspector sim **0.624** with too much edge contrast. Loop 4 implementation adds a presentation-only editorial preview matte/scaffold for audio/text/no-source selected states and flattened selected inspector rows with lower-opacity borders. Render/export/playback, commands, project models, and timeline behavior remain untouched.
+- Historical Loop 3 note (2026-06-19): populated-state captures showed mean subregion similarity **0.6302** and worst `dark_fill` delta **0.2845**. Weak regions were left_browser, preview_center, right_inspector, and timeline. This is retained as resolved history, not current blocker state.
+- Historical Loop 4 note (2026-06-19): committed Loop 3 text-selected metrics were mean subregion similarity **0.6746** and worst `dark_fill` delta **0.1996**. Main blockers were preview_center sim **0.488** and right_inspector sim **0.624**. Loop 4 added presentation-only editorial preview matte/scaffold and flatter selected inspector rows; keep this as metric history only.
+- Latest Loop 6 pass (2026-06-19): populated/text-selected metrics passed at `/tmp/moviecut-ui-evidence/current-loop/resume-20260619-004321/metrics_capcut_vs_moviecut_loop6_text_selected.json` with mean subregion similarity **0.7528 >= 0.75** and worst `dark_fill` delta **0.0850 <= 0.15**.
+- Current caveat (2026-06-20): IA/P0/P1/P2 polish is implemented, but this document does **not** claim a fresh matching populated side-by-side recapture after P2. Re-run capture/metrics before making final post-P2 visual claims.
 
 검증 스크립트 (repo에 포함됨):
 
@@ -148,8 +157,9 @@ python3 scripts/capcut_parity_metrics.py \
 ## 6. 새 세션 부트스트랩 프롬프트 (복붙)
 
 ```
-docs/CAPCUT_UI_SHOWCASE_HANDOFF.md 를 읽고 Phase 0-1(세로 아이콘 레일 전환)부터 착수해.
-프레젠테이션 레이어만 수정(가드레일 §1 준수), 각 작업마다 swift build →
-swift test --filter StaticContract → xcodebuild MovieCutMac build 로 검증하고
-populated 상태 스크린샷으로 before/after 확인. StaticContract 테스트는 라벨 보존하며 갱신.
+docs/CAPCUT_UI_SHOWCASE_HANDOFF.md 와 docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md 를 읽고
+남은 verification backlog부터 착수해: matching populated side-by-side recapture/metrics,
+standard workflow walkthroughs, optional iOS sync decision.
+프레젠테이션/문서 검증 범위만 수정하고, swift build →
+swift test --filter StaticContract 로 확인한다. Fresh post-P2 populated recapture 없이는 완료 주장하지 않는다.
 ```

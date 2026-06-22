@@ -198,4 +198,16 @@ Phase 2(Metal)에서 "더 빠르다"를 증명하려면 먼저 현재 수치를 
 - ✅ **앱 레벨 E2E (0.1c)**: `App/MovieCutMacUITests/`(XCUITest) + DEBUG 런치 하니스(`App/MovieCutMac/UITestHarness.swift`, env-var 게이트) + `exportProject(to:)` seam + `scripts/run_e2e_export.sh`. 실제 import→타임라인→export 파이프라인이 **유효한 h264 mp4(1920×1080, duration 2.0s)를 생성함을 런타임으로 증명**. ⚠️ XCUITest 자동화 실행은 macOS Accessibility/Automation 권한 필요(비대화형 터미널에서 "automation mode" 타임아웃) → 헤드리스 `run_e2e_export.sh`로 권한 없이 파이프라인 검증. CI/대화형 세션에서 XCUITest 별도 실행 권장.
 - ⚠️ **xcodegen 함정 발견·수정**: `xcodegen generate`가 Mac `Info.plist`를 덮어써 드래그앤드롭 UTType 선언(`com.moviecut.media-asset-id`)+마이크 권한을 날렸음(잠복 회귀). project.yml의 `info:` 생성 블록을 제거하고 hand-maintained plist를 `INFOPLIST_FILE`로만 참조하도록 영구 수정 → 재생성에도 보존 확인.
 - ⚠️ **iOS 빌드 미검증**: 이 머신에 iOS 26.5 플랫폼/런타임 미설치로 `MovieCutiOS` 빌드 실행 불가. 구조 배선(plist·INFOPLIST_FILE)은 Mac과 동일하게 온전. iOS 플랫폼 설치된 환경에서 빌드 확인 필요.
-- **다음**: `0.2` 티어1 스윕(EQ/노이즈 DSP 실태 판정 → 배경제거) — 골든/E2E 패턴을 그대로 적용.
+### 0.2 스윕 결과 — 티어1 EQ/노이즈감소 판정 (2026-06-22)
+
+증거 기반 판정 (`AudioEqualizerGapTests` + 코드 추적):
+
+| 기능 | 알고리즘 블록 | preview | export | 판정 |
+|---|---|---|---|---|
+| **EQ** | `AudioEqualizerService`(5밴드 `AVAudioUnitEQ`) — **앱에서 호출 0회 = dead code**, offline render 호출 시 `'player started when in a disconnected state'` **크래시**(노드 연결 순서 1회 수정 시도 실패) | `PlaybackEngine.applyEQBands` → **평균게인 단일 볼륨 배수**(주석이 자인) | `ExportEngine.eqVolumeMultiplier` → **평균게인 단일 볼륨 배수** | **❌** 실 EQ 미반영. bassBoost `[6,4,1,0,0]`/trebleBoost `[0,0,1,4,6]`는 평균게인 동일→볼륨 근사가 둘을 **구분 못 함**(`AudioEqualizerGapTests`로 잠금) |
+| **노이즈감소** | `NoiseReductionService`(HPF+LPF+Dynamics) — `applyNoiseReduction(for:)`에서 호출, denoise 파일 생성 후 **클립 소스 교체**(destructive apply) | (live 미적용; 교체된 소스로 반영) | (교체된 소스로 반영) | **🟡** 알고리즘 real + 배선 존재하나 **런타임 미검증**(EQ와 같은 offline-render 패턴 → 동일 크래시 위험). 실오디오 GUI 확인 필요 |
+
+- **Pro 함의**: Pro 오디오엔 실 EQ가 필수. 현재 타임라인 EQ는 볼륨 장식. **Phase 2A 과제 신설**: preview/export에 `MTAudioProcessingTap`(또는 pre-render bake)로 실제 5밴드 EQ/NR 적용 + 골든 오디오 검증. AVAudioEngine offline 크래시도 거기서 정조준.
+- 검증: `swift test --filter AudioEqualizerGapTests` pass(크래시 없는 갭 증명). 실 DSP 호출 테스트는 `swift test` 프로세스에서 SIGABRT → 제외.
+
+- **다음**: `0.2` 티어1 잔여 — 배경제거(F-08) 골든 검증 → 색보정 warmth/tint → 정지프레임 export.

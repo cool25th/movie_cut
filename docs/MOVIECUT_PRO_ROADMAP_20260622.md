@@ -210,4 +210,16 @@ Phase 2(Metal)에서 "더 빠르다"를 증명하려면 먼저 현재 수치를 
 - **Pro 함의**: Pro 오디오엔 실 EQ가 필수. 현재 타임라인 EQ는 볼륨 장식. **Phase 2A 과제 신설**: preview/export에 `MTAudioProcessingTap`(또는 pre-render bake)로 실제 5밴드 EQ/NR 적용 + 골든 오디오 검증. AVAudioEngine offline 크래시도 거기서 정조준.
 - 검증: `swift test --filter AudioEqualizerGapTests` pass(크래시 없는 갭 증명). 실 DSP 호출 테스트는 `swift test` 프로세스에서 SIGABRT → 제외.
 
-- **다음**: `0.2` 티어1 잔여 — 배경제거(F-08) 골든 검증 → 색보정 warmth/tint → 정지프레임 export.
+### 0.2 스윕 결과 — 티어1 배경제거(F-08) 판정 (2026-06-22)
+
+EQ와 대조적으로 **건강한 상태** — 증거:
+
+| 레이어 | 상태 |
+|---|---|
+| 합성 헬퍼 `PersonSegmentationCompositor.removeBackground`(`CIBlendWithMask`) | ✅ real + **non-skippable 골든**(`BackgroundRemovalGoldenTests`: center alpha **255**, corner **0**). 레거시 `BackgroundRemovalTests`의 silent-skip 픽셀 단언을 골든으로 보강 |
+| Vision 세그멘테이션 `VNGeneratePersonSegmentationRequest` | ✅ real + Mac(`CustomVideoCompositor:956`)·iOS(`IOSCustomVideoCompositor:793`) 양쪽 배선, `.fast`/`.accurate`, no-person guard |
+| preview/export 배선 | ✅ static contract(`isBackgroundRemoved` threading) |
+| **실인물 E2E**(Vision이 실제 인물 마스크 생성→합성→export) | 🟡 **미검증** — 테스트는 synthetic mask 사용, 실인물 fixture 없음. Vision 요청 자체는 테스트에서 실행된 적 없음 |
+
+- **판정**: **대부분 ✅** (알고리즘·합성·배선 real+검증). 잔여 🟡는 **실인물 E2E 1건**(실인물 비디오 fixture 또는 디바이스 캡처 필요). EQ(❌ dead+broken)와 격이 다름.
+- **다음**: `0.2` 티어1 잔여 — 색보정 warmth/tint(미지원 보강) → 정지프레임 export 반영 → NR 런타임 검증.

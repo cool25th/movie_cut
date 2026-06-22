@@ -53,6 +53,25 @@ enum GoldenPixel {
         )
     }
 
+    /// Renders and samples one pixel at (x, y) of an image via the software
+    /// renderer. Used for compositing goldens larger than 1×1 (e.g. masks).
+    static func pixel(_ image: CIImage, atX x: Int, y: Int) -> RGBA {
+        let bounds = CGRect(x: x, y: y, width: 1, height: 1)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var bytes = [UInt8](repeating: 0, count: 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            context.render(
+                image.cropped(to: bounds),
+                toBitmap: buffer.baseAddress!,
+                rowBytes: 4,
+                bounds: bounds,
+                format: .RGBA8,
+                colorSpace: colorSpace
+            )
+        }
+        return RGBA(bytes[0], bytes[1], bytes[2], bytes[3])
+    }
+
     /// Renders and samples the pixel at the image origin.
     static func sample(_ image: CIImage) -> RGBA {
         let bounds = CGRect(x: 0, y: 0, width: 1, height: 1)

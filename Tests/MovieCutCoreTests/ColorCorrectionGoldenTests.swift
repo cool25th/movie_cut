@@ -78,4 +78,24 @@ struct ColorCorrectionGoldenTests {
             "combined"
         )
     }
+
+    @Test("positive warmth renders the golden warm shift (red up, blue down)")
+    func warmthGolden() {
+        GoldenPixel.assertRendererFunctional()
+        GoldenPixel.expectClose(
+            corrected(ColorCorrection(warmth: 1), RGBA(150, 150, 150)),
+            RGBA(166, 148, 121),
+            "warmth+1"
+        )
+    }
+
+    @Test("positive tint renders the golden magenta shift")
+    func tintGolden() {
+        GoldenPixel.assertRendererFunctional()
+        GoldenPixel.expectClose(
+            corrected(ColorCorrection(tint: 1), RGBA(150, 150, 150)),
+            RGBA(191, 124, 185),
+            "tint+1"
+        )
+    }
 }

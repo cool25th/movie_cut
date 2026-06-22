@@ -64,23 +64,24 @@ struct ColorCorrectionPixelProcessorTests {
         #expect(channelSpread(processed) < channelSpread(original))
     }
 
-    @Test("unsupported warmth and tint are documented no ops")
-    func unsupportedWarmthAndTintAreNoOps() {
+    @Test("warmth and tint are now applied to rendered pixels")
+    func warmthAndTintAreApplied() {
         let warmthTintOnly = ColorCorrection(warmth: 1, tint: -1)
         #expect(!ColorCorrectionPixelProcessor.isIdentity(ColorCorrection(warmth: 1)))
-        #expect(!ColorCorrectionPixelProcessor.hasSupportedAdjustments(in: warmthTintOnly))
+        #expect(ColorCorrectionPixelProcessor.hasSupportedAdjustments(in: warmthTintOnly))
 
-        let noOpImage = solidColor(red: 0.33, green: 0.45, blue: 0.72)
-        #expect(ColorCorrectionPixelProcessor.apply(warmthTintOnly, to: noOpImage) === noOpImage)
+        let neutral = solidColor(red: 0.59, green: 0.59, blue: 0.59)
+        // An identity correction is still a no-op (same reference).
+        #expect(ColorCorrectionPixelProcessor.apply(ColorCorrection(), to: neutral) === neutral)
 
         guard coreImageRenderingAvailable() else { return }
 
-        let original = samplePixel(from: noOpImage)
-        let processed = samplePixel(from: ColorCorrectionPixelProcessor.apply(warmthTintOnly, to: noOpImage))
+        let original = samplePixel(from: neutral)
+        let warmed = samplePixel(from: ColorCorrectionPixelProcessor.apply(ColorCorrection(warmth: 1), to: neutral))
 
-        #expect(abs(Int(original.r) - Int(processed.r)) <= 1)
-        #expect(abs(Int(original.g) - Int(processed.g)) <= 1)
-        #expect(abs(Int(original.b) - Int(processed.b)) <= 1)
+        // Positive warmth renders warmer: more red, less blue.
+        #expect(warmed.r > original.r)
+        #expect(warmed.b < original.b)
     }
 
     private func coreImageRenderingAvailable() -> Bool {

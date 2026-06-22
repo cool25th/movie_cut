@@ -222,4 +222,12 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 | **실인물 E2E**(Vision이 실제 인물 마스크 생성→합성→export) | 🟡 **미검증** — 테스트는 synthetic mask 사용, 실인물 fixture 없음. Vision 요청 자체는 테스트에서 실행된 적 없음 |
 
 - **판정**: **대부분 ✅** (알고리즘·합성·배선 real+검증). 잔여 🟡는 **실인물 E2E 1건**(실인물 비디오 fixture 또는 디바이스 캡처 필요). EQ(❌ dead+broken)와 격이 다름.
-- **다음**: `0.2` 티어1 잔여 — 색보정 warmth/tint(미지원 보강) → 정지프레임 export 반영 → NR 런타임 검증.
+
+### 0.2 스윕 결과 — 색보정 warmth/tint ❌→✅ 구현 (2026-06-22)
+
+- **발견**: warmth/tint **슬라이더가 Mac(`InspectorEffectsSection`)·iOS(`IOSEffectsInspectorView` "색온도")에 이미 존재**하고 모델에 배선됐으나, `ColorCorrectionPixelProcessor`가 **둘을 무시(no-op)** → 사용자가 슬라이더를 움직여도 preview/export에 **아무 변화 없음**(작동 안 하는 컨트롤). Pro 색보정엔 치명적.
+- **구현**: shared `ColorCorrectionPixelProcessor.apply`에 `CITemperatureAndTint` 단계 추가(`hasTemperatureAdjustments` 게이트). 부호는 grading-intuitive — **warmth+ = 따뜻함(red↑/blue↓)**, tint+ = 마젠타. shared processor 경유라 Mac/iOS preview+export에 자동 반영.
+- **검증**: non-skippable 골든(`ColorCorrectionGoldenTests`: warmth+1 → `[166,148,121]`, tint+1 → `[191,124,185]`, 소프트웨어 렌더러로 실측·잠금) + 레거시 no-op 테스트를 "applied" 동작으로 갱신. `swift test --filter ColorCorrection*` **15/3 pass**, Mac `xcodebuild` BUILD SUCCEEDED.
+- **판정**: **✅** (preview+export 실반영). 잔여: 실영상 GUI 육안 확인은 선택.
+
+- **다음**: `0.2` 티어1 잔여 — 정지프레임 export 반영 → NR 런타임 검증.

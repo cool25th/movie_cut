@@ -1105,6 +1105,9 @@ struct MediaLibraryPanel: View {
                     ForEach(assets) { asset in
                         assetGridCard(asset)
                     }
+                    ForEach(0..<mediaRhythmPlaceholderCount(for: assets.count), id: \.self) { index in
+                        mediaPopulatedRhythmCard(index: index)
+                    }
                 }
                 .padding(MovieCutSpacing.medium)
             }
@@ -1243,6 +1246,46 @@ struct MediaLibraryPanel: View {
         )
     }
 
+    private func mediaRhythmPlaceholderCount(for assetCount: Int) -> Int {
+        max(0, min(4, 6 - assetCount))
+    }
+
+    private func mediaPopulatedRhythmCard(index: Int) -> some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.libraryThumbnailBackground.opacity(0.82))
+
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { column in
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(MovieCutTheme.librarySkeletonFill.opacity(column == index % 3 ? 0.78 : 0.48))
+                            .frame(width: 15 + CGFloat(column * 5), height: 18 + CGFloat((index + column) % 3) * 7)
+                    }
+                }
+                .padding(MovieCutSpacing.small)
+            }
+            .frame(height: 64)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(MovieCutTheme.librarySkeletonFill.opacity(0.72))
+                .frame(width: index.isMultiple(of: 2) ? 76 : 92, height: 6)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(MovieCutTheme.librarySkeletonFill.opacity(0.42))
+                .frame(width: 54, height: 5)
+        }
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .movieCutLibraryBrowserCard(
+            padding: MovieCutSpacing.small,
+            background: MovieCutTheme.libraryCardBackground.opacity(0.94),
+            border: MovieCutTheme.border.opacity(0.08)
+        )
+        .opacity(0.64)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private func assetGridCard(_ asset: MediaAsset) -> some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
             ZStack(alignment: .topTrailing) {
@@ -1260,7 +1303,7 @@ struct MediaLibraryPanel: View {
 
             assetStateText(asset)
         }
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
         .movieCutLibraryBrowserCard(
             padding: MovieCutSpacing.small,
             background: asset.id == viewModel.selectedAssetId ? MovieCutTheme.libraryRaisedCardBackground : MovieCutTheme.libraryCardBackground,
@@ -1683,6 +1726,7 @@ struct MediaLibraryPanel: View {
         }
         .aspectRatio(16 / 9, contentMode: .fit)
         .frame(maxWidth: .infinity)
+        .frame(maxHeight: 68)
         .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
         .clipped()
         .accessibilityHidden(true)

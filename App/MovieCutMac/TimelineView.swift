@@ -440,7 +440,7 @@ struct TimelineView: View {
                                 p.move(to: CGPoint(x: x, y: rulerHeight))
                                 p.addLine(to: CGPoint(x: x, y: rulerHeight - tickH))
                             },
-                            with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.58) : MovieCutTheme.timelineGrid.opacity(0.28)),
+                            with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.66) : MovieCutTheme.timelineGrid.opacity(0.34)),
                             lineWidth: isMajor ? 0.6 : 0.3
                         )
 
@@ -500,7 +500,7 @@ struct TimelineView: View {
                         path.move(to: CGPoint(x: x, y: 0))
                         path.addLine(to: CGPoint(x: x, y: height))
                     },
-                    with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18)),
+                    with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.44) : MovieCutTheme.timelineGrid.opacity(0.24)),
                     lineWidth: isMajor ? 0.4 : 0.25
                 )
 

@@ -26,11 +26,11 @@ struct Phase14TimelineDarkFillStaticContractTests {
         let shared = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
 
         for marker in [
-            #"static let timelineBackground: Color = rgb(0x1D, 0x1F, 0x23)"#,
-            #"static let rulerBackground: Color = rgb(0x24, 0x26, 0x2B)"#,
-            #"static let trackBackground: Color = rgb(0x1A, 0x1C, 0x20)"#,
-            #"static let trackHeaderBackground: Color = rgb(0x2A, 0x2D, 0x32)"#,
-            #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
+            #"static let timelineBackground: Color = rgb(0x24, 0x26, 0x2B)"#,
+            #"static let rulerBackground: Color = rgb(0x2B, 0x2D, 0x32)"#,
+            #"static let trackBackground: Color = rgb(0x22, 0x24, 0x28)"#,
+            #"static let trackHeaderBackground: Color = rgb(0x35, 0x38, 0x3E)"#,
+            #"static let timelineGrid: Color = rgb(0x4A, 0x4D, 0x55, opacity: 0.34)"#,
             #"static let timelineVideoClip: Color = rgb(0x1D, 0x30, 0x38)"#,
             #"static let timelineAudioClip: Color = rgb(0x22, 0x33, 0x29)"#,
             #"static let timelineTextClip: Color = rgb(0x3A, 0x2B, 0x1F)"#,
@@ -60,12 +60,12 @@ struct Phase14TimelineDarkFillStaticContractTests {
             to: "    private func trackLane(_ track: Track) -> some View"
         )
 
-        #expect(ruler.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.58) : MovieCutTheme.timelineGrid.opacity(0.28))"#))
+        #expect(ruler.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.66) : MovieCutTheme.timelineGrid.opacity(0.34))"#))
         #expect(ruler.contains("lineWidth: isMajor ? 0.6 : 0.3"))
         #expect(!ruler.contains("isMajor ? MovieCutTheme.divider"))
         #expect(!ruler.contains("MovieCutTheme.divider : MovieCutTheme.timelineGrid"))
 
-        #expect(grid.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18))"#))
+        #expect(grid.contains(#"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.44) : MovieCutTheme.timelineGrid.opacity(0.24))"#))
         #expect(grid.contains("lineWidth: isMajor ? 0.4 : 0.25"))
         #expect(!grid.contains("MovieCutTheme.divider.opacity(0.44)"))
         #expect(!grid.contains("isMajor ? MovieCutTheme.divider"))

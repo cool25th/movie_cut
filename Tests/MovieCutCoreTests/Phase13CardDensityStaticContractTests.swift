@@ -14,7 +14,7 @@ struct Phase13CardDensityStaticContractTests {
         let shared = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
 
         for marker in [
-            #"static let panelBackgroundRaised: Color = rgb(0x1B, 0x1C, 0x1F)"#,
+            #"static let panelBackgroundRaised: Color = rgb(0x20, 0x21, 0x24)"#,
             #"static let cardBackground: Color = rgb(0x18, 0x19, 0x1B)"#,
             #"static let elevatedCardBackground: Color = rgb(0x1B, 0x1C, 0x1E)"#,
             #"static let controlSurface: Color = rgb(0x1A, 0x1B, 0x1D)"#,
@@ -63,17 +63,17 @@ struct Phase13CardDensityStaticContractTests {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
 
         for marker in [
-            #"static let rulerBackground: Color = rgb(0x24, 0x26, 0x2B)"#,
-            #"static let trackBackground: Color = rgb(0x1A, 0x1C, 0x20)"#,
-            #"static let trackHeaderBackground: Color = rgb(0x2A, 0x2D, 0x32)"#,
-            #"static let timelineGrid: Color = rgb(0x30, 0x32, 0x37, opacity: 0.24)"#,
+            #"static let rulerBackground: Color = rgb(0x2B, 0x2D, 0x32)"#,
+            #"static let trackBackground: Color = rgb(0x22, 0x24, 0x28)"#,
+            #"static let trackHeaderBackground: Color = rgb(0x35, 0x38, 0x3E)"#,
+            #"static let timelineGrid: Color = rgb(0x4A, 0x4D, 0x55, opacity: 0.34)"#,
         ] {
             #expect(shared.contains(marker))
         }
 
         for marker in [
             #".fill(MovieCutTheme.rulerBackground)"#,
-            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.34) : MovieCutTheme.timelineGrid.opacity(0.18))"#,
+            #"with: .color(isMajor ? MovieCutTheme.timelineGrid.opacity(0.44) : MovieCutTheme.timelineGrid.opacity(0.24))"#,
             #".fill(MovieCutTheme.trackBackground)"#,
         ] {
             #expect(timeline.contains(marker))

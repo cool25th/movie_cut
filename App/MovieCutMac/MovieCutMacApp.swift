@@ -6,12 +6,16 @@ import UniformTypeIdentifiers
 @main
 struct MovieCutMacApp: App {
     @State private var viewModel = EditorViewModel()
+    @State private var didLoadBootstrapProject = false
 
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: viewModel)
+                .task {
+                    await loadBootstrapProjectIfNeeded()
+                }
         }
-        .defaultSize(width: 1440, height: 900)
+        .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -205,6 +209,66 @@ struct MovieCutMacApp: App {
                     MovieCutKeyboardShortcutHelp.show()
                 }
             }
+        }
+    }
+
+    private var bootstrapProjectPath: String? {
+        guard let path = ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_PROJECT"],
+              !path.isEmpty else {
+            return nil
+        }
+        return path
+    }
+
+    private var defaultWindowSize: CGSize {
+        bootstrapProjectPath == nil ? CGSize(width: 1440, height: 900) : CGSize(width: 1811, height: 881)
+    }
+
+    @MainActor
+    private func loadBootstrapProjectIfNeeded() async {
+        guard !didLoadBootstrapProject else { return }
+        guard let path = bootstrapProjectPath else {
+            return
+        }
+
+        didLoadBootstrapProject = true
+        await viewModel.openProject(from: URL(fileURLWithPath: path))
+
+        if ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_SELECT_TEXT"] == "1" {
+            selectFirstTextClipForBootstrap()
+        }
+
+        applyBootstrapWindowFrame()
+    }
+
+    @MainActor
+    private func applyBootstrapWindowFrame() {
+        guard bootstrapProjectPath != nil else { return }
+
+        DispatchQueue.main.async {
+            let targetSize = CGSize(width: 1811, height: 881)
+            let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(origin: NSPoint(x: 0, y: 0), size: targetSize)
+            let targetFrame = NSRect(
+                x: visibleFrame.minX,
+                y: max(visibleFrame.minY, visibleFrame.maxY - targetSize.height),
+                width: targetSize.width,
+                height: targetSize.height
+            )
+
+            let window = NSApp.keyWindow
+                ?? NSApp.mainWindow
+                ?? NSApp.windows.first(where: { $0.isVisible })
+            window?.setFrame(targetFrame, display: true)
+        }
+    }
+
+    @MainActor
+    private func selectFirstTextClipForBootstrap() {
+        for track in viewModel.currentProject.timeline.tracks where track.kind == .text {
+            guard let clip = track.clips.first else { continue }
+            viewModel.selectedClipId = clip.id
+            viewModel.playheadTime = clip.timelineRange.start
+            return
         }
     }
 }

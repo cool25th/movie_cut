@@ -98,8 +98,8 @@ struct P0BrowserTimelinePolishStaticContractTests {
             #expect(mediaBackground.contains(marker) || timeline.contains(marker))
         }
 
-        #expect(grid.contains("MovieCutTheme.timelineGrid.opacity(0.34)"))
-        #expect(grid.contains("MovieCutTheme.timelineGrid.opacity(0.18)"))
+        #expect(grid.contains("MovieCutTheme.timelineGrid.opacity(0.44)"))
+        #expect(grid.contains("MovieCutTheme.timelineGrid.opacity(0.24)"))
         #expect(lane.contains(".background(MovieCutTheme.trackHeaderBackground.opacity(0.74))"))
         #expect(lane.contains("trackHeaderControls(for: track)"))
         #expect(lane.contains("timelineGridLines(height: trackHeight)"))

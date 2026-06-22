@@ -36,6 +36,11 @@ struct ContentView: View {
         .background(MovieCutTheme.editorBackground.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .tint(MovieCutTheme.accentCyan)
+        .task {
+            #if DEBUG
+            await viewModel.runUITestHarnessIfRequested()
+            #endif
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 projectStatusToolbarItem
@@ -305,15 +310,10 @@ struct ContentView: View {
             Label(canvasSizeText, systemImage: "rectangle")
             Text(viewModel.currentProject.canvas.frameRate.statusDisplayName)
             Spacer()
-            if let error = viewModel.lastErrorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-            } else if let message = viewModel.lastStatusMessage {
-                Text(message)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            Text(viewModel.lastErrorMessage ?? viewModel.lastStatusMessage ?? "")
+                .foregroundStyle(viewModel.lastErrorMessage != nil ? .red : .secondary)
+                .lineLimit(1)
+                .accessibilityIdentifier("moviecut.status")
         }
         .font(.caption)
         .foregroundStyle(.secondary)

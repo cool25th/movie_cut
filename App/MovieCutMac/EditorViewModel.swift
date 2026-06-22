@@ -688,6 +688,20 @@ final class EditorViewModel {
             return
         }
 
+        await exportProject(to: url)
+    }
+
+    /// Exports to an explicit URL using the same engine path as `exportProject()`
+    /// but without the save panel. Used by automation and the XCUITest harness so
+    /// the real export pipeline is exercised end-to-end.
+    func exportProject(to url: URL) async {
+        let reconciledSettings = reconciledExportSettingsFromLegacyUI()
+        if currentProject.exportSettings != reconciledSettings {
+            await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
+            guard lastErrorMessage == nil else { return }
+        }
+
+        let settings = currentProject.exportSettings
         lastExportURL = nil
 
         exportEngine.exportResolution = Self.exportResolutionString(for: settings.resolution)

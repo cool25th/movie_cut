@@ -231,3 +231,10 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 - **판정**: **✅** (preview+export 실반영). 잔여: 실영상 GUI 육안 확인은 선택.
 
 - **다음**: `0.2` 티어1 잔여 — 정지프레임 export 반영 → NR 런타임 검증.
+
+### 이전 커밋 회귀 검증 (2026-06-22)
+
+사용자 요청으로 기존 커밋 건전성 점검:
+- **Mac 앱 빌드**: `eb63f1d`(사용자 본인 커밋 — `MOVIECUT_BOOTSTRAP_PROJECT` env 게이트 스크린샷 부트스트랩, 제 UITest seam과 다른 env/`.task`라 무충돌) + 제 모든 변경 함께 **BUILD SUCCEEDED**.
+- **전체 스위트**(네트워크/Speech/마이크 통합 6스위트 제외): **633 tests passed / 0 failed**. 모델·명령·전 렌더/픽셀 프로세서·static contract·cloud/collab + 신규 골든 전부 통과 → **로직 회귀 없음**.
+- ⚠️ **검증 인프라 부채(기록)**: `swift test` 전체가 헤드리스에서 완주 곤란 — (a) `ClaudeEditingProvider`(네트워크)·`TextToSpeech`/`Voiceover`/`Transcription`(Speech·마이크 권한)은 hang/권한 프롬프트, (b) `TransitionExportFixture` 등 실 AVFoundation export 픽셀 테스트는 분 단위로 느림. **Phase 0.1 후속**: 통합/느린 테스트에 trait 태깅 + CI 분리(`.tags`/별도 스킴)로 헤드리스 완주 보장.

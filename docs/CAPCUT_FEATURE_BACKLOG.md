@@ -60,6 +60,34 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ---
 
+## 2.5 증거 기반 검증 현황 리셋 (2026-06-23/24)
+
+> Phase 0(기반 경화)에서 "🟡 자가보고"를 **실측 증거**로 교체했다. 상세·로드맵은 `docs/MOVIECUT_PRO_ROADMAP_20260622.md`, 성능은 `docs/PERF_BASELINE_20260622.md`.
+
+**검증 인프라(신규)** — 이제 완료 증거는 static contract가 아니라 아래로 판정한다:
+- **골든 픽셀 하니스** `Tests/.../Support/GoldenPixelHarness.swift` — `CIContext(useSoftwareRenderer:true)` 결정적·sandbox-safe, **silent-skip 제거**(망가진 렌더러는 소리내어 실패). 색보정·배경제거 골든이 이를 사용.
+- **결정적 fixture** `Tests/Fixtures/` + `scripts/make_fixtures.sh` (실 AVFoundation 로드 검증).
+- **앱 레벨 E2E** `scripts/run_e2e_export.sh` + DEBUG 하니스(`App/MovieCutMac/UITestHarness.swift`, env 게이트) — import→export·freeze·NR·autosave를 **실제 앱 런타임**으로 검증.
+
+**티어1 스윕 판정(실측)**:
+
+| 기능 | 기존 | 실측 판정 | 증거 |
+|---|---|---|---|
+| 색보정 밝기/대비/채도 | ✅ | ✅ | `ColorCorrectionGoldenTests` 골든 |
+| 색보정 warmth/tint | ❌(no-op) | **✅ 구현 완료** | 골든(warm/magenta shift), 죽은 슬라이더 실수정 |
+| 배경제거 F-08 | 🟡 | **✅**(실인물 E2E만 🟡) | `BackgroundRemovalGoldenTests`(alpha 255/0) |
+| 정지프레임 | 🟡 미확인 | **✅ export 반영** | E2E duration 2.0→4.0s |
+| 노이즈감소 | 🟡~❌ | **✅ 앱 런타임** | 헤드리스 크래시 없음·소스 swap |
+| EQ | 🟡~❌ | **❌ dead+볼륨근사** | `AudioEqualizerGapTests` |
+
+**안정성(0.6)**: undo/redo 무결성(스냅샷 기반, `UndoIntegrityTests`)·크래시 복구 자동저장(`AutosaveRecoveryTests` + 앱 배선) ✅.
+
+**성능(0.3)**: export +9%(0.49× realtime)·preview 5.5ms/frame(182fps) → CoreImage 합성 병목 아님 → **Metal 전면 재작성 보류**.
+
+**미검증/주의**: 위 표 외 🟡 항목(덕킹·비트감지·자동컷·리프레임·자막워크플로우·TTS·캔버스배경·클라우드)은 **아직 실측 미검증** — 자가보고 "구현됨"을 완료로 보지 말 것. 전체 `swift test`는 네트워크/Speech/마이크 통합 테스트로 헤드리스 완주 곤란(633/0 부분 통과).
+
+---
+
 ## 3. CapCut 기능 백로그 (도메인별)
 
 상태: ✅ 실제 동작 / 🟡 배선·UI만 존재(실처리 없음) / ❌ 없음
@@ -84,7 +112,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 키보드 단축키 맵 전체 (P2) — `MovieCutMacApp.commands` now owns the F-05 Playback/Timeline/Edit shortcut map: Space, Cmd+B, Q/W, Delete, Shift+Delete, Cmd+D, frame/1s arrows, clip-boundary Up/Down, +/- zoom, M, and Cmd+Z/Shift+Cmd+Z. Toolbar/background duplicate shortcut registrations were removed from `ContentView`, and Help exposes "MovieCut Keyboard Shortcuts." Caveat: text-entry-sensitive unmodified shortcuts use a centralized AppKit first-responder guard rather than a full SwiftUI FocusState router; GUI text-field regression remains host verification.
 
 ### C. 비디오 효과 (Visual)
-- [x] ✅ 색보정(밝기/대비/채도) **실제 픽셀 처리** (P0) — `ColorCorrectionPixelProcessor`가 `CIColorControls`로 밝기/대비/채도를 적용하고, Mac `CustomVideoCompositor`가 preview/export 공통 경로에서 이를 사용한다. SwiftPM static contract가 `PlaybackEngine`/`ExportEngine`의 custom compositor 라우팅을 확인한다. 현재 sandbox에서는 `CIContext`가 non-black fixture도 transparent black으로 렌더해 pixel assertion은 guarded; 정상 CoreImage runner에서는 identity/brightness/saturation pixel sampling 테스트가 실행된다. warmth/tint는 후속 보강 대상.
+- [x] ✅ 색보정(밝기/대비/채도) **실제 픽셀 처리** (P0) — `ColorCorrectionPixelProcessor`가 `CIColorControls`로 밝기/대비/채도를 적용하고, Mac `CustomVideoCompositor`가 preview/export 공통 경로에서 이를 사용한다. SwiftPM static contract가 `PlaybackEngine`/`ExportEngine`의 custom compositor 라우팅을 확인한다. 현재 sandbox에서는 `CIContext`가 non-black fixture도 transparent black으로 렌더해 pixel assertion은 guarded; 정상 CoreImage runner에서는 identity/brightness/saturation pixel sampling 테스트가 실행된다. **warmth/tint는 2026-06-23 구현 완료** — `CITemperatureAndTint` 단계를 shared processor에 추가(warmth+ = 따뜻함/red↑, tint+ = 마젠타). Mac/iOS Inspector 슬라이더가 이미 존재했으나 프로세서가 무시하던 **작동 안 하는 컨트롤**이었고 이제 preview/export 실반영. non-skippable 골든(`ColorCorrectionGoldenTests`: warmth+1→[166,148,121], tint+1→[191,124,185]).
 - [x] ✅ 필터/LUT 실제 렌더 (P1) — `VisualEffectPixelProcessor`가 grayscale/sepia/blur/exposure/temperature/styleTransfer 및 cinematic/vintage/noir/vivid/cool procedural LUT preset을 Core Image로 적용한다. Mac `CustomVideoCompositor`가 clip `effects`를 preview/export 공통 custom compositor 경로에서 이 shared processor로 위임하고, `VisualEffectPixelProcessorTests`가 renderable contract, extent preservation, guarded pixel sampling, `PlaybackEngine`/`ExportEngine` 라우팅, Inspector preset 노출을 검증한다. 외부 `.cube` LUT import는 F-09에서 완료(`CubeLUTParser`+`.externalLUT`+Import LUT… UI, `CubeLUTTests` 10개, guarded 픽셀 검증). Caveat: 실기기 import GUI 확인 잔여.
 - [x] ✅ 크로마키 keying 알고리즘 (P1) — `ChromaKeyPixelProcessor`가 `ChromaKeySettings`의 keyColor/tolerance/softness/spillSuppression을 Core Image `CIColorKernel`로 적용하고, keyed green 픽셀 alpha 제거, near-key partial alpha, foreground opacity 유지, invalid hex fallback, extent preservation을 SwiftPM 테스트로 검증한다. Mac `CustomVideoCompositor`와 `ChromaKeyCompositor`는 shared processor로 위임하며 `ExportEngine`/`PlaybackEngine` static contract가 chroma-key clip의 custom compositor 라우팅을 확인한다. eyedropper/매트 erode는 F-10에서 완료(`PixelSampler` 스포이드 + `edgeShrink`, `ChromaKeyEyedropperTests` 9개). Caveat: 실기기 스포이드 GUI 확인 잔여.
 - [x] ✅ 마스킹(도형/그리기) 합성 (P1) — Batch 15에서 `MaskPixelProcessor`가 Core Image/CGContext 기반으로 rectangle/ellipse/triangle/diamond/linear/brush 마스크를 실제 알파 합성하고, Mac/iOS `CustomVideoCompositor`가 shared processor를 호출한다. SwiftPM 테스트가 rectangle/inverted/ellipse/brush 알파 샘플과 extent preservation, Mac export/playback 라우팅 static contract를 검증한다. Caveat: AI segmentation/refine edge 같은 고급 매트 보정은 이 배치 범위가 아니며 별도 후속 항목이다.
@@ -110,7 +138,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - ✅ 볼륨 / 페이드 / 파형 표시
 - [x] ✅ 페이드 duration 편집 UI (P1) — Mac Inspector `Fade Duration` 그룹에서 Fade In/Fade Out 현재값을 초 단위로 표시하고 Slider + Seconds `TextField` + 0.05s Stepper로 0...min(10s, clip duration) 범위 정밀 편집을 제공한다. Reset Fades/None/Soft/Long preset은 모두 `updateSelectedAudioFade` → `AudioFadeCommand` 경로로 적용되어 undo/redo path를 유지한다.
 - [ ] 🟡 자동 덕킹(범위 기반, F-14) (P2→구현됨) — `AudioDuckingPlanner` + `Clip.duckingRanges/duckingLevel` + `SetAudioDuckingCommand`(단일 undo) + Mac preview/export 동일 ramp(attack 0.12s/release 0.25s, fade 회피) + Inspector Duck/Clear. `AudioDuckingTests` 14개. Caveat: 청감 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
-- [ ] 🟡~❌ EQ / 노이즈감소 **실제 DSP**(AVAudioUnit) (P2)
+- [ ] ❌ EQ **실제 DSP** (P2) — **2026-06-23 증거 기반 판정**: 실 5밴드 `AudioEqualizerService`(AVAudioUnitEQ)는 **앱에서 호출 0회=dead code**이고 offline render 호출 시 크래시. 타임라인 EQ는 preview/export 모두 **평균게인→단일 볼륨 배수 근사**(실 EQ 아님; `AudioEqualizerGapTests`로 잠금). 실 EQ 배선은 **Phase 2A**(MTAudioProcessingTap/pre-render).
+- [x] ✅ 노이즈감소 **실제 DSP** (P2) — **2026-06-23 검증**: `NoiseReductionService`(HPF 80Hz+LPF 12kHz+Dynamics offline)가 `applyNoiseReduction(for:)` destructive apply로 클립 소스를 denoise 파일로 교체. **앱 컨텍스트 런타임 확정**(헤드리스: 크래시 없이 exit 0/error=none/소스 swap; `run_e2e_export.sh`). Caveat: 실잡음 효과 청감은 선택. (EQ의 swift-test 크래시는 환경 artifact였음.)
 - [ ] 🟡 비트 감지(음악 동기 편집, F-15) (P2→구현됨) — `BeatDetectionProvider`(에너지 플럭스 onset, 합성 클릭 트랙으로 <50ms 간격 검증) + `Marker.kind(.beat)` + 배치 마커 명령(단일 undo) + 룰러 틱 렌더/스냅 포함 + Quick Tools Detect/Clear Beats. `BeatDetectionTests` 13개. Caveat: 실음원 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [x] ✅ 보이스오버 실제 마이크 녹음 (P1) — Mac `VoiceoverRecordingView`가 macOS `AVCaptureDevice` microphone 권한을 확인/요청하고, shared `VoiceoverRecorder`의 `AVAudioEngine` input tap 경로로 temp CAF에 실제 녹음한다. 녹음 UI는 timer/input level/saving progress/accessibility label·hint를 제공하고, stop 시 recorder elapsed time을 `fallbackDuration`으로 `EditorViewModel.addVoiceoverAudio(from:fallbackDuration:)`에 넘긴다. EditorViewModel은 `audioDuration(for:)`로 readable audio duration을 먼저 쓰고, recorder fallback duration, 0.1s minimum 순서로 duration을 확정해 playhead 위치에 audio clip을 추가/선택한다. `MediaImporter`는 voiceover CAF를 audio asset으로 분류한다. Caveat: 실제 마이크 접근은 `NSMicrophoneUsageDescription`, macOS Microphone 권한, 선택된 입력 하드웨어에 의존하므로 호스트에서 실제 녹음 검증이 필요하다.
 - [ ] 🟡 오디오 추출 (P2)
@@ -119,7 +148,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ### G. 속도/시간
 - [x] ✅ 속도 조절 / speed ramp preview+export (P1) — Mac `PlaybackEngine` preview와 `ExportEngine` export가 `SpeedRampCurve(points: clip.speedRampPoints)`로 source segment를 나누고 `scaleTimeRange`로 composition time range를 조정한다. 비디오 클립의 audio preview path와 `.audio` track preview path도 같은 segment/scale 경로를 사용한다. Caveat: 고급 옵티컬 플로우 기반 부드러운 슬로우모션은 별도 P3 항목이며 아직 완료되지 않았다.
 - ✅ 역재생
-- [ ] 🟡 정지프레임 (export 반영 미확인) (P2)
+- [x] ✅ 정지프레임 (P2) — **2026-06-23 export 반영 확정**: `ExportEngine`(`isFreezeFrame` 감지 → 1프레임 source range → `scaleTimeRange`)·`PlaybackEngine` 양쪽 표준 기법. **헤드리스 E2E 측정**: 2s 클립에 2s freeze → export 2.0s→**4.0s**(delta 정확히 freeze duration). `run_e2e_export.sh`.
 - [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)
 
 ### H. AI 기능 (CapCut 차별화)

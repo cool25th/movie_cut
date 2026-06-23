@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
+import MovieCutCore
 
 extension EditorViewModel {
     /// Deterministic launch hooks for the XCUITest end-to-end safety net (Phase 0.1c).
@@ -33,6 +34,16 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_FREEZE"] == "1", let clip = selectedClip {
             playheadTime = clip.timelineRange.start + clip.timelineRange.duration / 2
             await freezeSelectedFrame(freezeDuration: 2.0)
+        }
+
+        // Optional color-correction step: forces every exported frame through the
+        // CoreImage CustomVideoCompositor, so a perf baseline can measure that
+        // path's cost against a plain passthrough export (the Phase 2B Metal
+        // decision input).
+        if env["MOVIECUT_UITEST_COLOR"] == "1", selectedClipId != nil {
+            await updateSelectedColorCorrection(
+                ColorCorrection(brightness: 0.1, contrast: 1.2, saturation: 1.3, warmth: 0.4, tint: 0.1)
+            )
         }
 
         // Optional noise-reduction step: runs the real NoiseReductionService DSP

@@ -242,6 +242,19 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 - **E2E 검증**: 헤드리스 하니스에 `MOVIECUT_UITEST_FREEZE` 훅 추가 → 2s fixture 중간에 2s freeze 적용 후 export. **baseline 2.000s → freeze 4.000s, delta 정확히 2.00s** = freeze duration. `scripts/run_e2e_export.sh`에 codify(반복 가능).
 - **판정**: **✅ export 실반영 확정**(런타임 측정).
 
+### 0.3 성능 베이스라인 — Metal 결정 해소 (2026-06-22)
+
+`scripts/perf_baseline.sh` (10s/1080p export, Debug). 상세는 `docs/PERF_BASELINE_20260622.md`.
+
+| 경로 | 시간 | realtime | 메모리 |
+|---|---|---|---|
+| passthrough | 4.51s | 0.45× | 160 MB |
+| color (CoreImage `CustomVideoCompositor`) | 4.90s | 0.49× | 166 MB |
+| **CoreImage 오버헤드** | **+0.39s (1.1×)** | | +6 MB |
+
+- **결정: Phase 2B Metal 전면 재작성 보류(defer).** CoreImage 합성은 5단계 색보정 전체에 **+9%**뿐, 효과 켜도 export가 realtime 2배 빠름 → **병목 아님**. 조건부 Metal이 측정으로 "보류" 확정. 절약된 노력은 2A(색그레이딩·ProRes/HDR)·3(온디바이스 AI)으로.
+- **후속**: 실시간 preview fps(60fps 스크러빙)는 별도 경로(`PlaybackEngine`)라 미측정 — 다음 측정 대상. 무거운 합성(전환+마스크+다중레이어)·4K도 후속.
+
 ### 이전 커밋 회귀 검증 (2026-06-22)
 
 사용자 요청으로 기존 커밋 건전성 점검:

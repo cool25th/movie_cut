@@ -252,8 +252,9 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 | color (CoreImage `CustomVideoCompositor`) | 4.90s | 0.49× | 166 MB |
 | **CoreImage 오버헤드** | **+0.39s (1.1×)** | | +6 MB |
 
-- **결정: Phase 2B Metal 전면 재작성 보류(defer).** CoreImage 합성은 5단계 색보정 전체에 **+9%**뿐, 효과 켜도 export가 realtime 2배 빠름 → **병목 아님**. 조건부 Metal이 측정으로 "보류" 확정. 절약된 노력은 2A(색그레이딩·ProRes/HDR)·3(온디바이스 AI)으로.
-- **후속**: 실시간 preview fps(60fps 스크러빙)는 별도 경로(`PlaybackEngine`)라 미측정 — 다음 측정 대상. 무거운 합성(전환+마스크+다중레이어)·4K도 후속.
+- **preview 렌더**: 1080p 풀 색보정 프레임당 GPU 렌더 **5.51ms → 182fps 용량**(60fps 예산의 33%). preview도 60fps 여유.
+- **결정: Phase 2B Metal 전면 재작성 보류(defer) — 양 경로 측정 확정.** export(+9%, 0.49×)·preview(5.5ms/frame, 182fps) 모두 CoreImage 합성이 병목 아님. 조건부 Metal이 "보류"로 닫힘. 절약된 노력은 2A(색그레이딩·ProRes/HDR)·3(온디바이스 AI)으로.
+- **후속(재검토 트리거)**: 무거운 합성(전환+마스크+다중레이어)·4K에서 프레임당 16.6ms 초과 시 preview 한정 재검토.
 
 ### 이전 커밋 회귀 검증 (2026-06-22)
 

@@ -97,6 +97,10 @@ extension EditorViewModel {
             benchSuffix = String(format: " render_ms=%.3f max_fps=%.0f", msPerFrame, fps)
         }
 
+        // Deterministically persist the crash-recovery autosave before quit so a
+        // script can verify the edit-driven autosave path produced a recovery file.
+        await flushAutosave()
+
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
         let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)"
         lastStatusMessage = status

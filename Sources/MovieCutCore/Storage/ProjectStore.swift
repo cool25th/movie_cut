@@ -2,8 +2,57 @@ import Foundation
 
 /// Loads and saves MovieCut projects as JSON documents.
 public actor ProjectStore {
-    /// Creates a project store.
-    public init() {}
+    private let autosaveDirectory: URL?
+
+    /// Creates a project store using the default autosave location
+    /// (Application Support/MovieCut).
+    public init() {
+        self.autosaveDirectory = Self.defaultAutosaveDirectory()
+    }
+
+    /// Creates a project store with an explicit autosave directory (tests), or
+    /// `nil` to disable crash-recovery autosave.
+    public init(autosaveDirectory: URL?) {
+        self.autosaveDirectory = autosaveDirectory
+    }
+
+    private static func defaultAutosaveDirectory() -> URL? {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("MovieCut", isDirectory: true)
+    }
+
+    private var autosaveURL: URL? {
+        autosaveDirectory?.appendingPathComponent("recovery.moviecut")
+    }
+
+    /// Writes the project to the crash-recovery autosave location (atomic).
+    public func saveAutosave(_ project: Project) async throws {
+        guard let url = autosaveURL else { return }
+        try await save(project, to: url)
+    }
+
+    /// Returns the autosaved project if a recovery file exists. Its presence on
+    /// launch indicates the previous session did not exit cleanly.
+    public func loadAutosaveIfAvailable() async -> Project? {
+        guard let url = autosaveURL, FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        return try? await load(from: url)
+    }
+
+    /// Whether a recovery autosave is present.
+    public func hasAutosave() -> Bool {
+        guard let url = autosaveURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    /// Removes the recovery autosave. Call on a clean quit or after a successful
+    /// manual save so the next launch does not offer stale recovery.
+    public func clearAutosave() {
+        guard let url = autosaveURL else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
 
     /// Saves a project to a JSON file using a temp-file replacement flow.
     public func save(_ project: Project, to url: URL) async throws {

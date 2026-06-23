@@ -87,4 +87,18 @@ case "$NR_STATUS" in
   *) echo "FAIL: noise reduction did not complete cleanly (status: $NR_STATUS)" >&2; exit 1 ;;
 esac
 
-echo "E2E check OK (import->export + freeze + noise reduction)"
+# Crash-recovery autosave must be written off the edit path (isolated dir).
+AS_DIR="$(mktemp -d)"
+env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+AP=$!
+for _ in $(seq 1 60); do [ -s "$AS_DIR/recovery.moviecut" ] && break; sleep 0.5; done
+wait "$AP" 2>/dev/null || true
+if [ -s "$AS_DIR/recovery.moviecut" ]; then
+  echo "PASS: crash-recovery autosave written ($(stat -f%z "$AS_DIR/recovery.moviecut") bytes)"
+else
+  echo "FAIL: no crash-recovery autosave after edit" >&2; rm -rf "$AS_DIR"; exit 1
+fi
+rm -rf "$AS_DIR"
+
+echo "E2E check OK (import->export + freeze + noise reduction + autosave)"

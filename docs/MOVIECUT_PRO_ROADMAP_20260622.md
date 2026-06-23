@@ -256,6 +256,16 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 - **결정: Phase 2B Metal 전면 재작성 보류(defer) — 양 경로 측정 확정.** export(+9%, 0.49×)·preview(5.5ms/frame, 182fps) 모두 CoreImage 합성이 병목 아님. 조건부 Metal이 "보류"로 닫힘. 절약된 노력은 2A(색그레이딩·ProRes/HDR)·3(온디바이스 AI)으로.
 - **후속(재검토 트리거)**: 무거운 합성(전환+마스크+다중레이어)·4K에서 프레임당 16.6ms 초과 시 preview 한정 재검토.
 
+### 0.6 안정성 트랙 — undo 무결성 + 자동저장/크래시 복구 (2026-06-23)
+
+Pro 핵심 가치 "안 깨진다". 셋 다 구현+검증:
+
+- **undo/redo 무결성** ✅ — `EditorSession` undo는 **전체 프로젝트 스냅샷 기반**(각 command `invert()` 무관, 구조적으로 견고). `UndoIntegrityTests`가 7-command 다양 시퀀스를 **단계별로 정확 복원**(apply→undo→redo, Equatable) + new-command-after-undo가 redo 스택 클리어함을 검증.
+- **자동저장 + 크래시 복구** ✅ — `ProjectStore`에 `saveAutosave`/`loadAutosaveIfAvailable`/`hasAutosave`/`clearAutosave` 추가(Application Support/MovieCut/recovery.moviecut). 크래시 시 recovery 파일 잔존 → 다음 실행 복구 제안 / clean quit는 clear. `AutosaveRecoveryTests`가 round-trip + 크래시 vs clean-quit 시맨틱 검증.
+- **앱 배선** ✅ — 편집 후 `refreshFromSession`이 `scheduleAutosave()`(fire-and-forget), 런치 시 복구 제안 NSAlert(헤드리스/부트스트랩 게이트), `willTerminate`에 clear. **헤드리스 검증**: import(편집) 후 isolated dir에 recovery.moviecut(3191B, 편집된 1클립 상태) 기록 확인 — `run_e2e_export.sh`에 codify.
+- 검증: `swift test` 302/72 pass, Mac `xcodebuild` BUILD SUCCEEDED, E2E 4체크(export·freeze·NR·autosave) PASS.
+- 잔여(후속): 대용량 미디어(4K/장편) 메모리·크래시 가드는 0.3 후속 측정과 연계.
+
 ### 이전 커밋 회귀 검증 (2026-06-22)
 
 사용자 요청으로 기존 커밋 건전성 점검:

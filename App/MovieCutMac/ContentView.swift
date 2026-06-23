@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import MovieCutCore
 
@@ -40,6 +41,10 @@ struct ContentView: View {
             #if DEBUG
             await viewModel.runUITestHarnessIfRequested()
             #endif
+            await presentRecoveryIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            Task { await viewModel.clearRecoveryAutosave() }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -303,6 +308,25 @@ struct ContentView: View {
             : settings.quality.displayName
 
         return "\(settings.containerFormat.displayName), \(settings.codec.accessibilityDisplayName), \(settings.resolution.accessibilityDisplayName), \(settings.frameRate.statusDisplayName), \(quality) quality"
+    }
+
+    /// Offers crash recovery when an autosave from a non-clean session exists.
+    /// Skipped in headless harness / bootstrap runs so the modal never blocks.
+    private func presentRecoveryIfNeeded() async {
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else { return }
+        guard let recovered = await viewModel.recoverableProject() else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Recover unsaved work?"
+        alert.informativeText = "MovieCut found a project from a session that didn't close normally."
+        alert.addButton(withTitle: "Recover")
+        alert.addButton(withTitle: "Discard")
+        if alert.runModal() == .alertFirstButtonReturn {
+            await viewModel.adoptRecoveredProject(recovered)
+        } else {
+            await viewModel.clearRecoveryAutosave()
+        }
     }
 
     private var statusBar: some View {

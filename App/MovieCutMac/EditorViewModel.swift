@@ -142,7 +142,39 @@ final class EditorViewModel {
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored private var session: EditorSession
-    @ObservationIgnored private let projectStore = ProjectStore()
+    @ObservationIgnored private let projectStore = EditorViewModel.makeProjectStore()
+
+    private static func makeProjectStore() -> ProjectStore {
+        #if DEBUG
+        if let dir = ProcessInfo.processInfo.environment["MOVIECUT_AUTOSAVE_DIR"], !dir.isEmpty {
+            return ProjectStore(autosaveDirectory: URL(fileURLWithPath: dir))
+        }
+        #endif
+        return ProjectStore()
+    }
+
+    /// Writes the current project to the crash-recovery autosave off the edit
+    /// path (fire-and-forget so edits stay responsive).
+    private func scheduleAutosave() {
+        let snapshot = currentProject
+        Task { [projectStore] in try? await projectStore.saveAutosave(snapshot) }
+    }
+
+    /// Awaitable autosave flush (used by automation to deterministically persist
+    /// recovery state before quitting; same path as the edit-driven autosave).
+    func flushAutosave() async {
+        try? await projectStore.saveAutosave(currentProject)
+    }
+
+    /// A project recovered from a non-clean previous session, if any.
+    func recoverableProject() async -> Project? {
+        await projectStore.loadAutosaveIfAvailable()
+    }
+
+    /// Removes the crash-recovery autosave (clean quit or after a manual save).
+    func clearRecoveryAutosave() async {
+        await projectStore.clearAutosave()
+    }
     private var currentProjectURL: URL?
     @ObservationIgnored private var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
@@ -452,6 +484,27 @@ final class EditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// Loads a crash-recovered in-memory project into a fresh session.
+    func adoptRecoveredProject(_ recovered: Project) async {
+        let project = Self.ensureDefaultTracks(in: recovered)
+        session = EditorSession(project: project)
+        currentProject = project
+        currentProjectURL = nil
+        canvasSelection = project.canvas.aspectRatio
+        syncExportUI(from: project.exportSettings)
+        selectedClipId = nil
+        selectedAssetId = nil
+        isMaskEditorActive = false
+        playbackEngine.clear()
+        playheadTime = 0
+        clearGeneratedSubtitles()
+        clearClipProcessingState()
+        recentAnalysisResults = []
+        lastErrorMessage = nil
+        lastStatusMessage = "Recovered unsaved work."
+        lastExportURL = nil
     }
 
     // MARK: - Project package (F-23)
@@ -3680,6 +3733,8 @@ final class EditorViewModel {
         playheadTime = min(playheadTime, max(0, currentProject.timeline.duration))
         lastErrorMessage = nil
         lastStatusMessage = nil
+
+        scheduleAutosave()
     }
 
     private func syncExportUI(from settings: ExportSettings) {

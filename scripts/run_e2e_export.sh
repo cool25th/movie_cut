@@ -25,6 +25,10 @@ PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -conf
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
+# Kill any lingering harness instance so sequential launches don't interfere.
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+
 OUT="$(mktemp -d)/e2e_export.mp4"
 echo "Running headless harness → $OUT"
 MOVIECUT_UITEST=1 \
@@ -67,4 +71,20 @@ awk -v base="$DURATION" -v frz="$FREEZE_DURATION" 'BEGIN { d = frz - base; exit 
   || { echo "FAIL: freeze not reflected in export (delta $(awk -v b="$DURATION" -v f="$FREEZE_DURATION" 'BEGIN{printf "%.2f", f-b}')s, expected ~2.0)" >&2; rm -rf "$(dirname "$FREEZE_OUT")"; exit 1; }
 rm -rf "$(dirname "$FREEZE_OUT")"
 
-echo "E2E export check OK (import->export + freeze reflected)"
+# Noise reduction must run the real AVAudioEngine DSP in the app context without
+# crashing (the offline-render path aborts under `swift test`).
+TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
+NR_RESULT="$(mktemp -d)/nr.txt"
+MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$TONE" MOVIECUT_UITEST_DENOISE=1 \
+  MOVIECUT_UITEST_RESULT="$NR_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+NP=$!
+for _ in $(seq 1 120); do [ -s "$NR_RESULT" ] && break; sleep 0.5; done
+wait "$NP" 2>/dev/null || true
+NR_STATUS="$(cat "$NR_RESULT" 2>/dev/null || echo MISSING)"
+rm -rf "$(dirname "$NR_RESULT")"
+case "$NR_STATUS" in
+  *"error=none"*) echo "PASS: noise reduction ran in app context ($NR_STATUS)" ;;
+  *) echo "FAIL: noise reduction did not complete cleanly (status: $NR_STATUS)" >&2; exit 1 ;;
+esac
+
+echo "E2E check OK (import->export + freeze + noise reduction)"

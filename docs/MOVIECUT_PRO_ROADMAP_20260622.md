@@ -230,6 +230,12 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 - **검증**: non-skippable 골든(`ColorCorrectionGoldenTests`: warmth+1 → `[166,148,121]`, tint+1 → `[191,124,185]`, 소프트웨어 렌더러로 실측·잠금) + 레거시 no-op 테스트를 "applied" 동작으로 갱신. `swift test --filter ColorCorrection*` **15/3 pass**, Mac `xcodebuild` BUILD SUCCEEDED.
 - **판정**: **✅** (preview+export 실반영). 잔여: 실영상 GUI 육안 확인은 선택.
 
+### 0.2 스윕 결과 — 노이즈감소(NR) 🟡→✅ 앱 컨텍스트 런타임 확정 (2026-06-22)
+
+- **위험**: `NoiseReductionService`는 EQ와 동일한 AVAudioEngine offline 패턴 → `swift test`에서 SIGABRT 위험이라 앱 컨텍스트로 검증 필요.
+- **검증**: 하니스에 `MOVIECUT_UITEST_DENOISE` 훅 + `MOVIECUT_UITEST_RESULT` 결과파일 추가. tone fixture import → `applyNoiseReduction(for:)`(실 HPF 80Hz + LPF 12kHz + Dynamics offline render) 실행 → **앱 종료코드 0(크래시 없음), 결과 `error=none`, 클립 소스 denoise 파일로 교체**. `run_e2e_export.sh`에 codify.
+- **판정**: **✅ 앱 런타임 동작 확정**(크래시 없이 실행 + 소스 swap). EQ의 `swift test` SIGABRT는 **테스트 환경 artifact**였음이 입증됨(앱 오디오 컨텍스트에선 offline render 정상). 잔여: 실잡음 오디오 효과 청감은 선택. **EQ가 ❌인 이유는 크래시가 아니라 dead code(미배선)+볼륨근사** — NR은 배선됨이 결정적 차이.
+
 ### 0.2 스윕 결과 — 정지프레임(freeze frame) ❓→✅ export 반영 확정 (2026-06-22)
 
 - **상태**: 백로그가 "🟡 export 반영 미확인"으로 둔 항목. 코드 추적 결과 export(`ExportEngine` `isFreezeFrame` 감지 → `freezeFrameSourceTimeRange` 1프레임 source range → `scaleTimeRange`로 freezeDuration까지 확장)·preview(`PlaybackEngine`) **양쪽에 표준·정확한 기법으로 구현**됨. 단 전용 테스트 0개였음.

@@ -52,6 +52,19 @@ echo "PASS: export ${SIZE} bytes, duration ${DURATION}s"
 # Duration must be ~2.0s (the fixture length), tolerance 0.2s.
 awk -v d="$DURATION" 'BEGIN { exit !(d > 1.8 && d < 2.2) }' \
   || { echo "FAIL: unexpected duration ${DURATION}s (expected ~2.0)" >&2; rm -rf "$(dirname "$OUT")"; exit 1; }
-
 rm -rf "$(dirname "$OUT")"
-echo "E2E export check OK"
+
+# Freeze frame must be reflected in export: a 2s freeze grows the output by ~2s.
+FREEZE_OUT="$(mktemp -d)/freeze.mp4"
+MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_FREEZE=1 \
+  MOVIECUT_UITEST_EXPORT="$FREEZE_OUT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+FP=$!
+for _ in $(seq 1 120); do [ -s "$FREEZE_OUT" ] && break; sleep 0.5; done
+wait "$FP" 2>/dev/null || true
+FREEZE_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$FREEZE_OUT" 2>/dev/null || echo 0)"
+echo "PASS: freeze export duration ${FREEZE_DURATION}s (baseline ${DURATION}s)"
+awk -v base="$DURATION" -v frz="$FREEZE_DURATION" 'BEGIN { d = frz - base; exit !(d > 1.7 && d < 2.3) }' \
+  || { echo "FAIL: freeze not reflected in export (delta $(awk -v b="$DURATION" -v f="$FREEZE_DURATION" 'BEGIN{printf "%.2f", f-b}')s, expected ~2.0)" >&2; rm -rf "$(dirname "$FREEZE_OUT")"; exit 1; }
+rm -rf "$(dirname "$FREEZE_OUT")"
+
+echo "E2E export check OK (import->export + freeze reflected)"

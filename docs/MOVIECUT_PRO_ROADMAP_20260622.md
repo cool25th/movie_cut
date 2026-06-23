@@ -230,7 +230,11 @@ EQ와 대조적으로 **건강한 상태** — 증거:
 - **검증**: non-skippable 골든(`ColorCorrectionGoldenTests`: warmth+1 → `[166,148,121]`, tint+1 → `[191,124,185]`, 소프트웨어 렌더러로 실측·잠금) + 레거시 no-op 테스트를 "applied" 동작으로 갱신. `swift test --filter ColorCorrection*` **15/3 pass**, Mac `xcodebuild` BUILD SUCCEEDED.
 - **판정**: **✅** (preview+export 실반영). 잔여: 실영상 GUI 육안 확인은 선택.
 
-- **다음**: `0.2` 티어1 잔여 — 정지프레임 export 반영 → NR 런타임 검증.
+### 0.2 스윕 결과 — 정지프레임(freeze frame) ❓→✅ export 반영 확정 (2026-06-22)
+
+- **상태**: 백로그가 "🟡 export 반영 미확인"으로 둔 항목. 코드 추적 결과 export(`ExportEngine` `isFreezeFrame` 감지 → `freezeFrameSourceTimeRange` 1프레임 source range → `scaleTimeRange`로 freezeDuration까지 확장)·preview(`PlaybackEngine`) **양쪽에 표준·정확한 기법으로 구현**됨. 단 전용 테스트 0개였음.
+- **E2E 검증**: 헤드리스 하니스에 `MOVIECUT_UITEST_FREEZE` 훅 추가 → 2s fixture 중간에 2s freeze 적용 후 export. **baseline 2.000s → freeze 4.000s, delta 정확히 2.00s** = freeze duration. `scripts/run_e2e_export.sh`에 codify(반복 가능).
+- **판정**: **✅ export 실반영 확정**(런타임 측정).
 
 ### 이전 커밋 회귀 검증 (2026-06-22)
 

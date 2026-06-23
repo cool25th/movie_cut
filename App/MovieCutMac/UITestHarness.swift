@@ -27,6 +27,14 @@ extension EditorViewModel {
             )
         }
 
+        // Optional freeze-frame step: holds a single frame for 2s mid-clip, so an
+        // E2E check can confirm freeze is reflected in export (output duration
+        // grows by the freeze duration).
+        if env["MOVIECUT_UITEST_FREEZE"] == "1", let clip = selectedClip {
+            playheadTime = clip.timelineRange.start + clip.timelineRange.duration / 2
+            await freezeSelectedFrame(freezeDuration: 2.0)
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))

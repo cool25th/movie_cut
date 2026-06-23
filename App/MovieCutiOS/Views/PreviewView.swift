@@ -390,29 +390,10 @@ private extension PreviewView {
     }
 
     static func apply(colorCorrection: ColorCorrection, to image: CIImage) -> CIImage {
-        var result = image
-        result = colorControls(
-            image,
-            brightness: colorCorrection.brightness,
-            contrast: colorCorrection.contrast,
-            saturation: colorCorrection.saturation
-        )
-
-        if colorCorrection.warmth != 0 || colorCorrection.tint != 0 {
-            result = applyFilter(
-                "CITemperatureAndTint",
-                to: result,
-                parameters: [
-                    "inputNeutral": CIVector(x: 6500, y: 0),
-                    "inputTargetNeutral": CIVector(
-                        x: 6500 + colorCorrection.warmth * 1500,
-                        y: colorCorrection.tint * 150
-                    )
-                ]
-            )
-        }
-
-        return result
+        // Delegate to the shared Core processor so the preview matches export and
+        // Mac. The previous inline warmth used the opposite sign (6500 + warmth)
+        // from the Core processor (6500 - warmth), so the slider ran backwards.
+        ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
     }
 
     static func apply(effect: Effect, to image: CIImage) -> CIImage {

@@ -7,8 +7,8 @@
 
 | 기능 | Mac | iOS | 비고 |
 |---|---|---|---|
-| **색보정(밝기/대비/채도)** | ✅ shared `ColorCorrectionPixelProcessor` | ⚠️ **인라인 재구현** | iOS가 shared 미사용 → 분기 위험 |
-| **warmth/tint** | ✅ `6500 - warmth*2000`(warmth+=따뜻) | ⚠️ `6500 + warmth*1500`(**반대 방향·다른 스케일**) | **방향 정반대 = 가시 버그** |
+| **색보정(밝기/대비/채도)** | ✅ shared `ColorCorrectionPixelProcessor` | ✅ shared (위임) | **2026-06-24 통일** |
+| **warmth/tint** | ✅ `6500 - warmth*2000`(warmth+=따뜻) | ✅ shared (동일 방향) | **2026-06-24 P0 버그 수정** |
 | 필터/LUT (VisualEffect) | ✅ | ✅ shared | |
 | 마스킹 | ✅ | ✅ shared | |
 | 텍스트 burn-in | ✅ | ✅ shared | |
@@ -27,20 +27,19 @@
 | ProRes export | ✅ | ❌ | Pro 출력, Mac 우선 가능 |
 | GIF / 스틸프레임 export | ✅ | ❌ | |
 
-## 핵심 발견 — 색보정 분기 (P0)
+## 핵심 발견 — 색보정 분기 (P0) — ✅ 2026-06-24 수정 완료
 
-iOS는 색보정을 shared `ColorCorrectionPixelProcessor`로 위임하지 않고 **인라인 재구현**한다(`IOSCustomVideoCompositor` + `PreviewView`). 그 결과:
+iOS가 색보정을 shared `ColorCorrectionPixelProcessor`로 위임하지 않고 **인라인 재구현**했었다(`IOSCustomVideoCompositor`+`PreviewView`). 결과: warmth/tint 방향이 Mac과 정반대(`6500 + warmth*1500` vs Core `6500 - warmth*2000`) = 같은 슬라이더가 iOS에서 거꾸로 동작하는 **가시 버그**, 그리고 export compositor는 warmth/tint를 아예 누락.
 
-- **warmth/tint 방향이 Mac과 정반대** — Core(`6500 - warmth*2000`, warmth+ = 따뜻함) vs iOS(`6500 + warmth*1500`, warmth+ = 차가움). 같은 슬라이더가 두 플랫폼에서 반대로 동작 = **가시 버그**.
-- 2026-06-23 Core warmth/tint 구현은 **Mac에만 자동 반영**(shared processor 경유). iOS는 별도 인라인이라 갱신 안 됨.
+**수정**: iOS의 두 색보정 진입점(`IOSCustomVideoCompositor.apply(colorCorrection:to:)`, `PreviewView.apply(colorCorrection:to:)`)을 **shared `ColorCorrectionPixelProcessor.apply`에 위임**으로 교체. 이제 Mac/iOS·preview/export가 동일 처리(밝기/대비/채도 + 올바른 방향 warmth/tint). 골든(`ColorCorrectionGoldenTests`)이 공유 동작을 검증하고, `IOSColorCorrectionParityStaticContractTests`가 위임을 회귀로부터 잠근다.
 
-**→ 권장(Phase 1)**: iOS compositor/preview가 shared Core 프로세서(`ColorCorrectionPixelProcessor` 등)에 위임하도록 통일. "공유 픽셀 프로세서 패턴"(세션 핸드오프 §4 규칙)을 iOS에도 강제.
+**한계**: iOS 빌드는 이 머신에 iOS 26.5 미설치로 미실행. Core(`swift build`)·골든·심볼/임포트 정합은 통과. iOS 플랫폼 환경에서 실기기 색보정 육안 확인 잔여.
 
 ## 우선순위 격차 (Phase 1 해소 대상)
 
 | P | 격차 | 근거 |
 |---|---|---|
-| **P0** | 색보정 shared 위임 + warmth/tint 방향 통일 | 가시 버그(슬라이더 반대 동작), 분기 |
+| ~~P0~~ ✅ | ~~색보정 shared 위임 + warmth/tint 방향 통일~~ **2026-06-24 완료** | 가시 버그(슬라이더 반대 동작), 분기 → 해소 |
 | **P1** | 정지프레임·speed ramp·역재생 iOS 배선 | 사용자가 양 플랫폼에서 기대하는 편집 기능 |
 | **P1** | 크로마키·전환 two-source·배경제거 shared 헬퍼 iOS | 렌더 파리티 |
 | **P1** | 자동저장/크래시 복구 iOS | 안정성(Pro 핵심) — `ProjectStore` autosave는 Core라 iOS도 호출만 하면 됨 |

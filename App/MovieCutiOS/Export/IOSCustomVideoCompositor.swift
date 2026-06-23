@@ -911,22 +911,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
 
     private func apply(colorCorrection: ColorCorrection, to image: CIImage) -> CIImage {
-        var parameters: [String: Any] = [:]
-        if colorCorrection.brightness != 0 {
-            parameters[kCIInputBrightnessKey] = colorCorrection.brightness
-        }
-        if colorCorrection.contrast != 1 {
-            parameters[kCIInputContrastKey] = colorCorrection.contrast
-        }
-        if colorCorrection.saturation != 1 {
-            parameters[kCIInputSaturationKey] = colorCorrection.saturation
-        }
-
-        guard !parameters.isEmpty else {
-            return image
-        }
-
-        return image.applyingFilter("CIColorControls", parameters: parameters)
+        // Delegate to the shared Core processor so iOS export matches Mac and the
+        // warmth/tint stage is applied consistently. Previously this applied only
+        // brightness/contrast/saturation here while warmth/tint diverged (with the
+        // opposite sign) in the preview path.
+        ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
     }
 
     private func applyChromaKey(to image: CIImage, keyColor: SIMD3<Float>, threshold: Float) -> CIImage {

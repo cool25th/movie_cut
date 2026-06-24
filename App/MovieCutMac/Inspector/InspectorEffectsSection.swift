@@ -156,25 +156,56 @@ struct InspectorEffectsSection: View {
                 .disabled(clip.colorGrade == nil)
             }
 
-            Text("Lift · shadows")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            inspectorSlider(title: "Red", value: grade.lift.red, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.red))
-            inspectorSlider(title: "Green", value: grade.lift.green, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.green))
-            inspectorSlider(title: "Blue", value: grade.lift.blue, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.blue))
+            HStack(alignment: .top, spacing: 16) {
+                ColorGradeWheel(
+                    title: "Lift · shadows",
+                    red: grade.lift.red,
+                    green: grade.lift.green,
+                    blue: grade.lift.blue,
+                    chromaScale: 0.5,
+                    lumaRange: -0.5 ... 0.5,
+                    onChange: { red, green, blue in
+                        updateColorGradeLift(red: red, green: green, blue: blue)
+                    }
+                )
+                ColorGradeWheel(
+                    title: "Gain · highlights",
+                    red: grade.gain.red,
+                    green: grade.gain.green,
+                    blue: grade.gain.blue,
+                    chromaScale: 0.5,
+                    lumaRange: 0 ... 2,
+                    onChange: { red, green, blue in
+                        updateColorGradeGain(red: red, green: green, blue: blue)
+                    }
+                )
+            }
 
             Text("Gamma · midtones")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2 ... 2.0, binding: colorGradeBinding(keyPath: \.gamma))
-
-            Text("Gain · highlights")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            inspectorSlider(title: "Red", value: grade.gain.red, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.red))
-            inspectorSlider(title: "Green", value: grade.gain.green, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.green))
-            inspectorSlider(title: "Blue", value: grade.gain.blue, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.blue))
         }
+    }
+
+    private func updateColorGradeLift(red: Double, green: Double, blue: Double) {
+        let grade = clip.colorGrade ?? ColorGrade()
+        let updated = ColorGrade(
+            lift: .init(red: red, green: green, blue: blue),
+            gamma: grade.gamma,
+            gain: grade.gain
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
+    }
+
+    private func updateColorGradeGain(red: Double, green: Double, blue: Double) {
+        let grade = clip.colorGrade ?? ColorGrade()
+        let updated = ColorGrade(
+            lift: grade.lift,
+            gamma: grade.gamma,
+            gain: .init(red: red, green: green, blue: blue)
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
     }
 
     private var maskSection: some View {

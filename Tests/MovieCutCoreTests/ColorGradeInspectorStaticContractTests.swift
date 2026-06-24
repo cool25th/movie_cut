@@ -11,11 +11,11 @@ struct ColorGradeInspectorStaticContractTests {
         try String(contentsOfFile: "App/MovieCutMac/Inspector/InspectorEffectsSection.swift", encoding: .utf8)
     }
 
-    @Test("the inspector exposes a color grade section with lift/gamma/gain")
+    @Test("the inspector exposes a color grade section with lift/gamma/gain wheels")
     func sectionExposed() throws {
         let source = try source()
         #expect(source.contains("private var colorGradeSection"))
-        #expect(source.contains("colorGradeSection"))
+        #expect(source.contains("ColorGradeWheel("))
         #expect(source.contains("Lift · shadows"))
         #expect(source.contains("Gamma · midtones"))
         #expect(source.contains("Gain · highlights"))
@@ -24,10 +24,10 @@ struct ColorGradeInspectorStaticContractTests {
     @Test("grade controls bind to the color-grade command path")
     func controlsBindToCommand() throws {
         let source = try source()
-        #expect(source.contains("colorGradeBinding(keyPath: \\.lift.red)"))
+        #expect(source.contains("updateColorGradeLift(red:"))
+        #expect(source.contains("updateColorGradeGain(red:"))
         #expect(source.contains("colorGradeBinding(keyPath: \\.gamma)"))
-        #expect(source.contains("colorGradeBinding(keyPath: \\.gain.blue)"))
-        #expect(source.contains("updateSelectedColorGrade(clamped)"))
+        #expect(source.contains("updateSelectedColorGrade(updated)"))
         #expect(source.contains("updateSelectedColorGrade(nil)"))
     }
 }

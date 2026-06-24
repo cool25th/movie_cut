@@ -195,7 +195,12 @@ Pro 정체성 핵심(CapCut 최대 격차). Phase 0.3에서 Metal 불필요 증�
 
 - ✅ **증분 1 — 3-way 그레이딩 엔진**: `ColorGrade` 모델(ASC CDL lift/gamma/gain) + shared `ColorGradePixelProcessor`(CIColorMatrix slope+offset, CIGammaAdjust power). `ColorGradeGoldenTests` 6개(lift→shadows↑, gain→highlights, gamma<1→midtones↑, per-channel 색조, warm grade) non-skippable 골든.
 - ✅ **증분 2 — export 반영**: `Clip.colorGrade`(영속) + `ClipProperty.colorGrade`(undo=스냅샷) + ExportEngine·Mac `CustomVideoCompositor` 배선. **E2E 확정**: warm grade가 export 평균색을 `020306→030303`(R↑ B↓)으로 이동(`run_e2e_export.sh` codify, static contract 잠금).
-- **잔여 증분**: preview(`PlaybackEngine`) 배선 → 그레이딩 UI(0.7 목업의 lift/gamma/gain 휠+스코프) → iOS 파리티 → ProRes/HDR export. preview/UI 없으면 사용자가 아직 직접 조작 불가(현재 command/하니스로만).
+- ✅ **증분 3 — preview 반영**: `PlaybackEngine`이 `clip.colorGrade`를 composition에 엮고 grade-only 클립을 custom compositor로 라우팅. preview/export가 **동일 공유 compositor**(export E2E로 grade 적용 검증됨)를 쓰므로 동작 상속; memberwise init이 누락 사이트를 빌드에서 잡음. `ColorGradePreviewWiringStaticContractTests` 잠금. (직접 화면 육안 확인은 GUI/디스플레이 필요.)
+- **잔여 증분**: 그레이딩 UI(0.7 목업의 lift/gamma/gain 휠+스코프) → iOS 파리티 → ProRes/HDR export. **UI 없으면 사용자가 아직 직접 조작 불가**(현재 command/하니스로만) — 다음 우선순위.
+
+### 코드 리뷰 (2026-06-24)
+
+Phase 2A 그레이딩 검토 결과: export 배선 완전·검증(누락 경로 없음), 수학 정확(ASC CDL 순서·클램핑·identity·골든), 하위호환 Codable, iOS 색보정 수정 견고. 발견된 유일 갭은 preview 미반영 = 증분 3로 해소. 버그 없음.
 
 ### 진행 기록 (2026-06-22)
 

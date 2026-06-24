@@ -582,6 +582,7 @@ final class PlaybackEngine {
                             opacity: Float(min(max(clip.opacity, 0), 1)),
                             transition: clip.transition,
                             colorCorrection: clip.colorCorrection,
+                            colorGrade: clip.colorGrade,
                             chromaKey: clip.chromaKey,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
@@ -803,6 +804,7 @@ final class PlaybackEngine {
             let transitionEffects = makeTransitionEffects(from: videoClipInstructions)
             let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
                 clipInstruction.colorCorrection != nil
+                    || clipInstruction.colorGrade != nil
                     || clipInstruction.chromaKey != nil
                     || clipInstruction.chromaKeyColor != nil
                     || clipInstruction.mask != nil
@@ -912,6 +914,7 @@ final class PlaybackEngine {
                                 trackID: clipInstruction.trackID,
                                 timeRange: clipInstruction.timeRange,
                                 colorCorrection: clipInstruction.colorCorrection,
+                                colorGrade: clipInstruction.colorGrade,
                                 chromaKey: clipInstruction.chromaKey,
                                 chromaKeyColor: clipInstruction.chromaKeyColor,
                                 chromaKeyThreshold: clipInstruction.chromaKeyThreshold,
@@ -1226,6 +1229,7 @@ private struct PlaybackClipInstructionMetadata {
     var opacity: Float
     var transition: Transition?
     var colorCorrection: ColorCorrection?
+    var colorGrade: ColorGrade?
     var chromaKey: ChromaKeySettings?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float

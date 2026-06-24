@@ -46,6 +46,7 @@ struct InspectorEffectsSection: View {
     @ViewBuilder
     private var fullSections: some View {
         colorCorrectionSection
+        colorGradeSection
         maskSection
         backgroundRemovalSection
         styleTransferSection
@@ -63,6 +64,7 @@ struct InspectorEffectsSection: View {
     @ViewBuilder
     private var adjustmentSections: some View {
         colorCorrectionSection
+        colorGradeSection
         backgroundRemovalSection
         styleTransferSection
         effectsSection
@@ -135,6 +137,43 @@ struct InspectorEffectsSection: View {
                 range: -1 ... 1,
                 binding: colorCorrectionBinding(keyPath: \.tint)
             )
+        }
+    }
+
+    private var colorGradeSection: some View {
+        let grade = clip.colorGrade ?? ColorGrade()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Color Grade")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button("Reset") {
+                    Task { await viewModel.updateSelectedColorGrade(nil) }
+                }
+                .controlSize(.small)
+                .disabled(clip.colorGrade == nil)
+            }
+
+            Text("Lift · shadows")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            inspectorSlider(title: "Red", value: grade.lift.red, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.red))
+            inspectorSlider(title: "Green", value: grade.lift.green, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.green))
+            inspectorSlider(title: "Blue", value: grade.lift.blue, range: -0.5 ... 0.5, binding: colorGradeBinding(keyPath: \.lift.blue))
+
+            Text("Gamma · midtones")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2 ... 2.0, binding: colorGradeBinding(keyPath: \.gamma))
+
+            Text("Gain · highlights")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            inspectorSlider(title: "Red", value: grade.gain.red, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.red))
+            inspectorSlider(title: "Green", value: grade.gain.green, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.green))
+            inspectorSlider(title: "Blue", value: grade.gain.blue, range: 0 ... 2, binding: colorGradeBinding(keyPath: \.gain.blue))
         }
     }
 
@@ -501,6 +540,24 @@ struct InspectorEffectsSection: View {
                 var colorCorrection = clip.colorCorrection ?? ColorCorrection()
                 colorCorrection[keyPath: keyPath] = newValue
                 Task { await viewModel.updateSelectedColorCorrection(colorCorrection) }
+            }
+        )
+    }
+
+    private func colorGradeBinding(
+        keyPath: WritableKeyPath<ColorGrade, Double>
+    ) -> Binding<Double> {
+        Binding(
+            get: {
+                let grade = clip.colorGrade ?? ColorGrade()
+                return grade[keyPath: keyPath]
+            },
+            set: { newValue in
+                var grade = clip.colorGrade ?? ColorGrade()
+                grade[keyPath: keyPath] = newValue
+                // Re-init so the model's clamping invariants are enforced.
+                let clamped = ColorGrade(lift: grade.lift, gamma: grade.gamma, gain: grade.gain)
+                Task { await viewModel.updateSelectedColorGrade(clamped) }
             }
         )
     }

@@ -70,6 +70,18 @@ extension EditorViewModel {
             )
         }
 
+        // Optional 3-way color grade step: applies a strong warm lift/gain grade so
+        // an E2E check can confirm the grade is reflected in export.
+        if env["MOVIECUT_UITEST_GRADE"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(
+                    lift: .init(red: 0.1, green: 0, blue: -0.05),
+                    gamma: 0.8,
+                    gain: .init(red: 1.2, green: 1.0, blue: 0.8)
+                )
+            )
+        }
+
         // Optional noise-reduction step: runs the real NoiseReductionService DSP
         // (AVAudioEngine offline) on the selected clip in the app's audio context,
         // where the offline-render path that aborts under `swift test` can be

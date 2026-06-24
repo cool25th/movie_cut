@@ -2366,6 +2366,12 @@ final class EditorViewModel {
         await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: colorCorrection))
     }
 
+    /// Sets the 3-way color grade on the selected clip (Phase 2A Pro grading).
+    func updateSelectedColorGrade(_ colorGrade: ColorGrade?) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
+    }
+
     func autoEnhance() async {
         guard let clipId = selectedClipId else { return }
         try? await autoColorCorrect(for: clipId)

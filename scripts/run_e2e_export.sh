@@ -87,6 +87,23 @@ case "$NR_STATUS" in
   *) echo "FAIL: noise reduction did not complete cleanly (status: $NR_STATUS)" >&2; exit 1 ;;
 esac
 
+# 3-way color grade must be reflected in export: a warm grade shifts the exported
+# average color (red up, blue down) vs an ungraded export of the same clip.
+BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
+favg() { ffmpeg -v error -i "$1" -vf "scale=1:1" -frames:v 1 -f rawvideo -pix_fmt rgb24 - 2>/dev/null | xxd -p; }
+GBASE="$(mktemp -d)/gbase.mp4"; GGRADE="$(mktemp -d)/ggrade.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT="$GBASE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+GP=$!; for _ in $(seq 1 120); do [ -s "$GBASE" ] && break; sleep 0.5; done; wait "$GP" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_EXPORT="$GGRADE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+GP=$!; for _ in $(seq 1 120); do [ -s "$GGRADE" ] && break; sleep 0.5; done; wait "$GP" 2>/dev/null || true
+B_AVG="$(favg "$GBASE")"; G_AVG="$(favg "$GGRADE")"
+rm -rf "$(dirname "$GBASE")" "$(dirname "$GGRADE")"
+if [ -n "$B_AVG" ] && [ "$B_AVG" != "$G_AVG" ]; then
+  echo "PASS: color grade reflected in export (avg $B_AVG -> $G_AVG)"
+else
+  echo "FAIL: color grade not reflected in export (avg $B_AVG vs $G_AVG)" >&2; exit 1
+fi
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \
@@ -101,4 +118,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction + color grade + autosave)"

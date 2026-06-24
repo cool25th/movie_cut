@@ -236,6 +236,7 @@ final class ExportEngine {
                         transition: nil,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        colorGrade: clip.colorGrade,
                         chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
@@ -405,6 +406,7 @@ final class ExportEngine {
                         transition: clip.transition,
                         mask: clip.mask,
                         colorCorrection: clip.colorCorrection,
+                        colorGrade: clip.colorGrade,
                         chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
@@ -466,6 +468,7 @@ final class ExportEngine {
         let transitionEffects = makeTransitionEffects(from: clips)
         let usesCustomVideoCompositor = clips.contains { clip in
             clip.colorCorrection != nil
+                || clip.colorGrade != nil
                 || clip.textContent != nil
                 || clip.stickerEmoji != nil
                 || clip.stickerImageURL != nil
@@ -590,6 +593,7 @@ final class ExportEngine {
                             opacity: clip.opacity,
                             keyframes: clip.keyframes,
                             colorCorrection: clip.colorCorrection,
+                            colorGrade: clip.colorGrade,
                             chromaKey: clip.chromaKey,
                             chromaKeyColor: clip.chromaKeyColor,
                             chromaKeyThreshold: clip.chromaKeyThreshold,
@@ -1523,6 +1527,7 @@ private struct ExportClipInstructionMetadata {
     var transition: Transition?
     var mask: Mask?
     var colorCorrection: ColorCorrection?
+    var colorGrade: ColorGrade?
     var chromaKey: ChromaKeySettings?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float = 0.3
@@ -1541,6 +1546,7 @@ private struct ExportClipInstructionMetadata {
             || stickerImageURL != nil
             || mask != nil
             || colorCorrection != nil
+            || colorGrade != nil
             || chromaKey != nil
             || chromaKeyColor != nil
             || !effects.isEmpty

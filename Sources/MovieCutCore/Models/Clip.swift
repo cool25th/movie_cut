@@ -119,6 +119,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Optional color correction adjustments.
     public var colorCorrection: ColorCorrection?
 
+    /// Optional 3-way (lift/gamma/gain) color grade.
+    public var colorGrade: ColorGrade?
+
     /// Optional link group. Clips sharing a group identifier are selected and
     /// edited together (CapCut-style linked clips). Nil means ungrouped.
     public var groupId: UUID?
@@ -154,6 +157,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case isReversed
         case isBackgroundRemoved
         case colorCorrection
+        case colorGrade
         case groupId
         case duckingRanges
         case duckingLevel
@@ -185,6 +189,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         isReversed: Bool = false,
         isBackgroundRemoved: Bool = false,
         colorCorrection: ColorCorrection? = nil,
+        colorGrade: ColorGrade? = nil,
         groupId: UUID? = nil,
         duckingRanges: [TimeRange] = [],
         duckingLevel: Double? = nil
@@ -222,6 +227,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.isReversed = isReversed
         self.isBackgroundRemoved = isBackgroundRemoved
         self.colorCorrection = colorCorrection
+        self.colorGrade = colorGrade
         self.groupId = groupId
         self.duckingRanges = duckingRanges
         self.duckingLevel = duckingLevel
@@ -251,6 +257,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
         isBackgroundRemoved = try container.decodeIfPresent(Bool.self, forKey: .isBackgroundRemoved) ?? false
         colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
+        colorGrade = try container.decodeIfPresent(ColorGrade.self, forKey: .colorGrade)
         groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
         duckingRanges = try container.decodeIfPresent([TimeRange].self, forKey: .duckingRanges) ?? []
         duckingLevel = try container.decodeIfPresent(Double.self, forKey: .duckingLevel)
@@ -280,6 +287,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(isReversed, forKey: .isReversed)
         if isBackgroundRemoved { try container.encode(isBackgroundRemoved, forKey: .isBackgroundRemoved) }
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
+        try container.encodeIfPresent(colorGrade, forKey: .colorGrade)
         try container.encodeIfPresent(groupId, forKey: .groupId)
         if !duckingRanges.isEmpty {
             try container.encode(duckingRanges, forKey: .duckingRanges)

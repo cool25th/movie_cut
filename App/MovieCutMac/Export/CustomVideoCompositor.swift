@@ -12,6 +12,7 @@ struct CustomCompositionClipEffect {
     let opacity: Double
     let keyframes: [Keyframe]
     let colorCorrection: ColorCorrection?
+    let colorGrade: ColorGrade?
     let chromaKey: ChromaKeySettings?
     let chromaKeyColor: SIMD3<Float>?
     let chromaKeyThreshold: Float
@@ -31,6 +32,7 @@ struct CustomCompositionClipEffect {
         opacity: Double = 1.0,
         keyframes: [Keyframe] = [],
         colorCorrection: ColorCorrection?,
+        colorGrade: ColorGrade? = nil,
         chromaKey: ChromaKeySettings? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
@@ -45,6 +47,7 @@ struct CustomCompositionClipEffect {
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
         guard colorCorrection != nil
+            || colorGrade != nil
             || chromaKey != nil
             || chromaKeyColor != nil
             || mask != nil
@@ -64,6 +67,7 @@ struct CustomCompositionClipEffect {
         self.opacity = clampedOpacity
         self.keyframes = keyframes
         self.colorCorrection = colorCorrection
+        self.colorGrade = colorGrade
         self.chromaKey = chromaKey
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
@@ -261,6 +265,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
+    let colorGrade: ColorGrade?
     let textContent: TextClipContent?
     let stickerEmoji: String?
     let stickerImageURL: URL?
@@ -277,6 +282,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         timeRange: CMTimeRange,
         trackIDs: [CMPersistentTrackID],
         colorCorrection: ColorCorrection? = nil,
+        colorGrade: ColorGrade? = nil,
         textContent: TextClipContent? = nil,
         stickerEmoji: String? = nil,
         stickerImageURL: URL? = nil,
@@ -294,6 +300,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
             transitionEffects: transitionEffects
         )
         self.colorCorrection = colorCorrection
+        self.colorGrade = colorGrade
         self.textContent = textContent
         self.stickerEmoji = stickerEmoji
         self.stickerImageURL = stickerImageURL
@@ -321,6 +328,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
             transitionEffects: transitionEffects
         )
         self.colorCorrection = nil
+        self.colorGrade = nil
         self.textContent = nil
         self.stickerEmoji = nil
         self.stickerImageURL = nil
@@ -488,6 +496,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     ) -> CIImage {
         var image = image
         let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
+        let colorGrade = effect?.colorGrade ?? instruction.colorGrade
         let chromaKey = effect?.chromaKey ?? instruction.chromaKey
         let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
         let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
@@ -510,6 +519,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
         if let colorCorrection {
             image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
+        }
+
+        if let colorGrade {
+            image = ColorGradePixelProcessor.apply(colorGrade, to: image)
         }
 
         if let chromaKey {

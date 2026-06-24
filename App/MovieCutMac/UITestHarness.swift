@@ -109,12 +109,22 @@ extension EditorViewModel {
             benchSuffix = String(format: " render_ms=%.3f max_fps=%.0f", msPerFrame, fps)
         }
 
+        // Optional scope check: compute the grading histogram for the selected
+        // clip and report its luma sample count, so an E2E check can confirm the
+        // scope pipeline produces real data from the graded thumbnail.
+        var scopeSuffix = ""
+        if env["MOVIECUT_UITEST_SCOPE"] == "1" {
+            refreshScopes()
+            let lumaSum = scopeHistogram?.luma.reduce(0, +) ?? 0
+            scopeSuffix = " scope_luma_sum=\(lumaSum)"
+        }
+
         // Deterministically persist the crash-recovery autosave before quit so a
         // script can verify the edit-driven autosave path produced a recovery file.
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)\(scopeSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

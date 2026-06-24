@@ -104,6 +104,19 @@ else
   echo "FAIL: color grade not reflected in export (avg $B_AVG vs $G_AVG)" >&2; exit 1
 fi
 
+# Color scope must produce real histogram data from the graded thumbnail.
+SC_RESULT="$(mktemp -d)/sc.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_SCOPE=1 \
+  MOVIECUT_UITEST_RESULT="$SC_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+SP=$!; for _ in $(seq 1 90); do [ -s "$SC_RESULT" ] && break; sleep 0.5; done; wait "$SP" 2>/dev/null || true
+SC_STATUS="$(cat "$SC_RESULT" 2>/dev/null || echo MISSING)"; rm -rf "$(dirname "$SC_RESULT")"
+SC_SUM="$(printf '%s' "$SC_STATUS" | sed -n 's/.*scope_luma_sum=\([0-9]*\).*/\1/p')"
+if [ -n "$SC_SUM" ] && [ "$SC_SUM" -gt 0 ]; then
+  echo "PASS: color scope produced histogram data (luma samples $SC_SUM)"
+else
+  echo "FAIL: color scope produced no data ($SC_STATUS)" >&2; exit 1
+fi
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \
@@ -118,4 +131,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction + color grade + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction + color grade + scope + autosave)"

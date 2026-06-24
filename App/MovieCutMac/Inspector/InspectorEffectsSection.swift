@@ -156,6 +156,10 @@ struct InspectorEffectsSection: View {
                 .disabled(clip.colorGrade == nil)
             }
 
+            if let histogram = viewModel.scopeHistogram {
+                HistogramView(histogram: histogram)
+            }
+
             HStack(alignment: .top, spacing: 16) {
                 ColorGradeWheel(
                     title: "Lift · shadows",
@@ -185,6 +189,9 @@ struct InspectorEffectsSection: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2 ... 2.0, binding: colorGradeBinding(keyPath: \.gamma))
+        }
+        .task(id: clip.id) {
+            viewModel.refreshScopes()
         }
     }
 

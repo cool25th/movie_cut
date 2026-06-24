@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Combine
+import CoreImage
 import Foundation
 import ImageIO
 import MovieCutCore
@@ -2372,6 +2373,59 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
     }
 
+    // MARK: - Color scopes (Phase 2A)
+
+    /// Histogram of the selected clip's frame with its grade applied, shown in the
+    /// grading panel. Computed from the cached thumbnail (cheap, grade-accurate)
+    /// rather than a live frame grab.
+    var scopeHistogram: ScopeAnalyzer.Histogram?
+
+    @ObservationIgnored private let scopeContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
+    func refreshScopes() {
+        guard let clip = selectedClip,
+              let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId],
+              let thumbnailData = asset.thumbnailData,
+              let source = CIImage(data: thumbnailData) else {
+            scopeHistogram = nil
+            return
+        }
+
+        var image = source
+        if let colorCorrection = clip.colorCorrection {
+            image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
+        }
+        if let colorGrade = clip.colorGrade {
+            image = ColorGradePixelProcessor.apply(colorGrade, to: image)
+        }
+
+        let width = 96
+        let height = 54
+        let extent = image.extent
+        guard extent.width > 0, extent.height > 0 else { scopeHistogram = nil; return }
+        let scaled = image.transformed(by: CGAffineTransform(
+            scaleX: CGFloat(width) / extent.width,
+            y: CGFloat(height) / extent.height
+        ))
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            guard let base = buffer.baseAddress else { return }
+            scopeContext.render(
+                scaled,
+                toBitmap: base,
+                rowBytes: width * 4,
+                bounds: bounds,
+                format: .RGBA8,
+                colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+        }
+        scopeHistogram = ScopeAnalyzer.histogram(rgba: bytes, binCount: 64)
+    }
+
     func autoEnhance() async {
         guard let clipId = selectedClipId else { return }
         try? await autoColorCorrect(for: clipId)
@@ -3741,6 +3795,7 @@ final class EditorViewModel {
         lastStatusMessage = nil
 
         scheduleAutosave()
+        refreshScopes()
     }
 
     private func syncExportUI(from settings: ExportSettings) {

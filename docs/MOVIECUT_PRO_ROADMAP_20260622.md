@@ -189,6 +189,14 @@ Phase 2(Metal)에서 "더 빠르다"를 증명하려면 먼저 현재 수치를 
 5. `0.6` 안정성 — 자동저장/복구 + undo 무결성 테스트.
 6. `0.3`/`0.4`/`0.5`/`0.7` 문서 산출물(성능 베이스라인·파리티 매트릭스·상태판·UI 원칙).
 
+### Phase 2A 착수 — 색 그레이딩 (2026-06-24)
+
+Pro 정체성 핵심(CapCut 최대 격차). Phase 0.3에서 Metal 불필요 증명됨 → CoreImage로 구현.
+
+- ✅ **증분 1 — 3-way 그레이딩 엔진**: `ColorGrade` 모델(ASC CDL lift/gamma/gain) + shared `ColorGradePixelProcessor`(CIColorMatrix slope+offset, CIGammaAdjust power). `ColorGradeGoldenTests` 6개(lift→shadows↑, gain→highlights, gamma<1→midtones↑, per-channel 색조, warm grade) non-skippable 골든.
+- ✅ **증분 2 — export 반영**: `Clip.colorGrade`(영속) + `ClipProperty.colorGrade`(undo=스냅샷) + ExportEngine·Mac `CustomVideoCompositor` 배선. **E2E 확정**: warm grade가 export 평균색을 `020306→030303`(R↑ B↓)으로 이동(`run_e2e_export.sh` codify, static contract 잠금).
+- **잔여 증분**: preview(`PlaybackEngine`) 배선 → 그레이딩 UI(0.7 목업의 lift/gamma/gain 휠+스코프) → iOS 파리티 → ProRes/HDR export. preview/UI 없으면 사용자가 아직 직접 조작 불가(현재 command/하니스로만).
+
 ### 진행 기록 (2026-06-22)
 
 - ✅ **검증 패턴 확립**: `Tests/MovieCutCoreTests/Support/GoldenPixelHarness.swift` — `CIContext(useSoftwareRenderer:true)` 기반 결정적·sandbox-safe 렌더러. 레거시 `coreImageRenderingAvailable()` **silent-skip 안티패턴 제거** → `assertRendererFunctional()`이 망가진 렌더러를 *소리내어* 실패시킨다.

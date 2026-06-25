@@ -119,6 +119,18 @@ extension EditorViewModel {
             benchSuffix = String(format: " render_ms=%.3f max_fps=%.0f", msPerFrame, fps)
         }
 
+        // Optional auto-white-balance check: run on-device auto color and report
+        // the resulting per-channel gain so an E2E check can confirm it ran.
+        var autoWBSuffix = ""
+        if env["MOVIECUT_UITEST_AUTOWB"] == "1" {
+            await autoColorSelectedClip()
+            if let gain = selectedClip?.colorGrade?.gain {
+                autoWBSuffix = String(format: " autowb_gain=%.3f,%.3f,%.3f", gain.red, gain.green, gain.blue)
+            } else {
+                autoWBSuffix = " autowb_gain=none"
+            }
+        }
+
         // Optional scope check: compute the grading histogram for the selected
         // clip and report its luma sample count, so an E2E check can confirm the
         // scope pipeline produces real data from the graded thumbnail.
@@ -136,7 +148,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)\(scopeSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

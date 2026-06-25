@@ -139,6 +139,19 @@ case "$HDR_TAGS" in
   *) echo "FAIL: HDR export missing 10-bit/HLG/Rec.2020 tags ($HDR_TAGS)" >&2; exit 1 ;;
 esac
 
+# On-device auto white balance must produce a corrective per-channel gain.
+WB_RESULT="$(mktemp -d)/wb.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_AUTOWB=1 \
+  MOVIECUT_UITEST_RESULT="$WB_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+WP=$!; for _ in $(seq 1 90); do [ -s "$WB_RESULT" ] && break; sleep 0.5; done; wait "$WP" 2>/dev/null || true
+WB_STATUS="$(cat "$WB_RESULT" 2>/dev/null || echo MISSING)"; rm -rf "$(dirname "$WB_RESULT")"
+WB_GAIN="$(printf '%s' "$WB_STATUS" | sed -n 's/.*autowb_gain=\([0-9.,]*\).*/\1/p')"
+if [ -n "$WB_GAIN" ] && [ "$WB_GAIN" != "none" ] && [ "$WB_GAIN" != "1.000,1.000,1.000" ]; then
+  echo "PASS: auto white balance produced a corrective gain ($WB_GAIN)"
+else
+  echo "FAIL: auto white balance did not correct ($WB_STATUS)" >&2; exit 1
+fi
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \

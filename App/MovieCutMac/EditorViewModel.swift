@@ -2426,6 +2426,42 @@ final class EditorViewModel {
         scopeVectorscope = nil
     }
 
+    /// On-device auto white balance: analyzes the selected clip's source
+    /// thumbnail (gray-world) and sets a corrective grade. No cloud round-trip.
+    func autoColorSelectedClip() async {
+        guard let clip = selectedClip,
+              let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId],
+              let thumbnailData = asset.thumbnailData,
+              let source = CIImage(data: thumbnailData) else {
+            return
+        }
+
+        let width = 96
+        let height = 54
+        let extent = source.extent
+        guard extent.width > 0, extent.height > 0 else { return }
+        let scaled = source.transformed(by: CGAffineTransform(
+            scaleX: CGFloat(width) / extent.width,
+            y: CGFloat(height) / extent.height
+        ))
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            guard let base = buffer.baseAddress else { return }
+            scopeContext.render(
+                scaled,
+                toBitmap: base,
+                rowBytes: width * 4,
+                bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                format: .RGBA8,
+                colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+        }
+
+        let grade = AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: bytes)
+        await updateSelectedColorGrade(grade)
+    }
+
     /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
     func refreshScopes() {
         guard let clip = selectedClip,

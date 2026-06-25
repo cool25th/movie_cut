@@ -149,6 +149,11 @@ struct InspectorEffectsSection: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
+                Button("Auto WB") {
+                    Task { await viewModel.autoColorSelectedClip() }
+                }
+                .controlSize(.small)
+                .help("On-device auto white balance")
                 Button("Reset") {
                     Task { await viewModel.updateSelectedColorGrade(nil) }
                 }

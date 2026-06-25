@@ -99,6 +99,16 @@ extension EditorViewModel {
             await exportProject(to: URL(filePath: exportPath))
         }
 
+        if lastErrorMessage == nil,
+           let proResPath = env["MOVIECUT_UITEST_EXPORT_PRORES"], !proResPath.isEmpty {
+            await exportProResMaster(to: URL(filePath: proResPath))
+        }
+
+        if lastErrorMessage == nil,
+           let hdrPath = env["MOVIECUT_UITEST_EXPORT_HDR"], !hdrPath.isEmpty {
+            await exportHDRMaster(to: URL(filePath: hdrPath))
+        }
+
         // Optional preview render benchmark: per-frame 1080p compositor cost on
         // the GPU context, to bound preview fps (the export baseline measured the
         // offline path; this measures the real-time render cost).

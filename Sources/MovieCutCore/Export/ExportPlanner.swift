@@ -2,6 +2,7 @@ import AVFoundation
 import AudioToolbox
 import CoreGraphics
 import Foundation
+import VideoToolbox
 
 /// The kind of artifact an export produces.
 ///
@@ -34,6 +35,9 @@ public enum VideoCompressionProfile: String, Sendable, Equatable, CaseIterable {
     /// HEVC / H.265 delivery codec.
     case hevc
 
+    /// HEVC Main 10 HDR (Rec. 2020 + HLG), 10-bit.
+    case hevcHDR
+
     /// Apple ProRes 422 mastering codec.
     case proRes422
 
@@ -45,7 +49,7 @@ public enum VideoCompressionProfile: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .h264:
             return AVVideoCodecType.h264.rawValue
-        case .hevc:
+        case .hevc, .hevcHDR:
             return AVVideoCodecType.hevc.rawValue
         case .proRes422:
             return AVVideoCodecType.proRes422.rawValue
@@ -60,7 +64,7 @@ public enum VideoCompressionProfile: String, Sendable, Equatable, CaseIterable {
     /// bitrate, so the planner omits the constraint for those profiles.
     public var supportsAverageBitrate: Bool {
         switch self {
-        case .h264, .hevc:
+        case .h264, .hevc, .hevcHDR:
             return true
         case .proRes422, .proRes4444:
             return false
@@ -70,11 +74,16 @@ public enum VideoCompressionProfile: String, Sendable, Equatable, CaseIterable {
     /// ProRes is only valid inside a QuickTime (`.mov`) container.
     public var requiresQuickTimeContainer: Bool {
         switch self {
-        case .h264, .hevc:
+        case .h264, .hevc, .hevcHDR:
             return false
         case .proRes422, .proRes4444:
             return true
         }
+    }
+
+    /// Whether this profile produces a 10-bit Rec. 2020 / HLG HDR master.
+    public var isHDR: Bool {
+        self == .hevcHDR
     }
 
     /// Derives the default delivery profile from persisted export settings.
@@ -478,6 +487,18 @@ public struct ExportPlanner: Sendable {
             AVVideoWidthKey: video.width,
             AVVideoHeightKey: video.height
         ]
+
+        if video.profile.isHDR {
+            // Rec. 2020 primaries + HLG transfer for a 10-bit HDR master, encoded
+            // with the HEVC Main 10 profile.
+            settings[AVVideoColorPropertiesKey] = [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+            ]
+            compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel as String
+        }
+
         if !compression.isEmpty {
             settings[AVVideoCompressionPropertiesKey] = compression
         }

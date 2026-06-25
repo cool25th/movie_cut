@@ -122,6 +122,33 @@ struct ExportPlannerTests {
         #expect(plan.video?.averageBitrateBitsPerSecond == nil)
     }
 
+    @Test("hevcHDR profile is a 10-bit HDR HEVC variant")
+    func hdrProfileFlags() {
+        #expect(VideoCompressionProfile.hevcHDR.isHDR)
+        #expect(!VideoCompressionProfile.hevc.isHDR)
+        #expect(VideoCompressionProfile.hevcHDR.avVideoCodecValue == AVVideoCodecType.hevc.rawValue)
+        #expect(VideoCompressionProfile.hevcHDR.requiresQuickTimeContainer == false)
+        #expect(VideoCompressionProfile.hevcHDR.supportsAverageBitrate)
+    }
+
+    @Test("HDR override emits Rec.2020 + HLG color properties on HEVC")
+    func hdrVideoSettings() throws {
+        let options = ExportPlanOptions(videoProfileOverride: .hevcHDR)
+        let plan = planner.plan(
+            settings: ExportSettings(resolution: .p1080, quality: .high),
+            canvas: CanvasPreset(aspectRatio: .landscape16x9),
+            options: options
+        )
+        #expect(plan.video?.profile == .hevcHDR)
+
+        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
+        #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.hevc.rawValue)
+        let colorProperties = try #require(settings[AVVideoColorPropertiesKey] as? [String: Any])
+        #expect(colorProperties[AVVideoColorPrimariesKey] as? String == AVVideoColorPrimaries_ITU_R_2020)
+        #expect(colorProperties[AVVideoTransferFunctionKey] as? String == AVVideoTransferFunction_ITU_R_2100_HLG)
+        #expect(colorProperties[AVVideoYCbCrMatrixKey] as? String == AVVideoYCbCrMatrix_ITU_R_2020)
+    }
+
     // MARK: - Audio-only / GIF / still plans
 
     @Test("Audio-only plan with AAC resolves an m4a file with no video")

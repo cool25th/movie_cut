@@ -117,6 +117,28 @@ else
   echo "FAIL: color scope produced no data ($SC_STATUS)" >&2; exit 1
 fi
 
+# ProRes master must export as actual ProRes.
+PR_OUT="$(mktemp -d)/master.mov"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT_PRORES="$PR_OUT" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+PP=$!; for _ in $(seq 1 180); do [ -s "$PR_OUT" ] && break; sleep 0.5; done; wait "$PP" 2>/dev/null || true
+PR_CODEC="$(ffprobe -v error -select_streams v -show_entries stream=codec_name -of csv=p=0 "$PR_OUT" 2>/dev/null)"
+rm -rf "$(dirname "$PR_OUT")"
+[ "$PR_CODEC" = "prores" ] && echo "PASS: ProRes master exported (codec $PR_CODEC)" \
+  || { echo "FAIL: ProRes export wrong codec ($PR_CODEC)" >&2; exit 1; }
+
+# HDR master must export as 10-bit HEVC with Rec.2020 + HLG tags.
+HDR_OUT="$(mktemp -d)/hdr.mov"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT_HDR="$HDR_OUT" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+HP=$!; for _ in $(seq 1 180); do [ -s "$HDR_OUT" ] && break; sleep 0.5; done; wait "$HP" 2>/dev/null || true
+HDR_TAGS="$(ffprobe -v error -select_streams v -show_entries stream=pix_fmt,color_transfer,color_primaries -of csv=p=0 "$HDR_OUT" 2>/dev/null)"
+rm -rf "$(dirname "$HDR_OUT")"
+case "$HDR_TAGS" in
+  *yuv420p10le*arib-std-b67*bt2020*) echo "PASS: HDR master exported (10-bit HLG Rec.2020: $HDR_TAGS)" ;;
+  *) echo "FAIL: HDR export missing 10-bit/HLG/Rec.2020 tags ($HDR_TAGS)" >&2; exit 1 ;;
+esac
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \
@@ -131,4 +153,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction + color grade + scope + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction + color grade + scope + prores + hdr + autosave)"

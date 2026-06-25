@@ -1288,9 +1288,12 @@ final class ExportEngine {
             var videoReaderOutput: AVAssetReaderVideoCompositionOutput?
             var writerVideoInput: AVAssetWriterInput?
             if !videoTracks.isEmpty {
+                let readerPixelFormat = (plan.video?.profile.isHDR ?? false)
+                    ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                    : kCVPixelFormatType_32BGRA
                 let readerOutput = AVAssetReaderVideoCompositionOutput(
                     videoTracks: videoTracks,
-                    videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                    videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: readerPixelFormat]
                 )
                 readerOutput.alwaysCopiesSampleData = false
                 if let videoComposition = exportPackage.videoComposition {

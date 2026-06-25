@@ -812,7 +812,12 @@ final class EditorViewModel {
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "\(currentProject.name)-prores.mov"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        await exportProResMaster(to: url)
+    }
 
+    /// Exports a ProRes 422 master to an explicit URL (no save panel). Used by
+    /// automation and the harness.
+    func exportProResMaster(to url: URL) async {
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {
@@ -821,6 +826,37 @@ final class EditorViewModel {
                 project: snapshot,
                 to: url,
                 profileOverride: .proRes422,
+                audioProcessing: buildAudioProcessingOptions()
+            )
+            lastErrorMessage = nil
+        } catch {
+            lastExportURL = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Exports a 10-bit HDR master (HEVC Main 10, Rec. 2020 + HLG). CapCut has no
+    /// HDR delivery; this is a Pro mastering output.
+    func exportHDRMaster() async {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentProject.name)-hdr.mov"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        await exportHDRMaster(to: url)
+    }
+
+    /// Exports an HDR master to an explicit URL (no save panel). Used by
+    /// automation and the harness.
+    func exportHDRMaster(to url: URL) async {
+        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
+        lastExportURL = nil
+        do {
+            let snapshot = await session.snapshot()
+            lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
+                project: snapshot,
+                to: url,
+                profileOverride: .hevcHDR,
                 audioProcessing: buildAudioProcessingOptions()
             )
             lastErrorMessage = nil

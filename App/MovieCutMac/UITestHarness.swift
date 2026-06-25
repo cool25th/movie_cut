@@ -116,7 +116,9 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_SCOPE"] == "1" {
             refreshScopes()
             let lumaSum = scopeHistogram?.luma.reduce(0, +) ?? 0
-            scopeSuffix = " scope_luma_sum=\(lumaSum)"
+            let waveformSum = scopeWaveform?.reduce(0) { $0 + $1.reduce(0, +) } ?? 0
+            let vectorSum = scopeVectorscope?.counts.reduce(0, +) ?? 0
+            scopeSuffix = " scope_luma_sum=\(lumaSum) wave_sum=\(waveformSum) vec_sum=\(vectorSum)"
         }
 
         // Deterministically persist the crash-recovery autosave before quit so a

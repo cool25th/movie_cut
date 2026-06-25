@@ -159,6 +159,14 @@ struct InspectorEffectsSection: View {
             if let histogram = viewModel.scopeHistogram {
                 HistogramView(histogram: histogram)
             }
+            HStack(alignment: .top, spacing: 8) {
+                if let waveform = viewModel.scopeWaveform {
+                    WaveformView(waveform: waveform)
+                }
+                if let vectorscope = viewModel.scopeVectorscope {
+                    VectorscopeView(vectorscope: vectorscope)
+                }
+            }
 
             HStack(alignment: .top, spacing: 16) {
                 ColorGradeWheel(

@@ -18,15 +18,18 @@ struct ColorScopeWiringStaticContractTests {
         #expect(source.contains("func refreshScopes()"))
         #expect(source.contains("ColorGradePixelProcessor.apply(colorGrade, to: image)"))
         #expect(source.contains("ScopeAnalyzer.histogram(rgba: bytes"))
+        #expect(source.contains("ScopeAnalyzer.lumaWaveform(rgba: bytes"))
+        #expect(source.contains("ScopeAnalyzer.vectorscope(rgba: bytes"))
         // Edits refresh the scope.
         #expect(source.contains("refreshScopes()"))
     }
 
-    @Test("the grading panel shows the histogram and refreshes on clip change")
+    @Test("the grading panel shows all three scopes and refreshes on clip change")
     func inspectorShowsScope() throws {
         let source = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
         #expect(source.contains("HistogramView(histogram: histogram)"))
-        #expect(source.contains("viewModel.scopeHistogram"))
+        #expect(source.contains("WaveformView(waveform: waveform)"))
+        #expect(source.contains("VectorscopeView(vectorscope: vectorscope)"))
         #expect(source.contains(".task(id: clip.id)"))
     }
 }

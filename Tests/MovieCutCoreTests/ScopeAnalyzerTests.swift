@@ -49,6 +49,25 @@ struct ScopeAnalyzerTests {
         #expect(histogram.red.count == 32)
     }
 
+    @Test("neutral gray lands at the vectorscope center")
+    func grayVectorscope() {
+        let scope = ScopeAnalyzer.vectorscope(rgba: solid(128, 128, 128, count: 9), size: 48)
+        let center = 24 * 48 + 24
+        #expect(scope.counts[center] == 9)
+        #expect(scope.counts.reduce(0, +) == 9)
+    }
+
+    @Test("saturated red spreads away from the vectorscope center")
+    func redVectorscope() {
+        let scope = ScopeAnalyzer.vectorscope(rgba: solid(255, 0, 0, count: 6), size: 48)
+        let center = 24 * 48 + 24
+        #expect(scope.counts[center] == 0)
+        #expect(scope.counts.reduce(0, +) == 6)
+        // Red pushes the R-Y (y) axis to its upper edge.
+        let redCell = scope.counts.firstIndex(of: 6)
+        #expect(redCell != nil && redCell! / 48 >= 40)
+    }
+
     @Test("luma waveform has the requested shape and bins each column")
     func waveformShape() {
         let waveform = ScopeAnalyzer.lumaWaveform(

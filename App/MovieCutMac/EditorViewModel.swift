@@ -2375,12 +2375,20 @@ final class EditorViewModel {
 
     // MARK: - Color scopes (Phase 2A)
 
-    /// Histogram of the selected clip's frame with its grade applied, shown in the
+    /// Scopes of the selected clip's frame with its grade applied, shown in the
     /// grading panel. Computed from the cached thumbnail (cheap, grade-accurate)
     /// rather than a live frame grab.
     var scopeHistogram: ScopeAnalyzer.Histogram?
+    var scopeWaveform: [[Int]]?
+    var scopeVectorscope: ScopeAnalyzer.Vectorscope?
 
     @ObservationIgnored private let scopeContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    private func clearScopes() {
+        scopeHistogram = nil
+        scopeWaveform = nil
+        scopeVectorscope = nil
+    }
 
     /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
     func refreshScopes() {
@@ -2389,7 +2397,7 @@ final class EditorViewModel {
               let asset = currentProject.mediaLibrary.assets[assetId],
               let thumbnailData = asset.thumbnailData,
               let source = CIImage(data: thumbnailData) else {
-            scopeHistogram = nil
+            clearScopes()
             return
         }
 
@@ -2404,7 +2412,7 @@ final class EditorViewModel {
         let width = 96
         let height = 54
         let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { scopeHistogram = nil; return }
+        guard extent.width > 0, extent.height > 0 else { clearScopes(); return }
         let scaled = image.transformed(by: CGAffineTransform(
             scaleX: CGFloat(width) / extent.width,
             y: CGFloat(height) / extent.height
@@ -2424,6 +2432,8 @@ final class EditorViewModel {
             )
         }
         scopeHistogram = ScopeAnalyzer.histogram(rgba: bytes, binCount: 64)
+        scopeWaveform = ScopeAnalyzer.lumaWaveform(rgba: bytes, width: width, height: height, columns: width, levels: 48)
+        scopeVectorscope = ScopeAnalyzer.vectorscope(rgba: bytes, size: 48)
     }
 
     func autoEnhance() async {

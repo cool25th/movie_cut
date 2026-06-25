@@ -52,6 +52,43 @@ public enum ScopeAnalyzer {
         return Histogram(red: red, green: green, blue: blue, luma: luma)
     }
 
+    /// A square chroma-scatter grid for a vectorscope.
+    public struct Vectorscope: Sendable, Equatable {
+        public var size: Int
+        /// `size * size` cell counts, row-major; x = B-Y (blue), y = R-Y (red),
+        /// centered at `size/2`.
+        public var counts: [Int]
+
+        public init(size: Int, counts: [Int]) {
+            self.size = size
+            self.counts = counts
+        }
+    }
+
+    /// Bins each pixel's chroma (B-Y, R-Y) into a `size × size` grid. Neutral
+    /// (gray) pixels land at the center; saturated hues spread outward.
+    public static func vectorscope(rgba: [UInt8], size: Int = 48) -> Vectorscope {
+        var counts = [Int](repeating: 0, count: size * size)
+        let scale = 0.5 / 200.0
+        let pixelCount = rgba.count / 4
+        for index in 0..<pixelCount {
+            let offset = index * 4
+            let r = Double(rgba[offset])
+            let g = Double(rgba[offset + 1])
+            let b = Double(rgba[offset + 2])
+            let yr: Double = r * 0.2126
+            let yg: Double = g * 0.7152
+            let yb: Double = b * 0.0722
+            let y = yr + yg + yb
+            let u = (b - y) * scale + 0.5
+            let v = (r - y) * scale + 0.5
+            let gx = Swift.min(size - 1, Swift.max(0, Int(u * Double(size))))
+            let gy = Swift.min(size - 1, Swift.max(0, Int(v * Double(size))))
+            counts[gy * size + gx] += 1
+        }
+        return Vectorscope(size: size, counts: counts)
+    }
+
     /// Luma waveform: for each of `columns` evenly-spaced image columns, the pixel
     /// count at each of `levels` luma levels (luma distribution vs. x).
     public static func lumaWaveform(

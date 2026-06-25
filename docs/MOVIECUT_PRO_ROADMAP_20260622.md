@@ -199,7 +199,8 @@ Pro 정체성 핵심(CapCut 최대 격차). Phase 0.3에서 Metal 불필요 증�
 - ✅ **증분 4 — 그레이딩 UI**: Mac Inspector에 Color Grade 섹션(lift R/G/B · gamma · gain R/G/B 슬라이더 + Reset, full/adjustment 모드). `colorGradeBinding` → `updateSelectedColorGrade`(setter가 ColorGrade 재init으로 클램핑 보장). 슬라이더→command→compositor는 E2E 검증된 동일 경로. `ColorGradeInspectorStaticContractTests` 잠금. **사용자가 직접 조작 가능**(preview+export 실시간 반영).
 - ✅ **증분 5 — 컬러 휠**: `ColorWheelMath`(Core, 유닛 테스트: 방향성+정확한 왕복) + `ColorGradeWheel`(SwiftUI, 휠=RGB밸런스/luma슬라이더=레벨, DaVinci 방식). Lift·Gain 휠 + Gamma 슬라이더. CapCut 없는 시그니처 컨트롤.
 - ✅ **증분 6 — 스코프(히스토그램)**: `ScopeAnalyzer`(Core, histogram+luma waveform 환원, 유닛 테스트) + `HistogramView` + `EditorViewModel.refreshScopes`(선택 클립 썸네일에 grade 적용→96×54 렌더→히스토그램, 편집/선택마다 갱신). **E2E 확정**: bars import→스코프가 5184 샘플 히스토그램 생성(`scope_luma_sum`, `run_e2e_export.sh` codify).
-- **그레이딩 코어 + 시각(휠·히스토그램) 완성**. 잔여: waveform/vectorscope 뷰 + 라이브 프레임-grab(현재 썸네일) → iOS 파리티 → ProRes/HDR export.
+- ✅ **증분 7 — 스코프 3종 완성**: `ScopeAnalyzer.vectorscope`(chroma scatter, 유닛 테스트: gray→중앙/red→edge) + `WaveformView`·`VectorscopeView`. 그레이딩 패널이 **히스토그램+웨이브폼+벡터스코프 + lift/gain 휠 + gamma** = 0.7 목업 실현. E2E: 3종 모두 5184 샘플(`scope_luma_sum/wave_sum/vec_sum`).
+- **그레이딩 코어 + 시각 폴리시 완성** (엔진·export·preview·휠·스코프 3종). 잔여: 라이브 프레임-grab(현재 썸네일 근사) → **iOS 파리티** → **ProRes/HDR export**.
 
 ### 코드 리뷰 (2026-06-24)
 

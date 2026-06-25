@@ -94,6 +94,7 @@ final class IOSExportEngine {
         project.timeline.tracks.contains { track in
             track.clips.contains { clip in
                 clip.colorCorrection != nil
+                    || clip.colorGrade != nil
                     || !clip.effects.isEmpty
                     || clip.mask != nil
                     || clip.chromaKey != nil
@@ -173,6 +174,7 @@ final class IOSExportEngine {
                         opacity: clip.opacity,
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
+                        colorGrade: clip.colorGrade,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,
@@ -206,6 +208,7 @@ final class IOSExportEngine {
                         opacity: clip.opacity,
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
+                        colorGrade: clip.colorGrade,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,

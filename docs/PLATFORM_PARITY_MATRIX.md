@@ -9,6 +9,7 @@
 |---|---|---|---|
 | **색보정(밝기/대비/채도)** | ✅ shared `ColorCorrectionPixelProcessor` | ✅ shared (위임) | **2026-06-24 통일** |
 | **warmth/tint** | ✅ `6500 - warmth*2000`(warmth+=따뜻) | ✅ shared (동일 방향) | **2026-06-24 P0 버그 수정** |
+| **3-way 컬러 그레이딩 (Phase 2A)** | ✅ shared `ColorGradePixelProcessor` + 휠/스코프 UI | ✅ 렌더 shared (export+preview) | **2026-06-25 렌더 파리티**. iOS 조절 UI(휠/스코프)는 iOS-inspector 후속 |
 | 필터/LUT (VisualEffect) | ✅ | ✅ shared | |
 | 마스킹 | ✅ | ✅ shared | |
 | 텍스트 burn-in | ✅ | ✅ shared | |

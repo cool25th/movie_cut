@@ -13,6 +13,7 @@ struct CustomCompositionClipEffect {
     let opacity: Double
     let keyframes: [Keyframe]
     let colorCorrection: ColorCorrection?
+    let colorGrade: ColorGrade?
     let chromaKeyColor: SIMD3<Float>?
     let chromaKeyThreshold: Float
     let mask: Mask?
@@ -29,6 +30,7 @@ struct CustomCompositionClipEffect {
         opacity: Double = 1.0,
         keyframes: [Keyframe] = [],
         colorCorrection: ColorCorrection?,
+        colorGrade: ColorGrade? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
         mask: Mask?,
@@ -40,6 +42,7 @@ struct CustomCompositionClipEffect {
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
         guard colorCorrection != nil
+            || colorGrade != nil
             || chromaKeyColor != nil
             || mask != nil
             || !effects.isEmpty
@@ -57,6 +60,7 @@ struct CustomCompositionClipEffect {
         self.opacity = clampedOpacity
         self.keyframes = keyframes
         self.colorCorrection = colorCorrection
+        self.colorGrade = colorGrade
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
@@ -222,6 +226,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
+    let colorGrade: ColorGrade?
     let textContent: TextClipContent?
     let stickerEmoji: String?
     var chromaKeyColor: SIMD3<Float>?
@@ -234,6 +239,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         timeRange: CMTimeRange,
         trackIDs: [CMPersistentTrackID],
         colorCorrection: ColorCorrection? = nil,
+        colorGrade: ColorGrade? = nil,
         textContent: TextClipContent? = nil,
         stickerEmoji: String? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
@@ -244,6 +250,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = colorCorrection
+        self.colorGrade = colorGrade
         self.textContent = textContent
         self.stickerEmoji = stickerEmoji
         self.chromaKeyColor = chromaKeyColor
@@ -262,6 +269,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
         self.colorCorrection = nil
+        self.colorGrade = nil
         self.textContent = nil
         self.stickerEmoji = nil
         self.chromaKeyColor = nil
@@ -303,6 +311,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
+                let colorGrade = effect?.colorGrade ?? instruction.colorGrade
                 let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
                 let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
                 let mask = effect?.mask ?? instruction.mask
@@ -322,6 +331,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
                 if let colorCorrection {
                     image = self.apply(colorCorrection: colorCorrection, to: image)
+                }
+
+                if let colorGrade {
+                    image = ColorGradePixelProcessor.apply(colorGrade, to: image)
                 }
 
                 if let chromaKeyColor {

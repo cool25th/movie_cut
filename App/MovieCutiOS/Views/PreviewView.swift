@@ -383,6 +383,9 @@ private extension PreviewView {
         if let correction = clip.colorCorrection {
             result = apply(colorCorrection: correction, to: result)
         }
+        if let grade = clip.colorGrade {
+            result = ColorGradePixelProcessor.apply(grade, to: result)
+        }
         for effect in clip.effects {
             result = apply(effect: effect, to: result)
         }
@@ -448,7 +451,7 @@ private extension PreviewView {
 
 private extension Clip {
     var requiresFilteredPreview: Bool {
-        colorCorrection != nil || !effects.isEmpty
+        colorCorrection != nil || colorGrade != nil || !effects.isEmpty
     }
 }
 

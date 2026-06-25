@@ -200,7 +200,9 @@ Pro 정체성 핵심(CapCut 최대 격차). Phase 0.3에서 Metal 불필요 증�
 - ✅ **증분 5 — 컬러 휠**: `ColorWheelMath`(Core, 유닛 테스트: 방향성+정확한 왕복) + `ColorGradeWheel`(SwiftUI, 휠=RGB밸런스/luma슬라이더=레벨, DaVinci 방식). Lift·Gain 휠 + Gamma 슬라이더. CapCut 없는 시그니처 컨트롤.
 - ✅ **증분 6 — 스코프(히스토그램)**: `ScopeAnalyzer`(Core, histogram+luma waveform 환원, 유닛 테스트) + `HistogramView` + `EditorViewModel.refreshScopes`(선택 클립 썸네일에 grade 적용→96×54 렌더→히스토그램, 편집/선택마다 갱신). **E2E 확정**: bars import→스코프가 5184 샘플 히스토그램 생성(`scope_luma_sum`, `run_e2e_export.sh` codify).
 - ✅ **증분 7 — 스코프 3종 완성**: `ScopeAnalyzer.vectorscope`(chroma scatter, 유닛 테스트: gray→중앙/red→edge) + `WaveformView`·`VectorscopeView`. 그레이딩 패널이 **히스토그램+웨이브폼+벡터스코프 + lift/gain 휠 + gamma** = 0.7 목업 실현. E2E: 3종 모두 5184 샘플(`scope_luma_sum/wave_sum/vec_sum`).
-- **그레이딩 코어 + 시각 폴리시 완성** (엔진·export·preview·휠·스코프 3종). 잔여: 라이브 프레임-grab(현재 썸네일 근사) → **iOS 파리티** → **ProRes/HDR export**.
+- ✅ **iOS 렌더 파리티**: grade가 iOS compositor·export·preview에 배선(shared processor), `IOSColorGradeParityStaticContractTests` 잠금. (iOS 조절 UI는 별도 작업 — iOS 인스펙터 슬라이더가 선행적으로 읽기전용.)
+- ✅ **ProRes/HDR export**: ProRes 422 master는 **E2E 검증**(codec=prores). **신규 HDR master** = HEVC Main 10 + Rec.2020 + HLG, **E2E 검증**(pix_fmt yuv420p10le / color_transfer arib-std-b67 / color_primaries bt2020 = 진짜 10-bit HDR). `exportHDRMaster` + export 메뉴 노출. `ExportPlannerTests` + `run_e2e_export.sh` codify. **CapCut엔 HDR·ProRes 출력 없음.**
+- **Phase 2A 색 그레이딩/Pro 출력 완성** (엔진·export·preview·휠·스코프·iOS 렌더·ProRes·10-bit HDR). 잔여 폴리시: 라이브 프레임-grab(현재 썸네일 근사), 그레이딩의 Rec.2020 wide-gamut 색관리(현재 HDR은 메타데이터+10-bit 인코딩, 콘텐츠는 sRGB 워킹).
 
 ### 코드 리뷰 (2026-06-24)
 

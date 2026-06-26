@@ -152,6 +152,19 @@ else
   echo "FAIL: auto white balance did not correct ($WB_STATUS)" >&2; exit 1
 fi
 
+# On-device auto levels must produce a contrast stretch (gain > 1).
+AL_RESULT="$(mktemp -d)/al.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_AUTOLEVELS=1 \
+  MOVIECUT_UITEST_RESULT="$AL_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+AP=$!; for _ in $(seq 1 90); do [ -s "$AL_RESULT" ] && break; sleep 0.5; done; wait "$AP" 2>/dev/null || true
+AL_STATUS="$(cat "$AL_RESULT" 2>/dev/null || echo MISSING)"; rm -rf "$(dirname "$AL_RESULT")"
+AL_GAIN="$(printf '%s' "$AL_STATUS" | sed -n 's/.*autolevels_gain=\([0-9.]*\).*/\1/p')"
+if [ -n "$AL_GAIN" ] && awk -v g="$AL_GAIN" 'BEGIN{exit !(g>1.0)}'; then
+  echo "PASS: auto levels produced a contrast stretch (gain $AL_GAIN)"
+else
+  echo "FAIL: auto levels did not stretch ($AL_STATUS)" >&2; exit 1
+fi
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \

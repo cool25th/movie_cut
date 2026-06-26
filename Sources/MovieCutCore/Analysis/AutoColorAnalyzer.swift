@@ -38,4 +38,52 @@ public enum AutoColorAnalyzer {
             )
         )
     }
+
+    /// Auto levels: stretches the luma range so the `lowPercentile` darkest and
+    /// `highPercentile` brightest pixels map to black/white, suggesting a uniform
+    /// gain (slope) + lift (offset). Outlier percentiles avoid letting a few
+    /// extreme pixels dictate the stretch.
+    public static func autoLevelsGrade(
+        rgba: [UInt8],
+        lowPercentile: Double = 0.02,
+        highPercentile: Double = 0.98
+    ) -> ColorGrade {
+        let count = rgba.count / 4
+        guard count > 0 else { return ColorGrade() }
+
+        var histogram = [Int](repeating: 0, count: 256)
+        for index in 0..<count {
+            let offset = index * 4
+            let luma = ScopeAnalyzer.luma(red: rgba[offset], green: rgba[offset + 1], blue: rgba[offset + 2])
+            histogram[Swift.min(255, Swift.max(0, luma))] += 1
+        }
+
+        let lowTarget = Swift.max(1, Int(Double(count) * lowPercentile))
+        let highTarget = Swift.max(1, Int(Double(count) * highPercentile))
+        var cumulative = 0
+        var black = 0
+        for value in 0..<256 {
+            cumulative += histogram[value]
+            if cumulative >= lowTarget { black = value; break }
+        }
+        cumulative = 0
+        var white = 255
+        for value in 0..<256 {
+            cumulative += histogram[value]
+            if cumulative >= highTarget { white = value; break }
+        }
+
+        guard white > black + 5 else { return ColorGrade() }
+
+        let blackNormalized = Double(black) / 255.0
+        let whiteNormalized = Double(white) / 255.0
+        let slope = 1.0 / (whiteNormalized - blackNormalized)
+        let offset = -blackNormalized * slope
+
+        return ColorGrade(
+            lift: ColorGrade.RGB(red: offset, green: offset, blue: offset),
+            gamma: 1,
+            gain: ColorGrade.RGB(red: slope, green: slope, blue: slope)
+        )
+    }
 }

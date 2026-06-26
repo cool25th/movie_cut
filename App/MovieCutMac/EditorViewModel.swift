@@ -2429,18 +2429,30 @@ final class EditorViewModel {
     /// On-device auto white balance: analyzes the selected clip's source
     /// thumbnail (gray-world) and sets a corrective grade. No cloud round-trip.
     func autoColorSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: rgba))
+    }
+
+    /// On-device auto levels: stretches the selected clip's luma range for
+    /// optimal contrast. No cloud round-trip.
+    func autoLevelsSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoLevelsGrade(rgba: rgba))
+    }
+
+    /// Renders the selected clip's source thumbnail to a small RGBA buffer for
+    /// on-device analysis (auto color, scopes).
+    private func selectedClipThumbnailRGBA(width: Int = 96, height: Int = 54) -> [UInt8]? {
         guard let clip = selectedClip,
               let assetId = clip.assetId,
               let asset = currentProject.mediaLibrary.assets[assetId],
               let thumbnailData = asset.thumbnailData,
               let source = CIImage(data: thumbnailData) else {
-            return
+            return nil
         }
 
-        let width = 96
-        let height = 54
         let extent = source.extent
-        guard extent.width > 0, extent.height > 0 else { return }
+        guard extent.width > 0, extent.height > 0 else { return nil }
         let scaled = source.transformed(by: CGAffineTransform(
             scaleX: CGFloat(width) / extent.width,
             y: CGFloat(height) / extent.height
@@ -2457,9 +2469,7 @@ final class EditorViewModel {
                 colorSpace: CGColorSpaceCreateDeviceRGB()
             )
         }
-
-        let grade = AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: bytes)
-        await updateSelectedColorGrade(grade)
+        return bytes
     }
 
     /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.

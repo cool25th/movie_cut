@@ -10,18 +10,21 @@ struct AutoColorWiringStaticContractTests {
         try String(contentsOfFile: path, encoding: .utf8)
     }
 
-    @Test("the view model runs auto white balance from the thumbnail and sets a grade")
+    @Test("the view model runs auto white balance and auto levels from the thumbnail")
     func viewModelWiresAutoColor() throws {
         let source = try source("App/MovieCutMac/EditorViewModel.swift")
         #expect(source.contains("func autoColorSelectedClip()"))
-        #expect(source.contains("AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: bytes)"))
-        #expect(source.contains("await updateSelectedColorGrade(grade)"))
+        #expect(source.contains("func autoLevelsSelectedClip()"))
+        #expect(source.contains("AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: rgba)"))
+        #expect(source.contains("AutoColorAnalyzer.autoLevelsGrade(rgba: rgba)"))
     }
 
-    @Test("the grading panel exposes an auto white balance button")
+    @Test("the grading panel exposes auto white balance and auto levels buttons")
     func inspectorExposesAutoColor() throws {
         let source = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
         #expect(source.contains("Auto WB"))
         #expect(source.contains("viewModel.autoColorSelectedClip()"))
+        #expect(source.contains("Auto Levels"))
+        #expect(source.contains("viewModel.autoLevelsSelectedClip()"))
     }
 }

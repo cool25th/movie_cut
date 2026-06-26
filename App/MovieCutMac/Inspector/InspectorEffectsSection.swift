@@ -154,6 +154,11 @@ struct InspectorEffectsSection: View {
                 }
                 .controlSize(.small)
                 .help("On-device auto white balance")
+                Button("Auto Levels") {
+                    Task { await viewModel.autoLevelsSelectedClip() }
+                }
+                .controlSize(.small)
+                .help("On-device auto contrast (levels)")
                 Button("Reset") {
                     Task { await viewModel.updateSelectedColorGrade(nil) }
                 }

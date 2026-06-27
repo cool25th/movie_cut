@@ -204,6 +204,16 @@ Pro 정체성 핵심(CapCut 최대 격차). Phase 0.3에서 Metal 불필요 증�
 - ✅ **ProRes/HDR export**: ProRes 422 master는 **E2E 검증**(codec=prores). **신규 HDR master** = HEVC Main 10 + Rec.2020 + HLG, **E2E 검증**(pix_fmt yuv420p10le / color_transfer arib-std-b67 / color_primaries bt2020 = 진짜 10-bit HDR). `exportHDRMaster` + export 메뉴 노출. `ExportPlannerTests` + `run_e2e_export.sh` codify. **CapCut엔 HDR·ProRes 출력 없음.**
 - **Phase 2A 색 그레이딩/Pro 출력 완성** (엔진·export·preview·휠·스코프·iOS 렌더·ProRes·10-bit HDR). 잔여 폴리시: 라이브 프레임-grab(현재 썸네일 근사), 그레이딩의 Rec.2020 wide-gamut 색관리(현재 HDR은 메타데이터+10-bit 인코딩, 콘텐츠는 sRGB 워킹).
 
+### Phase 3 착수 — 온디바이스 스마트 컬러 (2026-06-25)
+
+CapCut의 클라우드 AI를 **프라이버시·속도(온디바이스)** 로 능가하는 축. 스코프/그레이딩 인프라 위에 구축, 전부 순수 로직 유닛 테스트 + 헤드리스 E2E.
+
+- ✅ **Auto WB**: `AutoColorAnalyzer.autoWhiteBalanceGrade` (gray-world, 색 편향→per-channel gain). E2E gain 0.950/0.975/1.085.
+- ✅ **Auto Levels**: `autoLevelsGrade` (luma 히스토그램 black/white point→대비 stretch). E2E gain 1.364/lift -0.257.
+- ✅ **Auto Enhance**: `autoEnhanceGrade` (WB+Levels 합성, 원탭). E2E gain 1.296/1.329/1.479/lift -0.257. 그레이딩 패널 "Auto Enhance" 주버튼 + "Auto…" 메뉴.
+- 전부 클라우드 없이 썸네일 분석→`updateSelectedColorGrade`로 적용(preview+export 반영). `run_e2e_export.sh`에 3종 codify.
+- **다음 Phase 3 후보**: Vision 모션트래킹/saliency 스마트크롭, Speech 실시간 자막, FoundationModels 자연어 편집.
+
 ### 코드 리뷰 (2026-06-24)
 
 Phase 2A 그레이딩 검토 결과: export 배선 완전·검증(누락 경로 없음), 수학 정확(ASC CDL 순서·클램핑·identity·골든), 하위호환 Codable, iOS 색보정 수정 견고. 발견된 유일 갭은 preview 미반영 = 증분 3로 해소. 버그 없음.

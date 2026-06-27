@@ -59,6 +59,22 @@ struct AutoColorAnalyzerTests {
         #expect(grade.isIdentity)
     }
 
+    @Test("auto enhance combines white balance and a contrast stretch")
+    func autoEnhanceCombines() {
+        // A warm, low-contrast frame: two warm-tinted tones.
+        var pixels = halfAndHalf(0, 0, count: 0)
+        for index in 0..<100 {
+            let warmDark: [UInt8] = [100, 80, 60, 255]
+            let warmBright: [UInt8] = [180, 150, 120, 255]
+            pixels.append(contentsOf: index < 50 ? warmDark : warmBright)
+        }
+        let grade = AutoColorAnalyzer.autoEnhanceGrade(rgba: pixels)
+        // White balance: red pulled below blue. Contrast: gain stretched, lift down.
+        #expect(grade.gain.red < grade.gain.blue)
+        #expect(grade.gain.green > 1)
+        #expect(grade.lift.red < 0)
+    }
+
     @Test("applying the suggested grade narrows the channel spread toward neutral")
     func applyingNeutralizes() {
         GoldenPixel.assertRendererFunctional()

@@ -2440,6 +2440,12 @@ final class EditorViewModel {
         await updateSelectedColorGrade(AutoColorAnalyzer.autoLevelsGrade(rgba: rgba))
     }
 
+    /// On-device one-tap auto enhance: white balance + contrast in one grade.
+    func autoEnhanceSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoEnhanceGrade(rgba: rgba))
+    }
+
     /// Renders the selected clip's source thumbnail to a small RGBA buffer for
     /// on-device analysis (auto color, scopes).
     private func selectedClipThumbnailRGBA(width: Int = 96, height: Int = 54) -> [UInt8]? {

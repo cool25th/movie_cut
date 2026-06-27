@@ -165,6 +165,17 @@ else
   echo "FAIL: auto levels did not stretch ($AL_STATUS)" >&2; exit 1
 fi
 
+# One-tap auto enhance must combine white balance and a contrast stretch.
+AE_RESULT="$(mktemp -d)/ae.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_AUTOENHANCE=1 \
+  MOVIECUT_UITEST_RESULT="$AE_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+AEP=$!; for _ in $(seq 1 90); do [ -s "$AE_RESULT" ] && break; sleep 0.5; done; wait "$AEP" 2>/dev/null || true
+AE_STATUS="$(cat "$AE_RESULT" 2>/dev/null || echo MISSING)"; rm -rf "$(dirname "$AE_RESULT")"
+case "$AE_STATUS" in
+  *autoenhance_gain=*lift=-*) echo "PASS: auto enhance combined WB + contrast ($(printf '%s' "$AE_STATUS" | grep -o 'autoenhance_gain=[^ ]* lift=[^ ]*'))" ;;
+  *) echo "FAIL: auto enhance did not produce a combined grade ($AE_STATUS)" >&2; exit 1 ;;
+esac
+
 # Crash-recovery autosave must be written off the edit path (isolated dir).
 AS_DIR="$(mktemp -d)"
 env MOVIECUT_UITEST=1 MOVIECUT_AUTOSAVE_DIR="$AS_DIR" MOVIECUT_UITEST_IMPORT="$TONE" \

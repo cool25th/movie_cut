@@ -86,4 +86,23 @@ public enum AutoColorAnalyzer {
             gain: ColorGrade.RGB(red: slope, green: slope, blue: slope)
         )
     }
+
+    /// One-tap auto enhance: composes white balance (per-channel color gain) with
+    /// auto levels (uniform contrast lift/gain) into a single grade — color cast
+    /// removed and contrast stretched at once.
+    public static func autoEnhanceGrade(rgba: [UInt8]) -> ColorGrade {
+        let whiteBalance = autoWhiteBalanceGrade(rgba: rgba)
+        let levels = autoLevelsGrade(rgba: rgba)
+        let levelsSlope = levels.gain.red
+
+        return ColorGrade(
+            lift: levels.lift,
+            gamma: 1,
+            gain: ColorGrade.RGB(
+                red: whiteBalance.gain.red * levelsSlope,
+                green: whiteBalance.gain.green * levelsSlope,
+                blue: whiteBalance.gain.blue * levelsSlope
+            )
+        )
+    }
 }

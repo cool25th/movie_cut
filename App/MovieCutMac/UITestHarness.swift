@@ -138,6 +138,15 @@ extension EditorViewModel {
                 autoWBSuffix += " autolevels_gain=none"
             }
         }
+        if env["MOVIECUT_UITEST_AUTOENHANCE"] == "1" {
+            await autoEnhanceSelectedClip()
+            if let grade = selectedClip?.colorGrade {
+                autoWBSuffix += String(format: " autoenhance_gain=%.3f,%.3f,%.3f lift=%.3f",
+                                       grade.gain.red, grade.gain.green, grade.gain.blue, grade.lift.red)
+            } else {
+                autoWBSuffix += " autoenhance=none"
+            }
+        }
 
         // Optional scope check: compute the grading histogram for the selected
         // clip and report its luma sample count, so an E2E check can confirm the

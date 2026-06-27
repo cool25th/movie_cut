@@ -149,16 +149,21 @@ struct InspectorEffectsSection: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("Auto WB") {
-                    Task { await viewModel.autoColorSelectedClip() }
+                Button("Auto Enhance") {
+                    Task { await viewModel.autoEnhanceSelectedClip() }
                 }
                 .controlSize(.small)
-                .help("On-device auto white balance")
-                Button("Auto Levels") {
-                    Task { await viewModel.autoLevelsSelectedClip() }
+                .help("On-device auto white balance + contrast")
+                Menu("Auto…") {
+                    Button("Auto White Balance") {
+                        Task { await viewModel.autoColorSelectedClip() }
+                    }
+                    Button("Auto Levels") {
+                        Task { await viewModel.autoLevelsSelectedClip() }
+                    }
                 }
                 .controlSize(.small)
-                .help("On-device auto contrast (levels)")
+                .frame(width: 70)
                 Button("Reset") {
                     Task { await viewModel.updateSelectedColorGrade(nil) }
                 }

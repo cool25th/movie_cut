@@ -27,7 +27,7 @@ final class EditorViewModel {
         let fontSize: Double
         let isBold: Bool
         let alignment: TextAlignment
-        let animation: TextAnimationType?
+        let animation: TextAnimationPreset?
     }
 
     struct AnalysisHistoryItem: Identifiable {
@@ -78,9 +78,9 @@ final class EditorViewModel {
 
     static let textTemplates: [TextTemplate] = [
         TextTemplate(id: "title", name: "Title", fontName: "HelveticaNeue-Bold", fontSize: 36, isBold: true, alignment: .center, animation: .fadeIn),
-        TextTemplate(id: "subtitle", name: "Subtitle", fontName: "HelveticaNeue", fontSize: 24, isBold: false, alignment: .center, animation: .slideUp),
+        TextTemplate(id: "subtitle", name: "Subtitle", fontName: "HelveticaNeue", fontSize: 24, isBold: false, alignment: .center, animation: .slideInUp),
         TextTemplate(id: "caption", name: "Caption", fontName: "SFPro-Medium", fontSize: 18, isBold: false, alignment: .center, animation: nil),
-        TextTemplate(id: "lower_third", name: "Lower Third", fontName: "HelveticaNeue-Bold", fontSize: 20, isBold: true, alignment: .leading, animation: .slideUp),
+        TextTemplate(id: "lower_third", name: "Lower Third", fontName: "HelveticaNeue-Bold", fontSize: 20, isBold: true, alignment: .leading, animation: .slideInUp),
         TextTemplate(id: "credit", name: "Credits", fontName: "HelveticaNeue-Light", fontSize: 14, isBold: false, alignment: .center, animation: .typewriter),
     ]
 
@@ -1285,7 +1285,7 @@ final class EditorViewModel {
                 alignment: .center,
                 backgroundColor: "#00000000",
                 position: stickerPosition,
-                animation: TextAnimation(type: .scale, duration: 0.25),
+                animation: TextAnimation(preset: .popIn, duration: 0.25),
                 contentKind: .sticker,
                 stickerAssetID: sticker.id,
                 stickerImageURL: stickerImageURL
@@ -1316,7 +1316,7 @@ final class EditorViewModel {
                 fontFamily: template.fontName,
                 fontSize: template.fontSize,
                 alignment: template.alignment,
-                animation: template.animation.map { TextAnimation(type: $0) }
+                animation: template.animation.map { TextAnimation(preset: $0) }
             )
             let clip = Clip(
                 assetId: nil,

@@ -10,19 +10,22 @@ public struct TextOverlayRenderItem: Sendable, Equatable {
     public var opacity: Double
     public var timeRangeStart: TimeInterval
     public var timeRangeDuration: TimeInterval
+    public var clipProgress: Double?
 
     public init(
         textContent: TextClipContent = TextClipContent(text: ""),
         transform: ClipTransform = ClipTransform(),
         opacity: Double = 1,
         timeRangeStart: TimeInterval = 0,
-        timeRangeDuration: TimeInterval = .greatestFiniteMagnitude
+        timeRangeDuration: TimeInterval = .greatestFiniteMagnitude,
+        clipProgress: Double? = nil
     ) {
         self.textContent = textContent
         self.transform = transform
         self.opacity = opacity
         self.timeRangeStart = timeRangeStart
         self.timeRangeDuration = timeRangeDuration
+        self.clipProgress = clipProgress
     }
 }
 
@@ -95,6 +98,7 @@ public enum TextOverlayPixelProcessor {
         opacity: Double = 1,
         timeRangeStart: TimeInterval = 0,
         timeRangeDuration: TimeInterval = .greatestFiniteMagnitude,
+        progress: Double? = nil,
         at time: TimeInterval
     ) -> CIImage {
         apply(
@@ -104,7 +108,8 @@ public enum TextOverlayPixelProcessor {
                     transform: transform,
                     opacity: opacity,
                     timeRangeStart: timeRangeStart,
-                    timeRangeDuration: timeRangeDuration
+                    timeRangeDuration: timeRangeDuration,
+                    clipProgress: progress
                 )
             ],
             to: image,
@@ -119,10 +124,10 @@ public enum TextOverlayPixelProcessor {
         at time: TimeInterval
     ) {
         let textContent = item.textContent
-        let textState = animatedTextState(for: textContent, timeRangeStart: item.timeRangeStart, at: time)
-        guard !textState.text.isEmpty else { return }
+        let textState = animatedTextState(for: textContent, item: item, renderSize: renderSize, at: time)
+        guard !textState.visibleText.isEmpty else { return }
 
-        let effectiveOpacity = min(max(item.opacity * textState.alpha, 0), 1)
+        let effectiveOpacity = min(max(item.opacity * textState.opacity, 0), 1)
         guard effectiveOpacity > 0 else { return }
 
         let fontSize = max(CGFloat(textContent.fontSize), 1)
@@ -135,7 +140,7 @@ public enum TextOverlayPixelProcessor {
         )
         let textColor = cgColor(hexRGB: textContent.fontColor)
         let attributedString = attributedText(
-            textState.text,
+            textState.visibleText,
             font: font,
             color: textColor,
             alignment: textContent.alignment
@@ -169,7 +174,7 @@ public enum TextOverlayPixelProcessor {
         context.saveGState()
         context.setAlpha(CGFloat(effectiveOpacity))
         context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(item.transform.rotation * .pi / 180))
+        context.rotate(by: CGFloat((item.transform.rotation + textState.rotationDegrees) * .pi / 180))
         context.scaleBy(x: scaleX, y: scaleY)
 
         let textBox = CGRect(x: -boxWidth * 0.5, y: -boxHeight * 0.5, width: boxWidth, height: boxHeight)
@@ -203,7 +208,7 @@ public enum TextOverlayPixelProcessor {
             // CoreText stroke width is a percentage of the font point size.
             let strokePercent = strokeWidth / Double(fontSize) * 100
             let strokeString = attributedText(
-                textState.text,
+                textState.visibleText,
                 font: font,
                 color: textColor,
                 alignment: textContent.alignment,
@@ -251,52 +256,31 @@ public enum TextOverlayPixelProcessor {
 
     private static func animatedTextState(
         for textContent: TextClipContent,
-        timeRangeStart: TimeInterval,
+        item: TextOverlayRenderItem,
+        renderSize: CGSize,
         at time: TimeInterval
-    ) -> (text: String, alpha: Double, translation: CGPoint, scale: CGFloat) {
+    ) -> TextAnimationRenderState {
         guard let animation = textContent.animation else {
-            return (textContent.text, 1, CGPoint(x: 0, y: 0), 1)
+            return TextAnimationRenderState(visibleText: textContent.text)
         }
 
-        let rawLocalTime = time - timeRangeStart
+        if let clipProgress = item.clipProgress {
+            return animation.renderState(
+                for: textContent.text,
+                clipProgress: clipProgress,
+                clipDuration: item.timeRangeDuration,
+                canvasSize: renderSize
+            )
+        }
+
+        let rawLocalTime = time - item.timeRangeStart
         let localTime = rawLocalTime.isFinite ? max(0, rawLocalTime) : 0
-        let delay = max(animation.delay, 0)
-        let duration = max(animation.duration, 1.0e-6)
-        let elapsed = localTime - delay
-        let progress = min(max(elapsed / duration, 0), 1)
-        let isBeforeDelay = elapsed < 0
-
-        switch animation.type {
-        case .fadeIn:
-            return (textContent.text, isBeforeDelay ? 0 : progress, CGPoint(x: 0, y: 0), 1)
-        case .fadeOut:
-            return (textContent.text, isBeforeDelay ? 1 : 1 - progress, CGPoint(x: 0, y: 0), 1)
-        case .typewriter:
-            guard !isBeforeDelay else {
-                return ("", 1, CGPoint(x: 0, y: 0), 1)
-            }
-            let characterCount = Int(floor(progress * Double(textContent.text.count)))
-            return (String(textContent.text.prefix(characterCount)), 1, CGPoint(x: 0, y: 0), 1)
-        case .slideUp:
-            return (
-                textContent.text,
-                1,
-                CGPoint(x: 0, y: -40 * (1 - progress)),
-                1
-            )
-        case .slideDown:
-            return (
-                textContent.text,
-                1,
-                CGPoint(x: 0, y: 40 * (1 - progress)),
-                1
-            )
-        case .scale:
-            return (textContent.text, 1, CGPoint(x: 0, y: 0), max(CGFloat(progress), 0.001))
-        case .bounce:
-            let offset = sin(progress * .pi * 3) * 20 * (1 - progress)
-            return (textContent.text, 1, CGPoint(x: 0, y: offset), 1)
-        }
+        return animation.renderState(
+            for: textContent.text,
+            localTime: localTime,
+            clipDuration: item.timeRangeDuration,
+            canvasSize: renderSize
+        )
     }
 
     private static func attributedText(

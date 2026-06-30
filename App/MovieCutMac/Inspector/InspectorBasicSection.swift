@@ -944,8 +944,141 @@ struct InspectorBasicSection: View {
             textBackgroundControls(textContent)
             textDecorationControls(textContent)
             textQuickStylePresets(textContent)
+            textAnimationControls(textContent)
             userStylePresetControls(textContent)
             textToSpeechControls(textContent)
+        }
+    }
+
+    /// CapCut-style text animation presets with shared preview/export math.
+    private func textAnimationControls(_ textContent: TextClipContent) -> some View {
+        let selectedPreset = textContent.animation?.preset ?? .none
+        let selectedDuration = textContent.animation?.duration ?? selectedPreset.duration
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            HStack {
+                Text("Animation")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(textAnimationName(selectedPreset))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 6)], spacing: 6) {
+                ForEach(TextAnimationPreset.allCases, id: \.self) { preset in
+                    Button {
+                        applyTextAnimationPreset(preset, to: textContent)
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: textAnimationSystemImage(preset))
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(textAnimationName(preset))
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .padding(.horizontal, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(preset == selectedPreset ? Color.accentColor.opacity(0.22) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(preset == selectedPreset ? Color.accentColor.opacity(0.72) : Color.secondary.opacity(0.22), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Text animation \(textAnimationName(preset))")
+                    .accessibilityHint("Applies this animation preset to the selected text clip.")
+                    .help(textAnimationName(preset))
+                }
+            }
+
+            HStack(spacing: 6) {
+                Text("Duration")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 58, alignment: .leading)
+                Slider(value: Binding(
+                    get: { min(max(selectedDuration, 0.3), 2.0) },
+                    set: { newValue in
+                        updateTextAnimationDuration(newValue, for: textContent)
+                    }
+                ), in: 0.3 ... 2.0, step: 0.05)
+                .disabled(selectedPreset == .none)
+                .accessibilityLabel("Text animation duration")
+                .accessibilityValue(String(format: "%.2f seconds", selectedDuration))
+
+                Text(String(format: "%.2fs", selectedDuration))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+            }
+        }
+    }
+
+    private func applyTextAnimationPreset(_ preset: TextAnimationPreset, to textContent: TextClipContent) {
+        var updated = textContent
+        if preset == .none {
+            updated.animation = nil
+        } else {
+            let duration = min(max(updated.animation?.duration ?? preset.duration, 0.3), 2.0)
+            updated.animation = TextAnimation(preset: preset, duration: duration)
+        }
+        Task { await viewModel.updateSelectedTextContent(updated) }
+    }
+
+    private func updateTextAnimationDuration(_ duration: Double, for textContent: TextClipContent) {
+        guard let animation = textContent.animation, animation.preset != .none else { return }
+
+        var updated = textContent
+        updated.animation = TextAnimation(
+            preset: animation.preset,
+            duration: min(max(duration, 0.3), 2.0),
+            delay: animation.delay
+        )
+        Task { await viewModel.updateSelectedTextContent(updated) }
+    }
+
+    private func textAnimationName(_ preset: TextAnimationPreset) -> String {
+        switch preset {
+        case .none: return "None"
+        case .fadeIn: return "Fade In"
+        case .fadeOut: return "Fade Out"
+        case .fadeInOut: return "Fade In/Out"
+        case .slideInLeft: return "Left"
+        case .slideInRight: return "Right"
+        case .slideInUp: return "Up"
+        case .slideInDown: return "Down"
+        case .typewriter: return "Type"
+        case .bounceIn: return "Bounce"
+        case .zoomIn: return "Zoom"
+        case .popIn: return "Pop"
+        case .wave: return "Wave"
+        }
+    }
+
+    private func textAnimationSystemImage(_ preset: TextAnimationPreset) -> String {
+        switch preset {
+        case .none: return "slash.circle"
+        case .fadeIn: return "circle.lefthalf.filled"
+        case .fadeOut: return "circle.righthalf.filled"
+        case .fadeInOut: return "circle.dashed"
+        case .slideInLeft: return "arrow.right"
+        case .slideInRight: return "arrow.left"
+        case .slideInUp: return "arrow.up"
+        case .slideInDown: return "arrow.down"
+        case .typewriter: return "text.cursor"
+        case .bounceIn: return "arrow.up.and.down"
+        case .zoomIn: return "plus.magnifyingglass"
+        case .popIn: return "sparkles"
+        case .wave: return "water.waves"
         }
     }
 

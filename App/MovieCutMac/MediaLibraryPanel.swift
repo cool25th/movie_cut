@@ -1518,7 +1518,7 @@ struct MediaLibraryPanel: View {
     }
 
     private func textTemplateSubtitle(_ template: MovieCutCore.TextTemplate) -> String {
-        let animation = template.animation.map { textAnimationName($0.type) } ?? NSLocalizedString("No animation", comment: "")
+        let animation = template.animation.map { textAnimationName($0.preset) } ?? NSLocalizedString("No animation", comment: "")
         return String(format: NSLocalizedString("%@ · %.0f pt · %@", comment: ""), template.content.fontFamily, template.content.fontSize, animation)
     }
 
@@ -1544,15 +1544,21 @@ struct MediaLibraryPanel: View {
         return String(format: NSLocalizedString("%@ transition · 0.5s default", comment: ""), transitionCategoryName(type.category))
     }
 
-    private func textAnimationName(_ type: TextAnimationType) -> String {
-        switch type {
+    private func textAnimationName(_ preset: TextAnimationPreset) -> String {
+        switch preset {
+        case .none: return NSLocalizedString("None", comment: "")
         case .fadeIn: return NSLocalizedString("Fade In", comment: "")
         case .fadeOut: return NSLocalizedString("Fade Out", comment: "")
+        case .fadeInOut: return NSLocalizedString("Fade In/Out", comment: "")
+        case .slideInLeft: return NSLocalizedString("Slide Left", comment: "")
+        case .slideInRight: return NSLocalizedString("Slide Right", comment: "")
+        case .slideInUp: return NSLocalizedString("Slide Up", comment: "")
+        case .slideInDown: return NSLocalizedString("Slide Down", comment: "")
         case .typewriter: return NSLocalizedString("Typewriter", comment: "")
-        case .bounce: return NSLocalizedString("Bounce", comment: "")
-        case .slideUp: return NSLocalizedString("Slide Up", comment: "")
-        case .slideDown: return NSLocalizedString("Slide Down", comment: "")
-        case .scale: return NSLocalizedString("Scale", comment: "")
+        case .bounceIn: return NSLocalizedString("Bounce", comment: "")
+        case .zoomIn: return NSLocalizedString("Zoom", comment: "")
+        case .popIn: return NSLocalizedString("Pop", comment: "")
+        case .wave: return NSLocalizedString("Wave", comment: "")
         }
     }
 

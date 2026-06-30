@@ -410,6 +410,68 @@ import Testing
     #expect(content.animation == animation)
 }
 
+@Test func textAnimationPresetMetadataAndLegacyDecoding() throws {
+    #expect(TextAnimationPreset.allCases == [
+        .none,
+        .fadeIn,
+        .fadeOut,
+        .fadeInOut,
+        .slideInLeft,
+        .slideInRight,
+        .slideInUp,
+        .slideInDown,
+        .typewriter,
+        .bounceIn,
+        .zoomIn,
+        .popIn,
+        .wave
+    ])
+    #expect(TextAnimationPreset.fadeIn.enterAnimation == .fade)
+    #expect(TextAnimationPreset.fadeInOut.exitAnimation == .fade)
+    #expect(TextAnimationPreset.slideInLeft.direction == .left)
+    #expect(TextAnimationPreset.typewriter.duration >= 0.3)
+
+    let legacyJSON = """
+    {
+      "type": "slideUp",
+      "duration": 0.75,
+      "delay": 0.2
+    }
+    """.data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(TextAnimation.self, from: legacyJSON)
+
+    #expect(decoded.preset == .slideInUp)
+    #expect(decoded.type == .slideUp)
+    #expect(decoded.duration == 0.75)
+    #expect(decoded.delay == 0.2)
+}
+
+@Test func textAnimationRenderStateUsesClipLifetimeProgress() {
+    let fadeOut = TextAnimation(preset: .fadeOut, duration: 1.0)
+    let beforeExit = fadeOut.renderState(for: "Bye", clipProgress: 0.4, clipDuration: 4.0)
+    let duringExit = fadeOut.renderState(for: "Bye", clipProgress: 0.95, clipDuration: 4.0)
+
+    #expect(beforeExit.opacity == 1)
+    #expect(duringExit.opacity < beforeExit.opacity)
+
+    let slide = TextAnimation(preset: .slideInLeft, duration: 1.0)
+    let earlySlide = slide.renderState(
+        for: "Slide",
+        clipProgress: 0.05,
+        clipDuration: 5.0,
+        canvasSize: CGSize(width: 1920, height: 1080)
+    )
+    let lateSlide = slide.renderState(
+        for: "Slide",
+        clipProgress: 0.4,
+        clipDuration: 5.0,
+        canvasSize: CGSize(width: 1920, height: 1080)
+    )
+
+    #expect(earlySlide.translation.x < 0)
+    #expect(abs(lateSlide.translation.x) < abs(earlySlide.translation.x))
+}
+
 @Test func keyframeInterpolateLinear() {
     #expect(Keyframe.interpolate(from: 0, to: 10, progress: 0.5, mode: .linear) == 5.0)
 }

@@ -13,70 +13,40 @@ final class TextAnimationRenderer {
         fontSize: CGFloat,
         text: String
     ) {
-        let duration = max(textAnimation.duration, 0)
-        guard duration > 0 else { return }
+        _ = fontSize
+        applyLayerAnimation(
+            textAnimation,
+            to: textLayer,
+            text: text,
+            canvasSize: canvasSize
+        )
+    }
 
-        let delay = max(textAnimation.delay, 0)
-        let targetPositionY = textLayer.position.y
-        let targetOpacity = textLayer.opacity
+    static func applyLayerAnimation(
+        _ textAnimation: TextAnimation,
+        to layer: CALayer,
+        text: String? = nil,
+        canvasSize: CGSize
+    ) {
+        guard textAnimation.preset != .none else { return }
 
-        switch textAnimation.type {
-        case .fadeIn:
-            let fadeAnimation = CABasicAnimation(keyPath: "opacity")
-            fadeAnimation.fromValue = 0
-            fadeAnimation.toValue = targetOpacity
-            configure(fadeAnimation, duration: duration, delay: delay)
-            textLayer.add(fadeAnimation, forKey: "fadeIn")
-        case .fadeOut:
-            let fadeAnimation = CABasicAnimation(keyPath: "opacity")
-            fadeAnimation.fromValue = targetOpacity
-            fadeAnimation.toValue = 0
-            configure(fadeAnimation, duration: duration, delay: delay)
-            textLayer.add(fadeAnimation, forKey: "fadeOut")
-        case .slideUp:
-            let slideAnimation = CABasicAnimation(keyPath: "position.y")
-            slideAnimation.fromValue = canvasSize.height + fontSize
-            slideAnimation.toValue = targetPositionY
-            configure(slideAnimation, duration: duration, delay: delay)
-            textLayer.add(slideAnimation, forKey: "slideUp")
-        case .slideDown:
-            let slideAnimation = CABasicAnimation(keyPath: "position.y")
-            slideAnimation.fromValue = -fontSize
-            slideAnimation.toValue = targetPositionY
-            configure(slideAnimation, duration: duration, delay: delay)
-            textLayer.add(slideAnimation, forKey: "slideDown")
-        case .scale:
-            let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
-            scaleAnimation.fromValue = 0
-            scaleAnimation.toValue = 1
-            configure(scaleAnimation, duration: duration, delay: delay)
-            textLayer.add(scaleAnimation, forKey: "scale")
-        case .bounce:
-            let bounceAnimation = CAKeyframeAnimation(keyPath: "position.y")
-            bounceAnimation.values = [
-                NSNumber(value: Double(targetPositionY)),
-                NSNumber(value: Double(targetPositionY + 20)),
-                NSNumber(value: Double(targetPositionY - 8)),
-                NSNumber(value: Double(targetPositionY + 3)),
-                NSNumber(value: Double(targetPositionY))
-            ]
-            bounceAnimation.keyTimes = [0, 0.35, 0.6, 0.8, 1].map(NSNumber.init(value:))
-            configure(bounceAnimation, duration: duration, delay: delay)
-            textLayer.add(bounceAnimation, forKey: "bounce")
-        case .typewriter:
-            guard !text.isEmpty else { return }
+        let clipDuration = resolvedClipDuration(for: layer, animation: textAnimation)
+        guard clipDuration > 0 else { return }
 
-            let characters = Array(text)
-            let typewriterAnimation = CAKeyframeAnimation(keyPath: "string")
-            typewriterAnimation.values = (0...characters.count).map { characterCount in
-                String(characters.prefix(characterCount))
-            }
-            typewriterAnimation.keyTimes = (0...characters.count).map { characterCount in
-                NSNumber(value: Double(characterCount) / Double(characters.count))
-            }
-            typewriterAnimation.calculationMode = .discrete
-            configure(typewriterAnimation, duration: duration, delay: delay)
-            textLayer.add(typewriterAnimation, forKey: "typewriter")
+        let samples = animationSamples(
+            animation: textAnimation,
+            text: text ?? "",
+            clipDuration: clipDuration,
+            canvasSize: canvasSize
+        )
+        guard !samples.isEmpty else { return }
+
+        addOpacityAnimation(to: layer, samples: samples, duration: clipDuration)
+        addPositionAnimation(to: layer, samples: samples, duration: clipDuration)
+        addTransformAnimation(to: layer, samples: samples, duration: clipDuration)
+
+        if let textLayer = layer as? CATextLayer, let text {
+            addStringAnimation(to: textLayer, text: text, samples: samples, duration: clipDuration)
         }
     }
 
@@ -93,93 +63,173 @@ final class TextAnimationRenderer {
         _ = context
 
         let progress = min(max(progress, 0), 1)
-        let visibleText = renderedText(text, animation: animation, progress: progress)
-        guard !visibleText.isEmpty, size.width > 0, size.height > 0 else { return nil }
-
-        let alpha = alphaValue(for: animation, progress: progress)
-        guard alpha > 0 else { return nil }
+        let clipDuration = max(animation.duration + animation.delay, animation.duration, 1.0e-6)
+        let state = animation.renderState(
+            for: text,
+            clipProgress: progress,
+            clipDuration: clipDuration,
+            canvasSize: size
+        )
+        guard !state.visibleText.isEmpty, size.width > 0, size.height > 0 else { return nil }
+        guard state.opacity > 0 else { return nil }
 
         let bounds = CGRect(origin: CGPoint(x: 0, y: 0), size: size)
         guard let textImage = drawText(
-            visibleText,
+            state.visibleText,
             font: font,
             fontSize: fontSize,
             color: color,
-            alpha: CGFloat(alpha),
+            alpha: CGFloat(state.opacity),
             size: size
         ) else {
             return nil
         }
 
-        let transformed = applyTransform(
-            to: textImage,
-            animation: animation,
-            progress: progress,
-            size: size
-        )
+        let transformed = applyTransform(to: textImage, state: state, size: size)
         let clear = CIImage(color: CIColor.clear).cropped(to: bounds)
         return transformed.composited(over: clear).cropped(to: bounds)
     }
 
-    private static func configure(
-        _ animation: CAAnimation,
-        duration: TimeInterval,
-        delay: TimeInterval
+    private static func animationSamples(
+        animation: TextAnimation,
+        text: String,
+        clipDuration: TimeInterval,
+        canvasSize: CGSize
+    ) -> [(keyTime: NSNumber, state: TextAnimationRenderState)] {
+        let sampleCount = max(8, min(72, Int(ceil(clipDuration * 30))))
+        return (0...sampleCount).map { index in
+            let progress = Double(index) / Double(sampleCount)
+            return (
+                keyTime: NSNumber(value: progress),
+                state: animation.renderState(
+                    for: text,
+                    clipProgress: progress,
+                    clipDuration: clipDuration,
+                    canvasSize: canvasSize
+                )
+            )
+        }
+    }
+
+    private static func addOpacityAnimation(
+        to layer: CALayer,
+        samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
+        duration: TimeInterval
     ) {
-        animation.duration = duration
-        animation.beginTime = delay
+        let targetOpacity = Double(layer.opacity)
+        let values = samples.map { targetOpacity * $0.state.opacity }
+        guard valuesVary(values) else { return }
+
+        let animation = CAKeyframeAnimation(keyPath: "opacity")
+        animation.values = values.map(NSNumber.init(value:))
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        layer.add(animation, forKey: "textPresetOpacity")
+    }
+
+    private static func addPositionAnimation(
+        to layer: CALayer,
+        samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
+        duration: TimeInterval
+    ) {
+        let basePosition = layer.position
+        let xValues = samples.map { Double(basePosition.x + $0.state.translation.x) }
+        let yValues = samples.map { Double(basePosition.y + $0.state.translation.y) }
+
+        if valuesVary(xValues) {
+            let animation = CAKeyframeAnimation(keyPath: "position.x")
+            animation.values = xValues.map(NSNumber.init(value:))
+            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+            layer.add(animation, forKey: "textPresetPositionX")
+        }
+
+        if valuesVary(yValues) {
+            let animation = CAKeyframeAnimation(keyPath: "position.y")
+            animation.values = yValues.map(NSNumber.init(value:))
+            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+            layer.add(animation, forKey: "textPresetPositionY")
+        }
+    }
+
+    private static func addTransformAnimation(
+        to layer: CALayer,
+        samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
+        duration: TimeInterval
+    ) {
+        let transformChanges = samples.contains { sample in
+            abs(Double(sample.state.scale) - 1) > 1.0e-6
+                || abs(sample.state.rotationDegrees) > 1.0e-6
+        }
+        guard transformChanges else { return }
+
+        let baseTransform = layer.affineTransform()
+        let values = samples.map { sample in
+            let state = sample.state
+            let animatedTransform = baseTransform
+                .rotated(by: CGFloat(state.rotationDegrees * .pi / 180))
+                .scaledBy(x: state.scale, y: state.scale)
+            return NSValue(caTransform3D: CATransform3DMakeAffineTransform(animatedTransform))
+        }
+
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = values
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        layer.add(animation, forKey: "textPresetTransform")
+    }
+
+    private static func addStringAnimation(
+        to textLayer: CATextLayer,
+        text: String,
+        samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
+        duration: TimeInterval
+    ) {
+        let values = samples.map { $0.state.visibleText }
+        guard values.contains(where: { $0 != text }) else { return }
+
+        let animation = CAKeyframeAnimation(keyPath: "string")
+        animation.values = values
+        animation.calculationMode = .discrete
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        textLayer.add(animation, forKey: "textPresetString")
+    }
+
+    private static func configure(
+        _ animation: CAKeyframeAnimation,
+        keyTimes: [NSNumber],
+        duration: TimeInterval
+    ) {
+        animation.duration = max(duration, 1.0e-6)
+        animation.beginTime = 0
+        animation.keyTimes = keyTimes
         animation.fillMode = .both
         animation.isRemovedOnCompletion = false
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
     }
 
-    private static func renderedText(_ text: String, animation: TextAnimation, progress: Double) -> String {
-        switch animation.type {
-        case .typewriter:
-            let characterCount = Int(floor(progress * Double(text.count)))
-            return String(text.prefix(characterCount))
-        case .fadeIn, .fadeOut, .bounce, .slideUp, .slideDown, .scale:
-            return text
+    private static func resolvedClipDuration(for layer: CALayer, animation: TextAnimation) -> TimeInterval {
+        if layer.duration.isFinite, layer.duration > 0 {
+            return layer.duration
         }
+
+        return max(animation.duration + animation.delay, animation.duration, 1.0e-6)
     }
 
-    private static func alphaValue(for animation: TextAnimation, progress: Double) -> Double {
-        switch animation.type {
-        case .fadeIn:
-            return progress
-        case .fadeOut:
-            return 1 - progress
-        case .typewriter, .bounce, .slideUp, .slideDown, .scale:
-            return 1
-        }
+    private static func valuesVary(_ values: [Double]) -> Bool {
+        guard let first = values.first else { return false }
+        return values.contains { abs($0 - first) > 1.0e-6 }
     }
 
     private static func applyTransform(
         to image: CIImage,
-        animation: TextAnimation,
-        progress: Double,
+        state: TextAnimationRenderState,
         size: CGSize
     ) -> CIImage {
-        switch animation.type {
-        case .bounce:
-            let offset = sin(progress * .pi * 3) * 20 * (1 - progress)
-            return image.transformed(by: CGAffineTransform(translationX: 0, y: offset))
-        case .slideUp:
-            let offset = (1 - progress) * size.height * 0.5
-            return image.transformed(by: CGAffineTransform(translationX: 0, y: offset))
-        case .slideDown:
-            let offset = -(1 - progress) * size.height * 0.5
-            return image.transformed(by: CGAffineTransform(translationX: 0, y: offset))
-        case .scale:
-            let scale = 0.5 + progress * 0.5
-            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
-            let transform = CGAffineTransform(translationX: center.x, y: center.y)
-                .scaledBy(x: scale, y: scale)
-                .translatedBy(x: -center.x, y: -center.y)
-            return image.transformed(by: transform)
-        case .fadeIn, .fadeOut, .typewriter:
-            return image
-        }
+        let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+        let centeredTransform = CGAffineTransform(translationX: center.x, y: center.y)
+            .rotated(by: CGFloat(state.rotationDegrees * .pi / 180))
+            .scaledBy(x: state.scale, y: state.scale)
+            .translatedBy(x: -center.x, y: -center.y)
+        return image
+            .transformed(by: centeredTransform)
+            .transformed(by: CGAffineTransform(translationX: state.translation.x, y: state.translation.y))
     }
 
     private static func drawText(

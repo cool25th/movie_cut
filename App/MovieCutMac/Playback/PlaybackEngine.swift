@@ -1105,56 +1105,12 @@ final class PlaybackEngine {
         canvasSize: CGSize,
         displaySize: CGSize
     ) {
-        let duration = max(textAnimation.duration, 0)
-        guard duration > 0 else { return }
-
-        let delay = max(textAnimation.delay, 0)
-        switch textAnimation.type {
-        case .fadeIn:
-            let animation = CABasicAnimation(keyPath: "opacity")
-            animation.fromValue = 0
-            animation.toValue = layer.opacity
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "fadeIn")
-        case .fadeOut:
-            let animation = CABasicAnimation(keyPath: "opacity")
-            animation.fromValue = layer.opacity
-            animation.toValue = 0
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "fadeOut")
-        case .slideUp:
-            let animation = CABasicAnimation(keyPath: "position.y")
-            animation.fromValue = canvasSize.height + displaySize.height
-            animation.toValue = layer.position.y
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "slideUp")
-        case .slideDown:
-            let animation = CABasicAnimation(keyPath: "position.y")
-            animation.fromValue = -displaySize.height
-            animation.toValue = layer.position.y
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "slideDown")
-        case .scale:
-            let animation = CABasicAnimation(keyPath: "transform.scale")
-            animation.fromValue = 0
-            animation.toValue = 1
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "scale")
-        case .bounce:
-            let animation = CAKeyframeAnimation(keyPath: "position.y")
-            animation.values = [
-                NSNumber(value: Double(layer.position.y)),
-                NSNumber(value: Double(layer.position.y + 20)),
-                NSNumber(value: Double(layer.position.y - 8)),
-                NSNumber(value: Double(layer.position.y + 3)),
-                NSNumber(value: Double(layer.position.y))
-            ]
-            animation.keyTimes = [0, 0.35, 0.6, 0.8, 1].map(NSNumber.init(value:))
-            configureStickerLayerAnimation(animation, duration: duration, delay: delay)
-            layer.add(animation, forKey: "bounce")
-        case .typewriter:
-            break
-        }
+        _ = displaySize
+        TextAnimationRenderer.applyLayerAnimation(
+            textAnimation,
+            to: layer,
+            canvasSize: canvasSize
+        )
     }
 
     private func configureStickerLayerAnimation(

@@ -590,7 +590,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 transform: animationState?.transform ?? effect.transform,
                 opacity: animationState?.opacity ?? effect.opacity,
                 timeRangeStart: effect.timeRange.start.seconds,
-                timeRangeDuration: effect.timeRange.duration.seconds
+                timeRangeDuration: effect.timeRange.duration.seconds,
+                clipProgress: clipProgress(in: effect.timeRange, at: time)
             )
         }
 
@@ -601,11 +602,26 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 transform: ClipTransform(),
                 opacity: 1,
                 timeRangeStart: instruction.timeRange.start.seconds,
-                timeRangeDuration: instruction.timeRange.duration.seconds
+                timeRangeDuration: instruction.timeRange.duration.seconds,
+                clipProgress: clipProgress(in: instruction.timeRange, at: time)
             ))
         }
 
         return items
+    }
+
+    private func clipProgress(in timeRange: CMTimeRange, at time: CMTime) -> Double {
+        let duration = timeRange.duration.seconds
+        guard duration.isFinite, duration > 0 else {
+            return 0
+        }
+
+        let elapsed = CMTimeSubtract(time, timeRange.start).seconds
+        guard elapsed.isFinite else {
+            return 0
+        }
+
+        return min(max(elapsed / duration, 0), 1)
     }
 
     private func renderStickerOverlay(

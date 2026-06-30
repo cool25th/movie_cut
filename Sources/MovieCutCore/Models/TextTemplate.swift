@@ -56,7 +56,7 @@ public struct TextTemplate: Codable, Sendable, Identifiable, Equatable {
                     backgroundColor: "#111111CC",
                     position: CGPoint(x: 160, y: 820)
                 ),
-                animation: TextAnimation(type: .slideUp, duration: 0.5)
+                animation: TextAnimation(preset: .slideInUp, duration: 0.5)
             ),
             TextTemplate(
                 id: UUID(uuidString: "00000000-0000-0000-0000-000000002004")!,
@@ -81,7 +81,7 @@ public struct TextTemplate: Codable, Sendable, Identifiable, Equatable {
                     alignment: .center,
                     position: CGPoint(x: 960, y: 980)
                 ),
-                animation: TextAnimation(type: .slideUp, duration: 2.0)
+                animation: TextAnimation(preset: .slideInUp, duration: 2.0)
             )
         ]
     }

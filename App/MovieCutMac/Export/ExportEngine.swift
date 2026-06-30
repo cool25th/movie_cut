@@ -51,6 +51,10 @@ final class ExportEngine {
 
             exportSession.videoComposition = exportPackage.videoComposition
             exportSession.audioMix = exportPackage.audioMix
+
+            // Embed chapter metadata from timeline markers
+            applyChapterMetadata(to: exportSession, project: project)
+
             activeExportSession = exportSession
             startProgressPolling()
 
@@ -82,6 +86,43 @@ final class ExportEngine {
         }
 
         applyBitrateFileLengthLimit(exportSession, project: project)
+    }
+
+    /// Embeds timeline markers as QuickTime chapter metadata on the exported file.
+    private func applyChapterMetadata(to exportSession: AVAssetExportSession, project: Project) {
+        guard project.exportSettings.includeChapters else { return }
+
+        var markers = project.markers.filter { $0.kind == .standard }
+        if project.exportSettings.includeBeatChapters {
+            markers += project.markers.filter { $0.kind == .beat }
+        }
+
+        guard !markers.isEmpty else { return }
+
+        let totalDuration = project.timeline.duration
+        let sortedMarkers = markers.sorted { $0.time < $1.time }
+
+        var chapterGroups: [AVTimedMetadataGroup] = []
+        for (index, marker) in sortedMarkers.enumerated() {
+            let start = marker.time
+            let end = index + 1 < sortedMarkers.count ? sortedMarkers[index + 1].time : totalDuration
+            let duration = max(end - start, 0.1)
+
+            let item = AVMutableMetadataItem()
+            item.identifier = .quickTimeUserDataChapter
+            item.value = (marker.name.isEmpty ? "Chapter \(index + 1)" : marker.name) as NSString
+            item.extendedLanguageTag = "und"
+            item.dataType = kCMMetadataBaseDataType_UTF8 as String
+
+            let timeRange = CMTimeRange(
+                start: CMTime(seconds: start, preferredTimescale: 600),
+                duration: CMTime(seconds: duration, preferredTimescale: 600)
+            )
+            chapterGroups.append(AVTimedMetadataGroup(items: [item], timeRange: timeRange))
+        }
+
+        guard !chapterGroups.isEmpty else { return }
+        exportSession.metadata = chapterGroups.flatMap { $0.items }
     }
 
     private func applyBitrateFileLengthLimit(_ exportSession: AVAssetExportSession, project: Project) {

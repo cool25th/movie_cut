@@ -148,6 +148,12 @@ public struct ExportSettings: Codable, Sendable, Equatable {
     /// Optional target video bitrate in megabits per second when using custom quality.
     public var videoBitrateMbps: Int?
 
+    /// Whether to embed standard markers as chapter metadata during export.
+    public var includeChapters: Bool
+
+    /// Whether to also embed beat markers as chapter points.
+    public var includeBeatChapters: Bool
+
     private enum CodingKeys: String, CodingKey {
         case resolution
         case frameRate
@@ -156,6 +162,8 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         case containerFormat
         case quality
         case videoBitrateMbps
+        case includeChapters
+        case includeBeatChapters
     }
 
     /// Creates export settings with common H.264/AAC 1080p defaults.
@@ -166,7 +174,9 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         audioCodec: AudioCodec = .aac,
         containerFormat: ExportContainerFormat = .mp4,
         quality: ExportQuality = .high,
-        videoBitrateMbps: Int? = nil
+        videoBitrateMbps: Int? = nil,
+        includeChapters: Bool = true,
+        includeBeatChapters: Bool = false
     ) {
         self.resolution = resolution
         self.frameRate = frameRate
@@ -175,6 +185,8 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         self.containerFormat = containerFormat
         self.quality = quality
         self.videoBitrateMbps = videoBitrateMbps
+        self.includeChapters = includeChapters
+        self.includeBeatChapters = includeBeatChapters
     }
 
     public init(from decoder: any Decoder) throws {
@@ -186,6 +198,8 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         containerFormat = try container.decodeIfPresent(ExportContainerFormat.self, forKey: .containerFormat) ?? .mp4
         quality = try container.decodeIfPresent(ExportQuality.self, forKey: .quality) ?? .high
         videoBitrateMbps = try container.decodeIfPresent(Int.self, forKey: .videoBitrateMbps)
+        includeChapters = try container.decodeIfPresent(Bool.self, forKey: .includeChapters) ?? true
+        includeBeatChapters = try container.decodeIfPresent(Bool.self, forKey: .includeBeatChapters) ?? false
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -197,6 +211,8 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         try container.encode(containerFormat, forKey: .containerFormat)
         try container.encode(quality, forKey: .quality)
         try container.encodeIfPresent(videoBitrateMbps, forKey: .videoBitrateMbps)
+        try container.encode(includeChapters, forKey: .includeChapters)
+        try container.encode(includeBeatChapters, forKey: .includeBeatChapters)
     }
 
     /// Resolved target video bitrate in megabits per second.

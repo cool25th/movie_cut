@@ -824,6 +824,11 @@ struct TimelineView: View {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.duplicateClips(clipIds) }
                 }
+                Button(NSLocalizedString("Extract Audio", comment: "오디오 추출")) {
+                    selectClip(clip.id, extendingSelection: false)
+                    Task { await viewModel.extractAudioFromSelectedClip() }
+                }
+                .disabled(!canExtractAudio(from: clip))
                 Divider()
                 Button(NSLocalizedString("Group Clips", comment: "")) {
                     _ = contextMenuClipIds(anchor: clip.id)
@@ -930,6 +935,18 @@ struct TimelineView: View {
 
     private func shouldRenderWaveform(for clip: Clip, trackKind: TrackKind) -> Bool {
         trackKind != .text && (clip.kind == .audio || clip.kind == .video)
+    }
+
+    private func canExtractAudio(from clip: Clip) -> Bool {
+        guard
+            clip.kind == .video,
+            let assetId = clip.assetId,
+            let asset = viewModel.currentProject.mediaLibrary.assets[assetId]
+        else {
+            return false
+        }
+
+        return asset.kind == .video
     }
 
     private func waveformCanvas(for clip: Clip, selected: Bool) -> some View {

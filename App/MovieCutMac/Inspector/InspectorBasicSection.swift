@@ -456,13 +456,17 @@ struct InspectorBasicSection: View {
                 }
                 .controlSize(.small)
 
-                Button("Extract Audio") {
-                    if let clipId = viewModel.selectedClipId {
-                        Task { try? await viewModel.extractAudio(from: clipId) }
+                if clip.kind == .video {
+                    Button {
+                        Task { await viewModel.extractAudioFromSelectedClip() }
+                    } label: {
+                        Label("Extract Audio from Video", systemImage: "waveform")
                     }
+                    .controlSize(.small)
+                    .disabled(!viewModel.canExtractAudioFromSelection)
+                    .accessibilityLabel("Extract Audio from Video")
+                    .accessibilityHint("Creates an audio-only timeline clip from the selected video's embedded audio.")
                 }
-                .controlSize(.small)
-                .disabled(clip.kind != .video)
             }
         }
     }

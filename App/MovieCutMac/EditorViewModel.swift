@@ -2633,66 +2633,34 @@ final class EditorViewModel {
         try await refreshFromSession()
     }
 
-    func extractAudio(from clipId: UUID) async throws {
+    @discardableResult
+    func extractAudio(from clipId: UUID) async throws -> Clip {
         let snapshot = await session.snapshot()
         let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
-        guard asset.kind == .video else {
+        guard clip.kind == .video, asset.kind == .video else {
             throw EditorCommandError.invalidCommand("Audio can only be extracted from video clips.")
         }
-
-        let sourceAsset = AVAsset(url: asset.originalURL)
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutExtractedAudio_\(clipId.uuidString)")
-            .appendingPathExtension("m4a")
-        try? FileManager.default.removeItem(at: outputURL)
-
-        guard let exportSession = AVAssetExportSession(
-            asset: sourceAsset,
-            presetName: AVAssetExportPresetAppleM4A
-        ) else {
-            throw EditorCommandError.invalidCommand("Could not create audio export session.")
+        guard await Self.videoAssetContainsAudioTrack(asset.originalURL) else {
+            throw EditorCommandError.invalidCommand("Selected video clip has no audio track to extract.")
         }
 
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .m4a
-
-        let sourceStart = CMTime(seconds: clip.sourceRange.start, preferredTimescale: 600)
-        let sourceDur = CMTime(seconds: clip.sourceRange.duration, preferredTimescale: 600)
-        exportSession.timeRange = CMTimeRange(start: sourceStart, duration: sourceDur)
-
-        await exportSession.export()
-
-        guard exportSession.status == .completed else {
-            throw EditorCommandError.invalidCommand(
-                exportSession.error?.localizedDescription ?? "Audio extraction failed."
-            )
-        }
-
-        let audioAsset = MediaAsset(
-            originalURL: outputURL,
-            kind: .audio,
-            duration: clip.sourceRange.duration,
-            metadata: MediaMetadata(fileSize: fileSize(for: outputURL))
-        )
-
-        try await session.dispatch(ImportMediaCommand(asset: audioAsset))
-
-        let audioTrack = try await ensureTrack(for: .audio)
-        let audioClip = Clip(
-            assetId: audioAsset.id,
-            kind: .audio,
-            sourceRange: TimeRange(start: 0, duration: clip.sourceRange.duration),
-            timelineRange: clip.timelineRange,
-            volume: clip.volume,
-            fadeInDuration: clip.fadeInDuration,
-            fadeOutDuration: clip.fadeOutDuration,
-            playbackRate: clip.playbackRate
-        )
-
-        try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: audioClip))
-        selectedAssetId = audioAsset.id
-        selectedClipId = audioClip.id
+        let extractedClipId = UUID()
+        try await session.dispatch(ExtractAudioCommand(
+            clipId: clipId,
+            extractedClipId: extractedClipId
+        ))
+        selectedAssetId = asset.id
+        selectedClipId = extractedClipId
+        playheadTime = clip.timelineRange.start
         try await refreshFromSession()
+
+        guard let extractedClip = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == extractedClipId })
+        else {
+            throw EditorCommandError.clipNotFound(extractedClipId)
+        }
+        return extractedClip
     }
 
     // MARK: - Auto cut preview (F-18)
@@ -2890,7 +2858,7 @@ final class EditorViewModel {
         }
     }
 
-    func extractAudioFromSelection() async {
+    func extractAudioFromSelectedClip() async {
         guard let clipId = selectedClipId, canExtractAudioFromSelection else {
             reportQuickToolFailure("Select a video clip to extract audio.")
             return
@@ -2909,6 +2877,10 @@ final class EditorViewModel {
         } catch {
             reportQuickToolFailure(error)
         }
+    }
+
+    func extractAudioFromSelection() async {
+        await extractAudioFromSelectedClip()
     }
 
     func addMarkerAtPlayhead() {
@@ -4657,6 +4629,10 @@ final class EditorViewModel {
         } catch {
             return nil
         }
+    }
+
+    private nonisolated static func videoAssetContainsAudioTrack(_ url: URL) async -> Bool {
+        await firstTrack(in: AVURLAsset(url: url), mediaType: .audio) != nil
     }
 
     private nonisolated static func firstTrack(

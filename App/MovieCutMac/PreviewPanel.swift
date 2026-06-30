@@ -493,6 +493,17 @@ struct PreviewPanel: View {
                 ReframeCropPathOverlay(frames: viewModel.reframePreviewFrames)
             }
 
+            if let trackingRect = viewModel.motionTrackingOverlayRect,
+               viewModel.motionTrackingClipId == clip.id {
+                MotionTrackingBoxOverlay(
+                    rect: trackingRect,
+                    isEditable: viewModel.isMotionTrackingOverlayEditable,
+                    isTracking: viewModel.isMotionTrackingRunning
+                ) { updatedRect in
+                    viewModel.updateMotionTrackingInitialRect(updatedRect)
+                }
+            }
+
             if viewModel.isChromaKeyEyedropperActive, clip.kind == .video {
                 ChromaKeyEyedropperOverlay { normalizedPoint in
                     Task { await viewModel.pickChromaKeyColor(atNormalizedPoint: normalizedPoint) }
@@ -2234,6 +2245,194 @@ private struct ReframeCropPathOverlay: View {
 
     private func center(of normalized: CGRect, in size: CGSize) -> CGPoint {
         CGPoint(x: normalized.midX * size.width, y: normalized.midY * size.height)
+    }
+}
+
+/// Editable initial box and read-only tracked box overlay for motion tracking.
+private struct MotionTrackingBoxOverlay: View {
+    var rect: CGRect
+    var isEditable: Bool
+    var isTracking: Bool
+    var onChange: (CGRect) -> Void
+
+    @State private var gestureStartRect: CGRect?
+
+    private enum ResizeHandle: CaseIterable, Identifiable {
+        case topLeft
+        case topRight
+        case bottomRight
+        case bottomLeft
+
+        var id: Self { self }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let viewRect = Self.viewRect(rect, in: size)
+
+            ZStack(alignment: .topLeading) {
+                if isEditable {
+                    box(viewRect)
+                        .gesture(moveGesture(in: size))
+                } else {
+                    box(viewRect)
+                }
+
+                if isEditable {
+                    ForEach(ResizeHandle.allCases) { handle in
+                        Circle()
+                            .fill(Color.cyan)
+                            .frame(width: 10, height: 10)
+                            .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 1))
+                            .position(handlePosition(handle, in: viewRect))
+                            .gesture(resizeGesture(handle: handle, in: size))
+                    }
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .accessibilityLabel(isEditable ? "Motion tracking selection box" : "Tracked motion box")
+    }
+
+    private func box(_ viewRect: CGRect) -> some View {
+        Rectangle()
+            .fill(Color.cyan.opacity(isEditable ? 0.08 : 0.02))
+            .overlay(
+                Rectangle()
+                    .stroke(
+                        Color.cyan.opacity(isTracking ? 0.95 : 0.78),
+                        style: StrokeStyle(
+                            lineWidth: isTracking ? 2 : 1.5,
+                            dash: isEditable ? [6, 4] : []
+                        )
+                    )
+            )
+            .overlay(alignment: .center) {
+                Circle()
+                    .fill(Color.cyan.opacity(0.95))
+                    .frame(width: 5, height: 5)
+            }
+            .frame(width: viewRect.width, height: viewRect.height)
+            .position(x: viewRect.midX, y: viewRect.midY)
+            .contentShape(Rectangle())
+    }
+
+    private func moveGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = startedGestureRect()
+                let dx = value.translation.width / max(size.width, 1)
+                let dy = value.translation.height / max(size.height, 1)
+                onChange(Self.clampedMovingRect(
+                    CGRect(x: start.minX + dx, y: start.minY + dy, width: start.width, height: start.height)
+                ))
+            }
+            .onEnded { _ in
+                gestureStartRect = nil
+            }
+    }
+
+    private func resizeGesture(handle: ResizeHandle, in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = startedGestureRect()
+                let dx = value.translation.width / max(size.width, 1)
+                let dy = value.translation.height / max(size.height, 1)
+                onChange(Self.resizedRect(start, handle: handle, dx: dx, dy: dy))
+            }
+            .onEnded { _ in
+                gestureStartRect = nil
+            }
+    }
+
+    private func startedGestureRect() -> CGRect {
+        if let gestureStartRect {
+            return gestureStartRect
+        }
+
+        gestureStartRect = rect
+        return rect
+    }
+
+    private func handlePosition(_ handle: ResizeHandle, in rect: CGRect) -> CGPoint {
+        switch handle {
+        case .topLeft:
+            return CGPoint(x: rect.minX, y: rect.minY)
+        case .topRight:
+            return CGPoint(x: rect.maxX, y: rect.minY)
+        case .bottomRight:
+            return CGPoint(x: rect.maxX, y: rect.maxY)
+        case .bottomLeft:
+            return CGPoint(x: rect.minX, y: rect.maxY)
+        }
+    }
+
+    private static func viewRect(_ normalized: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: normalized.minX * size.width,
+            y: normalized.minY * size.height,
+            width: max(normalized.width * size.width, 1),
+            height: max(normalized.height * size.height, 1)
+        )
+    }
+
+    private static func clampedMovingRect(_ rect: CGRect) -> CGRect {
+        let width = min(max(rect.width, 0.04), 1)
+        let height = min(max(rect.height, 0.04), 1)
+        return CGRect(
+            x: min(max(rect.minX, 0), 1 - width),
+            y: min(max(rect.minY, 0), 1 - height),
+            width: width,
+            height: height
+        )
+    }
+
+    private static func resizedRect(_ rect: CGRect, handle: ResizeHandle, dx: CGFloat, dy: CGFloat) -> CGRect {
+        let minSize: CGFloat = 0.04
+        var minX = rect.minX
+        var minY = rect.minY
+        var maxX = rect.maxX
+        var maxY = rect.maxY
+
+        switch handle {
+        case .topLeft:
+            minX += dx
+            minY += dy
+        case .topRight:
+            maxX += dx
+            minY += dy
+        case .bottomRight:
+            maxX += dx
+            maxY += dy
+        case .bottomLeft:
+            minX += dx
+            maxY += dy
+        }
+
+        minX = min(max(minX, 0), 1)
+        minY = min(max(minY, 0), 1)
+        maxX = min(max(maxX, 0), 1)
+        maxY = min(max(maxY, 0), 1)
+
+        if maxX - minX < minSize {
+            switch handle {
+            case .topLeft, .bottomLeft:
+                minX = max(0, maxX - minSize)
+            case .topRight, .bottomRight:
+                maxX = min(1, minX + minSize)
+            }
+        }
+        if maxY - minY < minSize {
+            switch handle {
+            case .topLeft, .topRight:
+                minY = max(0, maxY - minSize)
+            case .bottomRight, .bottomLeft:
+                maxY = min(1, minY + minSize)
+            }
+        }
+
+        return CGRect(x: minX, y: minY, width: max(maxX - minX, minSize), height: max(maxY - minY, minSize))
     }
 }
 

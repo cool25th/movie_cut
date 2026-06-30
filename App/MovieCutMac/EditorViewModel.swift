@@ -65,6 +65,7 @@ final class EditorViewModel {
     private static let timelineZoomStep: Double = 20
     private static let minimumTimelineZoom: Double = 20
     private static let maximumTimelineZoom: Double = 300
+    private static let motionTrackingKeyframeProperties: Set<AnimatableProperty> = [.positionX, .positionY]
 
     var currentProject: Project
     var canvasSelection: AspectRatio = .landscape16x9
@@ -115,6 +116,11 @@ final class EditorViewModel {
     var lastErrorMessage: String?
     var lastStatusMessage: String?
     var quickToolProgressMessage: String?
+    var isMotionTrackingSelectionActive: Bool = false
+    var isMotionTrackingRunning: Bool = false
+    var motionTrackingInitialRect: CGRect = CGRect(x: 0.35, y: 0.25, width: 0.30, height: 0.40)
+    var motionTrackingResults: [TrackingResult] = []
+    var motionTrackingClipId: UUID?
     var recentAnalysisResults: [AnalysisHistoryItem] = []
     var lastExportURL: URL?
     var isCloudSyncing: Bool = false
@@ -166,6 +172,7 @@ final class EditorViewModel {
     @ObservationIgnored private var noiseReductionClipIds: Set<UUID> = []
     @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
     @ObservationIgnored private var clipStyles: [UUID: String] = [:]
+    @ObservationIgnored private var motionTrackingAppliedKeyframeCounts: [UUID: Int] = [:]
 
     init(project: Project? = nil) {
         let project = EditorViewModel.ensureDefaultTracks(in: project ?? Project(name: "Untitled"))
@@ -331,6 +338,40 @@ final class EditorViewModel {
 
     var canAutoReframeSelection: Bool {
         selectedClip?.kind == .video && selectedClipSourceAsset?.kind == .video
+    }
+
+    var canTrackMotionSelection: Bool {
+        selectedClip?.kind == .video && selectedClipSourceAsset?.kind == .video
+    }
+
+    var selectedClipMotionTrackingKeyframeCount: Int {
+        guard let clip = selectedClip,
+              motionTrackingClipId == clip.id || motionTrackingAppliedKeyframeCounts[clip.id] != nil
+        else {
+            return 0
+        }
+
+        return clip.keyframes.filter { Self.motionTrackingKeyframeProperties.contains($0.property) }.count
+    }
+
+    var motionTrackingOverlayRect: CGRect? {
+        guard let clip = selectedClip, motionTrackingClipId == clip.id else {
+            return nil
+        }
+
+        if let currentRect = currentMotionTrackingResultRect(for: clip) {
+            return currentRect
+        }
+
+        if isMotionTrackingSelectionActive || isMotionTrackingRunning {
+            return motionTrackingInitialRect
+        }
+
+        return nil
+    }
+
+    var isMotionTrackingOverlayEditable: Bool {
+        isMotionTrackingSelectionActive && !isMotionTrackingRunning
     }
 
     var canApplyNoiseReductionToSelection: Bool {
@@ -2798,6 +2839,93 @@ final class EditorViewModel {
         }
     }
 
+    func beginMotionTrackingSelection() {
+        guard let clipId = selectedClipId, canTrackMotionSelection else {
+            reportQuickToolFailure("Select a video clip to track motion.")
+            return
+        }
+
+        motionTrackingClipId = clipId
+        motionTrackingResults = []
+        isMotionTrackingSelectionActive = true
+        lastErrorMessage = nil
+        lastStatusMessage = "Adjust the tracking box on the preview, then start tracking."
+    }
+
+    func updateMotionTrackingInitialRect(_ rect: CGRect) {
+        guard let normalized = MotionTrackingProvider.clampedNormalizedRect(rect) else { return }
+        motionTrackingInitialRect = normalized
+        if let selectedClipId {
+            motionTrackingClipId = selectedClipId
+        }
+    }
+
+    func cancelMotionTrackingSelection() {
+        isMotionTrackingSelectionActive = false
+        if motionTrackingResults.isEmpty {
+            motionTrackingClipId = nil
+        }
+        lastStatusMessage = "Motion tracking selection cancelled."
+    }
+
+    func trackMotionInSelectedClip() async {
+        await trackMotionInSelectedClip(rect: motionTrackingInitialRect)
+    }
+
+    func trackMotionInSelectedClip(rect: CGRect) async {
+        guard let clipId = selectedClipId, canTrackMotionSelection else {
+            reportQuickToolFailure("Select a video clip to track motion.")
+            return
+        }
+        guard let normalizedRect = MotionTrackingProvider.clampedNormalizedRect(rect) else {
+            reportQuickToolFailure("Draw a valid tracking box on the preview.")
+            return
+        }
+
+        motionTrackingInitialRect = normalizedRect
+        motionTrackingClipId = clipId
+        motionTrackingResults = []
+        isMotionTrackingSelectionActive = false
+        isMotionTrackingRunning = true
+        quickToolProgressMessage = "Tracking motion..."
+        lastErrorMessage = nil
+        lastStatusMessage = "Tracking motion..."
+
+        do {
+            let keyframeCount = try await trackMotion(for: clipId, initialRect: normalizedRect)
+            let message = keyframeCount == 0
+                ? "Motion tracker found no frames; clip unchanged."
+                : "Added \(keyframeCount) motion tracking \(keyframeCount == 1 ? "keyframe" : "keyframes")."
+            recordAnalysisResult(
+                action: "Motion Tracking",
+                count: keyframeCount,
+                message: message,
+                clipId: clipId
+            )
+            reportQuickToolSuccess(message)
+        } catch {
+            motionTrackingResults = []
+            reportQuickToolFailure(error)
+        }
+
+        isMotionTrackingRunning = false
+    }
+
+    func clearMotionTrackingOnSelectedClip() async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+
+        let preserved = clip.keyframes.filter { !Self.motionTrackingKeyframeProperties.contains($0.property) }
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .keyframes(preserved)))
+
+        motionTrackingResults = []
+        motionTrackingAppliedKeyframeCounts[clipId] = nil
+        if motionTrackingClipId == clipId {
+            motionTrackingClipId = nil
+            isMotionTrackingSelectionActive = false
+        }
+        lastStatusMessage = "Cleared motion tracking keyframes."
+    }
+
     func applyNoiseReductionToSelection() async {
         guard let clipId = selectedClipId, canApplyNoiseReductionToSelection else {
             reportQuickToolFailure("Select an audio or video clip for noise reduction.")
@@ -3346,6 +3474,36 @@ final class EditorViewModel {
     }
 
     @discardableResult
+    func trackMotion(for clipId: UUID, initialRect: CGRect) async throws -> Int {
+        let snapshot = await session.snapshot()
+        let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
+        guard asset.kind == .video else {
+            throw EditorCommandError.invalidCommand("Select a video clip to track motion.")
+        }
+
+        let provider = MotionTrackingProvider()
+        let results = try await provider.track(
+            videoURL: asset.originalURL,
+            initialRect: initialRect,
+            timeRange: clip.sourceRange
+        )
+        let canvasSize = effectiveCanvasSize(in: snapshot)
+        let generatedKeyframes = motionTrackingKeyframes(from: results, clip: clip, canvasSize: canvasSize)
+        guard !generatedKeyframes.isEmpty else {
+            lastErrorMessage = nil
+            return 0
+        }
+
+        let updatedKeyframes = mergedMotionTrackingKeyframes(existing: clip.keyframes, generated: generatedKeyframes)
+        try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
+        motionTrackingResults = results
+        motionTrackingClipId = clipId
+        motionTrackingAppliedKeyframeCounts[clipId] = generatedKeyframes.count
+        try await refreshFromSession()
+        return generatedKeyframes.count
+    }
+
+    @discardableResult
     func autoReframe(for clipId: UUID, targetAspect: CGFloat) async throws -> Int {
         guard targetAspect.isFinite, targetAspect > 0 else {
             throw EditorCommandError.invalidCommand("Target aspect ratio must be greater than zero.")
@@ -3374,6 +3532,30 @@ final class EditorViewModel {
         try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .keyframes(updatedKeyframes)))
         try await refreshFromSession()
         return generatedKeyframes.count
+    }
+
+    /// Maps tracked boxes to position keyframes in clip-local time.
+    private func motionTrackingKeyframes(from results: [TrackingResult], clip: Clip, canvasSize: CGSize) -> [Keyframe] {
+        var generatedKeyframes: [Keyframe] = []
+        for result in results {
+            let pointRange = TimeRange(start: result.timestamp, duration: .ulpOfOne)
+            guard let mapping = timelineMapping(for: pointRange, in: clip) else { continue }
+
+            let localTime = mapping.timelineRange.start - clip.timelineRange.start
+            let posX = Double(result.rect.midX - 0.5) * Double(canvasSize.width)
+            let posY = Double(0.5 - result.rect.midY) * Double(canvasSize.height)
+
+            generatedKeyframes.append(Keyframe(property: .positionX, time: localTime, value: posX))
+            generatedKeyframes.append(Keyframe(property: .positionY, time: localTime, value: posY))
+        }
+        return generatedKeyframes
+    }
+
+    private func mergedMotionTrackingKeyframes(existing: [Keyframe], generated: [Keyframe]) -> [Keyframe] {
+        let preserved = existing.filter { !Self.motionTrackingKeyframeProperties.contains($0.property) }
+        return (preserved + generated).sorted {
+            $0.time == $1.time ? $0.property.rawValue < $1.property.rawValue : $0.time < $1.time
+        }
     }
 
     /// Maps smoothed crop frames to position/scale keyframes in clip-local time.
@@ -3506,6 +3688,20 @@ final class EditorViewModel {
     private func canvasAspectValue(in project: Project) -> CGFloat {
         let size = effectiveCanvasSize(in: project)
         return size.width / max(size.height, 1)
+    }
+
+    private func currentMotionTrackingResultRect(for clip: Clip) -> CGRect? {
+        guard !motionTrackingResults.isEmpty else { return nil }
+
+        let clipLocalTimelineTime = min(
+            max(playheadTime - clip.timelineRange.start, 0),
+            max(clip.timelineRange.duration, 0)
+        )
+        let sourceTime = clip.sourceRange.start + (clipLocalTimelineTime * max(clip.playbackRate, 0.25))
+
+        return motionTrackingResults.min {
+            abs($0.timestamp - sourceTime) < abs($1.timestamp - sourceTime)
+        }?.rect
     }
 
     // MARK: - Auto highlights (F-20)

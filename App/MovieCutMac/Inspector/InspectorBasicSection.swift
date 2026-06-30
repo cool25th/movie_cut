@@ -106,6 +106,7 @@ struct InspectorBasicSection: View {
 
         if clip.kind == .video {
             autoReframeSection
+            motionTrackingSection
         }
 
         if clip.kind.supportsSpeed {
@@ -128,6 +129,7 @@ struct InspectorBasicSection: View {
 
         if clip.kind == .video {
             autoReframeSection
+            motionTrackingSection
         }
     }
 
@@ -213,6 +215,65 @@ struct InspectorBasicSection: View {
                     }
                     .controlSize(.small)
                     .accessibilityHint("Discards the auto reframe preview.")
+                }
+            }
+        }
+    }
+
+    private var motionTrackingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("모션 트래킹")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                if viewModel.isMotionTrackingRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Motion tracking in progress")
+                }
+            }
+
+            if viewModel.selectedClipMotionTrackingKeyframeCount > 0 {
+                Text("\(viewModel.selectedClipMotionTrackingKeyframeCount) keyframes")
+                    .font(.caption)
+                    .foregroundStyle(.cyan)
+            }
+
+            HStack(spacing: 6) {
+                Button("영역 조정") {
+                    viewModel.beginMotionTrackingSelection()
+                }
+                .controlSize(.small)
+                .disabled(!viewModel.canTrackMotionSelection || viewModel.isMotionTrackingRunning)
+                .accessibilityHint("Shows an editable tracking box on the preview.")
+
+                Button("Track") {
+                    Task { await viewModel.trackMotionInSelectedClip() }
+                }
+                .controlSize(.small)
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canTrackMotionSelection || viewModel.isMotionTrackingRunning)
+                .accessibilityHint("Tracks the preview box and writes position keyframes to the clip.")
+
+                if viewModel.isMotionTrackingSelectionActive {
+                    Button("Cancel") {
+                        viewModel.cancelMotionTrackingSelection()
+                    }
+                    .controlSize(.small)
+                    .disabled(viewModel.isMotionTrackingRunning)
+                    .accessibilityHint("Hides the editable tracking box.")
+                }
+
+                if viewModel.selectedClipMotionTrackingKeyframeCount > 0 {
+                    Button("Clear") {
+                        Task { await viewModel.clearMotionTrackingOnSelectedClip() }
+                    }
+                    .controlSize(.small)
+                    .disabled(viewModel.isMotionTrackingRunning)
+                    .accessibilityHint("Removes motion tracking position keyframes from the selected clip.")
                 }
             }
         }

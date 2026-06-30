@@ -61,7 +61,7 @@ struct SpeedRampPreviewStaticContractTests {
         #expect(audioTrackBranch.contains("compositionTrack: audioCompositionTrack"))
     }
 
-    @Test("Backlog marks speed ramp preview and export complete with optical flow still separate")
+    @Test("Backlog marks speed ramp preview and export complete")
     func backlogMarksSpeedRampPreviewAndExportComplete() throws {
         let source = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
 
@@ -70,7 +70,6 @@ struct SpeedRampPreviewStaticContractTests {
         #expect(source.contains("SpeedRampCurve(points: clip.speedRampPoints)"))
         #expect(source.contains("scaleTimeRange"))
         #expect(source.contains("audio preview path"))
-        #expect(source.contains("- [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)"))
         #expect(source.contains("다음 1순위는 F-01 실기기 검증"))
         #expect(!source.contains("preview 미반영"))
         #expect(!source.contains("다음 1순위는 speed ramp preview"))

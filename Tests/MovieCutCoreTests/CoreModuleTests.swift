@@ -8,10 +8,12 @@ import MovieCutCore
     clip.opacity = 0.5
     clip.volume = 1.5
     clip.playbackRate = 2.0
+    clip.useOpticalFlow = true
     clip.isReversed = true
     #expect(clip.opacity == 0.5)
     #expect(clip.volume == 1.5)
     #expect(clip.playbackRate == 2.0)
+    #expect(clip.useOpticalFlow == true)
     #expect(clip.isReversed == true)
 }
 
@@ -94,6 +96,39 @@ import MovieCutCore
     #expect(decoded.zIndex == 12)
     #expect(decoded.timelineRange.start == 3)
     #expect(decoded.timelineRange.duration == 4)
+}
+
+@Test func clipCodableLegacyJSONWithoutOpticalFlowDefaultsToFalse() throws {
+    let clip = Clip(
+        kind: .video,
+        sourceRange: TimeRange(start: 0, duration: 5),
+        timelineRange: TimeRange(start: 0, duration: 10),
+        playbackRate: 0.5,
+        useOpticalFlow: true
+    )
+    let encoded = try JSONEncoder().encode(clip)
+    var jsonObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    jsonObject.removeValue(forKey: "useOpticalFlow")
+
+    let legacyData = try JSONSerialization.data(withJSONObject: jsonObject)
+    let decoded = try JSONDecoder().decode(Clip.self, from: legacyData)
+
+    #expect(decoded.useOpticalFlow == false)
+    #expect(decoded.playbackRate == 0.5)
+}
+
+@Test func clipCodableRoundTripPreservesOpticalFlow() throws {
+    let clip = Clip(
+        kind: .video,
+        sourceRange: TimeRange(start: 0, duration: 5),
+        timelineRange: TimeRange(start: 0, duration: 10),
+        playbackRate: 0.5,
+        useOpticalFlow: true
+    )
+    let data = try JSONEncoder().encode(clip)
+    let decoded = try JSONDecoder().decode(Clip.self, from: data)
+
+    #expect(decoded.useOpticalFlow == true)
 }
 
 @Test func moveClipCommandAppliesAndInverts() throws {
@@ -324,6 +359,29 @@ func setClipPropertyZIndexAppliesAndInvertsOnSelectedClip() throws {
     let undo = try command.invert(from: result)
     _ = try undo.apply(to: &project)
     #expect(project.timeline.tracks[0].clips[0].zIndex == 2)
+}
+
+@Test("SetClipProperty opticalFlow applies and inverts on selected clip")
+func setClipPropertyOpticalFlowAppliesAndInvertsOnSelectedClip() throws {
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "Video", zIndex: 0, clips: [
+            Clip(
+                kind: .video,
+                sourceRange: TimeRange(start: 0, duration: 5),
+                timelineRange: TimeRange(start: 0, duration: 10),
+                playbackRate: 0.5
+            )
+        ])
+    ]))
+    let clipId = project.timeline.tracks[0].clips[0].id
+    let command = SetClipPropertyCommand(clipId: clipId, property: .opticalFlow(true))
+
+    let result = try command.apply(to: &project)
+    #expect(project.timeline.tracks[0].clips[0].useOpticalFlow == true)
+
+    let undo = try command.invert(from: result)
+    _ = try undo.apply(to: &project)
+    #expect(project.timeline.tracks[0].clips[0].useOpticalFlow == false)
 }
 
 @Test("SetTrackProperty boolean applies and inverts")

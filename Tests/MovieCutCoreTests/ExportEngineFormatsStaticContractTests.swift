@@ -52,4 +52,15 @@ struct ExportEngineFormatsStaticContractTests {
         #expect(source.contains("AVAssetWriter(outputURL: url, fileType: fileType)"))
         #expect(source.contains("AVAssetReaderVideoCompositionOutput("))
     }
+
+    @Test("Optical-flow slow motion raises export composition frame cadence")
+    func opticalFlowSlowMotionExportContract() throws {
+        let source = try engineSource()
+        #expect(source.contains("maximumOpticalFlowFrameRate"))
+        #expect(source.contains("videoCompositionFrameRate(for: exportSettings, clips: clips)"))
+        #expect(source.contains("sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid"))
+        #expect(source.contains("useOpticalFlow: clip.useOpticalFlow"))
+        #expect(source.contains("playbackRate: playbackRate"))
+        #expect(source.contains("opticalFlowSlowMotionRate"))
+    }
 }

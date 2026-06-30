@@ -59,6 +59,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Optional speed-ramp points. Empty means the clip uses `playbackRate`.
     public var speedRampPoints: [SpeedRampPoint]
 
+    /// Whether export should request smoother frame interpolation for slow motion.
+    public var useOpticalFlow: Bool
+
     /// Source-relative animation keyframes.
     public var keyframes: [Keyframe]
 
@@ -152,6 +155,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case equalizer
         case playbackRate
         case speedRampPoints
+        case useOpticalFlow
         case keyframes
         case transition
         case textContent
@@ -183,6 +187,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         equalizer: ClipEqualizerSettings? = nil,
         playbackRate: Double = 1.0,
         speedRampPoints: [SpeedRampPoint] = [],
+        useOpticalFlow: Bool = false,
         keyframes: [Keyframe] = [],
         transition: Transition? = nil,
         textContent: TextClipContent? = nil,
@@ -213,6 +218,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.equalizer = equalizer
         self.playbackRate = playbackRate
         self.speedRampPoints = speedRampPoints
+        self.useOpticalFlow = useOpticalFlow
         self.keyframes = keyframes
         self.transition = transition
         self.textContent = textContent
@@ -255,6 +261,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         equalizer = try container.decodeIfPresent(ClipEqualizerSettings.self, forKey: .equalizer)
         playbackRate = try container.decodeIfPresent(Double.self, forKey: .playbackRate) ?? 1.0
         speedRampPoints = try container.decodeIfPresent([SpeedRampPoint].self, forKey: .speedRampPoints) ?? []
+        useOpticalFlow = try container.decodeIfPresent(Bool.self, forKey: .useOpticalFlow) ?? false
         keyframes = try container.decodeIfPresent([Keyframe].self, forKey: .keyframes) ?? []
         transition = try container.decodeIfPresent(Transition.self, forKey: .transition)
         textContent = try container.decodeIfPresent(TextClipContent.self, forKey: .textContent)
@@ -286,6 +293,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encodeIfPresent(equalizer, forKey: .equalizer)
         try container.encode(playbackRate, forKey: .playbackRate)
         try container.encode(speedRampPoints, forKey: .speedRampPoints)
+        if useOpticalFlow { try container.encode(useOpticalFlow, forKey: .useOpticalFlow) }
         try container.encode(keyframes, forKey: .keyframes)
         try container.encodeIfPresent(transition, forKey: .transition)
         try container.encodeIfPresent(textContent, forKey: .textContent)

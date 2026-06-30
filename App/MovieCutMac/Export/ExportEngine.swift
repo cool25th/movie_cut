@@ -24,6 +24,8 @@ final class ExportEngine {
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
 
+    private static let maximumOpticalFlowFrameRate: Int32 = 120
+
     /// Centralized export decision engine: render size, explicit bitrate, codec
     /// profile, file type, and writer output settings (see `MovieCutCore.ExportPlanner`).
     @ObservationIgnored private let exportPlanner = ExportPlanner()
@@ -470,7 +472,9 @@ final class ExportEngine {
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         effects: clip.effects,
                         keyframes: clip.keyframes,
-                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id)
+                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id),
+                        useOpticalFlow: clip.useOpticalFlow,
+                        playbackRate: playbackRate
                     ))
                 }
 
@@ -521,8 +525,12 @@ final class ExportEngine {
         let videoComposition = AVMutableVideoComposition()
 
         let resolvedSize = renderSize(for: exportSettings.resolution, canvas: canvas)
+        let renderFrameRate = videoCompositionFrameRate(for: exportSettings, clips: clips)
         videoComposition.renderSize = resolvedSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(exportSettings.frameRate.framesPerSecond))
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(renderFrameRate))
+        if clips.contains(where: \.usesOpticalFlowSlowMotion) {
+            videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+        }
 
         let transitionEffects = makeTransitionEffects(from: clips)
         let usesCustomVideoCompositor = clips.contains { clip in
@@ -733,6 +741,19 @@ final class ExportEngine {
                 )
             }
         }
+    }
+
+    private func videoCompositionFrameRate(
+        for exportSettings: ExportSettings,
+        clips: [ExportClipInstructionMetadata]
+    ) -> Int32 {
+        let baseFrameRate = exportSettings.frameRate.framesPerSecond
+        guard let slowestOpticalFlowRate = clips.compactMap(\.opticalFlowSlowMotionRate).min() else {
+            return baseFrameRate
+        }
+
+        let targetFrameRate = Int32((Double(baseFrameRate) / slowestOpticalFlowRate).rounded(.up))
+        return min(max(baseFrameRate, targetFrameRate), Self.maximumOpticalFlowFrameRate)
     }
 
     private func makeCustomVideoCompositorInstruction(
@@ -1631,6 +1652,18 @@ private struct ExportClipInstructionMetadata {
     var stickerFontSize: CGFloat? = nil
     var keyframes: [Keyframe]
     var isBackgroundRemoved: Bool
+    var useOpticalFlow: Bool = false
+    var playbackRate: Double = 1.0
+
+    var usesOpticalFlowSlowMotion: Bool {
+        opticalFlowSlowMotionRate != nil
+    }
+
+    var opticalFlowSlowMotionRate: Double? {
+        guard useOpticalFlow, trackID != kCMPersistentTrackID_Invalid else { return nil }
+        let rate = min(max(playbackRate, 0.25), 4.0)
+        return rate < 1.0 ? rate : nil
+    }
 
     var requiresCustomVideoCompositorMetadata: Bool {
         textContent != nil

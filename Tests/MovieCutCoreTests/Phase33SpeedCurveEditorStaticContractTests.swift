@@ -36,6 +36,11 @@ struct Phase33SpeedCurveEditorStaticContractTests {
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(newValue)"))
         #expect(speedSection.contains("ForEach(speedPresets, id: \\.self)"))
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(preset)"))
+        #expect(speedSection.contains("Toggle(\"부드러운 슬로우모션\""))
+        #expect(speedSection.contains("get: { clip.useOpticalFlow }"))
+        #expect(speedSection.contains("viewModel.updateSelectedOpticalFlow(newValue)"))
+        #expect(speedSection.contains(".disabled(clip.playbackRate >= 1.0)"))
+        #expect(speedSection.contains("Text(\"내보낼 때 프레임 보간이 적용됩니다\")"))
         #expect(speedSection.contains("speedCurveEditor"))
         #expect(speedSection.contains(#".accessibilityLabel("Constant speed")"#))
     }
@@ -163,8 +168,8 @@ struct Phase33SpeedCurveEditorStaticContractTests {
         }
     }
 
-    @Test("Phase 3 docs mark speed curve complete without claiming optical-flow slow motion")
-    func phase3DocsMarkSpeedCurveCompleteWithoutClaimingOpticalFlowSlowMotion() throws {
+    @Test("Phase 3 docs mark speed curve complete")
+    func phase3DocsMarkSpeedCurveComplete() throws {
         let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
         let parity = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
 
@@ -175,11 +180,8 @@ struct Phase33SpeedCurveEditorStaticContractTests {
 
         #expect(parity.contains("| R4-05 | **서브탭 깊이: Speed 곡선 에디터** | ✅ 구현(2026-06-18, Codex Phase 3-3):"))
         #expect(parity.contains("`EditorViewModel.updateSelectedSpeedRampPoints(_:)`"))
-        #expect(parity.contains("Optical-flow smooth slow motion은 별도 기능 backlog로 유지."))
         #expect(parity.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
-        #expect(parity.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
         #expect(!parity.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
-        #expect(!parity.lowercased().contains("optical-flow smooth slow motion complete"))
     }
 }
 

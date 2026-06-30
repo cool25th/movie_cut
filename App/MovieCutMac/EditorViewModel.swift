@@ -2250,6 +2250,11 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .speedRampPoints(points)))
     }
 
+    func updateSelectedOpticalFlow(_ enabled: Bool) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .opticalFlow(enabled)))
+    }
+
     func updateSelectedKeyframes(_ keyframes: [Keyframe]) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .keyframes(keyframes)))

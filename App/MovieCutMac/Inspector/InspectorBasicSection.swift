@@ -570,6 +570,21 @@ struct InspectorBasicSection: View {
                 }
             }
 
+            if clip.kind == .video {
+                Toggle("부드러운 슬로우모션", isOn: Binding(
+                    get: { clip.useOpticalFlow },
+                    set: { newValue in
+                        Task { await viewModel.updateSelectedOpticalFlow(newValue) }
+                    }
+                ))
+                .disabled(clip.playbackRate >= 1.0)
+                .accessibilityHint("Exports opted-in slow motion with frame interpolation.")
+
+                Text("내보낼 때 프레임 보간이 적용됩니다")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.secondary)
+            }
+
             Divider()
 
             speedCurveEditor

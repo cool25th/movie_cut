@@ -20,6 +20,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces the clip speed-ramp points.
     case speedRampPoints([SpeedRampPoint])
 
+    /// Smooth slow-motion frame interpolation toggle.
+    case opticalFlow(Bool)
+
     /// Replaces the clip animation keyframes.
     case keyframes([Keyframe])
 
@@ -102,6 +105,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .speedRampPoints(let speedRampPoints):
             previousProperty = .speedRampPoints(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].speedRampPoints)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].speedRampPoints = speedRampPoints
+        case .opticalFlow(let useOpticalFlow):
+            previousProperty = .opticalFlow(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].useOpticalFlow)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].useOpticalFlow = useOpticalFlow
         case .keyframes(let keyframes):
             previousProperty = .keyframes(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].keyframes)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].keyframes = keyframes

@@ -643,4 +643,23 @@ final class IOSEditorViewModel {
             lastErrorMessage = error.localizedDescription
         }
     }
+
+    /// Sets the 3-way (lift / gamma / gain) color grade on the selected clip.
+    /// Mirrors `EditorViewModel.updateSelectedColorGrade` so iOS gets an
+    /// adjustable grade UI on top of the rendering parity landed in 947b88b.
+    func updateSelectedColorGrade(_ colorGrade: ColorGrade?) async {
+        guard let selectedClipId else { return }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
+    }
+
+    /// Sets audio fade in/out on the selected clip. Passing `nil` for a
+    /// parameter keeps that clip's current value (mirrors the Mac view model).
+    func updateSelectedAudioFade(fadeInDuration: TimeInterval? = nil, fadeOutDuration: TimeInterval? = nil) async {
+        guard let selectedClipId, let selectedClip else { return }
+        await apply(AudioFadeCommand(
+            clipId: selectedClipId,
+            fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
+            fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
+        ))
+    }
 }

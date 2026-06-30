@@ -20,16 +20,6 @@ enum CanvasOverlayAlignment: Sendable {
 @MainActor
 @Observable
 final class EditorViewModel {
-    struct TextTemplate: Identifiable {
-        let id: String
-        let name: String
-        let fontName: String
-        let fontSize: Double
-        let isBold: Bool
-        let alignment: TextAlignment
-        let animation: TextAnimationPreset?
-    }
-
     struct AnalysisHistoryItem: Identifiable {
         let id = UUID()
         let action: String
@@ -75,14 +65,6 @@ final class EditorViewModel {
     private static let timelineZoomStep: Double = 20
     private static let minimumTimelineZoom: Double = 20
     private static let maximumTimelineZoom: Double = 300
-
-    static let textTemplates: [TextTemplate] = [
-        TextTemplate(id: "title", name: "Title", fontName: "HelveticaNeue-Bold", fontSize: 36, isBold: true, alignment: .center, animation: .fadeIn),
-        TextTemplate(id: "subtitle", name: "Subtitle", fontName: "HelveticaNeue", fontSize: 24, isBold: false, alignment: .center, animation: .slideInUp),
-        TextTemplate(id: "caption", name: "Caption", fontName: "SFPro-Medium", fontSize: 18, isBold: false, alignment: .center, animation: nil),
-        TextTemplate(id: "lower_third", name: "Lower Third", fontName: "HelveticaNeue-Bold", fontSize: 20, isBold: true, alignment: .leading, animation: .slideInUp),
-        TextTemplate(id: "credit", name: "Credits", fontName: "HelveticaNeue-Light", fontSize: 14, isBold: false, alignment: .center, animation: .typewriter),
-    ]
 
     var currentProject: Project
     var canvasSelection: AspectRatio = .landscape16x9
@@ -1304,40 +1286,6 @@ final class EditorViewModel {
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
-        }
-    }
-
-    func addTextFromTemplate(_ template: TextTemplate) async {
-        do {
-            let track = try await ensureTrack(for: .text)
-            let duration: TimeInterval = 5
-            let content = TextClipContent(
-                text: template.name,
-                fontFamily: template.fontName,
-                fontSize: template.fontSize,
-                alignment: template.alignment,
-                animation: template.animation.map { TextAnimation(preset: $0) }
-            )
-            let clip = Clip(
-                assetId: nil,
-                kind: .text,
-                sourceRange: TimeRange(start: 0, duration: duration),
-                timelineRange: TimeRange(start: playheadTime, duration: duration),
-                textContent: content
-            )
-
-            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
-            selectedClipId = clip.id
-            try await refreshFromSession()
-        } catch {
-            lastErrorMessage = error.localizedDescription
-        }
-    }
-
-    func addTextTemplateClip(_ template: TextTemplate) async {
-        await addTextFromTemplate(template)
-        if lastErrorMessage == nil {
-            reportQuickToolSuccess("Added \(template.name) text template.")
         }
     }
 

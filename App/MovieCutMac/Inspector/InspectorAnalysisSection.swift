@@ -41,9 +41,9 @@ struct InspectorAnalysisSection: View {
         Section("Text Templates") {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(EditorViewModel.textTemplates) { template in
+                    ForEach(MovieCutCore.TextTemplate.builtIn) { template in
                         Button(template.name) {
-                            Task { await viewModel.addTextFromTemplate(template) }
+                            Task { await viewModel.addTextTemplateClip(template) }
                         }
                         .buttonStyle(.bordered)
                     }

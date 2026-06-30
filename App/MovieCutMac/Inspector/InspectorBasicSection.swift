@@ -928,8 +928,48 @@ struct InspectorBasicSection: View {
             if isStickerClip {
                 stickerMetadataSection(textContent)
             } else {
+                textTemplateBrowser()
                 normalTextStyleEditor(textContent)
             }
+        }
+    }
+
+    private func textTemplateBrowser() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Templates")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(MovieCutCore.TextTemplate.builtIn.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHGrid(
+                    rows: [
+                        GridItem(.fixed(78), spacing: 8),
+                        GridItem(.fixed(78), spacing: 8)
+                    ],
+                    spacing: 8
+                ) {
+                    ForEach(MovieCutCore.TextTemplate.builtIn) { template in
+                        Button {
+                            Task { await viewModel.addTextTemplateClip(template) }
+                        } label: {
+                            InspectorTextTemplateThumbnail(template: template)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(template.name) text template")
+                        .accessibilityHint("Creates a new text clip at the playhead with this template style.")
+                        .help(template.name)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(height: 166)
         }
     }
 
@@ -1551,6 +1591,158 @@ struct InspectorBasicSection: View {
             return String(format: "%.0fx", rate)
         }
         return String(format: "%.2gx", rate)
+    }
+}
+
+private struct InspectorTextTemplateThumbnail: View {
+    let template: MovieCutCore.TextTemplate
+
+    private var content: TextClipContent {
+        template.content
+    }
+
+    private var previewText: String {
+        content.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewFontSize: CGFloat {
+        min(max(CGFloat(content.fontSize) * 0.26, 11), 24)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.previewWellBackground)
+
+                GeometryReader { proxy in
+                    styledPreviewText
+                        .frame(maxWidth: min(proxy.size.width - 12, 116), alignment: alignmentFrame)
+                        .position(previewPosition(in: proxy.size))
+                }
+                .padding(2)
+            }
+            .frame(height: 56)
+            .overlay(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .stroke(MovieCutTheme.border.opacity(0.44), lineWidth: 0.5)
+            )
+
+            Text(template.name)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: 128, height: 78)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .fill(MovieCutTheme.inspectorSelectedControlSurface.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .stroke(MovieCutTheme.inspectorSelectedBorder.opacity(0.52), lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private var styledPreviewText: some View {
+        let text = Text(previewText.isEmpty ? template.name : previewText)
+            .font(.custom(content.fontFamily, size: previewFontSize))
+            .fontWeight(content.isBold ? .bold : .regular)
+            .foregroundStyle(Self.color(from: content.fontColor))
+
+        if content.isItalic {
+            decoratedText(text.italic())
+        } else {
+            decoratedText(text)
+        }
+    }
+
+    private func decoratedText<Label: View>(_ label: Label) -> some View {
+        let strokeColor = content.strokeColor.map { Self.color(from: $0) } ?? .clear
+        let strokeWidth = min(max(CGFloat(content.strokeWidth ?? 0) * 0.25, 0), 2)
+        let shadowColor = content.shadowColor.map { Self.color(from: $0).opacity(0.9) } ?? .clear
+        let shadowOffset = content.shadowOffset ?? .zero
+        let shadowRadius = min(max(CGFloat(content.shadowBlur ?? 0) * 0.18, 0), 4)
+
+        return label
+            .lineLimit(2)
+            .minimumScaleFactor(0.55)
+            .multilineTextAlignment(multilineAlignment)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background {
+                if let backgroundColor = content.backgroundColor {
+                    RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                        .fill(Self.color(from: backgroundColor))
+                }
+            }
+            .shadow(color: strokeColor, radius: 0, x: strokeWidth, y: 0)
+            .shadow(color: strokeColor, radius: 0, x: -strokeWidth, y: 0)
+            .shadow(color: strokeColor, radius: 0, x: 0, y: strokeWidth)
+            .shadow(color: strokeColor, radius: 0, x: 0, y: -strokeWidth)
+            .shadow(
+                color: shadowColor,
+                radius: shadowRadius,
+                x: min(max(shadowOffset.x * 0.18, -3), 3),
+                y: min(max(shadowOffset.y * 0.18, -3), 3)
+            )
+    }
+
+    private var alignmentFrame: Alignment {
+        switch content.alignment {
+        case .leading:
+            return .leading
+        case .center, .justified:
+            return .center
+        case .trailing:
+            return .trailing
+        }
+    }
+
+    private var multilineAlignment: SwiftUI.TextAlignment {
+        switch content.alignment {
+        case .leading:
+            return .leading
+        case .center:
+            return .center
+        case .trailing:
+            return .trailing
+        case .justified:
+            return .leading
+        }
+    }
+
+    private func previewPosition(in size: CGSize) -> CGPoint {
+        guard size.width > 0, size.height > 0 else {
+            return .zero
+        }
+
+        let isDefaultPosition = abs(content.position.x) <= 1.0e-9 && abs(content.position.y) <= 1.0e-9
+        let normalizedX = isDefaultPosition ? 0.5 : min(max(content.position.x / 1920, 0.18), 0.82)
+        let normalizedY = isDefaultPosition ? 0.5 : min(max(content.position.y / 1080, 0.20), 0.80)
+
+        return CGPoint(
+            x: size.width * normalizedX,
+            y: size.height * normalizedY
+        )
+    }
+
+    private static func color(from hex: String) -> Color {
+        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard clean.count >= 6 else { return .white }
+
+        let rgb = String(clean.prefix(6))
+        guard let value = UInt64(rgb, radix: 16) else { return .white }
+
+        return Color(
+            red: Double((value >> 16) & 0xFF) / 255.0,
+            green: Double((value >> 8) & 0xFF) / 255.0,
+            blue: Double(value & 0xFF) / 255.0
+        )
     }
 }
 

@@ -2358,6 +2358,14 @@ final class EditorViewModel {
         reportQuickToolSuccess("Applied \(name) export preset.")
     }
 
+    func applyPlatformExportPreset(_ preset: PlatformExportPreset) async {
+        await applyExportPreset(
+            named: preset.name,
+            canvas: preset.canvas,
+            exportSettings: preset.exportSettings
+        )
+    }
+
     func updateSelectedTransition(_ transition: Transition?) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))

@@ -100,6 +100,55 @@ import Testing
     #expect(ExportQuality.custom.defaultVideoBitrateMbps(for: .p1080) == nil)
 }
 
+@Test func platformExportPresetCasesAndSettings() throws {
+    #expect(PlatformExportPreset.allCases == [
+        .tikTok,
+        .instagramReels,
+        .youtubeShorts,
+        .youtubeStandard,
+        .instagramPost
+    ])
+
+    let tikTok = PlatformExportPreset.tikTok
+    #expect(tikTok.aspectRatio == .portrait9x16)
+    #expect(tikTok.pixelSize.width == 1080)
+    #expect(tikTok.pixelSize.height == 1920)
+    #expect(tikTok.recommendedBitrateMbps == 15)
+    #expect(tikTok.maxDurationSeconds == 600)
+    #expect(tikTok.canvas.aspectRatio == .portrait9x16)
+    #expect(tikTok.exportSettings.resolution == .p1080)
+    #expect(tikTok.exportSettings.quality == .custom)
+    #expect(tikTok.exportSettings.videoBitrateMbps == 15)
+
+    let reels = PlatformExportPreset.instagramReels
+    #expect(reels.aspectRatio == .portrait9x16)
+    #expect(reels.recommendedBitrateMbps == 12)
+    #expect(reels.maxDurationSeconds == 180)
+
+    let shorts = PlatformExportPreset.youtubeShorts
+    #expect(shorts.aspectRatio == .portrait9x16)
+    #expect(shorts.recommendedBitrateMbps == 20)
+    #expect(shorts.maxDurationSeconds == 180)
+
+    let youtube = PlatformExportPreset.youtubeStandard
+    #expect(youtube.aspectRatio == .landscape16x9)
+    #expect(youtube.pixelSize.width == 1920)
+    #expect(youtube.pixelSize.height == 1080)
+    #expect(youtube.recommendedBitrateMbps == 20)
+    #expect(youtube.maxDurationSeconds == 43_200)
+
+    let post = PlatformExportPreset.instagramPost
+    #expect(post.aspectRatio == .square1x1)
+    #expect(post.pixelSize.width == 1080)
+    #expect(post.pixelSize.height == 1080)
+    #expect(post.recommendedBitrateMbps == 12)
+    #expect(post.maxDurationSeconds == 3_600)
+
+    let data = try JSONEncoder().encode(PlatformExportPreset.youtubeShorts)
+    let decoded = try JSONDecoder().decode(PlatformExportPreset.self, from: data)
+    #expect(decoded == .youtubeShorts)
+}
+
 @Test func canvasPresetDefault() {
     let preset = CanvasPreset.defaultPreset()
 

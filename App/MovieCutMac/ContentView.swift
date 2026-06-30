@@ -5,6 +5,7 @@ import MovieCutCore
 struct ContentView: View {
     @Bindable var viewModel: EditorViewModel
     @State private var isCanvasSettingsPresented = false
+    @State private var isExportPresetsPresented = false
     @State private var isTemplatePickerPresented = false
 
     var body: some View {
@@ -226,6 +227,18 @@ struct ContentView: View {
             .accessibilityValue(exportButtonAccessibilityValue)
             .accessibilityHint(exportButtonHelpText)
 
+            Button(action: { isExportPresetsPresented.toggle() }) {
+                Image(systemName: "square.grid.2x2")
+            }
+            .help("Platform export presets")
+            .accessibilityLabel("Platform export presets")
+            .accessibilityValue(platformPresetToolbarAccessibilityValue)
+            .accessibilityHint("Open platform presets for TikTok, Reels, Shorts, YouTube, and Instagram Post.")
+            .popover(isPresented: $isExportPresetsPresented, arrowEdge: .bottom) {
+                PlatformExportPresetPopover(viewModel: viewModel)
+                    .frame(width: 380)
+            }
+
             Menu {
                 Button("Video (Explicit Bitrate)…") {
                     Task { await viewModel.exportWithExplicitBitrate() }
@@ -311,6 +324,19 @@ struct ContentView: View {
             : settings.quality.displayName
 
         return "\(settings.containerFormat.displayName), \(settings.codec.accessibilityDisplayName), \(settings.resolution.accessibilityDisplayName), \(settings.frameRate.statusDisplayName), \(quality) quality"
+    }
+
+    private var platformPresetToolbarAccessibilityValue: String {
+        if let preset = PlatformExportPreset.allCases.first(where: isPlatformPresetApplied) {
+            return "\(preset.name), \(preset.detail)"
+        }
+
+        return "Custom export settings"
+    }
+
+    private func isPlatformPresetApplied(_ preset: PlatformExportPreset) -> Bool {
+        viewModel.currentProject.canvas == preset.canvas
+            && viewModel.currentProject.exportSettings == preset.exportSettings
     }
 
     /// Offers crash recovery when an autosave from a non-clean session exists.
@@ -679,6 +705,141 @@ struct ExportSheet: View {
     }
 }
 
+private struct PlatformExportPresetPopover: View {
+    var viewModel: EditorViewModel
+
+    private let columns = [
+        GridItem(.flexible(minimum: 152), spacing: MovieCutSpacing.small),
+        GridItem(.flexible(minimum: 152), spacing: MovieCutSpacing.small)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+            HStack(spacing: MovieCutSpacing.small) {
+                Text("Platform Presets")
+                    .font(.headline)
+                Spacer()
+                Text(activePreset?.name ?? "Custom")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MovieCutTheme.mutedText)
+            }
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: MovieCutSpacing.small) {
+                ForEach(PlatformExportPreset.allCases) { preset in
+                    platformPresetButton(preset)
+                }
+            }
+
+            Divider()
+                .overlay(MovieCutTheme.divider)
+
+            HStack(spacing: MovieCutSpacing.small) {
+                Label("Estimated Size", systemImage: "externaldrive")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Text(estimatedFileSizeLabel)
+                    .font(.caption)
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Color.primary)
+
+            if let activePreset, timelineDuration > activePreset.maxDurationSeconds {
+                Label("Timeline exceeds \(activePreset.maxDurationHint.lowercased())", systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(MovieCutSpacing.medium)
+        .background(MovieCutTheme.panelBackgroundRaised)
+    }
+
+    private func platformPresetButton(_ preset: PlatformExportPreset) -> some View {
+        let selected = isApplied(preset)
+
+        return Button {
+            Task {
+                await viewModel.applyPlatformExportPreset(preset)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: MovieCutSpacing.xSmall) {
+                    Image(systemName: preset.systemImageName)
+                        .font(.title3)
+                        .foregroundStyle(selected ? MovieCutTheme.accentCyan : Color.primary)
+
+                    Spacer(minLength: MovieCutSpacing.xSmall)
+
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(MovieCutTheme.accentCyan)
+                    }
+                }
+
+                Text(preset.name)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text(preset.detail)
+                    .font(.caption2)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+                    .lineLimit(2)
+
+                Text(preset.maxDurationHint)
+                    .font(.caption2)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? MovieCutTheme.accentCyan.opacity(0.18) : MovieCutTheme.controlSurface.opacity(0.32))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(selected ? MovieCutTheme.accentCyan.opacity(0.72) : MovieCutTheme.border.opacity(0.28), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Apply export preset \(preset.name)")
+        .accessibilityValue(platformPresetAccessibilityValue(for: preset))
+        .accessibilityHint("Applies \(preset.detail) export and canvas settings. This does not start export.")
+    }
+
+    private var activePreset: PlatformExportPreset? {
+        PlatformExportPreset.allCases.first(where: isApplied)
+    }
+
+    private func isApplied(_ preset: PlatformExportPreset) -> Bool {
+        viewModel.currentProject.canvas == preset.canvas
+            && viewModel.currentProject.exportSettings == preset.exportSettings
+    }
+
+    private func platformPresetAccessibilityValue(for preset: PlatformExportPreset) -> String {
+        let state = isApplied(preset) ? "Selected" : "Not selected"
+        return "\(state). \(preset.detail). \(preset.maxDurationHint). Estimated size \(estimatedFileSizeLabel)."
+    }
+
+    private var timelineDuration: TimeInterval {
+        max(viewModel.currentProject.timeline.duration, 0)
+    }
+
+    private var estimatedFileSizeLabel: String {
+        guard timelineDuration > 0 else {
+            return "Timeline empty"
+        }
+
+        let audioMbps = viewModel.currentProject.exportSettings.audioCodec == .pcm ? 1.5 : 0.192
+        let megabytes = timelineDuration * (estimatedVideoBitrateMbps + audioMbps) / 8
+        return String(format: "~%.1f MB for %.1fs", megabytes, timelineDuration)
+    }
+
+    private var estimatedVideoBitrateMbps: Double {
+        let settings = viewModel.currentProject.exportSettings
+        return Double(settings.resolvedVideoBitrateMbps ?? 10)
+    }
+}
+
 private extension ExportResolution {
     var accessibilityDisplayName: String {
         switch self {
@@ -688,6 +849,23 @@ private extension ExportResolution {
             return "1080p"
         case .p4K:
             return "4K"
+        }
+    }
+}
+
+private extension PlatformExportPreset {
+    var systemImageName: String {
+        switch self {
+        case .tikTok:
+            return "music.note"
+        case .instagramReels:
+            return "camera.aperture"
+        case .youtubeShorts:
+            return "play.square.fill"
+        case .youtubeStandard:
+            return "play.rectangle.fill"
+        case .instagramPost:
+            return "square.grid.2x2"
         }
     }
 }

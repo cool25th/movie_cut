@@ -10,6 +10,10 @@ struct InspectorExportSection: View {
 
             Divider()
 
+            Text("Custom Export")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
             Picker("Format", selection: exportContainerFormatBinding) {
                 ForEach(ExportContainerFormat.allCases, id: \.self) { format in
                     Text(format.displayName).tag(format)
@@ -69,121 +73,102 @@ struct InspectorExportSection: View {
 
     private var socialPresetButtons: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Social Presets")
+            Text("Platform Presets")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            ForEach(socialPresets) { preset in
-                Button {
-                    Task {
-                        await viewModel.applyExportPreset(
-                            named: preset.name,
-                            canvas: preset.canvas,
-                            exportSettings: preset.exportSettings
-                        )
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
+            LazyVGrid(columns: socialPresetColumns, alignment: .leading, spacing: 8) {
+                ForEach(socialPresets) { preset in
+                    Button {
+                        Task {
+                            await viewModel.applyPlatformExportPreset(preset)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                Image(systemName: socialPresetSystemImage(for: preset))
+                                    .font(.title3)
+                                Spacer(minLength: 4)
+                                if isApplied(preset) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                }
+                            }
+
                             Text(preset.name)
                                 .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+
                             Text(preset.detail)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(2)
+
+                            Text(preset.maxDurationHint)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        if isApplied(preset) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isApplied(preset) ? MovieCutTheme.accentCyan.opacity(0.18) : MovieCutTheme.controlSurface.opacity(0.28))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(isApplied(preset) ? MovieCutTheme.accentCyan.opacity(0.7) : MovieCutTheme.border.opacity(0.28), lineWidth: 1)
+                        )
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Apply export preset \(preset.name)")
+                    .accessibilityValue(socialPresetAccessibilityValue(for: preset))
+                    .accessibilityHint(socialPresetAccessibilityHint(for: preset))
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel("Apply export preset \(preset.name)")
-                .accessibilityValue(socialPresetAccessibilityValue(for: preset))
-                .accessibilityHint(socialPresetAccessibilityHint(for: preset))
             }
+
+            LabeledContent("Estimated Size", value: estimatedFileSizeLabel)
+                .font(.caption)
         }
     }
 
-    private var socialPresets: [SocialExportPreset] {
+    private var socialPresetColumns: [GridItem] {
         [
-            SocialExportPreset(
-                id: "vertical-30",
-                name: "TikTok/Reels/Shorts",
-                detail: "1080 x 1920 / 30 fps / MP4 / 12 Mbps",
-                canvas: CanvasPreset(aspectRatio: .portrait9x16, frameRate: .fps30),
-                exportSettings: ExportSettings(
-                    resolution: .p1080,
-                    frameRate: .fps30,
-                    codec: .h264,
-                    audioCodec: .aac,
-                    containerFormat: .mp4,
-                    quality: .custom,
-                    videoBitrateMbps: 12
-                )
-            ),
-            SocialExportPreset(
-                id: "vertical-60",
-                name: "TikTok/Reels/Shorts 60",
-                detail: "1080 x 1920 / 60 fps / MP4 / 20 Mbps",
-                canvas: CanvasPreset(aspectRatio: .portrait9x16, frameRate: .fps60),
-                exportSettings: ExportSettings(
-                    resolution: .p1080,
-                    frameRate: .fps60,
-                    codec: .h264,
-                    audioCodec: .aac,
-                    containerFormat: .mp4,
-                    quality: .custom,
-                    videoBitrateMbps: 20
-                )
-            ),
-            SocialExportPreset(
-                id: "youtube-16x9",
-                name: "YouTube",
-                detail: "1920 x 1080 / 30 fps / MP4 / 20 Mbps",
-                canvas: CanvasPreset(aspectRatio: .landscape16x9, frameRate: .fps30),
-                exportSettings: ExportSettings(
-                    resolution: .p1080,
-                    frameRate: .fps30,
-                    codec: .h264,
-                    audioCodec: .aac,
-                    containerFormat: .mp4,
-                    quality: .custom,
-                    videoBitrateMbps: 20
-                )
-            ),
-            SocialExportPreset(
-                id: "square-1x1",
-                name: "Square",
-                detail: "1080 x 1080 / 30 fps / MP4 / 10 Mbps",
-                canvas: CanvasPreset(aspectRatio: .square1x1, frameRate: .fps30),
-                exportSettings: ExportSettings(
-                    resolution: .p1080,
-                    frameRate: .fps30,
-                    codec: .h264,
-                    audioCodec: .aac,
-                    containerFormat: .mp4,
-                    quality: .custom,
-                    videoBitrateMbps: 10
-                )
-            )
+            GridItem(.flexible(minimum: 104), spacing: 8),
+            GridItem(.flexible(minimum: 104), spacing: 8)
         ]
     }
 
-    private func isApplied(_ preset: SocialExportPreset) -> Bool {
+    private var socialPresets: [PlatformExportPreset] {
+        PlatformExportPreset.allCases
+    }
+
+    private func socialPresetSystemImage(for preset: PlatformExportPreset) -> String {
+        switch preset {
+        case .tikTok:
+            return "music.note"
+        case .instagramReels:
+            return "camera.aperture"
+        case .youtubeShorts:
+            return "play.square.fill"
+        case .youtubeStandard:
+            return "play.rectangle.fill"
+        case .instagramPost:
+            return "square.grid.2x2"
+        }
+    }
+
+    private func isApplied(_ preset: PlatformExportPreset) -> Bool {
         viewModel.currentProject.canvas == preset.canvas
             && viewModel.currentProject.exportSettings == preset.exportSettings
     }
 
-    private func socialPresetAccessibilityValue(for preset: SocialExportPreset) -> String {
+    private func socialPresetAccessibilityValue(for preset: PlatformExportPreset) -> String {
         let selectedState = isApplied(preset) ? "Selected" : "Not selected"
-        return "\(selectedState). \(preset.detail)"
+        return "\(selectedState). \(preset.detail). \(preset.maxDurationHint). Estimated size \(estimatedFileSizeLabel)."
     }
 
-    private func socialPresetAccessibilityHint(for preset: SocialExportPreset) -> String {
+    private func socialPresetAccessibilityHint(for preset: PlatformExportPreset) -> String {
         "Applies \(preset.detail) export and canvas settings. This does not start export."
     }
 
@@ -438,14 +423,6 @@ struct InspectorExportSection: View {
             }
         )
     }
-}
-
-private struct SocialExportPreset: Identifiable {
-    let id: String
-    let name: String
-    let detail: String
-    let canvas: CanvasPreset
-    let exportSettings: ExportSettings
 }
 
 private extension ExportFrameRate {

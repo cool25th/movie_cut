@@ -1930,14 +1930,41 @@ final class EditorViewModel {
     }
 
     func applyEQPreset(_ preset: String) async {
-        guard let clipId = selectedClipId else { return }
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
 
-        selectedEQPreset = preset
-        if preset == "flat" {
+        let presetID = EqualizerPresetID(rawValue: preset) ?? .flat
+        selectedEQPreset = presetID.rawValue
+
+        let settings: ClipEqualizerSettings?
+        switch presetID {
+        case .flat:
+            settings = nil
             clipEQPresets.removeValue(forKey: clipId)
-        } else {
-            clipEQPresets[clipId] = preset
+        case .custom:
+            settings = .custom(bands: clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+            clipEQPresets[clipId] = presetID.rawValue
+        case .voiceEnhance, .bassBoost, .trebleBoost:
+            settings = .settings(for: presetID)
+            clipEQPresets[clipId] = presetID.rawValue
         }
+
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
+    }
+
+    func updateSelectedEQBandGain(frequency: Float, gain: Float) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+
+        let targetFrequencies = EqualizerPreset.bandFrequencies
+        var bands = ClipEqualizerSettings.normalizedBands(clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+        guard let index = targetFrequencies.firstIndex(where: { abs($0 - frequency) < 0.5 }) else { return }
+
+        bands[index] = EQBand(frequency: targetFrequencies[index], gain: gain)
+        selectedEQPreset = EqualizerPresetID.custom.rawValue
+        clipEQPresets[clipId] = EqualizerPresetID.custom.rawValue
+        await apply(SetClipPropertyCommand(
+            clipId: clipId,
+            property: .equalizer(.custom(bands: bands))
+        ))
     }
 
     func toggleBackgroundRemoval(_ enabled: Bool) async {
@@ -3996,7 +4023,11 @@ final class EditorViewModel {
             return
         }
 
-        selectedEQPreset = clipEQPresets[selectedClipId] ?? "flat"
+        if let clip = selectedClip {
+            selectedEQPreset = clip.equalizer?.preset.rawValue ?? clipEQPresets[selectedClipId] ?? "flat"
+        } else {
+            selectedEQPreset = clipEQPresets[selectedClipId] ?? "flat"
+        }
         isBackgroundRemoved = backgroundRemovedClipIds.contains(selectedClipId)
         selectedStyle = clipStyles[selectedClipId] ?? "none"
     }
@@ -4942,9 +4973,15 @@ final class EditorViewModel {
         }
 
         var eqPresets: [UUID: EqualizerPreset] = [:]
-        for (clipId, presetName) in clipEQPresets {
-            let matched = equalizerPreset(for: presetName)
-            if let matched {
+        for track in snapshot.timeline.tracks {
+            for clip in track.clips {
+                if let preset = clip.resolvedEqualizerPreset() {
+                    eqPresets[clip.id] = preset
+                }
+            }
+        }
+        for (clipId, presetName) in clipEQPresets where eqPresets[clipId] == nil {
+            if let matched = equalizerPreset(for: presetName) {
                 eqPresets[clipId] = matched
             }
         }
@@ -4958,18 +4995,15 @@ final class EditorViewModel {
     }
 
     private func equalizerPreset(for option: String) -> EqualizerPreset? {
-        switch option {
-        case "flat":
+        switch EqualizerPresetID(rawValue: option) {
+        case .flat, .custom:
             return nil
-        case "bassBoost":
-            return .bassBoost
-        case "trebleBoost":
-            return .trebleBoost
-        case "voice":
-            return .voiceEnhance
-        case "cinema":
-            return .loudness
+        case .voiceEnhance, .bassBoost, .trebleBoost:
+            return EqualizerPreset.preset(for: EqualizerPresetID(rawValue: option)!)
         default:
+            if option == "voice" {
+                return .voiceEnhance
+            }
             return EqualizerPreset.all.first { $0.name.lowercased() == option.lowercased() }
         }
     }

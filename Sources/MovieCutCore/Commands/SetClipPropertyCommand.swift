@@ -11,6 +11,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
     /// Replaces the clip audio volume multiplier.
     case volume(Double)
 
+    /// Replaces the clip five-band equalizer settings.
+    case equalizer(ClipEqualizerSettings?)
+
     /// Replaces the constant clip playback rate.
     case playbackRate(Double)
 
@@ -90,6 +93,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .volume(let volume):
             previousProperty = .volume(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].volume = volume
+        case .equalizer(let equalizer):
+            previousProperty = .equalizer(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].equalizer)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].equalizer = equalizer
         case .playbackRate(let playbackRate):
             previousProperty = .playbackRate(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].playbackRate)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].playbackRate = min(max(playbackRate, 0.25), 4.0)

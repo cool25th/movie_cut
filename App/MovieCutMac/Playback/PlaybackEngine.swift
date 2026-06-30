@@ -1,6 +1,8 @@
 import AVFoundation
 import AppKit
+import AudioToolbox
 import Foundation
+import MediaToolbox
 import MovieCutCore
 import Observation
 import QuartzCore
@@ -452,6 +454,7 @@ final class PlaybackEngine {
         var videoCompositionTracks: [(track: AVMutableCompositionTrack, zIndex: Int)] = []
         var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
+        var equalizerSegmentsByTrackID: [CMPersistentTrackID: [ClipEqualizerTimelineSegment]] = [:]
 
         for track in project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
@@ -628,6 +631,14 @@ final class PlaybackEngine {
                             destinationTime: destinationTime,
                             clipDuration: targetDuration
                         )
+                        if let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
+                            equalizerSegmentsByTrackID[audioCompositionTrack.trackID, default: []].append(
+                                ClipEqualizerTimelineSegment(
+                                    timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
+                                    preset: preset
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -687,6 +698,14 @@ final class PlaybackEngine {
                         destinationTime: destinationTime,
                         clipDuration: targetDuration
                     )
+                    if let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
+                        equalizerSegmentsByTrackID[audioCompositionTrack.trackID, default: []].append(
+                            ClipEqualizerTimelineSegment(
+                                timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
+                                preset: preset
+                            )
+                        )
+                    }
                 }
 
                 audioMixInputParameters.append(audioParameters)
@@ -951,6 +970,15 @@ final class PlaybackEngine {
             videoComposition = mutableVideoComposition
         }
 
+        for audioParameters in audioMixInputParameters {
+            guard let segments = equalizerSegmentsByTrackID[audioParameters.trackID],
+                  let audioTap = PlaybackEqualizerAudioTap.makeTap(segments: segments)
+            else {
+                continue
+            }
+            audioParameters.audioTapProcessor = audioTap
+        }
+
         let audioMix: AVMutableAudioMix?
         if audioMixInputParameters.isEmpty {
             audioMix = nil
@@ -958,20 +986,6 @@ final class PlaybackEngine {
             let mutableAudioMix = AVMutableAudioMix()
             mutableAudioMix.inputParameters = audioMixInputParameters
             audioMix = mutableAudioMix
-        }
-
-
-        // MARK: - EQ Processing
-        if !audioProcessing.eqPresets.isEmpty {
-            for mutableParams in audioMixInputParameters {
-                for projTrack in project.timeline.tracks {
-                    for clip in projTrack.clips {
-                        if let eqPreset = audioProcessing.eqPresets[clip.id] {
-                            applyEQBands(eqPreset, to: mutableParams)
-                        }
-                    }
-                }
-            }
         }
 
         // MARK: - Noise Reduction
@@ -1155,20 +1169,6 @@ final class PlaybackEngine {
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
     }
 
-    private func applyEQBands(_ preset: EqualizerPreset, to parameters: AVMutableAudioMixInputParameters) {
-        // EQ is applied through AVAudioUnitEQ in the audio engine; for composition-based
-        // playback we note that AVAudioMixInputParameters does not support parametric EQ directly.
-        // The EQ bands are applied when using AVAudioEngine for real-time playback.
-        // For composition playback, volume adjustments approximate the EQ effect per band.
-        let totalGain = preset.bands.reduce(Float(0)) { $0 + $1.gain }
-        let avgGain = totalGain / Float(preset.bands.count)
-        if avgGain != 0 {
-            let volumeAdjustment = pow(10.0, Double(avgGain) / 20.0)
-            let adjustedVolume = Float(min(max(volumeAdjustment, 0.0), 2.0))
-            parameters.setVolume(adjustedVolume, at: .zero)
-        }
-    }
-
     private func temporaryReverseRenderURL(for clip: Clip) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutPlaybackReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
@@ -1236,4 +1236,252 @@ private struct PlaybackClipInstructionMetadata {
     var mask: Mask?
     var effects: [Effect]
     var isBackgroundRemoved: Bool
+}
+
+private enum PlaybackEqualizerAudioTap {
+    static func makeTap(segments: [ClipEqualizerTimelineSegment]) -> MTAudioProcessingTap? {
+        let activeSegments = segments.filter { !$0.preset.bands.allSatisfy { abs($0.gain) <= 0.0001 } }
+        guard !activeSegments.isEmpty else { return nil }
+
+        let contextPointer = Unmanaged.passRetained(
+            PlaybackEqualizerAudioTapContext(segments: activeSegments)
+        ).toOpaque()
+
+        var callbacks = MTAudioProcessingTapCallbacks(
+            version: kMTAudioProcessingTapCallbacksVersion_0,
+            clientInfo: contextPointer,
+            init: { _, clientInfo, tapStorageOut in
+                tapStorageOut.pointee = clientInfo
+            },
+            finalize: { tap in
+                let storage = MTAudioProcessingTapGetStorage(tap)
+                Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(storage).release()
+            },
+            prepare: { tap, maxFrames, processingFormat in
+                let context = PlaybackEqualizerAudioTap.context(from: tap)
+                context.prepare(maxFrames: maxFrames, processingFormat: processingFormat)
+            },
+            unprepare: { tap in
+                let context = PlaybackEqualizerAudioTap.context(from: tap)
+                context.unprepare()
+            },
+            process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in
+                let context = PlaybackEqualizerAudioTap.context(from: tap)
+                context.process(
+                    tap: tap,
+                    numberFrames: numberFrames,
+                    bufferListInOut: bufferListInOut,
+                    numberFramesOut: numberFramesOut,
+                    flagsOut: flagsOut
+                )
+            }
+        )
+
+        var tap: MTAudioProcessingTap?
+        let status = MTAudioProcessingTapCreate(
+            kCFAllocatorDefault,
+            &callbacks,
+            kMTAudioProcessingTapCreationFlag_PreEffects,
+            &tap
+        )
+
+        guard status == noErr else {
+            Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(contextPointer).release()
+            return nil
+        }
+
+        return tap
+    }
+
+    private static func context(from tap: MTAudioProcessingTap) -> PlaybackEqualizerAudioTapContext {
+        let storage = MTAudioProcessingTapGetStorage(tap)
+        return Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(storage).takeUnretainedValue()
+    }
+}
+
+private final class PlaybackEqualizerAudioTapContext {
+    private let segments: [ClipEqualizerTimelineSegment]
+    private let eqNode = AVAudioUnitEQ(numberOfBands: 5)
+    private var sourceBuffer: AVAudioPCMBuffer?
+    private var outputBuffer: AVAudioPCMBuffer?
+    private var activePreset: EqualizerPreset?
+    private var isPrepared = false
+
+    init(segments: [ClipEqualizerTimelineSegment]) {
+        self.segments = segments.sorted { lhs, rhs in
+            lhs.timeRange.start < rhs.timeRange.start
+        }
+    }
+
+    func prepare(maxFrames: CMItemCount, processingFormat: UnsafePointer<AudioStreamBasicDescription>) {
+        guard let format = AVAudioFormat(streamDescription: processingFormat) else { return }
+
+        sourceBuffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(maxFrames)
+        )
+        outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(maxFrames)
+        )
+
+        do {
+            try eqNode.auAudioUnit.inputBusses[0].setFormat(format)
+            try eqNode.auAudioUnit.outputBusses[0].setFormat(format)
+            try eqNode.auAudioUnit.allocateRenderResources()
+            isPrepared = true
+        } catch {
+            isPrepared = false
+        }
+    }
+
+    func unprepare() {
+        eqNode.auAudioUnit.deallocateRenderResources()
+        sourceBuffer = nil
+        outputBuffer = nil
+        activePreset = nil
+        isPrepared = false
+    }
+
+    func process(
+        tap: MTAudioProcessingTap,
+        numberFrames: CMItemCount,
+        bufferListInOut: UnsafeMutablePointer<AudioBufferList>,
+        numberFramesOut: UnsafeMutablePointer<CMItemCount>,
+        flagsOut: UnsafeMutablePointer<MTAudioProcessingTapFlags>
+    ) {
+        var sourceFlags = MTAudioProcessingTapFlags()
+        var sourceTimeRange = CMTimeRange()
+        var sourceFrames = CMItemCount()
+
+        guard isPrepared,
+              let sourceBuffer,
+              let outputBuffer
+        else {
+            let status = MTAudioProcessingTapGetSourceAudio(
+                tap,
+                numberFrames,
+                bufferListInOut,
+                &sourceFlags,
+                &sourceTimeRange,
+                &sourceFrames
+            )
+            numberFramesOut.pointee = status == noErr ? sourceFrames : 0
+            flagsOut.pointee = sourceFlags
+            return
+        }
+
+        let sourceStatus = MTAudioProcessingTapGetSourceAudio(
+            tap,
+            numberFrames,
+            sourceBuffer.mutableAudioBufferList,
+            &sourceFlags,
+            &sourceTimeRange,
+            &sourceFrames
+        )
+        guard sourceStatus == noErr, sourceFrames > 0 else {
+            numberFramesOut.pointee = 0
+            flagsOut.pointee = sourceFlags
+            return
+        }
+
+        guard let bufferPreset = preset(for: sourceTimeRange) else {
+            copyAudioBufferListHeaders(from: sourceBuffer.mutableAudioBufferList, to: bufferListInOut)
+            numberFramesOut.pointee = sourceFrames
+            flagsOut.pointee = sourceFlags
+            return
+        }
+
+        configureEQIfNeeded(with: bufferPreset)
+        sourceBuffer.frameLength = AVAudioFrameCount(sourceFrames)
+        outputBuffer.frameLength = AVAudioFrameCount(sourceFrames)
+
+        var actionFlags = AudioUnitRenderActionFlags()
+        var timestamp = AudioTimeStamp()
+        let inputBlock: AURenderPullInputBlock = { _, _, _, _, inputData in
+            self.copyAudioBufferListHeaders(
+                from: sourceBuffer.mutableAudioBufferList,
+                to: inputData
+            )
+            return noErr
+        }
+
+        let renderStatus = eqNode.auAudioUnit.renderBlock(
+            &actionFlags,
+            &timestamp,
+            AUAudioFrameCount(sourceFrames),
+            0,
+            outputBuffer.mutableAudioBufferList,
+            inputBlock
+        )
+
+        if renderStatus == noErr {
+            copyAudioBufferListHeaders(from: outputBuffer.mutableAudioBufferList, to: bufferListInOut)
+        } else {
+            copyAudioBufferListHeaders(from: sourceBuffer.mutableAudioBufferList, to: bufferListInOut)
+        }
+        numberFramesOut.pointee = sourceFrames
+        flagsOut.pointee = sourceFlags
+    }
+
+    private func preset(for timeRange: CMTimeRange) -> EqualizerPreset? {
+        let start = timeRange.start.seconds
+        let duration = timeRange.duration.seconds
+        guard start.isFinite else { return nil }
+
+        let probeTime = start + max(duration.isFinite ? duration : 0, 0) * 0.5
+        return segments.first { segment in
+            let segmentStart = segment.timeRange.start.seconds
+            let segmentEnd = CMTimeAdd(segment.timeRange.start, segment.timeRange.duration).seconds
+            return segmentStart.isFinite
+                && segmentEnd.isFinite
+                && probeTime >= segmentStart
+                && probeTime < segmentEnd
+        }?.preset
+    }
+
+    private func configureEQIfNeeded(with preset: EqualizerPreset) {
+        guard activePreset != preset else { return }
+
+        for (index, band) in eqNode.bands.enumerated() {
+            guard index < preset.bands.count else {
+                band.bypass = true
+                continue
+            }
+
+            let presetBand = preset.bands[index]
+            band.filterType = filterType(forBandAt: index, bandCount: eqNode.bands.count)
+            band.frequency = presetBand.frequency
+            band.bandwidth = 1
+            band.gain = presetBand.gain
+            band.bypass = false
+        }
+
+        eqNode.globalGain = 0
+        eqNode.auAudioUnit.reset()
+        activePreset = preset
+    }
+
+    private func filterType(forBandAt index: Int, bandCount: Int) -> AVAudioUnitEQFilterType {
+        if index == 0 {
+            return .lowShelf
+        }
+        if index == bandCount - 1 {
+            return .highShelf
+        }
+        return .parametric
+    }
+
+    private func copyAudioBufferListHeaders(
+        from source: UnsafeMutablePointer<AudioBufferList>,
+        to destination: UnsafeMutablePointer<AudioBufferList>
+    ) {
+        let sourceBuffers = UnsafeMutableAudioBufferListPointer(source)
+        let destinationBuffers = UnsafeMutableAudioBufferListPointer(destination)
+        for index in 0..<min(sourceBuffers.count, destinationBuffers.count) {
+            destinationBuffers[index].mNumberChannels = sourceBuffers[index].mNumberChannels
+            destinationBuffers[index].mDataByteSize = sourceBuffers[index].mDataByteSize
+            destinationBuffers[index].mData = sourceBuffers[index].mData
+        }
+    }
 }

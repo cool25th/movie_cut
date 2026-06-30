@@ -355,20 +355,20 @@ struct EffectParameterRow: View {
 
 enum EqualizerPresetOption: String, CaseIterable, Identifiable {
     case flat
+    case voiceEnhance
     case bassBoost
     case trebleBoost
-    case voice
-    case cinema
+    case custom
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .flat: return "Flat"
+        case .voiceEnhance: return "Voice Enhance"
         case .bassBoost: return "Bass Boost"
         case .trebleBoost: return "Treble Boost"
-        case .voice: return "Voice"
-        case .cinema: return "Cinema"
+        case .custom: return "Custom"
         }
     }
 }

@@ -50,6 +50,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Audio fade-out duration in seconds.
     public var fadeOutDuration: TimeInterval
 
+    /// Optional five-band equalizer settings. Nil is equivalent to flat EQ.
+    public var equalizer: ClipEqualizerSettings?
+
     /// Constant playback speed multiplier from 0.25x to 4.0x.
     public var playbackRate: Double
 
@@ -146,6 +149,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case volume
         case fadeInDuration
         case fadeOutDuration
+        case equalizer
         case playbackRate
         case speedRampPoints
         case keyframes
@@ -176,6 +180,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         volume: Double = 1.0,
         fadeInDuration: TimeInterval = 0,
         fadeOutDuration: TimeInterval = 0,
+        equalizer: ClipEqualizerSettings? = nil,
         playbackRate: Double = 1.0,
         speedRampPoints: [SpeedRampPoint] = [],
         keyframes: [Keyframe] = [],
@@ -205,6 +210,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.volume = volume
         self.fadeInDuration = fadeInDuration
         self.fadeOutDuration = fadeOutDuration
+        self.equalizer = equalizer
         self.playbackRate = playbackRate
         self.speedRampPoints = speedRampPoints
         self.keyframes = keyframes
@@ -246,6 +252,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         volume = try container.decode(Double.self, forKey: .volume)
         fadeInDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .fadeInDuration) ?? 0
         fadeOutDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .fadeOutDuration) ?? 0
+        equalizer = try container.decodeIfPresent(ClipEqualizerSettings.self, forKey: .equalizer)
         playbackRate = try container.decodeIfPresent(Double.self, forKey: .playbackRate) ?? 1.0
         speedRampPoints = try container.decodeIfPresent([SpeedRampPoint].self, forKey: .speedRampPoints) ?? []
         keyframes = try container.decodeIfPresent([Keyframe].self, forKey: .keyframes) ?? []
@@ -276,6 +283,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(volume, forKey: .volume)
         try container.encode(fadeInDuration, forKey: .fadeInDuration)
         try container.encode(fadeOutDuration, forKey: .fadeOutDuration)
+        try container.encodeIfPresent(equalizer, forKey: .equalizer)
         try container.encode(playbackRate, forKey: .playbackRate)
         try container.encode(speedRampPoints, forKey: .speedRampPoints)
         try container.encode(keyframes, forKey: .keyframes)

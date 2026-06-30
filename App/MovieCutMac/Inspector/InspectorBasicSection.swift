@@ -481,6 +481,55 @@ struct InspectorBasicSection: View {
             .onChange(of: viewModel.selectedEQPreset) { _, newValue in
                 Task { await viewModel.applyEQPreset(newValue) }
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(equalizerBands.enumerated()), id: \.element.frequency) { _, band in
+                    HStack(spacing: 6) {
+                        Text(equalizerFrequencyLabel(band.frequency))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .leading)
+                        Slider(value: Binding(
+                            get: { Double(band.gain) },
+                            set: { newValue in
+                                Task {
+                                    await viewModel.updateSelectedEQBandGain(
+                                        frequency: band.frequency,
+                                        gain: Float(newValue)
+                                    )
+                                }
+                            }
+                        ), in: -12 ... 12, step: 0.5)
+                        .accessibilityLabel("Equalizer \(equalizerFrequencyLabel(band.frequency)) gain")
+                        .accessibilityValue(String(format: "%.1f dB", band.gain))
+                        Text(String(format: "%+.1f dB", band.gain))
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 58, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private var equalizerBands: [EQBand] {
+        ClipEqualizerSettings.normalizedBands(clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+    }
+
+    private func equalizerFrequencyLabel(_ frequency: Float) -> String {
+        switch Int(frequency.rounded()) {
+        case 60:
+            return "60Hz"
+        case 250:
+            return "250Hz"
+        case 1_000:
+            return "1kHz"
+        case 4_000:
+            return "4kHz"
+        case 12_000:
+            return "12kHz"
+        default:
+            return "\(Int(frequency.rounded()))Hz"
         }
     }
 

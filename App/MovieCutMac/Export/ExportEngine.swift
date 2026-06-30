@@ -37,6 +37,7 @@ final class ExportEngine {
 
         do {
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {
                 throw ExportEngineError.noExportableMedia
             }
@@ -107,16 +108,21 @@ final class ExportEngine {
         var videoCompositionTracks: [AVCompositionTrack] = []
         var videoClipInstructions: [ExportClipInstructionMetadata] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
+        var temporaryEqualizedAudioURLs: [URL] = []
+        var shouldKeepTemporaryEqualizedAudioURLs = false
+        defer {
+            if !shouldKeepTemporaryEqualizedAudioURLs {
+                removeTemporaryRenderURLs(temporaryEqualizedAudioURLs)
+            }
+        }
 
         func applyAudioVolumeAndFades(
             for clip: Clip,
             audioParameters: AVMutableAudioMixInputParameters,
             destinationTime: CMTime,
-            clipDuration: CMTime,
-            eqPreset: EqualizerPreset? = nil
+            clipDuration: CMTime
         ) {
-            let eqMultiplier = eqPreset.map(eqVolumeMultiplier(for:)) ?? 1
-            let volume = Float(min(max(clip.volume * eqMultiplier, 0), 2))
+            let volume = Float(min(max(clip.volume, 0), 2))
             audioParameters.setVolume(volume, at: destinationTime)
 
             guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
@@ -270,9 +276,20 @@ final class ExportEngine {
 
                 // Denoised video audio is imported as a new audio MediaAsset and added as
                 // an audio-track clip, so using this clip's asset URL preserves that source.
-                let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
-                guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first else {
+                var sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                guard var sourceTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first else {
                     continue
+                }
+                if mediaType == .audio,
+                   let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
+                    let rendered = try await equalizedAudioAsset(
+                        for: clip,
+                        mediaAsset: mediaAsset,
+                        preset: preset,
+                        temporaryURLs: &temporaryEqualizedAudioURLs
+                    )
+                    sourceAsset = rendered.asset
+                    sourceTrack = rendered.track
                 }
 
                 let compositionTrack: AVMutableCompositionTrack
@@ -421,8 +438,7 @@ final class ExportEngine {
                         for: clip,
                         audioParameters: audioParameters,
                         destinationTime: destinationTime,
-                        clipDuration: clipCompositionDuration,
-                        eqPreset: audioProcessing.eqPresets[clip.id]
+                        clipDuration: clipCompositionDuration
                     )
                 }
             }
@@ -442,10 +458,12 @@ final class ExportEngine {
         )
         let audioMix = makeAudioMix(parameters: audioMixInputParameters)
 
+        shouldKeepTemporaryEqualizedAudioURLs = true
         return ExportPackage(
             composition: composition,
             videoComposition: videoComposition,
-            audioMix: audioMix
+            audioMix: audioMix,
+            temporaryRenderURLs: temporaryEqualizedAudioURLs
         )
     }
 
@@ -740,6 +758,41 @@ final class ExportEngine {
             .appendingPathExtension("mov")
     }
 
+    private func temporaryEqualizedAudioURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutEQ-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("caf")
+    }
+
+    private func equalizedAudioAsset(
+        for clip: Clip,
+        mediaAsset: MediaAsset,
+        preset: EqualizerPreset,
+        temporaryURLs: inout [URL]
+    ) async throws -> (asset: AVURLAsset, track: AVAssetTrack) {
+        let outputURL = temporaryEqualizedAudioURL(for: clip)
+        try await AudioEqualizerService().apply(
+            preset: preset,
+            inputURL: mediaAsset.originalURL,
+            outputURL: outputURL
+        )
+
+        let asset = AVURLAsset(url: outputURL)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+            throw ExportEngineError.exportSessionCreationFailed
+        }
+
+        temporaryURLs.append(outputURL)
+        return (asset, track)
+    }
+
+    private func removeTemporaryRenderURLs(_ urls: [URL]) {
+        let fileManager = FileManager.default
+        for url in urls where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
     private func applySpeedRamp(
         _ curve: SpeedRampCurve,
         sourceTrack: AVAssetTrack,
@@ -812,16 +865,6 @@ final class ExportEngine {
         let clampedDuration = min(frameDuration, CMTimeSubtract(trackEnd, clampedStart))
 
         return CMTimeRange(start: clampedStart, duration: clampedDuration > .zero ? clampedDuration : frameDuration)
-    }
-
-    private func eqVolumeMultiplier(for preset: EqualizerPreset) -> Double {
-        guard !preset.bands.isEmpty else { return 1 }
-
-        let averageGain = preset.bands.reduce(Double(0)) { partialResult, band in
-            partialResult + Double(band.gain)
-        } / Double(preset.bands.count)
-        let multiplier = pow(10.0, averageGain / 20.0)
-        return min(max(multiplier, 0.0), 2.0)
     }
 
     private func stickerEmoji(from textContent: TextClipContent) -> String? {
@@ -1088,6 +1131,7 @@ final class ExportEngine {
 
         do {
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks(withMediaType: .audio).isEmpty else {
                 throw ExportEngineError.noExportableMedia
             }
@@ -1129,6 +1173,7 @@ final class ExportEngine {
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
     ) async throws -> URL {
         let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+        defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
         guard !exportPackage.composition.tracks(withMediaType: .video).isEmpty else {
             throw ExportEngineError.noExportableMedia
         }
@@ -1179,6 +1224,7 @@ final class ExportEngine {
             }
 
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             let duration = project.timeline.duration
             guard duration > 0, !exportPackage.composition.tracks(withMediaType: .video).isEmpty else {
                 throw ExportEngineError.noExportableMedia
@@ -1262,6 +1308,7 @@ final class ExportEngine {
 
         do {
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {
                 throw ExportEngineError.noExportableMedia
             }
@@ -1507,6 +1554,7 @@ private struct ExportPackage {
     var composition: AVMutableComposition
     var videoComposition: AVMutableVideoComposition?
     var audioMix: AVMutableAudioMix?
+    var temporaryRenderURLs: [URL] = []
 }
 
 /// Carries a non-`Sendable` value across a concurrency boundary when the caller

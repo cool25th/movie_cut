@@ -438,6 +438,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 검증 기록:
 - 2026-07-03 G-09 Inc 1: `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild ... MovieCutMac`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, `scripts/run_e2e_export.sh` 모두 PASS. CoreSimulator out-of-date는 simulator device support 경고로 기록.
+- 2026-07-04 G-09 Inc 2: `PLATFORM_PARITY_MATRIX.md`를 기능 × Core/Mac UI/iOS UI/Mac preview-export/iOS preview-export로 재감사하고 Mac-only/iOS defer 15건에 사유 1줄씩 기록. `IOSParityMatrixStaticContractTests`로 문서/코드 신호를 잠그고 `swift build`, `swift test --filter 'StaticContract|Golden|iOS|Parity'`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, Mac `xcodebuild ... MovieCutMac` PASS.
 
 ---
 

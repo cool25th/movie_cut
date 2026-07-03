@@ -5,12 +5,13 @@
 > **개발 착수용 상세 스펙(데이터 모델·구현 증분·AC·검증 계획)은 `CAPCUT_SURPASS_SPEC_20260703.md` — 실제 작업은 그 문서의 G-ID 단위로 진행한다.**
 > 전략 배경: `MOVIECUT_PRO_ROADMAP_20260622.md` / 기능 백로그: `CAPCUT_FEATURE_BACKLOG.md` / 이전 갭 분석: `GAP_ANALYSIS_V6.md`(자가보고 수치 신뢰 금지)
 > 판정 근거: 2026-07-03 코드 grep·문서·git log 실사. "코드 존재"가 아니라 **"preview에 보이고 export에 반영 + 증거"** 를 완료 기준으로 유지한다.
+> 2026-07-04 loop-9 재평가 기준 커밋: `84b696c feat(moviecut): preserve subtitle word timings`.
 
 ---
 
 ## 0. 한 줄 요약
 
-Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트래킹·옵티컬플로우·텍스트 애니메이션/템플릿·플랫폼 프리셋)로 **Pro 축에서는 CapCut을 이미 능가하기 시작했다.** 남은 격차는 세 갈래다: ① **숏폼 필수 기능의 깊이**(워드 단위 스타일 자막, 이펙트 볼륨, 에셋 라이브러리), ② **Pro 정체성의 미완성 조각**(HSL/커브, 조정 레이어, 키프레임 이징, FCPXML), ③ **체감 품질**(타임라인 필름스트립, iOS 파리티, 잔여 검증 부채). 개선안은 G-01~G-14로 상세화했고, 권장 착수 순서는 §5에 있다.
+Phase 2A(색 그레이딩·ProRes/HDR)와 2026-07-04 실측 스프린트(EQ/NR/덕킹/플랫폼 프리셋/모션 트래킹)로 **검증 지반은 크게 개선됐다.** 또한 S1 G-02는 커브/HSL 순수 수학(Inc 1~2)까지, S2 G-01은 워드 타이밍 보존(Inc 1)까지 착수했다. 그러나 CapCut 대비 완성도는 아직 “능가”가 아니라 **중간 증분 상태**다: ① **숏폼 필수 기능의 깊이**는 워드 timing 저장은 됐지만 스타일 프리셋/active-word 렌더/UI/export가 남았고, ② **Pro 색**은 커브/HSL 수학만 있고 렌더 체이닝/저장/UI/iOS가 남았으며, ③ **체감 품질**은 필름스트립/iOS 파리티/잔여 실기기 검증 부채가 여전히 격차다. 다음 보강은 G-02 Inc 3~5와 G-01 Inc 2~4를 완료 증거(preview/export/iOS)까지 닫는 순서가 최우선이다.
 
 ---
 
@@ -26,7 +27,7 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 | 프라이버시/오프라인 | 완전 오프라인, 로그인 불필요, 워터마크 없음 | 강제 로그인·클라우드 의존·페이월 | 구조적 |
 | 안정성 | 자동저장+크래시 복구, 스냅샷 기반 undo 무결성 검증 | 크래시 복구는 있으나 undo 무결성 비공개 | `UndoIntegrityTests`, `AutosaveRecoveryTests`, E2E |
 | 슬로모 품질 | 옵티컬 플로우 보간 (`d23a924`) | 프레임 블렌딩(데스크톱 일부 유료) | 커밋 — ⚠️ 실영상 검증 잔여 |
-| 모션 트래킹 | Vision `VNTrackObjectRequest` 온디바이스 (`c242632`) | 클라우드/모바일 한정 | 커밋 — ⚠️ 실영상 검증 잔여 |
+| 모션 트래킹 | Vision `VNTrackObjectRequest` 온디바이스 + 합성 실영상 IoU 검증 | 클라우드/모바일 한정 | `07ab764`, meanIoU 0.7929 / minIoU 0.7095 |
 
 ### 1-B. 파리티 도달했으나 검증 부채가 남은 영역 (🟡 — 완료 선언 금지)
 
@@ -37,8 +38,8 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 
 | # | 격차 | CapCut | MovieCut 현재 | 심각도 |
 |---|---|---|---|---|
-| 1 | **워드 단위 스타일 자막** | 워드별 하이라이트(karaoke), 자막 템플릿 수십 종, 자동 강조 | 문장 단위 STT + 수동 데코만. 워드 타임스탬프 미사용 (grep: word-level 코드 0건) | **최상** — 숏폼 제작의 사실상 필수 기능 |
-| 2 | **색 2차 보정 (HSL/커브)** | HSL 6채널 + RGB 커브 (데스크톱) | 없음 (grep: HSL/curve 렌더러 0건). Pro 포지셔닝인데 CapCut보다 뒤짐 | **최상** — Pro 정체성 모순 |
+| 1 | **워드 단위 스타일 자막** | 워드별 하이라이트(karaoke), 자막 템플릿 수십 종, 자동 강조 | **Inc 1 완료**: Apple Speech word timestamp 보존 + `TextClipContent.wordTimings` 상대 저장. 아직 스타일 프리셋/active word 렌더/UI/export/iOS 미완 | **최상** — 숏폼 제작 필수, 다음은 Inc 2~4 |
+| 2 | **색 2차 보정 (HSL/커브)** | HSL 6채널 + RGB 커브 (데스크톱) | **Inc 1~2 완료**: `CurveEvaluator` + `HSLCubeBuilder` 순수 수학. 아직 `ColorGradePixelProcessor` 렌더 체이닝/ColorCurves 저장/Mac+iOS UI 미완 | **최상** — Pro 정체성, 다음은 Inc 3~5 |
 | 3 | **이펙트 볼륨** | 수백 종 트렌드 이펙트(글리치/블링/레트로/파티클), 매주 갱신 | 프로시저럴 ~10종 + .cube LUT import | 상 |
 | 4 | **에셋 라이브러리** | 상용 음악/SFX/스티커/폰트 클라우드 카탈로그 | `MusicLibrary.placeholder()`, SFXLibrary 골격, 이모지/뱃지 스티커 | 상 |
 | 5 | **조정 레이어** | 조정 레이어(구간 일괄 효과) 지원 | 없음 (grep 0건) — 클립별 개별 적용만 | 상 |
@@ -74,10 +75,10 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 **배경**: CapCut 사용자 체감 1순위 기능. 현재 MovieCut STT는 문장(segment) 단위로만 클립을 만들고, `SFTranscriptionSegment`가 무료로 제공하는 **워드별 타임스탬프를 버리고 있다.**
 
 **구현 방안** (증분 4개):
-1. **워드 타이밍 모델**: `SubtitleSegment`에 `words: [WordTiming]` (`text`, `timeRange`) 추가. Apple Speech `SFTranscriptionSegment.substringRange`+`timestamp`/`duration`에서 채움. SRT round-trip 시 워드는 보존(확장 필드) 또는 재분배.
+1. **워드 타이밍 모델 — 완료(2026-07-04, `84b696c`)**: `WordTiming`, `TranscriptionSegment.words`, `TextClipContent.wordTimings`. Apple Speech `SFTranscriptionSegment` timestamp/duration/confidence 보존. `SubtitleGenerator`는 세그먼트 절대 시각을 클립 상대 시각으로 변환/clamp.
 2. **캡션 스타일 프리셋 모델**: `CaptionStyle` (기본 스타일 + `activeWordStyle`: 색/배경필/스케일/볼드) + 내장 프리셋 6~10종 (karaoke fill, background pill, bounce, underline sweep 등 — CapCut 인기 스타일 참조하되 자체 네이밍).
 3. **렌더러**: `TextOverlayPixelProcessor` 확장 — 프레임 시각 기준 active word 판정 → 워드별 attributed run 스타일 적용. 기존 CoreText 경로 재사용, 픽셀 골든으로 "같은 프레임에서 active/inactive 워드 색 다름" 검증.
-4. **UI**: `AutoSubtitlesView`에 스타일 피커(썸네일 프리뷰) + Inspector에서 세부 조절. iOS 동일 배선.
+4. **UI/preview-export/iOS**: `AutoSubtitlesView`에 스타일 피커(썸네일 프리뷰) + Inspector에서 세부 조절. Mac/iOS custom compositor와 preview 경로가 동일 metadata를 소비해야 완료.
 
 **대상 파일**: `Sources/MovieCutCore/Transcription/`, `Sources/MovieCutCore/Rendering/TextOverlayPixelProcessor.swift`, `App/MovieCutMac/Transcription/`, `App/MovieCutiOS/Export/IOSCustomVideoCompositor.swift`
 
@@ -92,10 +93,11 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 **배경**: 로드맵 Phase 2A 명세에 "커브, HSL"이 있었으나 **미구현**(grep 0건). 스코프 3종을 이미 보유했으므로 커브/HSL이 붙는 순간 "스코프 보면서 2차 보정"이라는 CapCut 불가능 워크플로우가 완성된다.
 
 **구현 방안**:
-1. **HSL 퀄리파이어**: `ColorGrade`에 `hslAdjustments: [HSLBand]` (8밴드: R/O/Y/G/A/B/P/M, 각 hue/sat/lum offset). 구현은 `CIColorCube`(64³ LUT 생성 — hue 거리 가중치로 밴드 보간) 1패스. 기존 ASC CDL 파이프라인 뒤에 체이닝.
-2. **RGB/루마 커브**: `ColorGrade.curves: ColorCurves` (master/R/G/B 각각 control points, Catmull-Rom 보간) → 256-entry LUT → `CIColorCurves` 또는 동일 `CIColorCube` 합성.
-3. **UI**: 그레이딩 패널에 Curves 탭(드래그 가능한 커브 에디터 — 포인트 추가/삭제/드래그) + HSL 탭(밴드 선택 + 3슬라이더). 스코프와 같은 화면에 배치.
-4. **Auto 연계**: `AutoColorAnalyzer`에 히스토그램 기반 auto-curve(S자 대비) 후보 추가(선택).
+1. **HSL 퀄리파이어 수학 — 완료(2026-07-04, `d7c8399`)**: `HSLBandCenter`/`HSLBand`/`HSLCubeBuilder`, 8밴드 hue center, 45° cosine falloff, hue wrap-around, RGB↔HSL 변환, RGBA cube data(`size^3*4`). 남은 일은 `ColorGrade` 저장 필드와 `ColorGradePixelProcessor` 체이닝.
+2. **RGB/루마 커브 수학 — 완료(2026-07-04, `07b666b`)**: `CurvePoint`/`CurveEvaluator`, 256-entry LUT, endpoint 고정, duplicate-x deterministic, monotone cubic Hermite/Fritsch-Carlson tangents, clamp/no-overflow. 남은 일은 `ColorCurves` 모델 저장과 CI 렌더 적용.
+3. **렌더 체이닝**: HSL cube + curve LUT를 기존 lift/gamma/gain/CDL 뒤에 연결하고, preview/export/iOS compositor가 같은 processor를 쓰게 한다.
+4. **UI**: 그레이딩 패널에 Curves 탭(드래그 가능한 커브 에디터 — 포인트 추가/삭제/드래그) + HSL 탭(밴드 선택 + 3슬라이더). 스코프와 같은 화면에 배치.
+5. **Auto 연계**: `AutoColorAnalyzer`에 히스토그램 기반 auto-curve(S자 대비) 후보 추가(선택).
 
 **대상 파일**: `Sources/MovieCutCore/Models/ColorGrade.swift`, `Sources/MovieCutCore/Rendering/ColorGradePixelProcessor.swift`, `App/MovieCutMac/Inspector/`(그레이딩 패널), iOS compositor.
 
@@ -257,8 +259,8 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 
 | 카테고리 | 현재 | G-플랜 완료 후 |
 |---|---|---|
-| 색/그레이딩 | 능가(휠·스코프·HDR) but HSL/커브 열위 | **전면 능가** (G-02: 스코프+커브+HSL 통합 워크플로우) |
-| 자막 | STT 파리티, 스타일 열위 | **동급+프라이버시 우위** (G-01 온디바이스 워드 자막) |
+| 색/그레이딩 | ProRes/HDR·휠·스코프는 우위, HSL/커브는 수학 Inc 1~2만 완료 | **전면 능가** (G-02 Inc 3~5: 저장+렌더+UI+iOS, 스코프+커브+HSL 통합 워크플로우) |
+| 자막 | STT+word timing 보존은 착수, 스타일/active-word 렌더는 열위 | **동급+프라이버시 우위** (G-01 Inc 2~4: 스타일 모델+렌더+preview/export+iOS) |
 | 오디오 | EQ/NR 보유, 분리·FX 열위 | 동급 (G-05) |
 | 편집 UX | 코어 파리티, 체감 열위 | 동급 (G-03/04/06/11) |
 | 이펙트/에셋 | 열위 | 열위 축소+확장 구조 (G-07/08) — 볼륨 추격은 비목표 |
@@ -274,13 +276,13 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 
 | 순서 | 항목 | 이유 |
 |---|---|---|
-| 1 | **G-12 부채 상환 1차** (오디오+플랫폼 묶음) + **G-09 iOS 빌드 복구** | 신규 작업의 지반. iOS 빌드 없이는 이후 전부 반쪽 |
-| 2 | **G-02 HSL/커브** | Pro 정체성 모순 해소. 기존 그레이딩 인프라 위라 위험 낮고 가시성 최고 |
-| 3 | **G-01 워드 자막** | 단일 최대 사용자 체감 격차. 온디바이스 차별화 서사 완성 |
-| 4 | **G-05 오디오 스위트** (보컬분리 배선+FX) | dead code 상환 + CapCut 격차 동시 해소 |
-| 5 | **G-04 필름스트립** + **G-06 이징** | 체감 완성도 점프 |
-| 6 | **G-03 조정 레이어** | compositor 구조 변경 — 위 항목들로 검증 인프라 성숙 후 |
-| 7 | **G-09 iOS 파리티 본대** | 신규 기능 iOS 배선과 병행 |
+| 1 | **G-02 Inc 3~5 HSL/커브 완성** | 이미 수학은 있으나 렌더/저장/UI/iOS가 없어 사용자가 결과를 볼 수 없다. Pro 정체성 최우선 |
+| 2 | **G-01 Inc 2~4 워드 스타일 자막 완성** | word timing 저장은 됐지만 CapCut 체감 격차는 active-word 스타일 렌더와 UI에서 결정된다 |
+| 3 | **G-05 오디오 스위트** (보컬분리 배선+FX) | dead code 상환 + CapCut 격차 동시 해소 |
+| 4 | **G-04 필름스트립** + **G-06 이징** | 체감 완성도 점프 |
+| 5 | **G-03 조정 레이어** | compositor 구조 변경 — G-02 렌더 체이닝 완료 후가 안전 |
+| 6 | **G-09 iOS 파리티 본대** | 신규 기능 iOS 배선과 병행하되, simulator out-of-date 환경성 경고를 별도 관리 |
+| 7 | **G-12 잔여 부채**: 옵티컬플로우 실영상, 배경제거 실인물, 자동리프레임 실영상, 비트감지 실음원, 캔버스 배경 export visual, TTS/자막 GUI, iCloud 2기기, F-01 Photos 드래그 | 신규 기능 완료 선언 전에 증거 부채 축소 |
 | 8 | **G-07 이펙트 팩** → **G-08 에셋 팩** → **G-10 FCPXML** → **G-11 프리뷰 폴리시** | P2 묶음 |
 | 9 | G-13 뷰티(합의 후) / G-14 녹화(합의 후) | P3 |
 
@@ -289,7 +291,7 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 최근 스프린트(EQ DSP·모션트�
 ## 6. 착수 전 확인 명령 (콜드 스타트 체크리스트)
 
 ```bash
-git status --short && git log --oneline -5   # c242632 기준 확인
+git status --short && git log --oneline -5   # 84b696c 기준 확인
 swift build && swift test --filter 'StaticContract|Golden'
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build
 scripts/run_e2e_export.sh                     # 기존 E2E 체크 전부 PASS 확인 후 시작

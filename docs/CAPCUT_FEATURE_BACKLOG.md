@@ -8,7 +8,7 @@
 
 ## 0. 한 줄 요약
 
-기본 명령/배선(command, metadata)은 대부분 존재하지만, **사용자가 실제 결과를 보는 경로(드래그앤드롭, 픽셀/샘플 처리, 렌더링 UX 등)가 비어 있거나 부분 구현인 항목이 많다.** 자동자막 STT P0는 Apple Speech 기반 실생성 + 선택 타임라인 클립 정렬까지 닫혔지만, 자가보고 97% 파리티는 여전히 과장이다. **실동작 기준 체감 55~65%**로 보는 것이 안전하다. 완료 기준을 "코드 존재"가 아니라 "preview + export에서 결과 확인"으로 잡고 진행할 것.
+기본 명령/배선(command, metadata)은 대부분 존재하지만, **사용자가 실제 결과를 보는 경로(드래그앤드롭, 픽셀/샘플 처리, 렌더링 UX 등)가 비어 있거나 부분 구현인 항목이 많다.** 2026-07-04 기준 EQ/NR/덕킹/플랫폼 프리셋/모션 트래킹은 실측 증거로 상환됐고, G-02 커브/HSL 수학과 G-01 워드 타이밍 저장은 착수됐다. 하지만 CapCut 대비 “완성도”는 아직 preview/export/iOS까지 닫힌 상태가 아니므로 과장 금지. **실동작 기준 체감 65~72%**로 보는 것이 안전하다. 완료 기준을 "코드 존재"가 아니라 "preview + export에서 결과 확인"으로 잡고 진행할 것.
 
 ---
 
@@ -101,6 +101,10 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 **S0 G-12 #8 플랫폼 프리셋 5종 상환(2026-07-04)**: `bars_320x240_3s_30fps.mp4` fixture, DEBUG 앱 하니스 `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>`, 실제 `applyPlatformExportPreset` → `exportProject(to:)` 경로를 `run_e2e_export.sh` ffprobe 검증으로 codify했다. 실측: TikTok/Reels/Shorts 1080x1920 30/1 h264 `.mp4`, YouTube Standard 1920x1080 30/1 h264 `.mp4`, Instagram Post 1080x1080 30/1 h264 `.mp4` (`format_name=mov,mp4,m4a,3gp,3g2,mj2`).
 
 **S1 G-02 Inc 1~2 커브/HSL 수학 착수/완료(2026-07-04)**: Inc 1에서 `CurvePoint`와 `CurveEvaluator` 순수 로직(256-entry LUT, endpoint 고정, duplicate-x deterministic, monotone cubic Hermite/Fritsch-Carlson tangents, clamp/no-overshoot)을 추가했고, Inc 2에서 `HSLBandCenter`/`HSLBand`/`HSLCubeBuilder` 순수 로직을 추가했다. HSL은 8밴드 hue center, 45° cosine falloff, hue wrap-around, RGB↔HSL 변환, RGBA cube data(`size^3*4`)를 `HSLCubeBuilderTests` 6개로 검증했다. Caveat: 아직 `ColorGradePixelProcessor` 렌더 체이닝, `ColorCurves` 모델 저장, Mac/iOS UI는 미연결이며 G-02 Inc 3+ 범위다.
+
+**S2 G-01 Inc 1 워드 타이밍 보존(2026-07-04)**: `WordTiming`, `TranscriptionSegment.words`, `TextClipContent.wordTimings`를 추가하고 Apple Speech `SFTranscriptionSegment` timestamp/duration/confidence를 보존하며, `SubtitleGenerator`가 세그먼트 절대 word 시각을 클립 상대 시각으로 변환한다. `StyledCaptionWordTimingTests` 6개로 legacy decode, Codable round-trip, relative transform, clamp, SRT omission을 검증했다. Caveat: caption style preset/active word renderer/preview-export burn-in/iOS 갤러리는 G-01 Inc 2+이다.
+
+**CapCut 대비 완성도 재평가(2026-07-04 loop-9, 기준 `84b696c`)**: 52주기식 자가보고 97%는 계속 폐기한다. EQ/NR/덕킹/플랫폼 프리셋/모션 트래킹의 실측 상환과 G-02/G-01 착수로 체감 완성도는 65~72%로 상향 가능하나, 아직 “능가” 선언은 금지다. 미완 핵심은 (1) G-02 HSL/커브 렌더 체이닝+저장+UI+iOS, (2) G-01 caption style model+active-word renderer+preview/export+iOS, (3) G-04 필름스트립, G-05 보컬분리/보이스FX, G-06 이징 UI, G-09 iOS 본대, (4) G-12 잔여 실기기/실영상 부채다.
 
 ---
 

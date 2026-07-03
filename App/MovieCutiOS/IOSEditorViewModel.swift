@@ -14,7 +14,7 @@ final class IOSEditorViewModel {
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
 
     private let session: EditorSession
-    private var sfxURLResolver: [String: URL] = Self.makeSFXURLResolver()
+    private var sfxURLResolver: [String: URL]
 
     init() {
         let project = Self.defaultProject()
@@ -23,6 +23,7 @@ final class IOSEditorViewModel {
         playheadTime = 0
         isPlaying = false
         session = EditorSession(project: project)
+        sfxURLResolver = Self.makeSFXURLResolver()
     }
 
     var mediaAssets: [MediaAsset] {

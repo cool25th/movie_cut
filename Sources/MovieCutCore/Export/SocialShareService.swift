@@ -82,8 +82,8 @@ public final class SocialShareService: Sendable {
         }
 
         if let navigationController = viewController as? UINavigationController,
-           let visibleViewController = navigationController.visibleViewController {
-            return visibleViewController(from: visibleViewController)
+           let navVisibleVC = navigationController.visibleViewController {
+            return visibleViewController(from: navVisibleVC)
         }
 
         if let tabBarController = viewController as? UITabBarController,

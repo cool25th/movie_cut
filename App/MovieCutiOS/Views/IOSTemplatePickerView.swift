@@ -254,7 +254,7 @@ private struct IOSTemplateCanvasPreview: View {
         return RoundedRectangle(cornerRadius: 5)
             .fill(layerColor(for: kind).opacity(0.78))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(EdgeInsets(top: 14 + inset, leading: 14 + inset, bottom: 14 + inset, trailing: 14 + inset))
+            .padding(SwiftUI.EdgeInsets(top: 14 + inset, leading: 14 + inset, bottom: 14 + inset, trailing: 14 + inset))
             .overlay {
                 Image(systemName: iconName(for: kind))
                     .font(.caption.weight(.bold))

@@ -53,13 +53,13 @@ struct IOSTextClipSheet: View {
 
                 Section {
                     Button {
-                        let simdColor = colorToSIMD(textColor)
+                        let hexColor = colorToHex(textColor)
                         Task {
                             await viewModel.addTextClip(
                                 text: text,
                                 fontName: fontName,
                                 fontSize: fontSize,
-                                color: simdColor
+                                color: hexColor
                             )
                             dismiss()
                         }
@@ -81,14 +81,14 @@ struct IOSTextClipSheet: View {
         }
     }
 
-    private func colorToSIMD(_ color: Color) -> SIMD4<Float> {
+    private func colorToHex(_ color: Color) -> String {
         let uiColor = UIColor(color)
         var r: CGFloat = 0
         var g: CGFloat = 0
         var b: CGFloat = 0
         var a: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        return SIMD4<Float>(Float(r), Float(g), Float(b), Float(a))
+        return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 }
 #endif

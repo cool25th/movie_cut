@@ -321,8 +321,15 @@ struct PreviewView: View {
         let frameTime = cmTime(time)
         isRenderingFilteredFrame = true
 
+        // AVAssetImageGenerator and CIContext are not Sendable; wrap them so the
+        // concurrent closure compiles under Swift 6. Each render task is
+        // serialised by isRenderingFilteredFrame and requestID guarding.
+        struct UncheckedSendable<T>: @unchecked Sendable { let value: T }
+        let genBox = UncheckedSendable(value: generator)
+        let ctxBox = UncheckedSendable(value: context)
+
         DispatchQueue.global(qos: .userInteractive).async {
-            let uiImage = Self.makeFilteredFrame(generator: generator, time: frameTime, clip: clip, context: context)
+            let uiImage = Self.makeFilteredFrame(generator: genBox.value, time: frameTime, clip: clip, context: ctxBox.value)
             DispatchQueue.main.async {
                 guard requestID == frameRequestID else { return }
                 filteredFrame = uiImage
@@ -422,7 +429,7 @@ private extension PreviewView {
                 .cropped(to: image.extent)
         case .styleTransfer:
             return applyFilter("CIPhotoEffectTransfer", to: image)
-        case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT:
+        case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT, .externalLUT:
             return VisualEffectPixelProcessor.apply([effect], to: image)
         case .fadeIn, .fadeOut, .crossDissolve:
             return image

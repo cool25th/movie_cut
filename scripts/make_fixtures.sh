@@ -43,6 +43,15 @@ ffmpeg -y -loglevel error \
   -filter_complex "[0:a][1:a]amix=inputs=2:duration=shortest:normalize=0,volume=0.5" \
   -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/eq_low_high_2s_mono.wav"
 
+# 3c) Noise reduction fixture — 1kHz voice-band carrier plus 8kHz hiss-like
+# deterministic tone. The NR E2E checks that the app path lowers 8kHz/1kHz
+# energy while preserving the voice-band component.
+ffmpeg -y -loglevel error \
+  -f lavfi -i "sine=frequency=1000:sample_rate=44100" \
+  -f lavfi -i "sine=frequency=8000:sample_rate=44100" \
+  -filter_complex "[0:a]volume=0.7[voice];[1:a]volume=0.35[hiss];[voice][hiss]amix=inputs=2:duration=shortest:normalize=0" \
+  -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/noisy_voice_1k_hiss_8k_2s_mono.wav"
+
 # 4) Solid blue still — image import, 64x64 PNG.
 ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=64x64" \
   -frames:v 1 -map_metadata -1 -fflags +bitexact "$OUT/swatch_blue_64x64.png"

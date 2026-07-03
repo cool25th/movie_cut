@@ -87,6 +87,60 @@ case "$NR_STATUS" in
   *) echo "FAIL: noise reduction did not complete cleanly (status: $NR_STATUS)" >&2; exit 1 ;;
 esac
 
+# Noise reduction must measurably reduce high-frequency hiss while preserving
+# the voice-band carrier. The fixture contains 1kHz voice-band tone + 8kHz hiss.
+NOISY="$ROOT/Tests/Fixtures/noisy_voice_1k_hiss_8k_2s_mono.wav"
+[ -s "$NOISY" ] || { echo "missing NR fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+NR_BASE="$(mktemp -d)/nr_base.m4a"
+NR_DENOISED="$(mktemp -d)/nr_denoised.m4a"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$NOISY" MOVIECUT_UITEST_EXPORT="$NR_BASE" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+NP=$!; for _ in $(seq 1 120); do [ -s "$NR_BASE" ] && break; sleep 0.5; done; wait "$NP" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$NOISY" MOVIECUT_UITEST_DENOISE=1 \
+  MOVIECUT_UITEST_EXPORT="$NR_DENOISED" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+NP=$!; for _ in $(seq 1 120); do [ -s "$NR_DENOISED" ] && break; sleep 0.5; done; wait "$NP" 2>/dev/null || true
+[ -s "$NR_BASE" ] || { echo "FAIL: baseline noisy export missing" >&2; exit 1; }
+[ -s "$NR_DENOISED" ] || { echo "FAIL: denoised export missing" >&2; exit 1; }
+NR_METRICS="$(python3 - "$NR_BASE" "$NR_DENOISED" <<'PY'
+import math, struct, subprocess, sys
+
+def tone_power(path, freq):
+    raw = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-ac", "1", "-ar", "44100", "-f", "f32le", "-"
+    ])
+    count = len(raw) // 4
+    if count == 0:
+        raise SystemExit(f"no decoded audio for {path}")
+    samples = struct.unpack("<" + "f" * count, raw)
+    n = min(count, 88200)
+    samples = samples[:n]
+    omega = 2.0 * math.pi * freq / 44100.0
+    cos_sum = 0.0
+    sin_sum = 0.0
+    for i, s in enumerate(samples):
+        cos_sum += s * math.cos(omega * i)
+        sin_sum += s * math.sin(omega * i)
+    return (cos_sum * cos_sum + sin_sum * sin_sum) / max(n, 1)
+
+def metrics(path):
+    voice = tone_power(path, 1000.0)
+    hiss = tone_power(path, 8000.0)
+    ratio = hiss / max(voice, 1e-18)
+    return voice, hiss, ratio
+
+base_voice, base_hiss, base_ratio = metrics(sys.argv[1])
+denoised_voice, denoised_hiss, denoised_ratio = metrics(sys.argv[2])
+improvement_db = 10.0 * math.log10(max(base_ratio, 1e-18) / max(denoised_ratio, 1e-18))
+voice_retention = denoised_voice / max(base_voice, 1e-18)
+print(f"base_ratio={base_ratio:.6f} denoised_ratio={denoised_ratio:.6f} improvement_db={improvement_db:.2f} base_voice={base_voice:.6e} denoised_voice={denoised_voice:.6e} base_hiss={base_hiss:.6e} denoised_hiss={denoised_hiss:.6e} voice_retention={voice_retention:.3f}")
+if not (denoised_ratio < base_ratio * 0.45 and improvement_db > 3.0 and voice_retention > 0.45):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: noise reduction SNR check failed (${NR_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$NR_BASE")" "$(dirname "$NR_DENOISED")"; exit 1; }
+rm -rf "$(dirname "$NR_BASE")" "$(dirname "$NR_DENOISED")"
+echo "PASS: noise reduction improved voice/hiss ratio ($NR_METRICS)"
+
 # Equalizer must produce a real spectral difference in the app/export path, not a
 # static UI claim. The fixture contains equal 110Hz and 4kHz tones; bassBoost
 # must raise the low/high energy ratio relative to trebleBoost.
@@ -246,4 +300,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction + EQ spectrum + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + color grade + scope + prores + hdr + autosave)"

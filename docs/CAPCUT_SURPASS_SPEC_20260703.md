@@ -1,7 +1,7 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.0 / 작성일: 2026-07-03 / 기준 커밋: `c242632` / 브랜치: `feat/core-backend-expansion`
-> 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(격차 분석·우선순위) — 이 문서는 그 G-ID들의 **개발 착수 가능한 상세 명세**다.
+> 버전: 1.1 / 작성일: 2026-07-03 (v1.1: UI 명세 §5 U-01~U-09 신설, 기준 커밋 `5cd5155`) / 브랜치: `feat/core-backend-expansion`
+> 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V7_FUNC_UI_20260703.md`(기능+UI 통합 격차) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-03 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
@@ -53,8 +53,9 @@
 | **S3. 체감·오디오** | 편집 체감 + 오디오 스위트 | G-04, G-05, G-06, G-09(본대) | W7 완주 + 필름스트립 성능 측정 |
 | **S4. 확장·상호운용** | 이펙트/에셋/NLE 연계 | G-07, G-08, G-10, G-11 | W8 완주 |
 | **S5. 합의 필요** | 범위 판단 후 착수 | G-13, G-14 | 별도 합의 |
+| **SU. UI 트랙 (병행)** | 제품 표면·체감 완성 | U-01~U-09 (§5) | 슬롯 순서: U-08 → U-02(+G-04) → U-01 → U-04/U-03/U-05 → U-06 → U-07/U-09 (`GAP_ANALYSIS_V7_FUNC_UI_20260703.md` §6) |
 
-순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `CAPCUT_FEATURE_BACKLOG.md` 갱신.
+순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. **UI 트랙은 전 단계 병행하되 U-08(회귀 인프라)을 선행**하고, U-02는 G-04와, U-07은 G-07/G-08과 같은 세션 묶음을 권장. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `CAPCUT_FEATURE_BACKLOG.md` 갱신.
 
 ---
 
@@ -521,7 +522,244 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ---
 
-## 4. 실행 체크리스트 (콜드 스타트)
+## 5. UI 명세 (U-ID) — v1.1 신설 (2026-07-03)
+
+> 근거 분석: `GAP_ANALYSIS_V7_FUNC_UI_20260703.md` §3. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다(V7 §6).
+> **UI 공통 DoD** (G-ID DoD에 추가로):
+> - `UI_DESIGN_PRINCIPLES.md` 원칙(반응성·밀도·발견성·접근성) 및 디자인 토큰(`MovieCutTheme`) 준수 — 새 색/간격 하드코딩 금지.
+> - IA 계약 유지: `IAMenuPositionStaticContractTests` 통과 (Split/Delete/Add Marker의 상단 툴바 재유입 금지, transport 하단 도킹 유지).
+> - 레이아웃/카피 변경은 static contract로 잠금(회귀 방지 전용) + **U-08 캡처 증거**(populated 스크린샷)를 완료 증거로.
+> - 모든 신규 컨트롤에 접근성 label/hint + 키보드 도달성.
+> - 프레젠테이션 레이어 변경 원칙: 명령/세션/렌더 아키텍처(A1~A3)를 건드리지 않는다. 모델 필드가 필요하면 A5 준수.
+
+---
+
+### U-01. 홈/프로젝트 매니저 화면 — P0 / 규모 M
+
+#### 요구사항
+1. 앱 실행 시 홈 화면이 뜬다: 최근 프로젝트 카드 그리드(썸네일·이름·수정일·길이) + "New Project" + "Open…" + 템플릿(.mctemplate) 섹션.
+2. 카드 더블클릭/Enter로 에디터 진입, 에디터에서 ⌘W 또는 "Back to Home"으로 복귀(저장 확인).
+3. 크래시 복구 제안(기존 recovery.moviecut 감지)은 홈에서 배너로 표시.
+4. 설정으로 "마지막 프로젝트 바로 열기" 선택 가능(U-05 연계).
+
+#### 현재 상태 (실사)
+- 홈/프로젝트 브라우저 **없음** — `WindowGroup`이 곧바로 `ContentView`(에디터). File>Open/New 메뉴만 존재(F-04 부수 수리로 배선됨). 최근 프로젝트 저장소 없음(grep: RecentProjects 0건).
+- 재료: `ProjectStore`(load/save/autosave), `ThumbnailGenerator`, `.mctemplate`(`ProjectPackage`), 크래시 복구 NSAlert(런치 시) 기존재.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `RecentProjectsStore`(앱 레이어): 항목 `{URL(security-scoped bookmark), name, modifiedAt, duration, thumbnailPath}` — App Support JSON. 프로젝트 open/save 시 upsert, 존재하지 않는 파일은 표시 시 회색 처리+제거 액션 | 신규 `App/MovieCutMac/Home/RecentProjectsStore.swift` |
+| 2 | `HomeView`: 카드 그리드(LazyVGrid, 카드=썸네일+이름+메타), New/Open 액션, 템플릿 행(내장+import된 .mctemplate), 복구 배너. 디자인은 Pro 다크 토큰, 온보딩 CTA는 여기로 일원화(프리뷰 empty CTA와 중복 제거 — 감사 R3 잔여 해소) | 신규 `App/MovieCutMac/Home/HomeView.swift` |
+| 3 | 앱 상태 전환: `AppStage` enum(.home/.editor(projectURL?)) — `MovieCutMacApp`에서 분기. 에디터 종료 시 dirty면 저장 시트. 홈 표시 정책은 UserDefaults(기본 on, 헤드리스/UITest 하니스는 기존처럼 에디터 직행 게이트 유지 — E2E 무회귀) | `MovieCutMacApp.swift`, `ContentView.swift` |
+| 4 | 프로젝트 썸네일: 저장 시 첫 비디오 클립 프레임(또는 캔버스 렌더) 1장을 캐시에 기록 | `EditorViewModel.swift`(save 경로) |
+
+#### AC
+1. 클린 실행 → 홈 표시, New Project → 빈 에디터, 편집·저장 후 재실행 → 최근 카드에 썸네일과 함께 표시 → 더블클릭 → 그 프로젝트 열림.
+2. recovery 파일 존재 상태로 실행 → 홈 배너에서 복구/폐기 선택 가능(기존 NSAlert 동작 대체, `AutosaveRecoveryTests` 시맨틱 유지).
+3. `run_e2e_export.sh` 전 체크 무회귀(하니스는 홈 우회).
+4. 없는 파일 카드 → 클릭 시 에러 토스트(U-04) + 목록 정리 액션.
+
+#### 검증
+- `RecentProjectsStoreTests`(upsert/정렬/누락 파일), 홈 표면 static contract, U-08 스크린샷(홈 populated). 실기기: 홈→열기→편집→홈 왕복 녹화.
+
+---
+
+### U-02. 타임라인 클립 표면 리치니스 (전환 pill·뱃지) — P0 / 규모 M
+
+> **G-04(필름스트립)와 같은 코드 영역(`TimelineView` 클립 렌더) — 같은 세션 묶음 권장.**
+
+#### 요구사항
+1. 전환이 설정된 클립 경계에 전환 아이콘 pill이 표시되고, 클릭하면 인스펙터 전환 섹션으로 포커스(선택+스크롤).
+2. 클립 우상단에 적용 상태 뱃지: FX(effects 비었지 않음)/그레이드(colorGrade non-identity)/속도(≠1.0x — "2x"·"0.5x" 라벨)/자막 스타일/그룹(기존 link 아이콘 유지).
+3. 뱃지는 줌 아웃으로 클립이 좁아지면(예: <48px) 자동 숨김 — 클립 가독성 우선.
+
+#### 현재 상태 (실사)
+- `TimelineView.swift`에 transition 시각 표시 **0건**(grep). 뱃지 없음(link 아이콘·Sticker 라벨만). 전환 설정은 인스펙터를 열어야만 확인 가능.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 클립 뱃지 스트립: 클립 뷰 우상단 HStack(아이콘 12pt, 최대 4개+overflow "…"), 조건 계산은 `Clip` 순수 함수(`clipBadges(for:)` — Core 또는 ViewModel, 유닛 테스트) | `TimelineView.swift`, `EditorViewModel.swift` |
+| 2 | 전환 pill: 인접 클립 경계(transition.type ≠ .none인 클립 끝)에 겹침 원형 pill(전환 타입 아이콘). 탭 → 해당 클립 선택 + `inspectorFocusSection = .transition` 발행 → InspectorPanel이 스크롤/하이라이트 | `TimelineView.swift`, `InspectorPanel.swift`(포커스 수신) |
+| 3 | 줌 반응: 클립 폭 기반 뱃지/pill 표시 임계값, 접근성 label에는 항상 상태 포함(시각 숨김과 무관) | `TimelineView.swift` |
+
+#### AC
+1. crossDissolve 설정 클립 경계에 pill 표시, 클릭 → 인스펙터 전환 섹션 가시화(스크롤 위치 검증은 실기기).
+2. 속도 1.0 클립엔 속도 뱃지 없음, 2x 설정 시 "2x" 라벨(뱃지 조건 유닛 테스트 전 케이스).
+3. 줌 아웃 극단에서 뱃지 숨김·클립 렌더 무손상, 60fps 유지(G-04 측정과 병행).
+4. VoiceOver가 클립에서 "transition: cross dissolve, speed 2x" 형태로 읽음.
+
+#### 검증
+- `ClipBadgeLogicTests`(순수 조건), static contract(pill/뱃지 존재), U-08 populated 캡처. 실기기 클릭 동선 녹화.
+
+---
+
+### U-03. 트랙 헤더 완성 (lock 배선 + 높이) — P1 / 규모 S
+
+#### 요구사항
+1. 트랙 lock 토글 — 잠긴 트랙의 클립은 선택/드래그/드롭/삭제가 거부되고 시각적으로 표시(빗금 오버레이 또는 감광).
+2. 트랙 높이 프리셋 S/M/L(오디오 트랙 파형 상세 확인용) — 프로젝트에 저장.
+
+#### 현재 상태 (실사)
+- `Track.isMuted`/`isHidden`은 UI 배선됨(`TimelineView.swift:656-672`). **`Track.isLocked`는 모델만 존재, UI grep 0건 — dead model field**(A6 취지 위반 상태).
+- 트랙 높이는 고정.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | lock 토글 버튼(자물쇠 아이콘, mute/hide 옆) — `SetTrackPropertyCommand` 기존 경로(zIndex 전례). 편집 가드: `EditorViewModel`의 클립 선택/이동/드롭/삭제 진입점에서 잠긴 트랙 거부 + 토스트(U-04)/상태 메시지 | `TimelineView.swift`, `EditorViewModel.swift` |
+| 2 | 잠긴 트랙 시각: 클립에 감광(opacity 0.55)+자물쇠 워터마크, drop 타깃 제외 | `TimelineView.swift` |
+| 3 | 트랙 높이: `Track.laneHeight`(enum S/M/L, A5 optional decode) + 헤더 컨텍스트 메뉴로 전환, 파형/필름스트립 렌더가 높이 반영 | `Models/Track.swift`, `TimelineView.swift` |
+
+#### AC
+1. 잠긴 트랙 클립 드래그 시도 → 이동 없음 + 피드백. 삭제/split도 거부. undo 스택에 잔여 명령 없음.
+2. 잠금 상태 프로젝트 저장/로드 왕복.
+3. 오디오 트랙 L 높이에서 파형 세로 해상도 증가 확인(캡처).
+4. 구버전 프로젝트 decode(laneHeight nil → M).
+
+---
+
+### U-04. 토스트 피드백 시스템 — P1 / 규모 S
+
+#### 요구사항
+1. 성공/정보/에러 3종 토스트가 우하단에 큐로 표시(자동 소멸 3s, 에러는 5s+닫기 버튼), 최근 이력은 상태바 클릭으로 팝오버 확인.
+2. 기존 `lastStatusMessage`/`lastErrorMessage` 발행 지점을 전부 토스트 경유로 승격(발행 API는 유지 — 호출부 대량 수정 없이 어댑터).
+
+#### 현재 상태 (실사)
+- 상태바 정적 텍스트 1줄(`ContentView.statusBar`) — 드롭 피드백 등 40+ 발행 지점이 이미 존재하므로 표시 계층만 교체하면 됨.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `ToastCenter`(@Observable, 앱 레이어): `post(kind:message:)` 큐(최대 3 동시)+이력(최근 20). `EditorViewModel.lastStatusMessage/lastErrorMessage` didSet에서 자동 post(어댑터 — 호출부 무수정) | 신규 `App/MovieCutMac/UIKitCommon/ToastCenter.swift`, `EditorViewModel.swift` |
+| 2 | `ToastOverlayView`: ZStack 최상위 오버레이(우하단), 토큰 준수(에러=시스템 red 톤, 성공=액센트 아님 — 액센트 남용 금지 원칙), reduce-motion 대응 | `ContentView.swift` |
+| 3 | 상태바 정리: 텍스트 1줄 유지하되 이력 팝오버 버튼 추가. export 완료/실패·E2E 하니스 메시지도 경유 | `ContentView.swift` |
+
+#### AC
+1. 파일 드롭 성공 → 토스트 표시 후 자동 소멸, 이력 팝오버에 잔존.
+2. 연속 5개 발행 → 큐 3개 표시+순차 처리(유닛: ToastCenter 큐 로직).
+3. VoiceOver announcement 발행(`AXAnnouncement`).
+4. 기존 `DragDropFeedbackStaticContractTests` 무회귀.
+
+---
+
+### U-05. 환경설정 창 — P1 / 규모 S
+
+#### 요구사항
+`Settings` scene(⌘,)에 3탭: **General**(홈 표시 정책, 언어 안내, 최근 프로젝트 개수), **Editing**(autosave 주기, 스냅 기본값, 매그네틱 기본값, 트랙 높이 기본), **Export**(기본 프리셋, 기본 저장 폴더, 프록시 preview 정책 — G-11 연계).
+
+#### 현재 상태 (실사)
+- `Settings` scene **없음**(`MovieCutMacApp.swift` grep). autosave 주기 등은 하드코딩.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `AppPreferences`(@Observable + UserDefaults 백킹, 키 상수화) — 소비처(autosave 스케줄러/스냅 초기값/export 기본)에 주입 | 신규 `App/MovieCutMac/Settings/AppPreferences.swift` |
+| 2 | `Settings { SettingsView() }` 3탭 폼(macOS 표준 `Form`+`TabView`) | `MovieCutMacApp.swift`, 신규 `SettingsView.swift` |
+
+#### AC
+1. autosave 주기 변경 → 스케줄러 반영(로그/테스트 훅으로 확인).
+2. 설정 값 재실행 후 유지.
+3. 각 설정에 접근성 label + 기본값 복원 버튼.
+
+---
+
+### U-06. 현지화 (ko + en) — P1 / 규모 M
+
+#### 요구사항
+1. String Catalog(`Localizable.xcstrings`) 도입, 한국어 번역 1차 완료 — 시스템 한국어에서 주요 표면(브라우저 탭/타임라인 도구/인스펙터 섹션/메뉴/export/토스트)이 한국어로 표시.
+2. 신규 UI 문자열은 카탈로그 등록을 규율로(하드코딩 리터럴 static contract 스윕은 표면 단위로 점진).
+
+#### 현재 상태 (실사)
+- `NSLocalizedString` 산발 사용(EditorViewModel 등), **.lproj/xcstrings 없음** → 번역 리소스 자체가 부재. `project.yml` 리소스 배선 필요(xcodegen — `info:` 블록 함정과 무관하나 재생성 검증 필수).
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `Localizable.xcstrings` 추가 + `project.yml` 리소스 등록 + xcodegen 재생성 검증(plist 보존 확인 — 함정 회피 체크 포함) | `App/MovieCutMac/`, `project.yml` |
+| 2 | 표면 스윕 1차(메뉴/툴바/브라우저 탭/타임라인 헤더): `Text("...")` 리터럴 → `String(localized:)`. 접근성 label/hint 포함 | `ContentView.swift`, `TimelineView.swift`, `MediaLibraryPanel.swift`, `MovieCutMacApp.swift` |
+| 3 | 표면 스윕 2차(인스펙터/export/시트) + ko 번역 채움 | `Inspector/`, 각 시트 |
+| 4 | iOS 동일 카탈로그 공유(타깃 리소스 공유 또는 복제 정책 결정 — 파리티 매트릭스에 기록) | `App/MovieCutiOS/`, `project.yml` |
+
+#### AC
+1. `defaults write -g AppleLanguages '(ko)'` 실행 상태에서 주요 표면 한국어 표시(스크린샷 증거 — U-08).
+2. 영어 폴백 정상(미번역 키 영어 표시, 빈 문자열 0건 — 카탈로그 lint).
+3. xcodegen 재생성 후에도 리소스/Info.plist 배선 보존(기존 함정 테스트).
+
+---
+
+### U-07. 브라우저 콘텐츠 그리드 리듬 — P2 / 규모 M
+
+> **G-07(이펙트 브라우저)·G-08(에셋 라이브러리)과 병합 실행** — 이 항목은 "탭 간 공통 시각 언어" 스코프.
+
+#### 요구사항
+1. Effects/Transitions/Filters/Text/Stickers 탭이 동일한 카드 컴포넌트(썸네일+이름+호버 상태)의 그리드로 통일 — 감사 R2 잔여("one visual language") 해소.
+2. 전환/필터 카드는 호버 시 선택 클립 프레임(또는 fixture 프레임)으로 미니 프리뷰.
+3. Captions/Adjust 탭 신설 여부 결정: **Captions 탭 신설**(G-01 스타일 갤러리 진입점), Adjust는 인스펙터 소관으로 비신설(결정 기록).
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `BrowserCard` 공통 컴포넌트(토큰 기반: 카드 크기 2종, 호버/선택 상태, 라벨 1줄) + 각 탭 그리드 이관 | 신규 `App/MovieCutMac/Library/BrowserCard.swift`, `MediaLibraryPanel.swift` |
+| 2 | 전환/필터 썸네일: fixture 프레임에 적용한 정적 PNG 캐시(G-07 Inc 3 썸네일 파이프라인 공유) | G-07과 공유 |
+| 3 | Captions 탭(G-01 완료 후): 캡션 스타일 카드 → 선택 자막 클립(들) 적용 | `MediaLibraryPanel.swift` |
+
+#### AC
+1. 5개 탭 카드가 동일 컴포넌트 사용(코드 검증) + 시각 일관(U-08 캡처).
+2. 카드 호버 프리뷰가 UI 블로킹 없음.
+3. 키보드 탐색(화살표+Enter 적용) 동작.
+
+---
+
+### U-08. UI 회귀/지표 인프라 — P0(상시) / 규모 M
+
+> **UI 트랙의 G-12** — 이후 모든 U-ID의 "완료 증거" 생산 수단. 최우선 선행.
+
+#### 요구사항
+1. **populated 상태 캡처 자동화**: 부트스트랩 프로젝트(비디오+오디오+텍스트+선택 상태)를 하니스로 구성 → 창 스크린샷 저장. 감사 문서의 "matching populated side-by-side 재캡처" 부채 상환.
+2. **골든 스크린샷 회귀**: 핵심 표면 4종(브라우저/프리뷰+인스펙터/타임라인 populated/그레이딩 패널)의 perceptual hash 비교(허용 오차 임계값) — 의도 변경 시 골든 갱신 절차 문서화.
+3. **발견성 지표**: 대표 플로우(클립 추가→전환 적용→export 시작)의 클릭 수를 XCUITest(또는 하니스 로그)로 기록 — `UI_DESIGN_PRINCIPLES.md` 목표(핵심 편집 ≤2클릭) 대조.
+
+#### 현재 상태 (실사)
+- `MOVIECUT_BOOTSTRAP_PROJECT` env 게이트 스크린샷 부트스트랩(사용자 커밋 `eb63f1d`)과 UITest 하니스(env 훅) 기존재 — 재료는 있음. 골든 스크린샷/클릭수 자동화 없음. 과거 캡처는 `/tmp` 휘발 — **증거는 리포지토리 내 `Tests/UIEvidence/`(골든) + 산출은 `artifacts/`(gitignore)로 이원화**.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `scripts/ui_capture.sh`: 부트스트랩 populated 상태 → `screencapture -l`(창 ID) → `artifacts/ui/` 저장. 상태 변형 env(선택 클립 타입) 지원 | 신규 스크립트, `UITestHarness.swift` 확장 |
+| 2 | 골든 비교: `scripts/ui_regression.sh` — 캡처 vs `Tests/UIEvidence/golden_*.png` perceptual hash(dHash 등, Swift 소도구 또는 Python) 비교, 임계 초과 시 FAIL+diff 이미지. 골든 갱신은 `--update-golden` 명시 플래그 | 신규 스크립트 + 골든 4종 커밋 |
+| 3 | 클릭수 로거: 하니스에 액션 카운터 훅 or XCUITest 플로우 1개(클립 추가→전환→export)로 클릭 수 산출 → `docs/UI_METRICS.md`에 기록 | `App/MovieCutMacUITests/` |
+
+#### AC
+1. `scripts/ui_regression.sh`가 클린 상태에서 PASS, 의도적 색 변경(토큰 1개 수정) 시 FAIL을 증명(이빨 확인) 후 revert.
+2. 골든 4종이 리포지토리에 커밋되고 갱신 절차가 문서화됨.
+3. 대표 플로우 클릭수 측정치가 기록되고 원칙 목표와 대조표 존재.
+
+---
+
+### U-09. 커맨드 팔레트 (⌘K) — P2 / 규모 M (Pro 능가 표면)
+
+#### 요구사항
+1. ⌘K로 오버레이 팔레트: 명령(split/duplicate/marker/auto-cut/export 등 기존 액션 전부)·이펙트·전환·텍스트 템플릿·캡션 스타일을 fuzzy 검색 → Enter 실행(적용 대상은 현재 선택 규칙 그대로).
+2. 각 결과 행에 카테고리·단축키 병기. 최근 사용 상단 정렬.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `CommandRegistry`(앱 레이어): 항목 `{id, title, category, shortcut?, isEnabled(selection), perform()}` — 기존 메뉴/QuickTools/브라우저 적용 액션을 등록(신규 로직 금지, 재노출만). 유닛: fuzzy 매칭·enabled 규칙 | 신규 `App/MovieCutMac/Palette/CommandRegistry.swift` |
+| 2 | `CommandPaletteView`: 오버레이(⌘K 토글, Esc 닫기, ↑↓ 탐색), 검색은 subsequence fuzzy + 최근 가중치 | 신규 `CommandPaletteView.swift`, `MovieCutMacApp.swift`(키 등록) |
+| 3 | G-07/G-08 완료 후 이펙트/에셋 항목 자동 등록(registry 소스 확장) | registry |
+
+#### AC
+1. ⌘K → "split" 입력 → Enter가 메뉴 Split과 동일 동작(선택/플레이헤드 가드 포함).
+2. 비활성 명령(선택 없음 등)은 회색+실행 불가.
+3. 텍스트 필드 포커스 중 ⌘K 충돌 없음(기존 `MovieCutShortcutGuard` 경유).
+4. 팔레트 open→실행까지 키보드만으로 완주(접근성).
+
+---
+
+## 6. 실행 체크리스트 (콜드 스타트)
 
 ```bash
 git status --short && git log --oneline -5        # c242632 기준

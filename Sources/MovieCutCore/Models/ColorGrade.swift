@@ -72,3 +72,43 @@ public struct CurvePoint: Codable, Sendable, Equatable, Hashable {
         return Swift.min(Swift.max(value, 0), 1)
     }
 }
+
+public enum HSLBandCenter: String, Codable, Sendable, CaseIterable, Equatable, Hashable {
+    case red, orange, yellow, green, aqua, blue, purple, magenta
+
+    public var hueDegrees: Double {
+        switch self {
+        case .red: 0
+        case .orange: 30
+        case .yellow: 60
+        case .green: 120
+        case .aqua: 180
+        case .blue: 240
+        case .purple: 270
+        case .magenta: 315
+        }
+    }
+}
+
+public struct HSLBand: Codable, Sendable, Equatable, Hashable {
+    public var center: HSLBandCenter
+    public var hueShift: Double
+    public var saturation: Double
+    public var luminance: Double
+
+    public init(center: HSLBandCenter, hueShift: Double = 0, saturation: Double = 0, luminance: Double = 0) {
+        self.center = center
+        self.hueShift = Self.clamp(hueShift, -60, 60)
+        self.saturation = Self.clamp(saturation, -1, 1)
+        self.luminance = Self.clamp(luminance, -1, 1)
+    }
+
+    public var isIdentity: Bool {
+        hueShift == 0 && saturation == 0 && luminance == 0
+    }
+
+    private static func clamp(_ value: Double, _ minimum: Double, _ maximum: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return Swift.min(Swift.max(value, minimum), maximum)
+    }
+}

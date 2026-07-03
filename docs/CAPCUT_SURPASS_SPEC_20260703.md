@@ -200,6 +200,7 @@ public struct CurvePoint: Codable, Sendable, Equatable { public var x: Double; p
 
 검증 기록:
 - 2026-07-04 G-02 Inc 1: `CurvePoint` + `CurveEvaluator` 순수 로직 추가. Monotone cubic Hermite/Fritsch-Carlson tangents, endpoints fixed `(0,0)/(1,1)`, duplicate-x last-write deterministic, 256-entry LUT clamp/no-overshoot. `swift test --filter CurveEvaluator` PASS (6 tests: identity diagonal, sanitized sort/endpoints, duplicate x, midtone raise, monotone nondecreasing, arbitrary no-overshoot). 렌더 체이닝/HSL/UI/iOS는 미연결이며 Inc 2+ 대상.
+- 2026-07-04 G-02 Inc 2: `HSLBandCenter` + `HSLBand` + `HSLCubeBuilder` 순수 로직 추가. 8밴드 hue center, 45° cosine falloff, hue wrap-around, RGB↔HSL 변환, RGBA cube data(`size^3*4`)를 구현했다. `swift test --filter HSLCubeBuilder` PASS (6 tests: identity passthrough, red saturation -1 grayscale, blue unaffected, red hueShift toward orange, red-boundary falloff wrap, identity cube shape/endpoints). 렌더 체이닝/UI/iOS는 Inc 3+ 대상.
 
 #### 검증 계획
 - `CurveEvaluatorTests` / `HSLCubeBuilderTests` (순수 로직) + `ColorGradeGoldenTests` 확장(AC①~③) + `run_e2e_export.sh` grade 체크 확장(AC④⑤).

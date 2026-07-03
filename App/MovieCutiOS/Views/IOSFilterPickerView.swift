@@ -8,26 +8,31 @@ struct IOSFilterPickerView: View {
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
-    private let filters: [(name: String, id: String, color: Color)] = [
-        ("None", "none", .gray),
-        ("Sepia", "CISepiaTone", .brown),
-        ("Noir", "CIPhotoEffectNoir", .black),
-        ("Chrome", "CIPhotoEffectChrome", .cyan),
-        ("Fade", "CIPhotoEffectFade", .secondary),
-        ("Instant", "CIPhotoEffectInstant", .orange),
-        ("Mono", "CIPhotoEffectMono", .white),
-        ("Tonal", "CIPhotoEffectTonal", .gray.opacity(0.6)),
-        ("Transfer", "CIPhotoEffectTransfer", .indigo),
+    private let filters: [FilterOption] = [
+        FilterOption(name: "None", type: nil, color: .gray),
+        FilterOption(name: "Grayscale", type: .grayscale, color: .white),
+        FilterOption(name: "Sepia", type: .sepia, color: .brown),
+        FilterOption(name: "Blur", type: .blur, color: .blue),
+        FilterOption(name: "Style", type: .styleTransfer, color: .indigo),
+        FilterOption(name: "Cinematic", type: .cinematicLUT, color: .teal),
+        FilterOption(name: "Vintage", type: .vintageLUT, color: .orange),
+        FilterOption(name: "Noir", type: .noirLUT, color: .black),
+        FilterOption(name: "Vivid", type: .vividLUT, color: .pink),
+        FilterOption(name: "Cool", type: .coolLUT, color: .cyan),
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(filters, id: \.id) { filter in
+                    ForEach(filters) { filter in
                         Button {
                             Task {
-                                await viewModel.applyEffect(filter.id)
+                                if let type = filter.type {
+                                    await viewModel.applyEffect(type.rawValue)
+                                } else {
+                                    await viewModel.clearEffects()
+                                }
                                 dismiss()
                             }
                         } label: {
@@ -36,7 +41,7 @@ struct IOSFilterPickerView: View {
                                     .fill(filter.color.gradient)
                                     .frame(height: 90)
                                     .overlay {
-                                        if isSelected(filter.id) {
+                                        if isSelected(filter) {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .font(.title2)
                                                 .foregroundStyle(.white)
@@ -64,12 +69,22 @@ struct IOSFilterPickerView: View {
         }
     }
 
-    private func isSelected(_ filterId: String) -> Bool {
-        guard let clip = viewModel.selectedClip else { return filterId == "none" }
-        if filterId == "none" {
+    private func isSelected(_ filter: FilterOption) -> Bool {
+        guard let clip = viewModel.selectedClip else { return filter.type == nil }
+        guard let type = filter.type else {
             return clip.effects.isEmpty
         }
-        return clip.effects.contains { $0.type == .custom && $0.parameters["filterId"] as? String == filterId }
+        return clip.effects.contains { $0.type == type }
+    }
+
+    private struct FilterOption: Identifiable {
+        var name: String
+        var type: EffectType?
+        var color: Color
+
+        var id: String {
+            type?.rawValue ?? "none"
+        }
     }
 }
 #endif

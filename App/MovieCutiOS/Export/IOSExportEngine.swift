@@ -248,8 +248,9 @@ final class IOSExportEngine {
                 result.append(boundary)
             }
 
-        let instructions = zip(sortedBoundaries, sortedBoundaries.dropFirst()).compactMap { start, end in
-            guard end > start else { return nil }
+        var instructions: [CustomCompositionInstruction] = []
+        for (start, end) in zip(sortedBoundaries, sortedBoundaries.dropFirst()) {
+            guard end > start else { continue }
 
             let segmentStart = cmTime(start)
             let segmentEnd = cmTime(end)
@@ -263,11 +264,13 @@ final class IOSExportEngine {
                     && CMTimeCompare(clipEnd, segmentStart) > 0
             }
 
-            return CustomCompositionInstruction(
-                timeRange: segmentRange,
-                trackIDs: videoTrackIDs,
-                clipEffects: activeClipEffects,
-                canvasBackground: project.canvasBackground
+            instructions.append(
+                CustomCompositionInstruction(
+                    timeRange: segmentRange,
+                    trackIDs: videoTrackIDs,
+                    clipEffects: activeClipEffects,
+                    canvasBackground: project.canvasBackground
+                )
             )
         }
 

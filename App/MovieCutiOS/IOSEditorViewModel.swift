@@ -599,6 +599,18 @@ final class IOSEditorViewModel {
         }
     }
 
+    func clearEffects() async {
+        guard let selectedClipId else { return }
+
+        do {
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects([])))
+            await refreshFromSession()
+        } catch {
+            self.lastErrorMessage = error.localizedDescription
+            return
+        }
+    }
+
     // MARK: - Integrated View Support
 
     func updateCanvasPreset(_ preset: CanvasPreset) async {

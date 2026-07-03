@@ -355,7 +355,7 @@ struct TransitionStaticContractTests {
 
     @Test("Mac inspector exposes expanded transition labels and keeps picker duration controls")
     func macInspectorExposesExpandedTransitionLabels() throws {
-        let sharedSource = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
+        let displayNameSource = try source("Sources/MovieCutCore/Models/DisplayNames.swift")
         let effectsSource = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
         let labels = [
             "None",
@@ -373,7 +373,7 @@ struct TransitionStaticContractTests {
         ]
 
         for label in labels {
-            #expect(sharedSource.contains(label))
+            #expect(displayNameSource.contains(label))
         }
         #expect(effectsSource.contains("ForEach(TransitionType.allCases"))
         #expect(effectsSource.contains(".accessibilityLabel(\"Transition type\")"))

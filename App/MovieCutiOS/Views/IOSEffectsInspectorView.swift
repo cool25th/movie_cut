@@ -263,7 +263,7 @@ struct IOSEffectsInspectorView: View {
                     }
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
 
@@ -276,7 +276,7 @@ struct IOSEffectsInspectorView: View {
             ForEach(clip.effects) { effect in
                 HStack {
                     Image(systemName: effectIcon(for: effect.type))
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                     Text(effect.type.displayName)
                         .font(.caption)
                     Spacer()

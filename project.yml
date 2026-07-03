@@ -43,7 +43,6 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: App/MovieCutiOS
-      - path: Sources/MovieCutCore
     resources:
       - path: App/MovieCutMac/Resources
         includes:

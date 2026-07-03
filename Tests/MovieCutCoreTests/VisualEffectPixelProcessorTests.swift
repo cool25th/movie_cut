@@ -159,7 +159,7 @@ struct VisualEffectStaticContractTests {
     func inspectorExposesProceduralLUTPresets() throws {
         let effectSource = try source("Sources/MovieCutCore/Models/Effect.swift")
         let inspectorSource = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
-        let sharedSource = try source("App/MovieCutMac/Inspector/InspectorShared.swift")
+        let displayNameSource = try source("Sources/MovieCutCore/Models/DisplayNames.swift")
 
         #expect(effectSource.contains("case cinematicLUT"))
         #expect(effectSource.contains("case vintageLUT"))
@@ -168,10 +168,10 @@ struct VisualEffectStaticContractTests {
         #expect(effectSource.contains("case coolLUT"))
         #expect(inspectorSource.contains("ForEach(EffectType.allCases"))
         #expect(inspectorSource.contains("case .cinematicLUT, .vintageLUT, .vividLUT, .coolLUT"))
-        #expect(sharedSource.contains("Cinematic LUT"))
-        #expect(sharedSource.contains("Vintage LUT"))
-        #expect(sharedSource.contains("Noir LUT"))
-        #expect(sharedSource.contains("Vivid LUT"))
-        #expect(sharedSource.contains("Cool LUT"))
+        #expect(displayNameSource.contains("Cinematic LUT"))
+        #expect(displayNameSource.contains("Vintage LUT"))
+        #expect(displayNameSource.contains("Noir LUT"))
+        #expect(displayNameSource.contains("Vivid LUT"))
+        #expect(displayNameSource.contains("Cool LUT"))
     }
 }

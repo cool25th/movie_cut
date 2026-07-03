@@ -435,6 +435,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 3. iOS 시뮬레이터에서 W1(숏폼) 완주 녹화.
 4. iOS export E2E 1체크 codify.
 
+검증 기록:
+- 2026-07-03 G-09 Inc 1: `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild ... MovieCutMac`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, `scripts/run_e2e_export.sh` 모두 PASS. CoreSimulator out-of-date는 simulator device support 경고로 기록.
+
 ---
 
 ### G-10. FCPXML export — P2 / S4 / 규모 M

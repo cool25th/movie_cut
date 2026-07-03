@@ -160,9 +160,8 @@ final class IOSPlaybackEngine {
     }
 
     deinit {
-        if let token = timeObserverToken {
-            player.removeTimeObserver(token)
-        }
+        // AVPlayer cleans up time observers on deallocation; the property is
+        // main-actor-isolated so we cannot access it from nonisolated deinit.
     }
 
     // MARK: - Composition Building
@@ -186,14 +185,14 @@ final class IOSPlaybackEngine {
 
         for track in project.timeline.tracks {
             for clip in track.clips {
-                let sourceURL = clip.sourceAsset?.originalURL
+                let sourceURL = clip.assetId.flatMap { project.mediaLibrary.assets[$0] }?.originalURL
                 guard let url = sourceURL else { continue }
 
                 let asset = AVURLAsset(url: url)
                 let duration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
 
                 // Video track
-                if clip.kind == .video || clip.kind == .image {
+                if clip.kind == ClipKind.video || clip.kind == ClipKind.image {
                     if let videoTrack = try? await asset.loadTracks(withMediaType: .video).first {
                         let compositionTrack = composition.addMutableTrack(
                             withMediaType: .video,
@@ -225,7 +224,7 @@ final class IOSPlaybackEngine {
                 }
 
                 // Audio track
-                if clip.kind == .video || clip.kind == .audio {
+                if clip.kind == ClipKind.video || clip.kind == ClipKind.audio {
                     if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first {
                         let compositionTrack = composition.addMutableTrack(
                             withMediaType: .audio,
@@ -241,7 +240,7 @@ final class IOSPlaybackEngine {
                         let params = AVMutableAudioMixInputParameters(track: compositionTrack)
                         params.setVolume(Float(clip.volume), at: timelineTime)
                         if clip.fadeInDuration > 0 {
-                            params.setVolumeRamp(from: 0, to: Float(clip.volume), timeRange: CMTimeRange(
+                            params.setVolumeRamp(fromStartVolume: 0, toEndVolume: Float(clip.volume), timeRange: CMTimeRange(
                                 start: timelineTime,
                                 duration: CMTime(seconds: clip.fadeInDuration, preferredTimescale: 600)
                             ))

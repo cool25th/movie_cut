@@ -86,6 +86,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **미검증/주의**: 위 표 외 🟡 항목(덕킹·비트감지·자동컷·리프레임·자막워크플로우·TTS·캔버스배경·클라우드)은 **아직 실측 미검증** — 자가보고 "구현됨"을 완료로 보지 말 것. 전체 `swift test`는 네트워크/Speech/마이크 통합 테스트로 헤드리스 완주 곤란(633/0 부분 통과).
 
+**S0 iOS 빌드 복구(2026-07-03)**: G-09 Inc 1로 `MovieCutiOS` generic iOS 빌드를 `CODE_SIGNING_ALLOWED=NO` 조건에서 복구했다. 같은 세션에서 `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild`, iOS generic `xcodebuild`, `scripts/run_e2e_export.sh`가 모두 PASS. CoreSimulator out-of-date는 simulator 지원 경고로 남아 있으나 generic device build에는 영향 없음.
+
 ---
 
 ## 3. CapCut 기능 백로그 (도메인별)

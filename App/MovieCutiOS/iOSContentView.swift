@@ -30,6 +30,20 @@ struct IOSContentView: View {
     @State private var isCanvasSettingsPresented = false
     @State private var isEffectsInspectorPresented = false
 
+    private var resolvedExportErrorMessage: String {
+        exportErrorMessage ?? "MovieCut could not export this project."
+    }
+
+    private var selectedClipForSheets: Clip? {
+        guard let clipId = viewModel.selectedClipId else { return nil }
+        for track in viewModel.currentProject.timeline.tracks {
+            if let clip = track.clips.first(where: { $0.id == clipId }) {
+                return clip
+            }
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
@@ -145,7 +159,7 @@ struct IOSContentView: View {
             .alert("Export Failed", isPresented: $isExportErrorPresented) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(exportErrorMessage ?? "MovieCut could not export this project.")
+                Text(resolvedExportErrorMessage)
             }
             .sheet(isPresented: $isTextClipPresented) {
                 IOSTextClipSheet(viewModel: viewModel)
@@ -157,152 +171,41 @@ struct IOSContentView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
-            // MARK: - New Sheet Integrations
             .sheet(isPresented: $isStickerPickerPresented) {
-                NavigationStack {
-                    IOSStickerPickerView(viewModel: viewModel)
-                        .navigationTitle("Stickers")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                stickerPickerSheet
             }
             .sheet(isPresented: $isMusicLibraryPresented) {
-                NavigationStack {
-                    IOSMusicLibraryView(viewModel: viewModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                musicLibrarySheet
             }
             .sheet(isPresented: $isSFXPickerPresented) {
-                NavigationStack {
-                    IOSSFXPickerView(viewModel: viewModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                sfxPickerSheet
             }
             .sheet(isPresented: $isVoiceoverPresented) {
-                NavigationStack {
-                    IOSVoiceoverRecordingView(viewModel: viewModel)
-                        .navigationTitle("Voiceover")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                voiceoverSheet
             }
             .sheet(isPresented: $isAutoSubtitlesPresented) {
-                NavigationStack {
-                    IOSAutoSubtitlesView(viewModel: viewModel)
-                        .navigationTitle("Auto Subtitles")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                autoSubtitlesSheet
             }
             .sheet(isPresented: $isAutoAssistantPresented) {
-                NavigationStack {
-                    IOSAutoAssistantView(viewModel: viewModel)
-                        .navigationTitle("AI Assistant")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                autoAssistantSheet
             }
             .sheet(isPresented: $isTemplatePickerPresented) {
-                NavigationStack {
-                    IOSTemplatePickerView(viewModel: viewModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                templatePickerSheet
             }
             .sheet(isPresented: $isCanvasSettingsPresented) {
-                NavigationStack {
-                    IOSCanvasSettingsView(
-                        canvas: viewModel.currentProject.canvas.preset,
-                        onChange: { newPreset in
-                            Task { await viewModel.updateCanvasPreset(newPreset) }
-                        }
-                    )
-                    .navigationTitle("Canvas Settings")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                }
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+                canvasSettingsSheet
             }
             .sheet(isPresented: $isChromaKeyPresented) {
-                if let clipId = viewModel.selectedClipId,
-                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
-                    NavigationStack {
-                        IOSChromaKeyView(clip: clip) { chromaKey in
-                            Task { await viewModel.updateSelectedChromaKey(chromaKey) }
-                        }
-                        .navigationTitle("Chroma Key")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                    }
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-                }
+                chromaKeySheet
             }
             .sheet(isPresented: $isMaskCanvasPresented) {
-                if let clipId = viewModel.selectedClipId,
-                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
-                    NavigationStack {
-                        IOSMaskCanvasView(
-                            mask: Binding(
-                                get: { clip.mask },
-                                set: { newMask in
-                                    Task { await viewModel.updateSelectedMask(newMask) }
-                                }
-                            ),
-                            canvasSize: viewModel.currentProject.canvas.size
-                        )
-                        .navigationTitle("Mask")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                    }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                }
+                maskCanvasSheet
             }
             .sheet(isPresented: $isEffectsInspectorPresented) {
-                if let clipId = viewModel.selectedClipId,
-                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
-                    NavigationStack {
-                        IOSEffectsInspectorView(viewModel: viewModel, clip: clip)
-                            .navigationTitle("Effects")
-                            .navigationBarTitleDisplayMode(.inline)
-                            .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                    }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                }
+                effectsInspectorSheet
             }
             .sheet(isPresented: $isKeyframeEditorPresented) {
-                if let clipId = viewModel.selectedClipId,
-                   let clip = viewModel.currentProject.timeline.allClips.first(where: { $0.id == clipId }) {
-                    NavigationStack {
-                        IOSKeyframeEditorView(
-                            clip: clip,
-                            playheadTime: viewModel.playheadTime,
-                            selectedKeyframeId: nil,
-                            onSelect: { _ in },
-                            onChange: { keyframes in
-                                Task { await viewModel.updateSelectedKeyframes(keyframes) }
-                            }
-                        )
-                        .navigationTitle("Keyframes")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
-                    }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                }
+                keyframeEditorSheet
             }
             .alert("Error", isPresented: Binding(
                 get: { viewModel.lastErrorMessage != nil },
@@ -322,6 +225,172 @@ struct IOSContentView: View {
                     isImporting = false
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var stickerPickerSheet: some View {
+        NavigationStack {
+            IOSStickerPickerView(viewModel: viewModel, onSelect: { _ in })
+                .navigationTitle("Stickers")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var musicLibrarySheet: some View {
+        NavigationStack {
+            IOSMusicLibraryView(viewModel: viewModel)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var sfxPickerSheet: some View {
+        NavigationStack {
+            IOSSFXPickerView(viewModel: viewModel)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var voiceoverSheet: some View {
+        NavigationStack {
+            IOSVoiceoverRecordingView(viewModel: viewModel)
+                .navigationTitle("Voiceover")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var autoSubtitlesSheet: some View {
+        NavigationStack {
+            IOSAutoSubtitlesView(viewModel: viewModel)
+                .navigationTitle("Auto Subtitles")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var autoAssistantSheet: some View {
+        NavigationStack {
+            IOSAutoAssistantView(viewModel: viewModel)
+                .navigationTitle("AI Assistant")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var templatePickerSheet: some View {
+        NavigationStack {
+            IOSTemplatePickerView(viewModel: viewModel)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var canvasSettingsSheet: some View {
+        NavigationStack {
+            IOSCanvasSettingsView(
+                canvas: viewModel.currentProject.canvas,
+                onChange: { newPreset in
+                    Task { await viewModel.updateCanvasPreset(newPreset) }
+                }
+            )
+            .navigationTitle("Canvas Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var chromaKeySheet: some View {
+        if let clip = selectedClipForSheets {
+            NavigationStack {
+                IOSChromaKeyView(clip: clip) { chromaKey in
+                    Task { await viewModel.updateSelectedChromaKey(chromaKey) }
+                }
+                .navigationTitle("Chroma Key")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var maskCanvasSheet: some View {
+        if let clip = selectedClipForSheets {
+            NavigationStack {
+                IOSMaskCanvasView(
+                    mask: Binding(
+                        get: { clip.mask },
+                        set: { newMask in
+                            Task { await viewModel.updateSelectedMask(newMask) }
+                        }
+                    ),
+                    canvasSize: viewModel.currentProject.canvas.size
+                )
+                .navigationTitle("Mask")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var effectsInspectorSheet: some View {
+        if let clip = selectedClipForSheets {
+            NavigationStack {
+                IOSEffectsInspectorView(viewModel: viewModel, clip: clip)
+                    .navigationTitle("Effects")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var keyframeEditorSheet: some View {
+        if let clip = selectedClipForSheets {
+            NavigationStack {
+                IOSKeyframeEditorView(
+                    clip: clip,
+                    playheadTime: viewModel.playheadTime,
+                    selectedKeyframeId: nil,
+                    onSelect: { _ in },
+                    onChange: { keyframes in
+                        Task { await viewModel.updateSelectedKeyframes(keyframes) }
+                    }
+                )
+                .navigationTitle("Keyframes")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 

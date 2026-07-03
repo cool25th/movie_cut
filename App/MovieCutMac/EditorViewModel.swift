@@ -2012,6 +2012,56 @@ final class EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    #if DEBUG
+    /// Deterministic two-track ducking fixture used by the headless E2E harness.
+    /// It builds the same project state a user would create, then applies
+    /// `SetAudioDuckingCommand` so export/preview ramp wiring is exercised for real.
+    func configureDuckingHarness(bgmURL: URL, voiceURL: URL, applyDucking: Bool) async {
+        do {
+            let bgmAsset = MediaAsset(originalURL: bgmURL, kind: .audio, duration: 4.0)
+            let voiceAsset = MediaAsset(originalURL: voiceURL, kind: .audio, duration: 1.0)
+            let bgmTrack = Track(kind: .audio, name: "UITest BGM", zIndex: 0)
+            let voiceTrack = Track(kind: .audio, name: "UITest Voice", zIndex: 1)
+            let bgmClip = Clip(
+                assetId: bgmAsset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: 4.0),
+                timelineRange: TimeRange(start: 0, duration: 4.0)
+            )
+            let voiceClip = Clip(
+                assetId: voiceAsset.id,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: 1.0),
+                timelineRange: TimeRange(start: 1.0, duration: 1.0)
+            )
+
+            try await session.dispatch(ImportMediaCommand(asset: bgmAsset))
+            try await session.dispatch(ImportMediaCommand(asset: voiceAsset))
+            try await session.dispatch(CreateTrackCommand(track: bgmTrack))
+            try await session.dispatch(CreateTrackCommand(track: voiceTrack))
+            try await session.dispatch(AddClipCommand(trackId: bgmTrack.id, clip: bgmClip))
+            try await session.dispatch(AddClipCommand(trackId: voiceTrack.id, clip: voiceClip))
+            if applyDucking {
+                let ranges = AudioDuckingPlanner.duckingRanges(
+                    forTarget: bgmClip.timelineRange,
+                    voiceIntervals: [voiceClip.timelineRange]
+                )
+                try await session.dispatch(SetAudioDuckingCommand(
+                    duckingRangesByClip: [bgmClip.id: ranges],
+                    level: AudioDuckingPlanner.defaultDuckingLevel
+                ))
+            }
+            try await refreshFromSession()
+            selectedAssetId = bgmAsset.id
+            selectedClipId = bgmClip.id
+            playheadTime = voiceClip.timelineRange.start
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = "ducking harness failed: \(error.localizedDescription)"
+        }
+    }
+    #endif
+
     /// F-14: ducks every overlapping audio clip under the selected speech
     /// clip's voiced intervals (silence-analysis complement), writing
     /// range-based ducking metadata that preview and export both consume.

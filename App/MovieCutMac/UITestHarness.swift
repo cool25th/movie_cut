@@ -52,6 +52,21 @@ extension EditorViewModel {
             )
         }
 
+        // Optional deterministic ducking setup: creates separate BGM and voice
+        // audio tracks through real EditorSession commands, then optionally writes
+        // range-based ducking metadata onto the BGM clip before export. This keeps
+        // the E2E proof in the same command/export path users exercise.
+        if let bgmPath = env["MOVIECUT_UITEST_DUCKING_BGM"],
+           let voicePath = env["MOVIECUT_UITEST_DUCKING_VOICE"],
+           !bgmPath.isEmpty,
+           !voicePath.isEmpty {
+            await configureDuckingHarness(
+                bgmURL: URL(filePath: bgmPath),
+                voiceURL: URL(filePath: voicePath),
+                applyDucking: env["MOVIECUT_UITEST_DUCKING_APPLY"] == "1"
+            )
+        }
+
         // Optional freeze-frame step: holds a single frame for 2s mid-clip, so an
         // E2E check can confirm freeze is reflected in export (output duration
         // grows by the freeze duration).

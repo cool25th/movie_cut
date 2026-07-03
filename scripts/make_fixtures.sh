@@ -52,6 +52,14 @@ ffmpeg -y -loglevel error \
   -filter_complex "[0:a]volume=0.7[voice];[1:a]volume=0.35[hiss];[voice][hiss]amix=inputs=2:duration=shortest:normalize=0" \
   -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/noisy_voice_1k_hiss_8k_2s_mono.wav"
 
+# 3d) Ducking pair — continuous 220Hz BGM under a 1kHz voice cue. The E2E
+# measures only the 220Hz component, so the voice cue does not contaminate the
+# BGM attenuation proof.
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=220:sample_rate=44100" \
+  -t 4 -ac 1 -af "volume=0.6" -map_metadata -1 -fflags +bitexact "$OUT/duck_bgm_220hz_4s_mono.wav"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=1000:sample_rate=44100" \
+  -t 1 -ac 1 -af "volume=0.45" -map_metadata -1 -fflags +bitexact "$OUT/duck_voice_1000hz_1s_mono.wav"
+
 # 4) Solid blue still — image import, 64x64 PNG.
 ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=64x64" \
   -frames:v 1 -map_metadata -1 -fflags +bitexact "$OUT/swatch_blue_64x64.png"

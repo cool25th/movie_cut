@@ -197,6 +197,69 @@ PY
 rm -rf "$(dirname "$EQ_BASS")" "$(dirname "$EQ_TREBLE")"
 echo "PASS: EQ bassBoost vs trebleBoost spectrum diverged ($EQ_METRICS)"
 
+# Ducking must attenuate BGM under a voice cue in the real app export path. The
+# harness creates two audio tracks, applies SetAudioDuckingCommand to the BGM,
+# and the metric isolates the 220Hz BGM component so the 1kHz voice cue cannot
+# falsely satisfy the check.
+DUCK_BGM="$ROOT/Tests/Fixtures/duck_bgm_220hz_4s_mono.wav"
+DUCK_VOICE="$ROOT/Tests/Fixtures/duck_voice_1000hz_1s_mono.wav"
+[ -s "$DUCK_BGM" ] || { echo "missing ducking BGM fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+[ -s "$DUCK_VOICE" ] || { echo "missing ducking voice fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+DUCK_BASE="$(mktemp -d)/duck_base.m4a"
+DUCKED="$(mktemp -d)/ducked.m4a"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_DUCKING_BGM="$DUCK_BGM" MOVIECUT_UITEST_DUCKING_VOICE="$DUCK_VOICE" \
+  MOVIECUT_UITEST_EXPORT="$DUCK_BASE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+DP=$!; for _ in $(seq 1 120); do [ -s "$DUCK_BASE" ] && break; sleep 0.5; done; wait "$DP" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_DUCKING_BGM="$DUCK_BGM" MOVIECUT_UITEST_DUCKING_VOICE="$DUCK_VOICE" MOVIECUT_UITEST_DUCKING_APPLY=1 \
+  MOVIECUT_UITEST_EXPORT="$DUCKED" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+DP=$!; for _ in $(seq 1 120); do [ -s "$DUCKED" ] && break; sleep 0.5; done; wait "$DP" 2>/dev/null || true
+[ -s "$DUCK_BASE" ] || { echo "FAIL: baseline ducking export missing" >&2; exit 1; }
+[ -s "$DUCKED" ] || { echo "FAIL: ducked export missing" >&2; exit 1; }
+DUCK_METRICS="$(python3 - "$DUCK_BASE" "$DUCKED" <<'PY'
+import math, struct, subprocess, sys
+
+def samples(path):
+    raw = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-ac", "1", "-ar", "44100", "-f", "f32le", "-"
+    ])
+    count = len(raw) // 4
+    if count == 0:
+        raise SystemExit(f"no decoded audio for {path}")
+    return struct.unpack("<" + "f" * count, raw)
+
+def tone_power_window(data, freq, start, end, rate=44100):
+    a = max(0, int(start * rate))
+    b = min(len(data), int(end * rate))
+    if b <= a:
+        raise SystemExit("empty analysis window")
+    omega = 2.0 * math.pi * freq / rate
+    cos_sum = 0.0
+    sin_sum = 0.0
+    for offset, s in enumerate(data[a:b], start=a):
+        cos_sum += s * math.cos(omega * offset)
+        sin_sum += s * math.sin(omega * offset)
+    n = b - a
+    return (cos_sum * cos_sum + sin_sum * sin_sum) / n
+
+base = samples(sys.argv[1])
+ducked = samples(sys.argv[2])
+# Central voice window avoids attack/release edges; quiet windows avoid the voice cue.
+base_voice = tone_power_window(base, 220.0, 1.25, 1.75)
+ducked_voice = tone_power_window(ducked, 220.0, 1.25, 1.75)
+base_quiet = (tone_power_window(base, 220.0, 0.25, 0.75) + tone_power_window(base, 220.0, 2.75, 3.25)) / 2.0
+ducked_quiet = (tone_power_window(ducked, 220.0, 0.25, 0.75) + tone_power_window(ducked, 220.0, 2.75, 3.25)) / 2.0
+reduction_db = 10.0 * math.log10(max(base_voice, 1e-18) / max(ducked_voice, 1e-18))
+quiet_delta_db = 10.0 * math.log10(max(ducked_quiet, 1e-18) / max(base_quiet, 1e-18))
+voice_vs_quiet_ratio = ducked_voice / max(ducked_quiet, 1e-18)
+print(f"base_voice={base_voice:.6e} ducked_voice={ducked_voice:.6e} reduction_db={reduction_db:.2f} base_quiet={base_quiet:.6e} ducked_quiet={ducked_quiet:.6e} quiet_delta_db={quiet_delta_db:.2f} ducked_voice_quiet_ratio={voice_vs_quiet_ratio:.3f}")
+if not (reduction_db > 6.0 and abs(quiet_delta_db) < 1.5 and voice_vs_quiet_ratio < 0.35):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: ducking RMS check failed (${DUCK_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$DUCK_BASE")" "$(dirname "$DUCKED")"; exit 1; }
+rm -rf "$(dirname "$DUCK_BASE")" "$(dirname "$DUCKED")"
+echo "PASS: ducking lowered BGM under voice ($DUCK_METRICS)"
+
 # 3-way color grade must be reflected in export: a warm grade shifts the exported
 # average color (red up, blue down) vs an ungraded export of the same clip.
 BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
@@ -300,4 +363,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + ducking RMS + color grade + scope + prores + hdr + autosave)"

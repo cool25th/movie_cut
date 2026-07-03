@@ -92,6 +92,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **S0 G-12 #2 NR 실잡음 효과 상환(2026-07-04)**: `NoiseReductionService`의 앱 export 경로를 deterministic AVAudioFile 버퍼 DSP로 고정하고, `noisy_voice_1k_hiss_8k_2s_mono.wav` fixture + `MOVIECUT_UITEST_DENOISE` 하니스 + `run_e2e_export.sh` Goertzel 측정으로 8kHz hiss/1kHz voice 비율 개선을 codify했다. 실측: base_ratio 0.248784 → denoised_ratio 0.075641, improvement_db 5.17dB, voice_retention 0.913, base_hiss 4.195051e+01 → denoised_hiss 1.164459e+01. 남은 G-12 오디오 부채는 덕킹 청감.
 
+**S0 G-12 #3 덕킹 청감 상환(2026-07-04)**: `duck_bgm_220hz_4s_mono.wav` + `duck_voice_1000hz_1s_mono.wav` fixtures, DEBUG 앱 하니스 `MOVIECUT_UITEST_DUCKING_*`, `SetAudioDuckingCommand`, export ramp를 `run_e2e_export.sh` Goertzel 측정으로 codify했다. 실측: base_voice 3.098866e+01 → ducked_voice 1.935795e+00, reduction_db 12.04dB, quiet_delta_db 0.00dB, ducked_voice_quiet_ratio 0.062. 남은 G-12 오디오 부채는 플랫폼 프리셋 ffprobe/GUI 증거다.
+
 ---
 
 ## 3. CapCut 기능 백로그 (도메인별)
@@ -143,7 +145,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ### F. 오디오
 - ✅ 볼륨 / 페이드 / 파형 표시
 - [x] ✅ 페이드 duration 편집 UI (P1) — Mac Inspector `Fade Duration` 그룹에서 Fade In/Fade Out 현재값을 초 단위로 표시하고 Slider + Seconds `TextField` + 0.05s Stepper로 0...min(10s, clip duration) 범위 정밀 편집을 제공한다. Reset Fades/None/Soft/Long preset은 모두 `updateSelectedAudioFade` → `AudioFadeCommand` 경로로 적용되어 undo/redo path를 유지한다.
-- [ ] 🟡 자동 덕킹(범위 기반, F-14) (P2→구현됨) — `AudioDuckingPlanner` + `Clip.duckingRanges/duckingLevel` + `SetAudioDuckingCommand`(단일 undo) + Mac preview/export 동일 ramp(attack 0.12s/release 0.25s, fade 회피) + Inspector Duck/Clear. `AudioDuckingTests` 14개. Caveat: 청감 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
+- [x] ✅ 자동 덕킹 **실제 preview/export ramp + 앱 export RMS 검증** (P2) — **2026-07-04 G-12 #3 상환**: `AudioDuckingPlanner` + `Clip.duckingRanges/duckingLevel` + `SetAudioDuckingCommand`(단일 undo) + Mac preview/export 동일 ramp(attack 0.12s/release 0.25s, fade 회피) + Inspector Duck/Clear. `AudioDuckingTests` 14개에 더해 `run_e2e_export.sh`가 `duck_bgm_220hz_4s_mono.wav`/`duck_voice_1000hz_1s_mono.wav`를 앱 하니스로 두 트랙 export 후 220Hz BGM 성분을 Goertzel 측정한다. 실측: voice-window BGM 3.098866e+01→1.935795e+00, reduction 12.04dB, quiet_delta 0.00dB, voice/quiet 0.062. Caveat: 실제 상용 BGM+사람 음성 GUI 녹화는 후속 품질 작업.
 - [x] ✅ EQ **실제 DSP + 앱 export 스펙트럼 검증** (P2) — **2026-07-03 G-12 #1 상환**: 과거 판정(`AudioEqualizerService` dead/crash + 평균게인 볼륨근사)은 현재 해소. `AudioEqualizerService`는 AVAudioFile 버퍼 DSP로 bass/mid/treble 대역을 분리 적용하고, Mac 하니스 `MOVIECUT_UITEST_EQ_PRESET`이 command-backed `applyEQPreset` 경로로 선택 클립에 적용한다. `run_e2e_export.sh`가 `eq_low_high_2s_mono.wav`를 bassBoost/trebleBoost로 각각 앱 export 후 Goertzel 측정: bass_ratio 2.315524 vs treble_ratio 0.488654, treble_high 1.891041e+02 > bass_high 9.854772e+01. Caveat: UI 슬라이더 실조작 녹화와 세밀한 5밴드 청감 튜닝은 후속 품질 작업으로 남는다.
 - [x] ✅ 노이즈감소 **실제 DSP + 앱 export SNR 검증** (P2) — **2026-07-04 G-12 #2 상환**: `NoiseReductionService`가 deterministic AVAudioFile 버퍼 DSP로 sub-voice rumble 제거 + high-frequency residual attenuation을 적용하고 `applyNoiseReduction(for:)` destructive apply로 클립 소스를 denoise 파일로 교체한다. 앱 컨텍스트 `MOVIECUT_UITEST_DENOISE` + `noisy_voice_1k_hiss_8k_2s_mono.wav` E2E에서 8kHz hiss/1kHz voice 비율이 0.248784→0.075641로 감소(improvement 5.17dB, voice_retention 0.913). Caveat: 실제 사람 음성/생활소음 청감 GUI 녹화는 후속 품질 작업으로 남는다.
 - [ ] 🟡 비트 감지(음악 동기 편집, F-15) (P2→구현됨) — `BeatDetectionProvider`(에너지 플럭스 onset, 합성 클릭 트랙으로 <50ms 간격 검증) + `Marker.kind(.beat)` + 배치 마커 명령(단일 undo) + 룰러 틱 렌더/스냅 포함 + Quick Tools Detect/Clear Beats. `BeatDetectionTests` 13개. Caveat: 실음원 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.

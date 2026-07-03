@@ -34,10 +34,6 @@ public final class AudioEqualizerService: Sendable {
     }
 
     private func render(preset: EqualizerPreset, inputURL: URL, outputURL: URL) throws {
-        engine.stop()
-        engine.reset()
-        engine.disableManualRenderingMode()
-
         let inputFile = try AVAudioFile(forReading: inputURL)
         let inputFormat = inputFile.processingFormat
         guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
@@ -53,65 +49,67 @@ public final class AudioEqualizerService: Sendable {
         }
 
         let outputFile = try AVAudioFile(forWriting: outputURL, settings: inputFormat.settings)
-        let player = AVAudioPlayerNode()
-
-        attachEQIfNeeded()
-        engine.attach(player)
-        configureEQNode(with: preset)
-        engine.disconnectNodeOutput(player)
-        engine.disconnectNodeOutput(eqNode)
-        engine.disconnectNodeOutput(engine.mainMixerNode)
-        engine.connect(player, to: eqNode, format: inputFormat)
-        engine.connect(eqNode, to: engine.mainMixerNode, format: inputFormat)
-
-        defer {
-            player.stop()
-            engine.stop()
-            engine.disableManualRenderingMode()
-            engine.disconnectNodeOutput(player)
-            engine.disconnectNodeOutput(eqNode)
-            engine.detach(player)
-        }
-
-        try engine.enableManualRenderingMode(
-            .offline,
-            format: inputFormat,
-            maximumFrameCount: 4_096
-        )
-
-        try engine.start()
-        player.scheduleFile(inputFile, at: nil)
-        player.play()
-
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: engine.manualRenderingFormat,
-            frameCapacity: engine.manualRenderingMaximumFrameCount
-        ) else {
+        let channelCount = Int(inputFormat.channelCount)
+        let frameCapacity: AVAudioFrameCount = 4_096
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCapacity),
+              let channels = buffer.floatChannelData else {
             throw AudioEqualizerServiceError.renderBufferUnavailable
         }
 
-        let totalFrames = inputFile.length
-        while engine.manualRenderingSampleTime < totalFrames {
-            let remainingFrames = totalFrames - engine.manualRenderingSampleTime
-            let frameCount = min(
-                AVAudioFrameCount(remainingFrames),
-                engine.manualRenderingMaximumFrameCount
-            )
+        let gains = Self.renderGains(for: preset)
+        let sampleRate = Float(inputFormat.sampleRate)
+        let lowAlpha = Self.onePoleAlpha(cutoff: 180, sampleRate: sampleRate)
+        let highAlpha = Self.onePoleAlpha(cutoff: 3_000, sampleRate: sampleRate)
+        var lowState = Array(repeating: Float(0), count: channelCount)
+        var highState = Array(repeating: Float(0), count: channelCount)
 
-            let status = try engine.renderOffline(frameCount, to: buffer)
-            switch status {
-            case .success:
-                try outputFile.write(from: buffer)
-            case .insufficientDataFromInputNode:
-                break
-            case .cannotDoInCurrentContext:
-                continue
-            case .error:
-                throw AudioEqualizerServiceError.renderingFailed
-            @unknown default:
-                throw AudioEqualizerServiceError.renderingFailed
+        while inputFile.framePosition < inputFile.length {
+            let remaining = AVAudioFrameCount(inputFile.length - inputFile.framePosition)
+            let framesToRead = min(frameCapacity, remaining)
+            try inputFile.read(into: buffer, frameCount: framesToRead)
+            let frameLength = Int(buffer.frameLength)
+            guard frameLength > 0 else { break }
+
+            for channel in 0..<channelCount {
+                let samples = channels[channel]
+                var low = lowState[channel]
+                var highLowpass = highState[channel]
+                for frame in 0..<frameLength {
+                    let input = samples[frame]
+                    low += lowAlpha * (input - low)
+                    highLowpass += highAlpha * (input - highLowpass)
+                    let high = input - highLowpass
+                    let mid = input - low - high
+                    let output = low * gains.low + mid * gains.mid + high * gains.high
+                    samples[frame] = max(-1, min(1, output))
+                }
+                lowState[channel] = low
+                highState[channel] = highLowpass
             }
+
+            try outputFile.write(from: buffer)
         }
+    }
+
+    private static func renderGains(for preset: EqualizerPreset) -> (low: Float, mid: Float, high: Float) {
+        let bands = ClipEqualizerSettings.normalizedBands(preset.bands)
+        let lowGainDb = (bands[0].gain + bands[1].gain) / 2
+        let midGainDb = bands[2].gain
+        let highGainDb = (bands[3].gain + bands[4].gain) / 2
+        return (
+            low: linearGain(db: lowGainDb),
+            mid: linearGain(db: midGainDb),
+            high: linearGain(db: highGainDb)
+        )
+    }
+
+    private static func linearGain(db: Float) -> Float {
+        pow(10, db / 20)
+    }
+
+    private static func onePoleAlpha(cutoff: Float, sampleRate: Float) -> Float {
+        guard sampleRate > 0, cutoff > 0 else { return 1 }
+        return 1 - exp(-2 * .pi * cutoff / sampleRate)
     }
 
     private func attachEQIfNeeded() {

@@ -34,6 +34,15 @@ ffmpeg -y -loglevel error -f lavfi -i "testsrc2=s=320x240:r=30" \
 ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=440:sample_rate=44100" \
   -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/tone_440hz_2s_mono.wav"
 
+# 3b) Equalizer sweep pair — simultaneous low/high tones for deterministic
+# spectrum-ratio E2E checks. 110Hz is in the bass shelf; 4kHz is in the treble
+# shelf, and both start at equal amplitude so bassBoost/trebleBoost diverge.
+ffmpeg -y -loglevel error \
+  -f lavfi -i "sine=frequency=110:sample_rate=44100" \
+  -f lavfi -i "sine=frequency=4000:sample_rate=44100" \
+  -filter_complex "[0:a][1:a]amix=inputs=2:duration=shortest:normalize=0,volume=0.5" \
+  -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/eq_low_high_2s_mono.wav"
+
 # 4) Solid blue still — image import, 64x64 PNG.
 ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=64x64" \
   -frames:v 1 -map_metadata -1 -fflags +bitexact "$OUT/swatch_blue_64x64.png"

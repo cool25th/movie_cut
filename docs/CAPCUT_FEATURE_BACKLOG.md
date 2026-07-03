@@ -78,7 +78,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 | 배경제거 F-08 | 🟡 | **✅**(실인물 E2E만 🟡) | `BackgroundRemovalGoldenTests`(alpha 255/0) |
 | 정지프레임 | 🟡 미확인 | **✅ export 반영** | E2E duration 2.0→4.0s |
 | 노이즈감소 | 🟡~❌ | **✅ 앱 런타임** | 헤드리스 크래시 없음·소스 swap |
-| EQ | 🟡~❌ | **❌ dead+볼륨근사** | `AudioEqualizerGapTests` |
+| EQ | 🟡~❌ | **✅ 앱 export 실측** | `run_e2e_export.sh` EQ spectrum: bass_ratio 2.315524 vs treble_ratio 0.488654 |
 
 **안정성(0.6)**: undo/redo 무결성(스냅샷 기반, `UndoIntegrityTests`)·크래시 복구 자동저장(`AutosaveRecoveryTests` + 앱 배선) ✅.
 
@@ -87,6 +87,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 **미검증/주의**: 위 표 외 🟡 항목(덕킹·비트감지·자동컷·리프레임·자막워크플로우·TTS·캔버스배경·클라우드)은 **아직 실측 미검증** — 자가보고 "구현됨"을 완료로 보지 말 것. 전체 `swift test`는 네트워크/Speech/마이크 통합 테스트로 헤드리스 완주 곤란(633/0 부분 통과).
 
 **S0 iOS 빌드 복구(2026-07-03)**: G-09 Inc 1로 `MovieCutiOS` generic iOS 빌드를 `CODE_SIGNING_ALLOWED=NO` 조건에서 복구했다. 같은 세션에서 `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild`, iOS generic `xcodebuild`, `scripts/run_e2e_export.sh`가 모두 PASS. CoreSimulator out-of-date는 simulator 지원 경고로 남아 있으나 generic device build에는 영향 없음.
+
+**S0 G-12 #1 EQ 청감 상환(2026-07-03)**: `AudioEqualizerService`의 앱 export 크래시 경로를 AVAudioFile 버퍼 DSP로 교체하고, `eq_low_high_2s_mono.wav` fixture + `MOVIECUT_UITEST_EQ_PRESET` 하니스 + `run_e2e_export.sh` Goertzel 측정으로 bassBoost/trebleBoost 차이를 codify했다. 실측: bass_ratio 2.315524, treble_ratio 0.488654, bass_low 2.281896e+02, bass_high 9.854772e+01, treble_low 9.240646e+01, treble_high 1.891041e+02. 남은 G-12 오디오 부채는 NR 실잡음 효과와 덕킹 청감.
 
 ---
 
@@ -140,7 +142,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - ✅ 볼륨 / 페이드 / 파형 표시
 - [x] ✅ 페이드 duration 편집 UI (P1) — Mac Inspector `Fade Duration` 그룹에서 Fade In/Fade Out 현재값을 초 단위로 표시하고 Slider + Seconds `TextField` + 0.05s Stepper로 0...min(10s, clip duration) 범위 정밀 편집을 제공한다. Reset Fades/None/Soft/Long preset은 모두 `updateSelectedAudioFade` → `AudioFadeCommand` 경로로 적용되어 undo/redo path를 유지한다.
 - [ ] 🟡 자동 덕킹(범위 기반, F-14) (P2→구현됨) — `AudioDuckingPlanner` + `Clip.duckingRanges/duckingLevel` + `SetAudioDuckingCommand`(단일 undo) + Mac preview/export 동일 ramp(attack 0.12s/release 0.25s, fade 회피) + Inspector Duck/Clear. `AudioDuckingTests` 14개. Caveat: 청감 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
-- [ ] ❌ EQ **실제 DSP** (P2) — **2026-06-23 증거 기반 판정**: 실 5밴드 `AudioEqualizerService`(AVAudioUnitEQ)는 **앱에서 호출 0회=dead code**이고 offline render 호출 시 크래시. 타임라인 EQ는 preview/export 모두 **평균게인→단일 볼륨 배수 근사**(실 EQ 아님; `AudioEqualizerGapTests`로 잠금). 실 EQ 배선은 **Phase 2A**(MTAudioProcessingTap/pre-render).
+- [x] ✅ EQ **실제 DSP + 앱 export 스펙트럼 검증** (P2) — **2026-07-03 G-12 #1 상환**: 과거 판정(`AudioEqualizerService` dead/crash + 평균게인 볼륨근사)은 현재 해소. `AudioEqualizerService`는 AVAudioFile 버퍼 DSP로 bass/mid/treble 대역을 분리 적용하고, Mac 하니스 `MOVIECUT_UITEST_EQ_PRESET`이 command-backed `applyEQPreset` 경로로 선택 클립에 적용한다. `run_e2e_export.sh`가 `eq_low_high_2s_mono.wav`를 bassBoost/trebleBoost로 각각 앱 export 후 Goertzel 측정: bass_ratio 2.315524 vs treble_ratio 0.488654, treble_high 1.891041e+02 > bass_high 9.854772e+01. Caveat: UI 슬라이더 실조작 녹화와 세밀한 5밴드 청감 튜닝은 후속 품질 작업으로 남는다.
 - [x] ✅ 노이즈감소 **실제 DSP** (P2) — **2026-06-23 검증**: `NoiseReductionService`(HPF 80Hz+LPF 12kHz+Dynamics offline)가 `applyNoiseReduction(for:)` destructive apply로 클립 소스를 denoise 파일로 교체. **앱 컨텍스트 런타임 확정**(헤드리스: 크래시 없이 exit 0/error=none/소스 swap; `run_e2e_export.sh`). Caveat: 실잡음 효과 청감은 선택. (EQ의 swift-test 크래시는 환경 artifact였음.)
 - [ ] 🟡 비트 감지(음악 동기 편집, F-15) (P2→구현됨) — `BeatDetectionProvider`(에너지 플럭스 onset, 합성 클릭 트랙으로 <50ms 간격 검증) + `Marker.kind(.beat)` + 배치 마커 명령(단일 undo) + 룰러 틱 렌더/스냅 포함 + Quick Tools Detect/Clear Beats. `BeatDetectionTests` 13개. Caveat: 실음원 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [x] ✅ 보이스오버 실제 마이크 녹음 (P1) — Mac `VoiceoverRecordingView`가 macOS `AVCaptureDevice` microphone 권한을 확인/요청하고, shared `VoiceoverRecorder`의 `AVAudioEngine` input tap 경로로 temp CAF에 실제 녹음한다. 녹음 UI는 timer/input level/saving progress/accessibility label·hint를 제공하고, stop 시 recorder elapsed time을 `fallbackDuration`으로 `EditorViewModel.addVoiceoverAudio(from:fallbackDuration:)`에 넘긴다. EditorViewModel은 `audioDuration(for:)`로 readable audio duration을 먼저 쓰고, recorder fallback duration, 0.1s minimum 순서로 duration을 확정해 playhead 위치에 audio clip을 추가/선택한다. `MediaImporter`는 voiceover CAF를 audio asset으로 분류한다. Caveat: 실제 마이크 접근은 `NSMicrophoneUsageDescription`, macOS Microphone 권한, 선택된 입력 하드웨어에 의존하므로 호스트에서 실제 녹음 검증이 필요하다.

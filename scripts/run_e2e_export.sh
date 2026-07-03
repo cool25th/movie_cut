@@ -87,6 +87,62 @@ case "$NR_STATUS" in
   *) echo "FAIL: noise reduction did not complete cleanly (status: $NR_STATUS)" >&2; exit 1 ;;
 esac
 
+# Equalizer must produce a real spectral difference in the app/export path, not a
+# static UI claim. The fixture contains equal 110Hz and 4kHz tones; bassBoost
+# must raise the low/high energy ratio relative to trebleBoost.
+EQ_FIXTURE="$ROOT/Tests/Fixtures/eq_low_high_2s_mono.wav"
+[ -s "$EQ_FIXTURE" ] || { echo "missing EQ fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+EQ_BASS="$(mktemp -d)/eq_bass.m4a"
+EQ_TREBLE="$(mktemp -d)/eq_treble.m4a"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$EQ_FIXTURE" MOVIECUT_UITEST_EQ_PRESET="bassBoost" \
+  MOVIECUT_UITEST_EXPORT="$EQ_BASS" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+EP=$!; for _ in $(seq 1 120); do [ -s "$EQ_BASS" ] && break; sleep 0.5; done; wait "$EP" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$EQ_FIXTURE" MOVIECUT_UITEST_EQ_PRESET="trebleBoost" \
+  MOVIECUT_UITEST_EXPORT="$EQ_TREBLE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+EP=$!; for _ in $(seq 1 120); do [ -s "$EQ_TREBLE" ] && break; sleep 0.5; done; wait "$EP" 2>/dev/null || true
+[ -s "$EQ_BASS" ] || { echo "FAIL: bassBoost EQ export missing" >&2; exit 1; }
+[ -s "$EQ_TREBLE" ] || { echo "FAIL: trebleBoost EQ export missing" >&2; exit 1; }
+EQ_METRICS="$(python3 - "$EQ_BASS" "$EQ_TREBLE" <<'PY'
+import math, struct, subprocess, sys
+
+def tone_power(path, freq):
+    raw = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-ac", "1", "-ar", "44100", "-f", "f32le", "-"
+    ])
+    if not raw:
+        raise SystemExit(f"no decoded audio for {path}")
+    count = len(raw) // 4
+    samples = struct.unpack("<" + "f" * count, raw)
+    # Use at most the first 2s to match the deterministic fixture.
+    n = min(count, 88200)
+    samples = samples[:n]
+    omega = 2.0 * math.pi * freq / 44100.0
+    cos_sum = 0.0
+    sin_sum = 0.0
+    for i, s in enumerate(samples):
+        cos_sum += s * math.cos(omega * i)
+        sin_sum += s * math.sin(omega * i)
+    return (cos_sum * cos_sum + sin_sum * sin_sum) / max(n, 1)
+
+def ratio(path):
+    low = tone_power(path, 110.0)
+    high = tone_power(path, 4000.0)
+    return low / max(high, 1e-18), low, high
+
+bass_ratio, bass_low, bass_high = ratio(sys.argv[1])
+treble_ratio, treble_low, treble_high = ratio(sys.argv[2])
+print(f"bass_ratio={bass_ratio:.6f} treble_ratio={treble_ratio:.6f} bass_low={bass_low:.6e} bass_high={bass_high:.6e} treble_low={treble_low:.6e} treble_high={treble_high:.6e}")
+# A real EQ should move the low/high ratio in opposite directions by a wide
+# margin. Keep thresholds loose enough for AAC/container differences while still
+# rejecting volume-only processing.
+if not (bass_ratio > treble_ratio * 2.0 and bass_low > treble_low * 1.25 and treble_high > bass_high * 1.25):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: equalizer spectrum check failed (${EQ_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$EQ_BASS")" "$(dirname "$EQ_TREBLE")"; exit 1; }
+rm -rf "$(dirname "$EQ_BASS")" "$(dirname "$EQ_TREBLE")"
+echo "PASS: EQ bassBoost vs trebleBoost spectrum diverged ($EQ_METRICS)"
+
 # 3-way color grade must be reflected in export: a warm grade shifts the exported
 # average color (red up, blue down) vs an ungraded export of the same clip.
 BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
@@ -190,4 +246,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction + EQ spectrum + color grade + scope + prores + hdr + autosave)"

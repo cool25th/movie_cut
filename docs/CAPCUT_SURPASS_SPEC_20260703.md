@@ -509,6 +509,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 **AC**: 표의 1~12가 E2E/골든으로 codify되어 `run_e2e_export.sh`(또는 테스트 스위트) PASS. 13~14는 녹화 증거. 백로그 전 항목 ✅/❌ 재판정 완료.
 
+검증 기록:
+- 2026-07-03 G-12 #1 EQ 청감: `eq_low_high_2s_mono.wav` fixture + `MOVIECUT_UITEST_EQ_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` Goertzel 측정 PASS. bassBoost/trebleBoost 스펙트럼: bass_ratio=2.315524, treble_ratio=0.488654, bass_low=2.281896e+02, bass_high=9.854772e+01, treble_low=9.240646e+01, treble_high=1.891041e+02.
+
 ---
 
 ### G-13. 내추럴 리터치 — P3 / S5 / 규모 M ⚠️ 착수 전 합의 필요

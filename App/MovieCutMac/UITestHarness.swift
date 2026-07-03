@@ -94,6 +94,13 @@ extension EditorViewModel {
             }
         }
 
+        // Optional equalizer step: applies the real command-backed clip EQ preset
+        // before export so scripts can measure bass/treble spectrum changes from
+        // the app runtime rather than a unit-test-only service call.
+        if let eqPreset = env["MOVIECUT_UITEST_EQ_PRESET"], !eqPreset.isEmpty, selectedClipId != nil {
+            await applyEQPreset(eqPreset)
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))

@@ -1741,7 +1741,7 @@ private struct InspectorTextTemplateThumbnail: View {
         let strokeColor = content.strokeColor.map { Self.color(from: $0) } ?? .clear
         let strokeWidth = min(max(CGFloat(content.strokeWidth ?? 0) * 0.25, 0), 2)
         let shadowColor = content.shadowColor.map { Self.color(from: $0).opacity(0.9) } ?? .clear
-        let shadowOffset = content.shadowOffset ?? .zero
+        let shadowOffset = content.shadowOffset ?? CGPoint(x: 0, y: 0)
         let shadowRadius = min(max(CGFloat(content.shadowBlur ?? 0) * 0.18, 0), 4)
 
         return label
@@ -1794,7 +1794,7 @@ private struct InspectorTextTemplateThumbnail: View {
 
     private func previewPosition(in size: CGSize) -> CGPoint {
         guard size.width > 0, size.height > 0 else {
-            return .zero
+            return CGPoint(x: 0, y: 0)
         }
 
         let isDefaultPosition = abs(content.position.x) <= 1.0e-9 && abs(content.position.y) <= 1.0e-9

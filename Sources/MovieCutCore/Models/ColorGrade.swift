@@ -56,3 +56,19 @@ public struct ColorGrade: Codable, Sendable, Equatable {
         Swift.min(Swift.max(value, minimum), maximum)
     }
 }
+
+/// A normalized tone-curve control point. Both axes are clamped to 0...1.
+public struct CurvePoint: Codable, Sendable, Equatable, Hashable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = Self.clamp(x)
+        self.y = Self.clamp(y)
+    }
+
+    private static func clamp(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return Swift.min(Swift.max(value, 0), 1)
+    }
+}

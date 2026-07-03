@@ -198,6 +198,9 @@ public struct CurvePoint: Codable, Sendable, Equatable { public var x: Double; p
 6. 구버전 프로젝트 decode → `hslBands == nil`, `curves == nil`, 렌더 결과 기존과 비트 동일 (기존 골든 6종 무회귀).
 7. 커브 드래그 중 preview 갱신 지연 100ms 이하 (스로틀 측정 로그).
 
+검증 기록:
+- 2026-07-04 G-02 Inc 1: `CurvePoint` + `CurveEvaluator` 순수 로직 추가. Monotone cubic Hermite/Fritsch-Carlson tangents, endpoints fixed `(0,0)/(1,1)`, duplicate-x last-write deterministic, 256-entry LUT clamp/no-overshoot. `swift test --filter CurveEvaluator` PASS (6 tests: identity diagonal, sanitized sort/endpoints, duplicate x, midtone raise, monotone nondecreasing, arbitrary no-overshoot). 렌더 체이닝/HSL/UI/iOS는 미연결이며 Inc 2+ 대상.
+
 #### 검증 계획
 - `CurveEvaluatorTests` / `HSLCubeBuilderTests` (순수 로직) + `ColorGradeGoldenTests` 확장(AC①~③) + `run_e2e_export.sh` grade 체크 확장(AC④⑤).
 - 실기기: W5 완주 녹화(스코프 보며 HSL/커브 조작 → HDR export).

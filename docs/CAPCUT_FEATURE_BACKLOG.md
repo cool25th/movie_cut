@@ -100,6 +100,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **S0 G-12 #8 플랫폼 프리셋 5종 상환(2026-07-04)**: `bars_320x240_3s_30fps.mp4` fixture, DEBUG 앱 하니스 `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>`, 실제 `applyPlatformExportPreset` → `exportProject(to:)` 경로를 `run_e2e_export.sh` ffprobe 검증으로 codify했다. 실측: TikTok/Reels/Shorts 1080x1920 30/1 h264 `.mp4`, YouTube Standard 1920x1080 30/1 h264 `.mp4`, Instagram Post 1080x1080 30/1 h264 `.mp4` (`format_name=mov,mp4,m4a,3gp,3g2,mj2`).
 
+**S1 G-02 Inc 1 커브 수학 착수/완료(2026-07-04)**: `CurvePoint`와 `CurveEvaluator` 순수 로직을 추가했다. 256-entry LUT, endpoint 고정 `(0,0)/(1,1)`, duplicate-x last-write deterministic, monotone cubic Hermite/Fritsch-Carlson tangents, 0...1 clamp/no-overshoot를 `CurveEvaluatorTests` 6개로 검증했다. Caveat: 아직 `ColorGradePixelProcessor` 렌더 체이닝, `ColorCurves` 모델 저장, HSL, Mac/iOS UI는 미연결이며 G-02 Inc 2+ 범위다.
+
 ---
 
 ## 3. CapCut 기능 백로그 (도메인별)

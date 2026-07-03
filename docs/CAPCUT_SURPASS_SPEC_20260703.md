@@ -513,6 +513,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-03 G-12 #1 EQ 청감: `eq_low_high_2s_mono.wav` fixture + `MOVIECUT_UITEST_EQ_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` Goertzel 측정 PASS. bassBoost/trebleBoost 스펙트럼: bass_ratio=2.315524, treble_ratio=0.488654, bass_low=2.281896e+02, bass_high=9.854772e+01, treble_low=9.240646e+01, treble_high=1.891041e+02.
 - 2026-07-04 G-12 #2 NR 실잡음 효과: `noisy_voice_1k_hiss_8k_2s_mono.wav` fixture + `MOVIECUT_UITEST_DENOISE` 앱 하니스 + `scripts/run_e2e_export.sh` Goertzel 측정 PASS. base_ratio=0.248784, denoised_ratio=0.075641, improvement_db=5.17, voice_retention=0.913, base_hiss=4.195051e+01, denoised_hiss=1.164459e+01.
 - 2026-07-04 G-12 #3 덕킹 청감: `duck_bgm_220hz_4s_mono.wav` + `duck_voice_1000hz_1s_mono.wav` fixtures, `MOVIECUT_UITEST_DUCKING_*` 앱 하니스, `SetAudioDuckingCommand` export ramp, `scripts/run_e2e_export.sh` Goertzel 측정 PASS. base_voice=3.098866e+01, ducked_voice=1.935795e+00, reduction_db=12.04, quiet_delta_db=0.00, ducked_voice_quiet_ratio=0.062.
+- 2026-07-04 G-12 #8 플랫폼 프리셋 5종: `bars_320x240_3s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLATFORM_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe 측정 PASS. TikTok/Reels/Shorts=1080x1920 30/1 h264 mp4, YouTube Standard=1920x1080 30/1 h264 mp4, Instagram Post=1080x1080 30/1 h264 mp4.
 
 ---
 

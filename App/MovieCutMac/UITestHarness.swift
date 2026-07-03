@@ -40,6 +40,7 @@ extension EditorViewModel {
     /// Environment:
     /// - `MOVIECUT_UITEST=1` — enables the harness.
     /// - `MOVIECUT_UITEST_IMPORT=<path>` — media imported and added to the timeline.
+    /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
@@ -114,6 +115,14 @@ extension EditorViewModel {
         // the app runtime rather than a unit-test-only service call.
         if let eqPreset = env["MOVIECUT_UITEST_EQ_PRESET"], !eqPreset.isEmpty, selectedClipId != nil {
             await applyEQPreset(eqPreset)
+        }
+
+        if let rawPlatformPreset = env["MOVIECUT_UITEST_PLATFORM_PRESET"], !rawPlatformPreset.isEmpty {
+            if let preset = PlatformExportPreset(rawValue: rawPlatformPreset) {
+                await applyPlatformExportPreset(preset)
+            } else {
+                lastErrorMessage = "unknown platform preset: \(rawPlatformPreset)"
+            }
         }
 
         if lastErrorMessage == nil,

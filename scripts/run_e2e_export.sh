@@ -263,6 +263,82 @@ echo "PASS: ducking lowered BGM under voice ($DUCK_METRICS)"
 # 3-way color grade must be reflected in export: a warm grade shifts the exported
 # average color (red up, blue down) vs an ungraded export of the same clip.
 BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
+
+platform_export_check() {
+  local raw="$1"
+  local label="$2"
+  local expected_width="$3"
+  local expected_height="$4"
+  local expected_fps="$5"
+  local expected_codec="$6"
+  local expected_ext="$7"
+  local tmpdir
+  local out
+  tmpdir="$(mktemp -d)"
+  out="$tmpdir/${raw}.${expected_ext}"
+
+  env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_PLATFORM_PRESET="$raw" \
+    MOVIECUT_UITEST_EXPORT="$out" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+  local pp=$!
+  for _ in $(seq 1 240); do [ -s "$out" ] && break; sleep 0.5; done
+  wait "$pp" 2>/dev/null || true
+
+  if [ ! -s "$out" ]; then
+    echo "FAIL: ${label} platform preset export missing" >&2
+    rm -rf "$tmpdir"
+    exit 1
+  fi
+
+  local width
+  local height
+  local avg_frame_rate
+  local codec
+  local format_name
+  width="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$out" 2>/dev/null)"
+  height="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$out" 2>/dev/null)"
+  avg_frame_rate="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$out" 2>/dev/null)"
+  codec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$out" 2>/dev/null)"
+  format_name="$(ffprobe -v error -show_entries format=format_name -of csv=p=0 "$out" 2>/dev/null)"
+
+  if [ "$width" != "$expected_width" ] || [ "$height" != "$expected_height" ]; then
+    echo "FAIL: ${label} preset exported ${width}x${height}, expected ${expected_width}x${expected_height}" >&2
+    rm -rf "$tmpdir"
+    exit 1
+  fi
+  if [ "$codec" != "$expected_codec" ]; then
+    echo "FAIL: ${label} preset codec ${codec}, expected ${expected_codec}" >&2
+    rm -rf "$tmpdir"
+    exit 1
+  fi
+  if [ "${out##*.}" != "$expected_ext" ]; then
+    echo "FAIL: ${label} preset extension ${out##*.}, expected ${expected_ext}" >&2
+    rm -rf "$tmpdir"
+    exit 1
+  fi
+  case "$format_name" in
+    *"$expected_ext"*) ;;
+    *) echo "FAIL: ${label} preset container ${format_name}, expected ${expected_ext}" >&2; rm -rf "$tmpdir"; exit 1 ;;
+  esac
+  awk -v r="$avg_frame_rate" -v expected="$expected_fps" 'BEGIN {
+      split(r, parts, "/")
+      fps = (parts[2] && parts[2] != 0) ? parts[1] / parts[2] : r + 0
+      exit !(fps > expected - 0.05 && fps < expected + 0.05)
+    }' || {
+      echo "FAIL: ${label} preset fps ${avg_frame_rate}, expected ${expected_fps}" >&2
+      rm -rf "$tmpdir"
+      exit 1
+    }
+
+  echo "PASS: ${label} preset export ${width}x${height} ${avg_frame_rate} ${codec} ${format_name} .${expected_ext}"
+  rm -rf "$tmpdir"
+}
+
+platform_export_check "tikTok" "TikTok" "1080" "1920" "30" "h264" "mp4"
+platform_export_check "instagramReels" "Instagram Reels" "1080" "1920" "30" "h264" "mp4"
+platform_export_check "youtubeShorts" "YouTube Shorts" "1080" "1920" "30" "h264" "mp4"
+platform_export_check "youtubeStandard" "YouTube Standard" "1920" "1080" "30" "h264" "mp4"
+platform_export_check "instagramPost" "Instagram Post" "1080" "1080" "30" "h264" "mp4"
+
 favg() { ffmpeg -v error -i "$1" -vf "scale=1:1" -frames:v 1 -f rawvideo -pix_fmt rgb24 - 2>/dev/null | xxd -p; }
 GBASE="$(mktemp -d)/gbase.mp4"; GGRADE="$(mktemp -d)/ggrade.mp4"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT="$GBASE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
@@ -363,4 +439,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + ducking RMS + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"

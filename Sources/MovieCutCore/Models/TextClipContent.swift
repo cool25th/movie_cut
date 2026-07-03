@@ -80,6 +80,9 @@ public struct TextClipContent: Codable, Sendable, Equatable {
     /// Renders the font with an italic trait when available.
     public var isItalic: Bool
 
+    /// Optional word timings relative to this text clip's source/timeline start.
+    public var wordTimings: [WordTiming]?
+
     /// Whether this text payload should be treated as a sticker overlay.
     public var isSticker: Bool {
         contentKind == .sticker
@@ -104,6 +107,7 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         case shadowBlur
         case isBold
         case isItalic
+        case wordTimings
     }
 
     private struct LegacyPoint: Decodable {
@@ -130,7 +134,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         shadowOffset: CGPoint? = nil,
         shadowBlur: Double? = nil,
         isBold: Bool = false,
-        isItalic: Bool = false
+        isItalic: Bool = false,
+        wordTimings: [WordTiming]? = nil
     ) {
         self.text = text
         self.fontFamily = fontFamily
@@ -150,6 +155,7 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         self.shadowBlur = shadowBlur
         self.isBold = isBold
         self.isItalic = isItalic
+        self.wordTimings = wordTimings
     }
 
     public init(from decoder: any Decoder) throws {
@@ -172,6 +178,7 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         shadowBlur = try container.decodeIfPresent(Double.self, forKey: .shadowBlur)
         isBold = try container.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
         isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
+        wordTimings = try container.decodeIfPresent([WordTiming].self, forKey: .wordTimings)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -194,6 +201,7 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         try container.encodeIfPresent(shadowBlur, forKey: .shadowBlur)
         if isBold { try container.encode(isBold, forKey: .isBold) }
         if isItalic { try container.encode(isItalic, forKey: .isItalic) }
+        try container.encodeIfPresent(wordTimings, forKey: .wordTimings)
     }
 
     private static func decodePointIfPresent(

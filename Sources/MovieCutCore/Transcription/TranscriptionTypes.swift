@@ -1,5 +1,52 @@
 import Foundation
 
+/// A word-level timing emitted by a speech provider.
+public struct WordTiming: Codable, Sendable, Equatable, Identifiable, Hashable {
+    public var id: UUID
+    public var text: String
+    public var startTime: TimeInterval
+    public var endTime: TimeInterval
+    public var confidence: Double
+
+    public init(
+        id: UUID = UUID(),
+        text: String,
+        startTime: TimeInterval,
+        endTime: TimeInterval,
+        confidence: Double
+    ) {
+        self.id = id
+        self.text = text
+        self.startTime = max(0, startTime)
+        self.endTime = max(self.startTime, endTime)
+        self.confidence = min(max(confidence, 0.0), 1.0)
+    }
+
+    public func clamped(to range: TimeRange) -> WordTiming {
+        let lower = range.start
+        let upper = range.end
+        let clampedStart = min(max(startTime, lower), upper)
+        let clampedEnd = min(max(endTime, clampedStart), upper)
+        return WordTiming(
+            id: id,
+            text: text,
+            startTime: clampedStart,
+            endTime: clampedEnd,
+            confidence: confidence
+        )
+    }
+
+    public func shifted(by offset: TimeInterval) -> WordTiming {
+        WordTiming(
+            id: id,
+            text: text,
+            startTime: startTime + offset,
+            endTime: endTime + offset,
+            confidence: confidence
+        )
+    }
+}
+
 /// A single timed speech segment produced by transcription.
 public struct TranscriptionSegment: Codable, Sendable, Equatable, Identifiable {
     /// The segment identifier.
@@ -17,19 +64,24 @@ public struct TranscriptionSegment: Codable, Sendable, Equatable, Identifiable {
     /// Provider confidence from 0.0 to 1.0.
     public var confidence: Double
 
+    /// Optional word timings in source-audio absolute seconds.
+    public var words: [WordTiming]?
+
     /// Creates a transcription segment.
     public init(
         id: UUID = UUID(),
         text: String,
         startTime: TimeInterval,
         endTime: TimeInterval,
-        confidence: Double
+        confidence: Double,
+        words: [WordTiming]? = nil
     ) {
         self.id = id
         self.text = text
         self.startTime = startTime
         self.endTime = endTime
         self.confidence = min(max(confidence, 0.0), 1.0)
+        self.words = words
     }
 }
 

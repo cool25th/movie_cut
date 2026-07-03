@@ -72,10 +72,9 @@
 4. SRT export는 문장 단위 호환을 유지한다(워드 정보는 SRT 표준 밖 — 유실 허용, 프로젝트 파일에는 보존).
 
 #### 현재 상태 (실사)
-- `TranscriptionSegment`(`Sources/MovieCutCore/Transcription/TranscriptionTypes.swift:4`)는 `text/startTime/endTime/confidence`만 보유 — **워드 타이밍 없음**.
-- `SpeechTranscriptionProvider`가 `SFSpeechRecognizer`를 사용 — `SFTranscriptionSegment`는 워드별 `timestamp`/`duration`을 이미 제공하나 버려지고 있음.
-- `TextClipContent`는 stroke/shadow/bold 등 데코 필드 완비(F-12R) — 워드 개념 없음.
-- 렌더는 `TextOverlayPixelProcessor`(CoreText attributed string) — Mac/iOS compositor 위임 구조(A2) 재사용 가능.
+- 2026-07-04 Inc 1: `TranscriptionSegment.words`와 `TextClipContent.wordTimings` optional 필드가 추가됐고, `SpeechTranscriptionProvider`가 `SFTranscriptionSegment`의 word timestamp/duration/confidence를 보존한다. `SubtitleGenerator`는 세그먼트 절대 word 시각을 클립 상대 시각으로 변환해 저장한다.
+- `TextClipContent`는 stroke/shadow/bold 등 데코 필드 완비(F-12R) + word timing 저장 필드 보유. 아직 caption style 참조/active word 렌더는 미구현.
+- 렌더는 `TextOverlayPixelProcessor`(CoreText attributed string) — Mac/iOS compositor 위임 구조(A2) 재사용 가능하나, 워드 단위 하이라이트 적용은 Inc 3+ 범위.
 
 #### 데이터 모델 (A5 준수 — 전부 optional 추가)
 
@@ -131,6 +130,7 @@ public var captionStyle: CaptionStyle?   // 참조 깨짐 방지용 인라인 �
 6. 60프레임 자막 렌더 성능: 워드 판정+run 분리 오버헤드가 프레임당 1ms 이하(측정 로그).
 
 #### 검증 계획
+- 2026-07-04 G-01 Inc 1: `WordTiming`, `TranscriptionSegment.words`, `TextClipContent.wordTimings`, Apple Speech segment 보존, `SubtitleGenerator` 상대시각 변환을 추가했다. `StyledCaptionWordTimingTests`가 legacy decode nil, word timing Codable round-trip/confidence clamp, TextClipContent legacy decode, segment absolute→clip relative 변환, segment 밖 word clamp, SRT sentence compatibility/word timing omission을 검증한다. 검증: `swift build` PASS, `swift test --filter StyledCaptionWordTiming` PASS(6 tests). Caveat: caption style model/active-word renderer/compositor/UI/iOS는 Inc 2+.
 - `WordTimingTests`(추출·클립 상대 변환·이진 탐색), `CaptionStyleGoldenTests`(AC②·스타일별 1골든), `run_e2e_export.sh`에 `MOVIECUT_UITEST_CAPTION` 훅(자막 스타일 적용 → export → 프레임 픽셀 검사).
 - 실기기: STT→스타일→export 완주 GUI 녹화 (W6).
 

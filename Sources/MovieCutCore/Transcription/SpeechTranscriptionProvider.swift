@@ -116,11 +116,18 @@ public struct SpeechTranscriptionProvider: TranscriptionProvider {
                         .bestTranscription
                         .segments
                         .map { segment in
-                            TranscriptionSegment(
+                            let word = WordTiming(
                                 text: segment.substring,
                                 startTime: segment.timestamp,
                                 endTime: segment.timestamp + segment.duration,
                                 confidence: Double(segment.confidence)
+                            )
+                            return TranscriptionSegment(
+                                text: segment.substring,
+                                startTime: segment.timestamp,
+                                endTime: segment.timestamp + segment.duration,
+                                confidence: Double(segment.confidence),
+                                words: [word]
                             )
                         }
 

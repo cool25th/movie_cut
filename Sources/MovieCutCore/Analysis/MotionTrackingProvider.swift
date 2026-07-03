@@ -122,6 +122,7 @@ public final class MotionTrackingProvider: AnalysisProvider {
         )
         request.trackingLevel = .accurate
 
+        let sequenceHandler = VNSequenceRequestHandler()
         var results: [TrackingResult] = []
         var time = startTime
         var didSeedInitialObservation = false
@@ -137,6 +138,7 @@ public final class MotionTrackingProvider: AnalysisProvider {
             }
 
             let timestamp = actualTime.seconds.isFinite ? actualTime.seconds : time
+
             if !didSeedInitialObservation {
                 results.append(TrackingResult(timestamp: timestamp, rect: normalizedInitialRect, confidence: 1))
                 didSeedInitialObservation = true
@@ -144,9 +146,8 @@ public final class MotionTrackingProvider: AnalysisProvider {
                 continue
             }
 
-            let handler = VNImageRequestHandler(cgImage: image, options: [:])
             do {
-                try handler.perform([request])
+                try sequenceHandler.perform([request], on: image)
             } catch {
                 throw MotionTrackingError.trackingFailed(error.localizedDescription)
             }

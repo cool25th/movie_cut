@@ -40,6 +40,20 @@ struct MediaFixtureTests {
         #expect(try await !asset.loadTracks(withMediaType: .video).isEmpty)
     }
 
+    @Test("moving subject video loads with the expected tracking fixture properties")
+    func movingSubjectVideoProperties() async throws {
+        let asset = AVURLAsset(url: MediaFixtures.movingSubjectVideo)
+        let duration = try await asset.load(.duration)
+        #expect(abs(CMTimeGetSeconds(duration) - 2.0) < 0.05)
+
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let size = try await track.load(.naturalSize)
+        let frameRate = try await track.load(.nominalFrameRate)
+        #expect(Int(size.width.rounded()) == 320)
+        #expect(Int(size.height.rounded()) == 240)
+        #expect(abs(frameRate - 30) < 0.01)
+    }
+
     @Test("tone audio loads with the expected duration and an audio track")
     func toneAudioProperties() async throws {
         let asset = AVURLAsset(url: MediaFixtures.toneAudio)

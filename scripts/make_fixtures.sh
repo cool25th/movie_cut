@@ -30,6 +30,14 @@ ffmpeg -y -loglevel error -f lavfi -i "color=c=red:s=320x240:r=30" \
 ffmpeg -y -loglevel error -f lavfi -i "testsrc2=s=320x240:r=30" \
   -t 3 "${COMMON_V[@]}" "$OUT/bars_320x240_3s_30fps.mp4"
 
+# 2b) Moving high-contrast subject — black background with a textured white box
+# moving left-to-right for Vision motion-tracking IoU verification.
+ffmpeg -y -loglevel error \
+  -f lavfi -i "color=c=black:s=320x240:r=30:d=2" \
+  -f lavfi -i "color=c=white:s=72x64:r=30:d=2" \
+  -filter_complex "[1:v]drawbox=x=8:y=8:w=56:h=48:color=black@1:t=4,drawbox=x=30:y=0:w=12:h=64:color=black@1:t=fill,drawbox=x=0:y=24:w=72:h=8:color=black@1:t=fill,drawbox=x=4:y=4:w=12:h=12:color=white@1:t=fill,drawbox=x=56:y=48:w=12:h=12:color=white@1:t=fill[obj];[0:v][obj]overlay=x='32+80*t':y=88:eval=frame" \
+  -t 2 "${COMMON_V[@]}" "$OUT/moving_subject_320x240_2s_30fps.mp4"
+
 # 3) Sine tone — audio import, 2.0s, 44100Hz mono.
 ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=440:sample_rate=44100" \
   -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/tone_440hz_2s_mono.wav"

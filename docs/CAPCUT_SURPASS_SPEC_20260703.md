@@ -1,9 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.1 / 작성일: 2026-07-03 (v1.1: UI 명세 §5 U-01~U-09 신설, 기준 커밋 `5cd5155`) / 브랜치: `feat/core-backend-expansion`
-> 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V7_FUNC_UI_20260703.md`(기능+UI 통합 격차) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
+> 버전: 1.2 / 작성일: 2026-07-03 (v1.2: V8 재감사 반영, 기준 커밋 `8efa65e`) / 브랜치: `feat/core-backend-expansion`
+> 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
-> 모든 명세는 2026-07-03 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
+> 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
+
+변경 이력:
+- 2026-07-04 v1.2: V8 재감사 반영. G-12 5/14 상환, G-09 Inc 2 진행, G-02 Inc 1~2 순수 로직, G-01 Inc 1 워드 타이밍, U-03 `Track.isLocked` dead-field 판정 정정, U-07 부분 구현 상태를 기록.
 
 ---
 
@@ -35,6 +38,8 @@
 - A5. 모델 필드 추가는 Codable 하위호환(optional 디코딩) + 디코딩 테스트 의무.
 - **A6.(신규)** Core 신설 서비스는 앱 호출부+검증 훅 동반 (§1.2-5).
 
+V8 dead-code 감사 메모: `VocalSeparationService` 계열은 G-05의 명시 부채다. 추가 후보로 `BackgroundRemovalProvider`(App=0, tests-only; 실제 렌더는 `PersonSegmentationCompositor`/iOS inline path)와 `StyleTransferProvider`(App=0, tests-only; 실제 효과는 `VisualEffectPixelProcessor` 계열)가 식별됐다. `CurveEvaluator`/`HSLCubeBuilder`도 App=0이지만 G-02 Inc 1~2 진행 산출물이므로 Inc 3에서 렌더 체이닝으로 해소해야 한다.
+
 ### 1.4 범위 제외 (Non-Goals, 변경 없음)
 
 클라우드 마켓플레이스 상용 백엔드 / SNS 직접 게시 API / AI 아바타·script-to-video / FCP·Resolve 전면 추격 / 픽셀 단위 CapCut 룩앤필 복제.
@@ -53,9 +58,11 @@
 | **S3. 체감·오디오** | 편집 체감 + 오디오 스위트 | G-04, G-05, G-06, G-09(본대) | W7 완주 + 필름스트립 성능 측정 |
 | **S4. 확장·상호운용** | 이펙트/에셋/NLE 연계 | G-07, G-08, G-10, G-11 | W8 완주 |
 | **S5. 합의 필요** | 범위 판단 후 착수 | G-13, G-14 | 별도 합의 |
-| **SU. UI 트랙 (병행)** | 제품 표면·체감 완성 | U-01~U-09 (§5) | 슬롯 순서: U-08 → U-02(+G-04) → U-01 → U-04/U-03/U-05 → U-06 → U-07/U-09 (`GAP_ANALYSIS_V7_FUNC_UI_20260703.md` §6) |
+| **SU. UI 트랙 (병행)** | 제품 표면·체감 완성 | U-01~U-09 (§5) | 슬롯 순서: U-08 → U-02(+G-04) → U-01 → U-04/U-03/U-05 → U-06 → U-07/U-09 (`GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §9) |
 
 순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. **UI 트랙은 전 단계 병행하되 U-08(회귀 인프라)을 선행**하고, U-02는 G-04와, U-07은 G-07/G-08과 같은 세션 묶음을 권장. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `CAPCUT_FEATURE_BACKLOG.md` 갱신.
+
+V8 재감사 상태(2026-07-04): S0는 아직 완료가 아니다. G-12는 14개 중 5개(#1 EQ, #2 NR, #3 ducking, #4 motion tracking, #8 platform presets)만 상환됐고, G-09는 iOS generic build와 파리티 매트릭스 재감사까지 진행됐으나 CI job, iOS W1 녹화, iOS E2E가 남아 있다. G-02/G-01 착수분은 S1/S2 진행중 증거로만 본다.
 
 ---
 
@@ -75,6 +82,7 @@
 - 2026-07-04 Inc 1: `TranscriptionSegment.words`와 `TextClipContent.wordTimings` optional 필드가 추가됐고, `SpeechTranscriptionProvider`가 `SFTranscriptionSegment`의 word timestamp/duration/confidence를 보존한다. `SubtitleGenerator`는 세그먼트 절대 word 시각을 클립 상대 시각으로 변환해 저장한다.
 - `TextClipContent`는 stroke/shadow/bold 등 데코 필드 완비(F-12R) + word timing 저장 필드 보유. 아직 caption style 참조/active word 렌더는 미구현.
 - 렌더는 `TextOverlayPixelProcessor`(CoreText attributed string) — Mac/iOS compositor 위임 구조(A2) 재사용 가능하나, 워드 단위 하이라이트 적용은 Inc 3+ 범위.
+- V8 grep: `TextClipContent.wordTimings`는 저장/테스트에는 존재하지만 `TextOverlayPixelProcessor`와 Mac/iOS compositor가 active word를 읽지 않는다. `CaptionStyle` 타입/프리셋도 아직 없다. 따라서 G-01은 **진행중(Inc 1 완료)**이며 사용자-visible styled caption 완료가 아니다.
 
 #### 데이터 모델 (A5 준수 — 전부 optional 추가)
 
@@ -149,8 +157,9 @@ public var captionStyle: CaptionStyle?   // 참조 깨짐 방지용 인라인 �
 4. 구버전 프로젝트 호환(A5).
 
 #### 현재 상태 (실사)
-- `ColorGrade`(`Models/ColorGrade.swift:13`): `lift: RGB` / `gamma: Double`(master) / `gain: RGB`, init에서 클램핑, `isIdentity` 게이트. **HSL·커브 없음**(grep 0건).
-- 렌더는 `ColorGradePixelProcessor`(CIColorMatrix slope+offset → CIGammaAdjust). 골든 6종 보유.
+- `ColorGrade`(`Models/ColorGrade.swift`): `lift: RGB` / `gamma: Double`(master) / `gain: RGB`, init에서 클램핑, `isIdentity` 게이트. V8 기준 `hslBands`/`curves` 저장 필드는 아직 없다.
+- 2026-07-04 Inc 1~2: `CurvePoint`, `HSLBandCenter`, `HSLBand`, `CurveEvaluator`, `HSLCubeBuilder` 순수 로직과 유닛 테스트가 추가됐다. 그러나 App 호출은 0회이며 `ColorGradePixelProcessor`가 아직 이 로직을 소비하지 않는다.
+- 렌더는 여전히 `ColorGradePixelProcessor`(CIColorMatrix slope+offset → CIGammaAdjust) 기반 3-way only다. HSL(`CIColorCube`)·커브 LUT 체이닝, cache, preview/export/iOS 검증은 Inc 3+.
 - 스코프 3종(`ScopeAnalyzer`) + 휠(`ColorGradeWheel`) + `refreshScopes` 파이프라인 완비 — 커브/HSL 추가 시 즉시 연동 가능.
 
 #### 데이터 모델
@@ -199,7 +208,7 @@ public struct CurvePoint: Codable, Sendable, Equatable { public var x: Double; p
 7. 커브 드래그 중 preview 갱신 지연 100ms 이하 (스로틀 측정 로그).
 
 검증 기록:
-- 2026-07-04 G-02 Inc 1: `CurvePoint` + `CurveEvaluator` 순수 로직 추가. Monotone cubic Hermite/Fritsch-Carlson tangents, endpoints fixed `(0,0)/(1,1)`, duplicate-x last-write deterministic, 256-entry LUT clamp/no-overshoot. `swift test --filter CurveEvaluator` PASS (6 tests: identity diagonal, sanitized sort/endpoints, duplicate x, midtone raise, monotone nondecreasing, arbitrary no-overshoot). 렌더 체이닝/HSL/UI/iOS는 미연결이며 Inc 2+ 대상.
+- 2026-07-04 G-02 Inc 1: `CurvePoint` + `CurveEvaluator` 순수 로직 추가. Monotone cubic Hermite/Fritsch-Carlson tangents, endpoints fixed `(0,0)/(1,1)`, duplicate-x last-write deterministic, 256-entry LUT clamp/no-overshoot. `swift test --filter CurveEvaluator` PASS (6 tests: identity diagonal, sanitized sort/endpoints, duplicate x, midtone raise, monotone nondecreasing, arbitrary no-overshoot). 렌더 체이닝/UI/iOS는 미연결이며 Inc 3+ 대상.
 - 2026-07-04 G-02 Inc 2: `HSLBandCenter` + `HSLBand` + `HSLCubeBuilder` 순수 로직 추가. 8밴드 hue center, 45° cosine falloff, hue wrap-around, RGB↔HSL 변환, RGBA cube data(`size^3*4`)를 구현했다. `swift test --filter HSLCubeBuilder` PASS (6 tests: identity passthrough, red saturation -1 grayscale, blue unaffected, red hueShift toward orange, red-boundary falloff wrap, identity cube shape/endpoints). 렌더 체이닝/UI/iOS는 Inc 3+ 대상.
 
 #### 검증 계획
@@ -299,7 +308,7 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 #### 현재 상태 (실사)
 - `VocalSeparationService`(`Sources/MovieCutCore/Audio/VocalSeparationService.swift`): `CenterChannelVocalSeparator`(mid/side DSP, `removeVocals`/`isolateCenter`, amount 0~1, ML seam 프로토콜 `AudioStemSeparator`) — **알고리즘은 실재하나 앱 호출 0회 dead code** (A6 위반 사례 2호).
 - 배선 전례: `NoiseReductionService` — offline render → denoise 파일 생성 → 클립 소스 destructive 교체, `MOVIECUT_UITEST_DENOISE` E2E 훅. 이 패턴 그대로 복제 가능.
-- EQ는 `c7e9d23`에서 실 5밴드 DSP 배선 커밋됨 — 청감 검증 잔여.
+- V8 기준 EQ/NR/덕킹 청감 검증은 G-12 #1~#3에서 상환됐다. G-05의 잔여 핵심은 보컬 분리 앱 배선/E2E와 보이스 FX다.
 
 #### 구현 증분
 
@@ -443,6 +452,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 검증 기록:
 - 2026-07-03 G-09 Inc 1: `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild ... MovieCutMac`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, `scripts/run_e2e_export.sh` 모두 PASS. CoreSimulator out-of-date는 simulator device support 경고로 기록.
 - 2026-07-04 G-09 Inc 2: `PLATFORM_PARITY_MATRIX.md`를 기능 × Core/Mac UI/iOS UI/Mac preview-export/iOS preview-export로 재감사하고 Mac-only/iOS defer 15건에 사유 1줄씩 기록. `IOSParityMatrixStaticContractTests`로 문서/코드 신호를 잠그고 `swift build`, `swift test --filter 'StaticContract|Golden|iOS|Parity'`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, Mac `xcodebuild ... MovieCutMac` PASS.
+- V8 caveat: `.github/workflows/ci.yml`은 `swift test`만 확인되며 iOS build job은 아직 명시되지 않았다. `PLATFORM_PARITY_MATRIX.md`도 스스로 "iOS simulator W1 녹화는 아직 미수행"이라고 제한한다. 따라서 G-09는 Inc 1~2 진행중이며 AC 1/3/4 완료가 아니다.
 
 ---
 
@@ -520,6 +530,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-04 G-12 #3 덕킹 청감: `duck_bgm_220hz_4s_mono.wav` + `duck_voice_1000hz_1s_mono.wav` fixtures, `MOVIECUT_UITEST_DUCKING_*` 앱 하니스, `SetAudioDuckingCommand` export ramp, `scripts/run_e2e_export.sh` Goertzel 측정 PASS. base_voice=3.098866e+01, ducked_voice=1.935795e+00, reduction_db=12.04, quiet_delta_db=0.00, ducked_voice_quiet_ratio=0.062.
 - 2026-07-04 G-12 #4 모션 트래킹 실영상: `moving_subject_320x240_2s_30fps.mp4` fixture + `MotionTrackingProviderTests.trackFollowsMovingSubjectFixtureByFrameIoU` 실제 `provider.track` PASS. 15fps sampling 31 samples, meanIoU=0.7929, minIoU=0.7095 (thresholds mean>=0.75, min>=0.65).
 - 2026-07-04 G-12 #8 플랫폼 프리셋 5종: `bars_320x240_3s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLATFORM_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe 측정 PASS. TikTok/Reels/Shorts=1080x1920 30/1 h264 mp4, YouTube Standard=1920x1080 30/1 h264 mp4, Instagram Post=1080x1080 30/1 h264 mp4.
+- V8 잔여(2026-07-04): #5 옵티컬 플로우, #6 텍스트 애니메이션 13종, #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #10 오디오 추출, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **5/14 진행중**으로 판정한다.
 
 ---
 
@@ -536,7 +547,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ## 5. UI 명세 (U-ID) — v1.1 신설 (2026-07-03)
 
-> 근거 분석: `GAP_ANALYSIS_V7_FUNC_UI_20260703.md` §3. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다(V7 §6).
+> 근거 분석: `GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §4~§9. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다.
 > **UI 공통 DoD** (G-ID DoD에 추가로):
 > - `UI_DESIGN_PRINCIPLES.md` 원칙(반응성·밀도·발견성·접근성) 및 디자인 토큰(`MovieCutTheme`) 준수 — 새 색/간격 하드코딩 금지.
 > - IA 계약 유지: `IAMenuPositionStaticContractTests` 통과 (Split/Delete/Add Marker의 상단 툴바 재유입 금지, transport 하단 도킹 유지).
@@ -614,8 +625,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 2. 트랙 높이 프리셋 S/M/L(오디오 트랙 파형 상세 확인용) — 프로젝트에 저장.
 
 #### 현재 상태 (실사)
-- `Track.isMuted`/`isHidden`은 UI 배선됨(`TimelineView.swift:656-672`). **`Track.isLocked`는 모델만 존재, UI grep 0건 — dead model field**(A6 취지 위반 상태).
-- 트랙 높이는 고정.
+- `Track.isMuted`/`isHidden`은 UI 배선됨.
+- V8 정정: ~~`Track.isLocked`는 모델만 존재하는 dead model field~~ 가 아니다. `TimelineView.swift`에 lock/open 헤더 버튼이 있고, `EditorViewModel.toggleTrackLock(_:)`가 `SetTrackPropertyCommand(.isLocked)`를 호출하며, Core command support가 locked track edit을 거부한다.
+- 잔여: 잠긴 트랙의 감광/워터마크 같은 시각 상태, drop target 제외/실조작 검증, 트랙 높이 프리셋은 아직 없다. `trackHeight`는 고정 상수다.
 
 #### 구현 증분
 | Inc | 내용 | 파일 |
@@ -709,6 +721,11 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 1. Effects/Transitions/Filters/Text/Stickers 탭이 동일한 카드 컴포넌트(썸네일+이름+호버 상태)의 그리드로 통일 — 감사 R2 잔여("one visual language") 해소.
 2. 전환/필터 카드는 호버 시 선택 클립 프레임(또는 fixture 프레임)으로 미니 프리뷰.
 3. Captions/Adjust 탭 신설 여부 결정: **Captions 탭 신설**(G-01 스타일 갤러리 진입점), Adjust는 인스펙터 소관으로 비신설(결정 기록).
+
+#### 현재 상태 (V8 실사)
+- `MediaLibraryPanel.swift`에는 10개 rail tab(Media/Audio/Text/Captions/Stickers/Effects/Transitions/Filters/Adjust/Smart), `LazyVGrid(columns: libraryGridColumns)`, `browserGridCard`, Effects/Filters/Adjustments/Transitions hover preview surface가 이미 있다. 따라서 V7의 브라우저 격차는 일부 축소됐다.
+- 잔여는 별도 `BrowserCard` 공통 컴포넌트화, G-07 20종 이펙트 썸네일/라이브 프리뷰, G-08 실제 음악/SFX/스티커 팩 콘텐츠, Captions 스타일 카드(G-01 완료 후)다.
+- U-07을 "브라우저가 없음"으로 재보고하지 말고, G-07/G-08/G-01 UI와 병합되는 제품화 항목으로 다룬다.
 
 #### 구현 증분
 | Inc | 내용 | 파일 |

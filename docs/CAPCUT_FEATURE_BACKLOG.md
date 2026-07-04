@@ -84,7 +84,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **성능(0.3)**: export +9%(0.49× realtime)·preview 5.5ms/frame(182fps) → CoreImage 합성 병목 아님 → **Metal 전면 재작성 보류**.
 
-**미검증/주의**: 위 표 외 🟡 항목(덕킹·비트감지·자동컷·리프레임·자막워크플로우·TTS·캔버스배경·클라우드)은 **아직 실측 미검증** — 자가보고 "구현됨"을 완료로 보지 말 것. 전체 `swift test`는 네트워크/Speech/마이크 통합 테스트로 헤드리스 완주 곤란(633/0 부분 통과).
+**미검증/주의**: 위 표와 아래 G-12 상환 기록 외 🟡 항목(비트감지·자동컷·리프레임·자막워크플로우·TTS·캔버스배경·클라우드)은 **아직 실측 미검증** — 자가보고 "구현됨"을 완료로 보지 말 것. 전체 `swift test`는 네트워크/Speech/마이크 통합 테스트로 헤드리스 완주 곤란(633/0 부분 통과).
 
 **S0 iOS 빌드 복구(2026-07-03)**: G-09 Inc 1로 `MovieCutiOS` generic iOS 빌드를 `CODE_SIGNING_ALLOWED=NO` 조건에서 복구했다. 같은 세션에서 `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild`, iOS generic `xcodebuild`, `scripts/run_e2e_export.sh`가 모두 PASS. CoreSimulator out-of-date는 simulator 지원 경고로 남아 있으나 generic device build에는 영향 없음.
 
@@ -105,6 +105,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 **S2 G-01 Inc 1 워드 타이밍 보존(2026-07-04)**: `WordTiming`, `TranscriptionSegment.words`, `TextClipContent.wordTimings`를 추가하고 Apple Speech `SFTranscriptionSegment` timestamp/duration/confidence를 보존하며, `SubtitleGenerator`가 세그먼트 절대 word 시각을 클립 상대 시각으로 변환한다. `StyledCaptionWordTimingTests` 6개로 legacy decode, Codable round-trip, relative transform, clamp, SRT omission을 검증했다. Caveat: caption style preset/active word renderer/preview-export burn-in/iOS 갤러리는 G-01 Inc 2+이다.
 
 **CapCut 대비 완성도 재평가(2026-07-04 loop-9, 기준 `84b696c`)**: 52주기식 자가보고 97%는 계속 폐기한다. EQ/NR/덕킹/플랫폼 프리셋/모션 트래킹의 실측 상환과 G-02/G-01 착수로 체감 완성도는 65~72%로 상향 가능하나, 아직 “능가” 선언은 금지다. 미완 핵심은 (1) G-02 HSL/커브 렌더 체이닝+저장+UI+iOS, (2) G-01 caption style model+active-word renderer+preview/export+iOS, (3) G-04 필름스트립, G-05 보컬분리/보이스FX, G-06 이징 UI, G-09 iOS 본대, (4) G-12 잔여 실기기/실영상 부채다.
+
+**V8 기능+UI 재감사(2026-07-04, 기준 `8efa65e`)**: 신규 분석 문서는 `docs/GAP_ANALYSIS_V8_FUNC_UI_20260704.md`다. 신규 G-ID/U-ID는 만들지 않았고, 상태만 재판정했다. G-12는 5/14 상환(#1 EQ, #2 NR, #3 덕킹, #4 모션 트래킹, #8 플랫폼 프리셋)으로 진행중이며, G-09는 Inc 1~2 진행중이나 CI job/iOS W1/iOS E2E가 남았다. G-02는 `CurveEvaluator`/`HSLCubeBuilder` 순수 로직만 완료되어 App 호출 0회이고, `ColorGrade` 저장 필드와 renderer chain이 없다. G-01은 `wordTimings` 저장만 완료되어 active-word renderer와 caption style UI가 없다. UI는 U-03 `Track.isLocked` dead-field 판정을 취소(헤더 lock UI + command guard 존재)하고 U-07 browser grid/hover 일부 구현을 반영했지만, U-01/U-02/U-04/U-05/U-06/U-08/U-09는 여전히 열위다. Dead-code 후보는 `VocalSeparationService` 계열(App=0), `BackgroundRemovalProvider`(App=0), `StyleTransferProvider`(App=0)이며 `CurveEvaluator`/`HSLCubeBuilder`는 G-02 Inc 3 지연 시 dead-code risk로 본다.
 
 ---
 
@@ -194,8 +196,10 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ## 4. 권장 작업 순서
 
+V8 재감사 기준 우선순위: 기능 트랙은 G-02 Inc 3(`ColorGrade` 저장 필드 + HSL/curve renderer chain + golden/E2E)를 최우선 착수 후보로 본다. 이유는 `CurveEvaluator`/`HSLCubeBuilder`가 App 호출 0회인 순수 로직 상태라, 다음 증분이 지연되면 새 코드가 사용자-visible 경로 없이 남기 때문이다. 단, 엄격한 S0 게이트를 적용하는 세션은 G-12 잔여 중 #5 optical flow 또는 #10 audio extraction 검증을 먼저 집는다. UI 트랙은 U-08 회귀/지표 인프라를 선행한다.
+
 1. **P0 묶음 완료 확인** — 라이브러리→타임라인 드래그앤드롭은 2026-06-10 실기기 GUI 검증까지 완료됐고, 드롭 성공/실패 피드백(A), 색보정 밝기/대비/채도 실픽셀 처리(C), 자동자막 STT(D)도 닫혔다. 단, 이것이 CapCut 95% 도달을 뜻하지는 않는다.
-2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A), speed ramp preview+export(G), 텍스트 스타일 편집 UI(D), 보이스오버 실녹음(F), 페이드 duration 편집 UI(F), 마그네틱 타임라인 / 클립별 zIndex(B), 키보드 단축키 맵(F-05), 임포트 메타데이터(F-06)는 닫혔다. F-01 비파일 드래그 소스(Photos/브라우저 이미지 드래그)는 `.image`/`.movie` payload materialization과 NSItemProvider behavioral test까지 통과했고, 2026-06-11 Safari data URL 이미지의 라이브러리 import 및 Video 1 타임라인 클립 생성은 실제 GUI 드래그로 확인했다. 단 Photos 앱 또는 대체 네이티브 앱 비파일 소스는 Photos window 0/AppleScript import timeout 및 screencapture black-frame 상태로 미검증이라 전체 완료 처리는 보류한다. 다음 1순위는 F-01 실기기 검증(Photos/Safari/브라우저 실제 GUI 드래그)이다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
+2. **P1 high-ROI 실제 렌더링/UX 항목 계속 진행** — 썸네일/프록시(A), speed ramp preview+export(G), 텍스트 스타일 편집 UI(D), 보이스오버 실녹음(F), 페이드 duration 편집 UI(F), 마그네틱 타임라인 / 클립별 zIndex(B), 키보드 단축키 맵(F-05), 임포트 메타데이터(F-06)는 닫혔다. F-01 비파일 드래그 소스(Photos/브라우저 이미지 드래그)는 `.image`/`.movie` payload materialization과 NSItemProvider behavioral test까지 통과했고, 2026-06-11 Safari data URL 이미지의 라이브러리 import 및 Video 1 타임라인 클립 생성은 실제 GUI 드래그로 확인했다. 단 Photos 앱 또는 대체 네이티브 앱 비파일 소스는 Photos window 0/AppleScript import timeout 및 screencapture black-frame 상태로 미검증이라 전체 완료 처리는 보류한다. 이 잔여는 V8 기준 G-12 #14로 유지한다. export format/codec controls(A)는 custom bitrate 1~200 Mbps clamp와 export/mask accessibility 배치까지 닫혔고, 자막/text burn-in export(D)는 Batch 16 범위에서 닫혔고, 전환효과 Inspector picker/duration 노출은 Batch 17 범위에서, two-source custom compositor preview/export 배선은 P1 transition pass에서 닫혔으므로 남은 P1 UI 목록에서 제외한다.
 3. **"🟡 배선만" → 실제 알고리즘 채우기** — 명령/메타데이터 경로가 이미 있으므로, compositor에 CIFilter/Vision/AVAudioUnit 처리만 붙이면 됨. 신규 배선보다 ROI 높음.
 4. **갭 문서 재작성** — "코드 존재"가 아니라 "preview+export 결과 확인"을 완료 기준으로.
 

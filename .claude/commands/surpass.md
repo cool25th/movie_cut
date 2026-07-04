@@ -12,7 +12,7 @@ MovieCut의 CapCut 능가 계획을 G-ID(기능)/U-ID(UI) 단위로 실행한다
 ## 0. 컨텍스트 로드 (필수, 순서대로)
 
 1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — **작업 명세(데이터 모델·구현 증분·AC·검증 계획)**. §3 G-ID(기능)와 §5 U-ID(UI)가 작업 단위다.
-2. `docs/GAP_ANALYSIS_V7_FUNC_UI_20260703.md` — 기능+UI 통합 격차 분석 (§6 병행 슬롯 순서).
+2. `docs/GAP_ANALYSIS_V8_FUNC_UI_20260704.md` — 최신 기능+UI 통합 재감사 (§9 병행 슬롯 순서).
 3. `docs/CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md` — 기능 격차 배경.
 4. `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5 — 증거 기반 검증 현황 (자가보고 수치 신뢰 금지).
 5. U-ID 작업 시 추가: `docs/UI_DESIGN_PRINCIPLES.md`(디자인 원칙·토큰), `docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md`(IA 계약 배경).
@@ -23,7 +23,7 @@ MovieCut의 CapCut 능가 계획을 G-ID(기능)/U-ID(UI) 단위로 실행한다
 - **`U-XX`** (예: `U-08`): 해당 UI 항목 착수 — 스펙 §5의 UI 공통 DoD(IA 계약·토큰·U-08 캡처 증거) 적용. U-02는 G-04와, U-07은 G-07/G-08과 묶음 실행 권장(스펙 참조).
 - **`debt`**: G-12 검증 부채 원장에서 미상환 항목 상위 1~2개를 골라 상환.
 - **`status`**: 작업 없이 현황만 보고 — 스펙 AC의 검증 기록 줄과 git log를 대조해 G-ID/U-ID별 진행 상태 표 출력 후 종료.
-- **(없음)**: 스펙 §2 마일스톤 순서(S0→S1→…, UI 트랙은 V7 §6 슬롯)에서 완료 기록이 없는 첫 항목을 선택하고, 선택 근거를 한 줄로 보고 후 진행.
+- **(없음)**: 스펙 §2 마일스톤 순서(S0→S1→…, UI 트랙은 최신 GAP 분석의 병행 슬롯)에서 완료 기록이 없는 첫 항목을 선택하고, 선택 근거를 한 줄로 보고 후 진행.
 
 ## 2. 콜드 스타트 체크 (작업 전 필수 — 실패 시 수리부터)
 

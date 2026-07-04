@@ -565,7 +565,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         onto image: CIImage,
         at time: CMTime
     ) -> CIImage {
-        let items = textOverlayRenderItems(in: instruction, at: time)
+        let items = textOverlayRenderItems(
+            in: instruction,
+            at: time,
+            renderSize: image.extent.size
+        )
         guard !items.isEmpty else {
             return image
         }
@@ -575,7 +579,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     private func textOverlayRenderItems(
         in instruction: CustomCompositionInstruction,
-        at time: CMTime
+        at time: CMTime,
+        renderSize: CGSize
     ) -> [TextOverlayRenderItem] {
         var items = instruction.clipEffects.compactMap { effect -> TextOverlayRenderItem? in
             guard let textContent = effect.textContent,
@@ -585,29 +590,89 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             }
 
             let animationState = effect.animationState(at: time)
+            let textAnimationState = resolvedTextAnimationState(
+                for: textContent,
+                timeRange: effect.timeRange,
+                at: time,
+                renderSize: renderSize
+            )
+            var resolvedTextContent = textContent
+            var resolvedTransform = animationState?.transform ?? effect.transform
+            var resolvedOpacity = animationState?.opacity ?? effect.opacity
+
+            if let textAnimationState {
+                resolvedTextContent.text = textAnimationState.visibleText
+                resolvedTextContent.animation = nil
+                resolvedTransform.offset.x += textAnimationState.translation.x
+                resolvedTransform.offset.y += textAnimationState.translation.y
+                resolvedTransform.scale.width *= textAnimationState.scale
+                resolvedTransform.scale.height *= textAnimationState.scale
+                resolvedTransform.rotation += textAnimationState.rotationDegrees
+                resolvedOpacity *= textAnimationState.opacity
+            }
+
             return TextOverlayRenderItem(
-                textContent: textContent,
-                transform: animationState?.transform ?? effect.transform,
-                opacity: animationState?.opacity ?? effect.opacity,
+                textContent: resolvedTextContent,
+                transform: resolvedTransform,
+                opacity: resolvedOpacity,
                 timeRangeStart: effect.timeRange.start.seconds,
                 timeRangeDuration: effect.timeRange.duration.seconds,
-                clipProgress: clipProgress(in: effect.timeRange, at: time)
+                clipProgress: nil
             )
         }
 
         if let textContent = instruction.textContent,
            CMTimeRangeContainsTime(instruction.timeRange, time: time) {
+            let textAnimationState = resolvedTextAnimationState(
+                for: textContent,
+                timeRange: instruction.timeRange,
+                at: time,
+                renderSize: renderSize
+            )
+            var resolvedTextContent = textContent
+            var resolvedTransform = ClipTransform()
+            var resolvedOpacity = 1.0
+            if let textAnimationState {
+                resolvedTextContent.text = textAnimationState.visibleText
+                resolvedTextContent.animation = nil
+                resolvedTransform.offset = textAnimationState.translation
+                resolvedTransform.scale.width *= textAnimationState.scale
+                resolvedTransform.scale.height *= textAnimationState.scale
+                resolvedTransform.rotation += textAnimationState.rotationDegrees
+                resolvedOpacity *= textAnimationState.opacity
+            }
             items.append(TextOverlayRenderItem(
-                textContent: textContent,
-                transform: ClipTransform(),
-                opacity: 1,
+                textContent: resolvedTextContent,
+                transform: resolvedTransform,
+                opacity: resolvedOpacity,
                 timeRangeStart: instruction.timeRange.start.seconds,
                 timeRangeDuration: instruction.timeRange.duration.seconds,
-                clipProgress: clipProgress(in: instruction.timeRange, at: time)
+                clipProgress: nil
             ))
         }
 
         return items
+    }
+
+    private func resolvedTextAnimationState(
+        for textContent: TextClipContent,
+        timeRange: CMTimeRange,
+        at time: CMTime,
+        renderSize: CGSize
+    ) -> TextAnimationRenderState? {
+        guard let animation = textContent.animation else { return nil }
+
+        let duration = timeRange.duration.seconds
+        guard duration.isFinite, duration > 0 else { return nil }
+
+        let elapsed = CMTimeSubtract(time, timeRange.start).seconds
+        let localTime = elapsed.isFinite ? max(0, elapsed) : 0
+        return animation.renderState(
+            for: textContent.text,
+            localTime: localTime,
+            clipDuration: duration,
+            canvasSize: renderSize
+        )
     }
 
     private func clipProgress(in timeRange: CMTimeRange, at time: CMTime) -> Double {

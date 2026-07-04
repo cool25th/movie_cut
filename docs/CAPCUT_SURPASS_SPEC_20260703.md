@@ -533,7 +533,8 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-04 G-12 #5 옵티컬 플로우 실영상: `moving_subject_320x240_2s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLAYBACK_RATE=0.25` + `MOVIECUT_UITEST_OPTICAL_FLOW=1` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe/frame-diff 측정 PASS. 0.25× export=8.000000s, 120/1fps, 960 frames. 기존 AVFoundation stretch-only probe는 adjacent MAD=0.0000으로 duplicate 반복이었으나, motion-aware slow-motion render 경로 후 adjacent_mad=0.001519, mid_vs_blend=0.001845, anchor_mad=0.005642.
 - 2026-07-04 G-12 #8 플랫폼 프리셋 5종: `bars_320x240_3s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLATFORM_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe 측정 PASS. TikTok/Reels/Shorts=1080x1920 30/1 h264 mp4, YouTube Standard=1920x1080 30/1 h264 mp4, Instagram Post=1080x1080 30/1 h264 mp4.
 - 2026-07-04 G-12 #10 오디오 추출: `solid_red_tone_320x240_2s_30fps.mp4` fixture + `MOVIECUT_UITEST_EXTRACT_AUDIO` 앱 하니스 + `MOVIECUT_UITEST_EXPORT_AUDIO` audio-only export를 `scripts/run_e2e_export.sh` ffprobe/RMS로 검증 PASS. `extract_audio_clips=1`, clip_duration=2.000s, export_duration=2.066576s, codec=aac, rms=0.087598.
-- V8 잔여(2026-07-04): #6 텍스트 애니메이션 13종, #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **7/14 진행중**으로 판정한다.
+- 2026-07-05 G-12 #6 텍스트 애니메이션 13종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` + `scripts/run_e2e_export.sh` none-baseline 대비 frame-diff 측정 PASS. 13종 전체 export proof: none overlay_mad=16.512326, non-none max_residual_temporal_mad min=2.870069(fadeOut) / max=6.594722(popIn), E2E `text animations + E2E check OK` 통과.
+- V8 잔여(2026-07-05): #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **8/14 진행중**으로 판정한다.
 
 ---
 

@@ -44,6 +44,7 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
+    /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -165,6 +166,20 @@ extension EditorViewModel {
             }
         }
 
+        var textAnimationSuffix = ""
+        if let rawTextAnimationPreset = env["MOVIECUT_UITEST_TEXT_ANIMATION_PRESET"] {
+            if let preset = TextAnimationPreset(rawValue: rawTextAnimationPreset) {
+                await addUITestTextAnimationClip(preset: preset)
+                if let clip = selectedClip, let textContent = clip.textContent {
+                    textAnimationSuffix = " text_anim=\(textContent.animation?.preset.rawValue ?? "none") text_keyframes=\(clip.keyframes.count)"
+                } else {
+                    textAnimationSuffix = " text_anim=missing text_keyframes=0"
+                }
+            } else {
+                lastErrorMessage = "unknown text animation preset: \(rawTextAnimationPreset)"
+            }
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))
@@ -241,7 +256,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

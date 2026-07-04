@@ -11,14 +11,16 @@ final class TextAnimationRenderer {
         to textLayer: CATextLayer,
         canvasSize: CGSize,
         fontSize: CGFloat,
-        text: String
+        text: String,
+        beginTime: CFTimeInterval? = nil
     ) {
         _ = fontSize
         applyLayerAnimation(
             textAnimation,
             to: textLayer,
             text: text,
-            canvasSize: canvasSize
+            canvasSize: canvasSize,
+            beginTime: beginTime
         )
     }
 
@@ -26,7 +28,8 @@ final class TextAnimationRenderer {
         _ textAnimation: TextAnimation,
         to layer: CALayer,
         text: String? = nil,
-        canvasSize: CGSize
+        canvasSize: CGSize,
+        beginTime: CFTimeInterval? = nil
     ) {
         guard textAnimation.preset != .none else { return }
 
@@ -41,12 +44,12 @@ final class TextAnimationRenderer {
         )
         guard !samples.isEmpty else { return }
 
-        addOpacityAnimation(to: layer, samples: samples, duration: clipDuration)
-        addPositionAnimation(to: layer, samples: samples, duration: clipDuration)
-        addTransformAnimation(to: layer, samples: samples, duration: clipDuration)
+        addOpacityAnimation(to: layer, samples: samples, duration: clipDuration, beginTime: beginTime)
+        addPositionAnimation(to: layer, samples: samples, duration: clipDuration, beginTime: beginTime)
+        addTransformAnimation(to: layer, samples: samples, duration: clipDuration, beginTime: beginTime)
 
         if let textLayer = layer as? CATextLayer, let text {
-            addStringAnimation(to: textLayer, text: text, samples: samples, duration: clipDuration)
+            addStringAnimation(to: textLayer, text: text, samples: samples, duration: clipDuration, beginTime: beginTime)
         }
     }
 
@@ -114,7 +117,8 @@ final class TextAnimationRenderer {
     private static func addOpacityAnimation(
         to layer: CALayer,
         samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
-        duration: TimeInterval
+        duration: TimeInterval,
+        beginTime: CFTimeInterval?
     ) {
         let targetOpacity = Double(layer.opacity)
         let values = samples.map { targetOpacity * $0.state.opacity }
@@ -122,14 +126,15 @@ final class TextAnimationRenderer {
 
         let animation = CAKeyframeAnimation(keyPath: "opacity")
         animation.values = values.map(NSNumber.init(value:))
-        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration, beginTime: beginTime)
         layer.add(animation, forKey: "textPresetOpacity")
     }
 
     private static func addPositionAnimation(
         to layer: CALayer,
         samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
-        duration: TimeInterval
+        duration: TimeInterval,
+        beginTime: CFTimeInterval?
     ) {
         let basePosition = layer.position
         let xValues = samples.map { Double(basePosition.x + $0.state.translation.x) }
@@ -138,14 +143,14 @@ final class TextAnimationRenderer {
         if valuesVary(xValues) {
             let animation = CAKeyframeAnimation(keyPath: "position.x")
             animation.values = xValues.map(NSNumber.init(value:))
-            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration, beginTime: beginTime)
             layer.add(animation, forKey: "textPresetPositionX")
         }
 
         if valuesVary(yValues) {
             let animation = CAKeyframeAnimation(keyPath: "position.y")
             animation.values = yValues.map(NSNumber.init(value:))
-            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+            configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration, beginTime: beginTime)
             layer.add(animation, forKey: "textPresetPositionY")
         }
     }
@@ -153,7 +158,8 @@ final class TextAnimationRenderer {
     private static func addTransformAnimation(
         to layer: CALayer,
         samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
-        duration: TimeInterval
+        duration: TimeInterval,
+        beginTime: CFTimeInterval?
     ) {
         let transformChanges = samples.contains { sample in
             abs(Double(sample.state.scale) - 1) > 1.0e-6
@@ -172,7 +178,7 @@ final class TextAnimationRenderer {
 
         let animation = CAKeyframeAnimation(keyPath: "transform")
         animation.values = values
-        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration, beginTime: beginTime)
         layer.add(animation, forKey: "textPresetTransform")
     }
 
@@ -180,7 +186,8 @@ final class TextAnimationRenderer {
         to textLayer: CATextLayer,
         text: String,
         samples: [(keyTime: NSNumber, state: TextAnimationRenderState)],
-        duration: TimeInterval
+        duration: TimeInterval,
+        beginTime: CFTimeInterval?
     ) {
         let values = samples.map { $0.state.visibleText }
         guard values.contains(where: { $0 != text }) else { return }
@@ -188,17 +195,18 @@ final class TextAnimationRenderer {
         let animation = CAKeyframeAnimation(keyPath: "string")
         animation.values = values
         animation.calculationMode = .discrete
-        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration)
+        configure(animation, keyTimes: samples.map { $0.keyTime }, duration: duration, beginTime: beginTime)
         textLayer.add(animation, forKey: "textPresetString")
     }
 
     private static func configure(
         _ animation: CAKeyframeAnimation,
         keyTimes: [NSNumber],
-        duration: TimeInterval
+        duration: TimeInterval,
+        beginTime: CFTimeInterval?
     ) {
         animation.duration = max(duration, 1.0e-6)
-        animation.beginTime = 0
+        animation.beginTime = beginTime ?? 0
         animation.keyTimes = keyTimes
         animation.fillMode = .both
         animation.isRemovedOnCompletion = false

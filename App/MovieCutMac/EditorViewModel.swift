@@ -1290,6 +1290,135 @@ final class EditorViewModel {
         }
     }
 
+#if DEBUG
+    func addUITestTextAnimationClip(preset: TextAnimationPreset) async {
+        do {
+            let track = try await ensureTrack(for: .text)
+            let position = CGPoint(x: 160, y: 120)
+            let animationDuration = preset == .none
+                ? 0.5
+                : min(max(preset.duration, 0.35), 1.2)
+            let content = TextClipContent(
+                text: "ANIMATE",
+                fontFamily: "Helvetica Neue",
+                fontSize: 92,
+                fontColor: "#FFFFFF",
+                alignment: .center,
+                backgroundColor: "#FF00FF",
+                position: CGPoint(x: 0, y: 0),
+                animation: TextAnimation(preset: preset, duration: animationDuration)
+            )
+            let keyframes = uiTestTextAnimationKeyframes(
+                for: preset,
+                position: position,
+                duration: 2.0,
+                animationDuration: animationDuration
+            )
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: 2.0),
+                timelineRange: TimeRange(start: playheadTime, duration: 2.0),
+                transform: ClipTransform(position: position),
+                keyframes: keyframes,
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func uiTestTextAnimationKeyframes(
+        for preset: TextAnimationPreset,
+        position: CGPoint,
+        duration: TimeInterval,
+        animationDuration: TimeInterval
+    ) -> [Keyframe] {
+        guard preset != .none else { return [] }
+
+        let enterEnd = min(max(animationDuration, 0.1), duration)
+        let exitStart = max(duration - enterEnd, 0)
+        func keyframe(_ property: AnimatableProperty, _ time: TimeInterval, _ value: Double, _ mode: InterpolationMode = .easeOut) -> Keyframe {
+            Keyframe(property: property, time: time, value: value, interpolation: mode)
+        }
+
+        switch preset {
+        case .none:
+            return []
+        case .fadeIn:
+            return [
+                keyframe(.opacity, 0, 0),
+                keyframe(.opacity, enterEnd, 1)
+            ]
+        case .fadeOut:
+            return [
+                keyframe(.opacity, 0, 1),
+                keyframe(.opacity, exitStart, 1),
+                keyframe(.opacity, duration, 0, .easeIn)
+            ]
+        case .fadeInOut:
+            return [
+                keyframe(.opacity, 0, 0),
+                keyframe(.opacity, enterEnd, 1),
+                keyframe(.opacity, exitStart, 1),
+                keyframe(.opacity, duration, 0, .easeIn)
+            ]
+        case .slideInLeft:
+            return [
+                keyframe(.positionX, 0, Double(position.x - 160)),
+                keyframe(.positionX, enterEnd, Double(position.x))
+            ]
+        case .slideInRight:
+            return [
+                keyframe(.positionX, 0, Double(position.x + 160)),
+                keyframe(.positionX, enterEnd, Double(position.x))
+            ]
+        case .slideInUp:
+            return [
+                keyframe(.positionY, 0, Double(position.y - 120)),
+                keyframe(.positionY, enterEnd, Double(position.y))
+            ]
+        case .slideInDown:
+            return [
+                keyframe(.positionY, 0, Double(position.y + 120)),
+                keyframe(.positionY, enterEnd, Double(position.y))
+            ]
+        case .typewriter:
+            return [
+                keyframe(.opacity, 0, 0),
+                keyframe(.opacity, 0.08, 1, .hold)
+            ]
+        case .bounceIn:
+            return [
+                keyframe(.scaleX, 0, 0.55), keyframe(.scaleY, 0, 0.55),
+                keyframe(.scaleX, enterEnd * 0.65, 1.18), keyframe(.scaleY, enterEnd * 0.65, 1.18),
+                keyframe(.scaleX, enterEnd, 1), keyframe(.scaleY, enterEnd, 1)
+            ]
+        case .zoomIn:
+            return [
+                keyframe(.scaleX, 0, 0.2), keyframe(.scaleY, 0, 0.2),
+                keyframe(.scaleX, enterEnd, 1), keyframe(.scaleY, enterEnd, 1)
+            ]
+        case .popIn:
+            return [
+                keyframe(.scaleX, 0, 0.1), keyframe(.scaleY, 0, 0.1),
+                keyframe(.scaleX, enterEnd * 0.7, 1.25), keyframe(.scaleY, enterEnd * 0.7, 1.25),
+                keyframe(.scaleX, enterEnd, 1), keyframe(.scaleY, enterEnd, 1)
+            ]
+        case .wave:
+            return [
+                keyframe(.rotation, 0, -8),
+                keyframe(.rotation, enterEnd * 0.5, 8, .easeInOut),
+                keyframe(.rotation, enterEnd, 0, .easeInOut)
+            ]
+        }
+    }
+#endif
+
     func addSticker(_ sticker: StickerAsset) async {
         let stickerText = sticker.emoji ?? sticker.name
         guard !stickerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }

@@ -837,7 +837,8 @@ final class ExportEngine {
                     to: textLayer,
                     canvasSize: canvas.size,
                     fontSize: fontSize,
-                    text: textContent.text
+                    text: textContent.text,
+                    beginTime: AVCoreAnimationBeginTimeAtZero + beginTime
                 )
             }
             parentLayer.addSublayer(textLayer)

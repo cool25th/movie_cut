@@ -129,6 +129,111 @@ PY
 rm -rf "$(dirname "$OF_OUT")"
 echo "PASS: optical-flow slow motion produced ${OF_DURATION}s ${OF_FPS} ${OF_FRAMES} frames with motion-aware deltas ($OF_METRICS)"
 
+# Text animation presets must burn into real exports and show time-varying frame
+# content for every animated preset. The .none preset is checked as a stable text
+# overlay against the source fixture.
+TEXT_ANIMATION_PRESETS=(none fadeIn fadeOut fadeInOut slideInLeft slideInRight slideInUp slideInDown typewriter bounceIn zoomIn popIn wave)
+TEXT_ANIMATION_SOURCE="$OF_FIXTURE"
+TEXT_ANIMATION_BASELINE_DIR="$(mktemp -d)"
+TEXT_ANIMATION_BASELINE_OUT="$TEXT_ANIMATION_BASELINE_DIR/text_none_baseline.mp4"
+TEXT_ANIMATION_BASELINE_RESULT="$TEXT_ANIMATION_BASELINE_DIR/text_none_baseline.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$TEXT_ANIMATION_SOURCE" MOVIECUT_UITEST_COLOR=1 MOVIECUT_UITEST_TEXT_ANIMATION_PRESET="none" \
+  MOVIECUT_UITEST_EXPORT="$TEXT_ANIMATION_BASELINE_OUT" MOVIECUT_UITEST_RESULT="$TEXT_ANIMATION_BASELINE_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+TBP=$!
+for _ in $(seq 1 180); do [ -s "$TEXT_ANIMATION_BASELINE_OUT" ] && [ -s "$TEXT_ANIMATION_BASELINE_RESULT" ] && break; sleep 0.5; done
+wait "$TBP" 2>/dev/null || true
+TEXT_ANIMATION_BASELINE_STATUS="$(cat "$TEXT_ANIMATION_BASELINE_RESULT" 2>/dev/null || echo MISSING)"
+if [ ! -s "$TEXT_ANIMATION_BASELINE_OUT" ]; then
+  echo "FAIL: text animation none baseline export missing (status: $TEXT_ANIMATION_BASELINE_STATUS)" >&2
+  rm -rf "$TEXT_ANIMATION_BASELINE_DIR"
+  exit 1
+fi
+case "$TEXT_ANIMATION_BASELINE_STATUS" in
+  *"error=none"*) ;;
+  *) echo "FAIL: text animation none baseline harness failed (status: $TEXT_ANIMATION_BASELINE_STATUS)" >&2; rm -rf "$TEXT_ANIMATION_BASELINE_DIR"; exit 1 ;;
+esac
+TEXT_ANIMATION_METRICS=()
+for preset in "${TEXT_ANIMATION_PRESETS[@]}"; do
+  TEXT_TMPDIR="$(mktemp -d)"
+  TEXT_OUT="$TEXT_TMPDIR/text_${preset}.mp4"
+  TEXT_RESULT="$TEXT_TMPDIR/text_${preset}.txt"
+
+  env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$TEXT_ANIMATION_SOURCE" MOVIECUT_UITEST_COLOR=1 MOVIECUT_UITEST_TEXT_ANIMATION_PRESET="$preset" \
+    MOVIECUT_UITEST_EXPORT="$TEXT_OUT" MOVIECUT_UITEST_RESULT="$TEXT_RESULT" MOVIECUT_UITEST_QUIT=1 \
+    "$APP_BIN" >/dev/null 2>&1 &
+  TAP=$!
+  for _ in $(seq 1 180); do [ -s "$TEXT_OUT" ] && [ -s "$TEXT_RESULT" ] && break; sleep 0.5; done
+  wait "$TAP" 2>/dev/null || true
+
+  TEXT_STATUS="$(cat "$TEXT_RESULT" 2>/dev/null || echo MISSING)"
+  if [ ! -s "$TEXT_OUT" ]; then
+    echo "FAIL: text animation ${preset} export missing (status: $TEXT_STATUS)" >&2
+    rm -rf "$TEXT_TMPDIR"
+    exit 1
+  fi
+  case "$TEXT_STATUS" in
+    *"error=none"*) ;;
+    *) echo "FAIL: text animation ${preset} harness failed (status: $TEXT_STATUS)" >&2; rm -rf "$TEXT_TMPDIR"; exit 1 ;;
+  esac
+
+  TEXT_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$TEXT_OUT" 2>/dev/null || echo 0)"
+  awk -v d="$TEXT_DURATION" 'BEGIN { exit !(d > 1.8 && d < 2.2) }' \
+    || { echo "FAIL: text animation ${preset} duration ${TEXT_DURATION}s (expected ~2.0)" >&2; rm -rf "$TEXT_TMPDIR"; exit 1; }
+
+  TEXT_COMPARE_SOURCE="$TEXT_ANIMATION_BASELINE_OUT"
+  if [ "$preset" = "none" ]; then
+    TEXT_COMPARE_SOURCE="$TEXT_ANIMATION_SOURCE"
+  fi
+  TEXT_METRIC="$(python3 - "$preset" "$TEXT_COMPARE_SOURCE" "$TEXT_OUT" <<'PY'
+import subprocess
+import sys
+
+preset, source_path, export_path = sys.argv[1:4]
+# Sample exact frame indices so the baseline/preset comparison cannot collapse to
+# the same keyframe during timestamp seeking.
+frames = (0, 8, 24, 51)
+
+def frame(path, frame_index):
+    data = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-vf", f"select=eq(n\\,{frame_index}),scale=80:60",
+        "-vsync", "0",
+        "-frames:v", "1",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+    ])
+    expected = 80 * 60 * 3
+    if len(data) != expected:
+        raise SystemExit(f"expected {expected} frame bytes from {path} at frame {frame_index}, got {len(data)}")
+    return data
+
+def mad(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / max(len(a), 1)
+
+export_frames = [frame(export_path, frame_index) for frame_index in frames]
+source_frames = [frame(source_path, frame_index) for frame_index in frames]
+residual_frames = [bytes(abs(o - s) for o, s in zip(out, src)) for out, src in zip(export_frames, source_frames)]
+adjacent_residual_mads = [mad(residual_frames[i], residual_frames[i + 1]) for i in range(len(residual_frames) - 1)]
+residual_temporal_mad = sum(adjacent_residual_mads) / len(adjacent_residual_mads)
+max_residual_temporal_mad = max(adjacent_residual_mads)
+overlay_mad = sum(sum(residual) / max(len(residual), 1) for residual in residual_frames) / len(residual_frames)
+
+print(f"residual_temporal_mad={residual_temporal_mad:.6f} max_residual_temporal_mad={max_residual_temporal_mad:.6f} overlay_mad={overlay_mad:.6f} duration_checked=2s")
+if preset == "none":
+    if not (overlay_mad > 0.05):
+        raise SystemExit(2)
+else:
+    if not (max_residual_temporal_mad > 0.2 and overlay_mad > 0.05):
+        raise SystemExit(2)
+PY
+)" || { echo "FAIL: text animation ${preset} frame-diff check failed (${TEXT_METRIC:-no metrics}; status: $TEXT_STATUS)" >&2; rm -rf "$TEXT_TMPDIR"; exit 1; }
+  TEXT_ANIMATION_METRICS+=("${preset}:${TEXT_METRIC}")
+  rm -rf "$TEXT_TMPDIR"
+done
+TEXT_ANIMATION_SUMMARY="$(printf '%s; ' "${TEXT_ANIMATION_METRICS[@]}")"
+rm -rf "$TEXT_ANIMATION_BASELINE_DIR"
+echo "PASS: text animations 13 presets export proof (${TEXT_ANIMATION_SUMMARY%; })"
+
 # Noise reduction must run the real AVAudioEngine DSP in the app context without
 # crashing (the offline-render path aborts under `swift test`).
 TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
@@ -560,4 +665,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"

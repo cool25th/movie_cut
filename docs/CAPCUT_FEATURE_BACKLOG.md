@@ -112,6 +112,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **S0 G-12 #5 옵티컬 플로우 실영상 상환(2026-07-04)**: 기존 `useOpticalFlow` export는 0.25×에서 duration/fps만 늘고 인접 중간 프레임 MAD가 0.0000인 duplicate 반복으로 드러났다. 이를 `MotionAwareSlowMotionRenderService` 임시 보간 asset 경로로 보강하고, `moving_subject_320x240_2s_30fps.mp4` fixture + DEBUG 하니스 `MOVIECUT_UITEST_PLAYBACK_RATE=0.25`, `MOVIECUT_UITEST_OPTICAL_FLOW=1`을 `run_e2e_export.sh`에서 검증한다. 실측: 8.000000s, 120/1fps, 960 frames, adjacent_mad 0.001519, mid_vs_blend 0.001845, anchor_mad 0.005642. G-12는 7/14 상환으로 진행중이다. Caveat: lightweight motion-aware interpolation이며 상용급 장면별 optical-flow 품질 평가는 후속 품질 작업이다.
 
+**S0 G-12 #6 텍스트 애니메이션 13종 상환(2026-07-05)**: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>`가 실제 텍스트 클립을 추가하고, export path에서 텍스트 animation/keyframe이 화면 안 fixture 중앙(160,120)에 burn-in 되도록 고정했다. `run_e2e_export.sh`는 13종(none/fadeIn/fadeOut/fadeInOut/slideInLeft/slideInRight/slideInUp/slideInDown/typewriter/bounceIn/zoomIn/popIn/wave)을 none-baseline 대비 frame-diff로 검증한다. 실측: none overlay_mad 16.512326, non-none max_residual_temporal_mad min 2.870069(fadeOut) / max 6.594722(popIn), `E2E check OK`. G-12는 8/14 상환으로 진행중이다. Caveat: 하니스 검증은 320x240 synthetic fixture 기준이며 상용 템플릿 모션 디테일/GUI 녹화는 후속 품질 작업이다.
+
 ---
 
 ## 3. CapCut 기능 백로그 (도메인별)
@@ -153,7 +155,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 자막/text burn-in export (P1) — Batch 16에서 `TextOverlayPixelProcessor`가 CoreGraphics/CoreText 기반으로 텍스트/자막 클립을 투명 RGBA overlay에 렌더하고 Mac/iOS `CustomVideoCompositor`가 shared processor로 위임한다. 픽셀 테스트는 배경 박스/알파 변화, fadeIn, typewriter, extent preservation을 guarded `CIContext`로 검증하고 static contract가 Mac/iOS compositor delegation과 Mac export/playback 경로를 확인한다. Caveat: 이 완료 범위는 text/subtitle clip burn-in이며, 자막 스타일 프리셋과 고급 caption template 렌더링은 이미 별도 구현된 경우를 제외하면 후속 항목이다.
 - [ ] 🟡 자막 편집 워크플로우 + SRT import/export (F-13) (P1→구현됨) — Core `SubtitleDocument` SRT 파서/시리얼라이저 + ViewModel 세그먼트 편집(수정/분할/병합/삭제, pending clip 재정렬 재사용) + `AutoSubtitlesView` 인라인 편집·SRT Import/Export. `SubtitleDocumentTests` 9개 검증. Caveat: W3 실기기 완주와 외부 플레이어 SRT 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 텍스트 외곽선/그림자/굵기+사용자 프리셋 (F-12R) (P1→구현됨) — `TextClipContent` 데코 필드(A5) + shared 렌더러 stroke 2-pass/`setShadow`/폰트 트레이트 + `UserTextStylePreset` 저장소 + Inspector 컨트롤. `TextDecorationTests` 9개(RGBA 스캔 픽셀 검증 포함). Caveat: 실기기 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
-- [ ] 🟡 텍스트 애니메이션 프리셋 (P2)
+- [x] ✅ 텍스트 애니메이션 프리셋 13종 preview/export 검증 (P2) — **2026-07-05 G-12 #6 상환**: `TextAnimationPreset` 13종 renderState delta 테스트와 DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET`를 추가하고, `run_e2e_export.sh`가 none-baseline 대비 export frame-diff로 13종 burn-in을 검증한다. 실측: non-none max_residual_temporal_mad min 2.870069(fadeOut) / max 6.594722(popIn). Caveat: synthetic fixture 기준이며 상용 템플릿 모션 디테일은 후속 품질 작업.
 
 ### E. 스티커/오버레이
 - ✅ 이모지/이미지 스티커 + 캔버스 변형

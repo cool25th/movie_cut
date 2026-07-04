@@ -495,6 +495,49 @@ import Testing
     #expect(decoded.delay == 0.2)
 }
 
+@Test func textAnimationAllPresetsProduceExpectedRenderStateDeltas() {
+    #expect(TextAnimationPreset.allCases.count == 13)
+
+    let text = "ANIMATE"
+    let canvasSize = CGSize(width: 320, height: 240)
+    let clipDuration: TimeInterval = 2.0
+    let sampleTimes: [TimeInterval] = [0.1, 0.8, 1.7]
+    var nonAnimatedFailures: [TextAnimationPreset] = []
+
+    for preset in TextAnimationPreset.allCases {
+        let animationDuration = preset == .none
+            ? 0.5
+            : min(max(preset.duration, 0.35), 1.2)
+        let animation = TextAnimation(preset: preset, duration: animationDuration)
+        let states = sampleTimes.map {
+            animation.renderState(
+                for: text,
+                localTime: $0,
+                clipDuration: clipDuration,
+                canvasSize: canvasSize
+            )
+        }
+
+        if preset == .none {
+            for state in states {
+                #expect(state.visibleText == text)
+                #expect(state.opacity == 1)
+                #expect(state.translation.x == 0)
+                #expect(state.translation.y == 0)
+                #expect(state.scale == 1)
+                #expect(state.rotationDegrees == 0)
+            }
+            continue
+        }
+
+        if !hasMeaningfulTextAnimationDelta(states) {
+            nonAnimatedFailures.append(preset)
+        }
+    }
+
+    #expect(nonAnimatedFailures.isEmpty)
+}
+
 @Test func textAnimationRenderStateUsesClipLifetimeProgress() {
     let fadeOut = TextAnimation(preset: .fadeOut, duration: 1.0)
     let beforeExit = fadeOut.renderState(for: "Bye", clipProgress: 0.4, clipDuration: 4.0)
@@ -519,6 +562,19 @@ import Testing
 
     #expect(earlySlide.translation.x < 0)
     #expect(abs(lateSlide.translation.x) < abs(earlySlide.translation.x))
+}
+
+private func hasMeaningfulTextAnimationDelta(_ states: [TextAnimationRenderState]) -> Bool {
+    guard let baseline = states.first else { return false }
+
+    return states.dropFirst().contains { state in
+        abs(state.opacity - baseline.opacity) > 0.001
+            || abs(Double(state.translation.x - baseline.translation.x)) > 0.001
+            || abs(Double(state.translation.y - baseline.translation.y)) > 0.001
+            || abs(Double(state.scale - baseline.scale)) > 0.001
+            || abs(state.rotationDegrees - baseline.rotationDegrees) > 0.001
+            || state.visibleText != baseline.visibleText
+    }
 }
 
 @Test func keyframeInterpolateLinear() {

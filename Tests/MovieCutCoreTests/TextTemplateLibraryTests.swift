@@ -9,11 +9,13 @@ struct TextTemplateLibraryTests {
         let templates = MovieCutCore.TextTemplate.builtIn
         let names = Set(templates.map(\.name))
 
-        #expect(templates.count >= 12)
-        #expect(names.isSuperset(of: [
+        #expect(templates.count == 14)
+        #expect(names == Set([
             "Title",
             "Subtitle",
             "Lower Third",
+            "Caption",
+            "Credits",
             "News Banner",
             "Quote",
             "Callout",

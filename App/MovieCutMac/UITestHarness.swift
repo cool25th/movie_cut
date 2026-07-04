@@ -180,6 +180,26 @@ extension EditorViewModel {
             }
         }
 
+        var textTemplateSuffix = ""
+        if let rawTextTemplateName = env["MOVIECUT_UITEST_TEXT_TEMPLATE_NAME"], !rawTextTemplateName.isEmpty {
+            let wanted = rawTextTemplateName.lowercased().replacingOccurrences(of: "_", with: " ")
+            if let template = TextTemplate.builtIn.first(where: { $0.name.lowercased() == wanted }) {
+                await addUITestTextTemplateClip(template: template)
+                let textTemplateClipCount = currentProject.timeline.tracks
+                    .flatMap(\.clips)
+                    .filter { $0.kind == .text }
+                    .count
+                if let clip = selectedClip, let textContent = clip.textContent {
+                    let templateName = template.name.replacingOccurrences(of: " ", with: "_")
+                    textTemplateSuffix = " text_template=\(templateName) text_template_clips=\(textTemplateClipCount) text_template_text=\(textContent.text.replacingOccurrences(of: " ", with: "_"))"
+                } else {
+                    textTemplateSuffix = " text_template=missing text_template_clips=\(textTemplateClipCount)"
+                }
+            } else {
+                lastErrorMessage = "unknown text template: \(rawTextTemplateName)"
+            }
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))
@@ -256,7 +276,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

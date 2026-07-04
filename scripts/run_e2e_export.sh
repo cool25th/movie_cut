@@ -234,6 +234,88 @@ TEXT_ANIMATION_SUMMARY="$(printf '%s; ' "${TEXT_ANIMATION_METRICS[@]}")"
 rm -rf "$TEXT_ANIMATION_BASELINE_DIR"
 echo "PASS: text animations 13 presets export proof (${TEXT_ANIMATION_SUMMARY%; })"
 
+# Built-in title templates must be applied through the real app template path and
+# visibly burn into exported frames. This codifies G-12 #7 for all 14 templates,
+# not just static library/Inspector contracts.
+TITLE_TEMPLATE_NAMES=(Title Subtitle "Lower Third" Caption Credits "News Banner" Quote Callout Kinetic Handwritten "Neon Glow" Outline Typewriter "Social Handle")
+TITLE_TEMPLATE_BASELINE_DIR="$(mktemp -d)"
+TITLE_TEMPLATE_BASELINE_OUT="$TITLE_TEMPLATE_BASELINE_DIR/title_template_baseline.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
+  MOVIECUT_UITEST_EXPORT="$TITLE_TEMPLATE_BASELINE_OUT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+TTBP=$!
+for _ in $(seq 1 120); do [ -s "$TITLE_TEMPLATE_BASELINE_OUT" ] && break; sleep 0.5; done
+wait "$TTBP" 2>/dev/null || true
+[ -s "$TITLE_TEMPLATE_BASELINE_OUT" ] || { echo "FAIL: title template baseline export missing" >&2; rm -rf "$TITLE_TEMPLATE_BASELINE_DIR"; exit 1; }
+TITLE_TEMPLATE_METRICS=()
+for template_name in "${TITLE_TEMPLATE_NAMES[@]}"; do
+  TITLE_TMPDIR="$(mktemp -d)"
+  TITLE_OUT="$TITLE_TMPDIR/title_template.mp4"
+  TITLE_RESULT="$TITLE_TMPDIR/title_template.txt"
+  TITLE_ENV_NAME="${template_name// /_}"
+
+  env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_TEXT_TEMPLATE_NAME="$TITLE_ENV_NAME" \
+    MOVIECUT_UITEST_EXPORT="$TITLE_OUT" MOVIECUT_UITEST_RESULT="$TITLE_RESULT" MOVIECUT_UITEST_QUIT=1 \
+    "$APP_BIN" >/dev/null 2>&1 &
+  TTP=$!
+  for _ in $(seq 1 180); do [ -s "$TITLE_OUT" ] && [ -s "$TITLE_RESULT" ] && break; sleep 0.5; done
+  wait "$TTP" 2>/dev/null || true
+
+  TITLE_STATUS="$(cat "$TITLE_RESULT" 2>/dev/null || echo MISSING)"
+  if [ ! -s "$TITLE_OUT" ]; then
+    echo "FAIL: title template ${template_name} export missing (status: $TITLE_STATUS)" >&2
+    rm -rf "$TITLE_TMPDIR"
+    exit 1
+  fi
+  case "$TITLE_STATUS" in
+    *"error=none"*"text_template=${TITLE_ENV_NAME}"*"text_template_clips=1"*) ;;
+    *) echo "FAIL: title template ${template_name} harness failed (status: $TITLE_STATUS)" >&2; rm -rf "$TITLE_TMPDIR"; exit 1 ;;
+  esac
+
+  TITLE_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$TITLE_OUT" 2>/dev/null || echo 0)"
+  awk -v d="$TITLE_DURATION" 'BEGIN { exit !(d > 1.8 && d < 2.2) }' \
+    || { echo "FAIL: title template ${template_name} duration ${TITLE_DURATION}s (expected ~2.0)" >&2; rm -rf "$TITLE_TMPDIR"; exit 1; }
+
+  TITLE_METRIC="$(python3 - "$template_name" "$TITLE_TEMPLATE_BASELINE_OUT" "$TITLE_OUT" <<'PY'
+import subprocess
+import sys
+
+template_name, source_path, export_path = sys.argv[1:4]
+frames = (8, 24, 51)
+
+def frame(path, frame_index):
+    data = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-vf", f"select=eq(n\\,{frame_index}),scale=80:60",
+        "-vsync", "0",
+        "-frames:v", "1",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+    ])
+    expected = 80 * 60 * 3
+    if len(data) != expected:
+        raise SystemExit(f"expected {expected} bytes from {path} frame {frame_index}, got {len(data)}")
+    return data
+
+def mad(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / max(len(a), 1)
+
+export_frames = [frame(export_path, n) for n in frames]
+source_frames = [frame(source_path, n) for n in frames]
+residual_mads = [mad(out, src) for out, src in zip(export_frames, source_frames)]
+max_overlay_mad = max(residual_mads)
+mean_overlay_mad = sum(residual_mads) / len(residual_mads)
+print(f"mean_overlay_mad={mean_overlay_mad:.6f} max_overlay_mad={max_overlay_mad:.6f}")
+if not (max_overlay_mad > 0.05):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: title template ${template_name} frame overlay check failed (${TITLE_METRIC:-no metrics}; status: $TITLE_STATUS)" >&2; rm -rf "$TITLE_TMPDIR"; exit 1; }
+  TITLE_TEMPLATE_METRICS+=("${TITLE_ENV_NAME}:${TITLE_METRIC}")
+  rm -rf "$TITLE_TMPDIR"
+done
+TITLE_TEMPLATE_SUMMARY="$(printf '%s; ' "${TITLE_TEMPLATE_METRICS[@]}")"
+rm -rf "$TITLE_TEMPLATE_BASELINE_DIR"
+echo "PASS: title templates 14 presets export proof (${TITLE_TEMPLATE_SUMMARY%; })"
+
 # Noise reduction must run the real AVAudioEngine DSP in the app context without
 # crashing (the offline-render path aborts under `swift test`).
 TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"

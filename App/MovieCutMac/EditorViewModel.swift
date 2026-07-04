@@ -1417,6 +1417,39 @@ final class EditorViewModel {
             ]
         }
     }
+
+    func addUITestTextTemplateClip(template: MovieCutCore.TextTemplate) async {
+        do {
+            let track = try await ensureTrack(for: .text)
+            let duration: TimeInterval = 2.0
+            let position = CGPoint(x: 160, y: 120)
+            let scaleFactor = min(1.0, max(0.32, 320.0 / 1920.0 * 2.15))
+            var content = template.content
+            content.position = CGPoint(x: 0, y: 0)
+            content.fontSize = max(22, min(76, content.fontSize * scaleFactor))
+            if content.backgroundColor == nil,
+               template.name == "Title" || template.name == "Subtitle" || template.name == "Credits" {
+                content.backgroundColor = "#00000066"
+            }
+            if content.animation == nil {
+                content.animation = template.animation
+            }
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration),
+                transform: ClipTransform(position: position),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
 #endif
 
     func addSticker(_ sticker: StickerAsset) async {

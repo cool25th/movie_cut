@@ -534,8 +534,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-04 G-12 #8 플랫폼 프리셋 5종: `bars_320x240_3s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLATFORM_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe 측정 PASS. TikTok/Reels/Shorts=1080x1920 30/1 h264 mp4, YouTube Standard=1920x1080 30/1 h264 mp4, Instagram Post=1080x1080 30/1 h264 mp4.
 - 2026-07-04 G-12 #10 오디오 추출: `solid_red_tone_320x240_2s_30fps.mp4` fixture + `MOVIECUT_UITEST_EXTRACT_AUDIO` 앱 하니스 + `MOVIECUT_UITEST_EXPORT_AUDIO` audio-only export를 `scripts/run_e2e_export.sh` ffprobe/RMS로 검증 PASS. `extract_audio_clips=1`, clip_duration=2.000s, export_duration=2.066576s, codec=aac, rms=0.087598.
 - 2026-07-05 G-12 #6 텍스트 애니메이션 13종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` + `scripts/run_e2e_export.sh` none-baseline 대비 frame-diff 측정 PASS. 13종 전체 export proof: none overlay_mad=16.512326, non-none max_residual_temporal_mad min=2.870069(fadeOut) / max=6.594722(popIn), E2E `text animations + E2E check OK` 통과.
+- 2026-07-05 G-12 #7 타이틀 템플릿 14종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=<name>`가 실제 템플릿 클립을 화면 안 fixture 중앙에 추가하고, `scripts/run_e2e_export.sh`가 no-template baseline 대비 frame-diff를 14종 전체에 대해 측정 PASS. 실측 max_overlay_mad: Title 7.450278, Subtitle 7.109653, Lower Third 6.524444, Caption 6.459444, Credits 7.125347, News Banner 6.722222, Quote 6.725417, Callout 6.875694, Kinetic 6.848056, Handwritten 6.700069, Neon Glow 6.790208, Outline 6.636806, Typewriter 6.506250, Social Handle 6.885069. E2E `title templates 14 presets + E2E check OK` 통과.
 - 2026-07-05 loop-6 CapCut 대비 완성도 재평가: `docs/GAP_ANALYSIS_V9_FUNC_UI_20260705.md` 생성. G-12는 8/14 상환 기준으로 갱신했고, 체감 완성도는 68~74%로 소폭 상향하되 “능가” 선언은 계속 금지한다. 엄격한 S0 자동 선택 다음 항목은 #7 타이틀 템플릿 14종이다.
-- V8 잔여(2026-07-05): #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **8/14 진행중**으로 판정한다.
+- V9 잔여(2026-07-05): #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **9/14 진행중**으로 판정한다.
 
 ---
 

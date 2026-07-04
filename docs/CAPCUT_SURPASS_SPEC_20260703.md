@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.2 / 작성일: 2026-07-03 (v1.2: V8 재감사 반영, 기준 커밋 `8efa65e`) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.3 / 작성일: 2026-07-03 (v1.3: G-12 #10 오디오 추출 E2E 상환) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-04 v1.3: G-12 #10 오디오 추출 app/E2E 상환. G-12 진행 상태를 6/14로 갱신.
 - 2026-07-04 v1.2: V8 재감사 반영. G-12 5/14 상환, G-09 Inc 2 진행, G-02 Inc 1~2 순수 로직, G-01 Inc 1 워드 타이밍, U-03 `Track.isLocked` dead-field 판정 정정, U-07 부분 구현 상태를 기록.
 
 ---
@@ -62,7 +63,7 @@ V8 dead-code 감사 메모: `VocalSeparationService` 계열은 G-05의 명시 �
 
 순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. **UI 트랙은 전 단계 병행하되 U-08(회귀 인프라)을 선행**하고, U-02는 G-04와, U-07은 G-07/G-08과 같은 세션 묶음을 권장. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `CAPCUT_FEATURE_BACKLOG.md` 갱신.
 
-V8 재감사 상태(2026-07-04): S0는 아직 완료가 아니다. G-12는 14개 중 5개(#1 EQ, #2 NR, #3 ducking, #4 motion tracking, #8 platform presets)만 상환됐고, G-09는 iOS generic build와 파리티 매트릭스 재감사까지 진행됐으나 CI job, iOS W1 녹화, iOS E2E가 남아 있다. G-02/G-01 착수분은 S1/S2 진행중 증거로만 본다.
+V8 재감사 상태(2026-07-04): S0는 아직 완료가 아니다. G-12는 14개 중 6개(#1 EQ, #2 NR, #3 ducking, #4 motion tracking, #8 platform presets, #10 audio extraction)가 상환됐고, G-09는 iOS generic build와 파리티 매트릭스 재감사까지 진행됐으나 CI job, iOS W1 녹화, iOS E2E가 남아 있다. G-02/G-01 착수분은 S1/S2 진행중 증거로만 본다.
 
 ---
 
@@ -530,7 +531,8 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-04 G-12 #3 덕킹 청감: `duck_bgm_220hz_4s_mono.wav` + `duck_voice_1000hz_1s_mono.wav` fixtures, `MOVIECUT_UITEST_DUCKING_*` 앱 하니스, `SetAudioDuckingCommand` export ramp, `scripts/run_e2e_export.sh` Goertzel 측정 PASS. base_voice=3.098866e+01, ducked_voice=1.935795e+00, reduction_db=12.04, quiet_delta_db=0.00, ducked_voice_quiet_ratio=0.062.
 - 2026-07-04 G-12 #4 모션 트래킹 실영상: `moving_subject_320x240_2s_30fps.mp4` fixture + `MotionTrackingProviderTests.trackFollowsMovingSubjectFixtureByFrameIoU` 실제 `provider.track` PASS. 15fps sampling 31 samples, meanIoU=0.7929, minIoU=0.7095 (thresholds mean>=0.75, min>=0.65).
 - 2026-07-04 G-12 #8 플랫폼 프리셋 5종: `bars_320x240_3s_30fps.mp4` fixture + `MOVIECUT_UITEST_PLATFORM_PRESET` 앱 하니스 + `scripts/run_e2e_export.sh` ffprobe 측정 PASS. TikTok/Reels/Shorts=1080x1920 30/1 h264 mp4, YouTube Standard=1920x1080 30/1 h264 mp4, Instagram Post=1080x1080 30/1 h264 mp4.
-- V8 잔여(2026-07-04): #5 옵티컬 플로우, #6 텍스트 애니메이션 13종, #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #10 오디오 추출, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **5/14 진행중**으로 판정한다.
+- 2026-07-04 G-12 #10 오디오 추출: `solid_red_tone_320x240_2s_30fps.mp4` fixture + `MOVIECUT_UITEST_EXTRACT_AUDIO` 앱 하니스 + `MOVIECUT_UITEST_EXPORT_AUDIO` audio-only export를 `scripts/run_e2e_export.sh` ffprobe/RMS로 검증 PASS. `extract_audio_clips=1`, clip_duration=2.000s, export_duration=2.066576s, codec=aac, rms=0.087598.
+- V8 잔여(2026-07-04): #5 옵티컬 플로우, #6 텍스트 애니메이션 13종, #7 타이틀 템플릿 14종, #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **6/14 진행중**으로 판정한다.
 
 ---
 

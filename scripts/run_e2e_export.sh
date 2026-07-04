@@ -197,6 +197,69 @@ PY
 rm -rf "$(dirname "$EQ_BASS")" "$(dirname "$EQ_TREBLE")"
 echo "PASS: EQ bassBoost vs trebleBoost spectrum diverged ($EQ_METRICS)"
 
+# Extract Audio must create a real audio clip from a video asset that contains
+# audio, then export that clip through the app's audio-only export path.
+EXTRACT_AUDIO_FIXTURE="$ROOT/Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4"
+[ -s "$EXTRACT_AUDIO_FIXTURE" ] || { echo "missing extract-audio fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+EXTRACT_AUDIO_OUT="$(mktemp -d)/extract_audio.m4a"
+EXTRACT_AUDIO_RESULT="$(mktemp -d)/extract_audio.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$EXTRACT_AUDIO_FIXTURE" MOVIECUT_UITEST_EXTRACT_AUDIO=1 \
+  MOVIECUT_UITEST_EXPORT_AUDIO="$EXTRACT_AUDIO_OUT" MOVIECUT_UITEST_RESULT="$EXTRACT_AUDIO_RESULT" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+EAP=$!
+for _ in $(seq 1 120); do
+  [ -s "$EXTRACT_AUDIO_OUT" ] && [ -s "$EXTRACT_AUDIO_RESULT" ] && break
+  sleep 0.5
+done
+wait "$EAP" 2>/dev/null || true
+EXTRACT_AUDIO_STATUS="$(cat "$EXTRACT_AUDIO_RESULT" 2>/dev/null || echo MISSING)"
+EXTRACT_AUDIO_CLIPS="$(printf '%s' "$EXTRACT_AUDIO_STATUS" | sed -n 's/.*extract_audio_clips=\([0-9][0-9]*\).*/\1/p')"
+EXTRACT_AUDIO_CLIP_DURATION="$(printf '%s' "$EXTRACT_AUDIO_STATUS" | sed -n 's/.*extract_audio_duration=\([0-9.]*\).*/\1/p')"
+if [ ! -s "$EXTRACT_AUDIO_OUT" ]; then
+  echo "FAIL: extract-audio export missing (status: $EXTRACT_AUDIO_STATUS)" >&2
+  rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"
+  exit 1
+fi
+case "$EXTRACT_AUDIO_STATUS" in
+  *"error=none"*) ;;
+  *) echo "FAIL: extract-audio harness failed (status: $EXTRACT_AUDIO_STATUS)" >&2; rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"; exit 1 ;;
+esac
+if [ "${EXTRACT_AUDIO_CLIPS:-0}" -lt 1 ]; then
+  echo "FAIL: extract-audio harness did not create an audio clip (status: $EXTRACT_AUDIO_STATUS)" >&2
+  rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"
+  exit 1
+fi
+awk -v d="${EXTRACT_AUDIO_CLIP_DURATION:-0}" 'BEGIN { exit !(d > 1.8 && d < 2.2) }' \
+  || { echo "FAIL: extracted audio clip duration ${EXTRACT_AUDIO_CLIP_DURATION:-missing}s (expected ~2.0)" >&2; rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"; exit 1; }
+EXTRACT_AUDIO_CODEC="$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$EXTRACT_AUDIO_OUT" 2>/dev/null)"
+EXTRACT_AUDIO_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$EXTRACT_AUDIO_OUT" 2>/dev/null || echo 0)"
+if [ -z "$EXTRACT_AUDIO_CODEC" ]; then
+  echo "FAIL: extract-audio export has no audio stream" >&2
+  rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"
+  exit 1
+fi
+awk -v d="$EXTRACT_AUDIO_DURATION" 'BEGIN { exit !(d > 1.8 && d < 2.2) }' \
+  || { echo "FAIL: extract-audio export duration ${EXTRACT_AUDIO_DURATION}s (expected ~2.0)" >&2; rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"; exit 1; }
+EXTRACT_AUDIO_RMS="$(python3 - "$EXTRACT_AUDIO_OUT" <<'PY'
+import math, struct, subprocess, sys
+
+raw = subprocess.check_output([
+    "ffmpeg", "-v", "error", "-i", sys.argv[1],
+    "-ac", "1", "-ar", "44100", "-f", "f32le", "-"
+])
+count = len(raw) // 4
+if count == 0:
+    raise SystemExit("no decoded audio")
+samples = struct.unpack("<" + "f" * count, raw)
+rms = math.sqrt(sum(s * s for s in samples) / count)
+print(f"{rms:.6f}")
+if rms <= 0.005:
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: extract-audio export decoded as silence (${EXTRACT_AUDIO_RMS:-no rms})" >&2; rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"; exit 1; }
+rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"
+echo "PASS: audio extraction produced valid audio stream (clips=${EXTRACT_AUDIO_CLIPS}, clip_duration=${EXTRACT_AUDIO_CLIP_DURATION}s, export_duration=${EXTRACT_AUDIO_DURATION}s, codec=${EXTRACT_AUDIO_CODEC}, rms=${EXTRACT_AUDIO_RMS})"
+
 # Ducking must attenuate BGM under a voice cue in the real app export path. The
 # harness creates two audio tracks, applies SetAudioDuckingCommand to the BGM,
 # and the metric isolates the 220Hz BGM component so the 1kHz voice cue cannot
@@ -439,4 +502,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"

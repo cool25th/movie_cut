@@ -7,6 +7,7 @@ depend on `ffmpeg` at run time. Resolved in tests via `MediaFixtures`
 | File | Properties | Used for |
 |---|---|---|
 | `solid_red_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | video import / metadata probe / timeline clip |
+| `solid_red_tone_320x240_2s_30fps.mp4` | h264+aac, 320×240, 30fps, 44100Hz mono, 2.0s | extract-audio E2E |
 | `bars_320x240_3s_30fps.mp4` | h264, 320×240, 30fps, 3.0s | distinguishable second video clip |
 | `moving_subject_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | Vision motion tracking IoU verification |
 | `tone_440hz_2s_mono.wav` | pcm_s16le, 44100Hz, mono, 2.0s | audio import / ducking / beat analysis |

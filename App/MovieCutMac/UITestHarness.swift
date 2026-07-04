@@ -40,11 +40,14 @@ extension EditorViewModel {
     /// Environment:
     /// - `MOVIECUT_UITEST=1` — enables the harness.
     /// - `MOVIECUT_UITEST_IMPORT=<path>` — media imported and added to the timeline.
+    /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
+    /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
+        var extractAudioSuffix = ""
 
         if let importPath = env["MOVIECUT_UITEST_IMPORT"], !importPath.isEmpty {
             await importMediaAndAddToTimeline(
@@ -117,6 +120,32 @@ extension EditorViewModel {
             await applyEQPreset(eqPreset)
         }
 
+        // Optional Extract Audio step: runs the real ViewModel command-backed
+        // extraction path and leaves the extracted audio clip selected.
+        if env["MOVIECUT_UITEST_EXTRACT_AUDIO"] == "1" {
+            if let sourceClipId = selectedClipId {
+                do {
+                    let extractedClip = try await extractAudio(from: sourceClipId)
+                    let extractedAudioClipCount = currentProject.timeline.tracks
+                        .filter { $0.kind == .audio }
+                        .flatMap(\.clips)
+                        .filter { $0.kind == .audio }
+                        .count
+                    extractAudioSuffix = String(
+                        format: " extract_audio_clips=%d extract_audio_duration=%.3f",
+                        extractedAudioClipCount,
+                        extractedClip.timelineRange.duration
+                    )
+                } catch {
+                    lastErrorMessage = "extract audio failed: \(error.localizedDescription)"
+                    extractAudioSuffix = " extract_audio_clips=0 extract_audio_duration=0.000"
+                }
+            } else {
+                lastErrorMessage = "extract audio failed: no selected clip"
+                extractAudioSuffix = " extract_audio_clips=0 extract_audio_duration=0.000"
+            }
+        }
+
         if let rawPlatformPreset = env["MOVIECUT_UITEST_PLATFORM_PRESET"], !rawPlatformPreset.isEmpty {
             if let preset = PlatformExportPreset(rawValue: rawPlatformPreset) {
                 await applyPlatformExportPreset(preset)
@@ -128,6 +157,11 @@ extension EditorViewModel {
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))
+        }
+
+        if lastErrorMessage == nil,
+           let audioPath = env["MOVIECUT_UITEST_EXPORT_AUDIO"], !audioPath.isEmpty {
+            await exportAudioOnly(to: URL(filePath: audioPath))
         }
 
         if lastErrorMessage == nil,
@@ -196,7 +230,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

@@ -26,6 +26,14 @@ echo "Generating fixtures into $OUT"
 ffmpeg -y -loglevel error -f lavfi -i "color=c=red:s=320x240:r=30" \
   -t 2 "${COMMON_V[@]}" "$OUT/solid_red_320x240_2s_30fps.mp4"
 
+# 1b) Solid red video with a 440Hz mono audio stream — same video envelope as
+# the import fixture, but with deterministic audio for Extract Audio E2E.
+ffmpeg -y -loglevel error \
+  -f lavfi -i "color=c=red:s=320x240:r=30" \
+  -f lavfi -i "sine=frequency=440:sample_rate=44100" \
+  -map 0:v:0 -map 1:a:0 -t 2 "${COMMON_V[@]}" \
+  -c:a aac -b:a 96k -ac 1 "$OUT/solid_red_tone_320x240_2s_30fps.mp4"
+
 # 2) Color-bars video — distinguishable second clip, 3.0s, 320x240, 30fps.
 ffmpeg -y -loglevel error -f lavfi -i "testsrc2=s=320x240:r=30" \
   -t 3 "${COMMON_V[@]}" "$OUT/bars_320x240_3s_30fps.mp4"

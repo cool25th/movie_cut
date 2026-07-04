@@ -897,6 +897,12 @@ final class EditorViewModel {
         panel.nameFieldStringValue = "\(currentProject.name).m4a"
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
+        await exportAudioOnly(to: url)
+    }
+
+    /// Exports mixed project audio to an explicit URL without presenting a save
+    /// panel. Used by automation to verify audio-only outputs headlessly.
+    func exportAudioOnly(to url: URL) async {
         lastExportURL = nil
         do {
             let snapshot = await session.snapshot()

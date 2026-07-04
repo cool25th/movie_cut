@@ -40,6 +40,8 @@ extension EditorViewModel {
     /// Environment:
     /// - `MOVIECUT_UITEST=1` — enables the harness.
     /// - `MOVIECUT_UITEST_IMPORT=<path>` — media imported and added to the timeline.
+    /// - `MOVIECUT_UITEST_PLAYBACK_RATE=<double>` — applies a constant playback rate to the selected clip.
+    /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
@@ -77,6 +79,15 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_FREEZE"] == "1", let clip = selectedClip {
             playheadTime = clip.timelineRange.start + clip.timelineRange.duration / 2
             await freezeSelectedFrame(freezeDuration: 2.0)
+        }
+
+        if let rawPlaybackRate = env["MOVIECUT_UITEST_PLAYBACK_RATE"],
+           let playbackRate = Double(rawPlaybackRate) {
+            await updateSelectedPlaybackRate(playbackRate)
+        }
+
+        if env["MOVIECUT_UITEST_OPTICAL_FLOW"] == "1" {
+            await updateSelectedOpticalFlow(true)
         }
 
         // Optional color-correction step: forces every exported frame through the

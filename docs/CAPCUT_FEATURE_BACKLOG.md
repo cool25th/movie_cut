@@ -110,6 +110,8 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 **S0 G-12 #10 오디오 추출 상환(2026-07-04)**: `solid_red_tone_320x240_2s_30fps.mp4`(h264+aac, 2.0s) fixture, DEBUG 앱 하니스 `MOVIECUT_UITEST_EXTRACT_AUDIO=1`, audio-only export `MOVIECUT_UITEST_EXPORT_AUDIO`를 `run_e2e_export.sh`에 추가했다. 실제 `extractAudio(from:)` command-backed 앱 경로가 audio clip 1개를 생성하고, ffprobe/RMS 검증으로 export audio stream을 확인했다. 실측: clip_duration 2.000s, export_duration 2.066576s, codec aac, rms 0.087598. G-12는 6/14 상환(#1 EQ, #2 NR, #3 덕킹, #4 모션 트래킹, #8 플랫폼 프리셋, #10 오디오 추출)으로 진행중이다.
 
+**S0 G-12 #5 옵티컬 플로우 실영상 상환(2026-07-04)**: 기존 `useOpticalFlow` export는 0.25×에서 duration/fps만 늘고 인접 중간 프레임 MAD가 0.0000인 duplicate 반복으로 드러났다. 이를 `MotionAwareSlowMotionRenderService` 임시 보간 asset 경로로 보강하고, `moving_subject_320x240_2s_30fps.mp4` fixture + DEBUG 하니스 `MOVIECUT_UITEST_PLAYBACK_RATE=0.25`, `MOVIECUT_UITEST_OPTICAL_FLOW=1`을 `run_e2e_export.sh`에서 검증한다. 실측: 8.000000s, 120/1fps, 960 frames, adjacent_mad 0.001519, mid_vs_blend 0.001845, anchor_mad 0.005642. G-12는 7/14 상환으로 진행중이다. Caveat: lightweight motion-aware interpolation이며 상용급 장면별 optical-flow 품질 평가는 후속 품질 작업이다.
+
 ---
 
 ## 3. CapCut 기능 백로그 (도메인별)
@@ -170,10 +172,10 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [ ] 🟡 TTS(텍스트→음성, F-17) (P3→구현됨) — shared `TextToSpeechSynthesizer`(AVSpeechSynthesizer.write→CAF) + value-type voice 목록 + ViewModel 텍스트클립 정렬 오디오 클립 생성 + Inspector Voice 피커/Generate Voice. `TextToSpeechTests` 7개(실합성 통합 테스트가 실제 오디오 생성). Caveat: 실기기 GUI 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 
 ### G. 속도/시간
-- [x] ✅ 속도 조절 / speed ramp preview+export (P1) — Mac `PlaybackEngine` preview와 `ExportEngine` export가 `SpeedRampCurve(points: clip.speedRampPoints)`로 source segment를 나누고 `scaleTimeRange`로 composition time range를 조정한다. 비디오 클립의 audio preview path와 `.audio` track preview path도 같은 segment/scale 경로를 사용한다. Caveat: 고급 옵티컬 플로우 기반 부드러운 슬로우모션은 별도 P3 항목이며 아직 완료되지 않았다.
+- [x] ✅ 속도 조절 / speed ramp preview+export (P1) — Mac `PlaybackEngine` preview와 `ExportEngine` export가 `SpeedRampCurve(points: clip.speedRampPoints)`로 source segment를 나누고 `scaleTimeRange`로 composition time range를 조정한다. 비디오 클립의 audio preview path와 `.audio` track preview path도 같은 segment/scale 경로를 사용한다. 고급 옵티컬 플로우 기반 부드러운 슬로우모션은 아래 P3 항목에서 G-12 #5로 별도 상환했다.
 - ✅ 역재생
 - [x] ✅ 정지프레임 (P2) — **2026-06-23 export 반영 확정**: `ExportEngine`(`isFreezeFrame` 감지 → 1프레임 source range → `scaleTimeRange`)·`PlaybackEngine` 양쪽 표준 기법. **헤드리스 E2E 측정**: 2s 클립에 2s freeze → export 2.0s→**4.0s**(delta 정확히 freeze duration). `run_e2e_export.sh`.
-- [ ] ❌ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3)
+- [x] ✅ 옵티컬 플로우 보간(부드러운 슬로우모션) (P3) — **2026-07-04 G-12 #5 상환**: 0.25× slow-motion export가 단순 duration/fps stretch만 하던 문제(adjacent MAD 0.0000)를 `MotionAwareSlowMotionRenderService`의 motion-aware temporary render asset 경로로 보강했다. `run_e2e_export.sh`가 `moving_subject_320x240_2s_30fps.mp4`를 `MOVIECUT_UITEST_PLAYBACK_RATE=0.25` + `MOVIECUT_UITEST_OPTICAL_FLOW=1`로 export 후 ffprobe/frame-diff 검증한다. 실측: 8.000000s, 120/1fps, 960 frames, adjacent_mad 0.001519, mid_vs_blend 0.001845, anchor_mad 0.005642. Caveat: deterministic motion-aware 보간 기준이며, 실사/가림/복잡 모션 품질은 CapCut 대비 후속 품질 튜닝 필요.
 
 ### H. AI 기능 (CapCut 차별화)
 - [ ] 🟡 자동 컷(무음 제거, F-18) (P1→preview/파라미터/단일undo 구현됨) — `AutoCutPlanner`(패딩으로 발화 보존) + `AutoCutCommand`(단일 undo) + ViewModel preview/apply/cancel + threshold/min/padding 슬라이더 + 타임라인 빨간 하이라이트. `AutoCutPlannerTests` 13개. Caveat: 실인터뷰 fixture 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류.

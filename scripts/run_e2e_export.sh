@@ -71,6 +71,64 @@ awk -v base="$DURATION" -v frz="$FREEZE_DURATION" 'BEGIN { d = frz - base; exit 
   || { echo "FAIL: freeze not reflected in export (delta $(awk -v b="$DURATION" -v f="$FREEZE_DURATION" 'BEGIN{printf "%.2f", f-b}')s, expected ~2.0)" >&2; rm -rf "$(dirname "$FREEZE_OUT")"; exit 1; }
 rm -rf "$(dirname "$FREEZE_OUT")"
 
+# Optical-flow slow motion must do more than stretch duration/fps: the 0.25x
+# export should be ~8s at 120fps and previously duplicated in-between frames
+# must now have measurable motion-compensated deltas.
+OF_FIXTURE="$ROOT/Tests/Fixtures/moving_subject_320x240_2s_30fps.mp4"
+[ -s "$OF_FIXTURE" ] || { echo "missing optical-flow fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+OF_OUT="$(mktemp -d)/optical_flow.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$OF_FIXTURE" MOVIECUT_UITEST_PLAYBACK_RATE=0.25 \
+  MOVIECUT_UITEST_OPTICAL_FLOW=1 MOVIECUT_UITEST_EXPORT="$OF_OUT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+OFP=$!
+for _ in $(seq 1 240); do [ -s "$OF_OUT" ] && break; sleep 0.5; done
+wait "$OFP" 2>/dev/null || true
+[ -s "$OF_OUT" ] || { echo "FAIL: optical-flow export missing" >&2; exit 1; }
+OF_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$OF_OUT" 2>/dev/null || echo 0)"
+OF_FPS="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$OF_OUT" 2>/dev/null || echo 0)"
+OF_FRAMES="$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$OF_OUT" 2>/dev/null || echo 0)"
+awk -v d="$OF_DURATION" 'BEGIN { exit !(d > 7.7 && d < 8.3) }' \
+  || { echo "FAIL: optical-flow duration ${OF_DURATION}s (expected ~8.0s)" >&2; rm -rf "$(dirname "$OF_OUT")"; exit 1; }
+awk -v r="$OF_FPS" 'BEGIN { split(r, p, "/"); fps = (p[2] && p[2] != 0) ? p[1] / p[2] : r + 0; exit !(fps > 119 && fps < 121) }' \
+  || { echo "FAIL: optical-flow fps ${OF_FPS} (expected 120fps)" >&2; rm -rf "$(dirname "$OF_OUT")"; exit 1; }
+awk -v f="$OF_FRAMES" 'BEGIN { exit !(f >= 940 && f <= 980) }' \
+  || { echo "FAIL: optical-flow frame count ${OF_FRAMES} (expected ~960)" >&2; rm -rf "$(dirname "$OF_OUT")"; exit 1; }
+OF_METRICS="$(python3 - "$OF_OUT" <<'PY'
+import subprocess, sys
+path = sys.argv[1]
+
+def frame_n(n):
+    return subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path,
+        "-vf", f"select=eq(n\\,{n}),scale=64:48", "-vsync", "0",
+        "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+    ])
+
+def mad(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / max(len(a), 1)
+
+def blend(a, b):
+    return bytes((x + y) // 2 for x, y in zip(a, b))
+
+adjacent = []
+mid_vs_blend = []
+anchors = []
+for base in (120, 240, 360):
+    frames = [frame_n(base + offset) for offset in range(5)]
+    adjacent.extend(mad(frames[i], frames[i + 1]) for i in range(4))
+    mid_vs_blend.append(mad(frames[2], blend(frames[0], frames[4])))
+    anchors.append(mad(frames[0], frames[4]))
+
+avg_adjacent = sum(adjacent) / len(adjacent)
+avg_mid_vs_blend = sum(mid_vs_blend) / len(mid_vs_blend)
+avg_anchor = sum(anchors) / len(anchors)
+print(f"adjacent_mad={avg_adjacent:.6f} mid_vs_blend={avg_mid_vs_blend:.6f} anchor_mad={avg_anchor:.6f}")
+if not (avg_adjacent > 0.0008 and avg_mid_vs_blend > 0.0008 and avg_anchor > 0.003):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: optical-flow frames still look duplicated or simple blended (${OF_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$OF_OUT")"; exit 1; }
+rm -rf "$(dirname "$OF_OUT")"
+echo "PASS: optical-flow slow motion produced ${OF_DURATION}s ${OF_FPS} ${OF_FRAMES} frames with motion-aware deltas ($OF_METRICS)"
+
 # Noise reduction must run the real AVAudioEngine DSP in the app context without
 # crashing (the offline-render path aborts under `swift test`).
 TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
@@ -502,4 +560,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"

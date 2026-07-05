@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.4 / 작성일: 2026-07-03 (v1.4: V10 재감사 반영 — S0 게이트 완화, A6 보강) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.5 / 작성일: 2026-07-03 (v1.5: V11 재감사 — G-02 Inc 3 상환 확인, 다음 자동 U-08) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-05 v1.5: V11 재감사(`GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
 - 2026-07-05 v1.4: V10 재감사(`GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 10/14; #9 chapter metadata 상환 후 다음 자동 항목 G-02 Inc 3).
 - 2026-07-04 v1.3: G-12 #10 오디오 추출 app/E2E 상환. G-12 진행 상태를 6/14로 갱신.
 - 2026-07-04 v1.2: V8 재감사 반영. G-12 5/14 상환, G-09 Inc 2 진행, G-02 Inc 1~2 순수 로직, G-01 Inc 1 워드 타이밍, U-03 `Track.isLocked` dead-field 판정 정정, U-07 부분 구현 상태를 기록.

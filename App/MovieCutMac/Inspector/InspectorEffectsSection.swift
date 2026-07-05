@@ -223,7 +223,9 @@ struct InspectorEffectsSection: View {
         let updated = ColorGrade(
             lift: .init(red: red, green: green, blue: blue),
             gamma: grade.gamma,
-            gain: grade.gain
+            gain: grade.gain,
+            hslBands: grade.hslBands,
+            curves: grade.curves
         )
         Task { await viewModel.updateSelectedColorGrade(updated) }
     }
@@ -233,7 +235,9 @@ struct InspectorEffectsSection: View {
         let updated = ColorGrade(
             lift: grade.lift,
             gamma: grade.gamma,
-            gain: .init(red: red, green: green, blue: blue)
+            gain: .init(red: red, green: green, blue: blue),
+            hslBands: grade.hslBands,
+            curves: grade.curves
         )
         Task { await viewModel.updateSelectedColorGrade(updated) }
     }
@@ -617,7 +621,13 @@ struct InspectorEffectsSection: View {
                 var grade = clip.colorGrade ?? ColorGrade()
                 grade[keyPath: keyPath] = newValue
                 // Re-init so the model's clamping invariants are enforced.
-                let clamped = ColorGrade(lift: grade.lift, gamma: grade.gamma, gain: grade.gain)
+                let clamped = ColorGrade(
+                    lift: grade.lift,
+                    gamma: grade.gamma,
+                    gain: grade.gain,
+                    hslBands: grade.hslBands,
+                    curves: grade.curves
+                )
                 Task { await viewModel.updateSelectedColorGrade(clamped) }
             }
         )

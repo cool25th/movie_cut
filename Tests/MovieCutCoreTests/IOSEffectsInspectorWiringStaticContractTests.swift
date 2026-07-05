@@ -65,7 +65,9 @@ struct IOSEffectsInspectorWiringStaticContractTests {
         #expect(source.contains("updateSelectedColorGrade(clamped)"))
         #expect(source.contains("await viewModel.updateSelectedColorGrade(nil)"))
         // Grade keypath mutations re-init ColorGrade so its clamps hold.
-        #expect(source.contains("ColorGrade(lift: grade.lift, gamma: grade.gamma, gain: grade.gain)"))
+        #expect(source.contains("ColorGrade("))
+        #expect(source.contains("hslBands: grade.hslBands"))
+        #expect(source.contains("curves: grade.curves"))
     }
 
     @Test("mask feather slider is wired")

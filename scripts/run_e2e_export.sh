@@ -705,6 +705,50 @@ else
   echo "FAIL: color grade not reflected in export (avg $B_AVG vs $G_AVG)" >&2; exit 1
 fi
 
+# G-02 Inc 3 HSL/curve grade must be reflected in export without relying on
+# lift/gamma/gain. Compare a same-app baseline of the solid red fixture against
+# an HSL red desaturation + master curve export.
+G02_BASE="$(mktemp -d)/g02_hsl_curve_base.mp4"; G02_GRADE="$(mktemp -d)/g02_hsl_curve_grade.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_EXPORT="$G02_BASE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+G02P=$!; for _ in $(seq 1 120); do [ -s "$G02_BASE" ] && break; sleep 0.5; done; wait "$G02P" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_HSL_CURVES=1 MOVIECUT_UITEST_EXPORT="$G02_GRADE" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+G02P=$!; for _ in $(seq 1 120); do [ -s "$G02_GRADE" ] && break; sleep 0.5; done; wait "$G02P" 2>/dev/null || true
+[ -s "$G02_BASE" ] || { echo "FAIL: G-02 HSL/curve baseline export missing" >&2; exit 1; }
+[ -s "$G02_GRADE" ] || { echo "FAIL: G-02 HSL/curve export missing" >&2; exit 1; }
+G02_METRICS="$(python3 - "$G02_BASE" "$G02_GRADE" <<'PY'
+import subprocess
+import sys
+
+base_path, grade_path = sys.argv[1:3]
+
+def avg_rgb(path):
+    data = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-ss", "1.0", "-i", path,
+        "-vf", "scale=1:1", "-frames:v", "1",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+    ])
+    if len(data) != 3:
+        raise SystemExit(f"expected 3 avg RGB bytes for {path}, got {len(data)}")
+    return tuple(data)
+
+base = avg_rgb(base_path)
+grade = avg_rgb(grade_path)
+gray_spread = max(grade) - min(grade)
+print(f"base_rgb={base[0]},{base[1]},{base[2]} grade_rgb={grade[0]},{grade[1]},{grade[2]} gray_spread={gray_spread}")
+base_spread = max(base) - min(base)
+channel_delta = sum(abs(int(grade[i]) - int(base[i])) for i in range(3))
+if not (
+    base[0] > base[1] + 3 and base[0] > base[2] + 3
+    and gray_spread <= 2
+    and gray_spread < base_spread
+    and channel_delta >= 8
+):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: G-02 HSL/curve grade not reflected in export (${G02_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$G02_BASE")" "$(dirname "$G02_GRADE")"; exit 1; }
+rm -rf "$(dirname "$G02_BASE")" "$(dirname "$G02_GRADE")"
+echo "PASS: G-02 HSL/curve grade reflected in export ($G02_METRICS)"
+
 # Color scope must produce real histogram data from the graded thumbnail.
 SC_RESULT="$(mktemp -d)/sc.txt"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_SCOPE=1 \
@@ -791,4 +835,4 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + scope + prores + hdr + autosave)"
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave)"

@@ -414,7 +414,13 @@ struct IOSEffectsInspectorView: View {
                 var grade = clip.colorGrade ?? ColorGrade()
                 grade[keyPath: keyPath] = newValue
                 // Re-init so ColorGrade's clamping invariants are enforced.
-                let clamped = ColorGrade(lift: grade.lift, gamma: grade.gamma, gain: grade.gain)
+                let clamped = ColorGrade(
+                    lift: grade.lift,
+                    gamma: grade.gamma,
+                    gain: grade.gain,
+                    hslBands: grade.hslBands,
+                    curves: grade.curves
+                )
                 Task { await viewModel.updateSelectedColorGrade(clamped) }
             }
         )

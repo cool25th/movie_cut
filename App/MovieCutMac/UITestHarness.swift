@@ -45,6 +45,7 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
+    /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -109,6 +110,19 @@ extension EditorViewModel {
                     lift: .init(red: 0.1, green: 0, blue: -0.05),
                     gamma: 0.8,
                     gain: .init(red: 1.2, green: 1.0, blue: 0.8)
+                )
+            )
+        }
+
+        // Optional G-02 Inc 3 grade: no lift/gamma/gain changes, only the new HSL
+        // and curve fields, so E2E can prove the non-3-way renderer chain.
+        if env["MOVIECUT_UITEST_HSL_CURVES"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(
+                    hslBands: [HSLBand(center: .red, saturation: -1, luminance: 0.5)],
+                    curves: ColorCurves(master: [
+                        CurvePoint(x: 0.5, y: 0.65)
+                    ])
                 )
             )
         }

@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.3 / 작성일: 2026-07-03 (v1.3: G-12 #10 오디오 추출 E2E 상환) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.4 / 작성일: 2026-07-03 (v1.4: V10 재감사 반영 — S0 게이트 완화, A6 보강) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-05 v1.4: V10 재감사(`GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 9/14).
 - 2026-07-04 v1.3: G-12 #10 오디오 추출 app/E2E 상환. G-12 진행 상태를 6/14로 갱신.
 - 2026-07-04 v1.2: V8 재감사 반영. G-12 5/14 상환, G-09 Inc 2 진행, G-02 Inc 1~2 순수 로직, G-01 Inc 1 워드 타이밍, U-03 `Track.isLocked` dead-field 판정 정정, U-07 부분 구현 상태를 기록.
 
@@ -37,7 +38,7 @@
 - A3. preview와 export는 동일 effect metadata를 소비.
 - A4. Core는 미디어 프레임워크 의존 최소화, 미디어 I/O는 앱 레이어.
 - A5. 모델 필드 추가는 Codable 하위호환(optional 디코딩) + 디코딩 테스트 의무.
-- **A6.(신규)** Core 신설 서비스는 앱 호출부+검증 훅 동반 (§1.2-5).
+- **A6.(신규)** Core 신설 서비스는 앱 호출부+검증 훅 동반 (§1.2-5). **(v1.4 보강)** 순수 로직·모델 타입(평가기/빌더/저장 필드)도 도입 후 다음 마일스톤 전환 시점까지 소비처(렌더 체인 또는 UI)에 연결되지 않으면 dead-value로 간주해 G-12 원장에 자동 등재한다.
 
 V8 dead-code 감사 메모: `VocalSeparationService` 계열은 G-05의 명시 부채다. 추가 후보로 `BackgroundRemovalProvider`(App=0, tests-only; 실제 렌더는 `PersonSegmentationCompositor`/iOS inline path)와 `StyleTransferProvider`(App=0, tests-only; 실제 효과는 `VisualEffectPixelProcessor` 계열)가 식별됐다. `CurveEvaluator`/`HSLCubeBuilder`도 App=0이지만 G-02 Inc 1~2 진행 산출물이므로 Inc 3에서 렌더 체이닝으로 해소해야 한다.
 
@@ -537,6 +538,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-05 G-12 #7 타이틀 템플릿 14종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=<name>`가 실제 템플릿 클립을 화면 안 fixture 중앙에 추가하고, `scripts/run_e2e_export.sh`가 no-template baseline 대비 frame-diff를 14종 전체에 대해 측정 PASS. 실측 max_overlay_mad: Title 7.450278, Subtitle 7.109653, Lower Third 6.524444, Caption 6.459444, Credits 7.125347, News Banner 6.722222, Quote 6.725417, Callout 6.875694, Kinetic 6.848056, Handwritten 6.700069, Neon Glow 6.790208, Outline 6.636806, Typewriter 6.506250, Social Handle 6.885069. E2E `title templates 14 presets + E2E check OK` 통과.
 - 2026-07-05 loop-6 CapCut 대비 완성도 재평가: `docs/GAP_ANALYSIS_V9_FUNC_UI_20260705.md` 생성. G-12는 8/14 상환 기준으로 갱신했고, 체감 완성도는 68~74%로 소폭 상향하되 “능가” 선언은 계속 금지한다. 엄격한 S0 자동 선택 다음 항목은 #7 타이틀 템플릿 14종이다.
 - V9 잔여(2026-07-05): #9 챕터/비트 마커 메타데이터, #11 배경제거 실인물, #12 자동 리프레임 실영상 추적, #13 iCloud 2기기 충돌, #14 Photos 앱 드래그. G-12는 **9/14 진행중**으로 판정한다.
+- V10 원장 재편(2026-07-05, v1.4 게이트 완화): **자동 상환 대상은 #9뿐.** #11/#12는 선행 fixture 제작을 독립 증분으로 분리 — `#11a/#12a: scripts/make_fixtures.sh`에 이동 피사체(합성 도형 애니메이션 mp4) 및 실인물 대체(합성 인물 실루엣 또는 사용자 제공 클립 절차 문서화) fixture 추가 → `#11b/#12b`: 해당 fixture로 E2E 측정. **#13(iCloud 2기기)/#14(Photos 드래그)는 "수동 검증 대기"로 분리** — 자동 선택에서 제외하고, 사용자 실기기 세션용 절차를 각 1페이지로 준비하는 것까지가 자동 세션의 몫. A6 보강에 따라 dead-value 4계열(CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand 미편입·wordTimings 미소비)을 원장에 등재하며, 상환처는 각각 G-02 Inc 3, G-01 Inc 2다.
 
 ---
 

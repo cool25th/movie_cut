@@ -200,6 +200,15 @@ extension EditorViewModel {
             }
         }
 
+        var chapterSuffix = ""
+        if env["MOVIECUT_UITEST_CHAPTER_MARKERS"] == "1" {
+            let includeBeatChapters = env["MOVIECUT_UITEST_BEAT_CHAPTERS"] == "1"
+            await addUITestChapterMarkers(includeBeatChapters: includeBeatChapters)
+            let standardCount = currentProject.markers.filter { $0.kind == .standard }.count
+            let beatCount = currentProject.markers.filter { $0.kind == .beat }.count
+            chapterSuffix = " chapters=\(standardCount) beat_chapters=\(beatCount) include_beats=\(includeBeatChapters ? 1 : 0)"
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             await exportProject(to: URL(filePath: exportPath))
@@ -276,7 +285,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

@@ -1450,6 +1450,29 @@ final class EditorViewModel {
             lastErrorMessage = error.localizedDescription
         }
     }
+
+    func addUITestChapterMarkers(includeBeatChapters: Bool) async {
+        do {
+            var settings = currentProject.exportSettings
+            settings.includeChapters = true
+            settings.includeBeatChapters = includeBeatChapters
+            await apply(SetProjectExportSettingsCommand(exportSettings: settings))
+
+            let markers = [
+                Marker(time: 0.25, name: "Intro", color: "#FFD60A", kind: .standard),
+                Marker(time: 1.25, name: "Outro", color: "#34C759", kind: .standard)
+            ]
+            await apply(AddMarkersCommand(markers: markers))
+
+            if includeBeatChapters {
+                await apply(AddMarkersCommand(markers: [
+                    Marker(time: 0.75, name: "Beat 1", color: "#FF9F0A", kind: .beat)
+                ]))
+            }
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
 #endif
 
     func addSticker(_ sticker: StickerAsset) async {

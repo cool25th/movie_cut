@@ -32,6 +32,10 @@ final class ExportEngine {
 
     @discardableResult
     func export(project: Project, to url: URL, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> URL {
+        if shouldWriteChapterMetadata(for: project) {
+            return try await exportVideoWithExplicitBitrate(project: project, to: url, audioProcessing: audioProcessing)
+        }
+
         isExporting = true
         exportProgress = 0
         exportError = nil
@@ -93,38 +97,46 @@ final class ExportEngine {
     /// Embeds timeline markers as QuickTime chapter metadata on the exported file.
     private func applyChapterMetadata(to exportSession: AVAssetExportSession, project: Project) {
         guard project.exportSettings.includeChapters else { return }
+        let chapterGroups = chapterMetadataGroups(for: project)
+        guard !chapterGroups.isEmpty else { return }
+        exportSession.metadata = chapterGroups.flatMap { $0.items }
+    }
+
+    private func shouldWriteChapterMetadata(for project: Project) -> Bool {
+        project.exportSettings.includeChapters && !chapterMetadataGroups(for: project).isEmpty
+    }
+
+    private func chapterMetadataGroups(for project: Project) -> [AVTimedMetadataGroup] {
+        guard project.exportSettings.includeChapters else { return [] }
 
         var markers = project.markers.filter { $0.kind == .standard }
         if project.exportSettings.includeBeatChapters {
             markers += project.markers.filter { $0.kind == .beat }
         }
 
-        guard !markers.isEmpty else { return }
+        let totalDuration = max(project.timeline.duration, 0.1)
+        let sortedMarkers = markers
+            .filter { $0.time.isFinite && $0.time >= 0 && $0.time < totalDuration }
+            .sorted { $0.time < $1.time }
+        guard !sortedMarkers.isEmpty else { return [] }
 
-        let totalDuration = project.timeline.duration
-        let sortedMarkers = markers.sorted { $0.time < $1.time }
-
-        var chapterGroups: [AVTimedMetadataGroup] = []
-        for (index, marker) in sortedMarkers.enumerated() {
+        return sortedMarkers.enumerated().map { index, marker in
             let start = marker.time
             let end = index + 1 < sortedMarkers.count ? sortedMarkers[index + 1].time : totalDuration
             let duration = max(end - start, 0.1)
 
             let item = AVMutableMetadataItem()
-            item.identifier = .quickTimeUserDataChapter
+            item.identifier = .quickTimeMetadataTitle
             item.value = (marker.name.isEmpty ? "Chapter \(index + 1)" : marker.name) as NSString
-            item.extendedLanguageTag = "und"
+            item.extendedLanguageTag = "en"
             item.dataType = kCMMetadataBaseDataType_UTF8 as String
 
             let timeRange = CMTimeRange(
                 start: CMTime(seconds: start, preferredTimescale: 600),
                 duration: CMTime(seconds: duration, preferredTimescale: 600)
             )
-            chapterGroups.append(AVTimedMetadataGroup(items: [item], timeRange: timeRange))
+            return AVTimedMetadataGroup(items: [item], timeRange: timeRange)
         }
-
-        guard !chapterGroups.isEmpty else { return }
-        exportSession.metadata = chapterGroups.flatMap { $0.items }
     }
 
     private func applyBitrateFileLengthLimit(_ exportSession: AVAssetExportSession, project: Project) {
@@ -1433,6 +1445,7 @@ final class ExportEngine {
             let fileType: AVFileType = plan.fileExtension == "mov" ? .mov : .mp4
             let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
             let reader = try AVAssetReader(asset: exportPackage.composition)
+            let chapterGroups = chapterMetadataGroups(for: project)
 
             let videoTracks = exportPackage.composition.tracks(withMediaType: .video)
             var videoReaderOutput: AVAssetReaderVideoCompositionOutput?
@@ -1494,6 +1507,26 @@ final class ExportEngine {
                 }
             }
 
+            var metadataAdaptor: AVAssetWriterInputMetadataAdaptor?
+            var metadataInput: AVAssetWriterInput?
+            if let firstChapterGroup = chapterGroups.first,
+               let formatDescription = firstChapterGroup.copyFormatDescription() {
+                let input = AVAssetWriterInput(
+                    mediaType: .metadata,
+                    outputSettings: nil,
+                    sourceFormatHint: formatDescription
+                )
+                input.expectsMediaDataInRealTime = false
+                if writer.canAdd(input) {
+                    writer.add(input)
+                    if let writerVideoInput {
+                        writerVideoInput.addTrackAssociation(withTrackOf: input, type: AVAssetTrack.AssociationType.chapterList.rawValue)
+                    }
+                    metadataInput = input
+                    metadataAdaptor = AVAssetWriterInputMetadataAdaptor(assetWriterInput: input)
+                }
+            }
+
             guard reader.startReading() else {
                 throw reader.error ?? ExportEngineError.exportSessionCreationFailed
             }
@@ -1501,6 +1534,15 @@ final class ExportEngine {
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
             }
             writer.startSession(atSourceTime: .zero)
+
+            if let metadataAdaptor, let metadataInput {
+                for chapterGroup in chapterGroups {
+                    guard metadataAdaptor.append(chapterGroup) else {
+                        throw writer.error ?? ExportEngineError.exportSessionCreationFailed
+                    }
+                }
+                metadataInput.markAsFinished()
+            }
 
             let totalDuration = max(project.timeline.duration, 1.0 / 600.0)
             if let writerVideoInput, let videoReaderOutput {

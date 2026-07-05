@@ -505,6 +505,50 @@ PY
 rm -rf "$(dirname "$EXTRACT_AUDIO_OUT")" "$(dirname "$EXTRACT_AUDIO_RESULT")"
 echo "PASS: audio extraction produced valid audio stream (clips=${EXTRACT_AUDIO_CLIPS}, clip_duration=${EXTRACT_AUDIO_CLIP_DURATION}s, export_duration=${EXTRACT_AUDIO_DURATION}s, codec=${EXTRACT_AUDIO_CODEC}, rms=${EXTRACT_AUDIO_RMS})"
 
+# Chapter/beat markers must be written into the exported file as real chapter
+# metadata, not just present in the in-memory project. The app harness creates two
+# standard markers (Intro/Outro) plus one beat marker and enables beat chapters;
+# ffprobe must then see timed chapter atoms at those marker times.
+CHAPTER_TMPDIR="$(mktemp -d)"
+CHAPTER_OUT="$CHAPTER_TMPDIR/chapters.mp4"
+CHAPTER_RESULT="$CHAPTER_TMPDIR/chapters.txt"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_CHAPTER_MARKERS=1 MOVIECUT_UITEST_BEAT_CHAPTERS=1 \
+  MOVIECUT_UITEST_EXPORT="$CHAPTER_OUT" MOVIECUT_UITEST_RESULT="$CHAPTER_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+CP=$!
+for _ in $(seq 1 180); do [ -s "$CHAPTER_OUT" ] && [ -s "$CHAPTER_RESULT" ] && break; sleep 0.5; done
+wait "$CP" 2>/dev/null || true
+CHAPTER_STATUS="$(cat "$CHAPTER_RESULT" 2>/dev/null || echo MISSING)"
+[ -s "$CHAPTER_OUT" ] || { echo "FAIL: chapter marker export missing (status: $CHAPTER_STATUS)" >&2; rm -rf "$CHAPTER_TMPDIR"; exit 1; }
+case "$CHAPTER_STATUS" in
+  *"error=none"*"chapters=2"*"beat_chapters=1"*"include_beats=1"*) ;;
+  *) echo "FAIL: chapter marker harness did not create expected markers (status: $CHAPTER_STATUS)" >&2; rm -rf "$CHAPTER_TMPDIR"; exit 1 ;;
+esac
+CHAPTER_METRICS="$(python3 - "$CHAPTER_OUT" <<'PY'
+import json
+import subprocess
+import sys
+
+path = sys.argv[1]
+raw = subprocess.check_output([
+    "ffprobe", "-v", "error", "-show_chapters", "-of", "json", path
+], text=True)
+chapters = json.loads(raw).get("chapters", [])
+starts = [float(chapter.get("start_time", "nan")) for chapter in chapters]
+expected = [0.25, 0.75, 1.25]
+if len(chapters) != 3:
+    raise SystemExit(f"expected 3 chapters, got {len(chapters)}")
+for got, want in zip(starts, expected):
+    if abs(got - want) > 0.02:
+        raise SystemExit(f"chapter starts {starts} do not match {expected}")
+ends = [float(chapter.get("end_time", "nan")) for chapter in chapters]
+if not all(end > start for start, end in zip(starts, ends)):
+    raise SystemExit(f"invalid chapter ranges starts={starts} ends={ends}")
+print("count=3 starts=" + ",".join(f"{v:.2f}" for v in starts) + " ends=" + ",".join(f"{v:.2f}" for v in ends))
+PY
+)" || { echo "FAIL: exported chapter metadata missing or malformed (${CHAPTER_METRICS:-no metrics})" >&2; rm -rf "$CHAPTER_TMPDIR"; exit 1; }
+rm -rf "$CHAPTER_TMPDIR"
+echo "PASS: chapter marker metadata export proof (Intro/Beat 1/Outro; $CHAPTER_METRICS)"
+
 # Ducking must attenuate BGM under a voice cue in the real app export path. The
 # harness creates two audio tracks, applies SetAudioDuckingCommand to the BGM,
 # and the metric isolates the 220Hz BGM component so the 1kHz voice cue cannot

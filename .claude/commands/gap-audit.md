@@ -10,10 +10,11 @@ CapCut 대비 격차를 **코드 실사 기반**으로 재도출하고, 분석 �
 ## 0. 이전 산출물 로드 (필수, 순서대로)
 
 1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — 현행 스펙(G-ID 기능 / U-ID UI). **스펙이 사실의 원천.**
-2. 최신 `docs/GAP_ANALYSIS_V*` (버전 번호 가장 높은 것) — 직전 통합 격차 분석.
-3. `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5 — 증거 기반 검증 현황.
-4. `docs/UI_DESIGN_PRINCIPLES.md`, `docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` — UI 원칙·IA 계약 배경.
-5. `git log --oneline` — 직전 분석의 기준 커밋 이후 델타 전부 확인.
+2. **`docs/CAPCUT_BENCHMARK_STANDARD.md` — CapCut 수준의 명시적 기준(B-ID). 모든 비교 판정은 이 문서의 B-ID 기준 문장에 대해 ⬆/=/⬇/❌로 내린다.**
+3. 최신 `docs/GAP_ANALYSIS_V*` (버전 번호 가장 높은 것) — 직전 통합 격차 분석.
+4. `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5 — 증거 기반 검증 현황.
+5. `docs/UI_DESIGN_PRINCIPLES.md`, `docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` — UI 원칙·IA 계약 배경.
+6. `git log --oneline` — 직전 분석의 기준 커밋 이후 델타 전부 확인.
 
 ## 1. 코드 실사 (문서 주장 검증 — 자가보고 신뢰 금지)
 
@@ -27,9 +28,9 @@ CapCut 대비 격차를 **코드 실사 기반**으로 재도출하고, 분석 �
 
 ## 2. CapCut 대비 재비교 (기능 + UI)
 
-- **기준**: 이전 분석의 비교표(1-A 능가 / 1-B 검증부채 / 1-C 열위)를 시작점으로, 실사 결과를 반영해 항목별로 갱신·이동.
-- **기능**: 편집/색/오디오/텍스트·자막/AI/export/생태계 축. **UI**: 진입 표면(홈/온보딩)/타임라인 정보 표면/브라우저/인스펙터/피드백/현지화/접근성/마이크로 인터랙션 축.
-- 새 격차 발견 시 근거(파일:라인 또는 grep 결과) 필수. CapCut 기능 지식이 불확실하면 웹 검색으로 확인 후 출처 명시.
+- **기준: `CAPCUT_BENCHMARK_STANDARD.md`의 B-ID가 판정 단위다.** §7 채점 시트를 복사해 갱신하고 신규 분석 문서에 첨부한다. 판정 변화(⬇→= 등)는 반드시 증거와 함께.
+- 이전 분석의 비교표(1-A 능가 / 1-B 검증부채 / 1-C 열위)는 B-ID 채점의 요약 뷰로 유지·갱신한다.
+- 새 격차 발견 시 근거(파일:라인 또는 grep 결과) 필수. **[추정] 표기 B-ID로 ⬇/❌ 판정 시 웹 검색으로 CapCut 실동작을 먼저 확인하고 벤치마크 문서를 [확인]으로 승격(출처 병기).** CapCut에 신기능이 보이면 벤치마크에 B-ID 추가 + 버전 bump.
 - **능가 기회**(CapCut이 구조적으로 못 하는 것 — 온디바이스/오프라인/Pro 출력/macOS 네이티브)도 함께 갱신.
 
 ## 3. 산출물 (전부 이 세션에서 작성·커밋)

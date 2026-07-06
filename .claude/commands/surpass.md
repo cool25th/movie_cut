@@ -12,6 +12,7 @@ MovieCut의 CapCut 능가 계획을 G-ID(기능)/U-ID(UI) 단위로 실행한다
 ## 0. 컨텍스트 로드 (필수, 순서대로)
 
 1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — **작업 명세(데이터 모델·구현 증분·AC·검증 계획)**. §3 G-ID(기능)와 §5 U-ID(UI)가 작업 단위다.
+1-b. `docs/CAPCUT_BENCHMARK_STANDARD.md` — 작업할 G/U-ID가 대응하는 **B-ID 기준 문장**을 확인. 완료 선언 = 해당 B-ID **= 이상** 도달(증거 포함)이어야 한다.
 2. 최신 `docs/GAP_ANALYSIS_V*`(버전 번호 최고) — 기능+UI 통합 재감사 (권장 실행 순서 포함).
 3. `docs/CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md` — 기능 격차 배경.
 4. `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5 — 증거 기반 검증 현황 (자가보고 수치 신뢰 금지).

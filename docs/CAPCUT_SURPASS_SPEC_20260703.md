@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.5 / 작성일: 2026-07-03 (v1.5: V11 재감사 — G-02 Inc 3 상환 확인, 다음 자동 U-08) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.6 / 작성일: 2026-07-03 (v1.6: 사용자 버그 재현 — G-15 이미지 파이프라인 신설·최우선, Works-First 게이트) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
 - 2026-07-05 v1.5: V11 재감사(`GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
 - 2026-07-05 v1.4: V10 재감사(`GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 10/14; #9 chapter metadata 상환 후 다음 자동 항목 G-02 Inc 3).
 - 2026-07-04 v1.3: G-12 #10 오디오 추출 app/E2E 상환. G-12 진행 상태를 6/14로 갱신.
@@ -40,6 +41,7 @@
 - A4. Core는 미디어 프레임워크 의존 최소화, 미디어 I/O는 앱 레이어.
 - A5. 모델 필드 추가는 Codable 하위호환(optional 디코딩) + 디코딩 테스트 의무.
 - **A6.(신규)** Core 신설 서비스는 앱 호출부+검증 훅 동반 (§1.2-5). **(v1.4 보강)** 순수 로직·모델 타입(평가기/빌더/저장 필드)도 도입 후 다음 마일스톤 전환 시점까지 소비처(렌더 체인 또는 UI)에 연결되지 않으면 dead-value로 간주해 G-12 원장에 자동 등재한다.
+- **A7.(v1.6 신설, Works-First)** 미디어 kind(video/audio/image)를 새로 소비하는 기능은 **해당 kind의 fixture로 E2E 1건**을 의무화한다. 또한 `run_e2e_export.sh`의 실사용 스모크(사진+비디오+텍스트 혼합 export)가 FAIL이면 모든 자동 세션은 신규 작업 금지·수리 우선이다. 근거: 전 E2E가 mp4/wav 전용이어서 이미지 클립 파이프라인 부재(G-15)를 한 번도 잡지 못했다.
 
 V8 dead-code 감사 메모: `VocalSeparationService` 계열은 G-05의 명시 부채다. 추가 후보로 `BackgroundRemovalProvider`(App=0, tests-only; 실제 렌더는 `PersonSegmentationCompositor`/iOS inline path)와 `StyleTransferProvider`(App=0, tests-only; 실제 효과는 `VisualEffectPixelProcessor` 계열)가 식별됐다. `CurveEvaluator`/`HSLCubeBuilder`도 App=0이지만 G-02 Inc 1~2 진행 산출물이므로 Inc 3에서 렌더 체이닝으로 해소해야 한다.
 
@@ -552,6 +554,58 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 ### G-14. Mac 녹화 스위트 — P3 / S5 / 규모 L ⚠️ 착수 전 합의 필요
 
 **권장 범위**: ① ScreenCaptureKit 화면+시스템 오디오 → 라이브러리 자동 import ② AVCaptureSession 웹캠 PiP 클립 ③ 텔레프롬프터 오버레이(텍스트 클립 원고 스크롤). 보이스오버 녹음 UI/권한 패턴 재사용. 상세 스펙은 합의 후 본 문서에 증분 추가.
+
+---
+
+### G-15. 이미지(사진) 클립 파이프라인 — **P0 / 최우선(v1.6 게이트)** / 규모 M ⭐
+
+> 트리거: 사용자 실사용 버그 보고(2026-07-06) + 헤드리스 재현 확정. 상세 배경: `GAP_ANALYSIS_V12_FUNC_UI_20260706.md` §1.
+
+#### 요구사항
+1. 사진 파일(png/jpg/heic)을 import→타임라인 배치하면 **preview에 즉시 보인다**(기본 duration 5s, trim으로 연장/단축 가능).
+2. export 결과물에 사진이 반영된다(사진 단독·사진+비디오 혼합 타임라인 모두).
+3. 기존 효과 체인(색보정/그레이드/HSL·커브/키프레임/전환/마스크)이 사진 클립에도 동일 적용된다.
+4. iOS 동일 동작.
+5. EXIF 회전이 올바르게 반영되고, 대형 사진(예: 48MP)은 캔버스 해상도 상한으로 다운스케일된다.
+
+#### 현재 상태 (2026-07-06 실사 — **미구현 확정**)
+- 재현: `MOVIECUT_UITEST_IMPORT=<blue png>` + `EXPORT` → **clips=1, error=Cannot Open, export 파일 미생성**.
+- `PlaybackEngine.swift:494` — 클립 소스 삽입이 `loadTracks(withMediaType: .video).first` 전제. 이미지 파일은 비디오 트랙 0개 → **조용히 스킵**(preview 무표시, 에러 없음).
+- `ExportEngine` — 이미지 클립 분기 없음(이미지 렌더는 sticker `stickerImageURL` 오버레이·GIF export·정지프레임 저장뿐).
+- `MediaImporter:38`의 `.image` 분류, `EditorViewModel:421`의 이미지 클립 생성 허용, 썸네일/메타데이터(F-06)는 정상 — **파이프라인의 앞부분만 존재**.
+- E2E 전 시나리오가 mp4/wav fixture → 이 경로가 한 번도 검증된 적 없음(fixture 다양성 부채 → A7 신설).
+
+#### 구현 방향 결정
+- **채택: (B) 이미지→비디오 세그먼트 사전 렌더** — `ReverseRenderService`(역재생용 임시 asset 생성→composition 삽입)와 동일한 검증된 패턴. 소스가 진짜 비디오가 되므로 preview/export/iOS/효과 체인(색·그레이드·키프레임·전환)이 **무수정으로 상속**된다.
+- 기각: (A) blank 트랙 + custom compositor 직접 드로잉 — AVFoundation은 소스 트랙 없는 구간에 compositor instruction을 호출하지 않아 placeholder 트랙 편법이 필요하고, two-source 전환·speed 경로 전반의 재작업 위험이 큼.
+
+#### 구현 증분
+
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | **`ImageVideoRenderService`**(앱 레이어, A4): `render(imageURL:duration:renderSize:) async throws -> URL` — CGImageSource(EXIF 회전 적용, 캔버스 해상도 상한 다운스케일) → `AVAssetWriter` h264 mp4(정지 프레임, `scaleTimeRange` 허용). 캐시 키 `(imageURL, duration버킷, renderSize)` — temp 디렉토리, `ReverseRenderService` 수명 관리 패턴 복제 | 신규 `App/MovieCutMac/Media/ImageVideoRenderService.swift` |
+| 2 | **엔진 배선**: `PlaybackEngine`/`ExportEngine` 클립 순회에서 asset kind `.image`이면 렌더된 세그먼트 asset을 소스로 삽입 — reverse 클립 분기와 같은 위치. 클립 생성 시 기본 duration 5s 부여 확인 | `PlaybackEngine.swift:494` 인근, `ExportEngine.swift`, `EditorViewModel.swift` |
+| 3 | **E2E + W-스모크**: ① 재현 케이스 codify — blue png import→export 성공 + 중간 프레임 RGB≈(0,0,255) 측정 ② **실사용 스모크 시나리오 상설**: 사진 1+비디오 1+텍스트 1 혼합 타임라인 → export 성공+duration 검증, `run_e2e_export.sh` 최상단 배치(FAIL 시 이후 체크 중단) | `scripts/run_e2e_export.sh`, `UITestHarness.swift` |
+| 4 | **iOS 배선** + trim/duration GUI 확인 + **사용자 실기기 확인 요청**(사진 드래그→재생→export 1회 — Works-First DoD) | `App/MovieCutiOS/`(IOSPlaybackEngine/IOSExportEngine) |
+
+#### AC
+1. 재현 케이스 역전: blue png → export **성공** + 중간 프레임 픽셀 RGB≈(0,0,255) (E2E — 이번 버그가 그대로 회귀 잠금).
+2. 사진+비디오 혼합 타임라인 export 성공, 총 duration = 클립 합 (E2E 스모크).
+3. 사진 클립에 warm grade 적용 → export 평균색 이동 (기존 grade E2E 패턴 재사용).
+4. preview에서 사진이 보임 + trim으로 duration 변경 반영 (실기기 확인).
+5. EXIF 회전 jpg가 올바른 방향으로 렌더 (fixture 추가 + 픽셀 위치 검사).
+6. iOS 동일 E2E 1건.
+7. 4K 캔버스에 대형 이미지 배치 시 다운스케일 확인(메모리 측정 로그).
+
+#### 검증 계획
+- fixture 추가: EXIF 회전 jpg (`scripts/make_fixtures.sh`).
+- `ImageVideoRenderServiceTests`(해상도 상한/회전/캐시) + E2E(기존 `MOVIECUT_UITEST_IMPORT`에 png 사용).
+- 실기기: 사용자 확인 1회(Inc 4) — Photos 앱 드래그(G-12 #14)와 묶어 진행 권장.
+
+#### 리스크
+- trim 연장 시 세그먼트 길이 부족 — 여유 길이(최대 30s)로 렌더 후 trim으로 흡수(권고) 또는 duration 버킷 재렌더.
+- HEIC/Display P3 → h264 변환 색 시프트 — sRGB 변환 명시.
+- 프로젝트 재로드 시 temp 세그먼트 소실 → imageURL 기준 lazy 재렌더 필수.
 
 ---
 

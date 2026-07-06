@@ -775,6 +775,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 2. 골든 4종이 리포지토리에 커밋되고 갱신 절차가 문서화됨.
 3. 대표 플로우 클릭수 측정치가 기록되고 원칙 목표와 대조표 존재.
 
+검증 기록:
+- 2026-07-06 U-08 Inc 1~2: `scripts/ui_capture.sh`와 `scripts/ui_regression.sh`를 추가해 Debug `MovieCutMac.app`을 deterministic populated harness(`MOVIECUT_UITEST_IMPORT` + `MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=Title`)로 실행하고, 실제 창을 `screencapture`로 캡처한 뒤 normalized PNG dHash로 `Tests/UIEvidence/golden_populated_editor.png`와 비교한다. 산출물은 `artifacts/ui/`에 저장하고 `.gitignore`로 제외, committed evidence는 `Tests/UIEvidence/`로 분리했다. 검증: `scripts/ui_regression.sh --update-golden` PASS, `scripts/ui_regression.sh` PASS(distance=0/threshold=4), 임시 golden negate 이빨 확인 FAIL(distance=56/threshold=4) 후 복원 PASS, `swift build` PASS, `swift test --filter 'UIRegression|StaticContract|Golden'` PASS, Mac `xcodebuild` PASS, `scripts/run_e2e_export.sh` PASS. Caveat: 현재 committed golden은 populated editor 1종이며, 4표면 확장과 Inc 3 클릭수 metric은 [진행중].
+
 ---
 
 ### U-09. 커맨드 팔레트 (⌘K) — P2 / 규모 M (Pro 능가 표면)

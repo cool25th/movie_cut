@@ -3,6 +3,8 @@
 .build-local/
 .swiftpm/
 DerivedData/
+build/
+artifacts/
 .xcode-home/
 *.xcresult
 

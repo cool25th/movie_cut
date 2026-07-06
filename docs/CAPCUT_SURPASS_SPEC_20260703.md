@@ -597,6 +597,9 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 6. iOS 동일 E2E 1건.
 7. 4K 캔버스에 대형 이미지 배치 시 다운스케일 확인(메모리 측정 로그).
 
+검증 기록:
+- 2026-07-06 G-15 Inc 1~3 부분 완료: `ImageVideoRenderService`를 `ReverseRenderService.swift`에 추가해 still image를 EXIF transform 적용 thumbnail → sRGB H.264 30fps mp4 segment로 렌더하고, Mac `PlaybackEngine`/`ExportEngine`이 `MediaKind.image` 클립을 기존 video composition source track으로 삽입한다. `scripts/run_e2e_export.sh` 최상단에 Works-First image smoke를 추가해 `Tests/Fixtures/swatch_blue_64x64.png`를 실제 DEBUG 앱 하니스(`MOVIECUT_UITEST_IMPORT`→`MOVIECUT_UITEST_EXPORT`)로 export한 뒤 duration과 중간 프레임을 측정한다. 검증: `swift build` PASS, `swift test --filter 'ImageVideo|StaticContract|Golden|Export|Playback'` PASS, Mac `xcodebuild` PASS, `scripts/run_e2e_export.sh` PASS — AC1 실측 `duration=5.000000s`, middle frame `rgb=0,0,171`(blue-dominant). Caveat: AC2 혼합 smoke, AC3 warm grade, AC4 실기기 preview/trim, AC5 EXIF fixture, AC6 iOS E2E, AC7 대형 이미지 메모리 로그는 [진행중]. 다음 증분: Inc 3 확장/Inc 4, 시작점: `scripts/run_e2e_export.sh` image smoke 바로 아래에 사진+비디오+텍스트 혼합 smoke 추가 및 `App/MovieCutiOS/Export/IOSExportEngine.swift`/`Playback/IOSPlaybackEngine.swift` 동일 배선.
+
 #### 검증 계획
 - fixture 추가: EXIF 회전 jpg (`scripts/make_fixtures.sh`).
 - `ImageVideoRenderServiceTests`(해상도 상한/회전/캐시) + E2E(기존 `MOVIECUT_UITEST_IMPORT`에 png 사용).

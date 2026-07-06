@@ -25,6 +25,51 @@ PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -conf
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
+# Works-First / G-15: still image clips must render through the real app
+# preview/export pipeline instead of silently skipping because PNG has no video
+# track. This reproduces the user bug and locks AC1: blue PNG -> exported blue
+# middle frame.
+IMAGE_FIXTURE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
+[ -s "$IMAGE_FIXTURE" ] || { echo "missing image fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+IMAGE_TMPDIR="$(mktemp -d)"
+IMAGE_OUT="$IMAGE_TMPDIR/image_clip.mp4"
+IMAGE_RESULT="$IMAGE_TMPDIR/image_clip.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-15 image smoke → $IMAGE_OUT"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
+  MOVIECUT_UITEST_EXPORT="$IMAGE_OUT" MOVIECUT_UITEST_RESULT="$IMAGE_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+IP=$!
+for _ in $(seq 1 180); do [ -s "$IMAGE_OUT" ] && [ -s "$IMAGE_RESULT" ] && break; sleep 0.5; done
+wait "$IP" 2>/dev/null || true
+IMAGE_STATUS="$(cat "$IMAGE_RESULT" 2>/dev/null || echo MISSING)"
+[ -s "$IMAGE_OUT" ] || { echo "FAIL: G-15 image export missing (status: $IMAGE_STATUS)" >&2; rm -rf "$IMAGE_TMPDIR"; exit 1; }
+case "$IMAGE_STATUS" in
+  *"error=none"*) ;;
+  *) echo "FAIL: G-15 image harness failed (status: $IMAGE_STATUS)" >&2; rm -rf "$IMAGE_TMPDIR"; exit 1 ;;
+esac
+IMAGE_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$IMAGE_OUT" 2>/dev/null || echo 0)"
+awk -v d="$IMAGE_DURATION" 'BEGIN { exit !(d > 4.7 && d < 5.3) }' \
+  || { echo "FAIL: G-15 image duration ${IMAGE_DURATION}s (expected ~5.0)" >&2; rm -rf "$IMAGE_TMPDIR"; exit 1; }
+IMAGE_RGB="$(python3 - "$IMAGE_OUT" <<'PY'
+import subprocess, sys
+path = sys.argv[1]
+data = subprocess.check_output([
+    "ffmpeg", "-v", "error", "-ss", "2.5", "-i", path,
+    "-vf", "scale=1:1", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+])
+if len(data) < 3:
+    raise SystemExit("no frame bytes")
+r, g, b = data[0], data[1], data[2]
+print(f"rgb={r},{g},{b}")
+if not (b > 120 and b > r * 2 and b > g * 2):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: G-15 image middle frame is not blue (${IMAGE_RGB:-no rgb})" >&2; rm -rf "$IMAGE_TMPDIR"; exit 1; }
+rm -rf "$IMAGE_TMPDIR"
+echo "PASS: G-15 image clip export ${IMAGE_DURATION}s ${IMAGE_RGB}"
+
 # Kill any lingering harness instance so sequential launches don't interfere.
 pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1

@@ -477,7 +477,29 @@ final class PlaybackEngine {
                         continue
                     }
 
-                    let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    var sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    var sourceTrack: AVAssetTrack
+                    if mediaAsset.kind == .image {
+                        let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
+                        let imageVideoURL = temporaryImageRenderURL(for: clip)
+                        try await ImageVideoRenderService().render(
+                            imageURL: mediaAsset.originalURL,
+                            duration: renderDuration,
+                            renderSize: project.timeline.canvasSize,
+                            outputURL: imageVideoURL
+                        )
+                        temporaryReverseRenderURLs.append(imageVideoURL)
+                        sourceAsset = AVURLAsset(url: imageVideoURL)
+                        guard let renderedTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
+                            continue
+                        }
+                        sourceTrack = renderedTrack
+                    } else {
+                        guard let loadedTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
+                            continue
+                        }
+                        sourceTrack = loadedTrack
+                    }
                     var adjustedTimelineStart = clip.timelineRange.start
                     if clipIndex > 0 {
                         let previousClip = sortedClips[clipIndex - 1]
@@ -490,8 +512,7 @@ final class PlaybackEngine {
                     let sourceTimeRange = cmTimeRange(clip.sourceRange)
                     let isFreezeFrame = isFreezeFrameClip(clip)
 
-                    if !track.isHidden,
-                       let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .video).first {
+                    if !track.isHidden {
                         let videoCompositionTrack: AVMutableCompositionTrack
                         let trackSlot = clipIndex % 2
                         if let existingTrack = videoCompositionTracksBySlot[trackSlot] {
@@ -1129,6 +1150,12 @@ final class PlaybackEngine {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutPlaybackReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
             .appendingPathExtension("mov")
+    }
+
+    private func temporaryImageRenderURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutPlaybackImage-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
     }
 
     private func cleanupTemporaryReverseRenderURLs() {

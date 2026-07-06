@@ -165,6 +165,7 @@ final class ExportEngine {
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
         var temporaryEqualizedAudioURLs: [URL] = []
         var temporaryOpticalFlowURLs: [URL] = []
+        var temporaryImageRenderURLs: [URL] = []
         var shouldKeepTemporaryEqualizedAudioURLs = false
         defer {
             if !shouldKeepTemporaryEqualizedAudioURLs {
@@ -333,8 +334,27 @@ final class ExportEngine {
                 // Denoised video audio is imported as a new audio MediaAsset and added as
                 // an audio-track clip, so using this clip's asset URL preserves that source.
                 var sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
-                guard var sourceTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first else {
-                    continue
+                var sourceTrack: AVAssetTrack
+                if mediaType == .video, mediaAsset.kind == .image {
+                    let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
+                    let imageVideoURL = temporaryImageRenderURL(for: clip)
+                    try await ImageVideoRenderService().render(
+                        imageURL: mediaAsset.originalURL,
+                        duration: renderDuration,
+                        renderSize: renderSize(for: project.exportSettings.resolution, canvas: project.canvas),
+                        outputURL: imageVideoURL
+                    )
+                    temporaryImageRenderURLs.append(imageVideoURL)
+                    sourceAsset = AVURLAsset(url: imageVideoURL)
+                    guard let renderedTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
+                        throw ExportEngineError.exportSessionCreationFailed
+                    }
+                    sourceTrack = renderedTrack
+                } else {
+                    guard let loadedTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first else {
+                        continue
+                    }
+                    sourceTrack = loadedTrack
                 }
                 if mediaType == .audio,
                    let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
@@ -554,7 +574,7 @@ final class ExportEngine {
             composition: composition,
             videoComposition: videoComposition,
             audioMix: audioMix,
-            temporaryRenderURLs: temporaryEqualizedAudioURLs + temporaryOpticalFlowURLs
+            temporaryRenderURLs: temporaryEqualizedAudioURLs + temporaryOpticalFlowURLs + temporaryImageRenderURLs
         )
     }
 
@@ -877,6 +897,12 @@ final class ExportEngine {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutOpticalFlow-\(clip.id.uuidString)-\(UUID().uuidString)")
             .appendingPathExtension("mov")
+    }
+
+    private func temporaryImageRenderURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutImage-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
     }
 
     private func equalizedAudioAsset(

@@ -614,7 +614,11 @@ final class ExportEngine {
         } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-        let layerInstructions = tracks.map { AVMutableVideoCompositionLayerInstruction(assetTrack: $0) }
+        let layerInstructions = tracks.map { track -> AVMutableVideoCompositionLayerInstruction in
+            let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
+            layerInstruction.setOpacity(0, at: .zero)
+            return layerInstruction
+        }
         instruction.layerInstructions = layerInstructions
 
         let layerInstructionsByTrackID = Dictionary(
@@ -632,12 +636,16 @@ final class ExportEngine {
                 continue
             }
 
+            let clipEnd = CMTimeAdd(clip.timeRange.start, clip.timeRange.duration)
+            layerInstruction.setOpacity(Float(min(max(clip.opacity, 0), 1)), at: clip.timeRange.start)
+            layerInstruction.setOpacity(0, at: clipEnd)
+
             if !isIdentityTransform(clip.transform) {
                 layerInstruction.setTransform(
                     affineTransform(for: clip.transform, canvasSize: resolvedSize),
                     at: clip.timeRange.start
                 )
-                layerInstruction.setTransform(.identity, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
+                layerInstruction.setTransform(.identity, at: clipEnd)
             }
 
             let opacity = min(max(clip.opacity, 0), 1)
@@ -647,7 +655,7 @@ final class ExportEngine {
                     toEndOpacity: Float(opacity),
                     timeRange: clip.timeRange
                 )
-                layerInstruction.setOpacity(1, at: CMTimeAdd(clip.timeRange.start, clip.timeRange.duration))
+                layerInstruction.setOpacity(0, at: clipEnd)
             }
 
             if let transition = clip.transition, transition.duration > 0 {
@@ -737,7 +745,8 @@ final class ExportEngine {
                             stickerFallbackText: clip.stickerFallbackText,
                             stickerImageURL: clip.stickerImageURL,
                             stickerFontSize: clip.stickerFontSize,
-                            isBackgroundRemoved: clip.isBackgroundRemoved
+                            isBackgroundRemoved: clip.isBackgroundRemoved,
+                            includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
                     transitionEffects: transitionEffects,

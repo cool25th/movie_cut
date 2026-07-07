@@ -43,7 +43,8 @@ struct CustomCompositionClipEffect {
         stickerFallbackText: String? = nil,
         stickerImageURL: URL? = nil,
         stickerFontSize: CGFloat? = nil,
-        isBackgroundRemoved: Bool = false
+        isBackgroundRemoved: Bool = false,
+        includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
         guard colorCorrection != nil
@@ -57,6 +58,7 @@ struct CustomCompositionClipEffect {
             || stickerImageURL != nil
             || isBackgroundRemoved
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
+            || (includeIdentitySource && trackID != kCMPersistentTrackID_Invalid)
         else {
             return nil
         }
@@ -349,6 +351,18 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         transitionEffects.first { $0.applies(at: time) }
     }
 
+    func activeSourceTrackIDs(at time: CMTime) -> [CMPersistentTrackID] {
+        clipEffects.reversed().compactMap { effect in
+            guard effect.trackID != kCMPersistentTrackID_Invalid,
+                  CMTimeRangeContainsTime(effect.timeRange, time: time)
+            else {
+                return nil
+            }
+
+            return effect.trackID
+        }
+    }
+
     private static func requiredTrackIDValues(
         trackIDs: [CMPersistentTrackID],
         transitionEffects: [CustomCompositionTransitionEffect]
@@ -446,14 +460,15 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 return
             }
 
-            guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request) else {
+            let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction
+            guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request, instruction: instruction) else {
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
             }
             
             var image = CIImage(cvPixelBuffer: sourceBuffer)
             
-            if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction {
+            if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 image = self.applyClipEffects(
                     to: image,
@@ -1141,8 +1156,17 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     // MARK: - Source Frame Helpers
 
     private func firstSourceFrame(
-        in request: AVAsynchronousVideoCompositionRequest
+        in request: AVAsynchronousVideoCompositionRequest,
+        instruction: CustomCompositionInstruction?
     ) -> (CMPersistentTrackID, CVPixelBuffer)? {
+        if let instruction {
+            for trackID in instruction.activeSourceTrackIDs(at: request.compositionTime) {
+                if let sourceBuffer = request.sourceFrame(byTrackID: trackID) {
+                    return (trackID, sourceBuffer)
+                }
+            }
+        }
+
         for sourceTrackID in request.sourceTrackIDs {
             let trackID = sourceTrackID.int32Value
             if let sourceBuffer = request.sourceFrame(byTrackID: trackID) {

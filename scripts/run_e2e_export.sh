@@ -70,6 +70,65 @@ PY
 rm -rf "$IMAGE_TMPDIR"
 echo "PASS: G-15 image clip export ${IMAGE_DURATION}s ${IMAGE_RGB}"
 
+# Works-First / G-15 AC2 / B-F1.3: mixed photo + video timeline must export
+# through the real app path. The harness imports the 5s image first, then
+# appends the 2s video via MOVIECUT_UITEST_IMPORT_EXTRA. Expected duration is
+# therefore the media clip sum: 5s + 2s = 7s. Text burn-in is covered by the
+# existing text-animation/template E2E below; this smoke isolates the image/video
+# adjacency bug that used to hold the image frame over later clips.
+MIXED_TMPDIR="$(mktemp -d)"
+MIXED_OUT="$MIXED_TMPDIR/mixed_image_video.mp4"
+MIXED_RESULT="$MIXED_TMPDIR/mixed_image_video.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-15 mixed image+video smoke → $MIXED_OUT"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
+  MOVIECUT_UITEST_IMPORT_EXTRA="$FIXTURE" \
+  MOVIECUT_UITEST_EXPORT="$MIXED_OUT" MOVIECUT_UITEST_RESULT="$MIXED_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+MP=$!
+for _ in $(seq 1 180); do [ -s "$MIXED_OUT" ] && [ -s "$MIXED_RESULT" ] && break; sleep 0.5; done
+wait "$MP" 2>/dev/null || true
+MIXED_STATUS="$(cat "$MIXED_RESULT" 2>/dev/null || echo MISSING)"
+[ -s "$MIXED_OUT" ] || { echo "FAIL: G-15 mixed export missing (status: $MIXED_STATUS)" >&2; rm -rf "$MIXED_TMPDIR"; exit 1; }
+case "$MIXED_STATUS" in
+  *"clips=2"*"error=none"*"timeline=video:image=0.000-5.000,video:video=5.000-7.000"*) ;;
+  *) echo "FAIL: G-15 mixed harness failed (status: $MIXED_STATUS)" >&2; rm -rf "$MIXED_TMPDIR"; exit 1 ;;
+esac
+MIXED_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MIXED_OUT" 2>/dev/null || echo 0)"
+awk -v d="$MIXED_DURATION" 'BEGIN { exit !(d > 6.9 && d < 7.1) }' \
+  || { echo "FAIL: G-15 mixed duration ${MIXED_DURATION}s (expected ~7.0)" >&2; rm -rf "$MIXED_TMPDIR"; exit 1; }
+MIXED_RGB="$(python3 - "$MIXED_OUT" <<'PY'
+import subprocess
+import sys
+
+path = sys.argv[1]
+
+def rgb_at(timestamp):
+    data = subprocess.check_output([
+        "ffmpeg", "-v", "error", "-i", path, "-ss", f"{timestamp:.3f}",
+        "-vf", "scale=1:1", "-frames:v", "1", "-f", "rawvideo",
+        "-pix_fmt", "rgb24", "-"
+    ])
+    if len(data) < 3:
+        raise SystemExit(f"no frame bytes at {timestamp:.3f}s")
+    return data[0], data[1], data[2]
+
+blue = rgb_at(2.5)
+red = rgb_at(6.0)
+print(
+    f"image_rgb={blue[0]},{blue[1]},{blue[2]} "
+    f"video_rgb={red[0]},{red[1]},{red[2]}"
+)
+if not (blue[2] > 120 and blue[2] > blue[0] * 2 and blue[2] > blue[1] * 2):
+    raise SystemExit(2)
+if not (red[0] >= 4 and red[0] > red[1] * 2 and red[0] > red[2] * 2 and red[2] < 20):
+    raise SystemExit(3)
+PY
+)" || { echo "FAIL: G-15 mixed image/video color samples failed (${MIXED_RGB:-no rgb})" >&2; rm -rf "$MIXED_TMPDIR"; exit 1; }
+rm -rf "$MIXED_TMPDIR"
+echo "PASS: G-15 mixed image+video export ${MIXED_DURATION}s ${MIXED_RGB} ($MIXED_STATUS)"
+
 # Kill any lingering harness instance so sequential launches don't interfere.
 pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1

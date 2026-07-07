@@ -40,6 +40,7 @@ extension EditorViewModel {
     /// Environment:
     /// - `MOVIECUT_UITEST=1` — enables the harness.
     /// - `MOVIECUT_UITEST_IMPORT=<path>` — media imported and added to the timeline.
+    /// - `MOVIECUT_UITEST_IMPORT_EXTRA=<path[:path...] | newline paths>` — extra media imported after the first import.
     /// - `MOVIECUT_UITEST_PLAYBACK_RATE=<double>` — applies a constant playback rate to the selected clip.
     /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
@@ -53,9 +54,15 @@ extension EditorViewModel {
         guard env["MOVIECUT_UITEST"] == "1" else { return }
         var extractAudioSuffix = ""
 
-        if let importPath = env["MOVIECUT_UITEST_IMPORT"], !importPath.isEmpty {
+        let primaryImportURL = env["MOVIECUT_UITEST_IMPORT"].flatMap { rawPath -> URL? in
+            rawPath.isEmpty ? nil : URL(filePath: rawPath)
+        }
+        let extraImportURLs = env["MOVIECUT_UITEST_IMPORT_EXTRA"]
+            .map(uiTestImportExtraURLs(from:)) ?? []
+        let importURLs = [primaryImportURL].compactMap { $0 } + extraImportURLs
+        if !importURLs.isEmpty {
             await importMediaAndAddToTimeline(
-                [URL(filePath: importPath)],
+                importURLs,
                 startTime: currentProject.timeline.duration
             )
         }
@@ -299,7 +306,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -312,6 +319,32 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    private func uiTestImportExtraURLs(from rawValue: String) -> [URL] {
+        rawValue
+            .split { character in
+                character == ":" || character == "\n" || character == "\r"
+            }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { URL(filePath: $0) }
+    }
+
+    private func timelineSummarySuffix() -> String {
+        let parts = currentProject.timeline.tracks.flatMap { track in
+            track.clips.map { clip in
+                String(
+                    format: "%@:%@=%.3f-%.3f",
+                    track.kind.rawValue,
+                    clip.kind.rawValue,
+                    clip.timelineRange.start,
+                    clip.timelineRange.end
+                )
+            }
+        }
+        guard !parts.isEmpty else { return " timeline=empty" }
+        return " timeline=" + parts.joined(separator: ",")
     }
 }
 #endif

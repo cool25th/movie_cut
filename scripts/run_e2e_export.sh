@@ -129,6 +129,64 @@ PY
 rm -rf "$MIXED_TMPDIR"
 echo "PASS: G-15 mixed image+video export ${MIXED_DURATION}s ${MIXED_RGB} ($MIXED_STATUS)"
 
+# Works-First / G-15 AC3: grading a still image must reach the real app export
+# pipeline. Compare against AC1's measured export rather than ideal source RGB
+# values because H.264 encoding darkens the solid swatch slightly.
+IMAGE_GRADE_TMPDIR="$(mktemp -d)"
+IMAGE_GRADE_OUT="$IMAGE_GRADE_TMPDIR/image_clip_warm.mp4"
+IMAGE_GRADE_RESULT="$IMAGE_GRADE_TMPDIR/image_clip_warm.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-15 warm-graded image smoke → $IMAGE_GRADE_OUT"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" MOVIECUT_UITEST_GRADE=1 \
+  MOVIECUT_UITEST_EXPORT="$IMAGE_GRADE_OUT" MOVIECUT_UITEST_RESULT="$IMAGE_GRADE_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+IGP=$!
+for _ in $(seq 1 180); do [ -s "$IMAGE_GRADE_OUT" ] && [ -s "$IMAGE_GRADE_RESULT" ] && break; sleep 0.5; done
+wait "$IGP" 2>/dev/null || true
+IMAGE_GRADE_STATUS="$(cat "$IMAGE_GRADE_RESULT" 2>/dev/null || echo MISSING)"
+[ -s "$IMAGE_GRADE_OUT" ] || { echo "FAIL: G-15 warm-graded image export missing (status: $IMAGE_GRADE_STATUS)" >&2; rm -rf "$IMAGE_GRADE_TMPDIR"; exit 1; }
+case "$IMAGE_GRADE_STATUS" in
+  *"error=none"*) ;;
+  *) echo "FAIL: G-15 warm-graded image harness failed (status: $IMAGE_GRADE_STATUS)" >&2; rm -rf "$IMAGE_GRADE_TMPDIR"; exit 1 ;;
+esac
+IMAGE_GRADE_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$IMAGE_GRADE_OUT" 2>/dev/null || echo 0)"
+awk -v d="$IMAGE_GRADE_DURATION" 'BEGIN { exit !(d > 4.7 && d < 5.3) }' \
+  || { echo "FAIL: G-15 warm-graded image duration ${IMAGE_GRADE_DURATION}s (expected ~5.0)" >&2; rm -rf "$IMAGE_GRADE_TMPDIR"; exit 1; }
+IMAGE_GRADE_RGB="$(python3 - "$IMAGE_RGB" "$IMAGE_GRADE_OUT" <<'PY'
+import re
+import subprocess
+import sys
+
+baseline_text, path = sys.argv[1:]
+match = re.fullmatch(r"rgb=(\d+),(\d+),(\d+)", baseline_text)
+if match is None:
+    print(f"baseline_rgb={baseline_text} graded_rgb=unavailable")
+    raise SystemExit(2)
+baseline = tuple(map(int, match.groups()))
+
+data = subprocess.check_output([
+    "ffmpeg", "-v", "error", "-ss", "2.5", "-i", path,
+    "-vf", "scale=1:1", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+])
+if len(data) < 3:
+    print(f"baseline_rgb={baseline[0]},{baseline[1]},{baseline[2]} graded_rgb=unavailable")
+    raise SystemExit(3)
+graded = data[0], data[1], data[2]
+red_delta = graded[0] - baseline[0]
+blue_delta = graded[2] - baseline[2]
+print(
+    f"baseline_rgb={baseline[0]},{baseline[1]},{baseline[2]} "
+    f"graded_rgb={graded[0]},{graded[1]},{graded[2]} "
+    f"red_delta={red_delta:+d} blue_delta={blue_delta:+d}"
+)
+if red_delta < 20 or blue_delta > -12:
+    raise SystemExit(4)
+PY
+)" || { echo "FAIL: G-15 warm shift too small (${IMAGE_GRADE_RGB:-baseline_rgb=unavailable graded_rgb=unavailable}; expected red_delta>=+20 and blue_delta<=-12)" >&2; rm -rf "$IMAGE_GRADE_TMPDIR"; exit 1; }
+rm -rf "$IMAGE_GRADE_TMPDIR"
+echo "PASS: G-15 warm-graded image export ${IMAGE_GRADE_DURATION}s ${IMAGE_GRADE_RGB} ($IMAGE_GRADE_STATUS)"
+
 # Kill any lingering harness instance so sequential launches don't interfere.
 pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1

@@ -1,6 +1,7 @@
 # CapCut 벤치마크 기준서 (Benchmark Standard)
 
-> 버전: 1.0 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
+> 버전: 1.1 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
+> 변경 이력: v1.1 (2026-07-12) — [추정] 8건 웹 검증: 7건 [확인] 승격(F1.4·F2.4·F4.4·F5.3·F5.4·I3·I8), L4 탭명 부분 승격. F1.4는 CapCut 약점으로 판명(능가 기회로 재분류).
 > **목적: MovieCut 검증의 명시적 잣대.** "CapCut 수준"이라는 말을 관찰 가능한 문장으로 고정해, 모든 감사·검증 세션이 같은 기준으로 판정하게 한다.
 > 신뢰도 표기 — **[확인]**: 웹 출처/실사용으로 확인됨. **[추정]**: 훈련 지식 기반, 판정에 사용 전 실제 CapCut 또는 웹으로 확인할 것.
 > 무료 티어 기준. Pro 전용은 (Pro) 표시 — MovieCut은 해당 기능을 **무료·오프라인**으로 제공하는 것이 전략(차별화 축).
@@ -25,7 +26,7 @@
 | B-F1.1 | 비디오/사진/오디오/GIF를 드래그 또는 파일 선택으로 import하면 실패 없이 라이브러리에 즉시 나타난다 | [확인] | E2E import + 실기기 드래그 |
 | B-F1.2 | **사진을 타임라인에 놓으면 즉시 재생·export 가능한 클립이 된다.** 기본 duration 3~5s, 설정에서 변경 가능, Duration 도구로 정확한 초 입력·일괄 적용 가능 | [확인] | G-15 E2E(프레임 색 실측) + 실기기 |
 | B-F1.3 | 사진+비디오+오디오 혼합 타임라인이 제약 없이 재생·export된다 | [확인] | W-스모크 E2E |
-| B-F1.4 | Photos 앱·브라우저 등 비파일 소스에서 직접 드래그 수용 | [추정] | 실기기 (G-12 #14) |
+| B-F1.4 | Photos 앱 직접 드래그: **CapCut은 불안정** — 비디오를 끌면 JPEG 썸네일로 들어오고, 내장 Photos 브라우저도 비디오 일부만 표시. 신뢰 경로는 파일 export 후 import | [확인] | 실기기 (G-12 #14) — **MovieCut이 제대로 수용하면 ⬆ 지점** |
 | B-F1.5 | export: 해상도(≤4K)/fps(≤60)/비트레이트/코덱 선택, GIF export, 진행률+취소 | [확인] | ffprobe E2E |
 | B-F1.6 | 플랫폼 규격 프리셋(9:16 등) 원클릭 | [확인] | ffprobe E2E (상환됨) |
 
@@ -35,7 +36,7 @@
 | B-F2.1 | split/trim/move/delete/ripple/duplicate — 프레임 정확, 즉시 반영 | [확인] | 기존 E2E+실기기 |
 | B-F2.2 | 트랙 Hide/Lock/Mute 토글 | [확인] | 실기기 + contract |
 | B-F2.3 | 컴파운드 클립(중첩)과 그룹으로 복잡한 타임라인 정리 | [확인] | 그룹=구현됨 / 컴파운드=MovieCut ❌(신규 후보) |
-| B-F2.4 | 속도: 일반 배속 + 커브 프리셋(Montage/Hero류) + 커스텀 커브, 역재생, freeze | [추정](커브 프리셋명) | speed E2E+실기기 |
+| B-F2.4 | 속도: 일반 배속 0.1x~100x(Keep pitch 옵션) + 커브 프리셋 6종(Bullet/Montage/Jump Cut/Hero Time/Flash In/Flash Out, 일부 프리미엄 커브 Pro) + Customized 커브, Smooth slow-mo(Frame Blending/Optical Flow), 역재생(체크박스), freeze(우클릭) | [확인] | speed E2E+실기기 |
 | B-F2.5 | 키프레임: position/scale/opacity/rotation, 타임라인에서 직접 설정 | [확인] | 골든+실기기 |
 | B-F2.6 | 단축키 체계(Ctrl+B split, Ctrl+G group 등) + 단축키 목록 제공 | [확인] | F-05 구현됨, 실기기 |
 
@@ -54,7 +55,7 @@
 | B-F4.1 | 기본 보정(밝기/대비/채도/온도) + HSL + 커브 + LUT import | [확인] | 골든/E2E — 엔진 = 도달, **편집기 UI ⬇(G-02 Inc 5~6)** |
 | B-F4.2 | 필터 프리셋 수십~수백 종, 강도 조절 | [확인] | MovieCut 볼륨 ⬇ (G-07) |
 | B-F4.3 | 이펙트/전환 라이브러리 수백 종(트렌드 갱신) | [확인] | 전환 12종 = 코어, 볼륨 ⬇ — 전략상 큐레이션 20종+플러그인(G-07) |
-| B-F4.4 | 크로마키/마스크/블렌딩 모드 | [확인](블렌딩 [추정]) | 크로마키·마스크 구현, 블렌딩 모드 MovieCut ❌(신규 후보) |
+| B-F4.4 | 크로마키/마스크/블렌딩 모드 — 블렌딩은 속성 패널 드롭다운, Multiply/Screen/Overlay/Soft Light 등 다수 모드 + 불투명도 병용 | [확인] | 크로마키·마스크 구현, 블렌딩 모드 MovieCut ❌(§6 확정 격차) |
 | B-F4.5 | 스코프(파형/벡터/히스토그램) — **CapCut 없음** | [확인] | MovieCut ⬆ 유지 |
 | B-F4.6 | ProRes/10-bit HDR export — **CapCut 없음(h264/HEVC 소비자 출력)** | [확인] | MovieCut ⬆ 유지 (E2E 상환) |
 
@@ -63,8 +64,8 @@
 |---|---|---|---|
 | B-F5.1 | 상용 음악/SFX 라이브러리 내장(라이선스 주의 고지) | [확인] | MovieCut ⬇ (G-08 스타터 팩) |
 | B-F5.2 | 오디오 분리(비디오에서 추출), 노이즈 제거, 보컬 분리, 보이스 체인저 | [확인] | 추출·NR 상환 / 보컬분리·보이스FX ❌(G-05) |
-| B-F5.3 | 비트 감지 마커, 볼륨/페이드/덕킹 | [확인](덕킹 [추정]) | 구현+E2E 상환 |
-| B-F5.4 | 실 EQ — CapCut은 간이 수준 | [추정] | MovieCut 5밴드 DSP = 이상 |
+| B-F5.3 | 비트 감지 마커, 볼륨/페이드. 덕킹: 자동 덕킹은 버전에 따라 유무가 갈리고, 표준 경로는 **수동 볼륨 키프레임** | [확인] | 구현+E2E 상환 — MovieCut 자동 덕킹 구현 시 ⬆ 후보 |
+| B-F5.4 | 실 EQ — **CapCut 데스크톱은 멀티밴드 EQ 부재**(v4.8 기준). 대신 loudness normalization/voice enhance/noise reduction/vocal isolation 제공 | [확인] | MovieCut 5밴드 DSP ⬆ 확정 |
 
 ### B-F6. AI 기능
 | ID | CapCut 수준 | 신뢰도 | 검증 |
@@ -83,7 +84,7 @@
 | B-L1 | **3패널 구조**: 좌상 미디어·에셋 패널(미디어/오디오/텍스트/스티커/필터/전환 탭) · 우상 속성 패널(맥락형) · 하단 멀티트랙 타임라인 | [확인] | = (IA 패스 완료, 잠금) |
 | B-L2 | 홈 화면: 프로젝트 목록(썸네일)·새 프로젝트·템플릿 진입 | [확인] | ❌ (U-01) |
 | B-L3 | 에셋 패널이 즉시 사용 가능한 **콘텐츠 그리드**(썸네일 카드, 검색, 카테고리) | [확인] | 🟡 부분 (U-07) |
-| B-L4 | 속성 패널: 선택 대상에 따라 전환(비디오: 기본/컷아웃/오디오/속도/애니메이션/조정 탭 계열) | [확인](탭명 [추정]) | = 구조 도달, 탭 리듬 폴리시 잔여 |
+| B-L4 | 속성 패널: 선택 대상에 따라 전환. 비디오 선택 시 Basic/Speed/Cutout(크로마키·마스크)/Audio 탭은 개별 [확인], 전체 탭 목록·순서는 [추정] | [확인](전체 탭 구성만 [추정]) | = 구조 도달, 탭 리듬 폴리시 잔여 |
 | B-L5 | 타임라인 툴바: split/delete/마커/스냅/줌 등이 타임라인에 밀착 | [확인] | = (UX-05) |
 | B-L6 | Export가 우상단 단일 주 액션 | [확인] | = |
 | B-L7 | 클립 표면: 비디오=필름스트립, 오디오=파형, 사진=이미지, 전환=클립 사이 아이콘, 적용 효과 표시 | [확인] | ⬇ 파형만 = (G-04·U-02) |
@@ -94,12 +95,12 @@
 |---|---|---|---|
 | B-I1 | 드래그: 고스트 표시 → 스냅 가이드라인 → 드롭 즉시 배치. 실패는 시각 피드백 | [확인] | 실기기 — 타임라인 스냅=구현, 가이드라인 ⬇ |
 | B-I2 | 스크럽: 플레이헤드 드래그에 프리뷰가 프레임 단위 즉시 추종 | [확인] | 실기기+측정 |
-| B-I3 | 클립 더블클릭=해당 편집 모드(텍스트=인라인 편집), 우클릭=풍부한 컨텍스트 메뉴 | [추정] | 실기기 |
+| B-I3 | 텍스트/캡션 더블클릭=즉시 편집(우클릭 → Edit Captions 대체 경로). 우클릭 메뉴 풍부: 설정 복사(변형·텍스트 스타일·조정 전부), Detach Audio, Sync video and audio, Freeze Frame, Select Leftward/Rightward | [확인] | 실기기 |
 | B-I4 | 호버: 에셋 카드 호버 프리뷰, 클립 호버 정보 | [확인] | ⬇ (G-04 호버 스크럽) |
 | B-I5 | 자동 저장 + 프로젝트 자동 복구 | [확인] | = 이상 (E2E 상환) |
 | B-I6 | undo/redo 깊은 히스토리, 모든 편집 동작 커버 | [확인] | = (스냅샷 undo 무결성 검증) |
-| B-I7 | Proxy Mode: 저해상 프록시로 부드러운 재생, export 시 원본 자동 복귀 | [확인] | ⬇ 생성만 됨, 소비 미배선 (G-11) |
-| B-I8 | 프리뷰 품질 선택/성능 자동 조절 | [추정] | ❌ (G-11) |
+| B-I7 | Proxy Mode: Settings > Performance에서 활성화+해상도 선택(720p 권장), 생성 완료 시 클립에 Proxy 배지, export는 원본 사용 | [확인] | ⬇ 생성만 됨, 소비 미배선 (G-11) |
+| B-I8 | 프리뷰 품질 선택: 프리뷰 우상단 메뉴 → Preview Quality → Performance Priority Mode(성능 우선) 또는 수동 해상도(360p/540p 등), export 품질 무영향 | [확인] | ❌ (G-11) |
 
 ## 4. B-U 사용성·성능·신뢰성 (Usability)
 
@@ -116,14 +117,14 @@
 
 ## 5. 능가 목표선 (MovieCut이 = 가 아니라 ⬆로 가는 지점)
 
-전략(로드맵 §2) 재확인: **B-F4.5/4.6(스코프·Pro출력), B-F6.4(온디바이스), B-U8(무료·오프라인)은 이미 ⬆ — 지킬 것.** 추가 ⬆ 후보: B-F3.1(무제한 온디바이스 캡션), B-F5.4(실 EQ), B-I5/6(신뢰성), FCPXML(G-10, CapCut 부재), 커맨드 팔레트(U-09, CapCut 부재).
+전략(로드맵 §2) 재확인: **B-F4.5/4.6(스코프·Pro출력), B-F6.4(온디바이스), B-U8(무료·오프라인)은 이미 ⬆ — 지킬 것.** B-F5.4(실 EQ)는 v1.1 검증으로 **⬆ 확정**(CapCut 데스크톱 멀티밴드 EQ 부재). 추가 ⬆ 후보: B-F3.1(무제한 온디바이스 캡션), B-F1.4(Photos 직접 드래그 — CapCut 불안정으로 확인, 네이티브 Mac 앱의 구조적 우위 지점), B-F5.3(자동 덕킹 — CapCut은 수동 키프레임이 표준), B-I5/6(신뢰성), FCPXML(G-10, CapCut 부재), 커맨드 팔레트(U-09, CapCut 부재).
 
 ## 6. 신규 격차 후보 (이 기준서 작성 중 식별 — 스펙 미등재)
 
 | 항목 | CapCut | MovieCut | 처리 |
 |---|---|---|---|
 | 컴파운드 클립(중첩 타임라인) | 있음 [확인] | ❌ | 다음 감사에서 G-ID 신설 검토 |
-| 블렌딩 모드(screen/multiply 등) | 있음 [추정→확인 필요] | ❌ | 확인 후 검토 |
+| 블렌딩 모드(screen/multiply 등) | 있음 [확인] (v1.1 웹 검증) | ❌ | **확정 격차 — 다음 감사에서 G-ID 신설** |
 | 캡션 VTT/ASS export | 있음 [확인] | SRT만 | F-13 확장 소항목 |
 
 ## 7. 채점 시트 (감사 세션이 갱신)
@@ -145,3 +146,5 @@
 ---
 
 출처: [CapCut PC 공식](https://www.capcut.com/resource/pc-professional-video-editor), [BIGVU 리뷰 2026](https://bigvu.tv/blog/capcut-online-desktop-editor-review/), [Atomi CapCut PC 리뷰 2026](https://atomisystems.com/screencasting/capcut-pc-review-2026-is-free-video-editing-really-worth-your-time/), [캡션 가이드 2026](https://caption-x.com/blog/how-to-add-captions-capcut), [타임라인 가이드](https://filmora.wondershare.com/advanced-video-editing/capcut-timeline.html), [AI 기능 리뷰 2026](https://freeacademy.ai/blog/capcut-ai-features-complete-guide-review-2026), [이미지 duration 설정](https://www.quora.com/How-do-you-set-the-duration-in-Capcut)
+
+v1.1 추가 출처: [속도 커브(Filmora)](https://filmora.wondershare.com/video-editing-tips/speed-ramp-capcut.html), [속도 커브 도구(rezaid)](https://rezaid.co.uk/using-capcut-desktop-video-editors-speed-curve-tool-for-simple-edits/), [블렌드 모드(CapCut 공식)](https://www.capcut.com/create/blend-modes-creative-video-photo-effects), [오버레이/블렌딩(BuddyX)](https://buddyxtheme.com/how-to-overlay-multiple-videos-in-capcut-desktop/), [프리뷰 성능 모드](https://www.nyongesasande.com/performance-priority-mode-in-capcut-a-guide/), [프록시/렉 해결(MiniTool)](https://moviemaker.minitool.com/news/capcut-lagging.html), [export 품질 공식 도움말](https://www.capcut.com/help/video-quality-change-after-exporting), [캡션 편집 공식 도움말](https://www.capcut.com/help/auto-captions-in-capcut), [데스크톱 팁(Kim Klassen)](https://www.kimklassen.com/blog/capcut-desktop-tips), [EQ 부재·오디오 도구(wishwonsystem)](https://wishwonsystem.com/archives/19), [Photos 드래그 문제(Apple Community)](https://discussions.apple.com/thread/255346153), [Photos 브라우저 제한(Apple Community)](https://discussions.apple.com/thread/255740567)

@@ -1,7 +1,8 @@
 # 외부 에이전트 핸드오프 프롬프트 (비-Claude 세션용)
 
-> 이 파일의 §A(개발) 또는 §B(감사) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
+> 이 파일의 §A(개발) / §B(감사) / §C(편집 체감 P0 묶음 작업지시서) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
 > Claude 세션이라면 이 파일 대신 `/surpass`, `/gap-audit` 슬래시 커맨드를 쓴다 (동일 내용의 원본: `.claude/commands/surpass.md`, `.claude/commands/gap-audit.md`).
+> **2026-07-13 현재 최우선은 §C다** — 사용자 보고 P0(타임라인 스크럽·클립 복사/붙여넣기·필름스트립)로, 스펙에 아직 G-ID가 없어 §A의 자동 선택으로는 잡히지 않는다.
 
 ---
 
@@ -105,3 +106,77 @@ scripts/run_e2e_export.sh
 - 완료 후 최종 보고: 핵심 변화 3줄 + 최우선 착수 항목 1개 추천.
 
 (§B 복사 끝)
+
+---
+
+## §C. 작업지시서: 편집 체감 P0 묶음 — 스크럽·복사/붙여넣기·필름스트립 (복사 시작)
+
+당신은 macOS 비디오 편집 앱 **MovieCut**의 개발 에이전트다. 작업 디렉토리 `/Users/cool-mini4/MyDev/automation/movie_cut`, 브랜치 `feat/core-backend-expansion`. **배경**: 2026-07-13 사용자 보고로 CapCut 대비 일상 편집 체감 격차 3건이 코드 실사로 확정됐다(`docs/CAPCUT_BENCHMARK_STANDARD.md` v1.2 §6 상단 3행). 헤드리스 E2E가 전부 통과하는데도 사용자만 느낄 수 있던 인터랙션 격차이며, 사진 버그(V12) 전례와 같은 사용자 보고 P0로 취급한다. 이 지시서가 이 세션의 작업 선택을 대체한다 — 다른 항목을 고르지 말 것.
+
+### C-0. 선행 절차 (필수)
+
+1. 이 파일(`docs/AGENT_HANDOFF_PROMPT.md`) **§A의 1단계(컨텍스트 로드)와 3단계(콜드 스타트 체크)를 그대로 수행**하고, §A 4단계 규율 10개를 이 세션 내내 준수한다. 특히: 모든 편집은 `EditorSession.dispatch(Command)` 경유, Core 서비스/기능 신설 시 앱 배선+E2E 훅을 같은 커밋에, static contract는 완료 증거 불인정, `swift test`는 `--filter`로만, 커밋에 AI attribution 금지.
+2. E2E FAIL이면 신규 작업 금지 — 회귀 수리부터.
+
+### C-1. 등재 의무 (구현 착수 전, 첫 커밋)
+
+`docs/CAPCUT_SURPASS_SPEC_20260703.md`에 아래 두 항목을 **기존 G-ID와 같은 밀도**(요구사항/현재 상태 실사/데이터 모델/구현 증분/측정 가능한 AC/검증 계획/리스크)로 신설하고 버전 bump + 변경 이력 1줄. `docs/CAPCUT_FEATURE_BACKLOG.md`에 사용자 보고 P0로 추가. `CAPCUT_BENCHMARK_STANDARD.md` §6 해당 행의 "처리" 칸을 "G-16/G-17 등재됨"으로 갱신. 커밋: `docs: register G-16/G-17 editing-feel P0 from user report`.
+
+- **G-16 타임라인 스크럽** (B-I2 대응, P0)
+- **G-17 클립 복사/잘라내기/붙여넣기** (B-F2.1 대응, P0)
+
+번호가 이미 점유돼 있으면 다음 빈 번호를 쓰되 벤치마크 §6과 백로그의 참조를 일치시킨다.
+
+### C-2. 작업 1: G-16 타임라인 스크럽 (착수 1순위 — 체감 대비 코드 규모 최소)
+
+**목표(B-I2 기준 문장)**: 타임라인 룰러 클릭·드래그와 플레이헤드 드래그에 프리뷰가 프레임 단위로 즉시 추종한다.
+
+**현재 상태 (2026-07-13 실사)**:
+- `App/MovieCutMac/TimelineView.swift` — `timeRuler`(약 :416)와 플레이헤드 Rectangle(약 :626~634)에 탭/드래그 제스처가 **전혀 없다**. 룰러 위 제스처는 마커 점프뿐.
+- `App/MovieCutMac/EditorViewModel.swift:4625` — `private func seekPlayhead(to:)`가 이미 `playheadTime` 갱신 + `playbackEngine.seek(to:)` 동기화를 한다. **재사용하라** (private 해제 또는 `func scrubPlayhead(to:)` 래퍼).
+- 시킹 진입점이 PreviewPanel 슬라이더/마커/스냅 명령/프레임 스텝뿐 — 타임라인에서 직접 스크럽 불가.
+
+**구현 증분**:
+- Inc 1: 룰러 클릭+드래그 시킹. `timeRuler`의 시간축 영역(트랙 헤더 80pt 오른쪽, `timelineContentWidth` 범위)에 `DragGesture(minimumDistance: 0)` — 클릭도 드래그 시작으로 잡힌다. `time = location.x / pixelsPerSecond`, `0...timeline.duration` clamp 후 스크럽 API 호출. 재생 중이면 스크럽 시작 시 pause.
+- Inc 2: 플레이헤드 자체 드래그(히트 영역은 시각 폭 2pt보다 넓게, 좌우 ~6pt). 스크럽에는 스냅을 걸지 않는다(자유 이동 — 클립 이동 스냅과 구별).
+- Inc 3: 프레임 정확도·성능 — seek 호출은 최신 값으로 coalesce(프레임당 1회 수준), `playbackEngine.seek`의 tolerance가 프레임 정확한지 확인하고 아니면 zero-tolerance 경로 추가. 스크럽 놓으면 정확한 최종 프레임 표시.
+
+**AC (측정 가능)**:
+- AC1 (behavioral): 스크럽 API 호출 시 `playheadTime`과 `playbackEngine.currentTime`이 ±1프레임 내 일치 — 단위/behavioral 테스트.
+- AC2 (E2E): DEBUG 하니스에 `MOVIECUT_UITEST_SCRUB=<t>` 지원을 추가해 실제 앱에서 룰러 좌표 기반 스크럽 경로를 구동하고 결과 status에 `playhead=<t>`를 기록, `scripts/run_e2e_export.sh`에 스모크 추가.
+- AC3 (실기기): 룰러 클릭·드래그와 플레이헤드 드래그 중 프리뷰가 지연 체감 없이(기준 B-U1 ≤100ms) 추종하는 화면 녹화 — 사용자 확인 요청으로 마무리 보고에 명시.
+
+### C-3. 작업 2: G-17 클립 복사/잘라내기/붙여넣기 (착수 2순위)
+
+**목표(B-F2.1 기준 문장)**: Cmd+C/X/V로 클립을 복사·잘라내고 플레이헤드 위치에 붙여넣는다. 다른 트랙·다른 시각으로 이동 가능, 멀티 선택 지원, undo 1회로 원복.
+
+**현재 상태 (2026-07-13 실사)**:
+- `App/MovieCutMac/MovieCutMacApp.swift` 단축키 목록에 C/X/V 없음 (n,o,s,i,e,z,space,화살표,b,q,w,delete,d,+,-,m 뿐).
+- `App/MovieCutMac/EditorViewModel.swift:1812` `copyClip(clipId:targetTrackId:targetStartTime:)`은 드래그 복제 내부용 — 클립보드 개념 없음.
+- `TimelineView.swift` 클립 contextMenu(약 :814)에도 복사/붙여넣기 항목 없음.
+
+**설계 지침**:
+- 클립보드는 앱 내부 상태로(EditorViewModel 프로퍼티, `Clip` 값 복사 배열) — 시스템 pasteboard/프로젝트 영속화 불요, Codable 영향 없음.
+- cut = copy + delete를 **하나의 undo 그룹**으로. paste도 dispatch(Command) 경유로 undo 가능해야 한다.
+- **붙여넣기 위치·겹침 정책은 CapCut 실동작을 웹으로 먼저 확인**하고(벤치마크 규약 §0-4) 그 결과를 벤치마크 B-F2.1에 [확인] 출처와 함께 반영한 뒤 따른다. 웹 확인이 불가하면: 플레이헤드 위치·원본 트랙에 배치하되 기존 클립과 겹치면 같은 kind의 다른 트랙 → 없으면 새 트랙 생성, 이 결정을 보고서에 명시.
+
+**구현 증분**:
+- Inc 1: Command 계층에 paste(및 cut 조합) 추가 + EditorViewModel copy/cut/paste API + 단일 클립 동작.
+- Inc 2: Cmd+C/X/V 단축키(`MovieCutMacApp.swift`) + 클립 contextMenu 항목 + 멀티 선택 지원.
+- Inc 3: 하니스 시나리오 — `MOVIECUT_UITEST_COPYPASTE=1`에서 import→split→cut→플레이헤드 이동→paste를 구동하고 기존 `timeline=` 덤프로 최종 배치를 출력.
+
+**AC (측정 가능)**:
+- AC1: behavioral 테스트 — copy→paste 후 새 클립의 timelineRange가 플레이헤드 기준 기대값, 원본 불변, cut→paste는 원위치 클립 소멸.
+- AC2: undo 1회로 paste 원복, cut의 undo 1회로 원복(그룹 확인) — 스냅샷 undo 테스트.
+- AC3: E2E — 하니스 시나리오의 `timeline=` 덤프가 기대 배치와 일치, `scripts/run_e2e_export.sh`에 스모크 추가 후 PASS.
+- AC4: 멀티 선택 copy/paste 상대 간격 보존.
+
+### C-4. 작업 3: G-04 필름스트립 (착수 3순위 — 기존 스펙 항목)
+
+스펙 `docs/CAPCUT_SURPASS_SPEC_20260703.md`의 **G-04(타임라인 필름스트립 + 호버 스크럽, :275 부근)** 명세를 그대로 따른다. 현재 `TimelineView.swift` `thumbnailStrip`(약 :912)이 프레임 1장을 반복 타일링하는 것을 시간축 실프레임 스트립으로 교체하는 작업이며, 스펙의 U-02와 같은 세션 묶음 권장. 성능 기준(스크롤/줌 중 끊김 없음)은 스펙 AC를 따른다. 이 항목은 규모가 있으므로 **G-16·G-17을 먼저 완료·커밋한 뒤** 착수하고, 세션 잔여 컨텍스트가 부족하면 시작하지 말고 §A 6단계 마무리만 수행한다.
+
+### C-5. 마무리 (매 세션 필수 — §A 6단계와 동일)
+
+1. 스펙의 G-16/G-17(/G-04) AC에 검증 결과 1줄(통과 AC 번호+증거). 2. 백로그 갱신. 3. 미완 증분은 `[진행중] 다음 증분: Inc N, 시작점: <파일:라인>` 기록. 4. 최종 검증(§A 3단계 재실행) 후 커밋. **검증 없이 완료 선언 금지.** 최종 보고에 "AC3(실기기 확인)는 사용자 확인 대기" 항목을 명시할 것.
+
+(§C 복사 끝)

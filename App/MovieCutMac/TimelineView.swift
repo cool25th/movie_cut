@@ -16,6 +16,9 @@ struct TimelineView: View {
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
     @State private var timelineViewportWidth: CGFloat = 900
+    @State private var isRulerScrubbing = false
+    @State private var isPlayheadScrubbing = false
+    @State private var playheadDragStartTime: TimeInterval = 0
 
     private let trackHeight: CGFloat = 50
     private let rulerHeight: CGFloat = 24
@@ -413,6 +416,63 @@ struct TimelineView: View {
         return min(timelineZoomRange.upperBound, max(timelineZoomRange.lowerBound, zoom))
     }
 
+    private func scrubTimeline(atLocalX localX: CGFloat, phase: TimelineScrubPhase) {
+        let time = TimelineScrubMath.time(
+            forLocalX: Double(localX),
+            pixelsPerSecond: pixelsPerSecond,
+            duration: viewModel.currentProject.timeline.duration
+        )
+        viewModel.scrubPlayhead(to: time, phase: phase)
+    }
+
+    private func rulerScrubGesture() -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let phase: TimelineScrubPhase = isRulerScrubbing ? .changed : .began
+                isRulerScrubbing = true
+                scrubTimeline(atLocalX: value.location.x, phase: phase)
+            }
+            .onEnded { value in
+                scrubTimeline(atLocalX: value.location.x, phase: .ended)
+                isRulerScrubbing = false
+            }
+    }
+
+    private func playheadScrubGesture() -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isPlayheadScrubbing {
+                    isPlayheadScrubbing = true
+                    playheadDragStartTime = viewModel.playheadTime
+                    viewModel.scrubPlayhead(to: playheadDragStartTime, phase: .began)
+                }
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                scrubTimeline(atLocalX: targetX, phase: .changed)
+            }
+            .onEnded { value in
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                scrubTimeline(atLocalX: targetX, phase: .ended)
+                isPlayheadScrubbing = false
+            }
+    }
+
+    private var playheadOverlay: some View {
+        ZStack {
+            Color.clear
+            Rectangle()
+                .fill(MovieCutTheme.accentCyan)
+                .frame(width: 2)
+        }
+        .frame(width: 14, height: trackHeight)
+        .contentShape(Rectangle())
+        .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
+        .highPriorityGesture(playheadScrubGesture())
+        .accessibilityElement()
+        .accessibilityLabel(NSLocalizedString("재생 헤드", comment: ""))
+        .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
+        .accessibilityHint(NSLocalizedString("드래그하여 타임라인을 프레임 단위로 스크럽합니다.", comment: ""))
+    }
+
     private var timeRuler: some View {
         HStack(spacing: 0) {
             Rectangle()
@@ -484,6 +544,11 @@ struct TimelineView: View {
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
             .background(MovieCutTheme.rulerBackground)
+            .contentShape(Rectangle())
+            .simultaneousGesture(rulerScrubGesture())
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(NSLocalizedString("타임라인 룰러", comment: ""))
+            .accessibilityHint(NSLocalizedString("클릭하거나 드래그하여 프리뷰를 스크럽합니다.", comment: ""))
         }
     }
 
@@ -623,14 +688,8 @@ struct TimelineView: View {
                         .help(markerHelp(marker))
                 }
 
-                // Playhead
-                Rectangle()
-                    .fill(Color.red)
-                    .frame(width: 2)
-                    .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond))
-                    .accessibilityElement()
-                    .accessibilityLabel(NSLocalizedString("재생 헤드", comment: ""))
-                    .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
+                // Playhead: a 2pt visual with a wider direct-drag target.
+                playheadOverlay
 
             }
             .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)

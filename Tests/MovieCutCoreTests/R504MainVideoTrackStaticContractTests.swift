@@ -94,7 +94,7 @@ struct R504MainVideoTrackStaticContractTests {
             "timelineGridLines(height: trackHeight)",
             "clipView(clip, trackKind: track.kind)",
             "TimelineMarkerLine(marker: marker, height: trackHeight)",
-            #"accessibilityLabel(NSLocalizedString("재생 헤드", comment: ""))"#,
+            "playheadOverlay",
             "onDrop(of: [.fileURL, .movie, .image, .movieCutMediaAssetID], isTargeted: nil)",
             "handleTrackDrop(providers: providers, location: location, trackId: track.id)",
             #"accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))"#,

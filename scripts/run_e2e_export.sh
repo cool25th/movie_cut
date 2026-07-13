@@ -25,6 +25,42 @@ PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -conf
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
+# Works-First / G-16 AC1-2: drive the ruler-coordinate conversion and the same
+# public transport scrub API used by TimelineView. The app must report both UI
+# playhead and PlaybackEngine time within one 30fps frame of 1.25s.
+SCRUB_TMPDIR="$(mktemp -d)"
+SCRUB_RESULT="$SCRUB_TMPDIR/timeline_scrub.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-16 timeline scrub smoke"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
+  MOVIECUT_UITEST_SCRUB=1.25 MOVIECUT_UITEST_RESULT="$SCRUB_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+SP=$!
+for _ in $(seq 1 120); do [ -s "$SCRUB_RESULT" ] && break; sleep 0.25; done
+wait "$SP" 2>/dev/null || true
+SCRUB_STATUS="$(cat "$SCRUB_RESULT" 2>/dev/null || echo MISSING)"
+case "$SCRUB_STATUS" in
+  *"error=none"*"scrub_requested=1.250"*) ;;
+  *) echo "FAIL: G-16 scrub harness failed (status: $SCRUB_STATUS)" >&2; rm -rf "$SCRUB_TMPDIR"; exit 1 ;;
+esac
+python3 - "$SCRUB_STATUS" <<'PY'
+import re, sys
+status = sys.argv[1]
+values = {}
+for key in ("scrub_requested", "playhead", "playback"):
+    match = re.search(rf"(?:^| )%s=([0-9.]+)" % key, status)
+    if not match:
+        raise SystemExit(f"missing {key}: {status}")
+    values[key] = float(match.group(1))
+frame = 1.0 / 30.0
+for key in ("playhead", "playback"):
+    if abs(values[key] - values["scrub_requested"]) > frame:
+        raise SystemExit(f"{key} drift exceeds one frame: {values}")
+print(f"PASS: G-16 timeline scrub requested={values['scrub_requested']:.3f} playhead={values['playhead']:.3f} playback={values['playback']:.3f}")
+PY
+rm -rf "$SCRUB_TMPDIR"
+
 # Works-First / G-15: still image clips must render through the real app
 # preview/export pipeline instead of silently skipping because PNG has no video
 # track. This reproduces the user bug and locks AC1: blue PNG -> exported blue

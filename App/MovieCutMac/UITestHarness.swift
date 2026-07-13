@@ -47,12 +47,14 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
+    /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
         var extractAudioSuffix = ""
+        var scrubSuffix = ""
 
         let primaryImportURL = env["MOVIECUT_UITEST_IMPORT"].flatMap { rawPath -> URL? in
             rawPath.isEmpty ? nil : URL(filePath: rawPath)
@@ -64,6 +66,24 @@ extension EditorViewModel {
             await importMediaAndAddToTimeline(
                 importURLs,
                 startTime: currentProject.timeline.duration
+            )
+        }
+
+        if let rawScrubTime = env["MOVIECUT_UITEST_SCRUB"],
+           let requestedTime = Double(rawScrubTime) {
+            let rulerX = requestedTime * timelineZoom
+            let convertedTime = TimelineScrubMath.time(
+                forLocalX: rulerX,
+                pixelsPerSecond: timelineZoom,
+                duration: currentProject.timeline.duration
+            )
+            scrubPlayhead(to: convertedTime, phase: .began)
+            scrubPlayhead(to: convertedTime, phase: .ended)
+            scrubSuffix = String(
+                format: " scrub_requested=%.3f playhead=%.3f playback=%.3f",
+                requestedTime,
+                playheadTime,
+                playbackEngine.currentTime
             )
         }
 
@@ -306,7 +326,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

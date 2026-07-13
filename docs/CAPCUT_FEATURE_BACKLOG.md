@@ -144,7 +144,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 플랫폼 프리셋(TikTok/Reels/Shorts/YouTube/Instagram Post) 실제 인코딩 (P2) — **2026-07-04 G-12 #8 상환**: `MOVIECUT_UITEST_PLATFORM_PRESET` 하니스가 실제 `applyPlatformExportPreset` 앱 호출부로 canvas/export settings를 바꾼 뒤 `exportProject(to:)`로 export한다. `run_e2e_export.sh` ffprobe 실측: TikTok/Reels/Shorts 1080x1920 30/1 h264 `.mp4`, YouTube Standard 1920x1080 30/1 h264 `.mp4`, Instagram Post 1080x1080 30/1 h264 `.mp4` (`format_name=mov,mp4,m4a,3gp,3g2,mj2`). Caveat: 현재 5종 프리셋 정의는 모두 30fps/H.264/AAC/MP4이며 직접 게시 API가 아니라 파일 export 검증이다.
 
 ### B. 타임라인 편집
-- [ ] ❌ **G-16 타임라인 스크럽(B-I2) (P0, 사용자 보고 2026-07-13)** — 룰러 클릭·드래그와 플레이헤드 직접 드래그가 없어서 preview가 타임라인 포인터를 추종하지 않는다. G-16 Inc 1~3 및 E2E/실기기 증거 필요.
+- [ ] 🟡 **G-16 타임라인 스크럽(B-I2) (P0, 사용자 보고 2026-07-13)** — Inc 1~3 구현 완료. shared coordinate clamp tests 3/3, actual app E2E `requested/playhead/playback=1.250/1.250/1.250`, Mac build PASS. AC3 실기기 100ms 체감 및 AC4 재생 중 스크럽 확인 대기.
 - [ ] ❌ **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1) (P0, 사용자 보고 2026-07-13)** — Cmd+C/X/V·내부 clipboard·atomic undo·멀티 선택 paste가 없다. G-17 Inc 1~3 및 E2E 필요.
 - ✅ Trim / Split / Move / Delete / Ripple
 - ✅ 스냅 / 줌 / 다중선택 / 컨텍스트 메뉴

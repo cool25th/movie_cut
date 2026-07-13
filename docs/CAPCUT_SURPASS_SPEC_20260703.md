@@ -625,10 +625,10 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 3. 재생 중 스크럽을 시작하면 먼저 pause하고, 스크럽에는 클립 이동용 스냅을 적용하지 않는다.
 4. 연속 입력은 프레임당 약 1회로 coalesce하되, 드래그 종료 시 요청한 최종 프레임을 정확히 표시한다.
 
-#### 현재 상태 (2026-07-13 실사)
-- `TimelineView.timeRuler`와 플레이헤드 Rectangle에는 시킹 제스처가 없고, 룰러 위 포인터 입력은 마커 점프 외에 플레이헤드를 움직이지 않는다.
-- `EditorViewModel.seekPlayhead(to:)`는 이미 `playheadTime` 갱신과 `PlaybackEngine.seek(to:)`를 동기화하지만 private이며, 시킹 진입점은 PreviewPanel 슬라이더·마커·스냅 명령·프레임 스텝뿐이다.
-- 즉 타임라인 직접 스크럽은 B-I2 기준에서 ❌이며, 사용자가 헤드리스 E2E 통과 상태에서도 즉시 체감한 P0다.
+#### 현재 상태 (2026-07-13 구현/검증)
+- `TimelineView.timeRuler` 시간축은 `DragGesture(minimumDistance: 0)`로 shared `TimelineScrubMath` 좌표 변환을 거쳐 `EditorViewModel.scrubPlayhead`를 호출한다.
+- 2pt 플레이헤드는 14pt hit target과 스냅 없는 직접 드래그를 제공하고, 시작 시 pause·중간 요청 16ms coalescing·종료 exact seek를 transport 상태로 처리한다.
+- DEBUG 하니스 `MOVIECUT_UITEST_SCRUB=1.25` 실측은 `playhead=1.250 playback=1.250`으로 30fps ±1프레임 기준을 통과했다. 실기기 100ms 체감 확인은 사용자 확인 대기다.
 
 #### 데이터/명령 경계
 - 프로젝트 모델 필드 추가 없음. 일시적인 scrubbing/coalescing 상태는 `EditorViewModel` 앱 상태로만 둔다.
@@ -643,10 +643,10 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 | 3 | seek coalescing·프레임 정확도. 연속 요청은 display-frame 수준으로 합치고 종료 요청은 zero-tolerance exact seek. DEBUG 하니스 `MOVIECUT_UITEST_SCRUB=<t>`와 Works-First E2E 추가 | `EditorViewModel.swift`, `PlaybackEngine.swift`, `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
 
 #### AC
-1. behavioral: 스크럽 API 호출 뒤 `playheadTime`과 `playbackEngine.currentTime`이 프로젝트 fps 기준 ±1프레임 이내 일치한다.
-2. E2E: `MOVIECUT_UITEST_SCRUB=<t>`가 실제 앱의 룰러 좌표 환산 경로를 구동하고 status에 `playhead=<t>`를 기록한다.
-3. 실기기: 룰러 클릭·드래그와 플레이헤드 드래그 중 프리뷰 반영 지연이 B-U1 기준 100ms 이하인 화면 녹화. **사용자 확인 필요.**
-4. 경계: 음수 X와 duration 이후 X가 각각 0과 duration으로 clamp되고, 스크럽 중 재생이 계속 진행하지 않는다.
+1. [PASS 2026-07-13] behavioral/runtime: `TimelineScrubBehaviorTests` 3/3 PASS, actual app `playhead=1.250 playback=1.250`으로 30fps ±1프레임 동기화 통과.
+2. [PASS 2026-07-13] E2E: `MOVIECUT_UITEST_SCRUB=1.25`가 ruler X=`requested×timelineZoom` shared 환산 경로와 공개 scrub API를 구동하고 exact status를 기록함.
+3. [사용자 확인 필요] 실기기 룰러 클릭·드래그/플레이헤드 드래그 화면 녹화와 B-U1 100ms 체감 확인 미수행.
+4. [부분 PASS 2026-07-13] 음수/초과/non-finite coordinate clamp behavioral 2/2 PASS, pause-on-begin 및 final exact seek 코드·Mac build PASS. 실기기 재생 중 스크럽 체감은 AC3와 함께 확인 필요.
 
 #### 검증 계획
 - `TimelineScrubBehaviorTests`: 좌표→시간 변환/clamp, pause-on-begin, ±1프레임 동기화, final exact seek.

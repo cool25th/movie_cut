@@ -17,6 +17,12 @@ enum CanvasOverlayAlignment: Sendable {
     case bottom
 }
 
+enum TimelineScrubPhase: Sendable {
+    case began
+    case changed
+    case ended
+}
+
 @MainActor
 @Observable
 final class EditorViewModel {
@@ -173,6 +179,8 @@ final class EditorViewModel {
     @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
     @ObservationIgnored private var clipStyles: [UUID: String] = [:]
     @ObservationIgnored private var motionTrackingAppliedKeyframeCounts: [UUID: Int] = [:]
+    @ObservationIgnored private var pendingScrubTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingScrubTime: TimeInterval?
 
     init(project: Project? = nil) {
         let project = EditorViewModel.ensureDefaultTracks(in: project ?? Project(name: "Untitled"))
@@ -1831,12 +1839,12 @@ final class EditorViewModel {
 
     func snapPlayheadToSelectedClipStart() {
         guard let selectedClip else { return }
-        seekPlayhead(to: selectedClip.timelineRange.start)
+        scrubPlayhead(to: selectedClip.timelineRange.start)
     }
 
     func snapPlayheadToSelectedClipEnd() {
         guard let selectedClip else { return }
-        seekPlayhead(to: selectedClip.timelineRange.end)
+        scrubPlayhead(to: selectedClip.timelineRange.end)
     }
 
     func deleteClips(_ clipIds: Set<UUID>) async {
@@ -1910,7 +1918,7 @@ final class EditorViewModel {
         }
 
         selectedClipId = point.clipId
-        seekPlayhead(to: point.time)
+        scrubPlayhead(to: point.time)
     }
 
     func jumpToNextClipBoundary() {
@@ -1921,7 +1929,7 @@ final class EditorViewModel {
         }
 
         selectedClipId = point.clipId
-        seekPlayhead(to: point.time)
+        scrubPlayhead(to: point.time)
     }
 
     func zoomTimelineIn() {
@@ -3237,7 +3245,7 @@ final class EditorViewModel {
     }
 
     func goToMarker(_ marker: Marker) {
-        seekPlayhead(to: marker.time)
+        scrubPlayhead(to: marker.time)
         reportQuickToolSuccess("Moved to \(marker.name) at \(String(format: "%.1fs", marker.time)).")
     }
 
@@ -4622,11 +4630,46 @@ final class EditorViewModel {
         )
     }
 
-    private func seekPlayhead(to time: TimeInterval) {
-        playheadTime = min(max(0, time), max(currentProject.timeline.duration, time))
-        if playbackEngine.playerItem != nil {
-            playbackEngine.seek(to: playheadTime)
+    func scrubPlayhead(to time: TimeInterval, phase: TimelineScrubPhase = .ended) {
+        let duration = max(0, currentProject.timeline.duration)
+        let safeTime = time.isFinite ? time : 0
+        let clampedTime = min(duration, max(0, safeTime))
+
+        switch phase {
+        case .began:
+            pendingScrubTask?.cancel()
+            pendingScrubTask = nil
+            pendingScrubTime = nil
+            if playbackEngine.isPlaying {
+                playbackEngine.pause()
+            }
+            applyScrubTime(clampedTime)
+
+        case .changed:
+            pendingScrubTime = clampedTime
+            guard pendingScrubTask == nil else { return }
+            pendingScrubTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 16_000_000)
+                guard let self, !Task.isCancelled else { return }
+                let latestTime = self.pendingScrubTime
+                self.pendingScrubTime = nil
+                self.pendingScrubTask = nil
+                if let latestTime {
+                    self.applyScrubTime(latestTime)
+                }
+            }
+
+        case .ended:
+            pendingScrubTask?.cancel()
+            pendingScrubTask = nil
+            pendingScrubTime = nil
+            applyScrubTime(clampedTime)
         }
+    }
+
+    private func applyScrubTime(_ time: TimeInterval) {
+        playheadTime = time
+        playbackEngine.seek(to: time)
     }
 
     private func isZeroPoint(_ point: CGPoint) -> Bool {

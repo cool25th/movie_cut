@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.6 / 작성일: 2026-07-03 (v1.6: 사용자 버그 재현 — G-15 이미지 파이프라인 신설·최우선, Works-First 게이트) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.7 / 작성일: 2026-07-03 (v1.7: 사용자 보고 편집 체감 P0 G-16/G-17 등재) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-13 v1.7: 사용자 보고 편집 체감 P0를 코드 실사 후 정식 등재. **G-16 타임라인 스크럽(B-I2)**과 **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1)**를 신설하고, 구현 순서를 G-16→G-17→G-04로 고정했다.
 - 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
 - 2026-07-05 v1.5: V11 재감사(`GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
 - 2026-07-05 v1.4: V10 재감사(`GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 10/14; #9 chapter metadata 상환 후 다음 자동 항목 G-02 Inc 3).
@@ -611,6 +612,99 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - trim 연장 시 세그먼트 길이 부족 — 여유 길이(최대 30s)로 렌더 후 trim으로 흡수(권고) 또는 duration 버킷 재렌더.
 - HEIC/Display P3 → h264 변환 색 시프트 — sRGB 변환 명시.
 - 프로젝트 재로드 시 temp 세그먼트 소실 → imageURL 기준 lazy 재렌더 필수.
+
+---
+
+### G-16. 타임라인 스크럽 — **P0 / 사용자 보고 편집 체감** / 규모 S~M ⭐
+
+> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-I2. 룰러 클릭·드래그와 플레이헤드 드래그에 프리뷰가 프레임 단위로 즉시 추종해야 한다.
+
+#### 요구사항
+1. 타임라인 룰러의 시간축 영역을 클릭하거나 드래그하면 플레이헤드와 프리뷰가 해당 시각으로 즉시 이동한다.
+2. 2pt 플레이헤드에는 좌우 약 6pt 이상의 투명 hit target을 제공하며 자유 드래그를 지원한다.
+3. 재생 중 스크럽을 시작하면 먼저 pause하고, 스크럽에는 클립 이동용 스냅을 적용하지 않는다.
+4. 연속 입력은 프레임당 약 1회로 coalesce하되, 드래그 종료 시 요청한 최종 프레임을 정확히 표시한다.
+
+#### 현재 상태 (2026-07-13 실사)
+- `TimelineView.timeRuler`와 플레이헤드 Rectangle에는 시킹 제스처가 없고, 룰러 위 포인터 입력은 마커 점프 외에 플레이헤드를 움직이지 않는다.
+- `EditorViewModel.seekPlayhead(to:)`는 이미 `playheadTime` 갱신과 `PlaybackEngine.seek(to:)`를 동기화하지만 private이며, 시킹 진입점은 PreviewPanel 슬라이더·마커·스냅 명령·프레임 스텝뿐이다.
+- 즉 타임라인 직접 스크럽은 B-I2 기준에서 ❌이며, 사용자가 헤드리스 E2E 통과 상태에서도 즉시 체감한 P0다.
+
+#### 데이터/명령 경계
+- 프로젝트 모델 필드 추가 없음. 일시적인 scrubbing/coalescing 상태는 `EditorViewModel` 앱 상태로만 둔다.
+- 시킹은 비파괴 transport 동작이므로 편집 undo command를 만들지 않는다. 단, 편집 상태를 바꾸는 신규 동작은 계속 `EditorSession.dispatch(Command)` 규율을 따른다.
+- 공개 진입점 예: `scrubPlayhead(to:phase:)`; 내부에서 timeline duration clamp, pause-on-begin, seek coalescing, final exact seek를 책임진다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 룰러 시간축에 `DragGesture(minimumDistance: 0)`. 트랙 헤더 80pt를 제외한 local X를 `pixelsPerSecond`로 환산하고 `0...timeline.duration` clamp. 시작 시 재생 pause | `TimelineView.swift`, `EditorViewModel.swift` |
+| 2 | 플레이헤드 자체 드래그. 시각 2pt와 별도의 좌우 약 6pt 투명 hit target, 스냅 없는 자유 이동 | `TimelineView.swift` |
+| 3 | seek coalescing·프레임 정확도. 연속 요청은 display-frame 수준으로 합치고 종료 요청은 zero-tolerance exact seek. DEBUG 하니스 `MOVIECUT_UITEST_SCRUB=<t>`와 Works-First E2E 추가 | `EditorViewModel.swift`, `PlaybackEngine.swift`, `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+
+#### AC
+1. behavioral: 스크럽 API 호출 뒤 `playheadTime`과 `playbackEngine.currentTime`이 프로젝트 fps 기준 ±1프레임 이내 일치한다.
+2. E2E: `MOVIECUT_UITEST_SCRUB=<t>`가 실제 앱의 룰러 좌표 환산 경로를 구동하고 status에 `playhead=<t>`를 기록한다.
+3. 실기기: 룰러 클릭·드래그와 플레이헤드 드래그 중 프리뷰 반영 지연이 B-U1 기준 100ms 이하인 화면 녹화. **사용자 확인 필요.**
+4. 경계: 음수 X와 duration 이후 X가 각각 0과 duration으로 clamp되고, 스크럽 중 재생이 계속 진행하지 않는다.
+
+#### 검증 계획
+- `TimelineScrubBehaviorTests`: 좌표→시간 변환/clamp, pause-on-begin, ±1프레임 동기화, final exact seek.
+- `scripts/run_e2e_export.sh`: 짧은 fixture import → 룰러 좌표 기반 t=1.25s 스크럽 → `playhead=1.250` status 검사.
+- 실기기: ruler click/drag + playhead drag를 화면 녹화하고 100ms 반응성 기준을 사용자에게 확인 요청.
+
+#### 리스크
+- `DragGesture`가 마커 hit target·가로 스크롤과 충돌할 수 있어 시간축 영역과 플레이헤드 hit region의 우선순위를 분리해야 한다.
+- AVPlayer seek 폭주 시 프리뷰가 뒤늦게 따라올 수 있으므로 중간 요청만 coalesce하고 최종 요청은 버리지 않는다.
+- SwiftUI local/global 좌표 혼용 시 80pt 트랙 헤더 오프셋이 중복 적용될 수 있어 순수 좌표 변환 테스트로 잠근다.
+
+---
+
+### G-17. 클립 복사/잘라내기/붙여넣기 — **P0 / 사용자 보고 편집 체감** / 규모 M ⭐
+
+> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F2.1. Cmd+C/X/V로 단일·다중 클립을 복사/잘라내고 플레이헤드 위치에 붙여넣으며 undo 1회로 원복해야 한다.
+
+#### 요구사항
+1. 선택한 단일 또는 복수 클립을 앱 내부 클립보드에 복사하고 Cmd+C/X/V 및 context menu로 실행한다.
+2. 붙여넣기는 클립군의 상대 시간 간격을 보존해 플레이헤드 위치를 anchor로 배치한다. 새 UUID를 부여하며 원본은 copy에서 불변이다.
+3. cut은 copy+delete를 하나의 undo 그룹으로, paste도 하나의 command/undo 단계로 처리한다.
+4. 원본 트랙·대상 시각에 충돌이 있으면 CapCut 실동작 확인 결과를 따른다. 확인 불가 시 같은 kind의 빈 트랙, 없으면 신규 트랙을 사용한다.
+
+#### 현재 상태 (2026-07-13 실사)
+- `MovieCutMacApp.swift` 단축키 목록에 C/X/V가 없다. Cmd+D duplicate만 있다.
+- `EditorViewModel.copyClip(clipId:targetTrackId:targetStartTime:)`은 드래그 복제 내부용이며 clipboard 개념이 아니다.
+- `TimelineView` clip context menu에도 Copy/Cut/Paste가 없다. 멀티 선택은 존재하지만 clipboard 소비 경로가 없다.
+
+#### 데이터 모델/명령 경계
+- clipboard는 `EditorViewModel`의 비영속 앱 상태: source clip 값 사본, source track id, earliest start, relative offset 배열. 시스템 pasteboard와 프로젝트 Codable은 변경하지 않는다.
+- Core command 계층에 atomic paste command와 cut용 composite/batch command를 추가한다. 실제 timeline 변형은 반드시 `EditorSession.dispatch(Command)`를 경유한다.
+- pasted clip은 새 id를 사용하되 asset/effect/transform/text/audio metadata는 값 복사한다. group 관계는 선택 집합 내부 관계만 새 group id로 remap한다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | Command 계층에 atomic paste·cut batch 추가. ViewModel clipboard와 단일 clip copy/cut/paste API, 플레이헤드 anchor·겹침 정책 구현 | `Sources/MovieCutCore/Commands/`, `EditorViewModel.swift` |
+| 2 | Cmd+C/X/V 메뉴·단축키, clip context menu, 멀티 선택과 상대 간격/group 관계 보존 | `MovieCutMacApp.swift`, `TimelineView.swift`, `EditorViewModel.swift` |
+| 3 | DEBUG 하니스 `MOVIECUT_UITEST_COPYPASTE=1`: import→split→cut→playhead 이동→paste, `timeline=` dump. Works-First E2E smoke 추가 | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+
+#### AC
+1. behavioral: copy→paste 후 새 clip의 timelineRange가 플레이헤드 anchor 기준 기대값이고 원본은 불변이다. cut→paste에서는 원위치 clip이 사라지고 새 위치에 나타난다.
+2. undo: paste는 undo 1회로 pasted clips 전부 제거, cut은 undo 1회로 원래 선택 전체를 복원한다.
+3. E2E: 하니스 `timeline=` dump가 import→split→cut→paste의 기대 배치와 일치한다.
+4. 멀티 선택 copy/paste가 선택 클립 간 상대 시간 간격과 kind를 보존하고 새 id를 사용한다.
+5. UI: Cmd+C/X/V와 context menu가 동일 command-backed API를 호출하며 text entry focus에서는 편집기 클립 단축키가 탈취되지 않는다.
+
+#### 검증 계획
+- CapCut 붙여넣기 위치·겹침 정책을 웹 검색으로 확인하고 B-F2.1에 [확인] 출처/결정을 기록한 뒤 구현한다.
+- `ClipClipboardCommandTests`: 단일/멀티 상대 간격, 새 id, 원본 불변, 충돌 트랙 선택, cut/paste 각 1회 undo/redo.
+- `scripts/run_e2e_export.sh`: 실제 DEBUG 앱 하니스 status의 `timeline=`을 exact compare.
+- 실기기: 단일·멀티 선택에서 Cmd+C/X/V와 context menu 왕복 확인.
+
+#### 리스크
+- 기존 magnetic packing이 paste 위치를 재배치할 수 있으므로 command 결과와 B-F2.1 anchor 정책의 우선순위를 테스트로 고정해야 한다.
+- cut을 copy 후 개별 delete command로 dispatch하면 undo가 여러 번 필요해진다. 반드시 composite/snapshot atomic command를 사용한다.
+- 시스템 텍스트 필드에서 Cmd+C/X/V를 가로채면 안 되므로 기존 `MovieCutShortcutGuard`를 재사용한다.
+- linked/grouped clip 일부만 선택했을 때 관계 복사 정책이 모호하다. 1차는 선택 집합 내부 관계만 보존하고 외부 링크는 끊는다.
 
 ---
 

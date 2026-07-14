@@ -42,6 +42,14 @@ public struct PasteClipsCommand: EditorCommand {
         let previousTracks = project.timeline.tracks
         var tracks = previousTracks
         var pastedIds = Set<UUID>()
+        var pastedGroupIds: [UUID: UUID] = [:]
+
+        for sourceClip in sourceClips {
+            if let sourceGroupId = sourceClip.groupId,
+               pastedGroupIds[sourceGroupId] == nil {
+                pastedGroupIds[sourceGroupId] = UUID()
+            }
+        }
 
         for group in orderedGroups where !group.clips.isEmpty {
             guard group.clips.allSatisfy({ Self.isCompatible($0.kind, with: group.trackKind) }) else {
@@ -51,6 +59,7 @@ public struct PasteClipsCommand: EditorCommand {
             let pastedGroup = group.clips.map { sourceClip -> Clip in
                 var clip = sourceClip
                 clip.id = UUID()
+                clip.groupId = sourceClip.groupId.flatMap { pastedGroupIds[$0] }
                 clip.timelineRange = TimeRange(
                     start: sourceClip.timelineRange.start + shift,
                     duration: sourceClip.timelineRange.duration

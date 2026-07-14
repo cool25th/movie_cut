@@ -60,6 +60,54 @@ struct ClipboardCommandTests {
         #expect(await session.snapshot() == pastedState)
     }
 
+    @Test("PasteClips remaps selected groups without linking pasted clips to originals")
+    func pasteClipsRemapsGroupIds() throws {
+        let oldGroupId = UUID()
+        var first = clip(start: 0, duration: 1)
+        var second = clip(start: 2, duration: 1)
+        var unselected = clip(start: 4, duration: 1)
+        let ungrouped = clip(start: 6, duration: 1)
+        first.groupId = oldGroupId
+        second.groupId = oldGroupId
+        unselected.groupId = oldGroupId
+        let track = Track(kind: .video, name: "Video 1", clips: [first, second, unselected, ungrouped])
+        var destination = project(tracks: [track])
+        let groupedPayload = try ClipboardPayload(
+            project: destination,
+            clipIds: [first.id, second.id]
+        )
+
+        let groupedResult = try PasteClipsCommand(
+            payload: groupedPayload,
+            anchorTime: 10
+        ).apply(to: &destination)
+
+        let clips = destination.timeline.tracks.flatMap(\.clips)
+        let pastedGrouped = clips.filter { groupedResult.affectedClipIds.contains($0.id) }
+        #expect(clips.first { $0.id == first.id }?.groupId == oldGroupId)
+        #expect(clips.first { $0.id == second.id }?.groupId == oldGroupId)
+        #expect(clips.first { $0.id == unselected.id }?.groupId == oldGroupId)
+        #expect(pastedGrouped.count == 2)
+        let pastedGroupId = try #require(pastedGrouped.first?.groupId)
+        #expect(pastedGroupId != oldGroupId)
+        #expect(pastedGrouped.allSatisfy { $0.groupId == pastedGroupId })
+
+        let ungroupedPayload = try ClipboardPayload(
+            project: destination,
+            clipIds: [ungrouped.id]
+        )
+        let ungroupedResult = try PasteClipsCommand(
+            payload: ungroupedPayload,
+            anchorTime: 20
+        ).apply(to: &destination)
+        let pastedUngrouped = try #require(
+            destination.timeline.tracks
+                .flatMap(\.clips)
+                .first { ungroupedResult.affectedClipIds.contains($0.id) }
+        )
+        #expect(pastedUngrouped.groupId == nil)
+    }
+
     @Test("CutClips removes clips across tracks and one undo restores exact values")
     func cutClipsAcrossTracksUndoExactly() async throws {
         let video = clip(start: 3, duration: 2)

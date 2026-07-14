@@ -49,6 +49,7 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
+    /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -57,6 +58,7 @@ extension EditorViewModel {
         var extractAudioSuffix = ""
         var scrubSuffix = ""
         var clipboardSuffix = ""
+        var filmstripSuffix = ""
 
         let primaryImportURLs = env["MOVIECUT_UITEST_IMPORT"]
             .map(uiTestImportURLs(from:)) ?? []
@@ -68,6 +70,15 @@ extension EditorViewModel {
                 importURLs,
                 startTime: currentProject.timeline.duration
             )
+        }
+
+        if env["MOVIECUT_UITEST_FILMSTRIP"] == "1" {
+            do {
+                filmstripSuffix = try await runFilmstripGeneratorUITestScenario()
+            } catch {
+                lastErrorMessage = "filmstrip harness failed: \(error.localizedDescription)"
+                filmstripSuffix = " filmstrip_frames=0 requested=none actual=none max_height=0"
+            }
         }
 
         if env["MOVIECUT_UITEST_CLIPBOARD"] == "1" {
@@ -336,7 +347,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -359,6 +370,91 @@ extension EditorViewModel {
             case .invariant(let message): message
             }
         }
+    }
+
+    private enum FilmstripUITestError: LocalizedError {
+        case invariant(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invariant(let message): message
+            }
+        }
+    }
+
+    private func runFilmstripGeneratorUITestScenario() async throws -> String {
+        guard let clip = selectedClip,
+              clip.kind == .video,
+              let assetID = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetID],
+              asset.kind == .video else {
+            throw FilmstripUITestError.invariant("expected a selected video clip and asset")
+        }
+
+        let frames = try await FilmstripGenerator().frames(
+            for: asset.originalURL,
+            sourceRange: clip.sourceRange,
+            targetCount: 4,
+            maxHeight: 60
+        )
+        guard frames.count == 4 else {
+            throw FilmstripUITestError.invariant("expected 4 frames, found \(frames.count)")
+        }
+
+        let expectedRequests = FilmstripRequestPlanner.requests(
+            sourceRange: clip.sourceRange,
+            targetCount: 4
+        )
+        guard frames.map(\.requestedTime) == expectedRequests.map(\.time) else {
+            throw FilmstripUITestError.invariant("generated requests differ from the shared plan")
+        }
+
+        let tolerance = FilmstripGenerator.requestedTimeTolerance + (1.0 / 30.0)
+        guard frames.allSatisfy({ abs($0.actualTime - $0.requestedTime) <= tolerance }) else {
+            throw FilmstripUITestError.invariant("actual frame time exceeded request tolerance")
+        }
+
+        let maxDecodedHeight = frames.map { $0.image.height }.max() ?? 0
+        guard maxDecodedHeight > 0, maxDecodedHeight <= 60 else {
+            throw FilmstripUITestError.invariant("decoded height \(maxDecodedHeight) exceeds maxHeight 60")
+        }
+
+        let zoomInputs: [Double] = [20, 40, 80, 160]
+        let zoomBuckets = zoomInputs.map { FilmstripZoomBucket.bucket(for: $0) }
+        guard zoomBuckets.map(\.rawValue) == [0, 1, 2, 3] else {
+            throw FilmstripUITestError.invariant("unexpected zoom buckets \(zoomBuckets)")
+        }
+
+        let cache = FilmstripCache()
+        let cacheKey = FilmstripCacheKey(
+            assetID: asset.id,
+            zoomBucket: FilmstripZoomBucket.bucket(for: 80)
+        )
+        guard await cache.frames(for: cacheKey) == nil else {
+            throw FilmstripUITestError.invariant("new cache unexpectedly contained frames")
+        }
+        await cache.insert(frames, for: cacheKey)
+        guard await cache.frames(for: cacheKey)?.count == frames.count else {
+            throw FilmstripUITestError.invariant("cache did not return inserted frames")
+        }
+        await cache.remove(assetID: asset.id)
+        guard await cache.frames(for: cacheKey) == nil else {
+            throw FilmstripUITestError.invariant("asset invalidation left cached frames")
+        }
+
+        let cacheStats = await cache.stats()
+        guard cacheStats == FilmstripCacheStats(hits: 1, misses: 2, inserts: 1) else {
+            throw FilmstripUITestError.invariant("unexpected cache stats \(cacheStats)")
+        }
+        let cacheLimit = await cache.configuredTotalCostLimit()
+        guard cacheLimit == FilmstripCache.defaultTotalCostLimit else {
+            throw FilmstripUITestError.invariant("unexpected cache limit \(cacheLimit)")
+        }
+
+        let requested = frames.map { String(format: "%.3f", $0.requestedTime) }.joined(separator: ",")
+        let actual = frames.map { String(format: "%.3f", $0.actualTime) }.joined(separator: ",")
+        let bucketSummary = zoomBuckets.map { String($0.rawValue) }.joined(separator: ",")
+        return " filmstrip_frames=\(frames.count) requested=\(requested) actual=\(actual) max_height=\(maxDecodedHeight) zoom_buckets=\(bucketSummary) cache_hit=\(cacheStats.hits) cache_miss=\(cacheStats.misses) cache_inserts=\(cacheStats.inserts) cache_limit=\(cacheLimit) cache_invalidate=1"
     }
 
     private func runClipboardUITestScenario() async throws -> String {

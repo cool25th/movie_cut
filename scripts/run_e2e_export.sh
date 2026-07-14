@@ -25,6 +25,28 @@ PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -conf
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
+# G-04 Inc 1-2: generate real time-varying frames through
+# AVAssetImageGenerator, then exercise the zoom-keyed 128MB cache in the actual
+# app process. The status records decoder timestamps and cache transitions.
+FILMSTRIP_TMPDIR="$(mktemp -d)"
+FILMSTRIP_RESULT="$FILMSTRIP_TMPDIR/filmstrip.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-04 filmstrip generator smoke"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
+  MOVIECUT_UITEST_FILMSTRIP=1 MOVIECUT_UITEST_RESULT="$FILMSTRIP_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+FP=$!
+for _ in $(seq 1 120); do [ -s "$FILMSTRIP_RESULT" ] && break; sleep 0.25; done
+wait "$FP" 2>/dev/null || true
+FILMSTRIP_STATUS="$(cat "$FILMSTRIP_RESULT" 2>/dev/null || echo MISSING)"
+case "$FILMSTRIP_STATUS" in
+  *"error=none"*"filmstrip_frames=4"*"requested=0.250,0.750,1.250,1.750"*"max_height="*"zoom_buckets=0,1,2,3"*"cache_hit=1"*"cache_miss=2"*"cache_inserts=1"*"cache_limit=134217728"*"cache_invalidate=1"*) ;;
+  *) echo "FAIL: G-04 filmstrip generator/cache harness failed (status: $FILMSTRIP_STATUS)" >&2; rm -rf "$FILMSTRIP_TMPDIR"; exit 1 ;;
+esac
+echo "PASS: G-04 filmstrip generator/cache $FILMSTRIP_STATUS"
+rm -rf "$FILMSTRIP_TMPDIR"
+
 # Works-First / G-16 AC1-2: drive the ruler-coordinate conversion and the same
 # public transport scrub API used by TimelineView. The app must report both UI
 # playhead and PlaybackEngine time within one 30fps frame of 1.25s.

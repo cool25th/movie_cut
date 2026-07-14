@@ -282,7 +282,7 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 3. 스크롤/줌 60fps 유지, 메모리 상한.
 
 #### 현재 상태 (실사)
-- `TimelineView.swift:957-1002` — `viewModel.thumbnailData(for: clip)` 단일 PNG를 `ForEach`로 반복한다. 2026-07-14 Inc 1~2에서 비동기 실제 프레임 생성기와 줌 버킷 캐시는 추가됐으나 이 UI에는 아직 연결되지 않았다.
+- 2026-07-15 Inc 3에서 실제 `TimelineView` 비디오 클립 배경에 시간가변 프레임 소비 경로를 연결했다. named horizontal viewport 좌표계에서 clip frame과 실제 scroll viewport를 교차해 반 화면씩 prefetch하며, offscreen은 skip하고 request identity(가시 window/zoom/source/media/geometry)가 바뀌면 이전 Task를 취소한다. 기존 단일 썸네일 타일은 async 준비·실패·취소 중 폴백으로 유지한다. 호버와 signpost/perf 측정은 아직 없다.
 
 #### 구현 증분
 
@@ -304,7 +304,8 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 #### 검증
 - `FilmstripGeneratorTests`(fixture 영상으로 프레임 수/시각 정확도), 성능은 perf 스크립트 실측. 실기기 스크롤 체감 GUI 녹화.
 - 2026-07-14 Inc 1~2 검증: `FilmstripPlanningTests` **5/5 PASS**(tile-center 시각·4단계 줌 버킷·cache key 분리), actual app DEBUG E2E가 2초 fixture에서 `frames=4`, requested `0.250,0.750,1.250,1.750`, actual `0.233,0.733,1.233,1.733`, `max_height=60`, `cache_hit=1/cache_miss=2/cache_inserts=1/cache_limit=134217728/cache_invalidate=1`을 기록했다. AC1~5는 Inc 3~5/UI·성능 측정 전이므로 미완료다.
-- `[진행중] 다음 증분: Inc 3, 시작점: App/MovieCutMac/TimelineView.swift:957`
+- 2026-07-15 Inc 3 검증: focused `swift test --filter Filmstrip` **11/11 PASS**(실제 scroll viewport 범위·양끝 clamp·offscreen nil·zoom/request identity·stale reject·cancel/failure fallback). actual app DEBUG E2E의 **실제 `TimelineView` consumer**가 `frames=32`, `distinct_digests=32`, `distinct_times=32`, `visible_span=21.600/30.000`, `visible_count=32/67`, `offscreen_skipped=1`, `cancelled=1`, `stale_rejected=1`, `fallback_before_ready=1`, `fallback_after_cancel=1`을 기록하고 전체 `E2E check OK`로 끝났다. Inc 3 범위는 완료했지만 AC1/AC2 성능·메모리 실측, AC3 4단계 실제 UI 밀도 측정, AC4 호버, AC5 비디오 외 시각 회귀 증거가 남아 **G-04 완료는 선언하지 않는다**.
+- `[진행중] 다음 증분: Inc 4, 시작점: App/MovieCutMac/TimelineView.swift:975`
 
 ---
 

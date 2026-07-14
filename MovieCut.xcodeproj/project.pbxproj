@@ -190,6 +190,7 @@
 		E10A7C824D3B7B6CD5181BF8 /* Phase04TimelineEditToolbarStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD557736F51426231073842B /* Phase04TimelineEditToolbarStaticContractTests.swift */; };
 		E154710F14EE37169D4A4B5F /* ColorGradeGoldenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069552FC6F46DE9AABF78957 /* ColorGradeGoldenTests.swift */; };
 		E1EEB65CD40B13017C739BEA /* IOSEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B96917052DBC7959584EAA /* IOSEditorViewModel.swift */; };
+		E3237A5300CA1759AA0A6A3D /* TimelineFilmstripStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217F85A983CF0B4A2AF4E59A /* TimelineFilmstripStore.swift */; };
 		E3691FF4E8D63ED5AB83CB0D /* ColorCorrectionGoldenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CC50C689EBB399BD3E387A /* ColorCorrectionGoldenTests.swift */; };
 		E5ACF83ED70021362C1C8888 /* AutoAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4674C59920A972C799F08B9 /* AutoAssistantView.swift */; };
 		E7DABAF9677D31F47DA3C2A2 /* R204LibraryHoverPreviewStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA4A7B2158D2DD913E3CE23 /* R204LibraryHoverPreviewStaticContractTests.swift */; };
@@ -253,6 +254,7 @@
 		1EB8E343896606CAA89FABDC /* VisualEffectPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectPixelProcessorTests.swift; sourceTree = "<group>"; };
 		2036514ED46A6D01113D4220 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		20D625B6F1AE837F3297C676 /* P2TopChromePolishStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P2TopChromePolishStaticContractTests.swift; sourceTree = "<group>"; };
+		217F85A983CF0B4A2AF4E59A /* TimelineFilmstripStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineFilmstripStore.swift; sourceTree = "<group>"; };
 		21E1C2F0D228B851271B9CD0 /* ChromaKeyPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyPixelProcessorTests.swift; sourceTree = "<group>"; };
 		22F84ED400FA3AC5ABB2471E /* IOSAutoSubtitlesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAutoSubtitlesView.swift; sourceTree = "<group>"; };
 		22FE68DC0ED882BD0171B22D /* MediaLibraryPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryPanel.swift; sourceTree = "<group>"; };
@@ -795,6 +797,7 @@
 			isa = PBXGroup;
 			children = (
 				0DFF3A77C71272DE0B87BD07 /* FilmstripGenerator.swift */,
+				217F85A983CF0B4A2AF4E59A /* TimelineFilmstripStore.swift */,
 			);
 			path = Media;
 			sourceTree = "<group>";
@@ -1157,6 +1160,7 @@
 				87FD864DD272A57E9BE8DF27 /* StickerPickerView.swift in Sources */,
 				7B574257CD8646D0165EA1B2 /* TemplatePickerView.swift in Sources */,
 				4D69FA00233FDD96D31E5CF4 /* TextAnimationRenderer.swift in Sources */,
+				E3237A5300CA1759AA0A6A3D /* TimelineFilmstripStore.swift in Sources */,
 				316EF08543782A41891B8ECC /* TimelineView.swift in Sources */,
 				169097017E98EB3D424358DC /* TranscriptionService.swift in Sources */,
 				97F20409A0E39F876976E520 /* UITestHarness.swift in Sources */,

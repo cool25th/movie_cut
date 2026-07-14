@@ -47,6 +47,81 @@ esac
 echo "PASS: G-04 filmstrip generator/cache $FILMSTRIP_STATUS"
 rm -rf "$FILMSTRIP_TMPDIR"
 
+# G-04 Inc 3: exercise the actual TimelineView background consumer. Two long,
+# time-varying clips make the first clip only partly near-visible and the second
+# clip offscreen. The DEBUG observer is fed by TimelineFilmstripLayer/Store;
+# UITestHarness only waits for and serializes those real UI-consumer events.
+TIMELINE_FILMSTRIP_TMPDIR="$(mktemp -d)"
+TIMELINE_FILMSTRIP_FIXTURE="$TIMELINE_FILMSTRIP_TMPDIR/timevarying_30s.mp4"
+TIMELINE_FILMSTRIP_RESULT="$TIMELINE_FILMSTRIP_TMPDIR/timeline_filmstrip.txt"
+ffmpeg -v error -f lavfi -i "testsrc2=size=160x90:rate=10:duration=30" \
+  -an -c:v libx264 -pix_fmt yuv420p -g 10 -keyint_min 10 -sc_threshold 0 \
+  "$TIMELINE_FILMSTRIP_FIXTURE"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-04 Inc 3 TimelineView filmstrip consumer smoke"
+env MOVIECUT_UITEST=1 \
+  MOVIECUT_UITEST_IMPORT="$TIMELINE_FILMSTRIP_FIXTURE,$TIMELINE_FILMSTRIP_FIXTURE" \
+  MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1 \
+  MOVIECUT_UITEST_RESULT="$TIMELINE_FILMSTRIP_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+TFP=$!
+for _ in $(seq 1 160); do [ -s "$TIMELINE_FILMSTRIP_RESULT" ] && break; sleep 0.25; done
+wait "$TFP" 2>/dev/null || true
+TIMELINE_FILMSTRIP_STATUS="$(cat "$TIMELINE_FILMSTRIP_RESULT" 2>/dev/null || echo MISSING)"
+case "$TIMELINE_FILMSTRIP_STATUS" in
+  *"error=none"*"timeline_filmstrip_frames="*"offscreen_skipped=1"*"cancelled=1"*"stale_rejected=1"*"fallback_before_ready=1"*"fallback_after_cancel=1"*) ;;
+  *) echo "FAIL: G-04 Inc 3 TimelineView consumer harness failed (status: $TIMELINE_FILMSTRIP_STATUS)" >&2; rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"; exit 1 ;;
+esac
+python3 - "$TIMELINE_FILMSTRIP_STATUS" <<'PY'
+import re, sys
+status = sys.argv[1]
+
+def integer(key):
+    match = re.search(rf"(?:^| ){key}=([0-9]+)", status)
+    if not match:
+        raise SystemExit(f"missing {key}: {status}")
+    return int(match.group(1))
+
+def number(key):
+    match = re.search(rf"(?:^| ){key}=([0-9.]+)", status)
+    if not match:
+        raise SystemExit(f"missing {key}: {status}")
+    return float(match.group(1))
+
+frames = integer("timeline_filmstrip_frames")
+digests = integer("distinct_digests")
+times = integer("distinct_times")
+requested_span = number("requested_span")
+full_span = number("full_span")
+requested_count = integer("requested_count")
+full_count = integer("full_count")
+if frames <= 1 or digests <= 1 or times <= 1:
+    raise SystemExit(f"filmstrip was not genuinely time-varying: {status}")
+if not (0 < requested_span < full_span):
+    raise SystemExit(f"visible source span was not limited: {status}")
+if not (0 < requested_count < full_count):
+    raise SystemExit(f"visible frame count was not limited: {status}")
+for key in (
+    "offscreen_skipped", "cancelled", "stale_rejected",
+    "fallback_before_ready", "fallback_after_cancel"
+):
+    if integer(key) != 1:
+        raise SystemExit(f"{key} was not proven: {status}")
+zoom_match = re.search(r"(?:^| )zoom_requests=([^ ]+)", status)
+zooms = set(zoom_match.group(1).split(",")) if zoom_match else set()
+if len(zooms) < 2:
+    raise SystemExit(f"zoom did not change request identity: {status}")
+print(
+    "PASS: G-04 Inc 3 TimelineView consumer "
+    f"frames={frames} distinct_digests={digests} distinct_times={times} "
+    f"visible_span={requested_span:.3f}/{full_span:.3f} "
+    f"visible_count={requested_count}/{full_count} offscreen_skipped=1 "
+    "cancelled=1 stale_rejected=1 fallback_before_ready=1 fallback_after_cancel=1"
+)
+PY
+rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"
+
 # Works-First / G-16 AC1-2: drive the ruler-coordinate conversion and the same
 # public transport scrub API used by TimelineView. The app must report both UI
 # playhead and PlaybackEngine time within one 30fps frame of 1.25s.

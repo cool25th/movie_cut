@@ -42,6 +42,189 @@ public enum FilmstripRequestPlanner {
     }
 }
 
+/// A quantized clip-local window that is worth decoding for the timeline.
+///
+/// The window is expressed in both clip pixels and source time so the UI can
+/// position the decoded frames without treating the whole clip as visible.
+public struct FilmstripViewportRequest: Hashable, Sendable {
+    public var sourceRange: TimeRange
+    public var localStartX: Double
+    public var localWidth: Double
+    public var targetCount: Int
+    public var fullTargetCount: Int
+    public var zoomBucket: FilmstripZoomBucket
+    public var zoomScaleKey: Int
+
+    public init(
+        sourceRange: TimeRange,
+        localStartX: Double,
+        localWidth: Double,
+        targetCount: Int,
+        fullTargetCount: Int,
+        zoomBucket: FilmstripZoomBucket,
+        zoomScaleKey: Int
+    ) {
+        self.sourceRange = sourceRange
+        self.localStartX = localStartX
+        self.localWidth = localWidth
+        self.targetCount = targetCount
+        self.fullTargetCount = fullTargetCount
+        self.zoomBucket = zoomBucket
+        self.zoomScaleKey = zoomScaleKey
+    }
+}
+
+/// Maps a clip's actual frame inside the horizontal timeline viewport to the
+/// source-time window that should be decoded.
+///
+/// The viewport is expanded by half a screen on each side to avoid visible
+/// pop-in. Pixel bounds are quantized to tile boundaries so ordinary scrolling
+/// does not restart decoding for every single pixel. Returning `nil` is an
+/// explicit offscreen decision, not an empty full-clip request.
+public enum FilmstripViewportPlanner {
+    public static let defaultPrefetchViewportFraction = 0.5
+    public static let defaultMaximumFrameCount = 32
+
+    public static func request(
+        clipMinX: Double,
+        clipWidth: Double,
+        viewportWidth: Double,
+        sourceRange: TimeRange,
+        pixelsPerSecond: Double,
+        tileWidth: Double,
+        prefetchViewportFraction: Double = defaultPrefetchViewportFraction,
+        maximumFrameCount: Int = defaultMaximumFrameCount
+    ) -> FilmstripViewportRequest? {
+        guard clipMinX.isFinite,
+              clipWidth.isFinite,
+              clipWidth > 0,
+              viewportWidth.isFinite,
+              viewportWidth > 0,
+              sourceRange.start.isFinite,
+              sourceRange.start >= 0,
+              sourceRange.duration.isFinite,
+              sourceRange.duration > 0,
+              pixelsPerSecond.isFinite,
+              pixelsPerSecond > 0,
+              tileWidth.isFinite,
+              tileWidth > 0,
+              prefetchViewportFraction.isFinite,
+              prefetchViewportFraction >= 0,
+              maximumFrameCount > 0 else {
+            return nil
+        }
+
+        let prefetchWidth = viewportWidth * prefetchViewportFraction
+        let nearViewportStart = -prefetchWidth
+        let nearViewportEnd = viewportWidth + prefetchWidth
+        let clipMaxX = clipMinX + clipWidth
+        let intersectionStart = max(clipMinX, nearViewportStart)
+        let intersectionEnd = min(clipMaxX, nearViewportEnd)
+        guard intersectionEnd > intersectionStart else { return nil }
+
+        let rawLocalStart = max(0, intersectionStart - clipMinX)
+        let rawLocalEnd = min(clipWidth, intersectionEnd - clipMinX)
+        let quantizedLocalStart = max(0, floor(rawLocalStart / tileWidth) * tileWidth)
+        let quantizedLocalEnd = min(clipWidth, ceil(rawLocalEnd / tileWidth) * tileWidth)
+        let localWidth = quantizedLocalEnd - quantizedLocalStart
+        guard localWidth > 0 else { return nil }
+
+        let startFraction = quantizedLocalStart / clipWidth
+        let durationFraction = localWidth / clipWidth
+        let requestedSourceRange = TimeRange(
+            start: sourceRange.start + sourceRange.duration * startFraction,
+            duration: min(
+                sourceRange.duration * durationFraction,
+                sourceRange.end - (sourceRange.start + sourceRange.duration * startFraction)
+            )
+        )
+        guard requestedSourceRange.duration > 0 else { return nil }
+
+        let fullTargetCount = max(1, Int(ceil(clipWidth / tileWidth)))
+        let targetCount = min(
+            maximumFrameCount,
+            max(1, Int(ceil(localWidth / tileWidth)))
+        )
+        let scaledZoom = (pixelsPerSecond * 1_000).rounded()
+        let zoomScaleKey = scaledZoom >= Double(Int.max)
+            ? Int.max
+            : Int(scaledZoom)
+
+        return FilmstripViewportRequest(
+            sourceRange: requestedSourceRange,
+            localStartX: quantizedLocalStart,
+            localWidth: localWidth,
+            targetCount: targetCount,
+            fullTargetCount: fullTargetCount,
+            zoomBucket: FilmstripZoomBucket.bucket(for: pixelsPerSecond),
+            zoomScaleKey: zoomScaleKey
+        )
+    }
+}
+
+/// Request lifecycle used by the app coordinator and exercised independently
+/// of AVFoundation. Only the currently active generation may publish frames.
+public struct FilmstripLoadState: Sendable, Equatable {
+    public enum Phase: Sendable, Equatable {
+        case fallback
+        case loading(generation: UInt64)
+        case ready(generation: UInt64, frameCount: Int)
+        case failed(generation: UInt64)
+        case cancelled(generation: UInt64)
+    }
+
+    public private(set) var phase: Phase = .fallback
+    public private(set) var currentGeneration: UInt64 = 0
+
+    public init() {}
+
+    public var showsFallbackThumbnail: Bool {
+        guard case .ready(_, let frameCount) = phase else { return true }
+        return frameCount <= 0
+    }
+
+    @discardableResult
+    public mutating func begin() -> UInt64 {
+        currentGeneration &+= 1
+        phase = .loading(generation: currentGeneration)
+        return currentGeneration
+    }
+
+    @discardableResult
+    public mutating func accept(frameCount: Int, generation: UInt64) -> Bool {
+        guard case .loading(let activeGeneration) = phase,
+              activeGeneration == generation,
+              generation == currentGeneration,
+              frameCount > 0 else {
+            return false
+        }
+        phase = .ready(generation: generation, frameCount: frameCount)
+        return true
+    }
+
+    @discardableResult
+    public mutating func fail(generation: UInt64) -> Bool {
+        guard case .loading(let activeGeneration) = phase,
+              activeGeneration == generation,
+              generation == currentGeneration else {
+            return false
+        }
+        phase = .failed(generation: generation)
+        return true
+    }
+
+    @discardableResult
+    public mutating func cancel(generation: UInt64) -> Bool {
+        guard case .loading(let activeGeneration) = phase,
+              activeGeneration == generation,
+              generation == currentGeneration else {
+            return false
+        }
+        phase = .cancelled(generation: generation)
+        return true
+    }
+}
+
 /// Four discrete cache/density levels for MovieCut's supported 20...300 px/s
 /// timeline zoom range. Bucket boundaries double so small zoom changes do not
 /// continuously invalidate decoded filmstrips.
@@ -69,9 +252,18 @@ public enum FilmstripZoomBucket: Int, CaseIterable, Sendable {
 public struct FilmstripCacheKey: Hashable, Sendable {
     public var assetID: UUID
     public var zoomBucket: FilmstripZoomBucket
+    public var viewportRequest: FilmstripViewportRequest?
+    public var mediaIdentity: String?
 
-    public init(assetID: UUID, zoomBucket: FilmstripZoomBucket) {
+    public init(
+        assetID: UUID,
+        zoomBucket: FilmstripZoomBucket,
+        viewportRequest: FilmstripViewportRequest? = nil,
+        mediaIdentity: String? = nil
+    ) {
         self.assetID = assetID
         self.zoomBucket = zoomBucket
+        self.viewportRequest = viewportRequest
+        self.mediaIdentity = mediaIdentity
     }
 }

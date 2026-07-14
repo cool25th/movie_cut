@@ -50,6 +50,7 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
+    /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport consumer.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -59,6 +60,11 @@ extension EditorViewModel {
         var scrubSuffix = ""
         var clipboardSuffix = ""
         var filmstripSuffix = ""
+        var timelineFilmstripSuffix = ""
+
+        if env["MOVIECUT_UITEST_TIMELINE_FILMSTRIP"] == "1" {
+            TimelineFilmstripDebugProbe.shared.arm()
+        }
 
         let primaryImportURLs = env["MOVIECUT_UITEST_IMPORT"]
             .map(uiTestImportURLs(from:)) ?? []
@@ -70,6 +76,15 @@ extension EditorViewModel {
                 importURLs,
                 startTime: currentProject.timeline.duration
             )
+        }
+
+        if env["MOVIECUT_UITEST_TIMELINE_FILMSTRIP"] == "1" {
+            do {
+                timelineFilmstripSuffix = try await runTimelineFilmstripConsumerUITestScenario()
+            } catch {
+                lastErrorMessage = "timeline filmstrip harness failed: \(error.localizedDescription)"
+                timelineFilmstripSuffix = " timeline_filmstrip_frames=0 distinct_digests=0 distinct_times=0 requested_span=0.000 full_span=0.000 requested_count=0 full_count=0 offscreen_skipped=0 cancelled=0 stale_rejected=0 fallback_before_ready=0 fallback_after_cancel=0 zoom_requests=none"
+            }
         }
 
         if env["MOVIECUT_UITEST_FILMSTRIP"] == "1" {
@@ -347,7 +362,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -455,6 +470,54 @@ extension EditorViewModel {
         let actual = frames.map { String(format: "%.3f", $0.actualTime) }.joined(separator: ",")
         let bucketSummary = zoomBuckets.map { String($0.rawValue) }.joined(separator: ",")
         return " filmstrip_frames=\(frames.count) requested=\(requested) actual=\(actual) max_height=\(maxDecodedHeight) zoom_buckets=\(bucketSummary) cache_hit=\(cacheStats.hits) cache_miss=\(cacheStats.misses) cache_inserts=\(cacheStats.inserts) cache_limit=\(cacheLimit) cache_invalidate=1"
+    }
+
+    private func runTimelineFilmstripConsumerUITestScenario() async throws -> String {
+        for _ in 0..<200 {
+            if TimelineFilmstripDebugProbe.shared.hasVisibleRequest { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard TimelineFilmstripDebugProbe.shared.hasVisibleRequest else {
+            throw FilmstripUITestError.invariant("TimelineView did not issue a visible filmstrip request")
+        }
+
+        // A real zoom mutation invalidates the first delayed UI request. The
+        // TimelineFilmstripStore must cancel it and only publish the replacement.
+        timelineZoom = timelineZoom < 160 ? 160 : 80
+
+        var completed: TimelineFilmstripDebugProbe.Summary?
+        for _ in 0..<400 {
+            if let summary = TimelineFilmstripDebugProbe.shared.completedSummary() {
+                completed = summary
+                break
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        guard let completed else {
+            throw FilmstripUITestError.invariant(
+                "TimelineView consumer did not prove viewport/cancellation/fallback invariants"
+            )
+        }
+
+        let zoomRequests = completed.zoomScaleKeys
+            .map { String(format: "%.3f", Double($0) / 1_000) }
+            .joined(separator: ",")
+        return String(
+            format: " timeline_filmstrip_frames=%d distinct_digests=%d distinct_times=%d requested_span=%.3f full_span=%.3f requested_count=%d full_count=%d offscreen_skipped=%d cancelled=%d stale_rejected=%d fallback_before_ready=%d fallback_after_cancel=%d zoom_requests=%@",
+            completed.consumerFrameCount,
+            completed.distinctDigestCount,
+            completed.distinctTimestampCount,
+            completed.requestedSpan,
+            completed.fullSpan,
+            completed.requestedCount,
+            completed.fullCount,
+            completed.offscreenSkipped ? 1 : 0,
+            completed.cancelled ? 1 : 0,
+            completed.staleRejected ? 1 : 0,
+            completed.fallbackBeforeReady ? 1 : 0,
+            completed.fallbackAfterCancellation ? 1 : 0,
+            zoomRequests
+        )
     }
 
     private func runClipboardUITestScenario() async throws -> String {

@@ -223,6 +223,11 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 2. §A 6단계 수행: 스펙 AC 검증 기록 1줄, 백로그, `[진행중] 다음 증분` 표시, 최종 검증(빌드+필터 테스트+E2E) 후 커밋. **검증 없이 완료 선언 금지.**
 3. 최종 보고: ① UB 채점 요약(✅/🟡/❌ 개수와 델타) ② 이번 사이클 달성 항목+증거 ③ `[사용자 확인 대기]` 목록(실기기 시나리오 완주 등 사람이 해야 할 것) ④ 다음 사이클 착수 항목 1개 추천.
 
+#### 현재 체크포인트 (2026-07-15 / §D Cycle 2)
+
+- G-04 Inc 1~3 완료. actual app `TimelineView` consumer E2E: time-varying `32/32/32` frames/digests/timestamps, visible-only `21.600/30.000s`·`32/67` tiles, offscreen skip/cancel/stale reject/single-thumbnail fallback 모두 PASS. UB 채점은 성능 수치 미측정으로 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**을 유지한다.
+- `[진행중] 다음 증분: G-04 Inc 4 호버 스크럽, 시작점: App/MovieCutMac/TimelineView.swift:975`. 그 뒤 Inc 5 signpost/perf·메모리 계측으로 G-04 AC1~3을 실측한다.
+
 ### D-5. 종료 조건
 
 UB 전 항목이 ✅ 또는 `[사용자 확인 대기]`가 되면 개발 루프를 멈추고, 대기 목록을 정리해 사용자에게 시나리오 완주 검증(SC-V1~SC-C4)을 요청하는 체크리스트를 출력한다.

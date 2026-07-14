@@ -8,6 +8,7 @@ struct FilmstripFrame: @unchecked Sendable {
     let image: CGImage
     let requestedTime: TimeInterval
     let actualTime: TimeInterval
+    let digest: String
 
     var byteCost: Int {
         image.bytesPerRow * image.height
@@ -47,7 +48,7 @@ struct FilmstripGenerator: Sendable {
         }
 
         let boundedHeight = max(1, min(maxHeight.isFinite ? maxHeight : 60, 60))
-        return try await Task.detached(priority: .utility) {
+        let decodeTask = Task.detached(priority: .utility) {
             let asset = AVURLAsset(url: assetURL)
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
@@ -77,7 +78,8 @@ struct FilmstripGenerator: Sendable {
                         FilmstripFrame(
                             image: image,
                             requestedTime: request.time,
-                            actualTime: decodedActualTime.isFinite ? decodedActualTime : request.time
+                            actualTime: decodedActualTime.isFinite ? decodedActualTime : request.time,
+                            digest: Self.digest(for: image)
                         )
                     )
                 } catch {
@@ -89,7 +91,34 @@ struct FilmstripGenerator: Sendable {
             }
 
             return frames
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await decodeTask.value
+        } onCancel: {
+            decodeTask.cancel()
+        }
+    }
+
+    /// Small deterministic pixel digest used by the DEBUG consumer evidence.
+    /// Frames are capped at 60px high, so hashing their provider bytes remains
+    /// cheap and stays off the MainActor with the rest of decoding.
+    private static func digest(for image: CGImage) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for value in [image.width, image.height, image.bytesPerRow] {
+            var bytes = UInt64(value)
+            for _ in 0..<MemoryLayout<UInt64>.size {
+                hash ^= bytes & 0xff
+                hash &*= 1_099_511_628_211
+                bytes >>= 8
+            }
+        }
+        if let providerData = image.dataProvider?.data {
+            for byte in providerData as Data {
+                hash ^= UInt64(byte)
+                hash &*= 1_099_511_628_211
+            }
+        }
+        return String(format: "%016llx", hash)
     }
 }
 
@@ -127,14 +156,22 @@ private final class FilmstripFrameBox {
 /// Memory-bounded decoded filmstrip cache isolated from view lifecycle races.
 actor FilmstripCache {
     static let defaultTotalCostLimit = 128 * 1024 * 1024
+    static let defaultMaximumTrackedKeys = 256
 
     private let storage = NSCache<FilmstripCacheKeyBox, FilmstripFrameBox>()
     private var counters = FilmstripCacheStats()
     private let totalCostLimit: Int
+    private let maximumTrackedKeys: Int
+    private var insertionOrder: [FilmstripCacheKey] = []
+    private var keysByAssetID: [UUID: Set<FilmstripCacheKey>] = [:]
 
-    init(totalCostLimit: Int = FilmstripCache.defaultTotalCostLimit) {
+    init(
+        totalCostLimit: Int = FilmstripCache.defaultTotalCostLimit,
+        maximumTrackedKeys: Int = FilmstripCache.defaultMaximumTrackedKeys
+    ) {
         let boundedLimit = max(1, totalCostLimit)
         self.totalCostLimit = boundedLimit
+        self.maximumTrackedKeys = max(1, maximumTrackedKeys)
         storage.totalCostLimit = boundedLimit
     }
 
@@ -157,21 +194,31 @@ actor FilmstripCache {
             forKey: FilmstripCacheKeyBox(key),
             cost: cost
         )
+        insertionOrder.removeAll { $0 == key }
+        insertionOrder.append(key)
+        keysByAssetID[key.assetID, default: []].insert(key)
+        while insertionOrder.count > maximumTrackedKeys {
+            let evictedKey = insertionOrder.removeFirst()
+            storage.removeObject(forKey: FilmstripCacheKeyBox(evictedKey))
+            keysByAssetID[evictedKey.assetID]?.remove(evictedKey)
+            if keysByAssetID[evictedKey.assetID]?.isEmpty == true {
+                keysByAssetID[evictedKey.assetID] = nil
+            }
+        }
         counters.inserts += 1
     }
 
     func remove(assetID: UUID) {
-        for bucket in FilmstripZoomBucket.allCases {
-            storage.removeObject(
-                forKey: FilmstripCacheKeyBox(
-                    FilmstripCacheKey(assetID: assetID, zoomBucket: bucket)
-                )
-            )
+        for key in keysByAssetID.removeValue(forKey: assetID) ?? [] {
+            storage.removeObject(forKey: FilmstripCacheKeyBox(key))
         }
+        insertionOrder.removeAll { $0.assetID == assetID }
     }
 
     func removeAll() {
         storage.removeAllObjects()
+        insertionOrder.removeAll(keepingCapacity: true)
+        keysByAssetID.removeAll(keepingCapacity: true)
     }
 
     func stats() -> FilmstripCacheStats {

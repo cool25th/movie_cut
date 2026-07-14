@@ -16,6 +16,8 @@ struct TimelineView: View {
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
     @State private var timelineViewportWidth: CGFloat = 900
+    @State private var timelineScrollViewportWidth: CGFloat = 900
+    @State private var filmstripStore = TimelineFilmstripStore()
     @State private var isRulerScrubbing = false
     @State private var isPlayheadScrubbing = false
     @State private var playheadDragStartTime: TimeInterval = 0
@@ -102,6 +104,8 @@ struct TimelineView: View {
                 }
                 .background(MovieCutTheme.timelineBackground)
             }
+            .coordinateSpace(name: TimelineFilmstripCoordinateSpace.viewport)
+            .background(timelineScrollViewportWidthReader)
             .movieCutScrollBackground(MovieCutTheme.timelineBackground)
         }
         // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
@@ -110,6 +114,9 @@ struct TimelineView: View {
         .background(timelineViewportWidthReader)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
+        .onDisappear {
+            filmstripStore.cancelAll()
+        }
     }
 
     private var timelineViewportWidthReader: some View {
@@ -120,6 +127,18 @@ struct TimelineView: View {
                 }
                 .onChange(of: proxy.size.width) { _, newWidth in
                     timelineViewportWidth = newWidth
+                }
+        }
+    }
+
+    private var timelineScrollViewportWidthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear {
+                    timelineScrollViewportWidth = proxy.size.width
+                }
+                .onChange(of: proxy.size.width) { _, newWidth in
+                    timelineScrollViewportWidth = newWidth
                 }
         }
     }
@@ -956,7 +975,29 @@ struct TimelineView: View {
 
     @ViewBuilder
     private func clipMediaBackground(for clip: Clip, trackKind: TrackKind, selected: Bool) -> some View {
-        if let image = thumbnailImage(for: clip) {
+        if let asset = filmstripAsset(for: clip) {
+            let fallbackImage = thumbnailImage(for: clip)
+            if let fallbackImage {
+                // The original single-thumbnail strip remains underneath the
+                // async layer as the non-blank loading/failure/cancel fallback.
+                thumbnailStrip(fallbackImage)
+            } else {
+                clipPlaceholderRhythm(
+                    accent: accentForClip(clip: clip, trackKind: trackKind),
+                    selected: selected
+                )
+            }
+            TimelineFilmstripLayer(
+                clip: clip,
+                asset: asset,
+                pixelsPerSecond: pixelsPerSecond,
+                viewportWidth: timelineScrollViewportWidth,
+                fallbackThumbnailAvailable: fallbackImage != nil,
+                store: filmstripStore
+            )
+            Color.black.opacity(selected ? 0.46 : 0.34)
+                .allowsHitTesting(false)
+        } else if let image = thumbnailImage(for: clip) {
             thumbnailStrip(image)
             Color.black.opacity(selected ? 0.46 : 0.34)
                 .allowsHitTesting(false)
@@ -969,6 +1010,16 @@ struct TimelineView: View {
         } else {
             clipPlaceholderRhythm(accent: accentForClip(clip: clip, trackKind: trackKind), selected: selected)
         }
+    }
+
+    private func filmstripAsset(for clip: Clip) -> MediaAsset? {
+        guard clip.kind == .video,
+              let assetID = clip.assetId,
+              let asset = viewModel.currentProject.mediaLibrary.assets[assetID],
+              asset.kind == .video else {
+            return nil
+        }
+        return asset
     }
 
     private func thumbnailImage(for clip: Clip) -> NSImage? {

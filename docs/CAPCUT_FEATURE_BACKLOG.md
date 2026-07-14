@@ -145,7 +145,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ### B. 타임라인 편집
 - [ ] 🟡 **G-16 타임라인 스크럽(B-I2) (P0, 사용자 보고 2026-07-13)** — Inc 1~3 구현 완료. shared coordinate clamp tests 3/3, actual app E2E `requested/playhead/playback=1.250/1.250/1.250`, Mac build PASS. AC3 실기기 100ms 체감 및 AC4 재생 중 스크럽 확인 대기.
-- [ ] ❌ **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1) (P0, 사용자 보고 2026-07-13)** — Cmd+C/X/V·내부 clipboard·atomic undo·멀티 선택 paste가 없다. G-17 Inc 1~3 및 E2E 필요.
+- [x] ✅ **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1) (P0, 사용자 보고 2026-07-13)** — Core atomic clipboard commands + Mac Cmd+C/X/V/context menu + NSText native forwarding 완료. behavioral 6/6, Mac static 3/3, actual app `paste_starts=10.000,12.000 relative=2.000 paste_undo=1 cut_undo=1 new_ids=1`, ffprobe video `14.000000s` PASS. 실기기 메뉴 클릭은 UX 확인 항목으로 잔여.
 - ✅ Trim / Split / Move / Delete / Ripple
 - ✅ 스냅 / 줌 / 다중선택 / 컨텍스트 메뉴
 - [x] ✅ 마그네틱 타임라인(자동 밀착) (P1) — Add/Move/Duplicate/Delete command path가 `RestoreTrackClipsCommand` track snapshot을 남기고, Add/Move/Duplicate/Delete 후 same-track magnetic packing으로 클립을 0초부터 end-to-start로 밀착한다. Undo는 이전 track snapshot/range를 복원한다.

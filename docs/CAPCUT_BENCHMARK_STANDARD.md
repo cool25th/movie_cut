@@ -1,9 +1,10 @@
 # CapCut 벤치마크 기준서 (Benchmark Standard)
 
-> 버전: 1.3 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
+> 버전: 1.4 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
 > 변경 이력: v1.1 (2026-07-12) — [추정] 8건 웹 검증: 7건 [확인] 승격(F1.4·F2.4·F4.4·F5.3·F5.4·I3·I8), L4 탭명 부분 승격. F1.4는 CapCut 약점으로 판명(능가 기회로 재분류).
 > 변경 이력: v1.2 (2026-07-13) — **사용자 보고 기반 격차 등재**: B-I2 타임라인 스크럽 판정 정정(코드 실사로 ❌ 확인), 클립 복사/붙여넣기 §6 신규 후보 추가(B-F2.1 기준 문장 보강).
 > 변경 이력: v1.3 (2026-07-13) — 사용자 보고 P0를 스펙 **G-16 타임라인 스크럽 / G-17 클립 복사·잘라내기·붙여넣기**로 정식 등재하고 §6 처리 상태를 갱신.
+> 변경 이력: v1.4 (2026-07-14) — G-17 구현·actual app E2E 상환. CapCut 공식 문서로 별도 위/아래 트랙 paste를 확인하고, 비공개 충돌 탐색 순서는 [추정] fallback으로 명시.
 > **목적: MovieCut 검증의 명시적 잣대.** "CapCut 수준"이라는 말을 관찰 가능한 문장으로 고정해, 모든 감사·검증 세션이 같은 기준으로 판정하게 한다.
 > 신뢰도 표기 — **[확인]**: 웹 출처/실사용으로 확인됨. **[추정]**: 훈련 지식 기반, 판정에 사용 전 실제 CapCut 또는 웹으로 확인할 것.
 > 무료 티어 기준. Pro 전용은 (Pro) 표시 — MovieCut은 해당 기능을 **무료·오프라인**으로 제공하는 것이 전략(차별화 축).
@@ -35,7 +36,7 @@
 ### B-F2. 타임라인 편집
 | ID | CapCut 수준 | 신뢰도 | 검증 |
 |---|---|---|---|
-| B-F2.1 | split/trim/move/delete/ripple/duplicate + **클립 복사/붙여넣기(Ctrl+C/V, 트랙·시각 이동 가능)** — 프레임 정확, 즉시 반영 | [확인] | 기존 E2E+실기기 — **복사/붙여넣기는 MovieCut ❌**(단축키 미배선, Cmd+D duplicate만 존재. §6 참조) |
+| B-F2.1 | split/trim/move/delete/ripple/duplicate + **클립 복사/붙여넣기(Ctrl+C/V, 플레이헤드 anchor·별도 위/아래 트랙 이동 가능)** — 프레임 정확, 즉시 반영 | [확인] | ✅ G-17: Core behavioral 6/6, Cmd+C/X/V/context menu, actual app multi-paste/cut atomic undo, ffprobe 14초 export PASS. 충돌 탐색 순서는 [추정] fallback |
 | B-F2.2 | 트랙 Hide/Lock/Mute 토글 | [확인] | 실기기 + contract |
 | B-F2.3 | 컴파운드 클립(중첩)과 그룹으로 복잡한 타임라인 정리 | [확인] | 그룹=구현됨 / 컴파운드=MovieCut ❌(신규 후보) |
 | B-F2.4 | 속도: 일반 배속 0.1x~100x(Keep pitch 옵션) + 커브 프리셋 6종(Bullet/Montage/Jump Cut/Hero Time/Flash In/Flash Out, 일부 프리미엄 커브 Pro) + Customized 커브, Smooth slow-mo(Frame Blending/Optical Flow), 역재생(체크박스), freeze(우클릭) | [확인] | speed E2E+실기기 |
@@ -126,7 +127,7 @@
 | 항목 | CapCut | MovieCut | 처리 |
 |---|---|---|---|
 | **타임라인 스크럽(B-I2)** — 룰러 클릭 시킹 + 플레이헤드 드래그 | 있음 [확인] (핵심 편집 인터랙션) | 🟡 — G-16 Inc 1~3 구현, shared clamp tests 3/3 및 actual app `1.250/1.250/1.250` E2E PASS. 실기기 100ms/재생 중 체감 확인 대기 | **G-16 구현+E2E 완료** — 사용자 확인 필요 |
-| **클립 복사/붙여넣기(B-F2.1)** — Cmd+C/X/V, 플레이헤드 위치·다른 트랙에 붙여넣기 | 있음 [확인] | ❌ — `MovieCutMacApp.swift` 단축키에 C/X/V 미배선, `EditorViewModel.copyClip`은 드래그 복제 내부용 | **G-17 등재됨** — 사용자 보고 P0, G-16 다음 |
+| **클립 복사/붙여넣기(B-F2.1)** — Cmd+C/X/V, 플레이헤드 위치·다른 트랙에 붙여넣기 | 있음 [확인] | ✅ — atomic multi-copy/cut/paste, new ID·relative spacing·group remap, NSText native forwarding. actual app `0-2,2-4,10-12,12-14`, ffprobe `14.000000s` | **G-17 구현+E2E 완료** — 실기기 메뉴 클릭 확인만 잔여 |
 | 클립 필름스트립이 단일 썸네일 타일 반복 | 시간축 실프레임 필름스트립 [확인] | ⬇ — `TimelineView.thumbnailStrip`이 프레임 1장을 반복 타일링 | 기존 G-04 범위 — 사용자 보고로 체감 확인, 우선순위 상향 근거 |
 | 컴파운드 클립(중첩 타임라인) | 있음 [확인] | ❌ | 다음 감사에서 G-ID 신설 검토 |
 | 블렌딩 모드(screen/multiply 등) | 있음 [확인] (v1.1 웹 검증) | ❌ | **확정 격차 — 다음 감사에서 G-ID 신설** |
@@ -150,6 +151,6 @@
 
 ---
 
-출처: [CapCut PC 공식](https://www.capcut.com/resource/pc-professional-video-editor), [BIGVU 리뷰 2026](https://bigvu.tv/blog/capcut-online-desktop-editor-review/), [Atomi CapCut PC 리뷰 2026](https://atomisystems.com/screencasting/capcut-pc-review-2026-is-free-video-editing-really-worth-your-time/), [캡션 가이드 2026](https://caption-x.com/blog/how-to-add-captions-capcut), [타임라인 가이드](https://filmora.wondershare.com/advanced-video-editing/capcut-timeline.html), [AI 기능 리뷰 2026](https://freeacademy.ai/blog/capcut-ai-features-complete-guide-review-2026), [이미지 duration 설정](https://www.quora.com/How-do-you-set-the-duration-in-Capcut)
+출처: [CapCut PC 공식](https://www.capcut.com/resource/pc-professional-video-editor), [CapCut 사용법 공식 — 원본 위 트랙 paste](https://www.capcut.com/resource/how-to-use-capcut), [CapCut motion tracking 공식 — 별도 위/아래 트랙 paste](https://www.capcut.com/resource/motion-tracking-premiere-pro), [CapCut 단축키 2026](https://www.skillademia.com/shortcuts/capcut-shortcuts), [BIGVU 리뷰 2026](https://bigvu.tv/blog/capcut-online-desktop-editor-review/), [Atomi CapCut PC 리뷰 2026](https://atomisystems.com/screencasting/capcut-pc-review-2026-is-free-video-editing-really-worth-your-time/), [캡션 가이드 2026](https://caption-x.com/blog/how-to-add-captions-capcut), [타임라인 가이드](https://filmora.wondershare.com/advanced-video-editing/capcut-timeline.html), [AI 기능 리뷰 2026](https://freeacademy.ai/blog/capcut-ai-features-complete-guide-review-2026), [이미지 duration 설정](https://www.quora.com/How-do-you-set-the-duration-in-Capcut)
 
 v1.1 추가 출처: [속도 커브(Filmora)](https://filmora.wondershare.com/video-editing-tips/speed-ramp-capcut.html), [속도 커브 도구(rezaid)](https://rezaid.co.uk/using-capcut-desktop-video-editors-speed-curve-tool-for-simple-edits/), [블렌드 모드(CapCut 공식)](https://www.capcut.com/create/blend-modes-creative-video-photo-effects), [오버레이/블렌딩(BuddyX)](https://buddyxtheme.com/how-to-overlay-multiple-videos-in-capcut-desktop/), [프리뷰 성능 모드](https://www.nyongesasande.com/performance-priority-mode-in-capcut-a-guide/), [프록시/렉 해결(MiniTool)](https://moviemaker.minitool.com/news/capcut-lagging.html), [export 품질 공식 도움말](https://www.capcut.com/help/video-quality-change-after-exporting), [캡션 편집 공식 도움말](https://www.capcut.com/help/auto-captions-in-capcut), [데스크톱 팁(Kim Klassen)](https://www.kimklassen.com/blog/capcut-desktop-tips), [EQ 부재·오디오 도구(wishwonsystem)](https://wishwonsystem.com/archives/19), [Photos 드래그 문제(Apple Community)](https://discussions.apple.com/thread/255346153), [Photos 브라우저 제한(Apple Community)](https://discussions.apple.com/thread/255740567)

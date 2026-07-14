@@ -670,10 +670,10 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 3. cut은 copy+delete를 하나의 undo 그룹으로, paste도 하나의 command/undo 단계로 처리한다.
 4. 원본 트랙·대상 시각에 충돌이 있으면 CapCut 실동작 확인 결과를 따른다. 확인 불가 시 같은 kind의 빈 트랙, 없으면 신규 트랙을 사용한다.
 
-#### 현재 상태 (2026-07-13 실사)
-- `MovieCutMacApp.swift` 단축키 목록에 C/X/V가 없다. Cmd+D duplicate만 있다.
-- `EditorViewModel.copyClip(clipId:targetTrackId:targetStartTime:)`은 드래그 복제 내부용이며 clipboard 개념이 아니다.
-- `TimelineView` clip context menu에도 Copy/Cut/Paste가 없다. 멀티 선택은 존재하지만 clipboard 소비 경로가 없다.
+#### 현재 상태 (2026-07-14 구현/검증)
+- Core `ClipboardPayload`·`PasteClipsCommand`·`CutClipsCommand`가 전체 clip 값 사본, 플레이헤드 anchor, 결정론적 충돌 회피와 single-dispatch undo를 제공한다.
+- `EditorViewModel` 비영속 clipboard가 Cmd+C/X/V 메뉴와 clip context menu 양쪽에서 동일 command-backed API를 호출한다. NSText focus에서는 native copy/cut/paste로 forwarding한다.
+- actual app 하니스가 두 2초 clip을 copy→10초 paste→undo/redo→cut→undo하고, `timeline=0-2,2-4,10-12,12-14` 및 14초 export를 검증한다.
 
 #### 데이터 모델/명령 경계
 - clipboard는 `EditorViewModel`의 비영속 앱 상태: source clip 값 사본, source track id, earliest start, relative offset 배열. 시스템 pasteboard와 프로젝트 Codable은 변경하지 않는다.
@@ -685,19 +685,19 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 |---|---|---|
 | 1 | Command 계층에 atomic paste·cut batch 추가. ViewModel clipboard와 단일 clip copy/cut/paste API, 플레이헤드 anchor·겹침 정책 구현 | `Sources/MovieCutCore/Commands/`, `EditorViewModel.swift` |
 | 2 | Cmd+C/X/V 메뉴·단축키, clip context menu, 멀티 선택과 상대 간격/group 관계 보존 | `MovieCutMacApp.swift`, `TimelineView.swift`, `EditorViewModel.swift` |
-| 3 | DEBUG 하니스 `MOVIECUT_UITEST_COPYPASTE=1`: import→split→cut→playhead 이동→paste, `timeline=` dump. Works-First E2E smoke 추가 | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+| 3 | DEBUG 하니스 `MOVIECUT_UITEST_CLIPBOARD=1`: 2개 import→copy→10초 paste→undo/redo→cut→undo, `timeline=` dump와 14초 export. Works-First E2E smoke 추가 | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
 
 #### AC
-1. behavioral: copy→paste 후 새 clip의 timelineRange가 플레이헤드 anchor 기준 기대값이고 원본은 불변이다. cut→paste에서는 원위치 clip이 사라지고 새 위치에 나타난다.
-2. undo: paste는 undo 1회로 pasted clips 전부 제거, cut은 undo 1회로 원래 선택 전체를 복원한다.
-3. E2E: 하니스 `timeline=` dump가 import→split→cut→paste의 기대 배치와 일치한다.
-4. 멀티 선택 copy/paste가 선택 클립 간 상대 시간 간격과 kind를 보존하고 새 id를 사용한다.
-5. UI: Cmd+C/X/V와 context menu가 동일 command-backed API를 호출하며 text entry focus에서는 편집기 클립 단축키가 탈취되지 않는다.
+1. [PASS 2026-07-14] behavioral 6/6: 10초 anchor, 원본 불변, 충돌 없는 호환 트랙/신규 트랙 정책과 multi-track cut을 검증했다.
+2. [PASS 2026-07-14] paste undo/redo 및 cut undo가 각각 1회로 전체 선택과 신규 트랙을 exact project snapshot으로 복원한다.
+3. [PASS 2026-07-14] actual app `timeline=0-2,2-4,10-12,12-14`, `error=none`; ffprobe video, duration `14.000000s`.
+4. [PASS 2026-07-14] `paste_starts=10.000,12.000 relative=2.000 new_ids=1`; group 관계는 새 group id로 remap되고 원본/외부 링크는 불변이다.
+5. [PASS 2026-07-14] Mac static contract 3/3 + xcodebuild PASS: Cmd+C/X/V·context menu가 동일 ViewModel API를 호출하고 NSText copy/cut/paste를 native forwarding한다. 실기기 메뉴 클릭 확인만 잔여.
 
 #### 검증 계획
-- CapCut 붙여넣기 위치·겹침 정책을 웹 검색으로 확인하고 B-F2.1에 [확인] 출처/결정을 기록한 뒤 구현한다.
-- `ClipClipboardCommandTests`: 단일/멀티 상대 간격, 새 id, 원본 불변, 충돌 트랙 선택, cut/paste 각 1회 undo/redo.
-- `scripts/run_e2e_export.sh`: 실제 DEBUG 앱 하니스 status의 `timeline=`을 exact compare.
+- [완료] CapCut 공식 `how-to-use-capcut` 및 motion-tracking 문서에서 Copy 후 원본 위/별도 트랙 paste를 [확인]. Cmd/Ctrl+C/V·playhead anchor는 2026 shortcut/desktop 튜토리얼로 교차 확인. 충돌 시 내부 트랙 탐색 순서는 미공개라 [추정] fallback(원본→같은 kind 빈 트랙→신규 트랙)을 채택했다.
+- [완료] `ClipboardCommandTests` 6/6: 상대 간격, 새 id, 원본 불변, 충돌 트랙, group remap, cut/paste 1회 undo/redo.
+- [완료] `scripts/run_e2e_export.sh`: actual app status exact compare + ffprobe 14초 export.
 - 실기기: 단일·멀티 선택에서 Cmd+C/X/V와 context menu 왕복 확인.
 
 #### 리스크

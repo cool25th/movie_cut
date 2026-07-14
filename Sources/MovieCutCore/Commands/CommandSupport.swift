@@ -224,3 +224,39 @@ struct RestoreTrackClipsCommand: EditorCommand {
         return snapshots
     }
 }
+
+/// Restores the complete ordered track collection. Used by atomic commands
+/// whose inverse may need to remove newly-created tracks as well as clips.
+struct RestoreTimelineTracksCommand: EditorCommand {
+    let id: UUID
+    let tracks: [Track]
+    let restoreDescription: String
+
+    init(
+        id: UUID = UUID(),
+        tracks: [Track],
+        description: String = "Restored timeline tracks"
+    ) {
+        self.id = id
+        self.tracks = tracks
+        self.restoreDescription = description
+    }
+
+    func apply(to project: inout Project) throws -> CommandResult {
+        let previousTracks = project.timeline.tracks
+        project.timeline.tracks = tracks
+        return CommandResult(
+            affectedClipIds: Set(previousTracks.flatMap(\.clips).map(\.id))
+                .union(tracks.flatMap(\.clips).map(\.id)),
+            description: restoreDescription,
+            undoValues: ["timelineTracks": .tracks(previousTracks)]
+        )
+    }
+
+    func invert(from result: CommandResult) throws -> any EditorCommand {
+        guard case .tracks(let previousTracks)? = result.undoValues["timelineTracks"] else {
+            return NoOpCommand(description: "Missing timeline track snapshot for inverse")
+        }
+        return RestoreTimelineTracksCommand(tracks: previousTracks)
+    }
+}

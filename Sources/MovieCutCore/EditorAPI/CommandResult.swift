@@ -17,6 +17,9 @@ public enum CommandResultValue: Sendable, Equatable {
     /// Full clip snapshots for a track.
     case clips([Clip])
 
+    /// A complete ordered timeline track snapshot.
+    case tracks([Track])
+
     /// A full marker snapshot.
     case marker(Marker)
 

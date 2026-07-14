@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.7 / 작성일: 2026-07-03 (v1.7: 사용자 보고 편집 체감 P0 G-16/G-17 등재) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.8 / 작성일: 2026-07-03 (v1.8: 카드뉴스 사용성 G-18~G-22/U-10 등재) / 브랜치: `feat/core-backend-expansion`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-14 v1.8: `USABILITY_BENCHMARK_STANDARD.md` v1.0의 카드뉴스 경로를 개발 단위로 등록. **G-18 카드 문서 모델+편집기 / G-19 카드 템플릿+마스터 스타일 / G-20 브랜드 킷 / G-21 카드 PNG·JPG 세트 export+원클릭 영상화 / G-22 대본 자동 분배 / U-10 카드뉴스 진입점**을 신설하고 UB-C/SC-C의 클릭 수·시간·출력 규격을 AC에 그대로 고정했다.
 - 2026-07-13 v1.7: 사용자 보고 편집 체감 P0를 코드 실사 후 정식 등재. **G-16 타임라인 스크럽(B-I2)**과 **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1)**를 신설하고, 구현 순서를 G-16→G-17→G-04로 고정했다.
 - 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
 - 2026-07-05 v1.5: V11 재감사(`GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
@@ -708,6 +709,295 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ---
 
+### G-18. 카드 문서 모델 + 편집기 — **P0 / 카드뉴스 핵심 경로** / 규모 L ⭐
+
+> 대응 기준: UB-C1/C3/C4, SC-C1. 카드 시퀀스를 별도 문서 모델로 만들고 페이지 편집과 캔버스 인라인 텍스트 수정을 command 경계 안에서 제공한다.
+
+#### 요구사항
+1. 카드(페이지)를 추가·복제·삭제·순서 변경하고 한 문서 안에서 1:1·4:5·9:16 규격을 선택한다.
+2. 카드 캔버스의 텍스트를 더블클릭하면 별도 Inspector 이동 없이 그 자리에서 인라인 수정한다.
+3. 규격을 바꿔도 텍스트·로고의 상대 좌표/크기가 유지되며, 모든 카드 편집은 `EditorSession.dispatch(Command)`를 경유하고 undo/redo된다.
+4. G-19 템플릿/마스터 스타일과 G-21 export가 소비할 안정적인 페이지·요소 ID와 순서를 제공한다.
+
+#### 현재 상태 실사 (2026-07-14)
+- `CardDocument`/`CardPage`/카드 편집 화면/카드 command는 코드 검색 0건이다. 기존 `Timeline`/`Clip`은 시간축 편집 모델이고 카드 페이지 시퀀스를 표현하지 않는다.
+- 재사용 블록은 `CanvasPreset`의 1:1·4:5·9:16, `TextClipContent`/`TextOverlayPixelProcessor`, 이미지 클립 G-15이며 전용 카드 워크플로우로 배선되지 않았다.
+- 따라서 UB-C1/C3/C4와 SC-C1의 기능 전제조건이 없고 현재 판정은 ❌다.
+
+#### 데이터 모델 (A5)
+```swift
+public struct CardDocument: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var title: String
+    public var format: CardFormat                 // legacy decode default: .square
+    public var pages: [CardPage]
+    public var masterStyle: CardMasterStyle?      // G-19, optional
+}
+public enum CardFormat: String, Codable, Sendable { case square, portrait, story } // 1:1, 4:5, 9:16
+public struct CardPage: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var role: CardPageRole                 // cover/body/emphasis/closing
+    public var elements: [CardElement]
+    public var duration: TimeInterval?            // G-21 영상화, nil = default
+}
+public struct CardElement: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var kind: CardElementKind              // text/image/logo
+    public var normalizedFrame: NormalizedRect    // 규격 독립 0...1 좌표
+    public var text: TextClipContent?
+    public var mediaAssetID: UUID?
+}
+```
+- 기존 MovieCut 프로젝트에 `cardDocument: CardDocument?`를 optional로 추가하며, 누락 시 `nil`로 decode하는 legacy fixture 테스트를 의무화한다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 모델+command: `CardDocument`/페이지/요소 타입과 Add/Duplicate/Delete/Move/UpdateCardElement command. 프로젝트 optional 저장+legacy decode+undo snapshot 테스트 | `Sources/MovieCutCore/Models/`, `Commands/`, 모델 테스트 |
+| 2 | Mac 카드 편집기: 페이지 썸네일 레일, 추가/복제/삭제/드래그 순서 변경, 규격 picker. ViewModel API는 전부 `EditorSession.dispatch(Command)` | `App/MovieCutMac/CardNews/`, `EditorViewModel.swift` |
+| 3 | 캔버스: normalized layout, 텍스트 더블클릭 인라인 편집, 이미지 교체. 편집 완료를 단일 command/undo로 확정 | `CardCanvasView.swift` |
+| 4 | DEBUG 하니스: 5장 생성→복제/삭제/재정렬→규격 3종 전환→인라인 텍스트 변경 후 프로젝트 저장/재로드 상태 dump | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. UB-C1: **“카드(페이지) 추가/복제/삭제/순서 변경이 각각 ≤2클릭”** — 하니스 액션 카운터에서 네 동작 각각 2 이하, 결과 페이지 ID/순서 일치.
+2. UB-C3: **“규격 프리셋 1:1·4:5·9:16, 규격 전환 시 텍스트·로고 상대 배치 유지”** — 3종 전환 전후 모든 요소 normalized frame 오차 ≤0.001.
+3. UB-C4: **“카드 위 텍스트 더블클릭 → 그 자리 인라인 수정”**, 목표 **“더블클릭 1회”** — 실제 캔버스 이벤트 후 동일 element ID의 텍스트 변경과 undo 1회 복원을 E2E 상태로 기록.
+4. SC-C1: **“≤10분, 막힘 0 / P-반복 ≤5분”** — 기능 전제 완성 후 화면 녹화+타임스탬프 사용자 시나리오로 판정하며 자동 완료 선언하지 않는다.
+5. 구버전 프로젝트 JSON이 `cardDocument == nil`로 decode되고 기존 timeline/export 골든이 비트 동일하다.
+
+#### 검증 계획
+- `CardDocumentCommandTests`: 네 페이지 동작, 순서/ID 결정성, single-step undo/redo, legacy decode.
+- `CardLayoutTests`: 1:1↔4:5↔9:16 normalized-frame 보존.
+- 앱 E2E: DEBUG 하니스의 click count + 저장/재로드 dump. SC-C1 시간/막힘은 `[사용자 확인 대기]`로 별도 녹화한다.
+
+#### 리스크
+- timeline `Project`에 카드 모델을 섞으면 기존 저장 포맷과 UI 상태가 복잡해진다. optional 최상위 필드와 명시적 editor mode로 격리한다.
+- 인라인 편집 중 IME 조합 텍스트를 command마다 dispatch하면 undo가 폭증한다. 조합 중 로컬 draft, commit 시 command 1회로 처리한다.
+- absolute pixel 좌표는 규격 전환 시 파손되므로 normalized frame을 source of truth로 고정한다.
+
+---
+
+### G-19. 카드 템플릿 세트 + 마스터 스타일 — **P0 / 카드뉴스 핵심 경로** / 규모 L ⭐
+
+> 대응 기준: UB-C2/C5, SC-C1. 표지/본문/강조/마무리가 한 세트인 템플릿 10종과 전 카드 일괄 스타일을 제공한다.
+
+#### 요구사항
+1. 최소 10개 템플릿 세트가 각각 cover/body/emphasis/closing 페이지 구성을 제공하고 선택 즉시 편집 가능한 5장 초안을 만든다.
+2. 마스터 폰트·색·로고 위치 변경을 한 번 확정하면 전 카드의 상속 요소에 반영한다. 페이지별 override는 유지/해제할 수 있다.
+3. 템플릿 적용과 마스터 변경은 각각 atomic command로 undo 1회에 복원한다.
+
+#### 현재 상태 실사 (2026-07-14)
+- `TextTemplate.builtIn` 14종은 단일 timeline 텍스트 클립 프리셋이며 다중 페이지 세트/카드 role/마스터 상속이 없다.
+- `CardTemplateSet`/`CardMasterStyle`/전 카드 스타일 적용 소비처는 0건이다. UB-C2/C5와 SC-C1의 템플릿 전제는 ❌다.
+
+#### 데이터 모델 (A5)
+```swift
+public struct CardTemplateSet: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public var pages: [CardTemplatePage]          // cover/body/emphasis/closing 포함
+    public var defaultMasterStyle: CardMasterStyle
+}
+public struct CardMasterStyle: Codable, Sendable, Equatable {
+    public var fontFamily: String
+    public var primaryColorHex: String
+    public var secondaryColorHex: String
+    public var logoPlacement: NormalizedRect?
+}
+```
+- G-18 `CardDocument.masterStyle`은 optional이고 구버전/미설정 decode 시 템플릿 기본값을 런타임에서 사용한다. 페이지 override도 optional로 추가한다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 템플릿/마스터 모델, 상속·override resolver, ApplyTemplateSet/SetMasterStyle atomic commands와 legacy decode 테스트 | `Sources/MovieCutCore/CardNews/`, `Commands/` |
+| 2 | 결정적 내장 세트 10종(각 cover/body/emphasis/closing 완비), thumbnail fixture와 manifest 검증 | `Templates/BuiltinCardTemplates.swift`, resources |
+| 3 | 템플릿 갤러리와 마스터 스타일 패널. 선택→적용 및 폰트·색·로고 변경을 command-backed API로 배선 | `App/MovieCutMac/CardNews/` |
+| 4 | 실제 앱 하니스: 10종 enumerate, 1종으로 5장 생성, master 변경→5장 렌더 상태/undo dump | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. UB-C2: **“일관 세트 템플릿 ≥10종”**, **“선택→적용 ≤2클릭”** — manifest/runtime 모두 정확히 10종 이상, 하니스 click count 2 이하.
+2. 각 세트에 표지/본문/강조/마무리 role이 모두 존재하고 5장 생성 후 비어 있는 필수 텍스트/이미지 슬롯 0건.
+3. UB-C5: **“일괄 스타일(마스터 스타일): 폰트·색·로고 위치 변경 1회가 전 카드에 반영, ≤3클릭”** — 8장 fixture에서 세 속성 모두 전파되고 click count 3 이하.
+4. SC-C1: 템플릿 선택부터 5장 교체/export까지 **“≤10분, 막힘 0 / P-반복 ≤5분”** — G-18/G-21 완료 후 사용자 녹화로 판정.
+5. 템플릿 적용/마스터 변경 각각 undo 1회로 exact document snapshot 복원.
+
+#### 검증 계획
+- `CardTemplateTests`: 10종 수/role/필수 slot/결정적 ID, resolver override 우선순위, legacy decode.
+- `CardMasterStyleCommandTests`: 8장 전파와 single-step undo.
+- 앱 E2E click counter + 5장 render-state dump; SC-C1은 `[사용자 확인 대기]`.
+
+#### 리스크
+- 10종을 이름만 바꾼 복제본으로 채우면 일관 세트 요구를 형식적으로만 통과한다. 레이아웃/타이포/색 토큰 fingerprint 중복을 테스트로 제한한다.
+- 마스터와 page override의 우선순위가 불명확하면 일괄 변경이 일부 카드에 조용히 누락된다. 상속 여부를 UI에 표시하고 resolver를 단일화한다.
+- 로고 media 참조는 프로젝트 이동 시 깨질 수 있어 G-20 자산 복사 정책과 정렬한다.
+
+---
+
+### G-20. 브랜드 킷 — **P1 / 반복 사용자 필수** / 규모 M
+
+> 대응 기준: UB-C6, SC-C2. 로고·브랜드 색·폰트를 프로젝트 밖 저장소에 보존하고 새 카드 문서에 빠르게 적용한다.
+
+#### 요구사항
+1. 이름 있는 브랜드 킷에 로고 자산, primary/secondary/accent 색, heading/body 폰트를 저장·편집·삭제한다.
+2. 다른 프로젝트에서 저장된 킷을 선택해 G-19 마스터 스타일과 모든 카드의 브랜드 슬롯에 적용한다.
+3. 로고 파일은 security-scoped 외부 URL에만 의존하지 않고 App Support 저장소에 복사해 재실행 후에도 유효해야 한다.
+
+#### 현재 상태 실사 (2026-07-14)
+- `BrandKit`/브랜드 저장소/적용 command는 코드 검색 0건이다. 사용자 텍스트 스타일 preset은 단일 텍스트 스타일이고 로고/색/프로젝트 간 묶음 재사용을 제공하지 않는다.
+- UB-C6 및 SC-C2의 기능 전제조건이 없어 현재 ❌다.
+
+#### 데이터 모델
+```swift
+public struct BrandKit: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var logoAssetFilename: String?
+    public var colors: BrandColors
+    public var headingFontFamily: String
+    public var bodyFontFamily: String
+    public var updatedAt: Date
+}
+```
+- `BrandKitStore`는 App Support의 versioned JSON + copied logo assets를 관리한다. `CardDocument`에는 적용 당시 `brandKitID: UUID?`와 optional inline snapshot을 저장해 외부 저장소 삭제 후에도 렌더를 보존하고 legacy decode를 검증한다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `BrandKit`/versioned store: CRUD, atomic file replace, logo copy, 손상 JSON 격리와 migration/legacy decode 테스트 | `App/MovieCutMac/CardNews/BrandKitStore.swift` |
+| 2 | ApplyBrandKit command: G-19 master style/브랜드 slot 갱신, 8장 atomic undo | `Sources/MovieCutCore/Commands/`, `EditorViewModel.swift` |
+| 3 | 브랜드 킷 관리/적용 UI와 접근성, 새 카드 프로젝트 생성 경로에 최근 킷 제안 | `App/MovieCutMac/CardNews/` |
+| 4 | 재실행 E2E: 킷 저장→앱 재실행→새 문서 8장 적용→폰트/색/logo hash dump | `UITestHarness.swift`, `scripts/run_e2e_export.sh` |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. UB-C6: **“로고·브랜드 색·폰트 저장, 새 프로젝트 적용 ≤2클릭”** — 재실행 후 새 문서 적용 click count 2 이하, 8장 모두 동일 logo hash/색/폰트 resolver 결과.
+2. SC-C2: **“브랜드 킷 적용 → 8장 제작 → 일괄 스타일 1회 변경(폰트+색) → export”**, 목표 **“≤5분”** — G-19/G-21 완료 후 사용자 녹화로 판정.
+3. 로고 원본 이동/삭제 뒤에도 copied asset으로 8장 렌더가 성공하고, store 삭제 뒤 이미 저장된 문서는 inline snapshot으로 동일하게 열린다.
+4. ApplyBrandKit undo 1회로 문서 전체가 exact snapshot 복원되고 redo 1회로 재적용된다.
+
+#### 검증 계획
+- `BrandKitStoreTests`: CRUD/재실행/원본 삭제/손상 파일/migration.
+- `ApplyBrandKitCommandTests`: 8장 전파, snapshot fallback, undo/redo.
+- 앱 컨텍스트 재실행 E2E + click counter. SC-C2 시간은 `[사용자 확인 대기]`.
+
+#### 리스크
+- 사용자 폰트가 다른 Mac에 없으면 레이아웃이 달라진다. 폰트 이름과 fallback을 함께 저장하고 missing-font 경고를 노출한다.
+- 로고 복사본 정리 시 사용 중 자산 삭제 위험이 있다. 문서 snapshot 참조를 검사하는 보수적 GC만 허용한다.
+- 전역 store 변경은 timeline 프로젝트 저장과 별도이므로 실패/동시 쓰기를 atomic replace로 막는다.
+
+---
+
+### G-21. 카드 일괄 export + 원클릭 영상화 — **P0 / 출력 완성** / 규모 L ⭐
+
+> 대응 기준: UB-C7/C8, SC-C3. 카드 세트를 순번 이미지 파일로 일괄 출력하고 동일 문서를 기본 duration·전환·BGM 슬롯이 있는 9:16 영상으로 변환·export한다.
+
+#### 요구사항
+1. 모든 카드를 PNG 또는 JPG로 한 번에 렌더해 선택 폴더에 순번 파일명으로 기록한다. 1:1·4:5·9:16 픽셀 규격과 색 공간을 검증한다.
+2. “Export as Video” 한 번으로 카드별 기본 duration, 기본 전환, optional BGM 슬롯을 적용한 9:16 timeline/export package를 만든다.
+3. 이미지 세트와 영상은 G-18/G-19/G-20의 resolved layout을 같은 renderer로 소비해 preview/output 차이를 막는다.
+
+#### 현재 상태 실사 (2026-07-14)
+- `ExportEngine`의 video/GIF/still 경로와 G-15 이미지 클립은 있으나 `CardDocument` 전체 페이지 renderer, 순번 이미지 세트 writer, 카드→영상 orchestration은 0건이다.
+- UB-C7/C8 및 SC-C3의 결과물 생성 경로가 없어 현재 ❌다.
+
+#### 데이터/서비스 경계
+```swift
+public struct CardImageExportOptions: Sendable, Equatable {
+    public var format: CardImageFormat            // png/jpeg
+    public var scale: Double
+    public var filenamePrefix: String
+}
+public struct CardVideoPlan: Sendable, Equatable {
+    public var pageDuration: TimeInterval
+    public var transition: TransitionType
+    public var bgmAssetID: UUID?
+    public var canvasPreset: CanvasPreset         // 항상 9:16
+}
+```
+- export는 문서를 변형하지 않는 서비스다. “timeline으로 열기”를 제공할 경우 생성 프로젝트 전체를 단일 command/snapshot으로 교체하며 app caller+E2E를 같은 커밋에 둔다(A6).
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | shared `CardPageRenderer`: resolved page→CGImage, 1:1/4:5/9:16 결정적 해상도/색공간, golden pixel tests | `Sources/MovieCutCore/Rendering/` 또는 앱 renderer seam |
+| 2 | `CardImageSetExporter`: PNG/JPG, zero-padded 순번 파일명, temp directory 후 atomic move, 실패 cleanup | `App/MovieCutMac/CardNews/Export/` |
+| 3 | `CardVideoPlanner`: 페이지 render→G-15 image clips, 기본 duration/transition/BGM slot, 9:16 export package. app caller+DEBUG E2E 동반 | Core planner + `EditorViewModel.swift` + `UITestHarness.swift` |
+| 4 | export UI와 `scripts/run_e2e_export.sh` card smoke: 장수·해상도·파일명·video duration/transition metadata/9:16 ffprobe | CardNews UI, scripts |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. UB-C7: **“전 카드 PNG/JPG 일괄 export (순번 파일명, 인스타 규격 검증)”** — 5장 입력에서 PNG/JPG 각각 정확히 5파일, `card_01...card_05`, 누락/중복 0, 1:1=1080×1080·4:5=1080×1350·9:16=1080×1920.
+2. UB-C8: **“원클릭 영상화: 카드당 기본 duration+전환+BGM 슬롯이 자동 적용된 9:16 영상 export”** — 하니스 1 action 뒤 ffprobe 1080×1920, duration=`pageCount×defaultDuration - transition overlaps` ±1 frame, 전환 수=`pageCount-1`, BGM slot 상태 기록.
+3. SC-C3: **“완성된 카드 세트 → 원클릭 9:16 슬라이드쇼 영상 export”**, 목표 **“조작 ≤1분(렌더 시간 제외)”** — 기능 E2E 후 사용자 녹화로 판정.
+4. 5장 image set과 video의 각 카드 중앙 frame perceptual hash가 shared renderer golden 허용 오차 안에서 일치한다.
+5. 부분 실패 시 최종 폴더에 불완전 세트가 남지 않고 재시도 성공한다.
+
+#### 검증 계획
+- `CardPageRendererGoldenTests`, `CardImageSetExporterTests`(장수/해상도/순번/cleanup), `CardVideoPlannerTests`(duration/transition/BGM).
+- 실제 앱 E2E로 PNG/JPG set probe와 ffprobe video smoke를 `run_e2e_export.sh`에 상설한다.
+- SC-C3 조작 시간은 `[사용자 확인 대기]`.
+
+#### 리스크
+- 5~10장의 1080p 이미지를 동시에 메모리에 두면 피크가 커진다. 페이지 단위 streaming write와 autorelease pool을 사용한다.
+- JPEG alpha/색공간 차이와 폰트 fallback이 이미지·영상 불일치를 만들 수 있다. renderer와 color space를 공유한다.
+- 영상화가 G-15 임시 segment 수명에 의존하므로 export 완료까지 강한 참조와 실패 cleanup을 보장한다.
+
+---
+
+### G-22. 대본 자동 카드 분배 — **P2 / 차별화** / 규모 M
+
+> 대응 기준: UB-C9, SC-C4. 붙여넣은 대본을 문단 단위 카드 초안으로 분배하고 선택적으로 온디바이스 요약하되 문안 창작은 하지 않는다.
+
+#### 요구사항
+1. 대본 붙여넣기 시 빈 줄/문단 경계를 보존해 카드 후보를 만들고 cover/body/closing role을 결정적으로 배정한다.
+2. 긴 문단은 온디바이스 요약 또는 길이 기반 분할을 선택할 수 있으며 원문과 매핑을 보존한다. 새로운 주장/문안 생성은 범위 밖이다.
+3. 미리보기에서 분배 결과를 수정한 뒤 G-18 문서로 한 번에 적용하며 undo 1회로 원복한다.
+
+#### 현재 상태 실사 (2026-07-14)
+- 대본→문단 parser/카드 분배/요약 provider/적용 UI는 0건이다. `AssistantCommandParser`와 자막 segment는 목적과 모델이 달라 재사용 소비처가 없다.
+- UB-C9/SC-C4의 전제 기능이 없어 현재 ❌다.
+
+#### 데이터 모델
+```swift
+public struct ScriptCardDraft: Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var sourceParagraphRange: Range<Int>
+    public var sourceText: String
+    public var proposedText: String
+    public var role: CardPageRole
+    public var wasSummarized: Bool
+}
+public protocol OnDeviceScriptSummarizer: Sendable {
+    func summarize(_ paragraph: String, maxCharacters: Int) async throws -> String
+}
+```
+- draft는 적용 전 비영속 상태다. 적용 후에는 G-18 `CardPage`/`CardElement`만 저장하므로 새 Codable 필드는 만들지 않는다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 결정적 paragraph parser/distributor: 빈 줄, 목록, 최대 글자 수, cover/closing 규칙과 한국어/영어 fixture tests | `Sources/MovieCutCore/CardNews/ScriptCardDistributor.swift` |
+| 2 | 온디바이스 summarizer seam + 원문 보존/실패 시 비요약 fallback. 문안 생성 금지 guard | `App/MovieCutMac/CardNews/` |
+| 3 | paste→preview→2장 수정→Apply UI. 적용은 G-18 batch command 1회 | CardNews UI, `EditorViewModel.swift` |
+| 4 | DEBUG 하니스: 대본 paste→draft count/source ranges→2장 수정→export-ready 5장 document dump | `UITestHarness.swift`, scripts |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. UB-C9: **“대본 붙여넣기 → 문단 단위 자동 카드 분배 (+온디바이스 요약·분배, 문안 창작은 범위 밖)”** — fixture의 모든 문단이 정확히 한 source range에 매핑되고 누락/중복 0, 생성 문장이 원문/요약 provider 결과 밖에 없음.
+2. SC-C4: **“대본 텍스트 붙여넣기 → 자동 카드 분배 → 2장 수정 → export”**, 목표 **“≤5분”** — G-21 완료 후 사용자 녹화로 판정.
+3. Apply undo 1회로 기존 CardDocument exact snapshot 복원, redo 1회로 동일 page/element ID 재생성.
+4. summarizer unavailable/error 상태에서도 결정적 비요약 분배로 5장 문서를 만들고 다음 행동 안내를 표시한다.
+
+#### 검증 계획
+- `ScriptCardDistributorTests`: 한국어/영어/목록/빈 문단/긴 문단, source mapping, 결정성.
+- fake summarizer behavioral tests로 요약/오류 fallback과 창작 금지 경계를 검증한다.
+- 앱 E2E 상태 dump + G-21 export smoke 연계. SC-C4 시간은 `[사용자 확인 대기]`.
+
+#### 리스크
+- 요약 모델 가용성/OS 버전 차이로 결과가 비결정적일 수 있다. E2E는 fake provider, 실기기는 품질 표본을 별도로 기록한다.
+- 한국어 문단/목록 구분이 줄바꿈 습관에 민감하다. 원문 range를 보존해 사용자가 쉽게 병합/분할하게 한다.
+- 자동 분배가 문안 생성으로 확장되지 않도록 provider 계약과 UI 카피에 범위를 명시한다.
+
+---
+
 ## 5. UI 명세 (U-ID) — v1.1 신설 (2026-07-03)
 
 > 근거 분석: `GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §4~§9. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다.
@@ -951,6 +1241,51 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 2. 비활성 명령(선택 없음 등)은 회색+실행 불가.
 3. 텍스트 필드 포커스 중 ⌘K 충돌 없음(기존 `MovieCutShortcutGuard` 경유).
 4. 팔레트 open→실행까지 키보드만으로 완주(접근성).
+
+---
+
+### U-10. 카드뉴스 진입점 — **P1 / 반복 사용자 필수** / 규모 S
+
+> 대응 기준: SC-C1 첫 단계와 UB-C2 템플릿 선택 경로. 앱 시작/신규 프로젝트에서 영상 편집과 카드뉴스 제작을 명확히 분기한다.
+
+#### 요구사항
+1. 홈 또는 New Project 표면에 “Card News” 주 진입점을 제공하고 선택 즉시 G-19 템플릿 갤러리로 이동한다.
+2. 1:1·4:5·9:16 빠른 시작과 빈 카드 문서 선택지를 제공하며 영상 프로젝트 생성 흐름을 회귀시키지 않는다.
+3. DEBUG/UITest 하니스는 기존 editor 직행을 유지하고 별도 env로 카드 진입을 자동화한다.
+
+#### 현재 상태 실사 (2026-07-14)
+- `MovieCutMacApp`은 `ContentView` 영상 에디터로 직행하고 U-01 홈도 미구현이다. “card/card news” 신규 프로젝트 분기와 카드 템플릿 갤러리 라우팅은 0건이다.
+- 따라서 SC-C1 시작점 전제와 카드 템플릿 발견 경로가 없어 현재 ❌다.
+
+#### 상태/라우팅 모델
+```swift
+enum ProjectCreationMode: Sendable, Equatable { case video, cardNews }
+enum AppStage: Sendable, Equatable { case home, videoEditor, cardEditor }
+```
+- 앱 일시 상태이며 프로젝트 Codable 필드 추가 없음. U-01이 먼저 도입되면 같은 `AppStage`를 확장하고, 아니면 New Project sheet의 로컬 route로 시작해 중복 router를 만들지 않는다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | New Project chooser: Video/Card News, 접근성 label/hint/keyboard focus, 기존 File > New 회귀 방지 | `MovieCutMacApp.swift`, `ContentView.swift` |
+| 2 | Card News 선택→G-19 템플릿 갤러리/규격 quick start→G-18 editor routing | `App/MovieCutMac/CardNews/` |
+| 3 | DEBUG 하니스 `MOVIECUT_UITEST_CARD_ENTRY=1`: cold launch→card chooser→template gallery route/click count 상태 기록 | `UITestHarness.swift`, scripts |
+
+#### AC (측정 가능 — UB 목표값 원문 고정)
+1. cold launch에서 카드뉴스 템플릿 갤러리까지 마우스 2클릭 이하, 키보드만으로도 도달하고 VoiceOver label/hint가 존재한다.
+2. UB-C2의 **“선택→적용 ≤2클릭”** 경로를 U-10→G-19 경계에서 유지한다(갤러리 진입 후 선택·적용 2 이하를 별도 집계).
+3. SC-C1: **“카드뉴스 템플릿 선택 → 5장 텍스트/이미지 교체 → 1:1 PNG 세트 export”**, 목표 **“≤10분, 막힘 0 / P-반복 ≤5분”** — G-18/G-19/G-21 완료 후 사용자 녹화로 판정.
+4. 기존 video New Project와 `MOVIECUT_UITEST` editor 직행 E2E가 무회귀다.
+
+#### 검증 계획
+- route reducer/chooser behavioral test, keyboard/accessibility UI contract, actual app harness route/click log.
+- `scripts/run_e2e_export.sh` 기존 video smoke와 별도 card-entry smoke를 모두 실행한다.
+- SC-C1 시간/막힘은 `[사용자 확인 대기]`.
+
+#### 리스크
+- U-01 홈보다 먼저 만들면 나중에 진입 UI를 두 번 구현할 수 있다. routing state와 chooser component를 재사용 가능하게 격리한다.
+- 카드 기능이 미완인 동안 노출하면 막다른 화면이 된다. G-18/G-19 최소 편집 경로와 같은 릴리스 게이트로 묶는다.
+- 기존 E2E가 홈/chooser에서 멈추지 않도록 UITest 직행 환경변수 우선순위를 고정한다.
 
 ---
 

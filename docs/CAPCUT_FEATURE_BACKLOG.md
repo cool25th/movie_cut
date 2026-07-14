@@ -146,6 +146,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 ### B. 타임라인 편집
 - [ ] 🟡 **G-16 타임라인 스크럽(B-I2) (P0, 사용자 보고 2026-07-13)** — Inc 1~3 구현 완료. shared coordinate clamp tests 3/3, actual app E2E `requested/playhead/playback=1.250/1.250/1.250`, Mac build PASS. AC3 실기기 100ms 체감 및 AC4 재생 중 스크럽 확인 대기.
 - [x] ✅ **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1) (P0, 사용자 보고 2026-07-13)** — Core atomic clipboard commands + Mac Cmd+C/X/V/context menu + NSText native forwarding 완료. behavioral 6/6, Mac static 3/3, actual app `paste_starts=10.000,12.000 relative=2.000 paste_undo=1 cut_undo=1 new_ids=1`, ffprobe video `14.000000s` PASS. 실기기 메뉴 클릭은 UX 확인 항목으로 잔여.
+- [ ] 🟡 **G-04 타임라인 필름스트립+호버 스크럽 (P1)** — 2026-07-14 Inc 1~2 완료: `AVAssetImageGenerator` 비동기 tile-center 프레임 생성과 `(assetID, 4단계 zoomBucket)` 키의 128MB `NSCache` actor를 추가했다. Core behavioral **5/5**와 actual app E2E에서 4개 requested/actual timestamp, 60px cap, miss→insert→hit→asset invalidation을 확인했다. Caveat: `TimelineView`는 여전히 단일 썸네일 반복이며 Inc 3 lazy/cancellation/fallback, Inc 4 hover, Inc 5 성능 계측이 남아 G-04/UB 완료가 아니다.
 - ✅ Trim / Split / Move / Delete / Ripple
 - ✅ 스냅 / 줌 / 다중선택 / 컨텍스트 메뉴
 - [x] ✅ 마그네틱 타임라인(자동 밀착) (P1) — Add/Move/Duplicate/Delete command path가 `RestoreTrackClipsCommand` track snapshot을 남기고, Add/Move/Duplicate/Delete 후 same-track magnetic packing으로 클립을 0초부터 end-to-start로 밀착한다. Undo는 이전 track snapshot/range를 복원한다.

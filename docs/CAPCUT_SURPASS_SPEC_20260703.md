@@ -282,7 +282,7 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 3. 스크롤/줌 60fps 유지, 메모리 상한.
 
 #### 현재 상태 (실사)
-- `TimelineView.swift:909` — `viewModel.thumbnailData(for: clip)` 단일 PNG를 클립 배경으로. `ThumbnailGenerator`는 단일 프레임 생성.
+- `TimelineView.swift:957-1002` — `viewModel.thumbnailData(for: clip)` 단일 PNG를 `ForEach`로 반복한다. 2026-07-14 Inc 1~2에서 비동기 실제 프레임 생성기와 줌 버킷 캐시는 추가됐으나 이 UI에는 아직 연결되지 않았다.
 
 #### 구현 증분
 
@@ -303,6 +303,8 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 
 #### 검증
 - `FilmstripGeneratorTests`(fixture 영상으로 프레임 수/시각 정확도), 성능은 perf 스크립트 실측. 실기기 스크롤 체감 GUI 녹화.
+- 2026-07-14 Inc 1~2 검증: `FilmstripPlanningTests` **5/5 PASS**(tile-center 시각·4단계 줌 버킷·cache key 분리), actual app DEBUG E2E가 2초 fixture에서 `frames=4`, requested `0.250,0.750,1.250,1.750`, actual `0.233,0.733,1.233,1.733`, `max_height=60`, `cache_hit=1/cache_miss=2/cache_inserts=1/cache_limit=134217728/cache_invalidate=1`을 기록했다. AC1~5는 Inc 3~5/UI·성능 측정 전이므로 미완료다.
+- `[진행중] 다음 증분: Inc 3, 시작점: App/MovieCutMac/TimelineView.swift:957`
 
 ---
 

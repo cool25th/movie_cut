@@ -39,8 +39,9 @@ extension EditorViewModel {
     ///
     /// Environment:
     /// - `MOVIECUT_UITEST=1` — enables the harness.
-    /// - `MOVIECUT_UITEST_IMPORT=<path>` — media imported and added to the timeline.
+    /// - `MOVIECUT_UITEST_IMPORT=<path[,path...]>` — media imported and added to the timeline.
     /// - `MOVIECUT_UITEST_IMPORT_EXTRA=<path[:path...] | newline paths>` — extra media imported after the first import.
+    /// - `MOVIECUT_UITEST_CLIPBOARD=1` — exercises multi-clip copy/paste/cut and atomic undo/redo before export.
     /// - `MOVIECUT_UITEST_PLAYBACK_RATE=<double>` — applies a constant playback rate to the selected clip.
     /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
@@ -55,18 +56,27 @@ extension EditorViewModel {
         guard env["MOVIECUT_UITEST"] == "1" else { return }
         var extractAudioSuffix = ""
         var scrubSuffix = ""
+        var clipboardSuffix = ""
 
-        let primaryImportURL = env["MOVIECUT_UITEST_IMPORT"].flatMap { rawPath -> URL? in
-            rawPath.isEmpty ? nil : URL(filePath: rawPath)
-        }
+        let primaryImportURLs = env["MOVIECUT_UITEST_IMPORT"]
+            .map(uiTestImportURLs(from:)) ?? []
         let extraImportURLs = env["MOVIECUT_UITEST_IMPORT_EXTRA"]
             .map(uiTestImportExtraURLs(from:)) ?? []
-        let importURLs = [primaryImportURL].compactMap { $0 } + extraImportURLs
+        let importURLs = primaryImportURLs + extraImportURLs
         if !importURLs.isEmpty {
             await importMediaAndAddToTimeline(
                 importURLs,
                 startTime: currentProject.timeline.duration
             )
+        }
+
+        if env["MOVIECUT_UITEST_CLIPBOARD"] == "1" {
+            do {
+                clipboardSuffix = try await runClipboardUITestScenario()
+            } catch {
+                lastErrorMessage = "clipboard harness failed: \(error.localizedDescription)"
+                clipboardSuffix = " clipboard_copy=0 paste=0 paste_starts=none relative=0.000 paste_undo=0 cut_undo=0 new_ids=0"
+            }
         }
 
         if let rawScrubTime = env["MOVIECUT_UITEST_SCRUB"],
@@ -326,7 +336,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -339,6 +349,139 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    private enum ClipboardUITestError: LocalizedError {
+        case invariant(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invariant(let message): message
+            }
+        }
+    }
+
+    private func runClipboardUITestScenario() async throws -> String {
+        let orderedClips = currentProject.timeline.tracks.enumerated().flatMap { trackIndex, track in
+            track.clips.enumerated().map { clipIndex, clip in
+                (trackIndex: trackIndex, clipIndex: clipIndex, clip: clip)
+            }
+        }.sorted { lhs, rhs in
+            if lhs.clip.timelineRange.start != rhs.clip.timelineRange.start {
+                return lhs.clip.timelineRange.start < rhs.clip.timelineRange.start
+            }
+            if lhs.trackIndex != rhs.trackIndex { return lhs.trackIndex < rhs.trackIndex }
+            return lhs.clipIndex < rhs.clipIndex
+        }
+        guard orderedClips.count >= 2 else {
+            throw ClipboardUITestError.invariant("expected at least two imported timeline clips, found \(orderedClips.count)")
+        }
+
+        let originals = orderedClips.prefix(2).map(\.clip)
+        let originalIds = Set(originals.map(\.id))
+        let originalStarts = Dictionary(uniqueKeysWithValues: originals.map { ($0.id, $0.timelineRange.start) })
+
+        selectedClipIds = originalIds
+        copyClips(originalIds)
+        guard lastErrorMessage == nil, selectedClipIds == originalIds else {
+            throw ClipboardUITestError.invariant("copy did not preserve the two-clip selection")
+        }
+
+        // The visible timeline has a 10-second minimum ruler, while the public
+        // scrub API clamps to content duration. Set the same public playhead state
+        // bound by the UI so PasteClipsCommand receives the requested empty time.
+        playheadTime = 10.0
+        let idsBeforePaste = Set(currentProject.timeline.tracks.flatMap(\.clips).map(\.id))
+        await pasteClipsAtPlayhead()
+        guard lastErrorMessage == nil else {
+            throw ClipboardUITestError.invariant("paste reported \(lastErrorMessage ?? "an unknown error")")
+        }
+
+        let clipsAfterPaste = currentProject.timeline.tracks.flatMap(\.clips)
+        let idsAfterPaste = Set(clipsAfterPaste.map(\.id))
+        let pastedIds = selectedClipIds
+        guard pastedIds.count == 2,
+              pastedIds == idsAfterPaste.subtracting(idsBeforePaste) else {
+            throw ClipboardUITestError.invariant("paste must select exactly the two newly created clips")
+        }
+        guard pastedIds.isDisjoint(with: originalIds) else {
+            throw ClipboardUITestError.invariant("pasted clip IDs must differ from source IDs")
+        }
+        guard originalIds.isSubset(of: idsAfterPaste) else {
+            throw ClipboardUITestError.invariant("paste removed an original clip")
+        }
+
+        let pastedClips = clipsAfterPaste
+            .filter { pastedIds.contains($0.id) }
+            .sorted { $0.timelineRange.start < $1.timelineRange.start }
+        let pastedStarts = pastedClips.map(\.timelineRange.start)
+        guard pastedStarts.count == 2,
+              abs(pastedStarts[0] - 10.0) <= 0.001,
+              abs(pastedStarts[1] - 12.0) <= 0.001 else {
+            throw ClipboardUITestError.invariant("expected pasted starts 10.000,12.000, found \(pastedStarts)")
+        }
+        let relativeOffset = pastedStarts[1] - pastedStarts[0]
+        guard abs(relativeOffset - 2.0) <= 0.001 else {
+            throw ClipboardUITestError.invariant("expected pasted relative offset 2.000, found \(relativeOffset)")
+        }
+
+        await undo()
+        let idsAfterPasteUndo = Set(currentProject.timeline.tracks.flatMap(\.clips).map(\.id))
+        guard pastedIds.isDisjoint(with: idsAfterPasteUndo),
+              originalIds.isSubset(of: idsAfterPasteUndo) else {
+            throw ClipboardUITestError.invariant("one undo did not remove both pasted clips while preserving originals")
+        }
+
+        await redo()
+        let clipsAfterRedo = currentProject.timeline.tracks.flatMap(\.clips)
+        let redoById = Dictionary(uniqueKeysWithValues: clipsAfterRedo.map { ($0.id, $0) })
+        guard originalIds.allSatisfy({ redoById[$0] != nil }),
+              pastedIds.allSatisfy({ redoById[$0] != nil }),
+              pastedIds.allSatisfy({ id in
+                  guard let clip = redoById[id],
+                        let prior = pastedClips.first(where: { $0.id == id }) else { return false }
+                  return clip.timelineRange == prior.timelineRange
+              }) else {
+            throw ClipboardUITestError.invariant("one redo did not restore both pasted IDs and ranges")
+        }
+
+        selectedClipIds = originalIds
+        await cutClips(originalIds)
+        let idsAfterCut = Set(currentProject.timeline.tracks.flatMap(\.clips).map(\.id))
+        guard originalIds.isDisjoint(with: idsAfterCut),
+              pastedIds.isSubset(of: idsAfterCut) else {
+            throw ClipboardUITestError.invariant("one cut did not remove both originals while preserving pasted clips")
+        }
+
+        await undo()
+        let finalClips = currentProject.timeline.tracks.flatMap(\.clips)
+        let finalById = Dictionary(uniqueKeysWithValues: finalClips.map { ($0.id, $0) })
+        guard originalIds.allSatisfy({ id in
+                  guard let restored = finalById[id], let originalStart = originalStarts[id] else { return false }
+                  return restored.timelineRange.start == originalStart
+              }),
+              pastedIds.allSatisfy({ id in
+                  guard let restored = finalById[id],
+                        let prior = pastedClips.first(where: { $0.id == id }) else { return false }
+                  return restored.timelineRange == prior.timelineRange
+              }) else {
+            throw ClipboardUITestError.invariant("one cut undo did not restore exact original starts and pasted state")
+        }
+
+        return String(
+            format: " clipboard_copy=2 paste=2 paste_starts=%.3f,%.3f relative=%.3f paste_undo=1 cut_undo=1 new_ids=1",
+            pastedStarts[0],
+            pastedStarts[1],
+            relativeOffset
+        )
+    }
+
+    private func uiTestImportURLs(from rawValue: String) -> [URL] {
+        rawValue
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { URL(filePath: $0) }
     }
 
     private func uiTestImportExtraURLs(from rawValue: String) -> [URL] {

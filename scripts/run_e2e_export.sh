@@ -61,6 +61,39 @@ print(f"PASS: G-16 timeline scrub requested={values['scrub_requested']:.3f} play
 PY
 rm -rf "$SCRUB_TMPDIR"
 
+# G-17 Inc 3: prove the actual app's public multi-clip clipboard APIs preserve
+# IDs, relative timing, and atomic undo/redo, then export the retained state.
+CLIPBOARD_TMPDIR="$(mktemp -d)"
+CLIPBOARD_OUT="$CLIPBOARD_TMPDIR/g17_clipboard.mp4"
+CLIPBOARD_RESULT="$CLIPBOARD_TMPDIR/g17_clipboard.txt"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+sleep 1
+echo "Running G-17 clipboard E2E → $CLIPBOARD_OUT"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE,$FIXTURE" \
+  MOVIECUT_UITEST_CLIPBOARD=1 MOVIECUT_UITEST_EXPORT="$CLIPBOARD_OUT" \
+  MOVIECUT_UITEST_RESULT="$CLIPBOARD_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+CP=$!
+for _ in $(seq 1 240); do
+  [ -s "$CLIPBOARD_OUT" ] && [ -s "$CLIPBOARD_RESULT" ] && break
+  sleep 0.5
+done
+wait "$CP" 2>/dev/null || true
+CLIPBOARD_STATUS="$(cat "$CLIPBOARD_RESULT" 2>/dev/null || echo MISSING)"
+[ -s "$CLIPBOARD_RESULT" ] || { echo "FAIL: G-17 clipboard result missing" >&2; rm -rf "$CLIPBOARD_TMPDIR"; exit 1; }
+[ -s "$CLIPBOARD_OUT" ] || { echo "FAIL: G-17 clipboard export missing (status: $CLIPBOARD_STATUS)" >&2; rm -rf "$CLIPBOARD_TMPDIR"; exit 1; }
+case "$CLIPBOARD_STATUS" in
+  *"error=none"*"clipboard_copy=2 paste=2 paste_starts=10.000,12.000 relative=2.000 paste_undo=1 cut_undo=1 new_ids=1"*) ;;
+  *) echo "FAIL: G-17 clipboard invariants failed (status: $CLIPBOARD_STATUS)" >&2; rm -rf "$CLIPBOARD_TMPDIR"; exit 1 ;;
+esac
+CLIPBOARD_VIDEO="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$CLIPBOARD_OUT" 2>/dev/null || true)"
+[ "$CLIPBOARD_VIDEO" = "video" ] || { echo "FAIL: G-17 clipboard export has no video stream (ffprobe: ${CLIPBOARD_VIDEO:-none})" >&2; rm -rf "$CLIPBOARD_TMPDIR"; exit 1; }
+CLIPBOARD_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$CLIPBOARD_OUT" 2>/dev/null || echo 0)"
+awk -v d="$CLIPBOARD_DURATION" 'BEGIN { exit !(d > 13.7 && d < 14.3) }' \
+  || { echo "FAIL: G-17 clipboard duration ${CLIPBOARD_DURATION}s (expected ~14.0; status: $CLIPBOARD_STATUS)" >&2; rm -rf "$CLIPBOARD_TMPDIR"; exit 1; }
+echo "PASS: G-17 clipboard E2E status=[$CLIPBOARD_STATUS] ffprobe_video=$CLIPBOARD_VIDEO ffprobe_duration=${CLIPBOARD_DURATION}s"
+rm -rf "$CLIPBOARD_TMPDIR"
+
 # Works-First / G-15: still image clips must render through the real app
 # preview/export pipeline instead of silently skipping because PNG has no video
 # track. This reproduces the user bug and locks AC1: blue PNG -> exported blue

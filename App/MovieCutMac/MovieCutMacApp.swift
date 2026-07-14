@@ -68,6 +68,38 @@ struct MovieCutMacApp: App {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
             }
 
+            CommandGroup(replacing: .pasteboard) {
+                Button("Copy Clips") {
+                    MovieCutShortcutGuard.performPasteboardShortcut(
+                        nativeAction: #selector(NSText.copy(_:))
+                    ) {
+                        viewModel.copySelectedClips()
+                    }
+                }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(!MovieCutShortcutGuard.isTextInputFirstResponder && !viewModel.canCopySelectedClips)
+
+                Button("Cut Clips") {
+                    MovieCutShortcutGuard.performPasteboardShortcut(
+                        nativeAction: #selector(NSText.cut(_:))
+                    ) {
+                        Task { await viewModel.cutSelectedClips() }
+                    }
+                }
+                .keyboardShortcut("x", modifiers: .command)
+                .disabled(!MovieCutShortcutGuard.isTextInputFirstResponder && !viewModel.canCutSelectedClips)
+
+                Button("Paste Clips") {
+                    MovieCutShortcutGuard.performPasteboardShortcut(
+                        nativeAction: #selector(NSText.paste(_:))
+                    ) {
+                        Task { await viewModel.pasteClipsAtPlayhead() }
+                    }
+                }
+                .keyboardShortcut("v", modifiers: .command)
+                .disabled(!MovieCutShortcutGuard.isTextInputFirstResponder && !viewModel.canPasteClips)
+            }
+
             CommandMenu("Playback") {
                 Button("Play/Pause") {
                     MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
@@ -299,6 +331,14 @@ private enum MovieCutShortcutGuard {
         guard !isTextInputFirstResponder else { return }
         action()
     }
+
+    static func performPasteboardShortcut(nativeAction: Selector, timelineAction: () -> Void) {
+        if isTextInputFirstResponder {
+            NSApp.sendAction(nativeAction, to: nil, from: nil)
+        } else {
+            timelineAction()
+        }
+    }
 }
 
 private extension NSView {
@@ -326,6 +366,7 @@ private enum MovieCutKeyboardShortcutHelp {
     Delete: Delete selected clips
     Shift+Delete: Ripple delete selected clip
     Cmd+D: Duplicate selected clips
+    Cmd+C / Cmd+X / Cmd+V: Copy/Cut/Paste clips
     +/-: Zoom timeline
     M: Add marker
     Cmd+Z / Shift+Cmd+Z: Undo/Redo

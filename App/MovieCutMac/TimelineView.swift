@@ -883,6 +883,20 @@ struct TimelineView: View {
                     let clipIds = contextMenuClipIds(anchor: clip.id)
                     Task { await viewModel.duplicateClips(clipIds) }
                 }
+                Button(NSLocalizedString("Copy", comment: "")) {
+                    let clipIds = contextMenuClipIds(anchor: clip.id)
+                    viewModel.copyClips(clipIds)
+                }
+                .disabled(!viewModel.canCopyClips(contextMenuCandidateClipIds(anchor: clip.id)))
+                Button(NSLocalizedString("Cut", comment: "")) {
+                    let clipIds = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.cutClips(clipIds) }
+                }
+                .disabled(!viewModel.canCutClips(contextMenuCandidateClipIds(anchor: clip.id)))
+                Button(NSLocalizedString("Paste", comment: "")) {
+                    Task { await viewModel.pasteClipsAtPlayhead() }
+                }
+                .disabled(!viewModel.canPasteClips)
                 Divider()
                 Button(NSLocalizedString("Group Clips", comment: "")) {
                     _ = contextMenuClipIds(anchor: clip.id)
@@ -1056,12 +1070,15 @@ struct TimelineView: View {
 
     @MainActor
     private func contextMenuClipIds(anchor clipId: UUID) -> Set<UUID> {
-        if viewModel.selectedClipIds.contains(clipId) {
-            return viewModel.selectedClipIds
-        }
+        let clipIds = contextMenuCandidateClipIds(anchor: clipId)
+        guard !viewModel.selectedClipIds.contains(clipId) else { return clipIds }
 
         viewModel.selectedClipIds = [clipId]
-        return [clipId]
+        return clipIds
+    }
+
+    private func contextMenuCandidateClipIds(anchor clipId: UUID) -> Set<UUID> {
+        viewModel.selectedClipIds.contains(clipId) ? viewModel.selectedClipIds : [clipId]
     }
 
     private func moveGesture(for clip: Clip) -> some Gesture {

@@ -138,6 +138,7 @@ final class EditorViewModel {
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = EditorViewModel.makeProjectStore()
+    private var clipClipboardPayload: ClipboardPayload?
 
     private static func makeProjectStore() -> ProjectStore {
         #if DEBUG
@@ -288,6 +289,29 @@ final class EditorViewModel {
 
     var hasSelectedClips: Bool {
         !selectedClipIds.isEmpty
+    }
+
+    var canCopySelectedClips: Bool {
+        canCopyClips(selectedClipIds)
+    }
+
+    var canCutSelectedClips: Bool {
+        canCutClips(selectedClipIds)
+    }
+
+    var canPasteClips: Bool {
+        clipClipboardPayload != nil
+    }
+
+    func canCopyClips(_ clipIds: Set<UUID>) -> Bool {
+        !clipIds.isEmpty && clipIds.isSubset(of: currentClipIds)
+    }
+
+    func canCutClips(_ clipIds: Set<UUID>) -> Bool {
+        guard canCopyClips(clipIds) else { return false }
+        return currentProject.timeline.tracks.allSatisfy { track in
+            track.isLocked ? clipIds.isDisjoint(with: Set(track.clips.map(\.id))) : true
+        }
     }
 
     var canSplitSelectedClip: Bool {
@@ -1812,6 +1836,55 @@ final class EditorViewModel {
                 try await session.dispatch(DuplicateClipCommand(clipId: clipId))
             }
             try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func copySelectedClips() {
+        copyClips(selectedClipIds)
+    }
+
+    func copyClips(_ clipIds: Set<UUID>) {
+        guard !clipIds.isEmpty else { return }
+
+        do {
+            clipClipboardPayload = try ClipboardPayload(project: currentProject, clipIds: clipIds)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func cutSelectedClips() async {
+        await cutClips(selectedClipIds)
+    }
+
+    func cutClips(_ clipIds: Set<UUID>) async {
+        guard !clipIds.isEmpty else { return }
+
+        do {
+            let payload = try ClipboardPayload(project: currentProject, clipIds: clipIds)
+            try await session.dispatch(CutClipsCommand(clipIds: clipIds))
+            clipClipboardPayload = payload
+            selectedClipIds.subtract(clipIds)
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func pasteClipsAtPlayhead() async {
+        guard let clipClipboardPayload else { return }
+
+        let clipIdsBeforePaste = currentClipIds
+        do {
+            try await session.dispatch(PasteClipsCommand(
+                payload: clipClipboardPayload,
+                anchorTime: max(0, playheadTime)
+            ))
+            try await refreshFromSession()
+            selectedClipIds = currentClipIds.subtracting(clipIdsBeforePaste)
         } catch {
             lastErrorMessage = error.localizedDescription
         }

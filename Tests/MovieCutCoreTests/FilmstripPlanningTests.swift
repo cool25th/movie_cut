@@ -196,4 +196,181 @@ struct FilmstripPlanningTests {
         #expect(failed.phase == .failed(generation: failedGeneration))
         #expect(failed.showsFallbackThumbnail)
     }
+
+    @Test("hover maps left, middle, and right positions through a trimmed source start")
+    func hoverMapsTrimmedSourceRange() throws {
+        let times = [10.0, 13.0, 16.0]
+        let left = try #require(FilmstripHoverPlanner.selection(
+            localX: 0,
+            clipWidth: 600,
+            sourceRange: TimeRange(start: 10, duration: 6),
+            timelineDuration: 6,
+            playbackRate: 1,
+            cachedFrameTimes: times
+        ))
+        let middle = try #require(FilmstripHoverPlanner.selection(
+            localX: 300,
+            clipWidth: 600,
+            sourceRange: TimeRange(start: 10, duration: 6),
+            timelineDuration: 6,
+            playbackRate: 1,
+            cachedFrameTimes: times
+        ))
+        let right = try #require(FilmstripHoverPlanner.selection(
+            localX: 600,
+            clipWidth: 600,
+            sourceRange: TimeRange(start: 10, duration: 6),
+            timelineDuration: 6,
+            playbackRate: 1,
+            cachedFrameTimes: times
+        ))
+
+        #expect(left.requestedSourceTime == 10)
+        #expect(left.frameIndex == 0)
+        #expect(middle.requestedSourceTime == 13)
+        #expect(middle.frameIndex == 1)
+        #expect(right.requestedSourceTime == 16)
+        #expect(right.frameIndex == 2)
+    }
+
+    @Test("hover maps scaled timeline duration through constant playback rate")
+    func hoverMapsPlaybackRate() throws {
+        let selection = try #require(FilmstripHoverPlanner.selection(
+            localX: 200,
+            clipWidth: 400,
+            sourceRange: TimeRange(start: 5, duration: 8),
+            timelineDuration: 4,
+            playbackRate: 2,
+            cachedFrameTimes: [5, 9, 13]
+        ))
+
+        #expect(selection.requestedSourceTime == 9)
+        #expect(selection.frameIndex == 1)
+        #expect(selection.frameSourceTime == 9)
+    }
+
+    @Test("hover maps display position through a normalized speed ramp")
+    func hoverMapsSpeedRamp() throws {
+        let points = [
+            SpeedRampPoint(time: 0, rate: 1),
+            SpeedRampPoint(time: 1, rate: 2)
+        ]
+        let curve = SpeedRampCurve(points: points)
+        let sourceDuration = 8.0
+        let expectedSourceFraction = 0.25
+        let timelineDuration = curve.timeMapping(sourceTime: 1) * sourceDuration
+        let localX = curve.timeMapping(sourceTime: expectedSourceFraction)
+            / curve.timeMapping(sourceTime: 1) * 400
+        let selection = try #require(FilmstripHoverPlanner.selection(
+            localX: localX,
+            clipWidth: 400,
+            sourceRange: TimeRange(start: 5, duration: sourceDuration),
+            timelineDuration: timelineDuration,
+            playbackRate: 1,
+            speedRampPoints: points,
+            cachedFrameTimes: [5, 7, 13]
+        ))
+
+        #expect(abs(selection.requestedSourceTime - 7) < 1.0e-9)
+        #expect(selection.frameIndex == 1)
+        #expect(selection.frameSourceTime == 7)
+    }
+
+    @Test("hover nearest-frame ties select the earlier source timestamp deterministically")
+    func hoverNearestFrameTieIsDeterministic() throws {
+        let selection = try #require(FilmstripHoverPlanner.selection(
+            localX: 50,
+            clipWidth: 100,
+            sourceRange: TimeRange(start: 0, duration: 10),
+            timelineDuration: 10,
+            playbackRate: 1,
+            cachedFrameTimes: [6, 4]
+        ))
+
+        #expect(selection.requestedSourceTime == 5)
+        #expect(selection.frameIndex == 1)
+        #expect(selection.frameSourceTime == 4)
+    }
+
+    @Test("hover clamps pointer positions at both source edges")
+    func hoverClampsEdges() throws {
+        let left = try #require(FilmstripHoverPlanner.selection(
+            localX: -500,
+            clipWidth: 100,
+            sourceRange: TimeRange(start: 2, duration: 4),
+            timelineDuration: 4,
+            playbackRate: 1,
+            cachedFrameTimes: [2, 6]
+        ))
+        let right = try #require(FilmstripHoverPlanner.selection(
+            localX: 500,
+            clipWidth: 100,
+            sourceRange: TimeRange(start: 2, duration: 4),
+            timelineDuration: 4,
+            playbackRate: 1,
+            cachedFrameTimes: [2, 6]
+        ))
+
+        #expect(left.requestedSourceTime == 2)
+        #expect(right.requestedSourceTime == 6)
+    }
+
+    @Test("hover rejects invalid and non-finite geometry or timing")
+    func hoverRejectsInvalidInputs() {
+        let validRange = TimeRange(start: 0, duration: 2)
+        #expect(FilmstripHoverPlanner.selection(
+            localX: .nan,
+            clipWidth: 100,
+            sourceRange: validRange,
+            timelineDuration: 2,
+            playbackRate: 1,
+            cachedFrameTimes: [1]
+        ) == nil)
+        #expect(FilmstripHoverPlanner.selection(
+            localX: 10,
+            clipWidth: .infinity,
+            sourceRange: validRange,
+            timelineDuration: 2,
+            playbackRate: 1,
+            cachedFrameTimes: [1]
+        ) == nil)
+        #expect(FilmstripHoverPlanner.selection(
+            localX: 10,
+            clipWidth: 100,
+            sourceRange: validRange,
+            timelineDuration: .infinity,
+            playbackRate: 1,
+            cachedFrameTimes: [1]
+        ) == nil)
+        #expect(FilmstripHoverPlanner.selection(
+            localX: 10,
+            clipWidth: 100,
+            sourceRange: validRange,
+            timelineDuration: 2,
+            playbackRate: .nan,
+            cachedFrameTimes: [1]
+        ) == nil)
+        #expect(FilmstripHoverPlanner.selection(
+            localX: 10,
+            clipWidth: 100,
+            sourceRange: validRange,
+            timelineDuration: 2,
+            playbackRate: 1,
+            cachedFrameTimes: [.nan, .infinity]
+        ) == nil)
+    }
+
+    @Test("hover cache miss returns nil without a generation seam")
+    func hoverCacheMissIsHidden() {
+        let selection = FilmstripHoverPlanner.selection(
+            localX: 50,
+            clipWidth: 100,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineDuration: 2,
+            playbackRate: 1,
+            cachedFrameTimes: []
+        )
+
+        #expect(selection == nil)
+    }
 }

@@ -878,6 +878,14 @@ struct TimelineView: View {
             .offset(x: x, y: 4)
             .zIndex(Double(clip.zIndex) + (isActiveDrag || isSelected ? 10_000 : 0))
             .contentShape(Rectangle())
+            .modifier(
+                TimelineFilmstripHoverModifier(
+                    clip: clip,
+                    clipWidth: max(2, width),
+                    supportsFilmstrip: filmstripAsset(for: clip) != nil,
+                    store: filmstripStore
+                )
+            )
             .accessibilityElement(children: .contain)
             .highPriorityGesture(
                 TapGesture()

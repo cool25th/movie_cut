@@ -50,7 +50,7 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
-    /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport consumer.
+    /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport and hover consumers.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -83,7 +83,7 @@ extension EditorViewModel {
                 timelineFilmstripSuffix = try await runTimelineFilmstripConsumerUITestScenario()
             } catch {
                 lastErrorMessage = "timeline filmstrip harness failed: \(error.localizedDescription)"
-                timelineFilmstripSuffix = " timeline_filmstrip_frames=0 distinct_digests=0 distinct_times=0 requested_span=0.000 full_span=0.000 requested_count=0 full_count=0 offscreen_skipped=0 cancelled=0 stale_rejected=0 fallback_before_ready=0 fallback_after_cancel=0 zoom_requests=none"
+                timelineFilmstripSuffix = " timeline_filmstrip_frames=0 distinct_digests=0 distinct_times=0 requested_span=0.000 full_span=0.000 requested_count=0 full_count=0 offscreen_skipped=0 cancelled=0 stale_rejected=0 fallback_before_ready=0 fallback_after_cancel=0 zoom_requests=none hover_visible=0 hover_width=0 hover_height=0 hover_label=0 hover_requested=0.000 hover_selected_requested=0.000 hover_actual=0.000 hover_error=999.000 hover_digest=none hover_digest_cached=0 hover_exit_hidden=0 hover_cache_miss_hidden=0 hover_unsupported_hidden=0 hover_request_delta=-1 hover_generation_delta=-1"
             }
         }
 
@@ -499,11 +499,68 @@ extension EditorViewModel {
             )
         }
 
+        var droveReadyHover = false
+        for _ in 0..<200 {
+            if TimelineFilmstripDebugProbe.shared.driveReadyHover() {
+                droveReadyHover = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard droveReadyHover else {
+            throw FilmstripUITestError.invariant(
+                "TimelineView hover surface did not accept the published-frame driver"
+            )
+        }
+
+        for _ in 0..<200 {
+            if TimelineFilmstripDebugProbe.shared.hasRenderedHoverEvidence { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard TimelineFilmstripDebugProbe.shared.hasRenderedHoverEvidence,
+              TimelineFilmstripDebugProbe.shared.driveHoverExit() else {
+            throw FilmstripUITestError.invariant(
+                "TimelineView hover overlay did not render before exit"
+            )
+        }
+
+        var provedNotReady = false
+        var provedUnsupported = false
+        for _ in 0..<200 {
+            if !provedNotReady {
+                provedNotReady = TimelineFilmstripDebugProbe.shared.driveNotReadyHover()
+            }
+            if !provedUnsupported {
+                provedUnsupported = TimelineFilmstripDebugProbe.shared.driveUnsupportedHover()
+            }
+            if provedNotReady && provedUnsupported { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard provedNotReady, provedUnsupported else {
+            throw FilmstripUITestError.invariant(
+                "TimelineView hover did not prove not-ready and unsupported hidden states"
+            )
+        }
+
+        var hoverCompleted: TimelineFilmstripDebugProbe.HoverSummary?
+        for _ in 0..<200 {
+            if let summary = TimelineFilmstripDebugProbe.shared.completedHoverSummary() {
+                hoverCompleted = summary
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard let hoverCompleted else {
+            throw FilmstripUITestError.invariant(
+                "TimelineView hover evidence did not complete"
+            )
+        }
+
         let zoomRequests = completed.zoomScaleKeys
             .map { String(format: "%.3f", Double($0) / 1_000) }
             .joined(separator: ",")
         return String(
-            format: " timeline_filmstrip_frames=%d distinct_digests=%d distinct_times=%d requested_span=%.3f full_span=%.3f requested_count=%d full_count=%d offscreen_skipped=%d cancelled=%d stale_rejected=%d fallback_before_ready=%d fallback_after_cancel=%d zoom_requests=%@",
+            format: " timeline_filmstrip_frames=%d distinct_digests=%d distinct_times=%d requested_span=%.3f full_span=%.3f requested_count=%d full_count=%d offscreen_skipped=%d cancelled=%d stale_rejected=%d fallback_before_ready=%d fallback_after_cancel=%d zoom_requests=%@ hover_visible=%d hover_width=%.0f hover_height=%.0f hover_label=%d hover_requested=%.3f hover_selected_requested=%.3f hover_actual=%.3f hover_error=%.3f hover_digest=%@ hover_digest_cached=%d hover_exit_hidden=%d hover_cache_miss_hidden=%d hover_unsupported_hidden=%d hover_request_delta=%d hover_generation_delta=%d",
             completed.consumerFrameCount,
             completed.distinctDigestCount,
             completed.distinctTimestampCount,
@@ -516,7 +573,22 @@ extension EditorViewModel {
             completed.staleRejected ? 1 : 0,
             completed.fallbackBeforeReady ? 1 : 0,
             completed.fallbackAfterCancellation ? 1 : 0,
-            zoomRequests
+            zoomRequests,
+            hoverCompleted.visible ? 1 : 0,
+            hoverCompleted.imageWidth,
+            hoverCompleted.imageHeight,
+            hoverCompleted.labelPresent ? 1 : 0,
+            hoverCompleted.requestedSourceTime,
+            hoverCompleted.selectedRequestedTime,
+            hoverCompleted.selectedActualTime,
+            hoverCompleted.absoluteError,
+            hoverCompleted.selectedDigest,
+            hoverCompleted.digestBelongsToPublishedFrames ? 1 : 0,
+            hoverCompleted.exitHidden ? 1 : 0,
+            hoverCompleted.cacheMissHidden ? 1 : 0,
+            hoverCompleted.unsupportedHidden ? 1 : 0,
+            hoverCompleted.requestCountDelta,
+            hoverCompleted.generationCountDelta
         )
     }
 

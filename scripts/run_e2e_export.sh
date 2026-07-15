@@ -14,6 +14,8 @@ cd "$ROOT"
 
 FIXTURE="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
 [ -s "$FIXTURE" ] || { echo "missing fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
+FILMSTRIP_UNSUPPORTED_FIXTURE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
+[ -s "$FILMSTRIP_UNSUPPORTED_FIXTURE" ] || { echo "missing image fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
 
 echo "Building MovieCutMac (Debug)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
@@ -47,9 +49,11 @@ esac
 echo "PASS: G-04 filmstrip generator/cache $FILMSTRIP_STATUS"
 rm -rf "$FILMSTRIP_TMPDIR"
 
-# G-04 Inc 3: exercise the actual TimelineView background consumer. Two long,
+# G-04 Inc 3-4: exercise the actual TimelineView background and hover consumers. Two long,
 # time-varying clips make the first clip only partly near-visible and the second
-# clip offscreen. The DEBUG observer is fed by TimelineFilmstripLayer/Store;
+# clip offscreen/not-ready; an image clip proves unsupported hover stays hidden.
+# The DEBUG observer is fed by TimelineFilmstripLayer/Store and the same
+# TimelineFilmstripHoverModifier handler used by onContinuousHover;
 # UITestHarness only waits for and serializes those real UI-consumer events.
 TIMELINE_FILMSTRIP_TMPDIR="$(mktemp -d)"
 TIMELINE_FILMSTRIP_FIXTURE="$TIMELINE_FILMSTRIP_TMPDIR/timevarying_30s.mp4"
@@ -59,9 +63,9 @@ ffmpeg -v error -f lavfi -i "testsrc2=size=160x90:rate=10:duration=30" \
   "$TIMELINE_FILMSTRIP_FIXTURE"
 pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
-echo "Running G-04 Inc 3 TimelineView filmstrip consumer smoke"
+echo "Running G-04 Inc 3-4 TimelineView filmstrip/hover consumer smoke"
 env MOVIECUT_UITEST=1 \
-  MOVIECUT_UITEST_IMPORT="$TIMELINE_FILMSTRIP_FIXTURE,$TIMELINE_FILMSTRIP_FIXTURE" \
+  MOVIECUT_UITEST_IMPORT="$TIMELINE_FILMSTRIP_FIXTURE,$TIMELINE_FILMSTRIP_FIXTURE,$FILMSTRIP_UNSUPPORTED_FIXTURE" \
   MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1 \
   MOVIECUT_UITEST_RESULT="$TIMELINE_FILMSTRIP_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
@@ -70,8 +74,8 @@ for _ in $(seq 1 160); do [ -s "$TIMELINE_FILMSTRIP_RESULT" ] && break; sleep 0.
 wait "$TFP" 2>/dev/null || true
 TIMELINE_FILMSTRIP_STATUS="$(cat "$TIMELINE_FILMSTRIP_RESULT" 2>/dev/null || echo MISSING)"
 case "$TIMELINE_FILMSTRIP_STATUS" in
-  *"error=none"*"timeline_filmstrip_frames="*"offscreen_skipped=1"*"cancelled=1"*"stale_rejected=1"*"fallback_before_ready=1"*"fallback_after_cancel=1"*) ;;
-  *) echo "FAIL: G-04 Inc 3 TimelineView consumer harness failed (status: $TIMELINE_FILMSTRIP_STATUS)" >&2; rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"; exit 1 ;;
+  *"error=none"*"timeline_filmstrip_frames="*"offscreen_skipped=1"*"cancelled=1"*"stale_rejected=1"*"fallback_before_ready=1"*"fallback_after_cancel=1"*"hover_visible=1"*"hover_width=120"*"hover_height=68"*"hover_label=1"*"hover_digest_cached=1"*"hover_exit_hidden=1"*"hover_cache_miss_hidden=1"*"hover_unsupported_hidden=1"*"hover_request_delta=0"*"hover_generation_delta=0"*) ;;
+  *) echo "FAIL: G-04 Inc 3-4 TimelineView consumer harness failed (status: $TIMELINE_FILMSTRIP_STATUS)" >&2; rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"; exit 1 ;;
 esac
 python3 - "$TIMELINE_FILMSTRIP_STATUS" <<'PY'
 import re, sys
@@ -112,12 +116,32 @@ zoom_match = re.search(r"(?:^| )zoom_requests=([^ ]+)", status)
 zooms = set(zoom_match.group(1).split(",")) if zoom_match else set()
 if len(zooms) < 2:
     raise SystemExit(f"zoom did not change request identity: {status}")
+hover_requested = number("hover_requested")
+hover_actual = number("hover_actual")
+hover_error = number("hover_error")
+hover_digest_match = re.search(r"(?:^| )hover_digest=([0-9a-f]{16})(?: |$)", status)
+if not hover_digest_match:
+    raise SystemExit(f"hover digest was not a real generated-frame digest: {status}")
+for key, expected in (
+    ("hover_visible", 1), ("hover_width", 120), ("hover_height", 68),
+    ("hover_label", 1), ("hover_digest_cached", 1),
+    ("hover_exit_hidden", 1), ("hover_cache_miss_hidden", 1),
+    ("hover_unsupported_hidden", 1), ("hover_request_delta", 0),
+    ("hover_generation_delta", 0),
+):
+    if integer(key) != expected:
+        raise SystemExit(f"{key} expected {expected}: {status}")
+if abs(hover_requested - hover_actual) > 0.3 or hover_error > 0.3:
+    raise SystemExit(f"hover source-time error exceeded AC4 tolerance: {status}")
 print(
-    "PASS: G-04 Inc 3 TimelineView consumer "
+    "PASS: G-04 Inc 3-4 TimelineView consumer "
     f"frames={frames} distinct_digests={digests} distinct_times={times} "
     f"visible_span={requested_span:.3f}/{full_span:.3f} "
     f"visible_count={requested_count}/{full_count} offscreen_skipped=1 "
-    "cancelled=1 stale_rejected=1 fallback_before_ready=1 fallback_after_cancel=1"
+    "cancelled=1 stale_rejected=1 fallback_before_ready=1 fallback_after_cancel=1 "
+    f"hover=120x68 label=1 requested={hover_requested:.3f} actual={hover_actual:.3f} "
+    f"error={hover_error:.3f} digest={hover_digest_match.group(1)} cached=1 "
+    "exit_hidden=1 cache_miss_hidden=1 unsupported_hidden=1 request_delta=0 generation_delta=0"
 )
 PY
 rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"

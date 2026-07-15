@@ -29,6 +29,16 @@ struct TimelineFilmstripSnapshot {
     }
 }
 
+struct TimelineFilmstripHoverPreview {
+    let clipID: UUID
+    let image: CGImage
+    let localX: CGFloat
+    let requestedSourceTime: TimeInterval
+    let selectedRequestedTime: TimeInterval
+    let selectedActualTime: TimeInterval
+    let digest: String
+}
+
 /// MainActor-owned per-clip async state for the real timeline consumer.
 ///
 /// Entries only exist for visible/near-visible clips and are capped separately
@@ -67,6 +77,44 @@ final class TimelineFilmstripStore {
             viewportRequest: entry.requestID.viewportRequest,
             frames: entry.frames,
             loadState: entry.loadState
+        )
+    }
+
+    /// Resolves only from the frames already published to the real timeline.
+    /// This synchronous MainActor read deliberately has no cache or generator
+    /// call, so pointer movement cannot enqueue work or block on media I/O.
+    func hoverPreview(
+        for clip: Clip,
+        localX: Double,
+        clipWidth: Double
+    ) -> TimelineFilmstripHoverPreview? {
+        guard let entry = entries[clip.id],
+              entry.requestID.clipSourceRange == clip.sourceRange,
+              entry.requestID.clipTimelineRange == clip.timelineRange,
+              case .ready = entry.loadState.phase,
+              !entry.frames.isEmpty,
+              let selection = FilmstripHoverPlanner.selection(
+                  localX: localX,
+                  clipWidth: clipWidth,
+                  sourceRange: clip.sourceRange,
+                  timelineDuration: clip.timelineRange.duration,
+                  playbackRate: clip.playbackRate,
+                  speedRampPoints: clip.speedRampPoints,
+                  cachedFrameTimes: entry.frames.map(\.actualTime)
+              ),
+              entry.frames.indices.contains(selection.frameIndex) else {
+            return nil
+        }
+
+        let frame = entry.frames[selection.frameIndex]
+        return TimelineFilmstripHoverPreview(
+            clipID: clip.id,
+            image: frame.image,
+            localX: CGFloat(min(max(localX, 0), clipWidth)),
+            requestedSourceTime: selection.requestedSourceTime,
+            selectedRequestedTime: frame.requestedTime,
+            selectedActualTime: frame.actualTime,
+            digest: frame.digest
         )
     }
 
@@ -134,6 +182,9 @@ final class TimelineFilmstripStore {
                 if let cachedFrames = await cache.frames(for: cacheKey) {
                     frames = cachedFrames
                 } else {
+                    #if DEBUG
+                    TimelineFilmstripDebugProbe.shared.recordGenerationStarted()
+                    #endif
                     frames = try await generator.frames(
                         for: assetURL,
                         sourceRange: requestID.viewportRequest.sourceRange,
@@ -261,6 +312,201 @@ final class TimelineFilmstripStore {
     }
 }
 
+struct TimelineFilmstripHoverModifier: ViewModifier {
+    static let previewImageSize = CGSize(width: 120, height: 68)
+
+    let clip: Clip
+    let clipWidth: CGFloat
+    let supportsFilmstrip: Bool
+    let store: TimelineFilmstripStore
+
+    @State private var preview: TimelineFilmstripHoverPreview?
+
+    func body(content: Content) -> some View {
+        content
+            .onContinuousHover { phase in
+                handleHover(phase)
+            }
+            .overlay(alignment: .topLeading) {
+                if let preview {
+                    hoverPreviewView(preview)
+                        .offset(
+                            x: previewOffsetX(for: preview),
+                            y: -(Self.previewImageSize.height + MovieCutSpacing.large + MovieCutSpacing.medium)
+                        )
+                }
+            }
+            #if DEBUG
+            .onAppear {
+                registerDebugHoverDriver()
+            }
+            .onChange(of: clipWidth) { _, _ in
+                registerDebugHoverDriver()
+            }
+            .onChange(of: clip) { _, _ in
+                registerDebugHoverDriver()
+            }
+            .onDisappear {
+                TimelineFilmstripDebugProbe.shared.unregisterHoverDriver(clipID: clip.id)
+            }
+            #endif
+    }
+
+    @MainActor
+    private func handleHover(_ phase: HoverPhase) {
+        switch phase {
+        case .active(let location):
+            resolveHover(localX: location.x)
+        case .ended:
+            endHover()
+        }
+    }
+
+    @MainActor
+    private func resolveHover(localX: CGFloat) {
+        guard supportsFilmstrip else {
+            preview = nil
+            #if DEBUG
+            TimelineFilmstripDebugProbe.shared.recordHoverHidden(
+                clipID: clip.id,
+                reason: .unsupported
+            )
+            #endif
+            return
+        }
+
+        let resolved = store.hoverPreview(
+            for: clip,
+            localX: Double(localX),
+            clipWidth: Double(clipWidth)
+        )
+        preview = resolved
+        #if DEBUG
+        if let resolved {
+            TimelineFilmstripDebugProbe.shared.recordHoverResolved(resolved)
+        } else {
+            TimelineFilmstripDebugProbe.shared.recordHoverHidden(
+                clipID: clip.id,
+                reason: .notReady
+            )
+        }
+        #endif
+    }
+
+    @MainActor
+    private func endHover() {
+        #if DEBUG
+        TimelineFilmstripDebugProbe.shared.recordHoverExitRequested(clipID: clip.id)
+        #endif
+        preview = nil
+    }
+
+    private func previewOffsetX(for preview: TimelineFilmstripHoverPreview) -> CGFloat {
+        let previewWidth = Self.previewImageSize.width
+        guard clipWidth >= previewWidth else {
+            return (clipWidth - previewWidth) / 2
+        }
+        return min(max(preview.localX - previewWidth / 2, 0), clipWidth - previewWidth)
+    }
+
+    private func hoverPreviewView(_ preview: TimelineFilmstripHoverPreview) -> some View {
+        let label = sourceTimeLabel(preview.requestedSourceTime)
+        return VStack(spacing: 0) {
+            Image(decorative: preview.image, scale: 1)
+                .resizable()
+                .scaledToFill()
+                .frame(
+                    width: Self.previewImageSize.width,
+                    height: Self.previewImageSize.height
+                )
+                .clipped()
+                #if DEBUG
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear {
+                                TimelineFilmstripDebugProbe.shared.recordHoverImageRendered(
+                                    preview,
+                                    size: proxy.size
+                                )
+                            }
+                            .onChange(of: proxy.size) { _, newSize in
+                                TimelineFilmstripDebugProbe.shared.recordHoverImageRendered(
+                                    preview,
+                                    size: newSize
+                                )
+                            }
+                    }
+                }
+                #endif
+
+            Text(label)
+                .font(MovieCutTypography.metadata.monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .padding(.horizontal, MovieCutSpacing.xSmall)
+                .padding(.vertical, MovieCutSpacing.xSmall)
+                .frame(maxWidth: .infinity)
+                .background(MovieCutTheme.controlSurface)
+                #if DEBUG
+                .onAppear {
+                    TimelineFilmstripDebugProbe.shared.recordHoverLabelRendered(
+                        preview,
+                        label: label
+                    )
+                }
+                #endif
+        }
+        .frame(width: Self.previewImageSize.width)
+        .background(MovieCutTheme.panelBackgroundRaised)
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: MovieCutRadius.medium, style: .continuous)
+                .stroke(MovieCutTheme.border, lineWidth: 0.5)
+        }
+        .shadow(color: MovieCutTheme.previewBackground.opacity(0.72), radius: MovieCutRadius.medium)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(NSLocalizedString("Filmstrip hover preview", comment: ""))
+        .accessibilityValue(label)
+        #if DEBUG
+        .onDisappear {
+            TimelineFilmstripDebugProbe.shared.recordHoverOverlayDisappeared(clipID: preview.clipID)
+        }
+        #endif
+    }
+
+    private func sourceTimeLabel(_ sourceTime: TimeInterval) -> String {
+        let boundedTime = max(0, sourceTime.isFinite ? sourceTime : 0)
+        let minutes = Int(boundedTime / 60)
+        let seconds = boundedTime - Double(minutes * 60)
+        return String(
+            format: NSLocalizedString("Source %02d:%05.2f", comment: ""),
+            minutes,
+            seconds
+        )
+    }
+
+    #if DEBUG
+    @MainActor
+    private func registerDebugHoverDriver() {
+        TimelineFilmstripDebugProbe.shared.registerHoverDriver(
+            clipID: clip.id,
+            kind: clip.kind,
+            supportsFilmstrip: supportsFilmstrip,
+            clipWidth: clipWidth
+        ) { action in
+            switch action {
+            case .active(let localX):
+                resolveHover(localX: localX)
+            case .ended:
+                endHover()
+            }
+        }
+    }
+    #endif
+}
+
 struct TimelineFilmstripLayer: View {
     let clip: Clip
     let asset: MediaAsset
@@ -375,6 +621,16 @@ struct TimelineFilmstripLayer: View {
 }
 
 #if DEBUG
+enum TimelineFilmstripDebugHoverAction {
+    case active(localX: CGFloat)
+    case ended
+}
+
+enum TimelineFilmstripDebugHoverHiddenReason {
+    case notReady
+    case unsupported
+}
+
 @MainActor
 final class TimelineFilmstripDebugProbe {
     struct Summary {
@@ -393,6 +649,31 @@ final class TimelineFilmstripDebugProbe {
         let zoomScaleKeys: [Int]
     }
 
+    struct HoverSummary {
+        let visible: Bool
+        let imageWidth: CGFloat
+        let imageHeight: CGFloat
+        let labelPresent: Bool
+        let requestedSourceTime: TimeInterval
+        let selectedRequestedTime: TimeInterval
+        let selectedActualTime: TimeInterval
+        let selectedDigest: String
+        let digestBelongsToPublishedFrames: Bool
+        let absoluteError: TimeInterval
+        let exitHidden: Bool
+        let cacheMissHidden: Bool
+        let unsupportedHidden: Bool
+        let requestCountDelta: Int
+        let generationCountDelta: Int
+    }
+
+    private struct HoverDriver {
+        let kind: ClipKind
+        let supportsFilmstrip: Bool
+        let clipWidth: CGFloat
+        let action: @MainActor (TimelineFilmstripDebugHoverAction) -> Void
+    }
+
     static let shared = TimelineFilmstripDebugProbe()
 
     private var isArmed = false
@@ -405,6 +686,19 @@ final class TimelineFilmstripDebugProbe {
     private var staleRejectionCount = 0
     private var sawFallbackBeforeReady = false
     private var sawFallbackAfterCancellation = false
+    private var generationStartCount = 0
+    private var hoverDrivers: [UUID: HoverDriver] = [:]
+    private var hoverBaselineRequestCount: Int?
+    private var hoverBaselineGenerationCount: Int?
+    private var activeHoverClipID: UUID?
+    private var resolvedHoverPreview: TimelineFilmstripHoverPreview?
+    private var renderedHoverImageSize: CGSize?
+    private var renderedHoverLabel: String?
+    private var hoverDigestBelongsToPublishedFrames = false
+    private var hoverExitRequestedClipID: UUID?
+    private var hoverExitHidden = false
+    private var hoverCacheMissHidden = false
+    private var hoverUnsupportedHidden = false
 
     private init() {}
 
@@ -419,6 +713,19 @@ final class TimelineFilmstripDebugProbe {
         staleRejectionCount = 0
         sawFallbackBeforeReady = false
         sawFallbackAfterCancellation = false
+        generationStartCount = 0
+        hoverDrivers.removeAll(keepingCapacity: true)
+        hoverBaselineRequestCount = nil
+        hoverBaselineGenerationCount = nil
+        activeHoverClipID = nil
+        resolvedHoverPreview = nil
+        renderedHoverImageSize = nil
+        renderedHoverLabel = nil
+        hoverDigestBelongsToPublishedFrames = false
+        hoverExitRequestedClipID = nil
+        hoverExitHidden = false
+        hoverCacheMissHidden = false
+        hoverUnsupportedHidden = false
     }
 
     var hasVisibleRequest: Bool {
@@ -444,6 +751,11 @@ final class TimelineFilmstripDebugProbe {
     func recordReady(requestID: TimelineFilmstripRequestID, frames: [FilmstripFrame]) {
         guard isArmed else { return }
         ready = (requestID, frames)
+    }
+
+    func recordGenerationStarted() {
+        guard isArmed else { return }
+        generationStartCount += 1
     }
 
     func recordConsumerRendered(requestID: TimelineFilmstripRequestID, frameCount: Int) {
@@ -472,6 +784,202 @@ final class TimelineFilmstripDebugProbe {
     func recordFallbackBeforeReadiness() {
         guard isArmed else { return }
         sawFallbackBeforeReady = true
+    }
+
+    func registerHoverDriver(
+        clipID: UUID,
+        kind: ClipKind,
+        supportsFilmstrip: Bool,
+        clipWidth: CGFloat,
+        action: @escaping @MainActor (TimelineFilmstripDebugHoverAction) -> Void
+    ) {
+        guard isArmed, clipWidth.isFinite, clipWidth > 0 else { return }
+        hoverDrivers[clipID] = HoverDriver(
+            kind: kind,
+            supportsFilmstrip: supportsFilmstrip,
+            clipWidth: clipWidth,
+            action: action
+        )
+    }
+
+    func unregisterHoverDriver(clipID: UUID) {
+        hoverDrivers[clipID] = nil
+    }
+
+    func driveReadyHover() -> Bool {
+        guard isArmed,
+              let ready,
+              !ready.frames.isEmpty,
+              let driver = hoverDrivers[ready.id.clipID],
+              driver.supportsFilmstrip,
+              ready.id.clipSourceRange.duration.isFinite,
+              ready.id.clipSourceRange.duration > 0 else {
+            return false
+        }
+
+        let targetFrame = ready.frames[ready.frames.count / 2]
+        let sourceFraction = min(
+            max(
+                (targetFrame.actualTime - ready.id.clipSourceRange.start)
+                    / ready.id.clipSourceRange.duration,
+                0
+            ),
+            1
+        )
+        hoverBaselineRequestCount = requests.count
+        hoverBaselineGenerationCount = generationStartCount
+        activeHoverClipID = ready.id.clipID
+        resolvedHoverPreview = nil
+        renderedHoverImageSize = nil
+        renderedHoverLabel = nil
+        hoverDigestBelongsToPublishedFrames = false
+        hoverExitRequestedClipID = nil
+        hoverExitHidden = false
+        hoverCacheMissHidden = false
+        hoverUnsupportedHidden = false
+        driver.action(.active(localX: driver.clipWidth * CGFloat(sourceFraction)))
+        return true
+    }
+
+    var hasRenderedHoverEvidence: Bool {
+        guard let resolvedHoverPreview,
+              let renderedHoverImageSize,
+              let renderedHoverLabel else {
+            return false
+        }
+        return resolvedHoverPreview.clipID == activeHoverClipID
+            && renderedHoverImageSize.width > 0
+            && renderedHoverImageSize.height > 0
+            && !renderedHoverLabel.isEmpty
+    }
+
+    func driveHoverExit() -> Bool {
+        guard let activeHoverClipID,
+              let driver = hoverDrivers[activeHoverClipID],
+              hasRenderedHoverEvidence else {
+            return false
+        }
+        hoverExitRequestedClipID = activeHoverClipID
+        driver.action(.ended)
+        return true
+    }
+
+    func driveNotReadyHover() -> Bool {
+        guard let readyClipID = ready?.id.clipID,
+              let candidate = hoverDrivers.first(where: {
+                  $0.key != readyClipID && $0.value.supportsFilmstrip && $0.value.kind == .video
+              }) else {
+            return false
+        }
+        candidate.value.action(.active(localX: candidate.value.clipWidth / 2))
+        candidate.value.action(.ended)
+        return hoverCacheMissHidden
+    }
+
+    func driveUnsupportedHover() -> Bool {
+        guard let candidate = hoverDrivers.first(where: {
+            !$0.value.supportsFilmstrip
+        }) else {
+            return false
+        }
+        candidate.value.action(.active(localX: candidate.value.clipWidth / 2))
+        candidate.value.action(.ended)
+        return hoverUnsupportedHidden
+    }
+
+    func recordHoverResolved(_ preview: TimelineFilmstripHoverPreview) {
+        guard isArmed, preview.clipID == activeHoverClipID else { return }
+        resolvedHoverPreview = preview
+    }
+
+    func recordHoverHidden(
+        clipID: UUID,
+        reason: TimelineFilmstripDebugHoverHiddenReason
+    ) {
+        guard isArmed else { return }
+        switch reason {
+        case .notReady:
+            if clipID != ready?.id.clipID {
+                hoverCacheMissHidden = true
+            }
+        case .unsupported:
+            hoverUnsupportedHidden = true
+        }
+    }
+
+    func recordHoverImageRendered(
+        _ preview: TimelineFilmstripHoverPreview,
+        size: CGSize
+    ) {
+        guard isArmed,
+              preview.clipID == activeHoverClipID,
+              preview.digest == resolvedHoverPreview?.digest else {
+            return
+        }
+        renderedHoverImageSize = size
+        hoverDigestBelongsToPublishedFrames = ready?.frames.contains(where: {
+            $0.digest == preview.digest
+                && $0.actualTime == preview.selectedActualTime
+                && $0.requestedTime == preview.selectedRequestedTime
+        }) == true
+    }
+
+    func recordHoverLabelRendered(
+        _ preview: TimelineFilmstripHoverPreview,
+        label: String
+    ) {
+        guard isArmed,
+              preview.clipID == activeHoverClipID,
+              preview.digest == resolvedHoverPreview?.digest else {
+            return
+        }
+        renderedHoverLabel = label
+    }
+
+    func recordHoverExitRequested(clipID: UUID) {
+        guard isArmed, clipID == activeHoverClipID else { return }
+        hoverExitRequestedClipID = clipID
+    }
+
+    func recordHoverOverlayDisappeared(clipID: UUID) {
+        guard isArmed, hoverExitRequestedClipID == clipID else { return }
+        hoverExitHidden = true
+    }
+
+    func completedHoverSummary() -> HoverSummary? {
+        guard isArmed,
+              hasRenderedHoverEvidence,
+              let resolvedHoverPreview,
+              let renderedHoverImageSize,
+              let renderedHoverLabel,
+              let hoverBaselineRequestCount,
+              let hoverBaselineGenerationCount,
+              hoverExitHidden,
+              hoverCacheMissHidden,
+              hoverUnsupportedHidden else {
+            return nil
+        }
+
+        return HoverSummary(
+            visible: true,
+            imageWidth: renderedHoverImageSize.width,
+            imageHeight: renderedHoverImageSize.height,
+            labelPresent: !renderedHoverLabel.isEmpty,
+            requestedSourceTime: resolvedHoverPreview.requestedSourceTime,
+            selectedRequestedTime: resolvedHoverPreview.selectedRequestedTime,
+            selectedActualTime: resolvedHoverPreview.selectedActualTime,
+            selectedDigest: resolvedHoverPreview.digest,
+            digestBelongsToPublishedFrames: hoverDigestBelongsToPublishedFrames,
+            absoluteError: abs(
+                resolvedHoverPreview.requestedSourceTime
+                    - resolvedHoverPreview.selectedActualTime
+            ),
+            exitHidden: true,
+            cacheMissHidden: true,
+            unsupportedHidden: true,
+            requestCountDelta: requests.count - hoverBaselineRequestCount,
+            generationCountDelta: generationStartCount - hoverBaselineGenerationCount
+        )
     }
 
     func completedSummary() -> Summary? {

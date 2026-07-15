@@ -162,6 +162,97 @@ public enum FilmstripViewportPlanner {
     }
 }
 
+/// A cache-only hover result for a timeline filmstrip.
+public struct FilmstripHoverSelection: Sendable, Equatable {
+    /// Source time represented by the pointer position.
+    public var requestedSourceTime: TimeInterval
+
+    /// Index in the caller's already-published frame array.
+    public var frameIndex: Int
+
+    /// Actual decoded source timestamp for the selected cached frame.
+    public var frameSourceTime: TimeInterval
+
+    public init(
+        requestedSourceTime: TimeInterval,
+        frameIndex: Int,
+        frameSourceTime: TimeInterval
+    ) {
+        self.requestedSourceTime = requestedSourceTime
+        self.frameIndex = frameIndex
+        self.frameSourceTime = frameSourceTime
+    }
+}
+
+/// Pure pointer-to-source-time and nearest-cached-frame planning.
+///
+/// This planner has no generation seam by design: an empty/not-ready timestamp
+/// array returns `nil`, so hover cannot synchronously decode or enqueue frames.
+public enum FilmstripHoverPlanner {
+    public static func selection(
+        localX: Double,
+        clipWidth: Double,
+        sourceRange: TimeRange,
+        timelineDuration: TimeInterval,
+        playbackRate: Double,
+        speedRampPoints: [SpeedRampPoint] = [],
+        cachedFrameTimes: [TimeInterval]
+    ) -> FilmstripHoverSelection? {
+        guard localX.isFinite,
+              clipWidth.isFinite,
+              clipWidth > 0,
+              sourceRange.start.isFinite,
+              sourceRange.start >= 0,
+              sourceRange.duration.isFinite,
+              sourceRange.duration > 0,
+              timelineDuration.isFinite,
+              timelineDuration > 0,
+              playbackRate.isFinite,
+              playbackRate > 0,
+              speedRampPoints.allSatisfy({
+                  $0.time.isFinite && $0.rate.isFinite && $0.rate > 0
+              }) else {
+            return nil
+        }
+
+        let clampedX = min(max(localX, 0), clipWidth)
+        let timelineOffset = (clampedX / clipWidth) * timelineDuration
+        let sourceOffset: TimeInterval
+        if speedRampPoints.count >= 2 {
+            let normalizedOutputTime = timelineOffset / sourceRange.duration
+            let normalizedSourceTime = SpeedRampCurve(points: speedRampPoints)
+                .inverseMapping(outputTime: normalizedOutputTime)
+            sourceOffset = normalizedSourceTime * sourceRange.duration
+        } else {
+            sourceOffset = timelineOffset * playbackRate
+        }
+        guard sourceOffset.isFinite else { return nil }
+
+        let requestedSourceTime = sourceRange.start
+            + min(max(sourceOffset, 0), sourceRange.duration)
+        var nearest: (index: Int, time: TimeInterval, distance: TimeInterval)?
+        for (index, frameTime) in cachedFrameTimes.enumerated() where frameTime.isFinite {
+            let distance = abs(frameTime - requestedSourceTime)
+            guard let current = nearest else {
+                nearest = (index, frameTime, distance)
+                continue
+            }
+            if distance < current.distance
+                || (distance == current.distance && frameTime < current.time)
+                || (distance == current.distance && frameTime == current.time && index < current.index) {
+                nearest = (index, frameTime, distance)
+            }
+        }
+
+        guard let nearest else { return nil }
+        return FilmstripHoverSelection(
+            requestedSourceTime: requestedSourceTime,
+            frameIndex: nearest.index,
+            frameSourceTime: nearest.time
+        )
+    }
+}
+
 /// Request lifecycle used by the app coordinator and exercised independently
 /// of AVFoundation. Only the currently active generation may publish frames.
 public struct FilmstripLoadState: Sendable, Equatable {

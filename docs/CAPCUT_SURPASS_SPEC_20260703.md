@@ -282,7 +282,7 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 3. 스크롤/줌 60fps 유지, 메모리 상한.
 
 #### 현재 상태 (실사)
-- 2026-07-15 Inc 3에서 실제 `TimelineView` 비디오 클립 배경에 시간가변 프레임 소비 경로를 연결했다. named horizontal viewport 좌표계에서 clip frame과 실제 scroll viewport를 교차해 반 화면씩 prefetch하며, offscreen은 skip하고 request identity(가시 window/zoom/source/media/geometry)가 바뀌면 이전 Task를 취소한다. 기존 단일 썸네일 타일은 async 준비·실패·취소 중 폴백으로 유지한다. 호버와 signpost/perf 측정은 아직 없다.
+- 2026-07-16 Inc 1~5 구현 완료. 실제 `TimelineView` 비디오 표면은 viewport-aware 시간가변 스트립과 cached-frame-only 호버를 소비하고, request/cache lookup/decode/cache insert/publish/UI consumer lifecycle은 production `os_signpost`로 계측된다. DEBUG actual-app 하니스가 real ScrollView/zoom consumer를 구동하며 decoded-byte cache accounting은 128MB를 강제한다. 다만 AC1의 문자 그대로인 16.6ms 초과 0건은 이번 MainActor scheduling-gap proxy에서 4건이어서 G-04 전체는 `[진행중]`이다.
 
 #### 구현 증분
 
@@ -292,7 +292,7 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 | 2 | 캐시: `FilmstripCache` actor — 키 `(assetID, zoomBucket)`, zoomBucket = pixelsPerSecond를 2배 단위 버킷화(4단계). NSCache 기반, totalCostLimit 128MB, 클립 삭제 시 무효화 | 동일 파일 |
 | 3 | `TimelineView` 클립 배경을 HStack 타일 → 폴백 체인: 스트립 준비 전 단일 썸네일 → 그마저 없으면 현행 색상. 생성은 클립 가시 영역 기준 lazy(스크롤 밖 클립 skip), Task 취소 처리 | `TimelineView.swift` |
 | 4 | 호버 스크럽: `onContinuousHover`로 X→시각 환산 → 캐시에서 최근접 프레임 팝오버(120×68) + 시각 라벨. 캐시 미스 시 표시 안 함(블로킹 생성 금지) | `TimelineView.swift` |
-| 5 | 성능 계측: `os_signpost`로 스트립 생성 시간/스크롤 프레임 시간 기록, `docs/PERF_BASELINE_20260622.md`에 수치 추가 | `scripts/perf_baseline.sh` 확장 |
+| 5 | 성능 계측: 실제 request/cache/decode/publish/UI consumer에 `os_signpost`, actual-app 4단계 zoom/scroll + 10분 4K 메모리 하니스, decoded-byte cache accounting, `docs/PERF_BASELINE_20260622.md` 수치 | `scripts/run_g04_filmstrip_perf.sh` |
 
 #### AC
 1. 3분 1080p 클립 + 줌 4단계 전환에서 스트립 갱신이 UI를 블로킹하지 않음(메인 스레드 프레임 16.6ms 초과 0건 — signpost 측정).
@@ -306,7 +306,11 @@ public enum ClipRole: String, Codable, Sendable { case media, adjustment }
 - 2026-07-14 Inc 1~2 검증: `FilmstripPlanningTests` **5/5 PASS**(tile-center 시각·4단계 줌 버킷·cache key 분리), actual app DEBUG E2E가 2초 fixture에서 `frames=4`, requested `0.250,0.750,1.250,1.750`, actual `0.233,0.733,1.233,1.733`, `max_height=60`, `cache_hit=1/cache_miss=2/cache_inserts=1/cache_limit=134217728/cache_invalidate=1`을 기록했다. AC1~5는 Inc 3~5/UI·성능 측정 전이므로 미완료다.
 - 2026-07-15 Inc 3 검증: focused `swift test --filter Filmstrip` **11/11 PASS**(실제 scroll viewport 범위·양끝 clamp·offscreen nil·zoom/request identity·stale reject·cancel/failure fallback). actual app DEBUG E2E의 **실제 `TimelineView` consumer**가 `frames=32`, `distinct_digests=32`, `distinct_times=32`, `visible_span=21.600/30.000`, `visible_count=32/67`, `offscreen_skipped=1`, `cancelled=1`, `stale_rejected=1`, `fallback_before_ready=1`, `fallback_after_cancel=1`을 기록하고 전체 `E2E check OK`로 끝났다. Inc 3 범위는 완료했지만 AC1/AC2 성능·메모리 실측, AC3 4단계 실제 UI 밀도 측정, AC4 호버, AC5 비디오 외 시각 회귀 증거가 남아 **G-04 완료는 선언하지 않는다**.
 - 2026-07-15 Inc 4 검증: pure `FilmstripHoverPlanner`가 trim/source start·timeline duration·constant/ramp playback mapping·edge clamp·deterministic nearest cached timestamp·invalid/cache-miss fail-closed를 담당하고 focused `swift test --filter Filmstrip` **18/18 PASS**. actual app DEBUG E2E는 **실제 `TimelineView`의 `onContinuousHover` 소비자와 동일 handler/state**를 published frame 위에서 구동해 `hover=120x68`, label `1`, requested/actual `11.000/11.000`(error `0.000s`), selected digest의 published-frame membership `1`, exit/cache-miss/unsupported hidden `1/1/1`, hover request/generation delta `0/0`을 기록하고 전체 `E2E check OK`로 끝났다. **AC4 충족**; AC5는 unsupported image에서 hover hidden만 부분 증명되어 기존 image/audio/text 렌더 보존 전수 증거가 없고, Inc 5의 AC1~3 성능·메모리·4단계 밀도 계측과 함께 남는다. G-04/UB-V4 완료는 선언하지 않는다.
-- `[진행중] 다음 증분: Inc 5, 시작점: App/MovieCutMac/Media/TimelineFilmstripStore.swift:121`
+- 2026-07-16 Inc 5 / AC1 `[진행중]`: 실제 3분 1080p `TimelineView` zoom+scroll 중 1ms MainActor scheduling-gap proxy(표시 FPS 아님) `n=1218`, `p95=2.096ms`(enforced ≤16.6ms), `max=67.106ms`, `>16.6ms=4`; stable p95 기준은 통과했지만 AC의 **초과 0건**은 미충족이다.
+- 2026-07-16 Inc 5 / AC2 충족: 임시 생성 low-bitrate 3840×2160/600s asset에서 30~570s를 60s 간격으로 실제 ScrollView seek/cache churn한 결과 process RSS median baseline `221.5MB`→peak `227.7MB`, delta `+6.2MB`(enforced ≤100MB), decoded cache current/peak `8,816,640B`, limit `134,217,728B`, keys `21`, height `41`; synthetic loop fixture라는 한계는 유지한다.
+- 2026-07-16 Inc 5 / AC3 충족: 실제 consumer 20/40/80/160px/s에서 bucket `0/1/2/3`, request identity 4종, published density `0.247/0.423/0.697/1.394 frame/s`; 모든 단계 frame/digest/timestamp가 각각 1개를 초과하는 시간가변 set이다.
+- 2026-07-16 Inc 5 / AC5 충족: density actual-app가 같은 실제 `TimelineView`에서 image thumbnail/audio waveform/text rhythm branch의 렌더를 모두 관찰했고, 전체 actual-app export E2E의 image/text/audio checks와 `E2E check OK`를 보존했다. 이 증분은 macOS timeline UI 계측이며 Core accounting만 platform-neutral로 추가되어 iOS preview/export/model 배선 변경은 필요하지 않았다.
+- `[진행중] G-04 잔여: AC1의 16.6ms 초과 0건 및 실기기 display-cadence/스크롤 체감 확인. Inc 5 구현 자체는 완료.`
 
 ---
 

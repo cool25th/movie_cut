@@ -54,3 +54,26 @@ export는 오프라인 경로다. preview fps는 **프레임당 GPU 렌더 시�
 1. **무거운 합성** — 전환+마스크+다중 레이어가 한 프레임에 겹칠 때. 단일 색보정은 대표적이지만 최악은 아니다(단 5.5ms의 3배여도 ~60fps).
 2. **고해상도/장시간** — 4K·장편 비선형 악화 여부.
 3. 위 시나리오에서 프레임당 렌더가 16.6ms를 넘기면 그때 preview 한정 최적화/Metal 재검토.
+
+## G-04 실제 TimelineView 필름스트립 (2026-07-16, Debug)
+
+재현: `bash scripts/run_g04_filmstrip_perf.sh`. 스크립트는 저장소 밖 임시 디렉터리에 low-bitrate generated fixture를 만들고 종료 시 삭제한다. Core-only loop가 아니라 DEBUG actual app를 실행해 실제 `TimelineView`의 `ScrollViewReader`, `timelineZoom`, `TimelineFilmstripStore`, `FilmstripGenerator`, publish 및 SwiftUI image consumer를 구동한다.
+
+### 줌 밀도와 MainActor 반응성 proxy
+
+- fixture: 3분 1920×1080, 10fps generated test pattern을 12초 단위 stream-copy loop.
+- actual UI zoom/scroll: 20/40/80/160px/s → bucket `0/1/2/3`, request identity 4종.
+- published frame density: `0.247/0.423/0.697/1.394 frame/s`; 각 set은 frame/digest/timestamp가 모두 1개를 초과해 정적 thumbnail 반복이 아니다.
+- MainActor scheduling-gap proxy: MainActor task가 1ms sleep 후 다시 service될 때까지의 wall interval을 zoom/scroll 전 구간에서 표본화한다. 이는 headless 창의 display presentation FPS가 아니라 UI actor가 작업을 받아들일 수 없었던 scheduling gap이다.
+- 결과: `n=1218`, p95 `2.096ms`, max `67.106ms`, `>16.6ms=4`. 스크립트는 표본 ≥100 및 p95 ≤16.6ms를 강제한다. max/초과 수는 host scheduling noise를 숨기지 않고 출력하며, G-04 AC1의 문자 그대로인 **초과 0건은 미충족**이다.
+
+### 10분 4K seek/cache churn 메모리
+
+- fixture: 600초 3840×2160, 10fps generated test pattern을 12초 단위 stream-copy loop한 synthetic low-bitrate asset. 실제 4K decode이지만 camera-originated/high-bitrate 콘텐츠 대표값은 아니다.
+- actual UI workload: 160px/s에서 30~570초를 60초 간격으로 10회 ScrollView seek하고, 인접 zoom identity 전환으로 실제 decode/publish/cache churn을 보장했다. 10개 published set 모두 request identity가 다르고 digest/timestamp가 시간가변이다.
+- process RSS: baseline 구간 표본 median `221.5MB`, churn peak `227.7MB`, delta `+6.2MB`; 스크립트 threshold `+100MB`.
+- decoded cache accounting: current/peak `8,816,640B`, configured/enforced limit `134,217,728B`, tracked keys `21`, evictions `0`, max decoded frame height `41px`(limit `60px`). `NSCache.totalCostLimit`과 별도로 deterministic LRU admission이 decoded byte cost/key count를 limit 이전에 강제하며 peak/current를 보고한다.
+
+### production signpost 범위와 한계
+
+`TimelineFilmstrip` OSLog category에서 실제 request lifecycle과 cache lookup, decode, cache insert, publish, `UIConsumerRendered`를 같은 signpost ID로 관찰하며 generator decode 자체도 별도 interval이다. 이 증분은 macOS timeline UI 계측이고 공유 모델·preview/export renderer를 바꾸지 않는다. density actual app는 image thumbnail/audio waveform/text rhythm branch도 직접 관찰했으며 전체 export E2E로 기존 image/text/audio 출력을 회귀 잠금한다.

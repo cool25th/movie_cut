@@ -75,6 +75,67 @@ struct FilmstripPlanningTests {
         #expect(Set([sameA, sameB, differentBucket, differentAsset]).count == 3)
     }
 
+    @Test("cache accounting enforces decoded-byte and key ceilings with LRU eviction")
+    func cacheAccountingEnforcesLimits() {
+        let assetID = UUID()
+        let keys = (0..<4).map { index in
+            FilmstripCacheKey(
+                assetID: assetID,
+                zoomBucket: FilmstripZoomBucket(rawValue: index)!,
+                mediaIdentity: "media-\(index)"
+            )
+        }
+        var accounting = FilmstripCacheAccounting(
+            totalCostLimit: 100,
+            maximumTrackedKeys: 2
+        )
+
+        #expect(accounting.insert(key: keys[0], cost: 40).evictedKeys.isEmpty)
+        #expect(accounting.insert(key: keys[1], cost: 40).evictedKeys.isEmpty)
+        accounting.touch(keys[0])
+        let byteEviction = accounting.insert(key: keys[2], cost: 40)
+        #expect(byteEviction == FilmstripCacheInsertionPlan(
+            shouldCache: true,
+            evictedKeys: [keys[1]]
+        ))
+        #expect(accounting.metrics.currentTrackedCost == 80)
+
+        let keyEviction = accounting.insert(key: keys[3], cost: 10)
+        #expect(keyEviction == FilmstripCacheInsertionPlan(
+            shouldCache: true,
+            evictedKeys: [keys[0]]
+        ))
+        #expect(accounting.metrics == FilmstripCacheMetrics(
+            totalCostLimit: 100,
+            currentTrackedCost: 50,
+            peakTrackedCost: 80,
+            trackedKeyCount: 2,
+            evictionCount: 2,
+            oversizedRejectionCount: 0
+        ))
+    }
+
+    @Test("cache accounting rejects an oversized insertion without evicting resident entries")
+    func cacheAccountingRejectsOversizedEntry() {
+        let resident = FilmstripCacheKey(assetID: UUID(), zoomBucket: .level0)
+        let oversized = FilmstripCacheKey(assetID: UUID(), zoomBucket: .level3)
+        var accounting = FilmstripCacheAccounting(
+            totalCostLimit: 128,
+            maximumTrackedKeys: 4
+        )
+        _ = accounting.insert(key: resident, cost: 64)
+
+        let plan = accounting.insert(key: oversized, cost: 129)
+
+        #expect(plan == FilmstripCacheInsertionPlan(shouldCache: false, evictedKeys: []))
+        #expect(accounting.metrics.currentTrackedCost == 64)
+        #expect(accounting.metrics.trackedKeyCount == 1)
+        #expect(accounting.metrics.oversizedRejectionCount == 1)
+        accounting.reconcileMissing(resident)
+        #expect(accounting.metrics.currentTrackedCost == 0)
+        #expect(accounting.metrics.peakTrackedCost == 64)
+    }
+
     @Test("viewport planning follows horizontal scroll and limits a long clip to the near-visible window")
     func plansScrolledNearVisibleWindow() throws {
         let request = try #require(FilmstripViewportPlanner.request(

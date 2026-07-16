@@ -2,7 +2,7 @@
 
 > 이 파일의 §A(개발) / §B(감사) / §C(편집 체감 P0 묶음 작업지시서) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
 > Claude 세션이라면 이 파일 대신 `/surpass`, `/gap-audit` 슬래시 커맨드를 쓴다 (동일 내용의 원본: `.claude/commands/surpass.md`, `.claude/commands/gap-audit.md`).
-> **2026-07-13 현재 최우선은 §C다** — 사용자 보고 P0(타임라인 스크럽·클립 복사/붙여넣기·필름스트립)로, 스펙에 아직 G-ID가 없어 §A의 자동 선택으로는 잡히지 않는다.
+> **2026-07-16 체크포인트는 §D Cycle 4다** — G-16/G-17과 G-04 Inc 1~5는 구현됐고, G-04 AC1 zero-over-budget 및 UB-V4의 별도 interaction latency가 남는다.
 
 ---
 
@@ -173,7 +173,7 @@ scripts/run_e2e_export.sh
 
 ### C-4. 작업 3: G-04 필름스트립 (착수 3순위 — 기존 스펙 항목)
 
-스펙 `docs/CAPCUT_SURPASS_SPEC_20260703.md`의 **G-04(타임라인 필름스트립 + 호버 스크럽, :275 부근)** 명세를 그대로 따른다. 현재 `TimelineView.swift` `thumbnailStrip`(약 :912)이 프레임 1장을 반복 타일링하는 것을 시간축 실프레임 스트립으로 교체하는 작업이며, 스펙의 U-02와 같은 세션 묶음 권장. 성능 기준(스크롤/줌 중 끊김 없음)은 스펙 AC를 따른다. 이 항목은 규모가 있으므로 **G-16·G-17을 먼저 완료·커밋한 뒤** 착수하고, 세션 잔여 컨텍스트가 부족하면 시작하지 말고 §A 6단계 마무리만 수행한다.
+스펙 `docs/CAPCUT_SURPASS_SPEC_20260703.md`의 **G-04(타임라인 필름스트립 + 호버 스크럽, :277 부근)** 명세가 사실의 원천이다. 2026-07-16 Inc 1~5 구현과 actual-app density/memory 하니스까지 완료됐으며 단일 thumbnail은 async fallback으로만 남는다. 잔여는 AC1의 16.6ms 초과 0건과 실기기 display cadence/스크롤 체감이다. MainActor scheduling-gap proxy를 표시 FPS로 오인하거나 p95 통과만으로 G-04 완료를 선언하지 말 것.
 
 ### C-5. 마무리 (매 세션 필수 — §A 6단계와 동일)
 
@@ -209,7 +209,7 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 ### D-3. 개발 (미달 항목 달성)
 
 - **선택 규칙**: ❌/🟡 항목 중 아래 우선순위의 첫 항목을 1~2개 고른다.
-  1. 영상 편집 잔여 P0 — G-17 클립 복사/붙여넣기(§C C-3, UB-V3 클릭 수 차등표의 빈번 동작), G-04 필름스트립
+  1. 영상 편집 잔여 P0 — G-04 AC1 zero-over-budget/실기기 cadence, UB-V4 scrub·slider·playback-start latency
   2. 카드뉴스 핵심 경로 — G-18 → G-19 (SC-C1 5분 완주의 전제)
   3. 출력 완성 — G-21 (UB-C7/C8, SC-C3)
   4. 반복 사용자 필수 — G-20 브랜드 킷, U-10 진입점
@@ -223,10 +223,11 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 2. §A 6단계 수행: 스펙 AC 검증 기록 1줄, 백로그, `[진행중] 다음 증분` 표시, 최종 검증(빌드+필터 테스트+E2E) 후 커밋. **검증 없이 완료 선언 금지.**
 3. 최종 보고: ① UB 채점 요약(✅/🟡/❌ 개수와 델타) ② 이번 사이클 달성 항목+증거 ③ `[사용자 확인 대기]` 목록(실기기 시나리오 완주 등 사람이 해야 할 것) ④ 다음 사이클 착수 항목 1개 추천.
 
-#### 현재 체크포인트 (2026-07-15 / §D Cycle 3)
+#### 현재 체크포인트 (2026-07-16 / §D Cycle 4)
 
-- G-04 Inc 1~4 완료. actual app `TimelineView` consumer E2E는 기존 time-varying `32/32/32` frames/digests/timestamps, visible-only `21.600/30.000s`·`32/67` tiles, offscreen/cancel/stale/fallback을 보존하고, cached hover `120×68`, label, requested/actual `11.000/11.000`, digest membership, exit/not-ready/unsupported hidden, hover request/generation delta `0/0`을 증명해 AC4를 충족했다. UB 채점은 성능 수치 미측정으로 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**을 유지한다.
-- `[진행중] 다음 증분: G-04 Inc 5, 시작점: App/MovieCutMac/Media/TimelineFilmstripStore.swift:121`. `request`/generation publish 구간부터 `os_signpost`를 추가하고 `scripts/perf_baseline.sh`를 확장해 AC1~3 성능·메모리·4단계 밀도와 AC5 비디오 외 기존 렌더 보존을 실측한다.
+- G-04 Inc 1~5 구현 완료. production signpost가 actual request/cache/decode/publish/UI consumer lifecycle을 잇고, `scripts/run_g04_filmstrip_perf.sh` actual app는 20/40/80/160px/s bucket `0/1/2/3`, density `0.247/0.423/0.697/1.394`, image/audio/text 보존을 확인했다. 10분 4K synthetic fixture seek는 RSS delta `+6.2MB`(≤100MB), decoded cache peak `8,816,640B/128MB`, height `41`이다.
+- MainActor scheduling-gap proxy는 `n=1218`, p95 `2.096ms`, max `67.106ms`, `>16.6ms=4`다. 이는 표시 FPS가 아니며 AC1의 초과 0건을 충족하지 못한다. UB 채점은 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**을 유지한다.
+- `[진행중] G-04 잔여: AC1 zero-over-budget 및 실기기 display cadence/스크롤 체감. Inc 5 구현 자체는 완료.`
 
 ### D-5. 종료 조건
 

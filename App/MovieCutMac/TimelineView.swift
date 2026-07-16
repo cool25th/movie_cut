@@ -94,19 +94,55 @@ struct TimelineView: View {
             Divider()
                 .overlay(MovieCutTheme.divider)
 
-            ScrollView([.horizontal, .vertical]) {
-                VStack(spacing: 0) {
-                    timeRuler
+            ScrollViewReader { scrollProxy in
+                ScrollView([.horizontal, .vertical]) {
+                    VStack(spacing: 0) {
+                        timeRuler
 
-                    ForEach(viewModel.currentProject.timeline.tracks) { track in
-                        trackLane(track)
+                        ForEach(viewModel.currentProject.timeline.tracks) { track in
+                            trackLane(track)
+                        }
                     }
+                    .background(MovieCutTheme.timelineBackground)
                 }
-                .background(MovieCutTheme.timelineBackground)
+                .coordinateSpace(name: TimelineFilmstripCoordinateSpace.viewport)
+                .background(timelineScrollViewportWidthReader)
+                .movieCutScrollBackground(MovieCutTheme.timelineBackground)
+                #if DEBUG
+                .onAppear {
+                    TimelineFilmstripDebugProbe.shared.registerPerformanceDriver(
+                        setZoom: { zoom in
+                            viewModel.timelineZoom = clampedTimelineZoom(zoom)
+                        },
+                        scrollTo: { sourceTime in
+                            let boundedSeconds = max(0, sourceTime.isFinite ? sourceTime : 0)
+                            let anchorMilliseconds = Int(
+                                ((boundedSeconds / 15).rounded() * 15 * 1_000).rounded()
+                            )
+                            Task { @MainActor in
+                                await Task.yield()
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    scrollProxy.scrollTo(
+                                        TimelineFilmstripDebugScrollAnchor(
+                                            milliseconds: anchorMilliseconds
+                                        ),
+                                        anchor: UnitPoint(x: 0.5, y: 0)
+                                    )
+                                }
+                            }
+                        },
+                        cacheMetrics: {
+                            await filmstripStore.cacheMetrics()
+                        }
+                    )
+                }
+                .onDisappear {
+                    TimelineFilmstripDebugProbe.shared.unregisterPerformanceDriver()
+                }
+                #endif
             }
-            .coordinateSpace(name: TimelineFilmstripCoordinateSpace.viewport)
-            .background(timelineScrollViewportWidthReader)
-            .movieCutScrollBackground(MovieCutTheme.timelineBackground)
         }
         // Header (~28) + ruler (24) + 3 default track lanes (3 x 50) must stay visible.
         .frame(minHeight: 210)
@@ -560,6 +596,20 @@ struct TimelineView: View {
                             .help(markerHelp(marker))
                     }
                 }
+
+                #if DEBUG
+                HStack(spacing: 0) {
+                    ForEach(debugFilmstripScrollAnchors, id: \.self) { milliseconds in
+                        Color.clear
+                            .frame(
+                                width: max(1, CGFloat(15 * pixelsPerSecond)),
+                                height: 1
+                            )
+                            .id(TimelineFilmstripDebugScrollAnchor(milliseconds: milliseconds))
+                    }
+                }
+                .frame(width: timelineContentWidth, height: 1, alignment: .leading)
+                #endif
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
             .background(MovieCutTheme.rulerBackground)
@@ -1007,14 +1057,33 @@ struct TimelineView: View {
                 .allowsHitTesting(false)
         } else if let image = thumbnailImage(for: clip) {
             thumbnailStrip(image)
+                #if DEBUG
+                .onAppear {
+                    if clip.kind == .image {
+                        TimelineFilmstripDebugProbe.shared.recordPreservedSurface(.imageThumbnail)
+                    }
+                }
+                #endif
             Color.black.opacity(selected ? 0.46 : 0.34)
                 .allowsHitTesting(false)
         } else if shouldRenderWaveform(for: clip, trackKind: trackKind) {
             waveformCanvas(for: clip, selected: selected)
+                #if DEBUG
+                .onAppear {
+                    if clip.kind == .audio {
+                        TimelineFilmstripDebugProbe.shared.recordPreservedSurface(.audioWaveform)
+                    }
+                }
+                #endif
             Color.black.opacity(selected ? 0.20 : 0.28)
                 .allowsHitTesting(false)
         } else if trackKind == .text || clip.kind == .text {
             textClipRhythmStrip(for: clip, selected: selected)
+                #if DEBUG
+                .onAppear {
+                    TimelineFilmstripDebugProbe.shared.recordPreservedSurface(.textRhythm)
+                }
+                #endif
         } else {
             clipPlaceholderRhythm(accent: accentForClip(clip: clip, trackKind: trackKind), selected: selected)
         }
@@ -1029,6 +1098,14 @@ struct TimelineView: View {
         }
         return asset
     }
+
+    #if DEBUG
+    private var debugFilmstripScrollAnchors: [Int] {
+        let duration = max(0, viewModel.currentProject.timeline.duration)
+        let finalStep = Int(ceil(duration / 15))
+        return (0...max(0, finalStep)).map { $0 * 15_000 }
+    }
+    #endif
 
     private func thumbnailImage(for clip: Clip) -> NSImage? {
         guard

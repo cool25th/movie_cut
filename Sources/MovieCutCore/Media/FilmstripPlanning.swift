@@ -358,3 +358,140 @@ public struct FilmstripCacheKey: Hashable, Sendable {
         self.mediaIdentity = mediaIdentity
     }
 }
+
+/// Observable decoded-byte accounting for the filmstrip cache.
+///
+/// `NSCache.totalCostLimit` remains the final memory-pressure backstop, while
+/// this value records the costs MovieCut explicitly admitted. Calling it
+/// "tracked" is intentional: it is decoded image byte cost, not process RSS.
+public struct FilmstripCacheMetrics: Sendable, Equatable {
+    public var totalCostLimit: Int
+    public var currentTrackedCost: Int
+    public var peakTrackedCost: Int
+    public var trackedKeyCount: Int
+    public var evictionCount: Int
+    public var oversizedRejectionCount: Int
+
+    public init(
+        totalCostLimit: Int,
+        currentTrackedCost: Int,
+        peakTrackedCost: Int,
+        trackedKeyCount: Int,
+        evictionCount: Int,
+        oversizedRejectionCount: Int
+    ) {
+        self.totalCostLimit = totalCostLimit
+        self.currentTrackedCost = currentTrackedCost
+        self.peakTrackedCost = peakTrackedCost
+        self.trackedKeyCount = trackedKeyCount
+        self.evictionCount = evictionCount
+        self.oversizedRejectionCount = oversizedRejectionCount
+    }
+}
+
+public struct FilmstripCacheInsertionPlan: Sendable, Equatable {
+    public var shouldCache: Bool
+    public var evictedKeys: [FilmstripCacheKey]
+
+    public init(shouldCache: Bool, evictedKeys: [FilmstripCacheKey]) {
+        self.shouldCache = shouldCache
+        self.evictedKeys = evictedKeys
+    }
+}
+
+/// Deterministic LRU admission/accounting shared by the app cache and tests.
+///
+/// The planner applies both the decoded-byte ceiling and a key-count ceiling
+/// before `NSCache` receives an object. This makes the 128MB application policy
+/// enforceable and reportable rather than relying on an advisory cache limit.
+public struct FilmstripCacheAccounting: Sendable {
+    public let totalCostLimit: Int
+    public let maximumTrackedKeys: Int
+
+    private var costsByKey: [FilmstripCacheKey: Int] = [:]
+    private var recency: [FilmstripCacheKey] = []
+    private var currentTrackedCost = 0
+    private var peakTrackedCost = 0
+    private var evictionCount = 0
+    private var oversizedRejectionCount = 0
+
+    public init(totalCostLimit: Int, maximumTrackedKeys: Int) {
+        self.totalCostLimit = max(1, totalCostLimit)
+        self.maximumTrackedKeys = max(1, maximumTrackedKeys)
+    }
+
+    public mutating func insert(
+        key: FilmstripCacheKey,
+        cost rawCost: Int
+    ) -> FilmstripCacheInsertionPlan {
+        let cost = max(0, rawCost)
+        guard cost <= totalCostLimit else {
+            oversizedRejectionCount += 1
+            return FilmstripCacheInsertionPlan(shouldCache: false, evictedKeys: [])
+        }
+
+        if let previousCost = costsByKey[key] {
+            currentTrackedCost -= previousCost
+            costsByKey[key] = nil
+            recency.removeAll { $0 == key }
+        }
+
+        var evictedKeys: [FilmstripCacheKey] = []
+        while let oldest = recency.first,
+              recency.count >= maximumTrackedKeys
+                || currentTrackedCost + cost > totalCostLimit {
+            recency.removeFirst()
+            currentTrackedCost -= costsByKey.removeValue(forKey: oldest) ?? 0
+            evictionCount += 1
+            evictedKeys.append(oldest)
+        }
+
+        costsByKey[key] = cost
+        recency.append(key)
+        currentTrackedCost += cost
+        peakTrackedCost = max(peakTrackedCost, currentTrackedCost)
+        return FilmstripCacheInsertionPlan(shouldCache: true, evictedKeys: evictedKeys)
+    }
+
+    public mutating func touch(_ key: FilmstripCacheKey) {
+        guard costsByKey[key] != nil else { return }
+        recency.removeAll { $0 == key }
+        recency.append(key)
+    }
+
+    /// Reconciles accounting when `NSCache` discarded a value under pressure.
+    public mutating func reconcileMissing(_ key: FilmstripCacheKey) {
+        remove(key)
+    }
+
+    public mutating func remove(_ key: FilmstripCacheKey) {
+        currentTrackedCost -= costsByKey.removeValue(forKey: key) ?? 0
+        recency.removeAll { $0 == key }
+    }
+
+    @discardableResult
+    public mutating func remove(assetID: UUID) -> [FilmstripCacheKey] {
+        let removed = recency.filter { $0.assetID == assetID }
+        for key in removed {
+            remove(key)
+        }
+        return removed
+    }
+
+    public mutating func removeAll() {
+        costsByKey.removeAll(keepingCapacity: true)
+        recency.removeAll(keepingCapacity: true)
+        currentTrackedCost = 0
+    }
+
+    public var metrics: FilmstripCacheMetrics {
+        FilmstripCacheMetrics(
+            totalCostLimit: totalCostLimit,
+            currentTrackedCost: currentTrackedCost,
+            peakTrackedCost: peakTrackedCost,
+            trackedKeyCount: costsByKey.count,
+            evictionCount: evictionCount,
+            oversizedRejectionCount: oversizedRejectionCount
+        )
+    }
+}

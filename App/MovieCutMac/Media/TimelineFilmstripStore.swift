@@ -22,6 +22,7 @@ struct TimelineFilmstripSnapshot {
     let viewportRequest: FilmstripViewportRequest
     let frames: [FilmstripFrame]
     let loadState: FilmstripLoadState
+    let trace: TimelineFilmstripTrace
 
     var readyGeneration: UInt64? {
         guard case .ready(let generation, _) = loadState.phase else { return nil }
@@ -51,6 +52,7 @@ final class TimelineFilmstripStore {
         var requestID: TimelineFilmstripRequestID
         var frames: [FilmstripFrame]
         var loadState: FilmstripLoadState
+        var trace: TimelineFilmstripTrace
     }
 
     private let maximumActiveEntries: Int
@@ -76,7 +78,8 @@ final class TimelineFilmstripStore {
             requestID: entry.requestID,
             viewportRequest: entry.requestID.viewportRequest,
             frames: entry.frames,
-            loadState: entry.loadState
+            loadState: entry.loadState,
+            trace: entry.trace
         )
     }
 
@@ -131,6 +134,7 @@ final class TimelineFilmstripStore {
 
         if let previousEntry = entries[requestID.clipID] {
             tasks[requestID.clipID]?.cancel()
+            previousEntry.trace.endLifecycle(outcome: "replaced")
             var previousState = previousEntry.loadState
             let previousGeneration = previousState.currentGeneration
             if previousState.cancel(generation: previousGeneration) {
@@ -144,10 +148,15 @@ final class TimelineFilmstripStore {
 
         var loadState = entries[requestID.clipID]?.loadState ?? FilmstripLoadState()
         let generation = loadState.begin()
+        let trace = TimelineFilmstripTrace(
+            requestID: requestID,
+            generation: generation
+        )
         entries[requestID.clipID] = Entry(
             requestID: requestID,
             frames: [],
-            loadState: loadState
+            loadState: loadState,
+            trace: trace
         )
         touch(requestID.clipID)
         pruneIfNeeded(keeping: requestID.clipID)
@@ -167,7 +176,10 @@ final class TimelineFilmstripStore {
         )
         let boundedHeight = max(1, min(maxHeight.isFinite ? maxHeight : 60, 60))
         let task = Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self else {
+                trace.endLifecycle(outcome: "store_released")
+                return
+            }
             do {
                 #if DEBUG
                 if TimelineFilmstripDebugProbe.shared.shouldDelayFirstGeneration(
@@ -179,32 +191,46 @@ final class TimelineFilmstripStore {
                 #endif
 
                 let frames: [FilmstripFrame]
-                if let cachedFrames = await cache.frames(for: cacheKey) {
+                trace.beginCacheLookup()
+                let cachedFrames = await cache.frames(for: cacheKey)
+                trace.endCacheLookup(hit: cachedFrames != nil)
+                if let cachedFrames {
                     frames = cachedFrames
                 } else {
                     #if DEBUG
                     TimelineFilmstripDebugProbe.shared.recordGenerationStarted()
                     #endif
-                    frames = try await generator.frames(
-                        for: assetURL,
-                        sourceRange: requestID.viewportRequest.sourceRange,
-                        targetCount: requestID.viewportRequest.targetCount,
-                        maxHeight: boundedHeight
-                    )
+                    trace.beginDecode()
+                    do {
+                        frames = try await generator.frames(
+                            for: assetURL,
+                            sourceRange: requestID.viewportRequest.sourceRange,
+                            targetCount: requestID.viewportRequest.targetCount,
+                            maxHeight: boundedHeight
+                        )
+                        trace.endDecode(frameCount: frames.count, succeeded: true)
+                    } catch {
+                        trace.endDecode(frameCount: 0, succeeded: false)
+                        throw error
+                    }
                     try Task.checkCancellation()
-                    await cache.insert(frames, for: cacheKey)
+                    trace.beginCacheInsert()
+                    let metrics = await cache.insert(frames, for: cacheKey)
+                    trace.endCacheInsert(metrics: metrics)
                 }
                 try Task.checkCancellation()
                 publish(
                     frames: frames,
                     requestID: requestID,
-                    generation: generation
+                    generation: generation,
+                    trace: trace
                 )
             } catch {
                 finishFailedRequest(
                     requestID: requestID,
                     generation: generation,
-                    wasCancelled: error is CancellationError || Task.isCancelled
+                    wasCancelled: error is CancellationError || Task.isCancelled,
+                    trace: trace
                 )
             }
         }
@@ -214,6 +240,7 @@ final class TimelineFilmstripStore {
     func cancel(clipID: UUID, offscreen: Bool, removeState: Bool = true) {
         tasks.removeValue(forKey: clipID)?.cancel()
         if var entry = entries[clipID] {
+            entry.trace.endLifecycle(outcome: offscreen ? "offscreen" : "cancelled")
             let generation = entry.loadState.currentGeneration
             if entry.loadState.cancel(generation: generation) {
                 entries[clipID] = entry
@@ -240,6 +267,9 @@ final class TimelineFilmstripStore {
             task.cancel()
         }
         tasks.removeAll(keepingCapacity: true)
+        for entry in entries.values {
+            entry.trace.endLifecycle(outcome: "view_disappeared")
+        }
         entries.removeAll(keepingCapacity: true)
         recency.removeAll(keepingCapacity: true)
     }
@@ -247,11 +277,15 @@ final class TimelineFilmstripStore {
     private func publish(
         frames: [FilmstripFrame],
         requestID: TimelineFilmstripRequestID,
-        generation: UInt64
+        generation: UInt64,
+        trace: TimelineFilmstripTrace
     ) {
+        trace.beginPublish(frameCount: frames.count)
         guard var entry = entries[requestID.clipID],
               entry.requestID == requestID,
               entry.loadState.accept(frameCount: frames.count, generation: generation) else {
+            trace.endPublish(accepted: false)
+            trace.endLifecycle(outcome: "stale_publish")
             #if DEBUG
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
@@ -259,6 +293,7 @@ final class TimelineFilmstripStore {
         }
         entry.frames = frames
         entries[requestID.clipID] = entry
+        trace.endPublish(accepted: true)
         if tasks[requestID.clipID] != nil {
             tasks[requestID.clipID] = nil
         }
@@ -273,10 +308,12 @@ final class TimelineFilmstripStore {
     private func finishFailedRequest(
         requestID: TimelineFilmstripRequestID,
         generation: UInt64,
-        wasCancelled: Bool
+        wasCancelled: Bool,
+        trace: TimelineFilmstripTrace
     ) {
         guard var entry = entries[requestID.clipID],
               entry.requestID == requestID else {
+            trace.endLifecycle(outcome: "stale_failure")
             #if DEBUG
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
@@ -287,6 +324,7 @@ final class TimelineFilmstripStore {
             ? entry.loadState.cancel(generation: generation)
             : entry.loadState.fail(generation: generation)
         guard accepted else {
+            trace.endLifecycle(outcome: "unaccepted_failure")
             #if DEBUG
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
@@ -295,6 +333,7 @@ final class TimelineFilmstripStore {
         entry.frames = []
         entries[requestID.clipID] = entry
         tasks[requestID.clipID] = nil
+        trace.endLifecycle(outcome: wasCancelled ? "cancelled" : "failed")
     }
 
     private func touch(_ clipID: UUID) {
@@ -306,9 +345,18 @@ final class TimelineFilmstripStore {
         while entries.count > maximumActiveEntries,
               let candidate = recency.first(where: { $0 != clipID }) {
             tasks.removeValue(forKey: candidate)?.cancel()
+            entries[candidate]?.trace.endLifecycle(outcome: "entry_pruned")
             entries[candidate] = nil
             recency.removeAll { $0 == candidate }
         }
+    }
+
+    func recordConsumerRendered(_ snapshot: TimelineFilmstripSnapshot) {
+        snapshot.trace.consumerRendered(frameCount: snapshot.frames.count)
+    }
+
+    func cacheMetrics() async -> FilmstripCacheMetrics {
+        await cache.metrics()
     }
 }
 
@@ -549,7 +597,8 @@ struct TimelineFilmstripLayer: View {
                    snapshot.readyGeneration != nil {
                     generatedFrames(snapshot, height: height)
                         .id(snapshot.requestID)
-                        .onAppear {
+                        .task(id: snapshot.requestID) {
+                            store.recordConsumerRendered(snapshot)
                             #if DEBUG
                             TimelineFilmstripDebugProbe.shared.recordConsumerRendered(
                                 requestID: snapshot.requestID,
@@ -621,6 +670,10 @@ struct TimelineFilmstripLayer: View {
 }
 
 #if DEBUG
+struct TimelineFilmstripDebugScrollAnchor: Hashable {
+    let milliseconds: Int
+}
+
 enum TimelineFilmstripDebugHoverAction {
     case active(localX: CGFloat)
     case ended
@@ -629,6 +682,12 @@ enum TimelineFilmstripDebugHoverAction {
 enum TimelineFilmstripDebugHoverHiddenReason {
     case notReady
     case unsupported
+}
+
+enum TimelineFilmstripDebugPreservedSurface: String, Hashable {
+    case imageThumbnail
+    case audioWaveform
+    case textRhythm
 }
 
 @MainActor
@@ -667,6 +726,38 @@ final class TimelineFilmstripDebugProbe {
         let generationCountDelta: Int
     }
 
+    struct PerformanceEvidence {
+        let requestID: TimelineFilmstripRequestID
+        let frameCount: Int
+        let distinctDigestCount: Int
+        let distinctTimestampCount: Int
+        let maxFrameHeight: Int
+        let decodedByteCost: Int
+
+        var density: Double {
+            Double(frameCount) / requestID.viewportRequest.sourceRange.duration
+        }
+
+        var stableIdentity: String {
+            let viewport = requestID.viewportRequest
+            return String(
+                format: "%d-%d-%d-%d-%d",
+                viewport.zoomBucket.rawValue,
+                viewport.zoomScaleKey,
+                Int((viewport.sourceRange.start * 1_000).rounded()),
+                Int((viewport.sourceRange.duration * 1_000).rounded()),
+                viewport.targetCount
+            )
+        }
+    }
+
+    struct MainActorGapSummary {
+        let sampleCount: Int
+        let p95Milliseconds: Double
+        let maxMilliseconds: Double
+        let overFrameBudgetCount: Int
+    }
+
     private struct HoverDriver {
         let kind: ClipKind
         let supportsFilmstrip: Bool
@@ -674,9 +765,16 @@ final class TimelineFilmstripDebugProbe {
         let action: @MainActor (TimelineFilmstripDebugHoverAction) -> Void
     }
 
+    private struct PerformanceDriver {
+        let setZoom: @MainActor (Double) -> Void
+        let scrollTo: @MainActor (TimeInterval) -> Void
+        let cacheMetrics: @MainActor () async -> FilmstripCacheMetrics
+    }
+
     static let shared = TimelineFilmstripDebugProbe()
 
     private var isArmed = false
+    private var isPerformanceMode = false
     private var requests: [(id: TimelineFilmstripRequestID, generation: UInt64)] = []
     private var delayedRequest: (id: TimelineFilmstripRequestID, generation: UInt64)?
     private var ready: (id: TimelineFilmstripRequestID, frames: [FilmstripFrame])?
@@ -699,11 +797,18 @@ final class TimelineFilmstripDebugProbe {
     private var hoverExitHidden = false
     private var hoverCacheMissHidden = false
     private var hoverUnsupportedHidden = false
+    private var performanceDriver: PerformanceDriver?
+    private var performanceReadyFrames: [TimelineFilmstripRequestID: [FilmstripFrame]] = [:]
+    private var performanceEvidenceRecords: [PerformanceEvidence] = []
+    private var preservedSurfaces: Set<TimelineFilmstripDebugPreservedSurface> = []
+    private var mainActorGapTask: Task<Void, Never>?
+    private var mainActorGapSamples: [Double] = []
 
     private init() {}
 
     func arm() {
         isArmed = true
+        isPerformanceMode = false
         requests.removeAll(keepingCapacity: true)
         delayedRequest = nil
         ready = nil
@@ -726,6 +831,17 @@ final class TimelineFilmstripDebugProbe {
         hoverExitHidden = false
         hoverCacheMissHidden = false
         hoverUnsupportedHidden = false
+        performanceReadyFrames.removeAll(keepingCapacity: true)
+        performanceEvidenceRecords.removeAll(keepingCapacity: true)
+        preservedSurfaces.removeAll(keepingCapacity: true)
+        mainActorGapTask?.cancel()
+        mainActorGapTask = nil
+        mainActorGapSamples.removeAll(keepingCapacity: true)
+    }
+
+    func armPerformance() {
+        arm()
+        isPerformanceMode = true
     }
 
     var hasVisibleRequest: Bool {
@@ -744,13 +860,16 @@ final class TimelineFilmstripDebugProbe {
         requestID: TimelineFilmstripRequestID,
         generation: UInt64
     ) -> Bool {
-        guard isArmed, let delayedRequest else { return false }
+        guard isArmed, !isPerformanceMode, let delayedRequest else { return false }
         return delayedRequest.id == requestID && delayedRequest.generation == generation
     }
 
     func recordReady(requestID: TimelineFilmstripRequestID, frames: [FilmstripFrame]) {
         guard isArmed else { return }
         ready = (requestID, frames)
+        if isPerformanceMode {
+            performanceReadyFrames[requestID] = frames
+        }
     }
 
     func recordGenerationStarted() {
@@ -761,6 +880,24 @@ final class TimelineFilmstripDebugProbe {
     func recordConsumerRendered(requestID: TimelineFilmstripRequestID, frameCount: Int) {
         guard isArmed else { return }
         consumer = (requestID, frameCount)
+        guard isPerformanceMode,
+              let frames = performanceReadyFrames[requestID],
+              frames.count == frameCount,
+              !performanceEvidenceRecords.contains(where: { $0.requestID == requestID }) else {
+            return
+        }
+        performanceEvidenceRecords.append(
+            PerformanceEvidence(
+                requestID: requestID,
+                frameCount: frameCount,
+                distinctDigestCount: Set(frames.map(\.digest)).count,
+                distinctTimestampCount: Set(frames.map {
+                    Int(($0.actualTime * 1_000).rounded())
+                }).count,
+                maxFrameHeight: frames.map { $0.image.height }.max() ?? 0,
+                decodedByteCost: frames.reduce(0) { $0 + $1.byteCost }
+            )
+        )
     }
 
     func recordOffscreenSkip(clipID: UUID) {
@@ -1022,6 +1159,125 @@ final class TimelineFilmstripDebugProbe {
             fallbackAfterCancellation: true,
             zoomScaleKeys: Array(Set(requests.map { $0.id.viewportRequest.zoomScaleKey })).sorted()
         )
+    }
+
+    func registerPerformanceDriver(
+        setZoom: @escaping @MainActor (Double) -> Void,
+        scrollTo: @escaping @MainActor (TimeInterval) -> Void,
+        cacheMetrics: @escaping @MainActor () async -> FilmstripCacheMetrics
+    ) {
+        performanceDriver = PerformanceDriver(
+            setZoom: setZoom,
+            scrollTo: scrollTo,
+            cacheMetrics: cacheMetrics
+        )
+    }
+
+    func unregisterPerformanceDriver() {
+        performanceDriver = nil
+    }
+
+    var hasPerformanceDriver: Bool {
+        performanceDriver != nil
+    }
+
+    func driveZoom(_ pixelsPerSecond: Double) -> Bool {
+        guard isPerformanceMode, let performanceDriver else { return false }
+        performanceDriver.setZoom(pixelsPerSecond)
+        return true
+    }
+
+    func driveScroll(to sourceTime: TimeInterval) -> Bool {
+        guard isPerformanceMode, let performanceDriver else { return false }
+        performanceDriver.scrollTo(sourceTime)
+        return true
+    }
+
+    var performanceEvidenceCount: Int {
+        performanceEvidenceRecords.count
+    }
+
+    var performanceDiagnostics: String {
+        let requestZooms = requests.map { $0.id.viewportRequest.zoomScaleKey }
+            .map(String.init)
+            .joined(separator: ",")
+        let readyZooms = performanceReadyFrames.keys.map { $0.viewportRequest.zoomScaleKey }
+            .sorted()
+            .map(String.init)
+            .joined(separator: ",")
+        let consumerZooms = performanceEvidenceRecords.map {
+            $0.requestID.viewportRequest.zoomScaleKey
+        }.map(String.init).joined(separator: ",")
+        return "requests[\(requestZooms)] ready[\(readyZooms)] consumers[\(consumerZooms)]"
+    }
+
+    func performanceEvidence(
+        after baseline: Int,
+        zoomScaleKey: Int,
+        differingFrom previousIdentity: String? = nil
+    ) -> PerformanceEvidence? {
+        guard baseline >= 0, baseline <= performanceEvidenceRecords.count else { return nil }
+        return performanceEvidenceRecords[baseline...].last(where: {
+            $0.requestID.viewportRequest.zoomScaleKey == zoomScaleKey
+                && $0.stableIdentity != previousIdentity
+        })
+    }
+
+    func recordPreservedSurface(_ surface: TimelineFilmstripDebugPreservedSurface) {
+        guard isArmed, isPerformanceMode else { return }
+        preservedSurfaces.insert(surface)
+    }
+
+    var hasPreservedSurfaceEvidence: Bool {
+        preservedSurfaces == Set(TimelineFilmstripDebugPreservedSurface.allCasesForEvidence)
+    }
+
+    var preservedSurfaceNames: [String] {
+        preservedSurfaces.map(\.rawValue).sorted()
+    }
+
+    func performanceCacheMetrics() async -> FilmstripCacheMetrics? {
+        guard let performanceDriver else { return nil }
+        return await performanceDriver.cacheMetrics()
+    }
+
+    func startMainActorGapSampling() {
+        mainActorGapTask?.cancel()
+        mainActorGapSamples.removeAll(keepingCapacity: true)
+        mainActorGapTask = Task { @MainActor [weak self] in
+            var previous = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(1))
+                } catch {
+                    break
+                }
+                let now = ProcessInfo.processInfo.systemUptime
+                self?.mainActorGapSamples.append((now - previous) * 1_000)
+                previous = now
+            }
+        }
+    }
+
+    func stopMainActorGapSampling() -> MainActorGapSummary {
+        mainActorGapTask?.cancel()
+        mainActorGapTask = nil
+        let sorted = mainActorGapSamples.sorted()
+        let p95Index = sorted.isEmpty
+            ? 0
+            : min(sorted.count - 1, max(0, Int(ceil(Double(sorted.count) * 0.95)) - 1))
+        return MainActorGapSummary(
+            sampleCount: sorted.count,
+            p95Milliseconds: sorted.isEmpty ? 0 : sorted[p95Index],
+            maxMilliseconds: sorted.last ?? 0,
+            overFrameBudgetCount: sorted.filter { $0 > (1_000.0 / 60.0) }.count
+        )
+    }
+}
+
+private extension TimelineFilmstripDebugPreservedSurface {
+    static var allCasesForEvidence: [Self] {
+        [.imageThumbnail, .audioWaveform, .textRhythm]
     }
 }
 #endif

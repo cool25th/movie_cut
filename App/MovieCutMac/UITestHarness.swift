@@ -51,6 +51,8 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
     /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport and hover consumers.
+    /// - `MOVIECUT_UITEST_FILMSTRIP_PERF=density|memory` — drives real TimelineView zoom/scroll performance evidence.
+    /// - `MOVIECUT_UITEST_PERF_PHASE=<path>` — optional phase handshake for external RSS sampling.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     func runUITestHarnessIfRequested() async {
@@ -61,8 +63,12 @@ extension EditorViewModel {
         var clipboardSuffix = ""
         var filmstripSuffix = ""
         var timelineFilmstripSuffix = ""
+        var filmstripPerformanceSuffix = ""
+        let filmstripPerformanceScenario = env["MOVIECUT_UITEST_FILMSTRIP_PERF"]
 
-        if env["MOVIECUT_UITEST_TIMELINE_FILMSTRIP"] == "1" {
+        if filmstripPerformanceScenario != nil {
+            TimelineFilmstripDebugProbe.shared.armPerformance()
+        } else if env["MOVIECUT_UITEST_TIMELINE_FILMSTRIP"] == "1" {
             TimelineFilmstripDebugProbe.shared.arm()
         }
 
@@ -70,12 +76,38 @@ extension EditorViewModel {
             .map(uiTestImportURLs(from:)) ?? []
         let extraImportURLs = env["MOVIECUT_UITEST_IMPORT_EXTRA"]
             .map(uiTestImportExtraURLs(from:)) ?? []
-        let importURLs = primaryImportURLs + extraImportURLs
-        if !importURLs.isEmpty {
-            await importMediaAndAddToTimeline(
-                importURLs,
-                startTime: currentProject.timeline.duration
-            )
+        if filmstripPerformanceScenario != nil {
+            if !primaryImportURLs.isEmpty {
+                await importMediaAndAddToTimeline(
+                    primaryImportURLs,
+                    startTime: currentProject.timeline.duration
+                )
+            }
+            for url in extraImportURLs {
+                await importMediaAndAddToTimeline([url], startTime: 0)
+            }
+            scrubPlayhead(to: 0, phase: .ended)
+            await addTextClip(text: "Filmstrip performance evidence")
+        } else {
+            let importURLs = primaryImportURLs + extraImportURLs
+            if !importURLs.isEmpty {
+                await importMediaAndAddToTimeline(
+                    importURLs,
+                    startTime: currentProject.timeline.duration
+                )
+            }
+        }
+
+        if let filmstripPerformanceScenario {
+            do {
+                filmstripPerformanceSuffix = try await runTimelineFilmstripPerformanceUITestScenario(
+                    named: filmstripPerformanceScenario,
+                    phasePath: env["MOVIECUT_UITEST_PERF_PHASE"]
+                )
+            } catch {
+                lastErrorMessage = "filmstrip performance harness failed: \(error.localizedDescription)"
+                filmstripPerformanceSuffix = " filmstrip_perf=\(filmstripPerformanceScenario) perf_complete=0 ui_proxy_samples=0 ui_proxy_p95_ms=999.000 ui_proxy_max_ms=999.000 ui_proxy_over_16_6=999 cache_current_bytes=0 cache_peak_bytes=0 cache_limit_bytes=0 cache_keys=0 cache_evictions=0 max_frame_height=0 preserved_image=0 preserved_audio=0 preserved_text=0"
+            }
         }
 
         if env["MOVIECUT_UITEST_TIMELINE_FILMSTRIP"] == "1" {
@@ -362,7 +394,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -590,6 +622,223 @@ extension EditorViewModel {
             hoverCompleted.requestCountDelta,
             hoverCompleted.generationCountDelta
         )
+    }
+
+    private func runTimelineFilmstripPerformanceUITestScenario(
+        named scenario: String,
+        phasePath: String?
+    ) async throws -> String {
+        for _ in 0..<300 {
+            if TimelineFilmstripDebugProbe.shared.hasPerformanceDriver { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard TimelineFilmstripDebugProbe.shared.hasPerformanceDriver else {
+            throw FilmstripUITestError.invariant("TimelineView performance driver did not register")
+        }
+
+        switch scenario {
+        case "density":
+            return try await runFilmstripDensityPerformanceScenario()
+        case "memory":
+            return try await runFilmstripMemoryPerformanceScenario(phasePath: phasePath)
+        default:
+            throw FilmstripUITestError.invariant("unknown filmstrip performance scenario \(scenario)")
+        }
+    }
+
+    private func runFilmstripDensityPerformanceScenario() async throws -> String {
+        let zoomLevels: [Double] = [20, 40, 80, 160]
+        let scrollTargets: [TimeInterval] = [30, 60, 90, 120]
+        var evidence: [TimelineFilmstripDebugProbe.PerformanceEvidence] = []
+        var previousIdentity: String?
+        TimelineFilmstripDebugProbe.shared.startMainActorGapSampling()
+
+        for (zoom, scrollTarget) in zip(zoomLevels, scrollTargets) {
+            guard TimelineFilmstripDebugProbe.shared.driveScroll(to: scrollTarget) else {
+                throw FilmstripUITestError.invariant("failed to drive TimelineView scroll \(scrollTarget)")
+            }
+            // Let SwiftUI apply the real ScrollViewReader mutation before the
+            // zoom change. The zoom request below is the measured stable state;
+            // any in-flight scroll request is intentionally cancellable work.
+            try await Task.sleep(for: .milliseconds(150))
+            let zoomBaseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
+            guard TimelineFilmstripDebugProbe.shared.driveZoom(zoom) else {
+                throw FilmstripUITestError.invariant("failed to drive TimelineView zoom \(zoom)")
+            }
+            let zoomEvidence = try await waitForFilmstripPerformanceEvidence(
+                after: zoomBaseline,
+                zoomScaleKey: Int((zoom * 1_000).rounded()),
+                differingFrom: previousIdentity
+            )
+            evidence.append(zoomEvidence)
+            previousIdentity = zoomEvidence.stableIdentity
+        }
+
+        for _ in 0..<300 {
+            if TimelineFilmstripDebugProbe.shared.hasPreservedSurfaceEvidence { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let gapSummary = TimelineFilmstripDebugProbe.shared.stopMainActorGapSampling()
+        guard TimelineFilmstripDebugProbe.shared.hasPreservedSurfaceEvidence else {
+            throw FilmstripUITestError.invariant(
+                "actual TimelineView did not render preserved image/audio/text surfaces: "
+                    + TimelineFilmstripDebugProbe.shared.preservedSurfaceNames.joined(separator: ",")
+            )
+        }
+        guard evidence.count == zoomLevels.count,
+              Set(evidence.map(\.stableIdentity)).count == zoomLevels.count,
+              evidence.allSatisfy({
+                  $0.frameCount > 1
+                      && $0.distinctDigestCount > 1
+                      && $0.distinctTimestampCount > 1
+                      && $0.maxFrameHeight > 0
+                      && $0.maxFrameHeight <= 60
+              }) else {
+            throw FilmstripUITestError.invariant("density evidence was static, duplicated, or unbounded")
+        }
+        let densities = evidence.map(\.density)
+        guard zip(densities, densities.dropFirst()).allSatisfy({ $0.0 < $0.1 }) else {
+            throw FilmstripUITestError.invariant("frame density was not strictly increasing: \(densities)")
+        }
+        guard let cacheMetrics = await TimelineFilmstripDebugProbe.shared.performanceCacheMetrics() else {
+            throw FilmstripUITestError.invariant("TimelineView cache metrics unavailable")
+        }
+
+        var fields = [
+            "filmstrip_perf=density",
+            "perf_complete=1",
+            "ui_proxy_samples=\(gapSummary.sampleCount)",
+            String(format: "ui_proxy_p95_ms=%.3f", gapSummary.p95Milliseconds),
+            String(format: "ui_proxy_max_ms=%.3f", gapSummary.maxMilliseconds),
+            "ui_proxy_over_16_6=\(gapSummary.overFrameBudgetCount)",
+            "cache_current_bytes=\(cacheMetrics.currentTrackedCost)",
+            "cache_peak_bytes=\(cacheMetrics.peakTrackedCost)",
+            "cache_limit_bytes=\(cacheMetrics.totalCostLimit)",
+            "cache_keys=\(cacheMetrics.trackedKeyCount)",
+            "cache_evictions=\(cacheMetrics.evictionCount)",
+            "max_frame_height=\(evidence.map(\.maxFrameHeight).max() ?? 0)",
+            "preserved_image=1",
+            "preserved_audio=1",
+            "preserved_text=1"
+        ]
+        for (zoom, item) in zip(zoomLevels, evidence) {
+            let label = Int(zoom.rounded())
+            fields.append("density_\(label)_bucket=\(item.requestID.viewportRequest.zoomBucket.rawValue)")
+            fields.append("density_\(label)_identity=\(item.stableIdentity)")
+            fields.append("density_\(label)_frames=\(item.frameCount)")
+            fields.append("density_\(label)_digests=\(item.distinctDigestCount)")
+            fields.append("density_\(label)_times=\(item.distinctTimestampCount)")
+            fields.append(String(
+                format: "density_%d_span=%.3f",
+                label,
+                item.requestID.viewportRequest.sourceRange.duration
+            ))
+            fields.append(String(format: "density_%d_fps=%.3f", label, item.density))
+            fields.append("density_\(label)_decoded_bytes=\(item.decodedByteCost)")
+        }
+        return " " + fields.joined(separator: " ")
+    }
+
+    private func runFilmstripMemoryPerformanceScenario(phasePath: String?) async throws -> String {
+        let zoom = 160.0
+        let zoomBaseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
+        guard TimelineFilmstripDebugProbe.shared.driveZoom(zoom) else {
+            throw FilmstripUITestError.invariant("failed to drive high-resolution TimelineView zoom")
+        }
+        let initial = try await waitForFilmstripPerformanceEvidence(
+            after: zoomBaseline,
+            zoomScaleKey: 160_000,
+            differingFrom: nil
+        )
+        var evidence: [TimelineFilmstripDebugProbe.PerformanceEvidence] = []
+        writeFilmstripPerformancePhase("baseline", path: phasePath)
+        try await Task.sleep(for: .milliseconds(1_200))
+        writeFilmstripPerformancePhase("churn", path: phasePath)
+
+        var previousIdentity = initial.stableIdentity
+        // Offset the ten one-minute-spaced positions by 30s so the sparse
+        // temporary loop fixture is never sampled exactly at a segment seam.
+        for target in stride(from: 30.0, through: 570.0, by: 60.0) {
+            guard TimelineFilmstripDebugProbe.shared.driveScroll(to: target) else {
+                throw FilmstripUITestError.invariant("failed to drive one-minute seek \(target)")
+            }
+            try await Task.sleep(for: .milliseconds(150))
+            let transientBaseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
+            guard TimelineFilmstripDebugProbe.shared.driveZoom(159) else {
+                throw FilmstripUITestError.invariant("failed to drive transient cache-churn zoom")
+            }
+            _ = try await waitForFilmstripPerformanceEvidence(
+                after: transientBaseline,
+                zoomScaleKey: 159_000,
+                differingFrom: nil
+            )
+            let baseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
+            guard TimelineFilmstripDebugProbe.shared.driveZoom(160) else {
+                throw FilmstripUITestError.invariant("failed to restore 160px/s memory zoom")
+            }
+            let item = try await waitForFilmstripPerformanceEvidence(
+                after: baseline,
+                zoomScaleKey: 160_000,
+                differingFrom: previousIdentity
+            )
+            evidence.append(item)
+            previousIdentity = item.stableIdentity
+        }
+
+        guard evidence.count == 10,
+              Set(evidence.map(\.stableIdentity)).count == 10,
+              evidence.allSatisfy({
+                  $0.frameCount > 1
+                      && $0.distinctDigestCount > 1
+                      && $0.distinctTimestampCount > 1
+                      && $0.maxFrameHeight > 0
+                      && $0.maxFrameHeight <= 60
+              }),
+              let cacheMetrics = await TimelineFilmstripDebugProbe.shared.performanceCacheMetrics() else {
+            throw FilmstripUITestError.invariant("memory churn evidence was incomplete or static")
+        }
+        writeFilmstripPerformancePhase("complete", path: phasePath)
+
+        return String(
+            format: " filmstrip_perf=memory perf_complete=1 memory_seeks=%d memory_published_sets=%d memory_distinct_requests=%d memory_nontrivial_sets=%d cache_current_bytes=%d cache_peak_bytes=%d cache_limit_bytes=%d cache_keys=%d cache_evictions=%d cache_oversized_rejections=%d max_frame_height=%d preserved_image=0 preserved_audio=0 preserved_text=0 ui_proxy_samples=0 ui_proxy_p95_ms=0.000 ui_proxy_max_ms=0.000 ui_proxy_over_16_6=0",
+            evidence.count,
+            evidence.count,
+            Set(evidence.map(\.stableIdentity)).count,
+            evidence.filter { $0.distinctDigestCount > 1 && $0.distinctTimestampCount > 1 }.count,
+            cacheMetrics.currentTrackedCost,
+            cacheMetrics.peakTrackedCost,
+            cacheMetrics.totalCostLimit,
+            cacheMetrics.trackedKeyCount,
+            cacheMetrics.evictionCount,
+            cacheMetrics.oversizedRejectionCount,
+            evidence.map(\.maxFrameHeight).max() ?? 0
+        )
+    }
+
+    private func waitForFilmstripPerformanceEvidence(
+        after baseline: Int,
+        zoomScaleKey: Int,
+        differingFrom previousIdentity: String?
+    ) async throws -> TimelineFilmstripDebugProbe.PerformanceEvidence {
+        for _ in 0..<800 {
+            if let evidence = TimelineFilmstripDebugProbe.shared.performanceEvidence(
+                after: baseline,
+                zoomScaleKey: zoomScaleKey,
+                differingFrom: previousIdentity
+            ) {
+                return evidence
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        throw FilmstripUITestError.invariant(
+            "TimelineView did not publish/render zoom=\(Double(zoomScaleKey) / 1_000) after evidence \(baseline); "
+                + TimelineFilmstripDebugProbe.shared.performanceDiagnostics
+        )
+    }
+
+    private func writeFilmstripPerformancePhase(_ phase: String, path: String?) {
+        guard let path, !path.isEmpty else { return }
+        try? phase.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     private func runClipboardUITestScenario() async throws -> String {

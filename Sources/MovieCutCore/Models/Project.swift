@@ -39,6 +39,9 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// historical solid black canvas.
     public var canvasBackground: CanvasBackground?
 
+    /// Optional card-news document. Nil preserves legacy timeline-only projects.
+    public var cardDocument: CardDocument?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -52,6 +55,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case canvas
         case exportSettings
         case canvasBackground
+        case cardDocument
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -67,7 +71,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         markers: [Marker] = [],
         canvas: CanvasPreset = CanvasPreset.defaultPreset(),
         exportSettings: ExportSettings = ExportSettings(),
-        canvasBackground: CanvasBackground? = nil
+        canvasBackground: CanvasBackground? = nil,
+        cardDocument: CardDocument? = nil
     ) {
         self.id = id
         self.name = name
@@ -81,6 +86,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.canvas = canvas
         self.exportSettings = exportSettings
         self.canvasBackground = canvasBackground
+        self.cardDocument = cardDocument
     }
 
     public init(from decoder: any Decoder) throws {
@@ -97,6 +103,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         canvas = try container.decodeIfPresent(CanvasPreset.self, forKey: .canvas) ?? CanvasPreset.defaultPreset()
         exportSettings = try container.decode(ExportSettings.self, forKey: .exportSettings)
         canvasBackground = try container.decodeIfPresent(CanvasBackground.self, forKey: .canvasBackground)
+        cardDocument = try container.decodeIfPresent(CardDocument.self, forKey: .cardDocument)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -113,5 +120,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         try container.encode(canvas, forKey: .canvas)
         try container.encode(exportSettings, forKey: .exportSettings)
         try container.encodeIfPresent(canvasBackground, forKey: .canvasBackground)
+        try container.encodeIfPresent(cardDocument, forKey: .cardDocument)
     }
 }

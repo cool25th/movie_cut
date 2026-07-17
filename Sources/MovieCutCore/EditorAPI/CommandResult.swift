@@ -43,6 +43,9 @@ public enum CommandResultValue: Sendable, Equatable {
 
     /// Multiple marker snapshots.
     case markers([Marker])
+
+    /// A complete optional card-document snapshot.
+    case cardDocument(CardDocument?)
 }
 
 /// The observable result of applying an editor command.

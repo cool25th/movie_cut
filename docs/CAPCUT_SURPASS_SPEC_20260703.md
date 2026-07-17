@@ -777,6 +777,7 @@ public struct CardElement: Codable, Sendable, Equatable, Identifiable {
 - `CardDocumentCommandTests`: 네 페이지 동작, 순서/ID 결정성, single-step undo/redo, legacy decode.
 - `CardLayoutTests`: 1:1↔4:5↔9:16 normalized-frame 보존.
 - 앱 E2E: DEBUG 하니스의 click count + 저장/재로드 dump. SC-C1 시간/막힘은 `[사용자 확인 대기]`로 별도 녹화한다.
+- 2026-07-17 Inc 1 완료: optional `Project.cardDocument`와 `CardDocument`/format/page/element/normalized geometry 및 G-19 경계의 최소 `CardMasterStyle` persisted shape, Add/Duplicate/Delete/Move/Update command를 기존 `EditorSession` snapshot undo에 연결했다. focused `swift test --filter CardDocumentCommand` **15 tests / 1 suite PASS**(실제 pre-card JSON의 `cardDocument == nil` 및 timeline/export 값 보존, round-trip, fresh duplicate IDs/content, 결정적 순서, normalized frame, 각 동작 single-step undo/redo, missing/invalid/last-page fail-closed). 이는 Core 기반 증분이며 UB-C1/C3/C4·SC-C1 완료 증거가 아니다. `[진행중] 다음 증분: Inc 2, 시작점: App/MovieCutMac/EditorViewModel.swift:5522`에서 command-backed CardNews ViewModel API와 Mac 페이지 레일/규격 picker를 배선한다.
 
 #### 리스크
 - timeline `Project`에 카드 모델을 섞으면 기존 저장 포맷과 UI 상태가 복잡해진다. optional 최상위 필드와 명시적 editor mode로 격리한다.

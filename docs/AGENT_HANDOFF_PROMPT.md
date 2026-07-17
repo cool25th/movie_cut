@@ -2,7 +2,7 @@
 
 > 이 파일의 §A(개발) / §B(감사) / §C(편집 체감 P0 묶음 작업지시서) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
 > Claude 세션이라면 이 파일 대신 `/surpass`, `/gap-audit` 슬래시 커맨드를 쓴다 (동일 내용의 원본: `.claude/commands/surpass.md`, `.claude/commands/gap-audit.md`).
-> **2026-07-16 체크포인트는 §D Cycle 4다** — G-16/G-17과 G-04 Inc 1~5는 구현됐고, G-04 AC1 zero-over-budget 및 UB-V4의 별도 interaction latency가 남는다.
+> **2026-07-17 체크포인트는 §D Cycle 5다** — G-16/G-17과 G-04 Inc 1~5, G-18 Inc 1 model+commands가 구현됐고, G-04 AC1/interaction latency 및 G-18 Mac UI 증분이 남는다.
 
 ---
 
@@ -223,11 +223,14 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 2. §A 6단계 수행: 스펙 AC 검증 기록 1줄, 백로그, `[진행중] 다음 증분` 표시, 최종 검증(빌드+필터 테스트+E2E) 후 커밋. **검증 없이 완료 선언 금지.**
 3. 최종 보고: ① UB 채점 요약(✅/🟡/❌ 개수와 델타) ② 이번 사이클 달성 항목+증거 ③ `[사용자 확인 대기]` 목록(실기기 시나리오 완주 등 사람이 해야 할 것) ④ 다음 사이클 착수 항목 1개 추천.
 
-#### 현재 체크포인트 (2026-07-16 / §D Cycle 4)
+#### 현재 체크포인트 (2026-07-17 / §D Cycle 5)
 
 - G-04 Inc 1~5 구현 완료. production signpost가 actual request/cache/decode/publish/UI consumer lifecycle을 잇고, `scripts/run_g04_filmstrip_perf.sh` actual app는 20/40/80/160px/s bucket `0/1/2/3`, density `0.247/0.423/0.697/1.394`, image/audio/text 보존을 확인했다. 10분 4K synthetic fixture seek는 RSS delta `+6.2MB`(≤100MB), decoded cache peak `8,816,640B/128MB`, height `41`이다.
 - MainActor scheduling-gap proxy는 `n=1218`, p95 `2.096ms`, max `67.106ms`, `>16.6ms=4`다. 이는 표시 FPS가 아니며 AC1의 초과 0건을 충족하지 못한다. UB 채점은 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**을 유지한다.
 - `[진행중] G-04 잔여: AC1 zero-over-budget 및 실기기 display cadence/스크롤 체감. Inc 5 구현 자체는 완료.`
+- G-18 Inc 1 완료: optional persisted `CardDocument`, normalized 0...1 element geometry, G-19 경계의 최소 `CardMasterStyle` shape와 Add/Duplicate/Delete/Move/Update atomic commands를 기존 `EditorSession`에 추가했다. `CardDocumentCommandTests` **15/15 PASS**로 pre-card legacy timeline/export 보존, fresh duplicate IDs/content, deterministic order, exact single-step undo/redo, invalid/missing/last-page fail-closed를 검증했다.
+- Inc 1은 Core 기반일 뿐 Mac UI/click count/actual format switch/inline canvas/save-reload E2E가 없으므로 **UB-C1/C3/C4와 SC-C1은 ❌**, 전체 채점도 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**이다. `[진행중] 다음 증분: G-18 Inc 2, 시작점: App/MovieCutMac/EditorViewModel.swift:5522`에서 command-backed ViewModel API와 CardNews page rail/format picker를 배선한다.
+- 사용자 확인 대기 유지: G-15 AC4 photo preview/trim feel, G-16 AC3 scrub feel, G-04 filmstrip/hover scrub feel+display cadence, 가능하면 SC-V1/V2 완료 시간. SC-C1은 카드 workflow/export 전제가 갖춰질 때까지 timing 불가다.
 
 ### D-5. 종료 조건
 

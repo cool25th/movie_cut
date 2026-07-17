@@ -1,0 +1,49 @@
+{
+  "id": "10000000-0000-4000-8000-000000000001",
+  "name": "Pre-card project",
+  "createdAt": 0,
+  "updatedAt": 60,
+  "appVersion": "0.1.0",
+  "schemaVersion": 1,
+  "mediaLibrary": {
+    "assets": []
+  },
+  "timeline": {
+    "id": "10000000-0000-4000-8000-000000000002",
+    "frameRate": {
+      "numerator": 24,
+      "denominator": 1
+    },
+    "canvasSize": [1080, 1920],
+    "aspectRatio": "portrait9x16",
+    "tracks": [
+      {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "kind": "video",
+        "name": "Legacy Video",
+        "isMuted": false,
+        "isLocked": true,
+        "isHidden": false,
+        "zIndex": 3,
+        "clips": []
+      }
+    ],
+    "markers": []
+  },
+  "markers": [],
+  "canvas": {
+    "aspectRatio": "portrait9x16",
+    "frameRate": "fps24"
+  },
+  "exportSettings": {
+    "resolution": "p4K",
+    "frameRate": "fps24",
+    "codec": "hevc",
+    "audioCodec": "pcm",
+    "containerFormat": "mov",
+    "quality": "custom",
+    "videoBitrateMbps": 42,
+    "includeChapters": false,
+    "includeBeatChapters": true
+  }
+}

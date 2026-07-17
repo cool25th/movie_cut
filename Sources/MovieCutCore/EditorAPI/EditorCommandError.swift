@@ -11,6 +11,15 @@ public enum EditorCommandError: Error, Sendable, Equatable {
     /// A requested media asset does not exist.
     case assetNotFound(UUID)
 
+    /// The project does not contain a card document.
+    case cardDocumentMissing
+
+    /// A requested card page does not exist.
+    case cardPageNotFound(UUID)
+
+    /// A requested card element does not exist.
+    case cardElementNotFound(UUID)
+
     /// The operation attempted to edit a locked track.
     case trackLocked(UUID)
 

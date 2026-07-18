@@ -586,6 +586,54 @@ final class EditorViewModel {
         )
     }
 
+    /// Commits one completed card-canvas interaction. Gesture ticks and inline
+    /// IME composition stay local to CardCanvasView; callers invoke this only at
+    /// move/resize/edit completion so the session records exactly one snapshot.
+    @discardableResult
+    func updateCardElement(pageId: UUID, element: CardElement) async -> Bool {
+        await dispatchCardMutation(
+            UpdateCardElementCommand(
+                pageId: pageId,
+                elementId: element.id,
+                element: element
+            ),
+            successMessage: "Updated card element \(element.id.uuidString)."
+        )
+    }
+
+    /// Imports or reuses an image and updates the selected image/logo element in
+    /// one Core command. Non-image inputs fail before any project mutation.
+    @discardableResult
+    func replaceCardElementImage(
+        pageId: UUID,
+        elementId: UUID,
+        with url: URL
+    ) async -> Bool {
+        let probedAsset = await mediaAssetWithAppProbe(for: url)
+        guard probedAsset.kind == .image else {
+            lastStatusMessage = nil
+            lastErrorMessage = "Card image replacement requires an image file."
+            return false
+        }
+
+        let replacementAsset = currentProject.mediaLibrary.assets.values.first {
+            $0.kind == .image && $0.originalURL.standardizedFileURL == url.standardizedFileURL
+        } ?? probedAsset
+
+        let didApply = await dispatchCardMutation(
+            ReplaceCardElementImageCommand(
+                pageId: pageId,
+                elementId: elementId,
+                asset: replacementAsset
+            ),
+            successMessage: "Replaced the selected card image with \(url.lastPathComponent)."
+        )
+        if didApply {
+            selectedAssetId = replacementAsset.id
+        }
+        return didApply
+    }
+
     func newProject() {
         let project = Self.defaultProject()
         session = EditorSession(project: project)
@@ -4454,9 +4502,11 @@ final class EditorViewModel {
         do {
             try await session.dispatch(command)
             try await refreshFromSession()
+            lastErrorMessage = nil
             lastStatusMessage = successMessage
             return true
         } catch {
+            lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
             return false
         }

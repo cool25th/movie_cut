@@ -254,6 +254,147 @@ public struct UpdateCardElementCommand: EditorCommand {
     }
 }
 
+/// Imports or reuses one project image and points an image/logo card element at
+/// it atomically. EditorSession therefore records one replacement gesture as one
+/// undo/redo snapshot instead of separate import and element-update snapshots.
+public struct ReplaceCardElementImageCommand: EditorCommand {
+    public let id: UUID
+    public let pageId: UUID
+    public let elementId: UUID
+    public let asset: MediaAsset
+
+    public init(
+        id: UUID = UUID(),
+        pageId: UUID,
+        elementId: UUID,
+        asset: MediaAsset
+    ) {
+        self.id = id
+        self.pageId = pageId
+        self.elementId = elementId
+        self.asset = asset
+    }
+
+    public func apply(to project: inout Project) throws -> CommandResult {
+        guard asset.kind == .image else {
+            throw EditorCommandError.invalidCommand("Card elements only accept image media.")
+        }
+
+        var document = try project.requiredCardDocument()
+        try CardDocumentCommandValidation.validate(document)
+        let pageIndex = try document.pageIndex(for: pageId)
+        let elementIndex = try document.pages[pageIndex].elementIndex(for: elementId)
+        let existingElement = document.pages[pageIndex].elements[elementIndex]
+        guard existingElement.kind == .image || existingElement.kind == .logo else {
+            throw EditorCommandError.invalidCommand("Only image and logo card elements can replace media.")
+        }
+
+        if let existingAsset = project.mediaLibrary.assets[asset.id], existingAsset != asset {
+            throw EditorCommandError.invalidCommand("A different media asset already uses the replacement identifier.")
+        }
+
+        let previousDocument = document
+        let previousAsset = project.mediaLibrary.assets[asset.id]
+        project.mediaLibrary.assets[asset.id] = asset
+        document.pages[pageIndex].elements[elementIndex].mediaAssetID = asset.id
+        try CardDocumentCommandValidation.validate(document)
+        project.cardDocument = document
+
+        var undoValues: [String: CommandResultValue] = [
+            "cardDocument": .cardDocument(previousDocument),
+            "replacementAssetID": .uuid(asset.id),
+            "hadPreviousAsset": .int(previousAsset == nil ? 0 : 1)
+        ]
+        if let previousAsset {
+            undoValues["previousAsset"] = .mediaAsset(previousAsset)
+        }
+        return CommandResult(
+            description: "Replaced card element image \(elementId)",
+            undoValues: undoValues
+        )
+    }
+
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        guard case .cardDocument(let document)? = result.undoValues["cardDocument"],
+              case .uuid(let replacementAssetID)? = result.undoValues["replacementAssetID"],
+              case .int(let hadPreviousAsset)? = result.undoValues["hadPreviousAsset"] else {
+            return NoOpCommand(description: "Missing card image replacement snapshot for inverse")
+        }
+        let previousAsset: MediaAsset?
+        if hadPreviousAsset == 1,
+           case .mediaAsset(let asset)? = result.undoValues["previousAsset"] {
+            previousAsset = asset
+        } else {
+            previousAsset = nil
+        }
+        return RestoreCardImageReplacementCommand(
+            document: document,
+            replacementAssetID: replacementAssetID,
+            previousAsset: previousAsset
+        )
+    }
+}
+
+private struct RestoreCardImageReplacementCommand: EditorCommand {
+    let id: UUID
+    let document: CardDocument?
+    let replacementAssetID: UUID
+    let previousAsset: MediaAsset?
+
+    init(
+        id: UUID = UUID(),
+        document: CardDocument?,
+        replacementAssetID: UUID,
+        previousAsset: MediaAsset?
+    ) {
+        self.id = id
+        self.document = document
+        self.replacementAssetID = replacementAssetID
+        self.previousAsset = previousAsset
+    }
+
+    func apply(to project: inout Project) throws -> CommandResult {
+        let currentDocument = project.cardDocument
+        let currentAsset = project.mediaLibrary.assets[replacementAssetID]
+        project.cardDocument = document
+        if let previousAsset {
+            project.mediaLibrary.assets[replacementAssetID] = previousAsset
+        } else {
+            project.mediaLibrary.assets.removeValue(forKey: replacementAssetID)
+        }
+
+        var undoValues: [String: CommandResultValue] = [
+            "cardDocument": .cardDocument(currentDocument),
+            "replacementAssetID": .uuid(replacementAssetID),
+            "hadPreviousAsset": .int(currentAsset == nil ? 0 : 1)
+        ]
+        if let currentAsset {
+            undoValues["previousAsset"] = .mediaAsset(currentAsset)
+        }
+        return CommandResult(description: "Restored card image replacement", undoValues: undoValues)
+    }
+
+    func invert(from result: CommandResult) throws -> any EditorCommand {
+        guard case .cardDocument(let document)? = result.undoValues["cardDocument"],
+              case .uuid(let replacementAssetID)? = result.undoValues["replacementAssetID"],
+              case .int(let hadPreviousAsset)? = result.undoValues["hadPreviousAsset"] else {
+            return NoOpCommand(description: "Missing restored card image replacement snapshot")
+        }
+        let previousAsset: MediaAsset?
+        if hadPreviousAsset == 1,
+           case .mediaAsset(let asset)? = result.undoValues["previousAsset"] {
+            previousAsset = asset
+        } else {
+            previousAsset = nil
+        }
+        return RestoreCardImageReplacementCommand(
+            document: document,
+            replacementAssetID: replacementAssetID,
+            previousAsset: previousAsset
+        )
+    }
+}
+
 private struct RestoreCardDocumentCommand: EditorCommand {
     let id: UUID
     let document: CardDocument?

@@ -116,6 +116,7 @@
 		82C77FB56F72A7FA85ED4F00 /* ColorCorrectionPixelProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15063F7773AD551764B4253C /* ColorCorrectionPixelProcessorTests.swift */; };
 		82FD821375A13AF76A349BF7 /* MaskPixelProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4BD982EA9102CECD530C2A /* MaskPixelProcessorTests.swift */; };
 		85A9F0B487D35106535B1252 /* SFXLibraryResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE97377A56E8D27C925CE63 /* SFXLibraryResourceTests.swift */; };
+		8617CFC2E6189B8A00D12AA9 /* CardCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DEBBB88C112AC74DBB285B4 /* CardCanvasView.swift */; };
 		87E593017AF247BD59D04708 /* FilmstripGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFF3A77C71272DE0B87BD07 /* FilmstripGenerator.swift */; };
 		87FD864DD272A57E9BE8DF27 /* StickerPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968454F92BCC814A62928EEF /* StickerPickerView.swift */; };
 		889AED05126DC68B6A12E83C /* IOSMaskCanvasStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0451095B9818C47BB9C1EDA7 /* IOSMaskCanvasStaticContractTests.swift */; };
@@ -147,6 +148,7 @@
 		A941BF250F84FDF91ABE6957 /* MaskFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11875331613523E055DFD18 /* MaskFixtureTests.swift */; };
 		AA72CCB5560A8328F3785A10 /* IOSCustomVideoCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4968081AF3908D468A59F83 /* IOSCustomVideoCompositor.swift */; };
 		AC00D0DDCAF16EC2E7B3945B /* UndoIntegrityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0200BA83D8032C31919D0D2 /* UndoIntegrityTests.swift */; };
+		AD3955703B60A8174036F308 /* CardLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */; };
 		AF7FADD6F46B982C17FA0A0E /* ColorScopeWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA7253A7E32D2A2B2C724F /* ColorScopeWiringStaticContractTests.swift */; };
 		B256920F8B7FAF9C6500862B /* CanvasSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18685F32B1B041132751CBBD /* CanvasSettingsView.swift */; };
 		B29B87B5497BBDF7CB856EED /* ScopeAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAAE040E06864543306ABEE1 /* ScopeAnalyzerTests.swift */; };
@@ -283,6 +285,7 @@
 		4ABB45D6B556CA3AB8DE0475 /* CoreModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreModuleTests.swift; sourceTree = "<group>"; };
 		4ADA7253A7E32D2A2B2C724F /* ColorScopeWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorScopeWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		4DB45FF6F6D577371FB4A06C /* MovieCutMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieCutMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4DEBBB88C112AC74DBB285B4 /* CardCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCanvasView.swift; sourceTree = "<group>"; };
 		4F86B49A963CD2475609208E /* MaskCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskCompositor.swift; sourceTree = "<group>"; };
 		4FB5835E9CEC4E581E218A30 /* ColorGradePreviewWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorGradePreviewWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		511D5D82251C0D91931B6BB3 /* AutoColorWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoColorWiringStaticContractTests.swift; sourceTree = "<group>"; };
@@ -415,6 +418,7 @@
 		EAA94F9D52545BA88372975E /* TransitionPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionPixelProcessorTests.swift; sourceTree = "<group>"; };
 		ED4E49F3FBF732565EBA8621 /* ZoomTransitionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomTransitionPlugin.swift; sourceTree = "<group>"; };
 		EE67663CF085B8BB7796E082 /* AudioEqualizerDSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEqualizerDSPTests.swift; sourceTree = "<group>"; };
+		EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLayoutTests.swift; sourceTree = "<group>"; };
 		F18B8335F6E5C7F7C27CA6E2 /* TemplatePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatePickerView.swift; sourceTree = "<group>"; };
 		F1CAD5DE75764AFD8C2F977F /* F06ImportMetadataStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = F06ImportMetadataStaticContractTests.swift; sourceTree = "<group>"; };
 		F1F9AFCF7834808124E9A749 /* IOSInspectorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSInspectorSheet.swift; sourceTree = "<group>"; };
@@ -490,6 +494,7 @@
 				8359735002AEC4A0C42D6E4D /* BeatDetectionTests.swift */,
 				3D7FAB9E94C95C3E4DD86B31 /* CanvasBackgroundTests.swift */,
 				F395532B9388B567B6F09B08 /* CardDocumentCommandTests.swift */,
+				EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */,
 				F8C96F1820080EC426F20181 /* ChromaKeyEyedropperTests.swift */,
 				21E1C2F0D228B851271B9CD0 /* ChromaKeyPixelProcessorTests.swift */,
 				BC3B62C4FB755A0C4FEA27B1 /* ClaudeEditingProviderTests.swift */,
@@ -760,6 +765,7 @@
 		A49B5647F150BF9E94CBED15 /* CardNews */ = {
 			isa = PBXGroup;
 			children = (
+				4DEBBB88C112AC74DBB285B4 /* CardCanvasView.swift */,
 				C4E3B3DA1414E72379DC03D6 /* CardEditorView.swift */,
 			);
 			path = CardNews;
@@ -1023,6 +1029,7 @@
 				BC0BFEEF3BF553DAE86B2556 /* BeatDetectionTests.swift in Sources */,
 				9917F97801E72C80DCAFE24E /* CanvasBackgroundTests.swift in Sources */,
 				29D246B0F4CB30A8E645E64D /* CardDocumentCommandTests.swift in Sources */,
+				AD3955703B60A8174036F308 /* CardLayoutTests.swift in Sources */,
 				12B80490D7329B08CC591FEF /* ChromaKeyEyedropperTests.swift in Sources */,
 				05AC0F5A2F3F6D9197C80093 /* ChromaKeyPixelProcessorTests.swift in Sources */,
 				28DB68F4AD122FC24EC439BE /* ClaudeEditingProviderTests.swift in Sources */,
@@ -1145,6 +1152,7 @@
 				928BF1DB5D0B39AFCE7A125E /* AutoSubtitlesView.swift in Sources */,
 				02E76D985AD7C193527E970A /* BuiltinTransitionPlugins.swift in Sources */,
 				B256920F8B7FAF9C6500862B /* CanvasSettingsView.swift in Sources */,
+				8617CFC2E6189B8A00D12AA9 /* CardCanvasView.swift in Sources */,
 				DDE28231596692471A3A6D8A /* CardEditorView.swift in Sources */,
 				7DBBF375C07C102B5BAAB181 /* ChromaKeyCompositor.swift in Sources */,
 				67CB0A974A9ABFD3B8C6896A /* ChromaKeyView.swift in Sources */,

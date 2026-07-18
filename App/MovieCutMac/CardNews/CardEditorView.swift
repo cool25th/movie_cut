@@ -11,13 +11,6 @@ extension CardFormat {
         }
     }
 
-    fileprivate var previewAspectRatio: CGFloat {
-        switch self {
-        case .square: 1
-        case .portrait: 4.0 / 5.0
-        case .story: 9.0 / 16.0
-        }
-    }
 }
 
 private extension CardPageRole {
@@ -325,15 +318,11 @@ struct CardEditorView: View {
                 MovieCutTheme.previewWellBackground
 
                 if let selection = selectedPage(in: document) {
-                    CardPageArtwork(
+                    CardCanvasView(
                         page: selection.page,
                         format: document.format,
-                        mediaAssets: viewModel.currentProject.mediaLibrary.assets
+                        viewModel: viewModel
                     )
-                    .padding(48)
-                    .shadow(color: .black.opacity(0.42), radius: 20, y: 9)
-                    .accessibilityIdentifier("cardEditor.pagePreview")
-                    .accessibilityLabel("Preview of page \(selection.index + 1)")
                 } else {
                     VStack(spacing: MovieCutSpacing.medium) {
                         Image(systemName: "rectangle.stack.badge.plus")
@@ -423,7 +412,7 @@ private struct CardPageArtwork: View {
                 }
             }
         }
-        .aspectRatio(format.previewAspectRatio, contentMode: .fit)
+        .aspectRatio(CardLayout.aspectRatio(for: format), contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
@@ -485,7 +474,7 @@ private struct CardPageArtwork: View {
     }
 }
 
-private extension Color {
+extension Color {
     init(cardHex: String) {
         let raw = cardHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var value: UInt64 = 0

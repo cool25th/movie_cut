@@ -217,6 +217,117 @@ struct CardDocumentCommandTests {
         #expect(project.cardDocument?.pages[1].elements[0].id == original.id)
     }
 
+    @Test("Canvas move is one undo and redo step with stable element ID")
+    func canvasMoveUndoRedo() async throws {
+        let initial = makeProject()
+        let page = initial.cardDocument!.pages[1]
+        let original = page.elements[0]
+        var moved = original
+        moved.normalizedFrame = CardLayout.moving(original.normalizedFrame, deltaX: 0.11, deltaY: 0.17)
+
+        try await expectSingleElementSnapshot(
+            initial: initial,
+            pageId: page.id,
+            original: original,
+            updated: moved
+        )
+    }
+
+    @Test("Canvas resize is one undo and redo step with stable element ID")
+    func canvasResizeUndoRedo() async throws {
+        let initial = makeProject()
+        let page = initial.cardDocument!.pages[1]
+        let original = page.elements[0]
+        var resized = original
+        resized.normalizedFrame = CardLayout.resizing(original.normalizedFrame, deltaWidth: -0.12, deltaHeight: 0.08)
+
+        try await expectSingleElementSnapshot(
+            initial: initial,
+            pageId: page.id,
+            original: original,
+            updated: resized
+        )
+    }
+
+    @Test("Inline text commit is one undo and redo step with stable element ID and frame")
+    func inlineTextUndoRedo() async throws {
+        let initial = makeProject()
+        let page = initial.cardDocument!.pages[1]
+        let original = page.elements[0]
+        var edited = original
+        edited.text?.text = "Committed once after IME composition"
+
+        try await expectSingleElementSnapshot(
+            initial: initial,
+            pageId: page.id,
+            original: original,
+            updated: edited
+        )
+        #expect(edited.normalizedFrame == original.normalizedFrame)
+    }
+
+    @Test("Atomic image replacement imports and updates in one undo and redo step")
+    func imageReplacementUndoRedo() async throws {
+        let initial = makeProject()
+        let page = initial.cardDocument!.pages[1]
+        let original = page.elements[1]
+        let replacement = MediaAsset(
+            id: uuid("75000000-0000-4000-8000-000000000001"),
+            originalURL: URL(fileURLWithPath: "/tmp/replacement-card.png"),
+            kind: .image,
+            metadata: MediaMetadata(width: 1200, height: 1200)
+        )
+        let session = EditorSession(project: initial)
+
+        try await session.dispatch(ReplaceCardElementImageCommand(
+            pageId: page.id,
+            elementId: original.id,
+            asset: replacement
+        ))
+        let applied = await session.snapshot()
+        let appliedElement = try #require(applied.cardDocument?.pages[1].elements[1])
+        #expect(appliedElement.id == original.id)
+        #expect(appliedElement.normalizedFrame == original.normalizedFrame)
+        #expect(appliedElement.mediaAssetID == replacement.id)
+        #expect(applied.mediaLibrary.assets[replacement.id] == replacement)
+
+        try await session.undo()
+        #expect(await session.snapshot() == initial)
+        try await session.redo()
+        #expect(await session.snapshot() == applied)
+    }
+
+    @Test("Atomic image replacement reuses an existing image and rejects non-image input")
+    func imageReplacementReuseAndRejection() throws {
+        var reusedProject = makeProject()
+        let page = reusedProject.cardDocument!.pages[1]
+        let imageElement = page.elements[1]
+        let existing = reusedProject.mediaLibrary.assets.values.first!
+
+        _ = try ReplaceCardElementImageCommand(
+            pageId: page.id,
+            elementId: imageElement.id,
+            asset: existing
+        ).apply(to: &reusedProject)
+        #expect(reusedProject.mediaLibrary.assets.count == 1)
+        #expect(reusedProject.cardDocument?.pages[1].elements[1].mediaAssetID == existing.id)
+
+        var rejectedProject = makeProject()
+        let rejectedInitial = rejectedProject
+        let video = MediaAsset(
+            originalURL: URL(fileURLWithPath: "/tmp/not-an-image.mp4"),
+            kind: .video
+        )
+        #expect(throws: EditorCommandError.self) {
+            _ = try ReplaceCardElementImageCommand(
+                pageId: page.id,
+                elementId: imageElement.id,
+                asset: video
+            ).apply(to: &rejectedProject)
+        }
+        #expect(rejectedProject == rejectedInitial)
+    }
+
     @Test("Every page and element operation is exactly one undo and redo snapshot")
     func operationsUndoRedoInSingleStep() async throws {
         let initial = makeProject()
@@ -240,7 +351,16 @@ struct CardDocumentCommandTests {
             DeleteCardPageCommand(pageId: pages[1].id),
             MoveCardPageCommand(pageId: pages[0].id, destinationIndex: 2),
             SetCardFormatCommand(format: .story),
-            UpdateCardElementCommand(pageId: pages[1].id, elementId: sourceElement.id, element: updated)
+            UpdateCardElementCommand(pageId: pages[1].id, elementId: sourceElement.id, element: updated),
+            ReplaceCardElementImageCommand(
+                pageId: pages[1].id,
+                elementId: pages[1].elements[1].id,
+                asset: MediaAsset(
+                    id: uuid("50000000-0000-4000-8000-000000000003"),
+                    originalURL: URL(fileURLWithPath: "/tmp/operation-card.png"),
+                    kind: .image
+                )
+            )
         ]
 
         for operation in operations {
@@ -261,13 +381,23 @@ struct CardDocumentCommandTests {
     func missingDocumentFailsClosed() throws {
         let page = makeProject().cardDocument!.pages[0]
         let element = page.elements[0]
+        let imageElement = makeProject().cardDocument!.pages[1].elements[1]
+        let imageAsset = MediaAsset(
+            originalURL: URL(fileURLWithPath: "/tmp/missing-document-card.png"),
+            kind: .image
+        )
         let commands: [any EditorCommand] = [
             AddCardPageCommand(page: CardPage(role: .body)),
             DuplicateCardPageCommand(pageId: page.id),
             DeleteCardPageCommand(pageId: page.id),
             MoveCardPageCommand(pageId: page.id, destinationIndex: 0),
             SetCardFormatCommand(format: .story),
-            UpdateCardElementCommand(pageId: page.id, elementId: element.id, element: element)
+            UpdateCardElementCommand(pageId: page.id, elementId: element.id, element: element),
+            ReplaceCardElementImageCommand(
+                pageId: page.id,
+                elementId: imageElement.id,
+                asset: imageAsset
+            )
         ]
 
         for command in commands {
@@ -461,6 +591,33 @@ struct CardDocumentCommandTests {
                 masterStyle: masterStyle
             )
         )
+    }
+
+    private func expectSingleElementSnapshot(
+        initial: Project,
+        pageId: UUID,
+        original: CardElement,
+        updated: CardElement
+    ) async throws {
+        let session = EditorSession(project: initial)
+        try await session.dispatch(UpdateCardElementCommand(
+            pageId: pageId,
+            elementId: original.id,
+            element: updated
+        ))
+        let applied = await session.snapshot()
+        let appliedElement = try #require(
+            applied.cardDocument?.pages
+                .first(where: { $0.id == pageId })?
+                .elements.first(where: { $0.id == original.id })
+        )
+        #expect(appliedElement == updated)
+        #expect(appliedElement.id == original.id)
+
+        try await session.undo()
+        #expect(await session.snapshot() == initial)
+        try await session.redo()
+        #expect(await session.snapshot() == applied)
     }
 
     private func frame(x: Double, y: Double, width: Double, height: Double) -> NormalizedRect {

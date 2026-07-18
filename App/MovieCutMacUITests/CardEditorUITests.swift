@@ -70,8 +70,37 @@ final class CardEditorUITests: XCTestCase {
         XCTAssertTrue(waitForLabel("Format: 9:16", on: formatStatus), "Format picker did not update visible persisted format state.")
         XCTAssertEqual(pageCount.label, "4 pages", "Format change unexpectedly changed the page sequence.")
 
+        let inlineTextElement = app.descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+                "cardCanvas.element.",
+                "Three ideas for better stories"
+            ))
+            .firstMatch
+        XCTAssertTrue(inlineTextElement.waitForExistence(timeout: 10), "A real canvas text element was not accessible.")
+        inlineTextElement.doubleClick()
+
+        let inlineEditor = app.descendants(matching: .any)
+            .matching(identifier: "cardCanvas.inlineEditor")
+            .firstMatch
+        XCTAssertTrue(inlineEditor.waitForExistence(timeout: 5), "Double-click did not open the inline editor.")
+        inlineEditor.click()
+        inlineEditor.typeKey("a", modifierFlags: .command)
+        inlineEditor.typeText("Inline canvas proof")
+        app.buttons["cardCanvas.inlineCommit"].click()
+
+        XCTAssertTrue(
+            waitForLabelContaining("Inline canvas proof", on: inlineTextElement),
+            "Committed inline text was not visible on the same element."
+        )
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(
+            waitForLabelContaining("Three ideas for better stories", on: inlineTextElement),
+            "One undo did not restore the original inline text."
+        )
+
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "G18-Inc2-Card-Editor-Page-Rail"
+        screenshot.name = "G18-Inc3-Inline-Card-Canvas"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -90,5 +119,21 @@ final class CardEditorUITests: XCTestCase {
             usleep(100_000)
         }
         return element.exists && element.label == expectedLabel
+    }
+
+    @MainActor
+    private func waitForLabelContaining(
+        _ expectedText: String,
+        on element: XCUIElement,
+        timeout: TimeInterval = 10
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.label.contains(expectedText) {
+                return true
+            }
+            usleep(100_000)
+        }
+        return element.exists && element.label.contains(expectedText)
     }
 }

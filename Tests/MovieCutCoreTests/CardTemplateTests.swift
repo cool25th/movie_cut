@@ -360,3 +360,66 @@ struct CardTemplateTests {
         UUID(uuidString: value)!
     }
 }
+
+@Suite("Built-in Card Template Manifest")
+struct BuiltinCardTemplateManifestTests {
+    @Test("Manifest contains ten unique stable sets and names")
+    func manifestIdentity() {
+        let templates = BuiltinCardTemplates.all
+
+        #expect(templates.count == 10)
+        #expect(Set(templates.map(\.id)).count == templates.count)
+        #expect(Set(templates.map(\.name)).count == templates.count)
+        #expect(templates == BuiltinCardTemplates.all)
+    }
+
+    @Test("Every built-in has five pages, all roles, and no empty required slots")
+    func manifestCompleteness() throws {
+        for template in BuiltinCardTemplates.all {
+            try CardTemplateResolver.validate(template)
+            #expect(template.pages.count == 5)
+            #expect(Set(template.pages.map(\.role)) == Set([.cover, .body, .emphasis, .closing]))
+            let resolved = try CardTemplateResolver.instantiate(template, seed: 20260718)
+            #expect(resolved.pages.count == 5)
+            #expect(CardTemplateResolver.emptyRequiredSlotCount(in: resolved.pages) == 0)
+            #expect(template.pages.flatMap(\.elements).contains(where: { $0.kind == .text }))
+            #expect(template.pages.flatMap(\.elements).contains(where: { $0.kind == .image }))
+            #expect(template.pages.flatMap(\.elements).contains(where: { $0.kind == .logo }))
+        }
+    }
+
+    @Test("Built-ins have unique visual fingerprints")
+    func visualFingerprintsAreUnique() {
+        let fingerprints = BuiltinCardTemplates.all.map { template in
+            let master = template.defaultMasterStyle
+            let frames = template.pages.flatMap(\.elements).map { element in
+                "\(element.kind.rawValue):\(element.normalizedFrame.x),\(element.normalizedFrame.y),\(element.normalizedFrame.width),\(element.normalizedFrame.height)"
+            }.joined(separator: "|")
+            return "\(master.fontFamily)|\(master.primaryColorHex)|\(master.secondaryColorHex)|\(String(describing: master.logoPlacement))|\(frames)"
+        }
+
+        #expect(Set(fingerprints).count == BuiltinCardTemplates.all.count)
+    }
+
+    @Test("Manifest Codable round trip is deterministic")
+    func deterministicCodableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let first = try encoder.encode(BuiltinCardTemplates.all)
+        let second = try encoder.encode(BuiltinCardTemplates.all)
+        let decoded = try JSONDecoder().decode([CardTemplateSet].self, from: first)
+
+        #expect(first == second)
+        #expect(decoded == BuiltinCardTemplates.all)
+        #expect(try encoder.encode(decoded) == first)
+    }
+
+    @Test("All manifest page and slot IDs are globally unique")
+    func manifestSlotIDsAreUnique() {
+        let pages = BuiltinCardTemplates.all.flatMap(\.pages)
+        let elements = pages.flatMap(\.elements)
+
+        #expect(Set(pages.map(\.id)).count == pages.count)
+        #expect(Set(elements.map(\.id)).count == elements.count)
+    }
+}

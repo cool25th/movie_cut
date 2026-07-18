@@ -215,7 +215,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ### K. 카드뉴스 사용성 (UB-C / 2026-07-14 등록)
 - [x] ✅ **G-18 카드 문서 모델+편집기 (P0)** — **Inc 1~4 완료**: persisted normalized card model/atomic commands, command-backed Mac card mode, real normalized canvas(move/resize/인라인 텍스트/atomic 이미지 교체), actual-app save/reload E2E(`MOVIECUT_UITEST_CARD_EDITOR=1` dump `complete=true/error=none/finalPageCount=5/maxNormalizedFrameError=0/saveReloadEqual=true`, 전체 `run_e2e_export.sh` `E2E check OK`). `CardDocumentCommand|CardLayout` 26/26 PASS. UB-C1(add/duplicate/delete/reorder 각 ≤2)/UB-C3(3규격, error 0≤0.001)/UB-C4(inline 1회 진입+undo 복원) 자동화 충족. SC-C1(≤10분/막힘 0)은 `[사용자 확인 대기]` 유지(admin UI Automation 권한으로 XCUITest 초기화 차단).
-- [ ] ❌ **G-19 카드 템플릿+마스터 스타일 (P0)** — timeline용 단일 텍스트 템플릿 14종만 있고 카드 세트/마스터 상속 없음. 목표: 일관 세트 ≥10종·선택→적용 ≤2클릭, 폰트·색·로고 위치 일괄 변경 ≤3클릭.
+- [x] ✅ **G-19 카드 템플릿+마스터 스타일 (P0)** — 고유 시각 fingerprint의 내장 세트 10종, 5장/all roles/empty slot 0, 선택→적용 2클릭, 8장 effective master 전파와 page override 보존/폰트·색·로고 위치 적용 2클릭, template/master 각각 single-step undo를 actual-app dump와 전체 `E2E check OK`로 검증했다. SC-C1은 `[사용자 확인 대기]`; 다음 자동 마일스톤은 G-20 브랜드 킷.
 - [ ] ❌ **G-20 브랜드 킷 (P1)** — 로고·색·폰트 묶음의 프로젝트 간 영속 저장/적용 0건. 목표: 새 프로젝트 적용 ≤2클릭, SC-C2(8장+일괄 스타일+export) ≤5분.
 - [ ] ❌ **G-21 카드 export (P0)** — 페이지 세트 renderer/PNG·JPG 순번 일괄 writer/카드→9:16 video planner 0건. 목표: 전 카드 `card_01...` PNG/JPG(1080×1080/1080×1350/1080×1920) 및 기본 duration+전환+BGM 슬롯 영상화, SC-C3 조작 ≤1분(렌더 제외).
 - [ ] ❌ **G-22 대본 자동 분배 (P2)** — 문단 parser/distributor/온디바이스 요약 seam 0건. 목표: 문단 매핑 누락·중복 0, 문안 창작 제외, SC-C4 ≤5분.

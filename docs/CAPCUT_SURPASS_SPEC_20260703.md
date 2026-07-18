@@ -839,6 +839,7 @@ public struct CardMasterStyle: Codable, Sendable, Equatable {
 - `CardTemplateTests`: 10종 수/role/필수 slot/결정적 ID, resolver override 우선순위, legacy decode.
 - `CardMasterStyleCommandTests`: 8장 전파와 single-step undo.
 - 앱 E2E click counter + 5장 render-state dump; SC-C1은 `[사용자 확인 대기]`.
+- 2026-07-18 Inc 1~4 완료: focused `CardTemplate|CardDocumentCommand|CardLayout` **42 tests / 4 suites PASS**, actual-app `MOVIECUT_UITEST_CARD_TEMPLATE=1` dump는 `builtinCount=10/appliedSetID=editorial-indigo/pageCount=5/roles=cover,body,emphasis,closing/emptyRequiredSlotCount=0/templateClickCount=2/masterPropagationPageCount=8/masterClickCount=2/templateUndoRestored=true/masterUndoRestored=true/complete=true/error=none`이고 page override 1개를 보존했으며 상설 전체 `scripts/run_e2e_export.sh`가 최종 `E2E check OK`까지 통과했다; SC-C1은 `[사용자 확인 대기]`, 다음 자동 마일스톤은 G-20 브랜드 킷이다.
 
 #### 리스크
 - 10종을 이름만 바꾼 복제본으로 채우면 일관 세트 요구를 형식적으로만 통과한다. 레이아웃/타이포/색 토큰 fingerprint 중복을 테스트로 제한한다.

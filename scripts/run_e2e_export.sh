@@ -32,7 +32,6 @@ APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 # app process. The status records decoder timestamps and cache transitions.
 FILMSTRIP_TMPDIR="$(mktemp -d)"
 FILMSTRIP_RESULT="$FILMSTRIP_TMPDIR/filmstrip.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-04 filmstrip generator smoke"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
@@ -61,7 +60,6 @@ TIMELINE_FILMSTRIP_RESULT="$TIMELINE_FILMSTRIP_TMPDIR/timeline_filmstrip.txt"
 ffmpeg -v error -f lavfi -i "testsrc2=size=160x90:rate=10:duration=30" \
   -an -c:v libx264 -pix_fmt yuv420p -g 10 -keyint_min 10 -sc_threshold 0 \
   "$TIMELINE_FILMSTRIP_FIXTURE"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-04 Inc 3-4 TimelineView filmstrip/hover consumer smoke"
 env MOVIECUT_UITEST=1 \
@@ -151,7 +149,6 @@ rm -rf "$TIMELINE_FILMSTRIP_TMPDIR"
 # playhead and PlaybackEngine time within one 30fps frame of 1.25s.
 SCRUB_TMPDIR="$(mktemp -d)"
 SCRUB_RESULT="$SCRUB_TMPDIR/timeline_scrub.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-16 timeline scrub smoke"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
@@ -187,7 +184,6 @@ rm -rf "$SCRUB_TMPDIR"
 CLIPBOARD_TMPDIR="$(mktemp -d)"
 CLIPBOARD_OUT="$CLIPBOARD_TMPDIR/g17_clipboard.mp4"
 CLIPBOARD_RESULT="$CLIPBOARD_TMPDIR/g17_clipboard.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-17 clipboard E2E → $CLIPBOARD_OUT"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE,$FIXTURE" \
@@ -224,7 +220,6 @@ IMAGE_FIXTURE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
 IMAGE_TMPDIR="$(mktemp -d)"
 IMAGE_OUT="$IMAGE_TMPDIR/image_clip.mp4"
 IMAGE_RESULT="$IMAGE_TMPDIR/image_clip.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-15 image smoke → $IMAGE_OUT"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
@@ -269,7 +264,6 @@ echo "PASS: G-15 image clip export ${IMAGE_DURATION}s ${IMAGE_RGB}"
 MIXED_TMPDIR="$(mktemp -d)"
 MIXED_OUT="$MIXED_TMPDIR/mixed_image_video.mp4"
 MIXED_RESULT="$MIXED_TMPDIR/mixed_image_video.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-15 mixed image+video smoke → $MIXED_OUT"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
@@ -325,7 +319,6 @@ echo "PASS: G-15 mixed image+video export ${MIXED_DURATION}s ${MIXED_RGB} ($MIXE
 IMAGE_GRADE_TMPDIR="$(mktemp -d)"
 IMAGE_GRADE_OUT="$IMAGE_GRADE_TMPDIR/image_clip_warm.mp4"
 IMAGE_GRADE_RESULT="$IMAGE_GRADE_TMPDIR/image_clip_warm.txt"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 sleep 1
 echo "Running G-15 warm-graded image smoke → $IMAGE_GRADE_OUT"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" MOVIECUT_UITEST_GRADE=1 \
@@ -377,8 +370,8 @@ PY
 rm -rf "$IMAGE_GRADE_TMPDIR"
 echo "PASS: G-15 warm-graded image export ${IMAGE_GRADE_DURATION}s ${IMAGE_GRADE_RGB} ($IMAGE_GRADE_STATUS)"
 
-# Kill any lingering harness instance so sequential launches don't interfere.
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+# Prior harness launches terminate through MOVIECUT_UITEST_QUIT; never signal an
+# unrelated MovieCutMac process before continuing with the sequential checks.
 sleep 1
 
 OUT="$(mktemp -d)/e2e_export.mp4"
@@ -1198,7 +1191,6 @@ CARD_TMPDIR="$(mktemp -d)"
 CARD_RESULT="$CARD_TMPDIR/card_editor.json"
 CARD_SAVE="$CARD_TMPDIR/saved.moviecut"
 CARD_RELOAD="$CARD_TMPDIR/reloaded.moviecut"
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_CARD_EDITOR=1 \
   MOVIECUT_UITEST_CARD_EDITOR_SOURCE="$CARD_FIXTURE" \
   MOVIECUT_UITEST_CARD_EDITOR_SAVE="$CARD_SAVE" \
@@ -1207,7 +1199,6 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_CARD_EDITOR=1 \
 CAP=$!
 for _ in $(seq 1 120); do [ -s "$CARD_RESULT" ] && break; sleep 0.5; done
 wait "$CAP" 2>/dev/null || true
-pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
 CARD_STATUS="$(cat "$CARD_RESULT" 2>/dev/null || echo MISSING)"
 # Fail closed unless every required field is present and correct.
 CARD_COMPLETE="$(printf '%s' "$CARD_STATUS" | python3 -c 'import json,sys
@@ -1241,4 +1232,77 @@ else
 fi
 rm -rf "$CARD_TMPDIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload)"
+# G-19 Inc 4: actual-app template gallery/master-style E2E. Enumerates the
+# built-in manifest, applies a complete five-page set through the gallery's
+# ViewModel API, builds the eight-page UB-C5 fixture through duplicate commands,
+# applies a master preset, and proves both atomic changes restore in one undo.
+# Only the exact MovieCutMac PID launched here is eligible for timeout cleanup.
+CARD_TEMPLATE_TMPDIR="$(mktemp -d)"
+CARD_TEMPLATE_RESULT="$CARD_TEMPLATE_TMPDIR/card_template.json"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_CARD_TEMPLATE=1 \
+  MOVIECUT_UITEST_CARD_TEMPLATE_SOURCE="$CARD_FIXTURE" \
+  MOVIECUT_UITEST_RESULT="$CARD_TEMPLATE_RESULT" MOVIECUT_UITEST_QUIT=1 \
+  "$APP_BIN" >/dev/null 2>&1 &
+CARD_TEMPLATE_PID=$!
+for _ in $(seq 1 120); do
+  [ -s "$CARD_TEMPLATE_RESULT" ] && break
+  sleep 0.5
+done
+if kill -0 "$CARD_TEMPLATE_PID" 2>/dev/null; then
+  kill "$CARD_TEMPLATE_PID" 2>/dev/null || true
+fi
+wait "$CARD_TEMPLATE_PID" 2>/dev/null || true
+CARD_TEMPLATE_STATUS="$(cat "$CARD_TEMPLATE_RESULT" 2>/dev/null || echo MISSING)"
+CARD_TEMPLATE_COMPLETE="$(printf '%s' "$CARD_TEMPLATE_STATUS" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+roles=d.get("rolesPresent",[])
+changed=d.get("masterChangedAttributes",[])
+ok=(d.get("complete") is True
+    and d.get("completionMarker")=="G19_CARD_TEMPLATE_E2E_COMPLETE"
+    and d.get("error")=="none"
+    and int(d.get("builtinCount",0))>=10
+    and len(d.get("builtinSetIDs",[]))==int(d.get("builtinCount",0))
+    and len(set(d.get("builtinSetIDs",[])))==int(d.get("builtinCount",0))
+    and len(d.get("builtinSetNames",[]))==int(d.get("builtinCount",0))
+    and bool(d.get("appliedSetID"))
+    and bool(d.get("appliedSetName"))
+    and int(d.get("pageCount",0))==5
+    and roles==["cover","body","emphasis","closing"]
+    and int(d.get("emptyRequiredSlotCount",-1))==0
+    and int(d.get("templateClickCount",99))<=2
+    and int(d.get("masterClickCount",99))<=3
+    and int(d.get("masterPropagationPageCount",0))>=8
+    and d.get("masterPropagationAcrossAllPages") is True
+    and int(d.get("masterInheritedPageCount",0))>=7
+    and d.get("masterFontFamily")=="Futura"
+    and d.get("masterPrimaryColorHex")=="#FF6B35"
+    and isinstance(d.get("masterLogoPlacement"),dict)
+    and all(key in changed for key in ("fontFamily","primaryColorHex","logoPlacement"))
+    and int(d.get("masterLogoElementCount",0))>0
+    and int(d.get("masterLogoPlacementMatchCount",-1))==int(d.get("masterLogoElementCount",0))
+    and int(d.get("pageOverrideCount",0))>=1
+    and d.get("pageOverridesPreserved") is True
+    and d.get("templateUndoRestored") is True
+    and d.get("templateRedoRestored") is True
+    and d.get("masterUndoRestored") is True)
+print("1" if ok else "0")
+' 2>/dev/null || echo 0)"
+if [ "$CARD_TEMPLATE_COMPLETE" = "1" ]; then
+  CARD_TEMPLATE_SUMMARY="$(printf '%s' "$CARD_TEMPLATE_STATUS" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print("builtins=%s set=%s pages=%s roles=%s empty=%s template_clicks=%s master_pages=%s master_clicks=%s template_undo=%s master_undo=%s" % (
+    d.get("builtinCount"), d.get("appliedSetID"), d.get("pageCount"),
+    ",".join(d.get("rolesPresent",[])), d.get("emptyRequiredSlotCount"),
+    d.get("templateClickCount"), d.get("masterPropagationPageCount"),
+    d.get("masterClickCount"), int(d.get("templateUndoRestored",False)),
+    int(d.get("masterUndoRestored",False))))
+' 2>/dev/null || echo summary_error)"
+  echo "PASS: G-19 card template/master style E2E ($CARD_TEMPLATE_SUMMARY)"
+else
+  echo "FAIL: G-19 card template/master style E2E ($CARD_TEMPLATE_STATUS)" >&2
+  cat "$CARD_TEMPLATE_RESULT" 2>/dev/null >&2 || true
+  rm -rf "$CARD_TEMPLATE_TMPDIR"; exit 1
+fi
+rm -rf "$CARD_TEMPLATE_TMPDIR"
+
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style)"

@@ -63,6 +63,38 @@ private struct CardEditorUITestDump: Codable {
     var freshSessionReloaded = false
 }
 
+private struct CardTemplateUITestDump: Codable {
+    var schemaVersion = 1
+    var scenario = "G-19-card-template-master-style"
+    var complete = false
+    var completionMarker = ""
+    var error = "not_run"
+    var builtinCount = 0
+    var builtinSetIDs: [String] = []
+    var builtinSetNames: [String] = []
+    var appliedSetID = ""
+    var appliedSetName = ""
+    var pageCount = 0
+    var rolesPresent: [String] = []
+    var emptyRequiredSlotCount = -1
+    var templateClickCount = 99
+    var masterClickCount = 99
+    var masterPropagationPageCount = 0
+    var masterPropagationAcrossAllPages = false
+    var masterInheritedPageCount = 0
+    var masterFontFamily = ""
+    var masterPrimaryColorHex = ""
+    var masterLogoPlacement: CardEditorUITestFrame?
+    var masterChangedAttributes: [String] = []
+    var masterLogoElementCount = 0
+    var masterLogoPlacementMatchCount = 0
+    var pageOverrideCount = 0
+    var pageOverridesPreserved = false
+    var templateUndoRestored = false
+    var templateRedoRestored = false
+    var masterUndoRestored = false
+}
+
 extension EditorViewModel {
     /// Measures per-frame CoreImage compositor render cost at 1080p on the GPU
     /// context the app actually uses — the factor that bounds preview fps. A
@@ -117,6 +149,10 @@ extension EditorViewModel {
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
+        if env["MOVIECUT_UITEST_CARD_TEMPLATE"] == "1" {
+            await runCardTemplateUITestScenario(environment: env)
+            return
+        }
         if env["MOVIECUT_UITEST_CARD_TEMPLATE_CORE"] == "1" {
             await runCardTemplateCoreUITestScenario(environment: env)
             return
@@ -604,6 +640,180 @@ extension EditorViewModel {
         )
     }
 
+    /// G-19 Inc 4's fail-closed actual-app proof. The action counts mirror the
+    /// gallery's select/apply and preset/apply paths, while every mutation runs
+    /// through the exact command-backed ViewModel methods used by those views.
+    private func runCardTemplateUITestScenario(environment: [String: String]) async {
+        var dump = CardTemplateUITestDump()
+        let resultPath = environment["MOVIECUT_UITEST_RESULT"] ?? ""
+
+        do {
+            dump = try await makeCardTemplateUITestDump(environment: environment)
+            lastErrorMessage = nil
+            lastStatusMessage = dump.completionMarker
+        } catch {
+            dump.complete = false
+            dump.completionMarker = ""
+            dump.error = error.localizedDescription
+            lastStatusMessage = nil
+            lastErrorMessage = "card template harness failed: \(error.localizedDescription)"
+        }
+
+        if !resultPath.isEmpty {
+            do {
+                try writeUITestDump(dump, to: URL(fileURLWithPath: resultPath))
+            } catch {
+                lastStatusMessage = nil
+                lastErrorMessage = "card template dump failed: \(error.localizedDescription)"
+            }
+        }
+
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func makeCardTemplateUITestDump(
+        environment: [String: String]
+    ) async throws -> CardTemplateUITestDump {
+        let sourceURL = try cardEditorUITestURL(
+            named: "MOVIECUT_UITEST_CARD_TEMPLATE_SOURCE",
+            environment: environment
+        )
+
+        stopAutoSave()
+        lastErrorMessage = nil
+        await openProject(from: sourceURL)
+        try cardEditorUITestRequire(lastErrorMessage == nil, lastErrorMessage ?? "source load failed")
+
+        let builtins = BuiltinCardTemplates.all
+        try cardEditorUITestRequire(builtins.count >= 10, "fewer than ten built-in card template sets")
+        try builtins.forEach { try CardTemplateResolver.validate($0) }
+        guard let template = builtins.first, builtins.count > 1 else {
+            throw CardEditorUITestError.invariant("built-in template manifest could not supply two styles")
+        }
+
+        var dump = CardTemplateUITestDump()
+        dump.builtinCount = builtins.count
+        dump.builtinSetIDs = builtins.map(\.id)
+        dump.builtinSetNames = builtins.map(\.name)
+        dump.appliedSetID = template.id
+        dump.appliedSetName = template.name
+        dump.templateClickCount = 2
+
+        let beforeTemplate = try cardEditorUITestDocument()
+        let templateApplied = await applyCardTemplate(template, seed: 19_04)
+        try cardEditorUITestRequire(templateApplied, lastErrorMessage ?? "template command failed")
+        let afterTemplate = try cardEditorUITestDocument()
+
+        dump.pageCount = afterTemplate.pages.count
+        let requiredRoles: [CardPageRole] = [.cover, .body, .emphasis, .closing]
+        dump.rolesPresent = requiredRoles
+            .filter { role in afterTemplate.pages.contains(where: { $0.role == role }) }
+            .map(\.rawValue)
+        dump.emptyRequiredSlotCount = CardTemplateResolver.emptyRequiredSlotCount(in: afterTemplate.pages)
+        try cardEditorUITestRequire(dump.pageCount == 5, "template did not resolve to exactly five pages")
+        try cardEditorUITestRequire(
+            dump.rolesPresent == requiredRoles.map(\.rawValue),
+            "template result did not contain all four roles"
+        )
+        try cardEditorUITestRequire(dump.emptyRequiredSlotCount == 0, "template result contained an empty required slot")
+        try cardEditorUITestRequire(dump.templateClickCount <= 2, "template action-count limit was exceeded")
+
+        await undo()
+        dump.templateUndoRestored = currentProject.cardDocument == beforeTemplate
+        try cardEditorUITestRequire(dump.templateUndoRestored, "one undo did not restore the pre-template snapshot")
+        await redo()
+        dump.templateRedoRestored = currentProject.cardDocument == afterTemplate
+        try cardEditorUITestRequire(dump.templateRedoRestored, "one redo did not restore the applied template snapshot")
+
+        // Expand the five-page template to the eight-card UB-C5 fixture through
+        // normal duplicate commands before changing the master.
+        let duplicatePageIDs = [
+            "87000000-0000-4000-8000-000000000001",
+            "87000000-0000-4000-8000-000000000002",
+            "87000000-0000-4000-8000-000000000003"
+        ].map { UUID(uuidString: $0)! }
+        for (sourcePage, duplicatePageID) in zip(afterTemplate.pages.prefix(3), duplicatePageIDs) {
+            let duplicated = await duplicateCardPage(sourcePage.id, duplicatePageID: duplicatePageID)
+            try cardEditorUITestRequire(duplicated == duplicatePageID, "failed to build the eight-page master fixture")
+        }
+        let beforeMaster = try cardEditorUITestDocument()
+        try cardEditorUITestRequire(beforeMaster.pages.count == 8, "master fixture did not contain eight pages")
+
+        let changedMaster = builtins[1].defaultMasterStyle
+        try cardEditorUITestRequire(
+            changedMaster.fontFamily != template.defaultMasterStyle.fontFamily
+                && changedMaster.primaryColorHex != template.defaultMasterStyle.primaryColorHex
+                && changedMaster.logoPlacement != template.defaultMasterStyle.logoPlacement,
+            "master fixture did not change font, primary color, and logo placement"
+        )
+        dump.masterClickCount = 2
+        dump.masterFontFamily = changedMaster.fontFamily
+        dump.masterPrimaryColorHex = changedMaster.primaryColorHex
+        dump.masterLogoPlacement = changedMaster.logoPlacement.map(CardEditorUITestFrame.init)
+        dump.masterChangedAttributes = ["fontFamily", "primaryColorHex", "logoPlacement"]
+
+        let masterApplied = await setCardMasterStyle(changedMaster)
+        try cardEditorUITestRequire(masterApplied, lastErrorMessage ?? "master command failed")
+        let afterMaster = try cardEditorUITestDocument()
+        dump.pageOverrideCount = afterMaster.pages.filter { $0.masterOverride != nil }.count
+        dump.masterInheritedPageCount = afterMaster.pages.filter { $0.masterOverride == nil }.count
+        dump.masterLogoElementCount = afterMaster.pages
+            .flatMap(\.elements)
+            .filter { $0.kind == .logo }
+            .count
+        dump.masterLogoPlacementMatchCount = afterMaster.pages
+            .flatMap(\.elements)
+            .filter { $0.kind == .logo && $0.normalizedFrame == changedMaster.logoPlacement }
+            .count
+
+        let matchingPages = afterMaster.pages.filter { page in
+            let effectiveStyle = page.masterOverride ?? changedMaster
+            return page.elements.allSatisfy { element in
+                switch element.kind {
+                case .text:
+                    return element.text?.fontFamily == effectiveStyle.fontFamily
+                        && element.text?.fontColor == effectiveStyle.primaryColorHex
+                case .logo:
+                    return effectiveStyle.logoPlacement == nil
+                        || element.normalizedFrame == effectiveStyle.logoPlacement
+                case .image:
+                    return true
+                }
+            }
+        }
+        dump.masterPropagationPageCount = matchingPages.count
+        dump.masterPropagationAcrossAllPages = matchingPages.count == afterMaster.pages.count
+            && afterMaster.pages.count >= 8
+            && afterMaster.masterStyle == changedMaster
+        dump.pageOverridesPreserved = zip(beforeMaster.pages, afterMaster.pages).allSatisfy { before, after in
+            before.id == after.id && before.masterOverride == after.masterOverride
+        }
+
+        try cardEditorUITestRequire(dump.masterClickCount <= 3, "master action-count limit was exceeded")
+        try cardEditorUITestRequire(
+            dump.masterPropagationAcrossAllPages && dump.masterPropagationPageCount >= 8,
+            "effective master values did not resolve across all eight pages"
+        )
+        try cardEditorUITestRequire(dump.masterInheritedPageCount >= 7, "master did not reach all inheriting pages")
+        try cardEditorUITestRequire(
+            dump.masterLogoElementCount > 0
+                && dump.masterLogoPlacementMatchCount == dump.masterLogoElementCount,
+            "master logo placement did not reach every inheriting logo"
+        )
+        try cardEditorUITestRequire(dump.pageOverridesPreserved, "page-local master overrides were not preserved")
+
+        await undo()
+        dump.masterUndoRestored = currentProject.cardDocument == beforeMaster
+        try cardEditorUITestRequire(dump.masterUndoRestored, "one undo did not restore the pre-master snapshot")
+
+        dump.complete = true
+        dump.completionMarker = "G19_CARD_TEMPLATE_E2E_COMPLETE"
+        dump.error = "none"
+        return dump
+    }
+
     /// G-18 Inc 4's deterministic actual-app scenario. This deliberately uses
     /// the same ViewModel methods as CardEditorView/CardCanvasView so every edit
     /// still crosses EditorSession.dispatch and the normal ProjectStore paths.
@@ -625,7 +835,7 @@ extension EditorViewModel {
 
         if !resultPath.isEmpty {
             do {
-                try writeCardEditorUITestDump(dump, to: URL(fileURLWithPath: resultPath))
+                try writeUITestDump(dump, to: URL(fileURLWithPath: resultPath))
             } catch {
                 lastStatusMessage = nil
                 lastErrorMessage = "card editor dump failed: \(error.localizedDescription)"
@@ -898,7 +1108,7 @@ extension EditorViewModel {
         ].max() ?? .infinity
     }
 
-    private func writeCardEditorUITestDump(_ dump: CardEditorUITestDump, to url: URL) throws {
+    private func writeUITestDump<Dump: Encodable>(_ dump: Dump, to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(dump)

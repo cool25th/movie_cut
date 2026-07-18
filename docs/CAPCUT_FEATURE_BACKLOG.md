@@ -214,7 +214,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 플랫폼 게시(F-24) — OS 공유 시트(ShareLink)로 충족. 직접 API 게시는 스펙 권고대로 범위 외.
 
 ### K. 카드뉴스 사용성 (UB-C / 2026-07-14 등록)
-- [ ] 🟡 **G-18 카드 문서 모델+편집기 (P0)** — **Inc 1 완료**: optional persisted `CardDocument`, normalized 0...1 page elements, 최소 future-compatible `CardMasterStyle` shape, Add/Duplicate/Delete/Move/Update atomic commands와 legacy/undo behavioral **15/15 PASS**. Caveat: Mac 카드 편집기, 동작별 click count, 3규격 실제 전환, 인라인 canvas 편집, actual-app 저장/재로드 E2E는 Inc 2~4로 남아 UB-C1/C3/C4와 SC-C1은 아직 ❌.
+- [ ] 🟡 **G-18 카드 문서 모델+편집기 (P0)** — **Inc 1~2 완료**: persisted normalized card model/atomic commands와 command-backed Mac card mode(선택 page rail, add/duplicate/delete, drag reorder, 1:1·4:5·9:16 picker)가 실제 앱 bootstrap에서 노출됐고 accessibility 조작으로 page 선택→duplicate 4장→9:16 전환을 확인했다(`CardDocumentCommand` 17/17 PASS, runtime screenshot 저장). Caveat: admin UI Automation 권한으로 XCUITest 0/1 초기화 차단 및 drag 자동화 미수행; UB-C1/C3/C4와 SC-C1은 Inc 3 canvas/인라인 편집과 Inc 4 실제 앱 click-count·save/reload 측정 전까지 완전 충족이 아니다.
 - [ ] ❌ **G-19 카드 템플릿+마스터 스타일 (P0)** — timeline용 단일 텍스트 템플릿 14종만 있고 카드 세트/마스터 상속 없음. 목표: 일관 세트 ≥10종·선택→적용 ≤2클릭, 폰트·색·로고 위치 일괄 변경 ≤3클릭.
 - [ ] ❌ **G-20 브랜드 킷 (P1)** — 로고·색·폰트 묶음의 프로젝트 간 영속 저장/적용 0건. 목표: 새 프로젝트 적용 ≤2클릭, SC-C2(8장+일괄 스타일+export) ≤5분.
 - [ ] ❌ **G-21 카드 export (P0)** — 페이지 세트 renderer/PNG·JPG 순번 일괄 writer/카드→9:16 video planner 0건. 목표: 전 카드 `card_01...` PNG/JPG(1080×1080/1080×1350/1080×1920) 및 기본 duration+전환+BGM 슬롯 영상화, SC-C3 조작 ≤1분(렌더 제외).

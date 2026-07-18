@@ -182,6 +182,39 @@ public struct MoveCardPageCommand: EditorCommand {
     }
 }
 
+/// Changes the document canvas format without rewriting normalized element
+/// geometry or page/element identifiers.
+public struct SetCardFormatCommand: EditorCommand {
+    public let id: UUID
+    public let format: CardFormat
+
+    public init(id: UUID = UUID(), format: CardFormat) {
+        self.id = id
+        self.format = format
+    }
+
+    public func apply(to project: inout Project) throws -> CommandResult {
+        var document = try project.requiredCardDocument()
+        try CardDocumentCommandValidation.validate(document)
+        guard document.format != format else {
+            throw EditorCommandError.invalidCommand("Card document already uses the requested format.")
+        }
+
+        let previousDocument = document
+        document.format = format
+        project.cardDocument = document
+
+        return CommandResult(
+            description: "Changed card format to \(format.rawValue)",
+            undoValues: ["cardDocument": .cardDocument(previousDocument)]
+        )
+    }
+
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Restored card format")
+    }
+}
+
 /// Replaces one card element while retaining its stable identifier.
 public struct UpdateCardElementCommand: EditorCommand {
     public let id: UUID

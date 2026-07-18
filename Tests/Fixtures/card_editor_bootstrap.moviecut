@@ -1,0 +1,162 @@
+{
+  "id": "81000000-0000-4000-8000-000000000001",
+  "name": "Card Editor UI Evidence",
+  "createdAt": "2026-07-18T00:00:00Z",
+  "updatedAt": "2026-07-18T00:01:00Z",
+  "appVersion": "0.1.0",
+  "schemaVersion": 1,
+  "mediaLibrary": {
+    "assets": []
+  },
+  "timeline": {
+    "id": "81000000-0000-4000-8000-000000000002",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvasSize": [1920, 1080],
+    "aspectRatio": "landscape16x9",
+    "tracks": [],
+    "markers": []
+  },
+  "markers": [],
+  "canvas": {
+    "aspectRatio": "landscape16x9",
+    "frameRate": "fps30"
+  },
+  "exportSettings": {
+    "resolution": "p1080",
+    "frameRate": "fps30",
+    "codec": "h264",
+    "audioCodec": "aac",
+    "containerFormat": "mp4",
+    "quality": "high",
+    "includeChapters": true,
+    "includeBeatChapters": false
+  },
+  "cardDocument": {
+    "id": "82000000-0000-4000-8000-000000000001",
+    "title": "Summer Launch",
+    "format": "square",
+    "pages": [
+      {
+        "id": "83000000-0000-4000-8000-000000000001",
+        "role": "cover",
+        "elements": [
+          {
+            "id": "84000000-0000-4000-8000-000000000001",
+            "kind": "text",
+            "normalizedFrame": {
+              "x": 0.1,
+              "y": 0.16,
+              "width": 0.8,
+              "height": 0.22
+            },
+            "text": {
+              "contentKind": "text",
+              "text": "Summer Launch",
+              "position": [0, 0],
+              "fontFamily": "System",
+              "fontSize": 64,
+              "fontColor": "#14213D",
+              "isBold": true,
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "84000000-0000-4000-8000-000000000002",
+            "kind": "image",
+            "normalizedFrame": {
+              "x": 0.12,
+              "y": 0.48,
+              "width": 0.76,
+              "height": 0.36
+            }
+          }
+        ]
+      },
+      {
+        "id": "83000000-0000-4000-8000-000000000002",
+        "role": "body",
+        "duration": 4,
+        "elements": [
+          {
+            "id": "84000000-0000-4000-8000-000000000003",
+            "kind": "text",
+            "normalizedFrame": {
+              "x": 0.09,
+              "y": 0.1,
+              "width": 0.82,
+              "height": 0.18
+            },
+            "text": {
+              "contentKind": "text",
+              "text": "Three ideas for better stories",
+              "position": [0, 0],
+              "fontFamily": "System",
+              "fontSize": 46,
+              "fontColor": "#1F2937",
+              "isBold": true,
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "84000000-0000-4000-8000-000000000004",
+            "kind": "text",
+            "normalizedFrame": {
+              "x": 0.12,
+              "y": 0.38,
+              "width": 0.76,
+              "height": 0.38
+            },
+            "text": {
+              "contentKind": "text",
+              "text": "Start with one clear point. Keep the layout focused.",
+              "position": [0, 0],
+              "fontFamily": "System",
+              "fontSize": 34,
+              "fontColor": "#374151",
+              "alignment": "center"
+            }
+          }
+        ]
+      },
+      {
+        "id": "83000000-0000-4000-8000-000000000003",
+        "role": "closing",
+        "elements": [
+          {
+            "id": "84000000-0000-4000-8000-000000000005",
+            "kind": "text",
+            "normalizedFrame": {
+              "x": 0.12,
+              "y": 0.3,
+              "width": 0.76,
+              "height": 0.2
+            },
+            "text": {
+              "contentKind": "text",
+              "text": "Ready to publish",
+              "position": [0, 0],
+              "fontFamily": "System",
+              "fontSize": 54,
+              "fontColor": "#14213D",
+              "isBold": true,
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "84000000-0000-4000-8000-000000000006",
+            "kind": "logo",
+            "normalizedFrame": {
+              "x": 0.38,
+              "y": 0.72,
+              "width": 0.24,
+              "height": 0.12
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

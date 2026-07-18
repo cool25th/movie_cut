@@ -485,6 +485,107 @@ final class EditorViewModel {
         max(10, currentProject.timeline.duration, playheadTime)
     }
 
+    var isCardEditorMode: Bool {
+        currentProject.cardDocument != nil
+    }
+
+    /// Adds a blank body page after the selected page, or at the end when no
+    /// selection is supplied. The returned identifier is the persisted page ID.
+    @discardableResult
+    func addCardPage(after pageId: UUID?) async -> UUID? {
+        let snapshot = await session.snapshot()
+        guard let document = snapshot.cardDocument else {
+            lastErrorMessage = "This project does not contain a card document."
+            return nil
+        }
+
+        let insertionIndex: Int
+        if let pageId {
+            guard let sourceIndex = document.pages.firstIndex(where: { $0.id == pageId }) else {
+                lastErrorMessage = "The selected card page no longer exists."
+                return nil
+            }
+            insertionIndex = sourceIndex + 1
+        } else {
+            insertionIndex = document.pages.endIndex
+        }
+
+        let page = CardPage(role: .body)
+        let didApply = await dispatchCardMutation(
+            AddCardPageCommand(page: page, insertionIndex: insertionIndex),
+            successMessage: "Added page \(insertionIndex + 1)."
+        )
+        return didApply ? page.id : nil
+    }
+
+    /// Duplicates a page through the Core command layer and returns the fresh,
+    /// stable identifier selected by the command.
+    @discardableResult
+    func duplicateCardPage(_ pageId: UUID) async -> UUID? {
+        let duplicatePageId = UUID()
+        let didApply = await dispatchCardMutation(
+            DuplicateCardPageCommand(pageId: pageId, duplicatePageId: duplicatePageId),
+            successMessage: "Duplicated the selected page."
+        )
+        return didApply ? duplicatePageId : nil
+    }
+
+    /// Deletes a page and returns the adjacent surviving page that the UI should
+    /// select. The final page remains protected by the Core command invariant.
+    @discardableResult
+    func deleteCardPage(_ pageId: UUID) async -> UUID? {
+        let snapshot = await session.snapshot()
+        guard let pages = snapshot.cardDocument?.pages,
+              let deletedIndex = pages.firstIndex(where: { $0.id == pageId }) else {
+            lastErrorMessage = "The selected card page no longer exists."
+            return nil
+        }
+
+        let didApply = await dispatchCardMutation(
+            DeleteCardPageCommand(pageId: pageId),
+            successMessage: "Deleted page \(deletedIndex + 1)."
+        )
+        guard didApply, let remainingPages = currentProject.cardDocument?.pages, !remainingPages.isEmpty else {
+            return nil
+        }
+        return remainingPages[min(deletedIndex, remainingPages.count - 1)].id
+    }
+
+    /// Reorders a page to its final array index. Drag/drop and accessible move
+    /// controls intentionally share this single command-backed entry point.
+    @discardableResult
+    func moveCardPage(_ pageId: UUID, to destinationIndex: Int) async -> Bool {
+        let snapshot = await session.snapshot()
+        guard let pages = snapshot.cardDocument?.pages,
+              let sourceIndex = pages.firstIndex(where: { $0.id == pageId }) else {
+            lastErrorMessage = "The selected card page no longer exists."
+            return false
+        }
+        guard sourceIndex != destinationIndex else { return true }
+
+        return await dispatchCardMutation(
+            MoveCardPageCommand(pageId: pageId, destinationIndex: destinationIndex),
+            successMessage: "Moved page to position \(destinationIndex + 1)."
+        )
+    }
+
+    /// Changes the card aspect preset while leaving normalized element frames
+    /// and all stable page/element identifiers untouched.
+    @discardableResult
+    func setCardFormat(_ format: CardFormat) async -> Bool {
+        let snapshot = await session.snapshot()
+        guard let document = snapshot.cardDocument else {
+            lastErrorMessage = "This project does not contain a card document."
+            return false
+        }
+        guard document.format != format else { return true }
+
+        return await dispatchCardMutation(
+            SetCardFormatCommand(format: format),
+            successMessage: "Changed card format to \(format.accessibilityTitle)."
+        )
+    }
+
     func newProject() {
         let project = Self.defaultProject()
         session = EditorSession(project: project)
@@ -4343,6 +4444,21 @@ final class EditorViewModel {
             try await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func dispatchCardMutation(
+        _ command: any EditorCommand,
+        successMessage: String
+    ) async -> Bool {
+        do {
+            try await session.dispatch(command)
+            try await refreshFromSession()
+            lastStatusMessage = successMessage
+            return true
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            return false
         }
     }
 

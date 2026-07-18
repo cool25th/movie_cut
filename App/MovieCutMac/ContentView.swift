@@ -9,30 +9,12 @@ struct ContentView: View {
     @State private var isTemplatePickerPresented = false
 
     var body: some View {
-        VSplitView {
-            VStack(spacing: 0) {
-                HSplitView {
-                    MediaLibraryPanel(viewModel: viewModel)
-                        .frame(minWidth: 360, idealWidth: 380, maxWidth: 430)
-
-                    PreviewPanel(viewModel: viewModel)
-                        .frame(minWidth: 400)
-
-                    InspectorPanel(viewModel: viewModel)
-                        .frame(minWidth: 240, maxWidth: 320)
-                }
-                .background(MovieCutTheme.editorBackground)
-
-                Divider()
-                    .overlay(MovieCutTheme.divider)
-
-                statusBar
+        Group {
+            if viewModel.isCardEditorMode {
+                CardEditorView(viewModel: viewModel)
+            } else {
+                timelineEditorSurface
             }
-            .frame(minHeight: 220, maxHeight: .infinity)
-            .layoutPriority(1)
-
-            TimelineView(viewModel: viewModel)
-                .frame(minHeight: 210, idealHeight: 260, maxHeight: .infinity)
         }
         .frame(minWidth: 1024, minHeight: 720)
         .background(MovieCutTheme.editorBackground.ignoresSafeArea())
@@ -73,89 +55,91 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
-                // P2 top chrome polish contract: compact secondary canvas/project
-                // helpers stay quiet so Export remains the primary toolbar action.
-                topChromeCompactCluster(accessibilityLabel: "Canvas view controls") {
-                    Picker("Canvas", selection: $viewModel.canvasSelection) {
-                        ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
-                            Text(aspectRatio.displayName).tag(aspectRatio)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .help("Choose the canvas aspect ratio")
-                    .accessibilityLabel("Canvas")
-                    .accessibilityHint("Choose the current canvas aspect ratio.")
-                    .onChange(of: viewModel.canvasSelection) { _, newValue in
-                        guard viewModel.currentProject.canvas.aspectRatio != newValue else { return }
-                        Task {
-                            await viewModel.updateCanvas(CanvasPreset(aspectRatio: newValue))
-                        }
-                    }
-
-                    toolbarCanvasResolutionBadge
-
-                    Button(action: { isCanvasSettingsPresented.toggle() }) {
-                        Label("Canvas", systemImage: "rectangle.dashed")
-                    }
-                    .topChromeSecondaryToolbarStyle()
-                    .help("Canvas settings")
-                    .accessibilityLabel("Canvas")
-                    .accessibilityHint("Open canvas settings for aspect ratio, frame rate, and background.")
-                    .popover(isPresented: $isCanvasSettingsPresented) {
-                        CanvasSettingsView(
-                            canvas: viewModel.currentProject.canvas,
-                            background: viewModel.currentProject.canvasBackground,
-                            onBackgroundChange: { background in
-                                Task { await viewModel.updateCanvasBackground(background) }
+                if !viewModel.isCardEditorMode {
+                    // P2 top chrome polish contract: compact secondary canvas/project
+                    // helpers stay quiet so Export remains the primary toolbar action.
+                    topChromeCompactCluster(accessibilityLabel: "Canvas view controls") {
+                        Picker("Canvas", selection: $viewModel.canvasSelection) {
+                            ForEach(toolbarCanvasPresets, id: \.self) { aspectRatio in
+                                Text(aspectRatio.displayName).tag(aspectRatio)
                             }
-                        ) { canvas in
-                            Task { await viewModel.updateCanvas(canvas) }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .help("Choose the canvas aspect ratio")
+                        .accessibilityLabel("Canvas")
+                        .accessibilityHint("Choose the current canvas aspect ratio.")
+                        .onChange(of: viewModel.canvasSelection) { _, newValue in
+                            guard viewModel.currentProject.canvas.aspectRatio != newValue else { return }
+                            Task {
+                                await viewModel.updateCanvas(CanvasPreset(aspectRatio: newValue))
+                            }
+                        }
+
+                        toolbarCanvasResolutionBadge
+
+                        Button(action: { isCanvasSettingsPresented.toggle() }) {
+                            Label("Canvas", systemImage: "rectangle.dashed")
+                        }
+                        .topChromeSecondaryToolbarStyle()
+                        .help("Canvas settings")
+                        .accessibilityLabel("Canvas")
+                        .accessibilityHint("Open canvas settings for aspect ratio, frame rate, and background.")
+                        .popover(isPresented: $isCanvasSettingsPresented) {
+                            CanvasSettingsView(
+                                canvas: viewModel.currentProject.canvas,
+                                background: viewModel.currentProject.canvasBackground,
+                                onBackgroundChange: { background in
+                                    Task { await viewModel.updateCanvasBackground(background) }
+                                }
+                            ) { canvas in
+                                Task { await viewModel.updateCanvas(canvas) }
+                            }
                         }
                     }
+
+                    topChromeCompactCluster(accessibilityLabel: "Project helper controls") {
+                        Button(action: { isTemplatePickerPresented.toggle() }) {
+                            Label("Templates", systemImage: "rectangle.stack.badge.plus")
+                        }
+                        .topChromeSecondaryToolbarStyle()
+                        .help("Templates")
+                        .accessibilityLabel("Templates")
+                        .accessibilityHint("Open template picker.")
+
+                        Menu {
+                            Button("Export Package…") {
+                                Task { await viewModel.exportProjectPackage() }
+                            }
+                            Button("Import Package…") {
+                                Task { await viewModel.importProjectPackage() }
+                            }
+                        } label: {
+                            Label("Package", systemImage: "shippingbox")
+                        }
+                        .topChromeSecondaryToolbarStyle()
+                        .help("Export or import a self-contained .mctemplate project package")
+                        .accessibilityLabel("Package")
+                        .accessibilityHint("Export or import a self-contained .mctemplate project package.")
+
+                        Button(action: { Task { await viewModel.syncToCloud() } }) {
+                            if viewModel.isCloudSyncing {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .frame(width: 14, height: 14)
+                            } else {
+                                Label("Sync to Cloud", systemImage: "cloud.and.arrow.up")
+                            }
+                        }
+                        .topChromeSecondaryToolbarStyle()
+                        .help("Sync to Cloud")
+                        .accessibilityLabel("Sync to Cloud")
+                        .accessibilityHint("Sync the current project to Cloud.")
+                    }
+
+                    exportToolbarControl
                 }
-
-                topChromeCompactCluster(accessibilityLabel: "Project helper controls") {
-                    Button(action: { isTemplatePickerPresented.toggle() }) {
-                        Label("Templates", systemImage: "rectangle.stack.badge.plus")
-                    }
-                    .topChromeSecondaryToolbarStyle()
-                    .help("Templates")
-                    .accessibilityLabel("Templates")
-                    .accessibilityHint("Open template picker.")
-
-                    Menu {
-                        Button("Export Package…") {
-                            Task { await viewModel.exportProjectPackage() }
-                        }
-                        Button("Import Package…") {
-                            Task { await viewModel.importProjectPackage() }
-                        }
-                    } label: {
-                        Label("Package", systemImage: "shippingbox")
-                    }
-                    .topChromeSecondaryToolbarStyle()
-                    .help("Export or import a self-contained .mctemplate project package")
-                    .accessibilityLabel("Package")
-                    .accessibilityHint("Export or import a self-contained .mctemplate project package.")
-
-                    Button(action: { Task { await viewModel.syncToCloud() } }) {
-                        if viewModel.isCloudSyncing {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: 14, height: 14)
-                        } else {
-                            Label("Sync to Cloud", systemImage: "cloud.and.arrow.up")
-                        }
-                    }
-                    .topChromeSecondaryToolbarStyle()
-                    .help("Sync to Cloud")
-                    .accessibilityLabel("Sync to Cloud")
-                    .accessibilityHint("Sync the current project to Cloud.")
-                }
-
-                exportToolbarControl
             }
         }
         .toolbarBackground(MovieCutTheme.panelBackgroundRaised, for: .windowToolbar)
@@ -168,6 +152,34 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isTemplatePickerPresented) {
             TemplatePickerView(viewModel: viewModel)
+        }
+    }
+
+    private var timelineEditorSurface: some View {
+        VSplitView {
+            VStack(spacing: 0) {
+                HSplitView {
+                    MediaLibraryPanel(viewModel: viewModel)
+                        .frame(minWidth: 360, idealWidth: 380, maxWidth: 430)
+
+                    PreviewPanel(viewModel: viewModel)
+                        .frame(minWidth: 400)
+
+                    InspectorPanel(viewModel: viewModel)
+                        .frame(minWidth: 240, maxWidth: 320)
+                }
+                .background(MovieCutTheme.editorBackground)
+
+                Divider()
+                    .overlay(MovieCutTheme.divider)
+
+                statusBar
+            }
+            .frame(minHeight: 220, maxHeight: .infinity)
+            .layoutPriority(1)
+
+            TimelineView(viewModel: viewModel)
+                .frame(minHeight: 210, idealHeight: 260, maxHeight: .infinity)
         }
     }
 

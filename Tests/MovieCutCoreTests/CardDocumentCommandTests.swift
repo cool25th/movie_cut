@@ -60,6 +60,24 @@ struct CardDocumentCommandTests {
         #expect(decoded.canvas == CanvasPreset(aspectRatio: .portrait9x16, frameRate: .fps24))
     }
 
+    @Test("Card editor bootstrap fixture decodes deterministic pages and normalized elements")
+    func cardEditorBootstrapFixtureDecodes() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/card_editor_bootstrap.moviecut")
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(Project.self, from: Data(contentsOf: fixtureURL))
+
+        #expect(decoded.cardDocument?.title == "Summer Launch")
+        #expect(decoded.cardDocument?.format == .square)
+        #expect(decoded.cardDocument?.pages.count == 3)
+        #expect(decoded.cardDocument?.pages.flatMap(\.elements).count == 6)
+        #expect(decoded.cardDocument?.pages[1].elements[0].normalizedFrame == frame(x: 0.09, y: 0.1, width: 0.82, height: 0.18))
+    }
+
     @Test("Legacy card document without format defaults to square")
     func legacyCardDocumentDefaultsToSquare() throws {
         let data = """
@@ -156,6 +174,27 @@ struct CardDocumentCommandTests {
         #expect(project.cardDocument?.pages[2].elements[0].normalizedFrame == original[0].elements[0].normalizedFrame)
     }
 
+    @Test("Format change preserves normalized layout and stable identifiers")
+    func formatChangePreservesLayoutAndIds() async throws {
+        let initial = makeProject(format: .square)
+        let originalPages = initial.cardDocument!.pages
+        let session = EditorSession(project: initial)
+
+        try await session.dispatch(SetCardFormatCommand(format: .story))
+        let changed = await session.snapshot()
+
+        #expect(changed.cardDocument?.format == .story)
+        #expect(changed.cardDocument?.pages == originalPages)
+        #expect(changed.cardDocument?.pages.map(\.id) == originalPages.map(\.id))
+        #expect(changed.cardDocument?.pages.flatMap(\.elements).map(\.id) == originalPages.flatMap(\.elements).map(\.id))
+        #expect(changed.cardDocument?.pages.flatMap(\.elements).map(\.normalizedFrame) == originalPages.flatMap(\.elements).map(\.normalizedFrame))
+
+        try await session.undo()
+        #expect(await session.snapshot() == initial)
+        try await session.redo()
+        #expect(await session.snapshot() == changed)
+    }
+
     @Test("Update replaces element content and geometry without changing its ID")
     func updateElementPreservesStableId() throws {
         var project = makeProject()
@@ -200,6 +239,7 @@ struct CardDocumentCommandTests {
             ),
             DeleteCardPageCommand(pageId: pages[1].id),
             MoveCardPageCommand(pageId: pages[0].id, destinationIndex: 2),
+            SetCardFormatCommand(format: .story),
             UpdateCardElementCommand(pageId: pages[1].id, elementId: sourceElement.id, element: updated)
         ]
 
@@ -226,6 +266,7 @@ struct CardDocumentCommandTests {
             DuplicateCardPageCommand(pageId: page.id),
             DeleteCardPageCommand(pageId: page.id),
             MoveCardPageCommand(pageId: page.id, destinationIndex: 0),
+            SetCardFormatCommand(format: .story),
             UpdateCardElementCommand(pageId: page.id, elementId: element.id, element: element)
         ]
 

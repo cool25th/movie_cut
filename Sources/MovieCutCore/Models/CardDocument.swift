@@ -82,7 +82,7 @@ public enum CardFormat: String, Codable, Sendable, Equatable {
 }
 
 /// The semantic role of a page within a card set.
-public enum CardPageRole: String, Codable, Sendable, Equatable {
+public enum CardPageRole: String, Codable, Sendable, Equatable, Hashable {
     /// The opening cover page.
     case cover
 
@@ -179,6 +179,10 @@ public struct CardPage: Codable, Sendable, Equatable, Identifiable {
     /// Ordered page elements.
     public var elements: [CardElement]
 
+    /// Optional page-local style. When present, G-19 inheritance resolves this
+    /// value ahead of the document master style and the template default.
+    public var masterOverride: CardMasterStyle?
+
     /// Optional future slideshow duration. Nil uses the G-21 default.
     public var duration: TimeInterval?
 
@@ -186,11 +190,13 @@ public struct CardPage: Codable, Sendable, Equatable, Identifiable {
         id: UUID = UUID(),
         role: CardPageRole,
         elements: [CardElement] = [],
+        masterOverride: CardMasterStyle? = nil,
         duration: TimeInterval? = nil
     ) {
         self.id = id
         self.role = role
         self.elements = elements
+        self.masterOverride = masterOverride
         self.duration = duration
     }
 }

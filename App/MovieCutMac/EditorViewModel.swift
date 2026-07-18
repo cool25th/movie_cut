@@ -489,6 +489,26 @@ final class EditorViewModel {
         currentProject.cardDocument != nil
     }
 
+    /// Applies a complete template set through one Core command. The gallery
+    /// and DEBUG actual-app harness share this entry point.
+    @discardableResult
+    func applyCardTemplate(_ template: CardTemplateSet, seed: UInt64) async -> Bool {
+        await dispatchCardMutation(
+            ApplyCardTemplateCommand(template: template, seed: seed),
+            successMessage: "Applied \(template.name)."
+        )
+    }
+
+    /// Applies one document-wide master style through one Core command while
+    /// retaining page-local overrides.
+    @discardableResult
+    func setCardMasterStyle(_ masterStyle: CardMasterStyle) async -> Bool {
+        await dispatchCardMutation(
+            SetCardMasterStyleCommand(masterStyle: masterStyle),
+            successMessage: "Updated the card master style."
+        )
+    }
+
     /// Adds a blank body page after the selected page, or at the end when no
     /// selection is supplied. The returned identifier is the persisted page ID.
     @discardableResult

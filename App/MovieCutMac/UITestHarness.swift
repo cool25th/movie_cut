@@ -117,6 +117,10 @@ extension EditorViewModel {
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
+        if env["MOVIECUT_UITEST_CARD_TEMPLATE_CORE"] == "1" {
+            await runCardTemplateCoreUITestScenario(environment: env)
+            return
+        }
         if env["MOVIECUT_UITEST_CARD_EDITOR"] == "1" {
             await runCardEditorUITestScenario(environment: env)
             return
@@ -470,6 +474,134 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    /// G-19 Inc 1 A6 hook. It executes the new resolver and both atomic
+    /// commands inside MovieCutMac through the same ViewModel methods reserved
+    /// for the gallery/panel, then proves each undo restores an exact snapshot.
+    private func runCardTemplateCoreUITestScenario(environment: [String: String]) async {
+        let resultPath = environment["MOVIECUT_UITEST_RESULT"] ?? ""
+        var status = "G19_CORE_E2E_INCOMPLETE error=not_run"
+
+        do {
+            guard let sourcePath = environment["MOVIECUT_UITEST_CARD_TEMPLATE_CORE_SOURCE"],
+                  !sourcePath.isEmpty else {
+                throw CardEditorUITestError.invariant("missing MOVIECUT_UITEST_CARD_TEMPLATE_CORE_SOURCE")
+            }
+            stopAutoSave()
+            lastErrorMessage = nil
+            await openProject(from: URL(fileURLWithPath: sourcePath))
+            try cardEditorUITestRequire(lastErrorMessage == nil, lastErrorMessage ?? "source load failed")
+            let beforeTemplate = try cardEditorUITestDocument()
+            let template = cardTemplateCoreUITestTemplate()
+
+            let templateApplied = await applyCardTemplate(template, seed: 19)
+            try cardEditorUITestRequire(templateApplied, lastErrorMessage ?? "template command failed")
+            let afterTemplate = try cardEditorUITestDocument()
+            try cardEditorUITestRequire(afterTemplate.pages.count == 5, "resolver did not produce five pages")
+            try cardEditorUITestRequire(
+                Set(afterTemplate.pages.map(\.role)) == Set([.cover, .body, .emphasis, .closing]),
+                "resolved roles were incomplete"
+            )
+
+            let changedStyle = CardMasterStyle(
+                fontFamily: "Avenir Next",
+                primaryColorHex: "#123456",
+                secondaryColorHex: "#FEDCBA",
+                logoPlacement: NormalizedRect(x: 0.72, y: 0.06, width: 0.2, height: 0.1)!
+            )
+            let masterApplied = await setCardMasterStyle(changedStyle)
+            try cardEditorUITestRequire(masterApplied, lastErrorMessage ?? "master command failed")
+            let afterMaster = try cardEditorUITestDocument()
+            let masterPropagated = afterMaster.pages.flatMap(\.elements).allSatisfy { element in
+                switch element.kind {
+                case .text:
+                    return element.text?.fontFamily == changedStyle.fontFamily
+                        && element.text?.fontColor == changedStyle.primaryColorHex
+                case .logo:
+                    return element.normalizedFrame == changedStyle.logoPlacement
+                case .image:
+                    return true
+                }
+            }
+            try cardEditorUITestRequire(masterPropagated, "master values did not propagate")
+
+            await undo()
+            let masterUndo = currentProject.cardDocument == afterTemplate
+            try cardEditorUITestRequire(masterUndo, "one undo did not restore the pre-master snapshot")
+            await undo()
+            let templateUndo = currentProject.cardDocument == beforeTemplate
+            try cardEditorUITestRequire(templateUndo, "one undo did not restore the pre-template snapshot")
+
+            status = "G19_CORE_E2E_COMPLETE pages=5 roles=cover,body,emphasis,closing emptySlots=\(CardTemplateResolver.emptyRequiredSlotCount(in: afterTemplate.pages)) masterPropagated=1 templateUndo=1 masterUndo=1 error=none"
+            lastErrorMessage = nil
+            lastStatusMessage = status
+        } catch {
+            status = "G19_CORE_E2E_INCOMPLETE error=\(error.localizedDescription)"
+            lastStatusMessage = nil
+            lastErrorMessage = "card template core harness failed: \(error.localizedDescription)"
+        }
+
+        if !resultPath.isEmpty {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+        }
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func cardEditorUITestDocument() throws -> CardDocument {
+        guard let document = currentProject.cardDocument else {
+            throw CardEditorUITestError.invariant("project has no card document")
+        }
+        return document
+    }
+
+    private func cardTemplateCoreUITestTemplate() -> CardTemplateSet {
+        let textFrame = NormalizedRect(x: 0.1, y: 0.12, width: 0.8, height: 0.22)!
+        let mediaFrame = NormalizedRect(x: 0.1, y: 0.4, width: 0.8, height: 0.45)!
+        let logoFrame = NormalizedRect(x: 0.7, y: 0.82, width: 0.2, height: 0.1)!
+        let mediaID = UUID(uuidString: "86000000-0000-4000-8000-000000000001")!
+        let logoID = UUID(uuidString: "86000000-0000-4000-8000-000000000002")!
+        let style = CardMasterStyle(
+            fontFamily: "Helvetica Neue",
+            primaryColorHex: "#112233",
+            secondaryColorHex: "#DDEEFF",
+            logoPlacement: logoFrame
+        )
+        return CardTemplateSet(
+            id: "g19-core-a6",
+            name: "G19 Core A6",
+            pages: [
+                CardTemplatePage(
+                    id: "cover",
+                    role: .cover,
+                    elements: [CardElement(kind: .text, normalizedFrame: textFrame, text: TextClipContent(text: "Cover"))]
+                ),
+                CardTemplatePage(
+                    id: "body",
+                    role: .body,
+                    elements: [
+                        CardElement(kind: .text, normalizedFrame: textFrame, text: TextClipContent(text: "Body")),
+                        CardElement(kind: .image, normalizedFrame: mediaFrame, mediaAssetID: mediaID)
+                    ]
+                ),
+                CardTemplatePage(
+                    id: "emphasis",
+                    role: .emphasis,
+                    elements: [CardElement(kind: .text, normalizedFrame: textFrame, text: TextClipContent(text: "Emphasis"))]
+                ),
+                CardTemplatePage(
+                    id: "closing",
+                    role: .closing,
+                    elements: [
+                        CardElement(kind: .text, normalizedFrame: textFrame, text: TextClipContent(text: "Closing")),
+                        CardElement(kind: .logo, normalizedFrame: logoFrame, mediaAssetID: logoID)
+                    ]
+                )
+            ],
+            defaultMasterStyle: style
+        )
     }
 
     /// G-18 Inc 4's deterministic actual-app scenario. This deliberately uses

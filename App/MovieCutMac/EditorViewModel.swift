@@ -492,7 +492,7 @@ final class EditorViewModel {
     /// Adds a blank body page after the selected page, or at the end when no
     /// selection is supplied. The returned identifier is the persisted page ID.
     @discardableResult
-    func addCardPage(after pageId: UUID?) async -> UUID? {
+    func addCardPage(after pageId: UUID?, pageID: UUID = UUID()) async -> UUID? {
         let snapshot = await session.snapshot()
         guard let document = snapshot.cardDocument else {
             lastErrorMessage = "This project does not contain a card document."
@@ -510,7 +510,7 @@ final class EditorViewModel {
             insertionIndex = document.pages.endIndex
         }
 
-        let page = CardPage(role: .body)
+        let page = CardPage(id: pageID, role: .body)
         let didApply = await dispatchCardMutation(
             AddCardPageCommand(page: page, insertionIndex: insertionIndex),
             successMessage: "Added page \(insertionIndex + 1)."
@@ -521,13 +521,12 @@ final class EditorViewModel {
     /// Duplicates a page through the Core command layer and returns the fresh,
     /// stable identifier selected by the command.
     @discardableResult
-    func duplicateCardPage(_ pageId: UUID) async -> UUID? {
-        let duplicatePageId = UUID()
+    func duplicateCardPage(_ pageId: UUID, duplicatePageID: UUID = UUID()) async -> UUID? {
         let didApply = await dispatchCardMutation(
-            DuplicateCardPageCommand(pageId: pageId, duplicatePageId: duplicatePageId),
+            DuplicateCardPageCommand(pageId: pageId, duplicatePageId: duplicatePageID),
             successMessage: "Duplicated the selected page."
         )
-        return didApply ? duplicatePageId : nil
+        return didApply ? duplicatePageID : nil
     }
 
     /// Deletes a page and returns the adjacent surviving page that the UI should

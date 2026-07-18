@@ -1187,4 +1187,58 @@ else
 fi
 rm -rf "$AS_DIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave)"
+# G-18 Inc 4: actual-app card editor save/reload E2E. Drives the same
+# EditorViewModel/CardEditorView/CardCanvasView command paths through a real
+# MovieCutMac process: add/duplicate/delete/reorder pages, all three formats,
+# inline text update with undo/redo, save, reload into a fresh session, and a
+# fail-closed machine-readable dump. Static contracts do not count as proof.
+CARD_FIXTURE="$ROOT/Tests/Fixtures/card_editor_bootstrap.moviecut"
+[ -s "$CARD_FIXTURE" ] || { echo "missing card editor fixture" >&2; exit 1; }
+CARD_TMPDIR="$(mktemp -d)"
+CARD_RESULT="$CARD_TMPDIR/card_editor.json"
+CARD_SAVE="$CARD_TMPDIR/saved.moviecut"
+CARD_RELOAD="$CARD_TMPDIR/reloaded.moviecut"
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_CARD_EDITOR=1 \
+  MOVIECUT_UITEST_CARD_EDITOR_SOURCE="$CARD_FIXTURE" \
+  MOVIECUT_UITEST_CARD_EDITOR_SAVE="$CARD_SAVE" \
+  MOVIECUT_UITEST_CARD_EDITOR_RELOAD="$CARD_RELOAD" \
+  MOVIECUT_UITEST_RESULT="$CARD_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+CAP=$!
+for _ in $(seq 1 120); do [ -s "$CARD_RESULT" ] && break; sleep 0.5; done
+wait "$CAP" 2>/dev/null || true
+pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true
+CARD_STATUS="$(cat "$CARD_RESULT" 2>/dev/null || echo MISSING)"
+# Fail closed unless every required field is present and correct.
+CARD_COMPLETE="$(printf '%s' "$CARD_STATUS" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+ok=(d.get("complete") is True
+    and d.get("completionMarker")=="G18_CARD_EDITOR_E2E_COMPLETE"
+    and d.get("error")=="none"
+    and d.get("finalPageCount")==5
+    and d.get("actionCounts",{}).get("add",99)<=2
+    and d.get("actionCounts",{}).get("duplicate",99)<=2
+    and d.get("actionCounts",{}).get("delete",99)<=2
+    and d.get("actionCounts",{}).get("reorder",99)<=2
+    and d.get("actionCounts",{}).get("inlineDoubleClick")==1
+    and d.get("observedFormats")==["square","portrait","story"]
+    and float(d.get("maxNormalizedFrameError",999))<=0.001
+    and bool(d.get("inlineUndoRestored")) is True
+    and bool(d.get("inlineRedoRestored")) is True
+    and bool(d.get("saveReloadEqual")) is True
+    and bool(d.get("freshSessionReloaded")) is True
+    and int(d.get("savedProjectBytes",0))>0
+    and int(d.get("reloadedProjectBytes",0))>0)
+print("1" if ok else "0")
+' 2>/dev/null || echo 0)"
+if [ "$CARD_COMPLETE" = "1" ] && [ -s "$CARD_SAVE" ] && [ -s "$CARD_RELOAD" ]; then
+  CARD_PAGES="$(printf '%s' "$CARD_STATUS" | python3 -c 'import json,sys;print(len(json.load(sys.stdin).get("orderedPageIDs",[])))' 2>/dev/null || echo 0)"
+  echo "PASS: card editor save/reload E2E (5 pages, inline undo/redo, save==reload, $CARD_PAGES ordered IDs)"
+else
+  echo "FAIL: card editor save/reload E2E ($CARD_STATUS)" >&2
+  cat "$CARD_RESULT" 2>/dev/null >&2 || true
+  rm -rf "$CARD_TMPDIR"; exit 1
+fi
+rm -rf "$CARD_TMPDIR"
+
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload)"

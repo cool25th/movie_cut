@@ -4,6 +4,65 @@ import CoreImage
 import Foundation
 import MovieCutCore
 
+private enum CardEditorUITestError: LocalizedError {
+    case invariant(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invariant(let message): message
+        }
+    }
+}
+
+private struct CardEditorUITestActionCounts: Codable, Equatable {
+    var add = 0
+    var duplicate = 0
+    var delete = 0
+    var reorder = 0
+    var inlineDoubleClick = 0
+}
+
+private struct CardEditorUITestFrame: Codable, Equatable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    init(_ frame: NormalizedRect) {
+        x = frame.x
+        y = frame.y
+        width = frame.width
+        height = frame.height
+    }
+}
+
+private struct CardEditorUITestDump: Codable {
+    var schemaVersion = 1
+    var scenario = "G-18-card-editor-save-reload"
+    var complete = false
+    var completionMarker = ""
+    var error = "not_run"
+    var actionCounts = CardEditorUITestActionCounts()
+    var initialPageCount = 0
+    var finalPageCount = 0
+    var orderedPageIDs: [String] = []
+    var editedElementID = ""
+    var originalText = ""
+    var editedText = ""
+    var observedFormats: [String] = []
+    var beforeFrame: CardEditorUITestFrame?
+    var afterFrame: CardEditorUITestFrame?
+    var maxNormalizedFrameError = Double.infinity
+    var inlineUndoRestored = false
+    var inlineRedoRestored = false
+    var saveReloadEqual = false
+    var savedProjectBytes = 0
+    var reloadedProjectBytes = 0
+    var savedProjectPath = ""
+    var reloadedProjectPath = ""
+    var freshSessionReloaded = false
+}
+
 extension EditorViewModel {
     /// Measures per-frame CoreImage compositor render cost at 1080p on the GPU
     /// context the app actually uses — the factor that bounds preview fps. A
@@ -58,6 +117,10 @@ extension EditorViewModel {
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
+        if env["MOVIECUT_UITEST_CARD_EDITOR"] == "1" {
+            await runCardEditorUITestScenario(environment: env)
+            return
+        }
         var extractAudioSuffix = ""
         var scrubSuffix = ""
         var clipboardSuffix = ""
@@ -407,6 +470,311 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    /// G-18 Inc 4's deterministic actual-app scenario. This deliberately uses
+    /// the same ViewModel methods as CardEditorView/CardCanvasView so every edit
+    /// still crosses EditorSession.dispatch and the normal ProjectStore paths.
+    private func runCardEditorUITestScenario(environment: [String: String]) async {
+        var dump = CardEditorUITestDump()
+        let resultPath = environment["MOVIECUT_UITEST_RESULT"] ?? ""
+
+        do {
+            dump = try await makeCardEditorUITestDump(environment: environment)
+            lastErrorMessage = nil
+            lastStatusMessage = dump.completionMarker
+        } catch {
+            dump.complete = false
+            dump.completionMarker = ""
+            dump.error = error.localizedDescription
+            lastStatusMessage = nil
+            lastErrorMessage = "card editor harness failed: \(error.localizedDescription)"
+        }
+
+        if !resultPath.isEmpty {
+            do {
+                try writeCardEditorUITestDump(dump, to: URL(fileURLWithPath: resultPath))
+            } catch {
+                lastStatusMessage = nil
+                lastErrorMessage = "card editor dump failed: \(error.localizedDescription)"
+            }
+        }
+
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func makeCardEditorUITestDump(
+        environment: [String: String]
+    ) async throws -> CardEditorUITestDump {
+        let sourceURL = try cardEditorUITestURL(
+            named: "MOVIECUT_UITEST_CARD_EDITOR_SOURCE",
+            environment: environment
+        )
+        let saveURL = try cardEditorUITestURL(
+            named: "MOVIECUT_UITEST_CARD_EDITOR_SAVE",
+            environment: environment
+        )
+        let reloadURL = try cardEditorUITestURL(
+            named: "MOVIECUT_UITEST_CARD_EDITOR_RELOAD",
+            environment: environment
+        )
+
+        stopAutoSave()
+        lastErrorMessage = nil
+        await openProject(from: sourceURL)
+        try cardEditorUITestRequire(lastErrorMessage == nil, lastErrorMessage ?? "source load failed")
+
+        let startingPageIDs = [
+            "83000000-0000-4000-8000-000000000001",
+            "83000000-0000-4000-8000-000000000002",
+            "83000000-0000-4000-8000-000000000003"
+        ].map { UUID(uuidString: $0)! }
+        let firstAddedPageID = UUID(uuidString: "85000000-0000-4000-8000-000000000001")!
+        let duplicatePageID = UUID(uuidString: "85000000-0000-4000-8000-000000000002")!
+        let secondAddedPageID = UUID(uuidString: "85000000-0000-4000-8000-000000000003")!
+        let editedElementID = UUID(uuidString: "84000000-0000-4000-8000-000000000003")!
+        let expectedFinalPageIDs = [
+            startingPageIDs[0],
+            secondAddedPageID,
+            firstAddedPageID,
+            startingPageIDs[1],
+            duplicatePageID
+        ]
+
+        guard let startingDocument = currentProject.cardDocument else {
+            throw CardEditorUITestError.invariant("source project has no card document")
+        }
+        try cardEditorUITestRequire(
+            startingDocument.pages.map(\.id) == startingPageIDs,
+            "source page IDs or order differed from the deterministic fixture"
+        )
+        try cardEditorUITestRequire(
+            startingDocument.format == .square,
+            "source format must start at square"
+        )
+
+        var dump = CardEditorUITestDump()
+        dump.initialPageCount = startingDocument.pages.count
+        dump.savedProjectPath = saveURL.path
+        dump.reloadedProjectPath = reloadURL.path
+
+        let firstAdded = await addCardPage(after: startingPageIDs[0], pageID: firstAddedPageID)
+        try cardEditorUITestRequire(firstAdded == firstAddedPageID, "first add did not return its stable page ID")
+        dump.actionCounts.add += 1
+
+        let duplicated = await duplicateCardPage(
+            startingPageIDs[1],
+            duplicatePageID: duplicatePageID
+        )
+        try cardEditorUITestRequire(duplicated == duplicatePageID, "duplicate did not return its stable page ID")
+        dump.actionCounts.duplicate += 1
+
+        let selectedAfterDelete = await deleteCardPage(startingPageIDs[2])
+        try cardEditorUITestRequire(
+            selectedAfterDelete != nil
+                && currentProject.cardDocument?.pages.contains(where: { $0.id == startingPageIDs[2] }) == false,
+            "delete did not remove the requested page"
+        )
+        dump.actionCounts.delete += 1
+
+        let secondAdded = await addCardPage(after: nil, pageID: secondAddedPageID)
+        try cardEditorUITestRequire(secondAdded == secondAddedPageID, "second add did not return its stable page ID")
+        dump.actionCounts.add += 1
+
+        let didReorder = await moveCardPage(secondAddedPageID, to: 1)
+        try cardEditorUITestRequire(didReorder, "reorder failed")
+        dump.actionCounts.reorder += 1
+
+        guard let reorderedDocument = currentProject.cardDocument else {
+            throw CardEditorUITestError.invariant("card document disappeared after page operations")
+        }
+        try cardEditorUITestRequire(
+            reorderedDocument.pages.map(\.id) == expectedFinalPageIDs,
+            "final page IDs or order differed after add/duplicate/delete/reorder"
+        )
+
+        dump.observedFormats = [reorderedDocument.format.rawValue]
+        let didPortrait = await setCardFormat(.portrait)
+        try cardEditorUITestRequire(didPortrait, "portrait format switch failed")
+        dump.observedFormats.append(CardFormat.portrait.rawValue)
+        let didStory = await setCardFormat(.story)
+        try cardEditorUITestRequire(didStory, "story format switch failed")
+        dump.observedFormats.append(CardFormat.story.rawValue)
+
+        guard let originalElement = cardEditorUITestElement(
+            pageID: startingPageIDs[1],
+            elementID: editedElementID,
+            in: currentProject
+        ) else {
+            throw CardEditorUITestError.invariant("stable text element was not found after format changes")
+        }
+        let originalText = originalElement.text?.text ?? ""
+        let editedText = "G18 saved inline text"
+        let beforeFrame = originalElement.normalizedFrame
+        var editedElement = originalElement
+        var editedContent = editedElement.text ?? TextClipContent(text: "")
+        editedContent.text = editedText
+        editedElement.text = editedContent
+
+        // The UI contract enters the inline control with one physical
+        // double-click; the harness then uses the exact one-commit API invoked by
+        // CardCanvasView after that local draft finishes.
+        dump.actionCounts.inlineDoubleClick = 1
+        let didUpdateElement = await updateCardElement(pageId: startingPageIDs[1], element: editedElement)
+        try cardEditorUITestRequire(didUpdateElement, "inline-equivalent element update failed")
+        guard let appliedElement = cardEditorUITestElement(
+            pageID: startingPageIDs[1],
+            elementID: editedElementID,
+            in: currentProject
+        ) else {
+            throw CardEditorUITestError.invariant("edited element lost its stable ID")
+        }
+        try cardEditorUITestRequire(appliedElement.text?.text == editedText, "edited text was not applied")
+
+        await undo()
+        let undoElement = cardEditorUITestElement(
+            pageID: startingPageIDs[1],
+            elementID: editedElementID,
+            in: currentProject
+        )
+        dump.inlineUndoRestored = undoElement?.text?.text == originalText
+            && undoElement?.normalizedFrame == beforeFrame
+        try cardEditorUITestRequire(dump.inlineUndoRestored, "one undo did not restore inline text and frame")
+
+        await redo()
+        let redoElement = cardEditorUITestElement(
+            pageID: startingPageIDs[1],
+            elementID: editedElementID,
+            in: currentProject
+        )
+        dump.inlineRedoRestored = redoElement?.text?.text == editedText
+            && redoElement?.id == editedElementID
+            && redoElement?.normalizedFrame == beforeFrame
+        try cardEditorUITestRequire(dump.inlineRedoRestored, "one redo did not restore inline text and stable ID")
+
+        guard let finalDocument = currentProject.cardDocument,
+              let finalElement = cardEditorUITestElement(
+                  pageID: startingPageIDs[1],
+                  elementID: editedElementID,
+                  in: currentProject
+              ) else {
+            throw CardEditorUITestError.invariant("final card document or edited element is missing")
+        }
+        let afterFrame = finalElement.normalizedFrame
+        dump.finalPageCount = finalDocument.pages.count
+        dump.orderedPageIDs = finalDocument.pages.map { $0.id.uuidString }
+        dump.editedElementID = finalElement.id.uuidString
+        dump.originalText = originalText
+        dump.editedText = finalElement.text?.text ?? ""
+        dump.beforeFrame = CardEditorUITestFrame(beforeFrame)
+        dump.afterFrame = CardEditorUITestFrame(afterFrame)
+        dump.maxNormalizedFrameError = cardEditorUITestMaxError(beforeFrame, afterFrame)
+
+        try cardEditorUITestRequire(dump.finalPageCount == 5, "final page count was not five")
+        try cardEditorUITestRequire(
+            dump.actionCounts.add <= 2
+                && dump.actionCounts.duplicate <= 2
+                && dump.actionCounts.delete <= 2
+                && dump.actionCounts.reorder <= 2
+                && dump.actionCounts.inlineDoubleClick == 1,
+            "G-18 action-count limit was exceeded"
+        )
+        try cardEditorUITestRequire(
+            dump.observedFormats == ["square", "portrait", "story"],
+            "all three card formats were not observed in order"
+        )
+        try cardEditorUITestRequire(
+            dump.maxNormalizedFrameError <= 0.001,
+            "normalized frame drift exceeded 0.001"
+        )
+
+        let savedSnapshot = currentProject
+        await saveProject(to: saveURL)
+        try cardEditorUITestRequire(lastErrorMessage == nil, lastErrorMessage ?? "project save failed")
+        let savedData = try Data(contentsOf: saveURL)
+        dump.savedProjectBytes = savedData.count
+        try cardEditorUITestRequire(!savedData.isEmpty, "saved project is empty")
+
+        let reloadViewModel = EditorViewModel(project: Project(name: "G-18 reload sentinel"))
+        reloadViewModel.stopAutoSave()
+        await reloadViewModel.openProject(from: saveURL)
+        try cardEditorUITestRequire(
+            reloadViewModel.lastErrorMessage == nil,
+            reloadViewModel.lastErrorMessage ?? "fresh session failed to load saved project"
+        )
+        await reloadViewModel.saveProject(to: reloadURL)
+        try cardEditorUITestRequire(
+            reloadViewModel.lastErrorMessage == nil,
+            reloadViewModel.lastErrorMessage ?? "fresh session failed to save reload path"
+        )
+
+        let verificationViewModel = EditorViewModel(project: Project(name: "G-18 verification sentinel"))
+        verificationViewModel.stopAutoSave()
+        await verificationViewModel.openProject(from: reloadURL)
+        try cardEditorUITestRequire(
+            verificationViewModel.lastErrorMessage == nil,
+            verificationViewModel.lastErrorMessage ?? "verification session failed to load fresh path"
+        )
+        let reloadedData = try Data(contentsOf: reloadURL)
+        dump.reloadedProjectBytes = reloadedData.count
+        dump.freshSessionReloaded = verificationViewModel.currentProject.name == savedSnapshot.name
+            && verificationViewModel.currentProject.cardDocument?.pages.map(\.id) == expectedFinalPageIDs
+        dump.saveReloadEqual = savedData == reloadedData
+            && reloadViewModel.currentProject == verificationViewModel.currentProject
+            && verificationViewModel.currentProject.cardDocument == savedSnapshot.cardDocument
+        try cardEditorUITestRequire(dump.freshSessionReloaded, "fresh-path session did not load expected project")
+        try cardEditorUITestRequire(dump.saveReloadEqual, "save/reload project equality failed")
+
+        dump.complete = true
+        dump.completionMarker = "G18_CARD_EDITOR_E2E_COMPLETE"
+        dump.error = "none"
+        return dump
+    }
+
+    private func cardEditorUITestURL(
+        named key: String,
+        environment: [String: String]
+    ) throws -> URL {
+        guard let path = environment[key], !path.isEmpty else {
+            throw CardEditorUITestError.invariant("missing \(key)")
+        }
+        return URL(fileURLWithPath: path)
+    }
+
+    private func cardEditorUITestRequire(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw CardEditorUITestError.invariant(message) }
+    }
+
+    private func cardEditorUITestElement(
+        pageID: UUID,
+        elementID: UUID,
+        in project: Project
+    ) -> CardElement? {
+        project.cardDocument?.pages
+            .first(where: { $0.id == pageID })?
+            .elements.first(where: { $0.id == elementID })
+    }
+
+    private func cardEditorUITestMaxError(_ lhs: NormalizedRect, _ rhs: NormalizedRect) -> Double {
+        [
+            abs(lhs.x - rhs.x),
+            abs(lhs.y - rhs.y),
+            abs(lhs.width - rhs.width),
+            abs(lhs.height - rhs.height)
+        ].max() ?? .infinity
+    }
+
+    private func writeCardEditorUITestDump(_ dump: CardEditorUITestDump, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(dump)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: url, options: .atomic)
     }
 
     private enum ClipboardUITestError: LocalizedError {

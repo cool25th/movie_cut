@@ -47,6 +47,9 @@ struct CardEditorView: View {
 
                     pageWorkspace(document: document)
                         .frame(minWidth: 520)
+
+                    CardTemplateGallery(viewModel: viewModel)
+                        .frame(minWidth: 290, idealWidth: 310, maxWidth: 340)
                 }
 
                 footer(document: document)

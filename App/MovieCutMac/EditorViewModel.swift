@@ -492,6 +492,12 @@ final class EditorViewModel {
     /// Applies a complete template set through one Core command. The gallery
     /// and DEBUG actual-app harness share this entry point.
     @discardableResult
+    func applyCardTemplate(_ template: CardTemplateSet) async -> Bool {
+        await applyCardTemplate(template, seed: UInt64.random(in: UInt64.min...UInt64.max))
+    }
+
+    /// Seeded overload used by deterministic actual-app evidence.
+    @discardableResult
     func applyCardTemplate(_ template: CardTemplateSet, seed: UInt64) async -> Bool {
         await dispatchCardMutation(
             ApplyCardTemplateCommand(template: template, seed: seed),

@@ -15,6 +15,7 @@
 		05AC0F5A2F3F6D9197C80093 /* ChromaKeyPixelProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E1C2F0D228B851271B9CD0 /* ChromaKeyPixelProcessorTests.swift */; };
 		05EC4DDC7A52BE99EADAFDD7 /* R102ProjectStatusStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57CF1A80A0F9F3630ECBFA35 /* R102ProjectStatusStaticContractTests.swift */; };
 		06506B1AB68D3A65AA88AB38 /* Phase01LibraryRailStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99C88D101BB8A264B3BA41B /* Phase01LibraryRailStaticContractTests.swift */; };
+		06AEEB26BD4568D58B880405 /* CardTemplateGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B956021EBC0ED92FDAB30FE /* CardTemplateGallery.swift */; };
 		0A120AE9D342BA8BC072920F /* ColorGradeExportWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E153A00A96E57DE91C30CA5 /* ColorGradeExportWiringStaticContractTests.swift */; };
 		0E15F42D545119D5D1A7AC5A /* Phase21MediaImportCTAStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C164488B74F8C09A3C9D5DF9 /* Phase21MediaImportCTAStaticContractTests.swift */; };
 		0E18D878D934950E0DE45FB0 /* TransitionPixelProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA94F9D52545BA88372975E /* TransitionPixelProcessorTests.swift */; };
@@ -171,6 +172,7 @@
 		C3D84703CC9D2341561AAD1D /* HistogramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B04A26010245BA9C65B08F01 /* HistogramView.swift */; };
 		C63CBA2C8842217ED99FF022 /* AssetCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8688E1CF974185333371321 /* AssetCatalogTests.swift */; };
 		C655F659CDFB2C6C2A4132AA /* VocalSeparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9C5A5BBB8705C0D0D4EB0F3 /* VocalSeparationTests.swift */; };
+		C68951B64C3F5B2CC134F5C4 /* CardTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA0E8D422C9AEC81EB7A3BB /* CardTemplateTests.swift */; };
 		C6B28ABAEBB025BFE13EDEAA /* CoreModuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ABB45D6B556CA3AB8DE0475 /* CoreModuleTests.swift */; };
 		C82D107887C646F3374E29DB /* Phase03BrowseableCardsStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232929731954339444A19DBA /* Phase03BrowseableCardsStaticContractTests.swift */; };
 		CA68D094A24836089B8ED451 /* R504MainVideoTrackStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07CEB21F75F44FD1920C361E /* R504MainVideoTrackStaticContractTests.swift */; };
@@ -276,6 +278,7 @@
 		3A6A3253E17C065DB2E8975E /* R502TimelineZoomStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R502TimelineZoomStaticContractTests.swift; sourceTree = "<group>"; };
 		3B4FA31D1CF9A1A19E4775FE /* IOSAutoAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAutoAssistantView.swift; sourceTree = "<group>"; };
 		3B5634894D7C2C7B03586820 /* IOSExportEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSExportEngine.swift; sourceTree = "<group>"; };
+		3B956021EBC0ED92FDAB30FE /* CardTemplateGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTemplateGallery.swift; sourceTree = "<group>"; };
 		3C06AF6904EB8A3BA2E69DC3 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
 		3D7FAB9E94C95C3E4DD86B31 /* CanvasBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasBackgroundTests.swift; sourceTree = "<group>"; };
 		3DF999ABCA47312FDB49E7D7 /* BackgroundRemovalGoldenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRemovalGoldenTests.swift; sourceTree = "<group>"; };
@@ -432,6 +435,7 @@
 		F8C96F1820080EC426F20181 /* ChromaKeyEyedropperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyEyedropperTests.swift; sourceTree = "<group>"; };
 		FA8783EDDC39100FEC510546 /* KeyframeUIFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyframeUIFormatting.swift; sourceTree = "<group>"; };
 		FD51A635F974878B2AF6E52B /* AutoCutPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCutPlannerTests.swift; sourceTree = "<group>"; };
+		FDA0E8D422C9AEC81EB7A3BB /* CardTemplateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTemplateTests.swift; sourceTree = "<group>"; };
 		FE654D011F51FF1BB7C56260 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FEDD5411E0694AED63809262 /* TextToSpeechTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -495,6 +499,7 @@
 				3D7FAB9E94C95C3E4DD86B31 /* CanvasBackgroundTests.swift */,
 				F395532B9388B567B6F09B08 /* CardDocumentCommandTests.swift */,
 				EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */,
+				FDA0E8D422C9AEC81EB7A3BB /* CardTemplateTests.swift */,
 				F8C96F1820080EC426F20181 /* ChromaKeyEyedropperTests.swift */,
 				21E1C2F0D228B851271B9CD0 /* ChromaKeyPixelProcessorTests.swift */,
 				BC3B62C4FB755A0C4FEA27B1 /* ClaudeEditingProviderTests.swift */,
@@ -767,6 +772,7 @@
 			children = (
 				4DEBBB88C112AC74DBB285B4 /* CardCanvasView.swift */,
 				C4E3B3DA1414E72379DC03D6 /* CardEditorView.swift */,
+				3B956021EBC0ED92FDAB30FE /* CardTemplateGallery.swift */,
 			);
 			path = CardNews;
 			sourceTree = "<group>";
@@ -883,7 +889,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_6429167F-80FE-4682-89A8-590F74922BEE" /* Resources */ = {
+		"TEMP_083C90EA-57E2-4351-888F-836858FC341B" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1030,6 +1036,7 @@
 				9917F97801E72C80DCAFE24E /* CanvasBackgroundTests.swift in Sources */,
 				29D246B0F4CB30A8E645E64D /* CardDocumentCommandTests.swift in Sources */,
 				AD3955703B60A8174036F308 /* CardLayoutTests.swift in Sources */,
+				C68951B64C3F5B2CC134F5C4 /* CardTemplateTests.swift in Sources */,
 				12B80490D7329B08CC591FEF /* ChromaKeyEyedropperTests.swift in Sources */,
 				05AC0F5A2F3F6D9197C80093 /* ChromaKeyPixelProcessorTests.swift in Sources */,
 				28DB68F4AD122FC24EC439BE /* ClaudeEditingProviderTests.swift in Sources */,
@@ -1154,6 +1161,7 @@
 				B256920F8B7FAF9C6500862B /* CanvasSettingsView.swift in Sources */,
 				8617CFC2E6189B8A00D12AA9 /* CardCanvasView.swift in Sources */,
 				DDE28231596692471A3A6D8A /* CardEditorView.swift in Sources */,
+				06AEEB26BD4568D58B880405 /* CardTemplateGallery.swift in Sources */,
 				7DBBF375C07C102B5BAAB181 /* ChromaKeyCompositor.swift in Sources */,
 				67CB0A974A9ABFD3B8C6896A /* ChromaKeyView.swift in Sources */,
 				A67120E48CB993CDC1AA9F65 /* ClipEqualizerProcessing.swift in Sources */,

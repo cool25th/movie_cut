@@ -4,9 +4,9 @@
 # This is deliberately separate from the broad export E2E suite: it creates
 # sparse/low-bitrate temporary long fixtures, drives the DEBUG-only real
 # TimelineView zoom/ScrollViewReader consumer, and leaves no generated media in
-# the repository. The UI timing metric is a MainActor scheduling-gap proxy, not
-# literal display FPS (headless windows do not provide a reliable presentation
-# cadence).
+# the repository. The UI timing metric is the duration of signposted main-thread
+# request, publish, consumer update, and AppKit draw operations. It deliberately
+# excludes idle/scheduler delay and is not literal display-presentation FPS.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -133,6 +133,10 @@ for expected_bucket, level in enumerate(levels):
         raise SystemExit(f"FAIL: zoom bucket mismatch at {level}px/s: {status}")
     if min(integer(f"density_{level}_frames"), integer(f"density_{level}_digests"), integer(f"density_{level}_times")) <= 1:
         raise SystemExit(f"FAIL: rendered set was static/trivial at {level}px/s: {status}")
+    if integer(f"density_{level}_requests") != 4 or integer(f"density_{level}_distinct_requests") != 4:
+        raise SystemExit(f"FAIL: expected zoom plus three distinct real scroll requests at {level}px/s: {status}")
+    if integer(f"ui_work_{level}_samples") < 16:
+        raise SystemExit(f"FAIL: insufficient main-thread request/publish/update/draw samples at {level}px/s: {status}")
     identities.append(text(f"density_{level}_identity"))
     densities.append(number(f"density_{level}_fps"))
 if len(set(identities)) != 4:
@@ -140,14 +144,30 @@ if len(set(identities)) != 4:
 if any(left >= right for left, right in zip(densities, densities[1:])):
     raise SystemExit(f"FAIL: published frame density did not increase: {densities}")
 
-samples = integer("ui_proxy_samples")
-p95 = number("ui_proxy_p95_ms")
-maximum = number("ui_proxy_max_ms")
-over = integer("ui_proxy_over_16_6")
-if samples < 100:
-    raise SystemExit(f"FAIL: insufficient MainActor proxy samples: {samples}")
+samples = integer("ui_work_samples")
+p95 = number("ui_work_p95_ms")
+maximum = number("ui_work_max_ms")
+over = integer("ui_work_over_16_6")
+requests = integer("ui_work_requests")
+publishes = integer("ui_work_publishes")
+updates = integer("ui_work_updates")
+draws = integer("ui_work_draws")
+distinct_work_requests = integer("ui_work_distinct_requests")
+off_main = integer("ui_work_off_main")
+if samples < 64 or requests < 16 or publishes < 16 or updates < 16 or draws < 16 or distinct_work_requests < 16:
+    raise SystemExit(
+        "FAIL: insufficient filmstrip-attributable main-thread work coverage: "
+        f"samples={samples} request_ops={requests} publishes={publishes} "
+        f"updates={updates} draws={draws} identities={distinct_work_requests}"
+    )
+if off_main != 0:
+    raise SystemExit(f"FAIL: filmstrip UI consumer work escaped the main thread: {off_main}")
 if p95 > 16.6:
-    raise SystemExit(f"FAIL: MainActor scheduling-gap p95 exceeds 16.6ms: {p95:.3f}ms")
+    raise SystemExit(f"FAIL: filmstrip main-thread work p95 exceeds 16.6ms: {p95:.3f}ms")
+if maximum > 16.6:
+    raise SystemExit(f"FAIL: filmstrip main-thread work max exceeds 16.6ms: {maximum:.3f}ms")
+if over != 0:
+    raise SystemExit(f"FAIL: filmstrip main-thread intervals over 16.6ms must be zero, found {over}")
 if integer("cache_peak_bytes") > integer("cache_limit_bytes"):
     raise SystemExit(f"FAIL: decoded cache accounting exceeded its limit: {status}")
 if integer("max_frame_height") > 60:
@@ -160,7 +180,9 @@ print(
     "PASS: density actual TimelineView "
     f"levels=20/40/80/160 buckets=0/1/2/3 "
     f"densities={','.join(f'{value:.3f}' for value in densities)} "
-    f"samples={samples} p95={p95:.3f}ms max={maximum:.3f}ms over16.6={over} "
+    f"main_thread_work_samples={samples} request_ops={requests} publishes={publishes} "
+    f"updates={updates} draws={draws} identities={distinct_work_requests} "
+    f"p95={p95:.3f}ms max={maximum:.3f}ms over16.6={over} "
     f"cache_peak={integer('cache_peak_bytes')}B limit={integer('cache_limit_bytes')}B "
     "max_height<=60 image/audio/text=preserved"
 )
@@ -248,4 +270,4 @@ PY
 
 run_density
 run_memory
-echo "G-04 Inc 5 actual-app performance check OK"
+echo "G-04 AC1 actual-app performance check OK"

@@ -2,7 +2,7 @@
 
 > 이 파일의 §A(개발) / §B(감사) / §C(편집 체감 P0 묶음 작업지시서) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
 > Claude 세션이라면 이 파일 대신 `/surpass`, `/gap-audit` 슬래시 커맨드를 쓴다 (동일 내용의 원본: `.claude/commands/surpass.md`, `.claude/commands/gap-audit.md`).
-> **2026-07-17 체크포인트는 §D Cycle 5다** — G-16/G-17과 G-04 Inc 1~5, G-18 Inc 1 model+commands가 구현됐고, G-04 AC1/interaction latency 및 G-18 Mac UI 증분이 남는다.
+> **2026-07-18 체크포인트는 §D Cycle 6다** — G-16/G-17, G-04 AC1~AC5 자동 검증, G-18 Inc 1 model+commands가 완료됐다. G-04 실기기 display cadence/체감과 UB-V4 scrub·slider·playback-start latency는 별도 확인 과제이며, 다음 미구현 증분은 G-18 Mac UI다.
 
 ---
 
@@ -173,7 +173,7 @@ scripts/run_e2e_export.sh
 
 ### C-4. 작업 3: G-04 필름스트립 (착수 3순위 — 기존 스펙 항목)
 
-스펙 `docs/CAPCUT_SURPASS_SPEC_20260703.md`의 **G-04(타임라인 필름스트립 + 호버 스크럽, :277 부근)** 명세가 사실의 원천이다. 2026-07-16 Inc 1~5 구현과 actual-app density/memory 하니스까지 완료됐으며 단일 thumbnail은 async fallback으로만 남는다. 잔여는 AC1의 16.6ms 초과 0건과 실기기 display cadence/스크롤 체감이다. MainActor scheduling-gap proxy를 표시 FPS로 오인하거나 p95 통과만으로 G-04 완료를 선언하지 말 것.
+스펙 `docs/CAPCUT_SURPASS_SPEC_20260703.md`의 **G-04(타임라인 필름스트립 + 호버 스크럽, :277 부근)** 명세가 사실의 원천이다. 2026-07-18 AC1~AC5 자동 검증은 완료됐다. actual main-thread request/publish/consumer update/AppKit draw operation interval은 4단계 zoom+scroll 격리 2회 모두 exact 16.6ms 초과 0건이며, scheduler wakeup proxy는 제거됐다. 이 결과를 display presentation FPS로 확대 해석하지 말고, 실기기 display cadence/스크롤·호버 체감과 UB-V4의 scrub·slider ≤100ms/playback start ≤300ms는 별도 과제로 유지할 것.
 
 ### C-5. 마무리 (매 세션 필수 — §A 6단계와 동일)
 
@@ -209,7 +209,7 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 ### D-3. 개발 (미달 항목 달성)
 
 - **선택 규칙**: ❌/🟡 항목 중 아래 우선순위의 첫 항목을 1~2개 고른다.
-  1. 영상 편집 잔여 P0 — G-04 AC1 zero-over-budget/실기기 cadence, UB-V4 scrub·slider·playback-start latency
+  1. 영상 편집 잔여 P0 — G-04 실기기 display cadence, UB-V4 scrub·slider·playback-start latency (G-04 AC1 zero-over-budget 자동 검증은 완료)
   2. 카드뉴스 핵심 경로 — G-18 → G-19 (SC-C1 5분 완주의 전제)
   3. 출력 완성 — G-21 (UB-C7/C8, SC-C3)
   4. 반복 사용자 필수 — G-20 브랜드 킷, U-10 진입점
@@ -223,13 +223,13 @@ UB-V1~V6, UB-C1~C10 전 항목을 판정한다:
 2. §A 6단계 수행: 스펙 AC 검증 기록 1줄, 백로그, `[진행중] 다음 증분` 표시, 최종 검증(빌드+필터 테스트+E2E) 후 커밋. **검증 없이 완료 선언 금지.**
 3. 최종 보고: ① UB 채점 요약(✅/🟡/❌ 개수와 델타) ② 이번 사이클 달성 항목+증거 ③ `[사용자 확인 대기]` 목록(실기기 시나리오 완주 등 사람이 해야 할 것) ④ 다음 사이클 착수 항목 1개 추천.
 
-#### 현재 체크포인트 (2026-07-17 / §D Cycle 5)
+#### 현재 체크포인트 (2026-07-18 / §D Cycle 6)
 
-- G-04 Inc 1~5 구현 완료. production signpost가 actual request/cache/decode/publish/UI consumer lifecycle을 잇고, `scripts/run_g04_filmstrip_perf.sh` actual app는 20/40/80/160px/s bucket `0/1/2/3`, density `0.247/0.423/0.697/1.394`, image/audio/text 보존을 확인했다. 10분 4K synthetic fixture seek는 RSS delta `+6.2MB`(≤100MB), decoded cache peak `8,816,640B/128MB`, height `41`이다.
-- MainActor scheduling-gap proxy는 `n=1218`, p95 `2.096ms`, max `67.106ms`, `>16.6ms=4`다. 이는 표시 FPS가 아니며 AC1의 초과 0건을 충족하지 못한다. UB 채점은 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**을 유지한다.
-- `[진행중] G-04 잔여: AC1 zero-over-budget 및 실기기 display cadence/스크롤 체감. Inc 5 구현 자체는 완료.`
+- G-04 AC1~AC5 자동 검증 완료. production signpost가 actual request/cache/decode/publish/UI consumer lifecycle을 잇고, `scripts/run_g04_filmstrip_perf.sh` actual app는 20/40/80/160px/s bucket `0/1/2/3`, density `0.232/0.366/0.694/1.381`, distinct request identities, image/audio/text 보존을 확인했다.
+- 기존 1ms MainActor sleep/wakeup proxy의 67ms sample은 filmstrip 작업이 아닌 scheduler/lifecycle artifact였다. 대체한 actual main-thread request/publish/consumer update/AppKit draw operation metric은 warmup 제거·outlier drop·clamp 없이 exact-final 격리 2회 모두 `n=66`, `p95/max=0.719/1.122ms`, `0.402/0.435ms`, `>16.6ms=0`이다. 스크립트는 초과 1건부터 실패하며 이 값은 표시 FPS가 아니다.
+- 10분 4K synthetic fixture seek는 두 run RSS delta `+0.0/+6.3MB`(≤100MB), decoded cache peak `8,816,640B/128MB`, height `41`이다. `[완료] G-04 AC1~AC5 자동 검증. [사용자 확인 대기] 실기기 display cadence/스크롤·호버 체감.`
 - G-18 Inc 1 완료: optional persisted `CardDocument`, normalized 0...1 element geometry, G-19 경계의 최소 `CardMasterStyle` shape와 Add/Duplicate/Delete/Move/Update atomic commands를 기존 `EditorSession`에 추가했다. `CardDocumentCommandTests` **15/15 PASS**로 pre-card legacy timeline/export 보존, fresh duplicate IDs/content, deterministic order, exact single-step undo/redo, invalid/missing/last-page fail-closed를 검증했다.
-- Inc 1은 Core 기반일 뿐 Mac UI/click count/actual format switch/inline canvas/save-reload E2E가 없으므로 **UB-C1/C3/C4와 SC-C1은 ❌**, 전체 채점도 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**이다. `[진행중] 다음 증분: G-18 Inc 2, 시작점: App/MovieCutMac/EditorViewModel.swift:5522`에서 command-backed ViewModel API와 CardNews page rail/format picker를 배선한다.
+- Inc 1은 Core 기반일 뿐 Mac UI/click count/actual format switch/inline canvas/save-reload E2E가 없으므로 **UB-C1/C3/C4와 SC-C1은 ❌**, 전체 채점도 **✅ 0 / 🟡 3 / ❌ 11 / 사용자 확인 대기 2, 델타 0**이다. G-04 AC1 완료만으로 UB-V4의 별도 latency를 증명하지 못해 채점은 변하지 않는다. `[진행중] 다음 증분: G-18 Inc 2, 시작점: App/MovieCutMac/EditorViewModel.swift:5522`에서 command-backed ViewModel API와 CardNews page rail/format picker를 배선한다.
 - 사용자 확인 대기 유지: G-15 AC4 photo preview/trim feel, G-16 AC3 scrub feel, G-04 filmstrip/hover scrub feel+display cadence, 가능하면 SC-V1/V2 완료 시간. SC-C1은 카드 workflow/export 전제가 갖춰질 때까지 timing 불가다.
 
 ### D-5. 종료 조건

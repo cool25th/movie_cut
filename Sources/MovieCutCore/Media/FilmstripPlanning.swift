@@ -389,6 +389,70 @@ public struct FilmstripCacheMetrics: Sendable, Equatable {
     }
 }
 
+/// Exact, lossless summary of measured filmstrip-attributable work intervals.
+///
+/// Callers provide monotonic-clock durations in nanoseconds. Every duration is
+/// retained: the accumulator does not discard warmup samples, trim outliers, or
+/// clamp values. The default frame-work budget is the G-04 AC1 limit of exactly
+/// 16.6ms rather than the slightly looser 1/60-second interval.
+public struct FilmstripWorkTimingSummary: Sendable, Equatable {
+    public var sampleCount: Int
+    public var p95Nanoseconds: UInt64
+    public var maxNanoseconds: UInt64
+    public var overFrameBudgetCount: Int
+
+    public init(
+        sampleCount: Int,
+        p95Nanoseconds: UInt64,
+        maxNanoseconds: UInt64,
+        overFrameBudgetCount: Int
+    ) {
+        self.sampleCount = sampleCount
+        self.p95Nanoseconds = p95Nanoseconds
+        self.maxNanoseconds = maxNanoseconds
+        self.overFrameBudgetCount = overFrameBudgetCount
+    }
+
+    public var p95Milliseconds: Double {
+        Double(p95Nanoseconds) / 1_000_000
+    }
+
+    public var maxMilliseconds: Double {
+        Double(maxNanoseconds) / 1_000_000
+    }
+}
+
+public struct FilmstripWorkTimingAccumulator: Sendable {
+    public static let frameBudgetNanoseconds: UInt64 = 16_600_000
+
+    private var durationNanoseconds: [UInt64] = []
+
+    public init() {}
+
+    public mutating func record(durationNanoseconds: UInt64) {
+        self.durationNanoseconds.append(durationNanoseconds)
+    }
+
+    public func summary(
+        frameBudgetNanoseconds: UInt64 = Self.frameBudgetNanoseconds
+    ) -> FilmstripWorkTimingSummary {
+        let sorted = durationNanoseconds.sorted()
+        let p95Index = sorted.isEmpty
+            ? 0
+            : min(sorted.count - 1, Int(ceil(Double(sorted.count) * 0.95)) - 1)
+        return FilmstripWorkTimingSummary(
+            sampleCount: sorted.count,
+            p95Nanoseconds: sorted.isEmpty ? 0 : sorted[p95Index],
+            maxNanoseconds: sorted.last ?? 0,
+            overFrameBudgetCount: sorted.reduce(into: 0) { count, duration in
+                if duration > frameBudgetNanoseconds {
+                    count += 1
+                }
+            }
+        )
+    }
+}
+
 public struct FilmstripCacheInsertionPlan: Sendable, Equatable {
     public var shouldCache: Bool
     public var evictedKeys: [FilmstripCacheKey]

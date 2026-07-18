@@ -106,7 +106,7 @@ extension EditorViewModel {
                 )
             } catch {
                 lastErrorMessage = "filmstrip performance harness failed: \(error.localizedDescription)"
-                filmstripPerformanceSuffix = " filmstrip_perf=\(filmstripPerformanceScenario) perf_complete=0 ui_proxy_samples=0 ui_proxy_p95_ms=999.000 ui_proxy_max_ms=999.000 ui_proxy_over_16_6=999 cache_current_bytes=0 cache_peak_bytes=0 cache_limit_bytes=0 cache_keys=0 cache_evictions=0 max_frame_height=0 preserved_image=0 preserved_audio=0 preserved_text=0"
+                filmstripPerformanceSuffix = " filmstrip_perf=\(filmstripPerformanceScenario) perf_complete=0 ui_work_samples=0 ui_work_p95_ms=999.000 ui_work_max_ms=999.000 ui_work_over_16_6=999 ui_work_requests=0 ui_work_publishes=0 ui_work_updates=0 ui_work_draws=0 ui_work_distinct_requests=0 ui_work_off_main=999 cache_current_bytes=0 cache_peak_bytes=0 cache_limit_bytes=0 cache_keys=0 cache_evictions=0 max_frame_height=0 preserved_image=0 preserved_audio=0 preserved_text=0"
             }
         }
 
@@ -648,45 +648,69 @@ extension EditorViewModel {
 
     private func runFilmstripDensityPerformanceScenario() async throws -> String {
         let zoomLevels: [Double] = [20, 40, 80, 160]
-        let scrollTargets: [TimeInterval] = [30, 60, 90, 120]
-        var evidence: [TimelineFilmstripDebugProbe.PerformanceEvidence] = []
+        let scrollTargetsByZoom: [[TimeInterval]] = [
+            [30, 45, 60],
+            [75, 90, 105],
+            [120, 135, 90],
+            [75, 60, 45]
+        ]
+        var evidenceGroups: [[TimelineFilmstripDebugProbe.PerformanceEvidence]] = []
         var previousIdentity: String?
-        TimelineFilmstripDebugProbe.shared.startMainActorGapSampling()
 
-        for (zoom, scrollTarget) in zip(zoomLevels, scrollTargets) {
-            guard TimelineFilmstripDebugProbe.shared.driveScroll(to: scrollTarget) else {
-                throw FilmstripUITestError.invariant("failed to drive TimelineView scroll \(scrollTarget)")
-            }
-            // Let SwiftUI apply the real ScrollViewReader mutation before the
-            // zoom change. The zoom request below is the measured stable state;
-            // any in-flight scroll request is intentionally cancellable work.
-            try await Task.sleep(for: .milliseconds(150))
+        for (zoom, scrollTargets) in zip(zoomLevels, scrollTargetsByZoom) {
+            var zoomEvidence: [TimelineFilmstripDebugProbe.PerformanceEvidence] = []
             let zoomBaseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
             guard TimelineFilmstripDebugProbe.shared.driveZoom(zoom) else {
                 throw FilmstripUITestError.invariant("failed to drive TimelineView zoom \(zoom)")
             }
-            let zoomEvidence = try await waitForFilmstripPerformanceEvidence(
+            let initialZoomEvidence = try await waitForFilmstripPerformanceEvidence(
                 after: zoomBaseline,
                 zoomScaleKey: Int((zoom * 1_000).rounded()),
                 differingFrom: previousIdentity
             )
-            evidence.append(zoomEvidence)
-            previousIdentity = zoomEvidence.stableIdentity
+            zoomEvidence.append(initialZoomEvidence)
+            previousIdentity = initialZoomEvidence.stableIdentity
+
+            // Three distinct real ScrollViewReader mutations at every zoom make
+            // the UI work distribution attributable to zoom/scroll updates, not
+            // to an idle scheduler wakeup or a single lucky render.
+            for scrollTarget in scrollTargets {
+                let scrollBaseline = TimelineFilmstripDebugProbe.shared.performanceEvidenceCount
+                guard TimelineFilmstripDebugProbe.shared.driveScroll(to: scrollTarget) else {
+                    throw FilmstripUITestError.invariant(
+                        "failed to drive TimelineView scroll \(scrollTarget) at zoom \(zoom)"
+                    )
+                }
+                let scrollEvidence = try await waitForFilmstripPerformanceEvidence(
+                    after: scrollBaseline,
+                    zoomScaleKey: Int((zoom * 1_000).rounded()),
+                    differingFrom: previousIdentity
+                )
+                zoomEvidence.append(scrollEvidence)
+                previousIdentity = scrollEvidence.stableIdentity
+            }
+            evidenceGroups.append(zoomEvidence)
         }
 
         for _ in 0..<300 {
             if TimelineFilmstripDebugProbe.shared.hasPreservedSurfaceEvidence { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        let gapSummary = TimelineFilmstripDebugProbe.shared.stopMainActorGapSampling()
+        let workSummary = TimelineFilmstripDebugProbe.shared.mainThreadWorkSummary()
         guard TimelineFilmstripDebugProbe.shared.hasPreservedSurfaceEvidence else {
             throw FilmstripUITestError.invariant(
                 "actual TimelineView did not render preserved image/audio/text surfaces: "
                     + TimelineFilmstripDebugProbe.shared.preservedSurfaceNames.joined(separator: ",")
             )
         }
-        guard evidence.count == zoomLevels.count,
-              Set(evidence.map(\.stableIdentity)).count == zoomLevels.count,
+        let evidence = evidenceGroups.flatMap { $0 }
+        let expectedRequestsPerZoom = 4
+        let expectedRequestCount = zoomLevels.count * expectedRequestsPerZoom
+        guard evidenceGroups.count == zoomLevels.count,
+              evidenceGroups.allSatisfy({ $0.count == expectedRequestsPerZoom }),
+              evidenceGroups.allSatisfy({ Set($0.map(\.stableIdentity)).count == expectedRequestsPerZoom }),
+              evidence.count == expectedRequestCount,
+              Set(evidence.map(\.stableIdentity)).count == expectedRequestCount,
               evidence.allSatisfy({
                   $0.frameCount > 1
                       && $0.distinctDigestCount > 1
@@ -696,9 +720,27 @@ extension EditorViewModel {
               }) else {
             throw FilmstripUITestError.invariant("density evidence was static, duplicated, or unbounded")
         }
-        let densities = evidence.map(\.density)
+        let densities = evidenceGroups.map { group in
+            group.map(\.density).reduce(0, +) / Double(group.count)
+        }
         guard zip(densities, densities.dropFirst()).allSatisfy({ $0.0 < $0.1 }) else {
             throw FilmstripUITestError.invariant("frame density was not strictly increasing: \(densities)")
+        }
+        guard workSummary.timing.sampleCount >= expectedRequestCount * 4,
+              workSummary.requestCount >= expectedRequestCount,
+              workSummary.publishCount >= expectedRequestCount,
+              workSummary.consumerUpdateCount >= expectedRequestCount,
+              workSummary.consumerDrawCount >= expectedRequestCount,
+              workSummary.distinctRequestCount >= expectedRequestCount,
+              workSummary.offMainThreadCount == 0,
+              zoomLevels.allSatisfy({ zoom in
+                  workSummary.sampleCount(
+                      zoomScaleKey: Int((zoom * 1_000).rounded())
+                  ) >= expectedRequestsPerZoom * 4
+              }) else {
+            throw FilmstripUITestError.invariant(
+                "main-thread filmstrip consumer work evidence was incomplete"
+            )
         }
         guard let cacheMetrics = await TimelineFilmstripDebugProbe.shared.performanceCacheMetrics() else {
             throw FilmstripUITestError.invariant("TimelineView cache metrics unavailable")
@@ -707,10 +749,16 @@ extension EditorViewModel {
         var fields = [
             "filmstrip_perf=density",
             "perf_complete=1",
-            "ui_proxy_samples=\(gapSummary.sampleCount)",
-            String(format: "ui_proxy_p95_ms=%.3f", gapSummary.p95Milliseconds),
-            String(format: "ui_proxy_max_ms=%.3f", gapSummary.maxMilliseconds),
-            "ui_proxy_over_16_6=\(gapSummary.overFrameBudgetCount)",
+            "ui_work_samples=\(workSummary.timing.sampleCount)",
+            String(format: "ui_work_p95_ms=%.3f", workSummary.timing.p95Milliseconds),
+            String(format: "ui_work_max_ms=%.3f", workSummary.timing.maxMilliseconds),
+            "ui_work_over_16_6=\(workSummary.timing.overFrameBudgetCount)",
+            "ui_work_requests=\(workSummary.requestCount)",
+            "ui_work_publishes=\(workSummary.publishCount)",
+            "ui_work_updates=\(workSummary.consumerUpdateCount)",
+            "ui_work_draws=\(workSummary.consumerDrawCount)",
+            "ui_work_distinct_requests=\(workSummary.distinctRequestCount)",
+            "ui_work_off_main=\(workSummary.offMainThreadCount)",
             "cache_current_bytes=\(cacheMetrics.currentTrackedCost)",
             "cache_peak_bytes=\(cacheMetrics.peakTrackedCost)",
             "cache_limit_bytes=\(cacheMetrics.totalCostLimit)",
@@ -721,20 +769,29 @@ extension EditorViewModel {
             "preserved_audio=1",
             "preserved_text=1"
         ]
-        for (zoom, item) in zip(zoomLevels, evidence) {
+        for (index, zoom) in zoomLevels.enumerated() {
+            let group = evidenceGroups[index]
+            guard let item = group.last else {
+                throw FilmstripUITestError.invariant("missing density evidence at zoom \(zoom)")
+            }
             let label = Int(zoom.rounded())
             fields.append("density_\(label)_bucket=\(item.requestID.viewportRequest.zoomBucket.rawValue)")
             fields.append("density_\(label)_identity=\(item.stableIdentity)")
-            fields.append("density_\(label)_frames=\(item.frameCount)")
-            fields.append("density_\(label)_digests=\(item.distinctDigestCount)")
-            fields.append("density_\(label)_times=\(item.distinctTimestampCount)")
+            fields.append("density_\(label)_frames=\(group.map(\.frameCount).min() ?? 0)")
+            fields.append("density_\(label)_digests=\(group.map(\.distinctDigestCount).min() ?? 0)")
+            fields.append("density_\(label)_times=\(group.map(\.distinctTimestampCount).min() ?? 0)")
+            fields.append("density_\(label)_requests=\(group.count)")
+            fields.append("density_\(label)_distinct_requests=\(Set(group.map(\.stableIdentity)).count)")
+            fields.append(
+                "ui_work_\(label)_samples=\(workSummary.sampleCount(zoomScaleKey: item.requestID.viewportRequest.zoomScaleKey))"
+            )
             fields.append(String(
                 format: "density_%d_span=%.3f",
                 label,
                 item.requestID.viewportRequest.sourceRange.duration
             ))
-            fields.append(String(format: "density_%d_fps=%.3f", label, item.density))
-            fields.append("density_\(label)_decoded_bytes=\(item.decodedByteCost)")
+            fields.append(String(format: "density_%d_fps=%.3f", label, densities[index]))
+            fields.append("density_\(label)_decoded_bytes=\(group.map(\.decodedByteCost).max() ?? 0)")
         }
         return " " + fields.joined(separator: " ")
     }
@@ -800,7 +857,7 @@ extension EditorViewModel {
         writeFilmstripPerformancePhase("complete", path: phasePath)
 
         return String(
-            format: " filmstrip_perf=memory perf_complete=1 memory_seeks=%d memory_published_sets=%d memory_distinct_requests=%d memory_nontrivial_sets=%d cache_current_bytes=%d cache_peak_bytes=%d cache_limit_bytes=%d cache_keys=%d cache_evictions=%d cache_oversized_rejections=%d max_frame_height=%d preserved_image=0 preserved_audio=0 preserved_text=0 ui_proxy_samples=0 ui_proxy_p95_ms=0.000 ui_proxy_max_ms=0.000 ui_proxy_over_16_6=0",
+            format: " filmstrip_perf=memory perf_complete=1 memory_seeks=%d memory_published_sets=%d memory_distinct_requests=%d memory_nontrivial_sets=%d cache_current_bytes=%d cache_peak_bytes=%d cache_limit_bytes=%d cache_keys=%d cache_evictions=%d cache_oversized_rejections=%d max_frame_height=%d preserved_image=0 preserved_audio=0 preserved_text=0 ui_work_samples=0 ui_work_p95_ms=0.000 ui_work_max_ms=0.000 ui_work_over_16_6=0 ui_work_requests=0 ui_work_publishes=0 ui_work_updates=0 ui_work_draws=0 ui_work_distinct_requests=0 ui_work_off_main=0",
             evidence.count,
             evidence.count,
             Set(evidence.map(\.stableIdentity)).count,

@@ -1,7 +1,9 @@
+import AppKit
 import Foundation
 import MovieCutCore
 import Observation
 import SwiftUI
+import os.log
 
 enum TimelineFilmstripCoordinateSpace {
     static let viewport = "moviecut.timeline.horizontal-viewport"
@@ -127,6 +129,34 @@ final class TimelineFilmstripStore {
         maxHeight: CGFloat,
         fallbackThumbnailAvailable: Bool
     ) {
+        let workStart = DispatchTime.now().uptimeNanoseconds
+        let workSignpostID = OSSignpostID(log: TimelineFilmstripInstrumentation.log)
+        os_signpost(
+            .begin,
+            log: TimelineFilmstripInstrumentation.log,
+            name: "MainThreadRequest",
+            signpostID: workSignpostID,
+            "clip=%{public}@ bucket=%d zoom=%d",
+            requestID.clipID.uuidString as NSString,
+            requestID.viewportRequest.zoomBucket.rawValue,
+            requestID.viewportRequest.zoomScaleKey
+        )
+        defer {
+            os_signpost(
+                .end,
+                log: TimelineFilmstripInstrumentation.log,
+                name: "MainThreadRequest",
+                signpostID: workSignpostID
+            )
+            let duration = DispatchTime.now().uptimeNanoseconds - workStart
+            #if DEBUG
+            TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
+                phase: .request,
+                requestID: requestID,
+                durationNanoseconds: duration
+            )
+            #endif
+        }
         if entries[requestID.clipID]?.requestID == requestID {
             touch(requestID.clipID)
             return
@@ -280,6 +310,17 @@ final class TimelineFilmstripStore {
         generation: UInt64,
         trace: TimelineFilmstripTrace
     ) {
+        let workStart = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let duration = DispatchTime.now().uptimeNanoseconds - workStart
+            #if DEBUG
+            TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
+                phase: .publish,
+                requestID: requestID,
+                durationNanoseconds: duration
+            )
+            #endif
+        }
         trace.beginPublish(frameCount: frames.count)
         guard var entry = entries[requestID.clipID],
               entry.requestID == requestID,
@@ -555,6 +596,138 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
     #endif
 }
 
+/// AppKit-backed strip consumer so the measured interval covers the actual
+/// main-thread image update and draw work, not time spent waiting to be
+/// scheduled. Decode/cache work remains off the main actor.
+@MainActor
+private final class TimelineFilmstripImageStripNSView: NSView {
+    private var images: [NSImage] = []
+    private var trace: TimelineFilmstripTrace?
+    private var onRendered: (@MainActor () -> Void)?
+    private(set) var currentRequestID: TimelineFilmstripRequestID?
+
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    func configure(
+        frames: [FilmstripFrame],
+        requestID: TimelineFilmstripRequestID,
+        trace: TimelineFilmstripTrace,
+        onRendered: @escaping @MainActor () -> Void
+    ) {
+        images = frames.map { frame in
+            NSImage(
+                cgImage: frame.image,
+                size: NSSize(width: frame.image.width, height: frame.image.height)
+            )
+        }
+        currentRequestID = requestID
+        self.trace = trace
+        self.onRendered = onRendered
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let requestID = currentRequestID,
+              let trace,
+              !images.isEmpty,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return
+        }
+
+        let start = DispatchTime.now().uptimeNanoseconds
+        trace.beginUIConsumerDraw(frameCount: images.count)
+        NSGraphicsContext.current?.imageInterpolation = .low
+        let availableWidth = max(1, bounds.width - CGFloat(max(0, images.count - 1)))
+        let frameWidth = availableWidth / CGFloat(images.count)
+        for (index, image) in images.enumerated() {
+            let targetRect = NSRect(
+                x: CGFloat(index) * (frameWidth + 1),
+                y: 0,
+                width: frameWidth,
+                height: bounds.height
+            )
+            image.draw(
+                in: targetRect,
+                from: aspectFillSourceRect(imageSize: image.size, targetSize: targetRect.size),
+                operation: .sourceOver,
+                fraction: 1,
+                respectFlipped: true,
+                hints: nil
+            )
+        }
+        trace.endUIConsumerDraw(frameCount: images.count)
+        let duration = DispatchTime.now().uptimeNanoseconds - start
+        #if DEBUG
+        TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
+            phase: .consumerDraw,
+            requestID: requestID,
+            durationNanoseconds: duration
+        )
+        #endif
+        onRendered?()
+    }
+
+    private func aspectFillSourceRect(imageSize: NSSize, targetSize: NSSize) -> NSRect {
+        guard imageSize.width > 0,
+              imageSize.height > 0,
+              targetSize.width > 0,
+              targetSize.height > 0 else {
+            return NSRect(origin: NSPoint(x: 0, y: 0), size: imageSize)
+        }
+        let imageAspect = imageSize.width / imageSize.height
+        let targetAspect = targetSize.width / targetSize.height
+        if imageAspect > targetAspect {
+            let sourceWidth = imageSize.height * targetAspect
+            return NSRect(
+                x: (imageSize.width - sourceWidth) / 2,
+                y: 0,
+                width: sourceWidth,
+                height: imageSize.height
+            )
+        }
+        let sourceHeight = imageSize.width / targetAspect
+        return NSRect(
+            x: 0,
+            y: (imageSize.height - sourceHeight) / 2,
+            width: imageSize.width,
+            height: sourceHeight
+        )
+    }
+}
+
+private struct TimelineFilmstripImageStripRepresentable: NSViewRepresentable {
+    let snapshot: TimelineFilmstripSnapshot
+    let onRendered: @MainActor () -> Void
+
+    func makeNSView(context: Context) -> TimelineFilmstripImageStripNSView {
+        TimelineFilmstripImageStripNSView()
+    }
+
+    func updateNSView(_ nsView: TimelineFilmstripImageStripNSView, context: Context) {
+        guard nsView.currentRequestID != snapshot.requestID else { return }
+        let start = DispatchTime.now().uptimeNanoseconds
+        snapshot.trace.beginUIConsumerUpdate(frameCount: snapshot.frames.count)
+        nsView.configure(
+            frames: snapshot.frames,
+            requestID: snapshot.requestID,
+            trace: snapshot.trace,
+            onRendered: onRendered
+        )
+        snapshot.trace.endUIConsumerUpdate(frameCount: snapshot.frames.count)
+        let duration = DispatchTime.now().uptimeNanoseconds - start
+        #if DEBUG
+        TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
+            phase: .consumerUpdate,
+            requestID: snapshot.requestID,
+            durationNanoseconds: duration
+        )
+        #endif
+    }
+
+}
+
 struct TimelineFilmstripLayer: View {
     let clip: Clip
     let asset: MediaAsset
@@ -597,15 +770,6 @@ struct TimelineFilmstripLayer: View {
                    snapshot.readyGeneration != nil {
                     generatedFrames(snapshot, height: height)
                         .id(snapshot.requestID)
-                        .task(id: snapshot.requestID) {
-                            store.recordConsumerRendered(snapshot)
-                            #if DEBUG
-                            TimelineFilmstripDebugProbe.shared.recordConsumerRendered(
-                                requestID: snapshot.requestID,
-                                frameCount: snapshot.frames.count
-                            )
-                            #endif
-                        }
                 }
             }
             .task(id: requestID) {
@@ -646,18 +810,14 @@ struct TimelineFilmstripLayer: View {
         _ snapshot: TimelineFilmstripSnapshot,
         height: CGFloat
     ) -> some View {
-        let count = snapshot.frames.count
-        let availableWidth = max(1, CGFloat(snapshot.viewportRequest.localWidth) - CGFloat(max(0, count - 1)))
-        let frameWidth = availableWidth / CGFloat(max(1, count))
-
-        return HStack(spacing: 1) {
-            ForEach(Array(snapshot.frames.enumerated()), id: \.offset) { _, frame in
-                Image(decorative: frame.image, scale: 1)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: frameWidth, height: height)
-                    .clipped()
-            }
+        TimelineFilmstripImageStripRepresentable(snapshot: snapshot) {
+            store.recordConsumerRendered(snapshot)
+            #if DEBUG
+            TimelineFilmstripDebugProbe.shared.recordConsumerRendered(
+                requestID: snapshot.requestID,
+                frameCount: snapshot.frames.count
+            )
+            #endif
         }
         .frame(
             width: CGFloat(snapshot.viewportRequest.localWidth),
@@ -688,6 +848,13 @@ enum TimelineFilmstripDebugPreservedSurface: String, Hashable {
     case imageThumbnail
     case audioWaveform
     case textRhythm
+}
+
+enum TimelineFilmstripMainThreadWorkPhase: String, Hashable {
+    case request
+    case publish
+    case consumerUpdate
+    case consumerDraw
 }
 
 @MainActor
@@ -751,11 +918,19 @@ final class TimelineFilmstripDebugProbe {
         }
     }
 
-    struct MainActorGapSummary {
-        let sampleCount: Int
-        let p95Milliseconds: Double
-        let maxMilliseconds: Double
-        let overFrameBudgetCount: Int
+    struct MainThreadWorkSummary {
+        let timing: FilmstripWorkTimingSummary
+        let requestCount: Int
+        let publishCount: Int
+        let consumerUpdateCount: Int
+        let consumerDrawCount: Int
+        let distinctRequestCount: Int
+        let offMainThreadCount: Int
+        let sampleCountsByZoomScaleKey: [Int: Int]
+
+        func sampleCount(zoomScaleKey: Int) -> Int {
+            sampleCountsByZoomScaleKey[zoomScaleKey, default: 0]
+        }
     }
 
     private struct HoverDriver {
@@ -801,8 +976,11 @@ final class TimelineFilmstripDebugProbe {
     private var performanceReadyFrames: [TimelineFilmstripRequestID: [FilmstripFrame]] = [:]
     private var performanceEvidenceRecords: [PerformanceEvidence] = []
     private var preservedSurfaces: Set<TimelineFilmstripDebugPreservedSurface> = []
-    private var mainActorGapTask: Task<Void, Never>?
-    private var mainActorGapSamples: [Double] = []
+    private var mainThreadWorkTimings = FilmstripWorkTimingAccumulator()
+    private var mainThreadWorkPhaseCounts: [TimelineFilmstripMainThreadWorkPhase: Int] = [:]
+    private var mainThreadWorkRequestIDs: Set<TimelineFilmstripRequestID> = []
+    private var mainThreadWorkSampleCountsByZoomScaleKey: [Int: Int] = [:]
+    private var offMainThreadWorkCount = 0
 
     private init() {}
 
@@ -834,9 +1012,11 @@ final class TimelineFilmstripDebugProbe {
         performanceReadyFrames.removeAll(keepingCapacity: true)
         performanceEvidenceRecords.removeAll(keepingCapacity: true)
         preservedSurfaces.removeAll(keepingCapacity: true)
-        mainActorGapTask?.cancel()
-        mainActorGapTask = nil
-        mainActorGapSamples.removeAll(keepingCapacity: true)
+        mainThreadWorkTimings = FilmstripWorkTimingAccumulator()
+        mainThreadWorkPhaseCounts.removeAll(keepingCapacity: true)
+        mainThreadWorkRequestIDs.removeAll(keepingCapacity: true)
+        mainThreadWorkSampleCountsByZoomScaleKey.removeAll(keepingCapacity: true)
+        offMainThreadWorkCount = 0
     }
 
     func armPerformance() {
@@ -1241,36 +1421,34 @@ final class TimelineFilmstripDebugProbe {
         return await performanceDriver.cacheMetrics()
     }
 
-    func startMainActorGapSampling() {
-        mainActorGapTask?.cancel()
-        mainActorGapSamples.removeAll(keepingCapacity: true)
-        mainActorGapTask = Task { @MainActor [weak self] in
-            var previous = ProcessInfo.processInfo.systemUptime
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .milliseconds(1))
-                } catch {
-                    break
-                }
-                let now = ProcessInfo.processInfo.systemUptime
-                self?.mainActorGapSamples.append((now - previous) * 1_000)
-                previous = now
-            }
+    func recordMainThreadWork(
+        phase: TimelineFilmstripMainThreadWorkPhase,
+        requestID: TimelineFilmstripRequestID,
+        durationNanoseconds: UInt64
+    ) {
+        guard isArmed, isPerformanceMode else { return }
+        mainThreadWorkTimings.record(durationNanoseconds: durationNanoseconds)
+        mainThreadWorkPhaseCounts[phase, default: 0] += 1
+        mainThreadWorkRequestIDs.insert(requestID)
+        mainThreadWorkSampleCountsByZoomScaleKey[
+            requestID.viewportRequest.zoomScaleKey,
+            default: 0
+        ] += 1
+        if !Thread.isMainThread {
+            offMainThreadWorkCount += 1
         }
     }
 
-    func stopMainActorGapSampling() -> MainActorGapSummary {
-        mainActorGapTask?.cancel()
-        mainActorGapTask = nil
-        let sorted = mainActorGapSamples.sorted()
-        let p95Index = sorted.isEmpty
-            ? 0
-            : min(sorted.count - 1, max(0, Int(ceil(Double(sorted.count) * 0.95)) - 1))
-        return MainActorGapSummary(
-            sampleCount: sorted.count,
-            p95Milliseconds: sorted.isEmpty ? 0 : sorted[p95Index],
-            maxMilliseconds: sorted.last ?? 0,
-            overFrameBudgetCount: sorted.filter { $0 > (1_000.0 / 60.0) }.count
+    func mainThreadWorkSummary() -> MainThreadWorkSummary {
+        MainThreadWorkSummary(
+            timing: mainThreadWorkTimings.summary(),
+            requestCount: mainThreadWorkPhaseCounts[.request, default: 0],
+            publishCount: mainThreadWorkPhaseCounts[.publish, default: 0],
+            consumerUpdateCount: mainThreadWorkPhaseCounts[.consumerUpdate, default: 0],
+            consumerDrawCount: mainThreadWorkPhaseCounts[.consumerDraw, default: 0],
+            distinctRequestCount: mainThreadWorkRequestIDs.count,
+            offMainThreadCount: offMainThreadWorkCount,
+            sampleCountsByZoomScaleKey: mainThreadWorkSampleCountsByZoomScaleKey
         )
     }
 }

@@ -123,6 +123,50 @@ final class TimelineFilmstripTrace: @unchecked Sendable {
         )
     }
 
+    func beginUIConsumerUpdate(frameCount: Int) {
+        os_signpost(
+            .begin,
+            log: TimelineFilmstripInstrumentation.log,
+            name: "UIConsumerUpdate",
+            signpostID: signpostID,
+            "frames=%d",
+            frameCount
+        )
+    }
+
+    func endUIConsumerUpdate(frameCount: Int) {
+        os_signpost(
+            .end,
+            log: TimelineFilmstripInstrumentation.log,
+            name: "UIConsumerUpdate",
+            signpostID: signpostID,
+            "frames=%d",
+            frameCount
+        )
+    }
+
+    func beginUIConsumerDraw(frameCount: Int) {
+        os_signpost(
+            .begin,
+            log: TimelineFilmstripInstrumentation.log,
+            name: "UIConsumerDraw",
+            signpostID: signpostID,
+            "frames=%d",
+            frameCount
+        )
+    }
+
+    func endUIConsumerDraw(frameCount: Int) {
+        os_signpost(
+            .end,
+            log: TimelineFilmstripInstrumentation.log,
+            name: "UIConsumerDraw",
+            signpostID: signpostID,
+            "frames=%d",
+            frameCount
+        )
+    }
+
     func consumerRendered(frameCount: Int) {
         os_signpost(
             .event,

@@ -434,4 +434,48 @@ struct FilmstripPlanningTests {
 
         #expect(selection == nil)
     }
+
+    @Test("work timing summary retains every sample and uses nearest-rank p95")
+    func workTimingSummaryRetainsEverySample() {
+        var accumulator = FilmstripWorkTimingAccumulator()
+        for milliseconds in (1...20).reversed() {
+            accumulator.record(durationNanoseconds: UInt64(milliseconds) * 1_000_000)
+        }
+
+        let summary = accumulator.summary()
+
+        #expect(summary.sampleCount == 20)
+        #expect(summary.p95Nanoseconds == 19_000_000)
+        #expect(summary.maxNanoseconds == 20_000_000)
+        #expect(summary.overFrameBudgetCount == 4)
+        #expect(summary.p95Milliseconds == 19)
+        #expect(summary.maxMilliseconds == 20)
+    }
+
+    @Test("work timing budget is exactly 16.6ms and counts only strict overruns")
+    func workTimingSummaryUsesExactFrameBudget() {
+        var accumulator = FilmstripWorkTimingAccumulator()
+        accumulator.record(durationNanoseconds: 16_599_999)
+        accumulator.record(durationNanoseconds: 16_600_000)
+        accumulator.record(durationNanoseconds: 16_600_001)
+
+        let summary = accumulator.summary()
+
+        #expect(FilmstripWorkTimingAccumulator.frameBudgetNanoseconds == 16_600_000)
+        #expect(summary.sampleCount == 3)
+        #expect(summary.maxNanoseconds == 16_600_001)
+        #expect(summary.overFrameBudgetCount == 1)
+    }
+
+    @Test("empty work timing summary is explicit zero evidence")
+    func emptyWorkTimingSummary() {
+        let summary = FilmstripWorkTimingAccumulator().summary()
+
+        #expect(summary == FilmstripWorkTimingSummary(
+            sampleCount: 0,
+            p95Nanoseconds: 0,
+            maxNanoseconds: 0,
+            overFrameBudgetCount: 0
+        ))
+    }
 }

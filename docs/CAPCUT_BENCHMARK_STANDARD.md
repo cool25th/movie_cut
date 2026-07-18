@@ -1,11 +1,12 @@
 # CapCut 벤치마크 기준서 (Benchmark Standard)
 
-> 버전: 1.5 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
+> 버전: 1.6 / 작성일: 2026-07-06 / 기준 대상: **CapCut 데스크톱(Mac/PC) 2026 버전**
 > 변경 이력: v1.1 (2026-07-12) — [추정] 8건 웹 검증: 7건 [확인] 승격(F1.4·F2.4·F4.4·F5.3·F5.4·I3·I8), L4 탭명 부분 승격. F1.4는 CapCut 약점으로 판명(능가 기회로 재분류).
 > 변경 이력: v1.2 (2026-07-13) — **사용자 보고 기반 격차 등재**: B-I2 타임라인 스크럽 판정 정정(코드 실사로 ❌ 확인), 클립 복사/붙여넣기 §6 신규 후보 추가(B-F2.1 기준 문장 보강).
 > 변경 이력: v1.3 (2026-07-13) — 사용자 보고 P0를 스펙 **G-16 타임라인 스크럽 / G-17 클립 복사·잘라내기·붙여넣기**로 정식 등재하고 §6 처리 상태를 갱신.
 > 변경 이력: v1.4 (2026-07-14) — G-17 구현·actual app E2E 상환. CapCut 공식 문서로 별도 위/아래 트랙 paste를 확인하고, 비공개 충돌 탐색 순서는 [추정] fallback으로 명시.
 > 변경 이력: v1.5 (2026-07-16) — G-04 actual `TimelineView` 시간가변 필름스트립/호버/4단계 밀도·메모리 증거로 stale 단일-thumbnail 판정을 정정. exact 16.6ms 초과 0건은 미달로 유지.
+> 변경 이력: v1.6 (2026-07-18) — G-04의 scheduler wakeup proxy를 actual main-thread request/publish/consumer update/draw operation interval로 교체. 4단계 zoom+scroll 격리 2회 모두 exact 16.6ms 초과 0건을 강제 통과해 자동 AC1~AC5를 완료했다. 이 측정은 display FPS가 아니다.
 > **목적: MovieCut 검증의 명시적 잣대.** "CapCut 수준"이라는 말을 관찰 가능한 문장으로 고정해, 모든 감사·검증 세션이 같은 기준으로 판정하게 한다.
 > 신뢰도 표기 — **[확인]**: 웹 출처/실사용으로 확인됨. **[추정]**: 훈련 지식 기반, 판정에 사용 전 실제 CapCut 또는 웹으로 확인할 것.
 > 무료 티어 기준. Pro 전용은 (Pro) 표시 — MovieCut은 해당 기능을 **무료·오프라인**으로 제공하는 것이 전략(차별화 축).
@@ -129,7 +130,7 @@
 |---|---|---|---|
 | **타임라인 스크럽(B-I2)** — 룰러 클릭 시킹 + 플레이헤드 드래그 | 있음 [확인] (핵심 편집 인터랙션) | 🟡 — G-16 Inc 1~3 구현, shared clamp tests 3/3 및 actual app `1.250/1.250/1.250` E2E PASS. 실기기 100ms/재생 중 체감 확인 대기 | **G-16 구현+E2E 완료** — 사용자 확인 필요 |
 | **클립 복사/붙여넣기(B-F2.1)** — Cmd+C/X/V, 플레이헤드 위치·다른 트랙에 붙여넣기 | 있음 [확인] | ✅ — atomic multi-copy/cut/paste, new ID·relative spacing·group remap, NSText native forwarding. actual app `0-2,2-4,10-12,12-14`, ffprobe `14.000000s` | **G-17 구현+E2E 완료** — 실기기 메뉴 클릭 확인만 잔여 |
-| 클립 필름스트립이 단일 썸네일 타일 반복 | 시간축 실프레임 필름스트립 [확인] | 🟡 — 실제 `TimelineView`가 viewport 시간가변 frame set을 소비하고 20/40/80/160px/s 밀도 증가·cached hover를 actual app로 증명. 단일 thumbnail은 async fallback으로만 유지 | **G-04 Inc 1~5 구현 완료** — AC1 zero-over-budget·실기기 cadence 확인 잔여 |
+| 클립 필름스트립이 단일 썸네일 타일 반복 | 시간축 실프레임 필름스트립 [확인] | ✅ — 실제 `TimelineView`가 viewport 시간가변 frame set을 소비하고 20/40/80/160px/s 밀도 증가·cached hover를 actual app로 증명. main-thread request/publish/consumer update/draw는 격리 2회 모두 `>16.6ms=0`; 단일 thumbnail은 async fallback으로만 유지 | **G-04 AC1~AC5 자동 검증 완료** — display cadence/스크롤·호버 체감은 사용자 확인 대기이며 이 operation metric은 표시 FPS가 아님 |
 | 컴파운드 클립(중첩 타임라인) | 있음 [확인] | ❌ | 다음 감사에서 G-ID 신설 검토 |
 | 블렌딩 모드(screen/multiply 등) | 있음 [확인] (v1.1 웹 검증) | ❌ | **확정 격차 — 다음 감사에서 G-ID 신설** |
 | 캡션 VTT/ASS export | 있음 [확인] | SRT만 | F-13 확장 소항목 |

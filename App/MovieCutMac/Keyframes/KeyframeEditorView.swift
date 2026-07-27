@@ -89,6 +89,13 @@ struct KeyframeEditorView: View {
     }
 
     private var currentSourceTime: TimeInterval {
+        // Route through the canonical mapping so the keyframe playhead reports
+        // the correct source offset at any rate or speed ramp (Step 3).
+        if let mapping = clip.makeTimeMapping() {
+            let absolute = mapping.sourceTime(forTimelineTime: playheadTime)
+            let local = absolute - clip.sourceRange.start
+            return min(max(0, local), clip.sourceRange.duration)
+        }
         let timelineOffset = max(0, playheadTime - clip.timelineRange.start)
         let sourceOffset = timelineOffset * max(clip.playbackRate, 0.25)
         return min(max(0, sourceOffset), clip.sourceRange.duration)

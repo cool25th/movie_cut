@@ -45,22 +45,39 @@ public struct SplitClipCommand: EditorCommand {
             throw EditorCommandError.invalidCommand("Split time must be inside the clip range.")
         }
 
-        let firstDuration = splitTime - clip.timelineRange.start
-        let secondDuration = clip.timelineRange.end - splitTime
-        let secondSourceDuration = clip.sourceRange.duration - firstDuration
+        // Map the split boundary to source time through the canonical mapping
+        // so a 2x clip's timeline split advances the source by the right amount
+        // (Step 3 of the core-editing repair). Previously split assumed
+        // timeline 1s == source 1s, which was wrong for any non-1x clip.
+        let mapping = clip.makeTimeMapping()
+            ?? ClipTimeMapping(
+                sourceRange: clip.sourceRange,
+                timelineStart: clip.timelineRange.start,
+                timelineDuration: clip.timelineRange.duration,
+                playbackRate: clip.playbackRate,
+                speedRampPoints: clip.speedRampPoints,
+                isReversed: clip.isReversed,
+                kind: clip.kind
+            )
+
+        let splitSourceTime = mapping.sourceTime(forTimelineTime: splitTime)
+        let firstTimelineDuration = splitTime - clip.timelineRange.start
+        let secondTimelineDuration = clip.timelineRange.end - splitTime
+        let firstSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
+        let secondSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
         guard secondSourceDuration >= 0 else {
             throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
         }
 
         var firstClip = clip
-        firstClip.timelineRange.duration = firstDuration
-        firstClip.sourceRange.duration = firstDuration
+        firstClip.timelineRange.duration = firstTimelineDuration
+        firstClip.sourceRange.duration = firstSourceDuration
 
         var secondClip = clip
         secondClip.id = newClipId
-        secondClip.timelineRange = TimeRange(start: splitTime, duration: secondDuration)
+        secondClip.timelineRange = TimeRange(start: splitTime, duration: secondTimelineDuration)
         secondClip.sourceRange = TimeRange(
-            start: clip.sourceRange.start + firstDuration,
+            start: splitSourceTime,
             duration: secondSourceDuration
         )
 

@@ -1812,9 +1812,14 @@ final class EditorViewModel {
             return
         }
 
-        let playbackRate = min(max(selectedClip.playbackRate, 0.25), 4.0)
-        let sourceDelta = (trimTime - selectedClip.timelineRange.start) * playbackRate
-        let newSourceStart = min(selectedClip.sourceRange.end, selectedClip.sourceRange.start + sourceDelta)
+        // Map the trim boundary to source time through the canonical mapping
+        // so the source range stays in sync with the timeline range at any
+        // playback rate or speed ramp (Step 3 of the core-editing repair).
+        guard let mapping = selectedClip.makeTimeMapping() else {
+            lastErrorMessage = "Selected clip has an invalid time range."
+            return
+        }
+        let newSourceStart = mapping.sourceTime(forTimelineTime: trimTime)
         let newSourceDuration = selectedClip.sourceRange.end - newSourceStart
         guard newSourceDuration > 0 else {
             lastErrorMessage = "Trimmed source range would be empty."
@@ -1846,8 +1851,15 @@ final class EditorViewModel {
             return
         }
 
-        let playbackRate = min(max(selectedClip.playbackRate, 0.25), 4.0)
-        let newSourceDuration = min(selectedClip.sourceRange.duration, newDuration * playbackRate)
+        // Map the trim boundary to source time through the canonical mapping
+        // (Step 3). The source start is unchanged; the new source end is the
+        // source time at the trim boundary.
+        guard let mapping = selectedClip.makeTimeMapping() else {
+            lastErrorMessage = "Selected clip has an invalid time range."
+            return
+        }
+        let newSourceEnd = mapping.sourceTime(forTimelineTime: trimTime)
+        let newSourceDuration = newSourceEnd - selectedClip.sourceRange.start
         guard newSourceDuration > 0 else {
             lastErrorMessage = "Trimmed source range would be empty."
             return
@@ -4189,11 +4201,19 @@ final class EditorViewModel {
     private func currentMotionTrackingResultRect(for clip: Clip) -> CGRect? {
         guard !motionTrackingResults.isEmpty else { return nil }
 
-        let clipLocalTimelineTime = min(
-            max(playheadTime - clip.timelineRange.start, 0),
-            max(clip.timelineRange.duration, 0)
-        )
-        let sourceTime = clip.sourceRange.start + (clipLocalTimelineTime * max(clip.playbackRate, 0.25))
+        // Map the playhead timeline time to source time through the canonical
+        // mapping so the nearest tracking result is found at the correct source
+        // offset for any rate or speed ramp (Step 3).
+        let sourceTime: TimeInterval
+        if let mapping = clip.makeTimeMapping() {
+            sourceTime = mapping.sourceTime(forTimelineTime: playheadTime)
+        } else {
+            let clipLocalTimelineTime = min(
+                max(playheadTime - clip.timelineRange.start, 0),
+                max(clip.timelineRange.duration, 0)
+            )
+            sourceTime = clip.sourceRange.start + (clipLocalTimelineTime * max(clip.playbackRate, 0.25))
+        }
 
         return motionTrackingResults.min {
             abs($0.timestamp - sourceTime) < abs($1.timestamp - sourceTime)
@@ -4295,12 +4315,22 @@ final class EditorViewModel {
             let snapshot = await session.snapshot()
             let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
 
-            // Map the timeline-space candidate window back to source time.
-            let timelineDuration = max(clip.timelineRange.duration, .leastNonzeroMagnitude)
-            let ratio = clip.sourceRange.duration / timelineDuration
-            let localStart = candidate.range.start - clip.timelineRange.start
-            let sourceStart = clip.sourceRange.start + max(0, localStart) * ratio
-            let sourceDuration = candidate.range.duration * ratio
+            // Map the timeline-space candidate window back to source time
+            // through the canonical mapping (Step 3). The ratio fallback only
+            // runs if the clip's ranges are degenerate.
+            let sourceStart: TimeInterval
+            let sourceDuration: TimeInterval
+            if let mapping = clip.makeTimeMapping() {
+                sourceStart = mapping.sourceTime(forTimelineTime: candidate.range.start)
+                let sourceEnd = mapping.sourceTime(forTimelineTime: candidate.range.end)
+                sourceDuration = max(0, sourceEnd - sourceStart)
+            } else {
+                let timelineDuration = max(clip.timelineRange.duration, .leastNonzeroMagnitude)
+                let ratio = clip.sourceRange.duration / timelineDuration
+                let localStart = candidate.range.start - clip.timelineRange.start
+                sourceStart = clip.sourceRange.start + max(0, localStart) * ratio
+                sourceDuration = candidate.range.duration * ratio
+            }
 
             var newProject = Project(name: "Highlight")
             newProject.canvas = snapshot.canvas
@@ -5114,12 +5144,12 @@ final class EditorViewModel {
         let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
         guard sourceEnd > sourceStart else { return nil }
 
-        let playbackRate = max(clip.playbackRate, 0.25)
-        let timelineStart = clip.timelineRange.start + (sourceStart - clip.sourceRange.start) / playbackRate
-        let timelineEnd = min(
-            clip.timelineRange.end,
-            timelineStart + (sourceEnd - sourceStart) / playbackRate
-        )
+        // Map the source range to the timeline through the canonical mapping so
+        // subtitle/auto-assistant windows land at the right timeline position
+        // for any rate or speed ramp (Step 3).
+        guard let mapping = clip.makeTimeMapping() else { return nil }
+        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
+        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
         guard timelineEnd > timelineStart else { return nil }
 
         return (
@@ -5181,6 +5211,16 @@ final class EditorViewModel {
     private func syncTimelinePlayhead(to playbackTime: TimeInterval) {
         guard let clip = selectedClip else {
             playheadTime = min(max(0, playbackTime), max(0, currentProject.timeline.duration))
+            return
+        }
+
+        // The playback engine reports composition timeline time. Map the
+        // playhead to the project timeline domain through the canonical mapping
+        // so the inspector/scrubber reflects the right position for any rate or
+        // speed ramp (Step 3).
+        if let mapping = clip.makeTimeMapping() {
+            let timelineTime = mapping.timelineTime(forSourceTime: playbackTime)
+            playheadTime = min(max(0, timelineTime), max(0, currentProject.timeline.duration))
             return
         }
 

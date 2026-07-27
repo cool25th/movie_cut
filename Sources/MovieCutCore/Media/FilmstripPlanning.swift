@@ -217,15 +217,21 @@ public enum FilmstripHoverPlanner {
 
         let clampedX = min(max(localX, 0), clipWidth)
         let timelineOffset = (clampedX / clipWidth) * timelineDuration
-        let sourceOffset: TimeInterval
-        if speedRampPoints.count >= 2 {
-            let normalizedOutputTime = timelineOffset / sourceRange.duration
-            let normalizedSourceTime = SpeedRampCurve(points: speedRampPoints)
-                .inverseMapping(outputTime: normalizedOutputTime)
-            sourceOffset = normalizedSourceTime * sourceRange.duration
-        } else {
-            sourceOffset = timelineOffset * playbackRate
-        }
+        // Route the timeline->source conversion through the canonical
+        // ClipTimeMapping so hover scrub agrees with split/trim/scrub at any
+        // rate or speed ramp (Step 3). The planner works in clip-local time,
+        // so build a mapping with timelineStart == 0.
+        let mapping = ClipTimeMapping(
+            sourceRange: sourceRange,
+            timelineStart: 0,
+            timelineDuration: timelineDuration,
+            playbackRate: playbackRate,
+            speedRampPoints: speedRampPoints,
+            isReversed: false,
+            kind: .video
+        )
+        let absoluteSourceTime = mapping.sourceTime(forTimelineTime: timelineOffset)
+        let sourceOffset = max(0, absoluteSourceTime - sourceRange.start)
         guard sourceOffset.isFinite else { return nil }
 
         let requestedSourceTime = sourceRange.start

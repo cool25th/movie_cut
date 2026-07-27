@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct PreviewPanel: View {
     var viewModel: EditorViewModel
     @State private var playbackEngine: PlaybackEngine
-    @State private var loadedAssetId: UUID?
     @State private var previewVolume: Double = 1
     @State private var previewZoom: Double = 1
     @State private var isPreviewZoomFit = true
@@ -25,14 +24,18 @@ struct PreviewPanel: View {
             ZStack {
                 MovieCutTheme.previewWellBackground
 
-                if let clip = viewModel.selectedClip {
+                if projectHasVisualContent || playbackEngine.playerItem != nil {
                     previewCanvasWell {
-                        previewSurface(for: clip)
+                        previewSurface
                     }
                 } else {
                     previewCanvasWell {
                         previewEmptyState
                     }
+                }
+
+                if let compositionError = playbackEngine.lastCompositionError {
+                    previewCompositionErrorBanner(compositionError)
                 }
 
                 // IA/menu-position contract: preview transport is bottom-docked
@@ -50,19 +53,53 @@ struct PreviewPanel: View {
             .accessibilityLabel(NSLocalizedString("Preview", comment: ""))
             .accessibilityValue(previewAccessibilityValue)
             .task {
-                loadSelectedClipAsset()
-            }
-            .onChange(of: viewModel.selectedClipId) { _, _ in
-                loadSelectedClipAsset()
-            }
-            .onChange(of: viewModel.selectedClip?.playbackRate) { _, playbackRate in
-                playbackEngine.setRate(Float(playbackRate ?? 1))
+                loadProjectComposition()
             }
             .onChange(of: playbackEngine.currentTime) { _, currentTime in
-                syncTimelinePlayhead(to: currentTime)
+                // Composition playback time is already the project timeline
+                // domain; no per-clip source→timeline conversion needed.
+                viewModel.playheadTime = min(max(0, currentTime), max(0, viewModel.currentProject.timeline.duration))
             }
 
         }
+    }
+
+    /// Whether the project has any visual track (video/image/text) worth
+    /// showing the composition surface for. Drives the empty-state vs.
+    /// surface decision independently of selection.
+    private var projectHasVisualContent: Bool {
+        let timeline = viewModel.currentProject.timeline
+        return timeline.tracks.contains { track in
+            track.kind != .audio && !track.clips.isEmpty
+        }
+    }
+
+    private func previewCompositionErrorBanner(_ message: String) -> some View {
+        VStack {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .fill(MovieCutTheme.inspectorSelectedControlSurface.opacity(0.95))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                    .stroke(MovieCutTheme.border.opacity(0.4), lineWidth: 0.5)
+            )
+            .padding(.top, 12)
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(NSLocalizedString("Preview composition failed", comment: ""))
+        .accessibilityValue(message)
     }
 
     private func previewCanvasWell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -345,9 +382,22 @@ struct PreviewPanel: View {
         min(previewZoomRange.upperBound, max(previewZoomRange.lowerBound, zoom))
     }
 
-    private func previewSurface(for clip: Clip) -> some View {
+    private var previewSurface: some View {
         ZStack {
-            if usesLoop4PreviewEditorialMatte(for: clip) {
+            // The project composition is the source of truth for the rendered
+            // video frame (multi-track, transitions, effects, masks, audio
+            // mix). Canvas editing overlays (text/sticker transform, mask,
+            // chroma eyedropper, motion tracking) are layered on top for
+            // interaction but do not re-render the underlying pixels — the
+            // composition already bakes them in via Core Animation.
+            //
+            // When the selected clip is text/audio (no visual source) and the
+            // project has no rendered video track behind it, fall back to the
+            // editorial matte so the preview never shows an empty void while
+            // the user edits a text or audio-only clip.
+            if projectHasRenderedVideoTrack {
+                VideoPreviewView(player: playbackEngine.player)
+            } else if let clip = viewModel.selectedClip, usesLoop4PreviewEditorialMatte(for: clip) {
                 PreviewLoop4EditorialMatte(
                     clipKind: clip.kind,
                     textContent: clip.textContent
@@ -356,12 +406,26 @@ struct PreviewPanel: View {
                 VideoPreviewView(player: playbackEngine.player)
             }
         }
-            .aspectRatio(canvasAspectRatio, contentMode: .fit)
-            .overlay {
+        .aspectRatio(canvasAspectRatio, contentMode: .fit)
+        .overlay {
+            if let clip = viewModel.selectedClip {
                 previewOverlay(for: clip)
             }
-            .scaleEffect(previewZoom)
-            .accessibilityValue(previewZoomAccessibilityValue)
+        }
+        .scaleEffect(previewZoom)
+        .accessibilityValue(previewZoomAccessibilityValue)
+    }
+
+    /// Whether any non-text/non-audio clip exists that the composition can
+    /// render real pixels for. Text-only or audio-only selections still get
+    /// the editorial matte so the canvas isn't a black void.
+    private var projectHasRenderedVideoTrack: Bool {
+        let timeline = viewModel.currentProject.timeline
+        // Video tracks carry both video and image clips (image clips are
+        // promoted onto video tracks and rendered via ImageVideoRenderService).
+        return timeline.tracks.contains { track in
+            track.kind == .video && track.clips.contains { $0.assetId != nil }
+        }
     }
 
     private var canvasAspectRatio: CGFloat {
@@ -696,44 +760,17 @@ struct PreviewPanel: View {
         }
     }
 
-    private func loadSelectedClipAsset() {
-        guard
-            let clip = viewModel.selectedClip,
-            let assetId = clip.assetId,
-            let asset = viewModel.currentProject.mediaLibrary.assets[assetId]
-        else {
-            loadedAssetId = nil
-            playbackEngine.clear()
-            return
-        }
-
-        if loadedAssetId != asset.id {
-            playbackEngine.load(asset: asset)
-            loadedAssetId = asset.id
-        }
-
-        playbackEngine.setRate(Float(clip.playbackRate))
-        playbackEngine.seek(to: clip.sourceRange.start)
-        syncTimelinePlayhead(to: clip.sourceRange.start)
+    private func loadProjectComposition() {
+        viewModel.rebuildPreviewComposition()
     }
 
     private func seekByFrames(_ frameCount: Int) {
-        let frameDuration = 1.0 / 30.0
+        let frameRate = viewModel.currentProject.timeline.frameRate.doubleValue
+        guard frameRate > 0 else { return }
+        let frameDuration = 1.0 / frameRate
         let nextTime = playbackEngine.currentTime + (Double(frameCount) * frameDuration)
         playbackEngine.seek(to: nextTime)
-        syncTimelinePlayhead(to: nextTime)
-    }
-
-    private func syncTimelinePlayhead(to playbackTime: TimeInterval) {
-        guard let clip = viewModel.selectedClip else {
-            viewModel.playheadTime = playbackTime
-            return
-        }
-
-        let sourceOffset = max(0, playbackTime - clip.sourceRange.start)
-        let timelineOffset = sourceOffset / max(clip.playbackRate, 0.25)
-        let timelineTime = clip.timelineRange.start + timelineOffset
-        viewModel.playheadTime = min(timelineTime, clip.timelineRange.end)
+        viewModel.playheadTime = min(max(0, nextTime), max(0, viewModel.currentProject.timeline.duration))
     }
 
     private func timecodeString(_ time: TimeInterval) -> String {

@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import AudioToolbox
+import CoreVideo
 import Foundation
 import MediaToolbox
 import MovieCutCore
@@ -24,11 +25,22 @@ final class PlaybackEngine {
     var duration: TimeInterval
     var playerItem: AVPlayerItem?
     var playbackRate: Float
+    /// Most recent composition build error, surfaced to the UI instead of being
+    /// silently swallowed by `clear()`. Reset to `nil` on a successful build.
+    var lastCompositionError: String?
+    /// Monotonically increasing token stamped on every `loadProject` request and
+    /// checked before applying a built composition, so a slow stale rebuild can
+    /// never overwrite a newer composition (Step 1 stale-rebuild guard).
+    private var compositionGeneration: UInt64 = 0
 
     @ObservationIgnored private var textLayers: [CALayer] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
+    /// Video output used to pull the currently displayed preview pixel buffer
+    /// for Preview↔Export parity verification. Lazily attached to the active
+    /// player item.
+    @ObservationIgnored private var previewVideoOutput: AVPlayerItemVideoOutput?
 
     init() {
         self.player = AVPlayer()
@@ -43,6 +55,7 @@ final class PlaybackEngine {
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
+        clearPreviewVideoOutput()
 
         let avAsset = AVURLAsset(url: asset.originalURL)
         let item = AVPlayerItem(asset: avAsset)
@@ -55,37 +68,130 @@ final class PlaybackEngine {
         observeStatus(for: item)
     }
 
+    /// Returns the monotonically increasing composition generation counter.
+    /// Exposed for behavioral tests that verify stale rebuilds cannot
+    /// overwrite a newer composition (Step 1 acceptance criterion).
+    var currentCompositionGeneration: UInt64 {
+        compositionGeneration
+    }
+
     func loadProject(_ project: Project, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) {
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
+
+        // Stamp a new generation before any async work. Only the holder of the
+        // latest token is allowed to install a player item, so a slow earlier
+        // rebuild that completes after a newer request cannot overwrite it.
+        compositionGeneration &+= 1
+        let requestedGeneration = compositionGeneration
 
         Task { @MainActor [weak self] in
             guard let self else { return }
 
             do {
                 let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project, audioProcessing: audioProcessing)
+
+                // Stale guard: another rebuild was requested while we built.
+                guard requestedGeneration == compositionGeneration else { return }
+
                 let item = AVPlayerItem(asset: composition)
                 item.videoComposition = videoComposition
                 item.audioMix = audioMix
+                attachPreviewVideoOutput(to: item)
 
                 playerItem = item
                 currentTime = 0
                 duration = composition.duration.seconds.isFinite ? composition.duration.seconds : 0
+                lastCompositionError = nil
                 player.replaceCurrentItem(with: item)
                 cleanupTemporaryReverseRenderURLs()
                 self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
             } catch {
-                clear()
+                // Stale guard applies to the failure path too.
+                guard requestedGeneration == compositionGeneration else { return }
+                lastCompositionError = error.localizedDescription
+                clearPreviewVideoOutput()
+                player.replaceCurrentItem(with: nil)
+                cleanupTemporaryReverseRenderURLs()
+                playerItem = nil
+                currentTime = 0
+                duration = 0
             }
         }
+    }
+
+    private func attachPreviewVideoOutput(to item: AVPlayerItem) {
+        clearPreviewVideoOutput()
+        let settings: [String: Any] = [String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_32BGRA]
+        let output = AVPlayerItemVideoOutput(outputSettings: settings)
+        item.add(output)
+        previewVideoOutput = output
+    }
+
+    private func clearPreviewVideoOutput() {
+        if let output = previewVideoOutput, let item = playerItem {
+            item.remove(output)
+        }
+        previewVideoOutput = nil
+    }
+
+    /// Returns the preview frame currently displayed at the player's time, or
+    /// `nil` when no composition is loaded / the renderer has not produced a
+    /// frame yet. Used by Preview↔Export parity verification (Step 1).
+    func snapshotCurrentFrame() -> CGImage? {
+        guard let output = previewVideoOutput else { return nil }
+        // AVPlayerItemVideoOutput.itemTime(forHostTime:) takes a host-time
+        // scalar (CFTimeInterval), not a CMTime.
+        let hostTimeSeconds = CMClockGetTime(CMClockGetHostTimeClock()).seconds
+        guard hostTimeSeconds.isFinite else { return nil }
+        let itemTime = output.itemTime(forHostTime: hostTimeSeconds)
+        guard CMTIME_IS_NUMERIC(itemTime) else { return nil }
+        if output.hasNewPixelBuffer(forItemTime: itemTime) {
+            if let pixelBuffer = output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil) {
+                return Self.cgImage(from: pixelBuffer)
+            }
+        }
+        return nil
+    }
+
+    /// Returns the preview frame at an arbitrary composition time by seeking
+    /// the player first. Intended for parity harness use where the host must
+    /// capture a frame at a known timestamp regardless of live playback.
+    func snapshotFrame(at time: TimeInterval) async -> CGImage? {
+        // Wait until the player item is ready to produce frames. The video
+        // output cannot copy a pixel buffer before .readyToPlay, and the first
+        // seek after install frequently returns nil without this gate.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if let item = playerItem, item.status == .readyToPlay { break }
+            if lastCompositionError != nil { return nil }
+            try? await Task.sleep(nanoseconds: 30_000_000)
+        }
+        seek(to: time)
+        // Give AVFoundation time to service the seek and the video output to
+        // render a fresh frame. Poll for the frame for up to ~300ms so a slow
+        // first-frame decode is still captured.
+        let frameDeadline = Date().addingTimeInterval(0.3)
+        while Date() < frameDeadline {
+            if let image = snapshotCurrentFrame() { return image }
+            try? await Task.sleep(nanoseconds: 30_000_000)
+        }
+        return snapshotCurrentFrame()
+    }
+
+    private static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+        return context.createCGImage(ciImage, from: ciImage.extent)
     }
 
     func clear() {
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
+        clearPreviewVideoOutput()
         player.replaceCurrentItem(with: nil)
         cleanupTemporaryReverseRenderURLs()
         playerItem = nil

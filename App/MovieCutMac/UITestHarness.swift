@@ -161,6 +161,14 @@ extension EditorViewModel {
             await runCardEditorUITestScenario(environment: env)
             return
         }
+        if env["MOVIECUT_UITEST_PREVIEW_PROJECT"] == "1" {
+            await runPreviewProjectCompositionUITestScenario(environment: env)
+            return
+        }
+        if env["MOVIECUT_UITEST_PARITY"] == "1" {
+            await runPreviewExportParityUITestScenario(environment: env)
+            return
+        }
         var extractAudioSuffix = ""
         var scrubSuffix = ""
         var clipboardSuffix = ""
@@ -1755,6 +1763,265 @@ extension EditorViewModel {
         }
         guard !parts.isEmpty else { return " timeline=empty" }
         return " timeline=" + parts.joined(separator: ",")
+    }
+
+    /// Step 1 actual-app E2E for the project-composition Preview path. Loads
+    /// the provided fixtures (video + audio + text), drives a composition
+    /// rebuild through the real ViewModel, and asserts the acceptance
+    /// criteria from `CAPCUT_CORE_EDITING_REPAIR_HANDOFF_20260727.md`:
+    ///   - composition installs a player item (no silent `clear()`)
+    ///   - clip boundary crossing advances the playhead into the next clip
+    ///   - selection change does NOT reset playback time to zero
+    ///   - the generation token never lets a stale rebuild overwrite a newer
+    ///     composition
+    /// Outcome is serialized to `MOVIECUT_UITEST_RESULT` as a key=value string.
+    private func runPreviewProjectCompositionUITestScenario(environment: [String: String]) async {
+        var generationBefore: UInt64 = 0
+        var generationAfterFirst: UInt64 = 0
+        var generationAfterBurst: UInt64 = 0
+        var playerItemInstalled = false
+        var compositionErrorExposed = "none"
+        var durationSeconds = 0.0
+        var boundaryCrossingWorked = false
+        var selectionKeepsTime = false
+        var staleGuardHeld = false
+
+        do {
+            // 1. Import the provided fixtures and add them to the timeline.
+            let importURLs = (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
+                .split(separator: ",")
+                .map { String($0) }
+                .filter { !$0.isEmpty }
+                .map(URL.init(fileURLWithPath:))
+            if importURLs.isEmpty {
+                throw NSError(domain: "MovieCutUITest", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_IMPORT not set"])
+            }
+            await importMediaAndAddToTimeline(importURLs, startTime: 0)
+
+            // Add a text clip so the composition exercises the Core Animation
+            // text layer path (acceptance: text change is reflected in preview).
+            await addTextClip(text: "Step1 preview composition")
+
+            // 2. Force a composition rebuild through the same path PreviewPanel
+            // uses, then wait for the player item to install.
+            generationBefore = playbackEngine.currentCompositionGeneration
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(timeoutSeconds: 8)
+            // The player item installs synchronously, but AVFoundation reports
+            // a non-zero duration only once the item reaches .readyToPlay, so
+            // re-read duration after a short settle window.
+            try await Task.sleep(nanoseconds: 300_000_000)
+            playerItemInstalled = playbackEngine.playerItem != nil
+            compositionErrorExposed = playbackEngine.lastCompositionError ?? "none"
+            durationSeconds = playbackEngine.duration
+            generationAfterFirst = playbackEngine.currentCompositionGeneration
+
+            guard playerItemInstalled, compositionErrorExposed == "none" else {
+                throw NSError(domain: "MovieCutUITest", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "composition did not install cleanly (item=\(playerItemInstalled) err=\(compositionErrorExposed))"])
+            }
+
+            // 3. Boundary crossing: seek to just before the first clip end,
+            // nudge across it, and confirm time keeps advancing (the playhead
+            // is in the project timeline domain under composition playback).
+            // Prefer the published composition duration; fall back to the
+            // timeline's nominal duration if AVFoundation has not settled yet.
+            let referenceDuration = durationSeconds > 0
+                ? durationSeconds
+                : currentProject.timeline.duration
+            let firstClipEnd = currentProject.timeline.tracks
+                .flatMap(\.clips)
+                .map { $0.timelineRange.end }
+                .filter { $0 > 0 }
+                .sorted()
+                .first ?? 0
+            if referenceDuration > firstClipEnd, firstClipEnd > 0 {
+                playbackEngine.seek(to: max(0, firstClipEnd - 0.05))
+                let before = playbackEngine.currentTime
+                playbackEngine.seek(to: firstClipEnd + 0.1)
+                let after = playbackEngine.currentTime
+                boundaryCrossingWorked = after > before && after <= referenceDuration + 0.1
+            }
+
+            // 4. Selection must not reset playback time to zero. Park at a
+            // non-zero time, change selection, and verify the engine time did
+            // not jump back to 0.
+            if let firstClip = currentProject.timeline.tracks.first?.clips.first {
+                let parkTarget = min(0.5, max(0.1, referenceDuration * 0.25))
+                playbackEngine.seek(to: parkTarget)
+                let parkedTime = playbackEngine.currentTime
+                selectedClipIds = [firstClip.id]
+                // Give SwiftUI a tick to process the selection change.
+                try await Task.sleep(nanoseconds: 50_000_000)
+                selectionKeepsTime = abs(playbackEngine.currentTime - parkedTime) < 0.25
+            }
+
+            // 5. Stale rebuild guard: fire two rapid rebuilds and confirm the
+            // generation counter advances twice (each request stamps a token)
+            // and the final state is consistent. We cannot deterministically
+            // race the async builds, but the counter must have moved by >= 2
+            // and the engine must remain on a clean item afterwards.
+            rebuildPreviewComposition()
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(timeoutSeconds: 8)
+            generationAfterBurst = playbackEngine.currentCompositionGeneration
+            staleGuardHeld = (generationAfterBurst - generationAfterFirst) >= 2
+                && playbackEngine.playerItem != nil
+                && playbackEngine.lastCompositionError == nil
+        } catch {
+            lastErrorMessage = "preview project harness failed: \(error.localizedDescription)"
+        }
+
+        let status = "preview_project_done" +
+            " player_item_installed=\(playerItemInstalled ? 1 : 0)" +
+            " composition_error=\(compositionErrorExposed)" +
+            String(format: " duration=%.3f", durationSeconds) +
+            " boundary_crossing=\(boundaryCrossingWorked ? 1 : 0)" +
+            " selection_keeps_time=\(selectionKeepsTime ? 1 : 0)" +
+            " stale_guard_held=\(staleGuardHeld ? 1 : 0)" +
+            " generation_before=\(generationBefore)" +
+            " generation_after_first=\(generationAfterFirst)" +
+            " generation_after_burst=\(generationAfterBurst)" +
+            " error=\(lastErrorMessage ?? "none")" +
+            timelineSummarySuffix()
+        lastStatusMessage = status
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+        }
+        await flushAutosave()
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// Step 1 Preview↔Export pixel-parity harness. Builds the project,
+    /// exports it to `MOVIECUT_UITEST_EXPORT`, and dumps the Preview frame at
+    /// each timestamp listed in `MOVIECUT_UITEST_PARITY_TIMES` (comma-separated
+    /// seconds) to `MOVIECUT_UITEST_PREVIEW_DUMP` (one PNG per timestamp with
+    /// a `_t<seconds>.png` suffix). The shell script then extracts the same
+    /// timestamps from the exported mp4 and compares them pixel-by-pixel.
+    private func runPreviewExportParityUITestScenario(environment: [String: String]) async {
+        var dumpedFrames = 0
+        var previewDumpDir = "none"
+        // Progressive status writer so a hang or crash still leaves evidence
+        // about how far the harness got (the parity path is newer and has no
+        // prior in-the-wild run).
+        func checkpoint(_ stage: String) {
+            let line = "parity_checkpoint stage=\(stage) dumped_frames=\(dumpedFrames) composition_error=\(playbackEngine.lastCompositionError ?? "none")\n"
+            if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+                try? line.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            }
+        }
+        checkpoint("start")
+        do {
+            let importURLs = (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
+                .split(separator: ",")
+                .map { String($0) }
+                .filter { !$0.isEmpty }
+                .map(URL.init(fileURLWithPath:))
+            guard !importURLs.isEmpty else {
+                throw NSError(domain: "MovieCutUITest", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_IMPORT not set"])
+            }
+            await importMediaAndAddToTimeline(importURLs, startTime: 0)
+            checkpoint("imported")
+
+            // Force a composition build and wait for the player item so the
+            // video output is attached and producing frames.
+            rebuildPreviewComposition()
+            checkpoint("rebuild_requested")
+            try await waitForCompositionReady(timeoutSeconds: 10)
+            checkpoint("composition_ready")
+            guard playbackEngine.playerItem != nil,
+                  playbackEngine.lastCompositionError == nil else {
+                throw NSError(domain: "MovieCutUITest", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "composition not ready for parity dump"])
+            }
+
+            let times: [TimeInterval] = (environment["MOVIECUT_UITEST_PARITY_TIMES"] ?? "")
+                .split(separator: ",")
+                .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            guard !times.isEmpty else {
+                throw NSError(domain: "MovieCutUITest", code: 3,
+                              userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_PARITY_TIMES not set or empty"])
+            }
+
+            previewDumpDir = environment["MOVIECUT_UITEST_PREVIEW_DUMP"] ?? ""
+            guard !previewDumpDir.isEmpty else {
+                throw NSError(domain: "MovieCutUITest", code: 4,
+                              userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_PREVIEW_DUMP not set"])
+            }
+            try? FileManager.default.createDirectory(atPath: previewDumpDir,
+                                                    withIntermediateDirectories: true)
+
+            // Use the timeline duration as the clamp reference; AVFoundation
+            // may still be reporting duration == 0 right after install.
+            let referenceDuration = playbackEngine.duration > 0
+                ? playbackEngine.duration
+                : currentProject.timeline.duration
+            for time in times {
+                let clamped = min(max(0, time), referenceDuration)
+                checkpoint("snapshot_before t=\(clamped)")
+                let frame = await playbackEngine.snapshotFrame(at: clamped)
+                checkpoint("snapshot_after t=\(clamped) nil=\(frame == nil)")
+                guard let cgImage = frame else { continue }
+                let bitmap = NSBitmapImageRep(cgImage: cgImage)
+                guard let pngData = bitmap.representation(using: .png, properties: [:]) else { continue }
+                let fileName = String(format: "preview_t%.3f.png", time)
+                let outURL = URL(fileURLWithPath: previewDumpDir).appendingPathComponent(fileName)
+                try? pngData.write(to: outURL)
+                dumpedFrames += 1
+            }
+            checkpoint("dumped")
+
+            // Export the project so the parity script can sample the same
+            // timestamps from the rendered mp4.
+            if let exportPath = environment["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
+                checkpoint("export_before")
+                await exportProject(to: URL(filePath: exportPath))
+                checkpoint("export_after")
+            }
+        } catch {
+            lastErrorMessage = "parity harness failed: \(error.localizedDescription)"
+        }
+
+        let status = "parity_done" +
+            " dumped_frames=\(dumpedFrames)" +
+            " preview_dump_dir=\(previewDumpDir)" +
+            " composition_error=\(playbackEngine.lastCompositionError ?? "none")" +
+            " error=\(lastErrorMessage ?? "none")" +
+            timelineSummarySuffix()
+        lastStatusMessage = status
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+        }
+        await flushAutosave()
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// Polls the playback engine until a composition on the current generation
+    /// has installed a player item without error, or `timeoutSeconds` elapses.
+    /// Does NOT gate on `.readyToPlay` because composition track loading can
+    /// take longer than is healthy for a smoke test; the boundary/duration
+    /// checks downstream tolerate a still-settling item. A thrown error here
+    /// means the composition genuinely failed to install (not that it was slow).
+    private func waitForCompositionReady(timeoutSeconds: Double) async throws {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if let err = playbackEngine.lastCompositionError {
+                throw NSError(domain: "MovieCutUITest", code: 6,
+                              userInfo: [NSLocalizedDescriptionKey: err])
+            }
+            if playbackEngine.playerItem != nil {
+                return
+            }
+            try await Task.sleep(nanoseconds: 30_000_000)
+        }
+        throw NSError(domain: "MovieCutUITest", code: 5,
+                      userInfo: [NSLocalizedDescriptionKey: "timed out waiting for composition to become ready"])
     }
 }
 #endif

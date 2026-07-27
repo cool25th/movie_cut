@@ -4561,6 +4561,15 @@ final class EditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = nil
 
+        // Step 1: rebuild the preview composition so the main Preview reflects
+        // the committed project state (multi-track, transitions, effects,
+        // audio mix). This runs on every committed mutation (command dispatch
+        // / undo / redo / import) but NOT during in-progress drags, which
+        // mutate `currentProject` directly without going through the session
+        // — so drag ticks don't trigger a rebuild storm. Playback state is
+        // preserved inside `rebuildPreviewComposition`.
+        rebuildPreviewComposition()
+
         scheduleAutosave()
         refreshScopes()
     }
@@ -5181,6 +5190,59 @@ final class EditorViewModel {
         playheadTime = min(max(0, timelineTime), clip.timelineRange.end)
     }
 
+    /// Rebuilds the preview composition from the current project so the main
+    /// Preview reflects the timeline as a whole (multi-track, transitions,
+    /// effects, audio mix, masks, subtitles) rather than the selected clip's
+    /// raw source asset. Playback state (time, play/pause, preview volume) is
+    /// preserved across the rebuild. Used by PreviewPanel and the actual-app
+    /// E2E harness. Step 1 of the core-editing repair handoff.
+    func rebuildPreviewComposition(preservingPlayback preserve: Bool = true) {
+        let snapshotTime = playbackEngine.currentTime
+        let wasPlaying = playbackEngine.isPlaying
+        let snapshotVolume = Double(playbackEngine.player.volume)
+
+        let project = currentProject
+        let audio = buildAudioProcessingOptions()
+        playbackEngine.loadProject(project, audioProcessing: audio)
+
+        if preserve {
+            // Composition install is async (Task inside loadProject). Restore
+            // playback state once the new item reports ready; if the rebuild
+            // fails, lastCompositionError is surfaced to the UI instead.
+            restorePlaybackAfterRebuild(targetTime: snapshotTime,
+                                        shouldPlay: wasPlaying,
+                                        volume: snapshotVolume)
+        }
+    }
+
+    private func restorePlaybackAfterRebuild(targetTime: TimeInterval, shouldPlay: Bool, volume: Double) {
+        // Capture the generation at request time so we can detect if a newer
+        // rebuild supersedes this one (in which case that newer request owns
+        // playback restoration and we should bail out instead of waiting
+        // forever on a generation that will never match again).
+        let requestedGeneration = playbackEngine.currentCompositionGeneration
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Wait for the composition to install. Bail if a newer rebuild
+            // supersedes us, or if the build failed, or after ~3s.
+            for _ in 0..<150 {
+                if self.playbackEngine.lastCompositionError != nil { return }
+                if self.playbackEngine.currentCompositionGeneration != requestedGeneration { return }
+                if self.playbackEngine.playerItem != nil { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            guard self.playbackEngine.playerItem != nil,
+                  self.playbackEngine.lastCompositionError == nil,
+                  self.playbackEngine.currentCompositionGeneration == requestedGeneration else { return }
+
+            self.playbackEngine.player.volume = Float(volume)
+            self.playbackEngine.seek(to: min(max(0, targetTime), self.playbackEngine.duration))
+            if shouldPlay {
+                self.playbackEngine.play()
+            }
+        }
+    }
+
     private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
         var asset = MediaImporter.probe(url: url)
 
@@ -5644,7 +5706,7 @@ final class EditorViewModel {
         }
     }
 
-    private func buildAudioProcessingOptions() -> ClipAudioProcessingOptions {
+    func buildAudioProcessingOptions() -> ClipAudioProcessingOptions {
         let snapshot = currentProject
         var voiceClipIds: Set<UUID> = []
         for track in snapshot.timeline.tracks where track.kind == .video {

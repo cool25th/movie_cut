@@ -25,7 +25,8 @@ struct TimelineView: View {
     private let trackHeight: CGFloat = 50
     private let rulerHeight: CGFloat = 24
     private let trimHandleWidth: CGFloat = 8
-    private let minimumClipDuration: TimeInterval = 0.1
+    /// Shares the view model's minimum so drag and keyboard trim agree (Step 5).
+    private var minimumClipDuration: TimeInterval { EditorViewModel.minimumTimelineClipDuration }
     private let markerLabelWidth: CGFloat = 132
     private let minimumTimelineContentWidth: CGFloat = 900
     private let timelineZoomRange: ClosedRange<Double> = 20...300
@@ -1244,26 +1245,37 @@ struct TimelineView: View {
                 beginClipDrag(clip)
                 dragOffset = value.translation.width
 
-                guard let initialTimelineRange = dragInitialTimelineRange,
-                      let initialSourceRange = dragInitialSourceRange
-                else { return }
+                guard let initialTimelineRange = dragInitialTimelineRange else { return }
 
-                let minimumStart = max(0, initialTimelineRange.start - initialSourceRange.start)
-                let maximumStart = max(minimumStart, initialTimelineRange.end - minimumClipDuration)
+                // Compute the candidate new timeline start from the drag, then
+                // route it through the shared ClipTrimMath so the source range
+                // stays in sync with the timeline at any speed/ramp, the
+                // source is guarded against the asset end, and the preview
+                // matches the committed value (Step 5 of the core-editing
+                // repair). Previously this assumed timeline 1s == source 1s.
                 let rawStart = initialTimelineRange.start + Double(value.translation.width) / pixelsPerSecond
                 let snappedStart = snappedTime(rawStart, allClips: allClips(excluding: clip.id))
-                let newStart = min(maximumStart, max(minimumStart, snappedStart))
-                let newDuration = max(minimumClipDuration, initialTimelineRange.end - newStart)
-                let sourceDelta = newStart - initialTimelineRange.start
-                let newSourceRange = TimeRange(
-                    start: max(0, initialSourceRange.start + sourceDelta),
-                    duration: newDuration
-                )
+                // Build a working clip from the initial ranges so ClipTrimMath
+                // sees the pre-drag state on every tick (the live mutation
+                // below would otherwise feed it already-mutated ranges).
+                var workingClip = clip
+                workingClip.timelineRange = initialTimelineRange
+                if let initialSourceRange = dragInitialSourceRange {
+                    workingClip.sourceRange = initialSourceRange
+                }
+
+                guard let result = ClipTrimMath.compute(
+                    clip: workingClip,
+                    edge: .start,
+                    targetTimelineTime: snappedStart,
+                    assetDuration: viewModel.assetDuration(forClipID: clip.id),
+                    minimumDuration: minimumClipDuration
+                ) else { return }
 
                 updateClip(
                     clip.id,
-                    sourceRange: newSourceRange,
-                    timelineRange: TimeRange(start: newStart, duration: newDuration)
+                    sourceRange: result.source,
+                    timelineRange: result.timeline
                 )
             }
             .onEnded { _ in
@@ -1278,20 +1290,29 @@ struct TimelineView: View {
                 beginClipDrag(clip)
                 dragOffset = value.translation.width
 
-                guard let initialTimelineRange = dragInitialTimelineRange,
-                      let initialSourceRange = dragInitialSourceRange
-                else { return }
+                guard let initialTimelineRange = dragInitialTimelineRange else { return }
 
                 let rawEnd = initialTimelineRange.end + Double(value.translation.width) / pixelsPerSecond
                 let snappedEnd = snappedTime(rawEnd, allClips: allClips(excluding: clip.id))
-                let newEnd = max(initialTimelineRange.start + minimumClipDuration, snappedEnd)
-                let newDuration = newEnd - initialTimelineRange.start
-                let newSourceRange = TimeRange(start: initialSourceRange.start, duration: newDuration)
+
+                var workingClip = clip
+                workingClip.timelineRange = initialTimelineRange
+                if let initialSourceRange = dragInitialSourceRange {
+                    workingClip.sourceRange = initialSourceRange
+                }
+
+                guard let result = ClipTrimMath.compute(
+                    clip: workingClip,
+                    edge: .end,
+                    targetTimelineTime: snappedEnd,
+                    assetDuration: viewModel.assetDuration(forClipID: clip.id),
+                    minimumDuration: minimumClipDuration
+                ) else { return }
 
                 updateClip(
                     clip.id,
-                    sourceRange: newSourceRange,
-                    timelineRange: TimeRange(start: initialTimelineRange.start, duration: newDuration)
+                    sourceRange: result.source,
+                    timelineRange: result.timeline
                 )
             }
             .onEnded { _ in

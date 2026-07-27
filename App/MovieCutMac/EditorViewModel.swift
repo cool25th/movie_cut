@@ -67,7 +67,10 @@ final class EditorViewModel {
     }
 
     private static let minimumVoiceoverDuration: TimeInterval = 0.1
-    private static let minimumTimelineClipDuration: TimeInterval = 0.1
+    /// Minimum allowed timeline clip duration. Internal so TimelineView's drag
+    /// trim and this view model's keyboard trim share one constant (Step 5 of
+    /// the core-editing repair: single source of truth for the trim minimum).
+    static let minimumTimelineClipDuration: TimeInterval = 0.1
     private static let timelineZoomStep: Double = 20
     private static let minimumTimelineZoom: Double = 20
     private static let maximumTimelineZoom: Double = 300
@@ -1799,38 +1802,25 @@ final class EditorViewModel {
         guard let selectedClipId, let selectedClip else { return }
         let trimTime = playheadTime
 
-        guard trimTime > selectedClip.timelineRange.start,
-              trimTime < selectedClip.timelineRange.end
-        else {
+        // Route through the shared ClipTrimMath so the keyboard path and the
+        // drag path produce identical ranges at any speed or ramp, and so the
+        // source range is guarded against the asset duration (Step 5).
+        guard let result = ClipTrimMath.compute(
+            clip: selectedClip,
+            edge: .start,
+            targetTimelineTime: trimTime,
+            assetDuration: assetDuration(for: selectedClip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
             lastErrorMessage = "Move the playhead inside the selected clip to trim its start."
-            return
-        }
-
-        let newDuration = selectedClip.timelineRange.end - trimTime
-        guard newDuration >= Self.minimumTimelineClipDuration else {
-            lastErrorMessage = "Trimmed clip would be too short."
-            return
-        }
-
-        // Map the trim boundary to source time through the canonical mapping
-        // so the source range stays in sync with the timeline range at any
-        // playback rate or speed ramp (Step 3 of the core-editing repair).
-        guard let mapping = selectedClip.makeTimeMapping() else {
-            lastErrorMessage = "Selected clip has an invalid time range."
-            return
-        }
-        let newSourceStart = mapping.sourceTime(forTimelineTime: trimTime)
-        let newSourceDuration = selectedClip.sourceRange.end - newSourceStart
-        guard newSourceDuration > 0 else {
-            lastErrorMessage = "Trimmed source range would be empty."
             return
         }
 
         await trimClip(
             clipId: selectedClipId,
             trackId: selectedClipTrackId,
-            sourceRange: TimeRange(start: newSourceStart, duration: newSourceDuration),
-            timelineRange: TimeRange(start: trimTime, duration: newDuration)
+            sourceRange: result.source,
+            timelineRange: result.timeline
         )
     }
 
@@ -1838,39 +1828,45 @@ final class EditorViewModel {
         guard let selectedClipId, let selectedClip else { return }
         let trimTime = playheadTime
 
-        guard trimTime > selectedClip.timelineRange.start,
-              trimTime < selectedClip.timelineRange.end
-        else {
+        guard let result = ClipTrimMath.compute(
+            clip: selectedClip,
+            edge: .end,
+            targetTimelineTime: trimTime,
+            assetDuration: assetDuration(for: selectedClip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
             lastErrorMessage = "Move the playhead inside the selected clip to trim its end."
-            return
-        }
-
-        let newDuration = trimTime - selectedClip.timelineRange.start
-        guard newDuration >= Self.minimumTimelineClipDuration else {
-            lastErrorMessage = "Trimmed clip would be too short."
-            return
-        }
-
-        // Map the trim boundary to source time through the canonical mapping
-        // (Step 3). The source start is unchanged; the new source end is the
-        // source time at the trim boundary.
-        guard let mapping = selectedClip.makeTimeMapping() else {
-            lastErrorMessage = "Selected clip has an invalid time range."
-            return
-        }
-        let newSourceEnd = mapping.sourceTime(forTimelineTime: trimTime)
-        let newSourceDuration = newSourceEnd - selectedClip.sourceRange.start
-        guard newSourceDuration > 0 else {
-            lastErrorMessage = "Trimmed source range would be empty."
             return
         }
 
         await trimClip(
             clipId: selectedClipId,
             trackId: selectedClipTrackId,
-            sourceRange: TimeRange(start: selectedClip.sourceRange.start, duration: newSourceDuration),
-            timelineRange: TimeRange(start: selectedClip.timelineRange.start, duration: newDuration)
+            sourceRange: result.source,
+            timelineRange: result.timeline
         )
+    }
+
+    /// Resolves the source asset duration for a clip, used by the shared trim
+    /// math to guard against trimming the source past the asset's real end.
+    /// Returns nil for image clips (unbounded) and for clips with no asset.
+    private func assetDuration(for clip: Clip) -> TimeInterval? {
+        guard let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            return nil
+        }
+        return asset.duration
+    }
+
+    /// Clip-id-keyed asset duration lookup for views (TimelineView drag trim)
+    /// that don't hold the Clip value directly. Step 5.
+    func assetDuration(forClipID clipId: UUID) -> TimeInterval? {
+        guard let clip = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == clipId }) else {
+            return nil
+        }
+        return assetDuration(for: clip)
     }
 
     func moveClip(

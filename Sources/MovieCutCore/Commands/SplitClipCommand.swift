@@ -72,6 +72,20 @@ public struct SplitClipCommand: EditorCommand {
         var firstClip = clip
         firstClip.timelineRange.duration = firstTimelineDuration
         firstClip.sourceRange.duration = firstSourceDuration
+        // Re-normalize speed-ramp points into each sub-clip's own source
+        // sub-range so the ramp curve still spans [0,1] after the split (Step 5
+        // of the core-editing repair). Previously both sub-clips inherited the
+        // parent's ramp points verbatim, so each curve referenced the wrong
+        // source domain.
+        if clip.speedRampPoints.count >= 2 {
+            let firstSubRange = TimeRange(start: clip.sourceRange.start, duration: firstSourceDuration)
+            let renormalizedFirst = clip.speedRampPoints.renormalized(
+                fromParentSourceStart: clip.sourceRange.start,
+                parentSourceDuration: clip.sourceRange.duration,
+                intoSubSourceRange: firstSubRange
+            )
+            firstClip.speedRampPoints = renormalizedFirst
+        }
 
         var secondClip = clip
         secondClip.id = newClipId
@@ -80,6 +94,15 @@ public struct SplitClipCommand: EditorCommand {
             start: splitSourceTime,
             duration: secondSourceDuration
         )
+        if clip.speedRampPoints.count >= 2 {
+            let secondSubRange = TimeRange(start: splitSourceTime, duration: secondSourceDuration)
+            let renormalizedSecond = clip.speedRampPoints.renormalized(
+                fromParentSourceStart: clip.sourceRange.start,
+                parentSourceDuration: clip.sourceRange.duration,
+                intoSubSourceRange: secondSubRange
+            )
+            secondClip.speedRampPoints = renormalizedSecond
+        }
 
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex] = firstClip
         project.timeline.tracks[location.trackIndex].clips.insert(secondClip, at: location.clipIndex + 1)

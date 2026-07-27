@@ -2790,13 +2790,16 @@ final class EditorViewModel {
 
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
+        // Route through SetClipSpeedCommand so the rendered timeline duration,
+        // main-track ripple, and stale-field clamp happen atomically with the
+        // rate change (Step 4 of the core-editing repair).
+        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
         playbackEngine.setRate(Float(rate))
     }
 
     func updateSelectedSpeedRampPoints(_ points: [SpeedRampPoint]) async {
         guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .speedRampPoints(points)))
+        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .rampPoints(points)))
     }
 
     func updateSelectedOpticalFlow(_ enabled: Bool) async {

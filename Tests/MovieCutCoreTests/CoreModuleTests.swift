@@ -192,7 +192,11 @@ import MovieCutCore
     expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
 }
 
-@Test func deleteClipCommandMagneticCompactionNormalizesZIndexesAndUndoRestoresSnapshot() throws {
+@Test func deleteClipCommandPreservesGapsAndNormalizesZIndexesAndUndoRestoresSnapshot() throws {
+    // Step 2: normal Delete preserves gaps (no magnetic compaction). Only
+    // zIndexes are re-normalized. Ripple Delete is the separate gap-closing
+    // variant. The clips start at non-zero, gapped offsets (3, 10, 20) and
+    // must keep those offsets minus the deleted clip's slot.
     let firstClip = Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 3, duration: 2), zIndex: 4)
     let middleClip = Clip(kind: .video, sourceRange: TimeRange(start: 2, duration: 3), timelineRange: TimeRange(start: 10, duration: 3), zIndex: 6)
     let lastClip = Clip(kind: .video, sourceRange: TimeRange(start: 5, duration: 4), timelineRange: TimeRange(start: 20, duration: 4), zIndex: 9)
@@ -207,8 +211,10 @@ import MovieCutCore
 
     let middleDeleteClips = middleDeleteProject.timeline.tracks[0].clips
     #expect(middleDeleteClips.map(\.id) == [firstClip.id, lastClip.id])
-    #expect(middleDeleteClips.map { $0.timelineRange.start } == [0, 2])
+    // Gaps preserved: first stays at 3, last stays at 20 (NOT re-compacted to 0/2).
+    #expect(middleDeleteClips.map { $0.timelineRange.start } == [3, 20])
     #expect(middleDeleteClips.map { $0.timelineRange.duration } == [2, 4])
+    // zIndexes are re-normalized contiguously even though positions are preserved.
     #expect(middleDeleteClips.map(\.zIndex) == [0, 1])
 
     let middleDeleteUndo = try middleDeleteCommand.invert(from: middleDeleteResult)
@@ -225,13 +231,61 @@ import MovieCutCore
 
     let firstDeleteClips = firstDeleteProject.timeline.tracks[0].clips
     #expect(firstDeleteClips.map(\.id) == [middleClip.id, lastClip.id])
-    #expect(firstDeleteClips.map { $0.timelineRange.start } == [0, 3])
+    // Gaps preserved: middle stays at 10, last stays at 20.
+    #expect(firstDeleteClips.map { $0.timelineRange.start } == [10, 20])
     #expect(firstDeleteClips.map { $0.timelineRange.duration } == [3, 4])
     #expect(firstDeleteClips.map(\.zIndex) == [0, 1])
 
     let firstDeleteUndo = try firstDeleteCommand.invert(from: firstDeleteResult)
     _ = try firstDeleteUndo.apply(to: &firstDeleteProject)
     expectClipTimelineSnapshot(firstDeleteProject.timeline.tracks[0].clips, matches: firstDeleteOriginalClips)
+}
+
+@Test func addClipOnFreeTrackPreservesRequestedPosition() throws {
+    // Step 2 acceptance: a text clip added at a 5-second position on a non-main
+    // (text) track keeps exactly start=5. Previously every add compacted the
+    // track back to start=0.
+    let textClip = Clip(kind: .text, sourceRange: TimeRange(start: 0, duration: 3), timelineRange: TimeRange(start: 5, duration: 3), zIndex: 0)
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        // A video track exists so "main video track" is well-defined; the text
+        // track is therefore a free (non-magnetic) track.
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [
+            Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 0, duration: 2))
+        ]),
+        Track(kind: .text, name: "T1", zIndex: 1, clips: [])
+    ]))
+    let textTrackId = project.timeline.tracks[1].id
+
+    _ = try AddClipCommand(trackId: textTrackId, clip: textClip).apply(to: &project)
+
+    let addedClips = project.timeline.tracks[1].clips
+    #expect(addedClips.count == 1)
+    #expect(addedClips[0].timelineRange.start == 5)
+    #expect(addedClips[0].timelineRange.duration == 3)
+}
+
+@Test func moveClipOnAudioTrackPreservesPosition() throws {
+    // Step 2 acceptance: moving an audio clip to 7.5s on an audio (free) track
+    // keeps the requested position instead of compacting to 0.
+    let audioClip = Clip(kind: .audio, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 0, duration: 2))
+    var project = Project(name: "Test", timeline: Timeline(tracks: [
+        Track(kind: .video, name: "V1", zIndex: 0, clips: [
+            Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 2), timelineRange: TimeRange(start: 0, duration: 2))
+        ]),
+        Track(kind: .audio, name: "A1", zIndex: 1, clips: [audioClip])
+    ]))
+    let audioTrackId = project.timeline.tracks[1].id
+
+    _ = try MoveClipCommand(
+        clipId: audioClip.id,
+        sourceTrackId: audioTrackId,
+        targetTrackId: audioTrackId,
+        newTimelineRange: TimeRange(start: 7.5, duration: 2)
+    ).apply(to: &project)
+
+    let movedClips = project.timeline.tracks[1].clips
+    #expect(movedClips.count == 1)
+    #expect(movedClips[0].timelineRange.start == 7.5)
 }
 
 @Test func trimClipCommandAppliesAndInverts() throws {

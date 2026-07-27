@@ -135,10 +135,17 @@ public struct MoveClipCommand: EditorCommand {
             }
         }
 
-        try project.compactTrackMagnetically(currentTrackId)
+        // Magnetic compaction applies only to the main video track. Free tracks
+        // preserve the requested clip position (same-track drag, cross-track
+        // drop). Step 2 of the core-editing repair handoff.
+        if project.isMagneticTrack(currentTrackId) {
+            try project.compactTrackMagnetically(currentTrackId)
+        }
         try project.normalizeClipZIndexes(in: currentTrackId)
         if destinationTrackId != currentTrackId {
-            try project.compactTrackMagnetically(destinationTrackId)
+            if project.isMagneticTrack(destinationTrackId) {
+                try project.compactTrackMagnetically(destinationTrackId)
+            }
             try project.normalizeClipZIndexes(in: destinationTrackId)
         }
 

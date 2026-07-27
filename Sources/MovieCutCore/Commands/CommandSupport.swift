@@ -129,6 +129,24 @@ extension Project {
         try timeline.tracks[trackIndex].compactClipsMagnetically()
     }
 
+    /// The id of the primary (main) video track — the first track whose kind is
+    /// `.video`. This is the only track subject to magnetic compaction; every
+    /// other track (secondary video, audio, text/sticker) is freely positioned.
+    /// Derived from track ordering, never persisted on `Track` (so legacy
+    /// `.moviecut` decode is unaffected and the R504 "presentation-only"
+    /// contract on `Track.swift` holds). Step 2 of the core-editing repair
+    /// handoff.
+    func mainVideoTrackId() -> UUID? {
+        timeline.tracks.first { $0.kind == .video }?.id
+    }
+
+    /// Whether `trackId` is the magnetic (main video) track and therefore
+    /// subject to gap-closing compaction on add/move/duplicate. All other
+    /// tracks preserve freely-positioned clip offsets.
+    func isMagneticTrack(_ trackId: UUID) -> Bool {
+        trackId == mainVideoTrackId()
+    }
+
     mutating func restoreClips(_ clips: [Clip], in trackId: UUID) throws {
         let trackIndex = try trackIndex(for: trackId)
         try ensureTrackIsEditable(at: trackIndex)

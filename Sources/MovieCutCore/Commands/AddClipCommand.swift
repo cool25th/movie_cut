@@ -29,7 +29,12 @@ public struct AddClipCommand: EditorCommand {
 
         let previousClips = try project.trackClipSnapshot(for: trackId)
         try project.insertClip(clip, into: trackId, at: insertionIndex)
-        try project.compactTrackMagnetically(trackId)
+        // Magnetic compaction applies only to the main video track; every other
+        // track (secondary video, audio, text/sticker) keeps freely-positioned
+        // clip offsets. Step 2 of the core-editing repair handoff.
+        if project.isMagneticTrack(trackId) {
+            try project.compactTrackMagnetically(trackId)
+        }
         try project.normalizeClipZIndexes(in: trackId)
         project.normalizeTrackZIndexes()
 

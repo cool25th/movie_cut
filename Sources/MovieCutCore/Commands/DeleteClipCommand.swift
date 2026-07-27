@@ -36,7 +36,10 @@ public struct DeleteClipCommand: EditorCommand {
         let location = try project.clipLocation(for: clipId)
         let previousClips = project.timeline.tracks[location.trackIndex].clips
         let removed = try project.removeClip(id: clipId)
-        try project.compactTrackMagnetically(removed.trackId)
+        // Normal Delete preserves gaps: it removes the clip and normalizes
+        // zIndexes but does NOT compact the track. Ripple Delete (a separate
+        // command) is the gap-closing variant. Step 2 of the core-editing
+        // repair handoff.
         try project.normalizeClipZIndexes(in: removed.trackId)
         return CommandResult(
             affectedClipIds: Set(previousClips.map(\.id)),

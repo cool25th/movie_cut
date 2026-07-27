@@ -31,13 +31,34 @@ struct MagneticTimelineZIndexStaticContractTests {
         #expect(source.contains("RestoreTrackClipsCommand"))
     }
 
-    @Test("Delete command compacts timeline and normalizes clip zIndex")
-    func deleteCommandCompactsTimelineAndNormalizesClipZIndex() throws {
+    @Test("Delete command preserves gaps (no compaction) and normalizes clip zIndex")
+    func deleteCommandPreservesGapsAndNormalizesClipZIndex() throws {
+        // Step 2 of the core-editing repair handoff: normal Delete preserves
+        // gaps — it no longer calls compactTrackMagnetically. Only zIndexes are
+        // normalized. Ripple Delete is the separate gap-closing variant.
         let source = try source("Sources/MovieCutCore/Commands/DeleteClipCommand.swift")
 
-        #expect(source.contains("project.compactTrackMagnetically(removed.trackId)"))
+        #expect(!source.contains("project.compactTrackMagnetically(removed.trackId)"))
         #expect(source.contains("project.normalizeClipZIndexes(in: removed.trackId)"))
         #expect(source.contains("RestoreTrackClipsCommand.snapshotKey(for: removed.trackId)"))
+    }
+
+    @Test("Magnetic compaction is scoped to the main video track via derived policy")
+    func magneticCompactionScopedToMainVideoTrack() throws {
+        // Step 2: Add/Move/Duplicate gate compaction on isMagneticTrack, and
+        // the derived policy helper lives in CommandSupport.
+        let commandSupport = try source("Sources/MovieCutCore/Commands/CommandSupport.swift")
+        #expect(commandSupport.contains("func mainVideoTrackId() -> UUID?"))
+        #expect(commandSupport.contains("func isMagneticTrack(_ trackId: UUID) -> Bool"))
+
+        let addCommand = try source("Sources/MovieCutCore/Commands/AddClipCommand.swift")
+        #expect(addCommand.contains("if project.isMagneticTrack(trackId)"))
+
+        let moveCommand = try source("Sources/MovieCutCore/Commands/MoveClipCommand.swift")
+        #expect(moveCommand.contains("if project.isMagneticTrack(currentTrackId)"))
+
+        let duplicateCommand = try source("Sources/MovieCutCore/Commands/DuplicateClipCommand.swift")
+        #expect(duplicateCommand.contains("if project.isMagneticTrack(trackId)"))
     }
 
     @Test("Clip coding defaults legacy zIndex and persists zIndex")

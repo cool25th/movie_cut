@@ -32,7 +32,11 @@ public struct DuplicateClipCommand: EditorCommand {
             duplicateClip,
             at: location.clipIndex + 1
         )
-        try project.compactTrackMagnetically(trackId)
+        // Magnetic compaction applies only to the main video track. Step 2 of
+        // the core-editing repair handoff.
+        if project.isMagneticTrack(trackId) {
+            try project.compactTrackMagnetically(trackId)
+        }
         try project.normalizeClipZIndexes(in: trackId)
 
         return CommandResult(

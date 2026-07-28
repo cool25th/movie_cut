@@ -44,6 +44,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FF5ED0200D103702F71018E6"
+               BuildableName = "MovieCutMacTests.xctest"
+               BlueprintName = "MovieCutMacTests"
+               ReferencedContainer = "container:MovieCut.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "1E7DE09CF9F9E9F641558AFB"
                BuildableName = "MovieCutMacUITests.xctest"
                BlueprintName = "MovieCutMacUITests"

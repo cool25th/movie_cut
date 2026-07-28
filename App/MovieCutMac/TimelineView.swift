@@ -1157,7 +1157,13 @@ struct TimelineView: View {
         // outside body evaluation — mirroring TimelineFilmstripLayer's pattern
         // (read snapshot in body, request from .task).
         let samples = viewModel.waveform(for: clip)
-        let clipId = clip.id
+        // Identity includes the asset, not just the clip id: when a clip's
+        // source asset is swapped (noise reduction), the clip id is unchanged
+        // but the audio content — and thus the waveform — changes. Keying the
+        // decode-triggering .task on WaveformRequestKey(clip:) re-runs the task
+        // on the asset swap so the new waveform is requested. (The asset-swap
+        // site also re-requests directly; both paths cover the case.)
+        let requestKey = WaveformRequestKey(clip: clip)
         return Canvas { context, size in
             let sampleCount = samples.isEmpty ? max(12, Int(size.width / 7)) : samples.count
             let barWidth = max(1, size.width / CGFloat(sampleCount))
@@ -1175,10 +1181,13 @@ struct TimelineView: View {
                 context.fill(Path(rect), with: .color(.white.opacity(selected ? 0.36 : 0.24)))
             }
         }
-        .task(id: clipId) {
+        .task(id: requestKey) {
             // Trigger the decode only when the sample array is empty AND a
             // decode has not already populated the cache. Kept out of body so
             // the cache write happens during the task, not during view update.
+            // Re-runs when requestKey (clip + asset) changes — e.g. an asset
+            // swap — so the new waveform is requested even though clip.id is
+            // unchanged.
             if viewModel.waveform(for: clip).isEmpty {
                 viewModel.requestWaveformDecode(for: clip)
             }

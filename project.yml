@@ -71,6 +71,22 @@ targets:
       base:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
+  MovieCutMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: App/MovieCutMacTests
+    dependencies:
+      - target: MovieCutMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.mac.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MovieCutMac.app/Contents/MacOS/MovieCutMac"
   MovieCutMacUITests:
     type: bundle.ui-testing
     platform: macOS
@@ -96,4 +112,5 @@ schemes:
     test:
       config: Debug
       targets:
+        - MovieCutMacTests
         - MovieCutMacUITests

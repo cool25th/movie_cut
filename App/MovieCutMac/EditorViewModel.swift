@@ -487,6 +487,31 @@ final class EditorViewModel {
         startWaveformDecode(for: clip.id, asset: asset)
     }
 
+    /// Invalidates the cached waveform for a clip and re-requests a decode for
+    /// its current asset. Called when the clip's source asset changes (e.g.
+    /// after noise reduction via `SetClipSourceAssetCommand`): the clip id is
+    /// unchanged, so the view's `.task(id:)` — which now keys on
+    /// `WaveformRequestKey(clip:)`, including the asset — would re-run anyway,
+    /// but having the asset-swap site re-request directly is more robust than
+    /// relying on the view to notice. Performs all writes outside body.
+    func invalidateWaveform(for clip: Clip) {
+        waveformCache.removeValue(forKey: clip.id)
+        waveformInFlight.remove(clip.id)
+        requestWaveformDecode(for: clip)
+    }
+
+    /// Cancels any in-flight decode for a clip without touching the cache.
+    /// Test/inspection helper.
+    func cancelWaveformDecode(forClip clipId: UUID) {
+        waveformInFlight.remove(clipId)
+    }
+
+    /// Whether a decode is currently in flight (queued/running) for a clip.
+    /// Test/inspection helper.
+    func isWaveformDecodeRequested(forClip clipId: UUID) -> Bool {
+        waveformInFlight.contains(clipId)
+    }
+
     /// Schedules exactly one background waveform decode per clip id while a
     /// decode for that clip is already in flight.
     private func startWaveformDecode(for clipId: UUID, asset: MediaAsset) {
@@ -3302,8 +3327,19 @@ final class EditorViewModel {
             try await session.dispatch(
                 SetClipSourceAssetCommand(clipId: clipId, assetId: denoisedAsset.id, kind: .audio)
             )
-            waveformCache.removeValue(forKey: clipId)
-            waveformInFlight.remove(clipId)
+            // The clip id is unchanged but the source asset (and thus the audio
+            // waveform) is new. Invalidate the stale waveform and re-request a
+            // decode for the new asset. The view's .task(id:) now keys on
+            // WaveformRequestKey(clip:) too, but re-requesting here is the
+            // robust path — the asset-swap site knows the content changed.
+            if let updatedClip = currentProject.timeline.tracks
+                .flatMap(\.clips)
+                .first(where: { $0.id == clipId }) {
+                invalidateWaveform(for: updatedClip)
+            } else {
+                waveformCache.removeValue(forKey: clipId)
+                waveformInFlight.remove(clipId)
+            }
             selectedAssetId = denoisedAsset.id
         case .video:
             let audioTrack = try await ensureTrack(for: .audio)

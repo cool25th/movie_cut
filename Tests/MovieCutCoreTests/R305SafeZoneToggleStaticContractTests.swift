@@ -61,7 +61,7 @@ struct R305SafeZoneToggleStaticContractTests {
         let preview = try source("App/MovieCutMac/PreviewPanel.swift")
         let surface = try section(
             in: preview,
-            from: "private func previewSurface(for clip: Clip) -> some View",
+            from: "private var previewSurface: some View",
             to: "    private var canvasAspectRatio"
         )
 

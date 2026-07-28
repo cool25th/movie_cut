@@ -24,7 +24,7 @@ struct R301R302PreviewTransportZoomStaticContractTests {
         let preview = try source("App/MovieCutMac/PreviewPanel.swift")
         let surface = try section(
             in: preview,
-            from: "private func previewSurface(for clip: Clip) -> some View",
+            from: "private var previewSurface: some View",
             to: "    private var canvasAspectRatio"
         )
 
@@ -83,7 +83,7 @@ struct R301R302PreviewTransportZoomStaticContractTests {
         let helpers = try section(
             in: preview,
             from: "private var previewZoomDisplay: String",
-            to: "    private func previewSurface"
+            to: "    private var previewSurface"
         )
 
         #expect(zoom.contains("Button(action: resetPreviewZoomToFit)"))

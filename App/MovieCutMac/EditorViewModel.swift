@@ -184,6 +184,11 @@ final class EditorViewModel {
     /// reflect the dirty state (e.g. window title dot) and guard destructive
     /// session replacements (new/open/close) until the user confirms.
     private(set) var isDirty = false
+    /// Snapshot of the project as last saved (or loaded). Used to recompute
+    /// isDirty after undo/redo so that returning to the saved state clears the
+    /// dirty flag — a plain boolean set on every mutation would stay true even
+    /// after undoing back to the on-disk bytes.
+    @ObservationIgnored private var lastSavedProject: Project?
     @ObservationIgnored private var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
     /// Waveform bins per clip, populated lazily off the main thread. Observed
@@ -718,6 +723,8 @@ final class EditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = nil
         lastExportURL = nil
+        // A brand-new project is its own clean baseline.
+        lastSavedProject = project
         isDirty = false
     }
 
@@ -742,6 +749,8 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastStatusMessage = nil
             lastExportURL = nil
+            // The loaded file is the clean baseline.
+            lastSavedProject = project
             isDirty = false
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -755,6 +764,9 @@ final class EditorViewModel {
             try await projectStore.save(snapshot, to: url)
             currentProjectURL = url
             lastErrorMessage = nil
+            // Record the saved bytes so undo/redo back to this state clears
+            // the dirty flag.
+            lastSavedProject = snapshot
             isDirty = false
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -780,7 +792,8 @@ final class EditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = "Recovered unsaved work."
         lastExportURL = nil
-        // Recovered work was never saved, so it starts dirty.
+        // Recovered work was never saved: no clean baseline, so it is dirty.
+        lastSavedProject = nil
         isDirty = true
     }
 
@@ -837,6 +850,8 @@ final class EditorViewModel {
             lastExportURL = nil
             lastErrorMessage = nil
             lastStatusMessage = "Imported \(url.lastPathComponent). Replace any missing media via the library."
+            // The imported package is the clean baseline for this session.
+            lastSavedProject = project
             isDirty = false
         } catch {
             lastStatusMessage = nil
@@ -1058,6 +1073,8 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastExportURL = nil
             cloudSyncError = nil
+            // The downloaded cloud project is the clean baseline.
+            lastSavedProject = loaded
             isDirty = false
         } catch {
             cloudSyncError = error.localizedDescription
@@ -4724,11 +4741,17 @@ final class EditorViewModel {
             rebuildPreviewComposition()
         }
 
-        // Any committed mutation (command dispatch / undo / redo / import, plus
-        // the Auto Highlights ReplaceProjectCommand) marks the project dirty.
-        // Resets to false happen in the clean transition points: successful
-        // save, new project, open, recovery adoption, import, and cloud open.
-        isDirty = true
+        // Recompute the dirty flag from the project content rather than
+        // blanket-setting true. This makes undo/redo back to the saved state
+        // clear the flag: a project that equals its last-saved snapshot is not
+        // dirty even if it was reached through edits then undos. When there is
+        // no saved snapshot yet (new unsaved project), any committed change is
+        // dirty.
+        if let lastSavedProject {
+            isDirty = currentProject != lastSavedProject
+        } else {
+            isDirty = true
+        }
         scheduleAutosave()
         refreshScopes()
     }
@@ -6023,6 +6046,8 @@ final class EditorViewModel {
         recentAnalysisResults = []
         lastErrorMessage = nil
         lastExportURL = nil
+        // The template-generated project is the clean baseline.
+        lastSavedProject = project
         isDirty = false
     }
 

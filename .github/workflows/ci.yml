@@ -12,7 +12,56 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
-      - name: Build
+
+      # Core (SwiftPM): build then run the full test suite. The timeout guards
+      # against a regression of the cooperative-pool deadlock (Task A): if a
+      # blocking decode sneaks back onto the cooperative pool, the suite hangs
+      # instead of failing fast. The timeout turns that hang into a red build.
+      - name: Build Core
         run: swift build
-      - name: Run tests
+      - name: Run Core tests
         run: swift test
+        timeout-minutes: 15
+
+      # The Mac app target (33k lines) was previously never compiled in CI.
+      # Building it here catches App-side regressions that Core tests cannot.
+      - name: Build Mac app
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # iOS app target (8.7k lines). The runtime/simulator platform may not be
+      # installed on every runner; if the generic build cannot find an iOS
+      # destination, report it but do not fail the workflow (continue-on-error).
+      # This is intentionally explicit rather than silently omitted.
+      - name: Build iOS app (generic, best-effort)
+        continue-on-error: true
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+  # Lint is reported but never blocking: the codebase carries ~1,000 existing
+  # findings, so gating on them would block every PR. This step surfaces
+  # violations in the log for visibility while a baseline/strict rollout is
+  # pursued separately. Runs even if build-and-test failed, so lint output is
+  # always available.
+  lint:
+    runs-on: macos-15
+    if: always()
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Report SwiftLint findings (non-blocking)
+        run: swiftlint lint --reporter github-actions-logging . || true

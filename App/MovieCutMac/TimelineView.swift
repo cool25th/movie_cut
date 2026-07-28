@@ -1143,8 +1143,15 @@ struct TimelineView: View {
     }
 
     private func waveformCanvas(for clip: Clip, selected: Bool) -> some View {
-        Canvas { context, size in
-            let samples = viewModel.waveform(for: clip)
+        // Read the waveform in `body` (here) rather than inside the Canvas
+        // render closure. The Canvas closure runs in a separate immediate-mode
+        // render pass and does NOT establish an @Observable dependency, so a
+        // read there would never be invalidated when waveformCache is filled
+        // by the background decode. Reading here makes the observation tracker
+        // register the waveformCache access, so the view rebuilds (and the
+        // Canvas re-renders) once the real bins arrive.
+        let samples = viewModel.waveform(for: clip)
+        return Canvas { context, size in
             let sampleCount = samples.isEmpty ? max(12, Int(size.width / 7)) : samples.count
             let barWidth = max(1, size.width / CGFloat(sampleCount))
             let midY = size.height / 2

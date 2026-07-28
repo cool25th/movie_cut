@@ -407,9 +407,12 @@ final class MovieCutAppDelegate: NSObject, NSApplicationDelegate {
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             // Save asynchronously, then reply to the termination request with
-            // the outcome so a failed save does not discard work.
-            Task { @MainActor [weak viewModel] in
-                let saved = await viewModel?.terminateAfterSaving() ?? false
+            // the outcome so a failed save does not discard work. The VM is
+            // captured strongly: the app is terminating, so outliving this Task
+            // is intended, and a weak capture would risk deallocating it
+            // mid-save (snapshot/projectStore torn down across the awaits).
+            Task { @MainActor [viewModel] in
+                let saved = await viewModel.terminateAfterSaving()
                 sender.reply(toApplicationShouldTerminate: saved)
             }
             return .terminateLater

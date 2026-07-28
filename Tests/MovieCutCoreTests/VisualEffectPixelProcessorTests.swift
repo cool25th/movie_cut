@@ -6,7 +6,11 @@ import Testing
 
 @Suite("Visual Effect Pixel Processor")
 struct VisualEffectPixelProcessorTests {
-    private let context = CIContext()
+    // Software renderer (deterministic in headless envs) via GoldenPixelHarness.
+    // The previous GPU-backed CIContext() returned transparent black in
+    // headless runs, which the coreImageRenderingAvailable() sentinel then
+    // silently skipped — masking real regressions. Step 6 of the core-editing
+    // repair handoff.
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private let pixelBounds = CGRect(x: 0, y: 0, width: 1, height: 1)
 
@@ -56,7 +60,8 @@ struct VisualEffectPixelProcessorTests {
 
     @Test("procedural filters change sampled pixels when Core Image renders")
     func proceduralFiltersChangeSampledPixels() {
-        guard coreImageRenderingAvailable() else { return }
+        // Loud-failure renderer check (no silent skip). Step 6.
+        GoldenPixel.assertRendererFunctional()
 
         let image = solidColor(red: 0.26, green: 0.42, blue: 0.72)
         let original = samplePixel(from: image)
@@ -75,11 +80,12 @@ struct VisualEffectPixelProcessorTests {
     }
 
     private func coreImageRenderingAvailable() -> Bool {
-        let sentinel = samplePixel(from: solidColor(red: 0.35, green: 0.35, blue: 0.35))
-        if sentinel.r == 0 && sentinel.g == 0 && sentinel.b == 0 && sentinel.a == 0 {
-            print("Skipping CIContext pixel assertion: renderer returned transparent black for a non-black fixture.")
-            return false
-        }
+        // Retained as a no-op shim for any external callers; the suite now uses
+        // GoldenPixel.assertRendererFunctional() (loud failure, no skip). Kept
+        // temporarily to avoid breaking the migration in one step; the body is
+        // intentionally a loud check so old call sites that still reference it
+        // cannot pass vacuously.
+        GoldenPixel.assertRendererFunctional()
         return true
     }
 
@@ -102,7 +108,7 @@ struct VisualEffectPixelProcessorTests {
     private func samplePixel(from image: CIImage) -> Pixel {
         var bytes = [UInt8](repeating: 0, count: 4)
         bytes.withUnsafeMutableBytes { buffer in
-            context.render(
+            GoldenPixel.context.render(
                 image.cropped(to: pixelBounds),
                 toBitmap: buffer.baseAddress!,
                 rowBytes: 4,

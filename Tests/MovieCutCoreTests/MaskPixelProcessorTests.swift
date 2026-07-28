@@ -6,7 +6,6 @@ import Testing
 
 @Suite("Mask Pixel Processor")
 struct MaskPixelProcessorTests {
-    private let context = CIContext()
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private let imageBounds = CGRect(x: 0, y: 0, width: 8, height: 8)
 
@@ -93,11 +92,7 @@ struct MaskPixelProcessorTests {
     }
 
     private func coreImageRenderingAvailable() -> Bool {
-        let sentinel = samplePixel(from: solidColorImage(red: 0.35, green: 0.35, blue: 0.35), at: CGPoint(x: 0, y: 0))
-        if sentinel.r == 0 && sentinel.g == 0 && sentinel.b == 0 && sentinel.a == 0 {
-            print("Skipping CIContext pixel assertion: renderer returned transparent black for a non-black fixture.")
-            return false
-        }
+        GoldenPixel.assertRendererFunctional()
         return true
     }
 
@@ -126,7 +121,7 @@ struct MaskPixelProcessorTests {
         var bytes = [UInt8](repeating: 0, count: 4)
         let bounds = CGRect(x: point.x, y: point.y, width: 1, height: 1)
         bytes.withUnsafeMutableBytes { buffer in
-            context.render(
+            GoldenPixel.context.render(
                 image.cropped(to: bounds),
                 toBitmap: buffer.baseAddress!,
                 rowBytes: 4,

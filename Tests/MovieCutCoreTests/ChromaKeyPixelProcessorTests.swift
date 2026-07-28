@@ -6,7 +6,6 @@ import Testing
 
 @Suite("ChromaKey Pixel Processor")
 struct ChromaKeyPixelProcessorTests {
-    private let context = CIContext()
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private let pixelBounds = CGRect(x: 0, y: 0, width: 1, height: 1)
 
@@ -82,11 +81,7 @@ struct ChromaKeyPixelProcessorTests {
     }
 
     private func coreImageRenderingAvailable() -> Bool {
-        let sentinel = samplePixel(from: solidColor(red: 0.35, green: 0.35, blue: 0.35))
-        if sentinel.r == 0 && sentinel.g == 0 && sentinel.b == 0 && sentinel.a == 0 {
-            print("Skipping CIContext pixel assertion: renderer returned transparent black for a non-black fixture.")
-            return false
-        }
+        GoldenPixel.assertRendererFunctional()
         return true
     }
 
@@ -109,7 +104,7 @@ struct ChromaKeyPixelProcessorTests {
     private func samplePixel(from image: CIImage) -> Pixel {
         var bytes = [UInt8](repeating: 0, count: 4)
         bytes.withUnsafeMutableBytes { buffer in
-            context.render(
+            GoldenPixel.context.render(
                 image.cropped(to: pixelBounds),
                 toBitmap: buffer.baseAddress!,
                 rowBytes: 4,

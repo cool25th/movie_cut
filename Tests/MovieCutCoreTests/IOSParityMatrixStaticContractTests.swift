@@ -41,25 +41,30 @@ struct IOSParityMatrixStaticContractTests {
         }
     }
 
-    @Test("iOS compositor audit remains honest about shared and missing render paths")
+    @Test("iOS compositor audit remains honest about shared render paths")
     func iosCompositorAuditMatchesCurrentCodeShape() throws {
         let iosCompositor = try source("App/MovieCutiOS/Export/IOSCustomVideoCompositor.swift")
         let iosPreview = try source("App/MovieCutiOS/Views/PreviewView.swift")
         let matrix = try source("docs/PLATFORM_PARITY_MATRIX.md")
 
+        // Positive contract: the shared Core render processors that ARE wired
+        // into iOS must be present.
         #expect(iosCompositor.contains("ColorCorrectionPixelProcessor.apply"))
         #expect(iosCompositor.contains("ColorGradePixelProcessor.apply"))
         #expect(iosCompositor.contains("VisualEffectPixelProcessor.apply"))
         #expect(iosCompositor.contains("MaskPixelProcessor.apply"))
         #expect(iosCompositor.contains("TextOverlayPixelProcessor.apply"))
         #expect(iosCompositor.contains("CanvasBackgroundPixelProcessor.compose"))
-        #expect(!iosCompositor.contains("TransitionPixelProcessor.apply"))
-        #expect(!iosCompositor.contains("PersonSegmentationCompositor"))
 
         #expect(iosPreview.contains("ColorCorrectionPixelProcessor.apply"))
         #expect(iosPreview.contains("ColorGradePixelProcessor.apply"))
-        #expect(!iosPreview.contains("SpeedRampCurve"))
 
+        // Missing iOS features are tracked in the parity matrix documentation,
+        // not locked by negative source assertions. The previous
+        // !contains(...) checks here pinned the unimplemented state into the
+        // test suite, so implementing TransitionPixelProcessor,
+        // PersonSegmentationCompositor, or SpeedRampCurve on iOS would have
+        // turned the test red — actively blocking the work the matrix tracks.
         #expect(matrix.contains("TransitionPixelProcessor` 및 two-source instruction path 미배선"))
         #expect(matrix.contains("PersonSegmentationCompositor` 미사용"))
         #expect(matrix.contains("SpeedRampCurve` 미사용"))

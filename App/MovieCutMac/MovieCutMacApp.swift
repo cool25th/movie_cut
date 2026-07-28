@@ -7,11 +7,13 @@ import UniformTypeIdentifiers
 struct MovieCutMacApp: App {
     @State private var viewModel = EditorViewModel()
     @State private var didLoadBootstrapProject = false
+    @NSApplicationDelegateAdaptor(MovieCutAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: viewModel)
                 .task {
+                    appDelegate.viewModel = viewModel
                     await loadBootstrapProjectIfNeeded()
                 }
         }
@@ -20,7 +22,7 @@ struct MovieCutMacApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Project") {
-                    viewModel.newProject()
+                    Task { await viewModel.newProject() }
                 }
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Open...") {
@@ -378,5 +380,43 @@ private enum MovieCutKeyboardShortcutHelp {
         alert.informativeText = text
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+}
+
+/// Application delegate that guards termination against unsaved changes.
+final class MovieCutAppDelegate: NSObject, NSApplicationDelegate {
+    /// Set from the SwiftUI app so the delegate can reach the view model.
+    weak var viewModel: EditorViewModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let viewModel, viewModel.isDirty else { return .terminateNow }
+
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else {
+            return .terminateNow
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \"\(viewModel.currentProject.name)\"?"
+        alert.informativeText = "Your changes will be lost if you don't save them."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            // Save asynchronously, then reply to the termination request with
+            // the outcome so a failed save does not discard work.
+            Task { @MainActor [weak viewModel] in
+                let saved = await viewModel?.terminateAfterSaving() ?? false
+                sender.reply(toApplicationShouldTerminate: saved)
+            }
+            return .terminateLater
+        case .alertSecondButtonReturn:
+            return .terminateNow
+        default:
+            return .terminateCancel
+        }
     }
 }

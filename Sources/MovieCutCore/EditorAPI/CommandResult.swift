@@ -46,6 +46,10 @@ public enum CommandResultValue: Sendable, Equatable {
 
     /// A complete optional card-document snapshot.
     case cardDocument(CardDocument?)
+
+    /// A complete project snapshot, used by whole-project replacement commands
+    /// (e.g. Auto Highlights) so undo can restore the prior project.
+    case project(Project)
 }
 
 /// The observable result of applying an editor command.

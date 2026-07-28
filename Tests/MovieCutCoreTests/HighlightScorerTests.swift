@@ -170,7 +170,11 @@ struct HighlightsStaticContractTests {
         #expect(viewModel.contains("func detectHighlights"))
         #expect(viewModel.contains("HighlightScorer.scoreHighlights"))
         #expect(viewModel.contains("func createSequenceFromHighlight"))
-        #expect(viewModel.contains("session = EditorSession(project: newProject)"))
+        // Auto Highlights routes through the command path so undo survives: it
+        // dispatches ReplaceProjectCommand instead of replacing the session,
+        // which previously destroyed the undo stack.
+        #expect(viewModel.contains("ReplaceProjectCommand"))
+        #expect(!viewModel.contains("session = EditorSession(project: newProject)"))
     }
 
     @Test("inspector exposes the highlights section")

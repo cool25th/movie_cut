@@ -180,6 +180,10 @@ final class EditorViewModel {
         await projectStore.clearAutosave()
     }
     private var currentProjectURL: URL?
+    /// Whether the current project has unsaved changes. Observed so the UI can
+    /// reflect the dirty state (e.g. window title dot) and guard destructive
+    /// session replacements (new/open/close) until the user confirms.
+    private(set) var isDirty = false
     @ObservationIgnored private var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
     /// Waveform bins per clip, populated lazily off the main thread. Observed
@@ -695,7 +699,8 @@ final class EditorViewModel {
         return didApply
     }
 
-    func newProject() {
+    func newProject() async {
+        guard await confirmDiscardUnsavedChanges() else { return }
         let project = Self.defaultProject()
         session = EditorSession(project: project)
         currentProject = project
@@ -713,9 +718,11 @@ final class EditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = nil
         lastExportURL = nil
+        isDirty = false
     }
 
     func openProject(from url: URL) async {
+        guard await confirmDiscardUnsavedChanges() else { return }
         do {
             let loadedProject = try await projectStore.load(from: url)
             let project = Self.ensureDefaultTracks(in: loadedProject)
@@ -735,6 +742,7 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastStatusMessage = nil
             lastExportURL = nil
+            isDirty = false
         } catch {
             lastErrorMessage = error.localizedDescription
             lastStatusMessage = nil
@@ -747,6 +755,7 @@ final class EditorViewModel {
             try await projectStore.save(snapshot, to: url)
             currentProjectURL = url
             lastErrorMessage = nil
+            isDirty = false
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -771,6 +780,8 @@ final class EditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = "Recovered unsaved work."
         lastExportURL = nil
+        // Recovered work was never saved, so it starts dirty.
+        isDirty = true
     }
 
     // MARK: - Project package (F-23)
@@ -807,6 +818,7 @@ final class EditorViewModel {
             panel.allowedContentTypes = [type]
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard await confirmDiscardUnsavedChanges() else { return }
 
         do {
             let project = try ProjectPackage.load(from: url)
@@ -825,6 +837,7 @@ final class EditorViewModel {
             lastExportURL = nil
             lastErrorMessage = nil
             lastStatusMessage = "Imported \(url.lastPathComponent). Replace any missing media via the library."
+            isDirty = false
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = "Could not import package: \(error.localizedDescription)"
@@ -842,6 +855,70 @@ final class EditorViewModel {
         }
 
         await saveProject(to: url)
+    }
+
+    /// Guards session-replacing operations (new/open/import/template/cloud)
+    /// when there are unsaved changes. Presents a Save / Don't Save / Cancel
+    /// alert (skipped in headless harness / bootstrap runs so the modal never
+    /// blocks automation). Returns true to proceed; false to cancel.
+    ///
+    /// - Save: prompts for a destination, awaits the save, and proceeds only if
+    ///   the save succeeded (so a failed save never discards work).
+    /// - Don't Save: proceeds, discarding unsaved work.
+    /// - Cancel: returns false, leaving the current session untouched.
+    func confirmDiscardUnsavedChanges() async -> Bool {
+        guard isDirty else { return true }
+
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else {
+            return true
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \"\(currentProject.name)\"?"
+        alert.informativeText = "Your changes will be lost if you don't save them."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            // Save first, then proceed only if it succeeded.
+            if let url = currentProjectURL {
+                await saveProject(to: url)
+                return lastErrorMessage == nil
+            }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = "\(currentProject.name).moviecut"
+            guard panel.runModal() == .OK, let url = panel.url else { return false }
+            await saveProject(to: url)
+            return lastErrorMessage == nil
+        case .alertSecondButtonReturn:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Used by the termination guard to save before quitting. Returns whether
+    /// the project was saved successfully (or there was nothing to save), so a
+    /// failed save cancels termination instead of discarding work.
+    @discardableResult
+    func terminateAfterSaving() async -> Bool {
+        if currentProjectURL == nil {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = "\(currentProject.name).moviecut"
+            guard panel.runModal() == .OK, let url = panel.url else { return false }
+            await saveProject(to: url)
+        } else {
+            await saveProject(to: currentProjectURL!)
+        }
+        return lastErrorMessage == nil
     }
 
     func startAutoSave() {
@@ -958,6 +1035,7 @@ final class EditorViewModel {
     }
 
     func openCloudProject(name: String) async {
+        guard await confirmDiscardUnsavedChanges() else { return }
         isCloudSyncing = true
         defer { isCloudSyncing = false }
 
@@ -980,6 +1058,7 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastExportURL = nil
             cloudSyncError = nil
+            isDirty = false
         } catch {
             cloudSyncError = error.localizedDescription
         }
@@ -4390,10 +4469,16 @@ final class EditorViewModel {
                 newProject.timeline.tracks.append(track)
             }
 
-            session = EditorSession(project: newProject)
-            currentProject = newProject
-            canvasSelection = newProject.canvas.aspectRatio
-            syncExportUI(from: newProject.exportSettings)
+            // Route through the command path instead of replacing the session:
+            // ReplaceProjectCommand swaps the project wholesale while pushing
+            // the previous project onto the undo stack, so Cmd+Z restores the
+            // pre-highlight project. Replacing the session here used to destroy
+            // the undo stack entirely.
+            try await session.dispatch(ReplaceProjectCommand(
+                project: newProject,
+                previousProject: snapshot
+            ))
+            try await refreshFromSession()
             selectedClipId = highlightClip.id
             selectedAssetId = asset.id
             playbackEngine.clear()
@@ -4639,6 +4724,11 @@ final class EditorViewModel {
             rebuildPreviewComposition()
         }
 
+        // Any committed mutation (command dispatch / undo / redo / import, plus
+        // the Auto Highlights ReplaceProjectCommand) marks the project dirty.
+        // Resets to false happen in the clean transition points: successful
+        // save, new project, open, recovery adoption, import, and cloud open.
+        isDirty = true
         scheduleAutosave()
         refreshScopes()
     }
@@ -5917,6 +6007,7 @@ final class EditorViewModel {
     // MARK: - Phase 3-2: Templates
 
     func createProject(from bundle: TemplateBundle) async {
+        guard await confirmDiscardUnsavedChanges() else { return }
         let project = templateStore.createProject(from: bundle)
         session = EditorSession(project: project)
         currentProject = project
@@ -5932,6 +6023,7 @@ final class EditorViewModel {
         recentAnalysisResults = []
         lastErrorMessage = nil
         lastExportURL = nil
+        isDirty = false
     }
 
     func createProjectFromTemplate(_ bundle: TemplateBundle) async {

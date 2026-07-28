@@ -1924,13 +1924,22 @@ extension EditorViewModel {
                 throw NSError(domain: "MovieCutUITest", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_IMPORT not set"])
             }
+            // Suppress per-dispatch rebuilds for the ENTIRE parity setup
+            // (import + scenario gates) so no racing restorePlaybackAfterRebuild
+            // tasks are spawned. A single rebuild fires after all edits.
+            suppressCompositionRebuild = true
             await importMediaAndAddToTimeline(importURLs, startTime: 0)
             checkpoint("imported")
 
-            // Force a composition build and wait for the player item so the
-            // video output is attached and producing frames.
+            // Step 6 parity scenarios: apply edits/effects.
+            try await applyParityScenarioEdits(environment: environment)
+            suppressCompositionRebuild = false
+            checkpoint("scenarios_applied")
+
+            // Single composition rebuild after all scenario edits, then wait
+            // for the player item + non-zero duration so the video output can
+            // produce frames.
             rebuildPreviewComposition()
-            checkpoint("rebuild_requested")
             try await waitForCompositionReady(timeoutSeconds: 10)
             checkpoint("composition_ready")
             guard playbackEngine.playerItem != nil,
@@ -2002,12 +2011,115 @@ extension EditorViewModel {
         }
     }
 
-    /// Polls the playback engine until a composition on the current generation
-    /// has installed a player item without error, or `timeoutSeconds` elapses.
-    /// Does NOT gate on `.readyToPlay` because composition track loading can
-    /// take longer than is healthy for a smoke test; the boundary/duration
-    /// checks downstream tolerate a still-settling item. A thrown error here
-    /// means the composition genuinely failed to install (not that it was slow).
+    /// Applies the composable Step 6 parity scenario edits (speed, split,
+    /// transition, text, BGM, mask, color/grade, delete) to the project before
+    /// the parity harness rebuilds the composition and dumps frames. Each gate
+    /// is independent so the 8 handoff scenarios are driven by combining env
+    /// vars in the shell script.
+    private func applyParityScenarioEdits(environment: [String: String]) async throws {
+        // 1. Constant speed change (SetClipSpeedCommand) — covers "2× split/trim"
+        //    and constant-rate speed scenarios.
+        if let rateString = environment["MOVIECUT_UITEST_SPEED_RATE"],
+           let rate = Double(rateString), selectedClipId != nil {
+            await updateSelectedPlaybackRate(rate)
+        }
+
+        // 2. Speed ramp points — covers the "speed ramp" scenario.
+        if environment["MOVIECUT_UITEST_SPEED_RAMP"] == "1", selectedClipId != nil {
+            let ramp = [
+                SpeedRampPoint(time: 0, rate: 1),
+                SpeedRampPoint(time: 0.5, rate: 2),
+                SpeedRampPoint(time: 1, rate: 1)
+            ]
+            await updateSelectedSpeedRampPoints(ramp)
+        }
+
+        // 3. Split at a timeline time — covers "2× split/trim" (combine with
+        //    SPEED_RATE). splitClip splits at the playhead.
+        if let splitString = environment["MOVIECUT_UITEST_SPLIT_AT"],
+           let splitTime = Double(splitString) {
+            playheadTime = splitTime
+            await splitClip()
+        }
+
+        // 4. Transition on the selected clip — covers "2 clips + cross dissolve".
+        if let transitionRaw = environment["MOVIECUT_UITEST_TRANSITION"] {
+            let type = TransitionType(rawValue: transitionRaw) ?? .crossDissolve
+            await updateSelectedTransition(Transition(type: type, duration: 0.5))
+        }
+
+        // 5. Text overlay at a timeline position — covers "text overlay at 5s".
+        if let textAtString = environment["MOVIECUT_UITEST_TEXT_AT"],
+           let textTime = Double(textAtString) {
+            playheadTime = textTime
+            await addTextClip(text: "Parity text overlay")
+        }
+
+        // 6. BGM at a timeline position — covers "BGM at 7.5s". Requires an
+        //    audio file path; if absent, the scenario is skipped (the shell
+        //    script supplies a fixture .wav).
+        if let bgmAtString = environment["MOVIECUT_UITEST_BGM_AT"],
+           let bgmTime = Double(bgmAtString),
+           let bgmPath = environment["MOVIECUT_UITEST_BGM_PATH"],
+           !bgmPath.isEmpty {
+            playheadTime = bgmTime
+            let url = URL(fileURLWithPath: bgmPath)
+            await addMusicTrack(MusicTrack(
+                title: "Parity BGM",
+                artist: "UITest",
+                duration: 0,
+                fileURL: url
+            ))
+        }
+
+        // 7. Mask on the selected clip — covers "filter+mask+subtitle". Mask
+        //    position/size are canvas pixels; the default canvas is 320×240
+        //    for the parity fixtures, so center the mask there.
+        if environment["MOVIECUT_UITEST_MASK"] == "1", selectedClipId != nil {
+            let mask = Mask(
+                shape: .rectangle,
+                position: CGPoint(x: 160, y: 120),
+                size: CGSize(width: 192, height: 144)
+            )
+            await updateSelectedMask(mask)
+        }
+
+        // 8. Color correction / grade on the selected clip — covers "filter"
+        //    scenarios. Composes with MASK + TEXT_AT for the combined scenario.
+        if environment["MOVIECUT_UITEST_COLOR"] == "1", selectedClipId != nil {
+            await updateSelectedColorCorrection(
+                ColorCorrection(brightness: 0.1, contrast: 1.2, saturation: 1.3, warmth: 0.4, tint: 0.1)
+            )
+        }
+        if environment["MOVIECUT_UITEST_GRADE"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(lift: .init(red: 0.1, green: 0, blue: -0.05),
+                           gamma: 0.8,
+                           gain: .init(red: 1.2, green: 1.0, blue: 0.8))
+            )
+        }
+
+        // 9. Delete scenarios — covers "normal delete (gap preserved)" and
+        //    "ripple delete (gap closed)".
+        if environment["MOVIECUT_UITEST_NORMAL_DELETE"] == "1" {
+            await deleteClip()
+        }
+        if environment["MOVIECUT_UITEST_RIPPLE_DELETE"] == "1", let firstClipId = firstTimelineClipId() {
+            await rippleDeleteClip(clipId: firstClipId)
+        }
+    }
+
+    /// Returns the id of the first clip on the first track, for delete
+    /// scenarios that need a deterministic target.
+    private func firstTimelineClipId() -> UUID? {
+        currentProject.timeline.tracks.first?.clips.first?.id
+    }
+
+    /// Polls the playback engine until a composition has installed a player
+    /// item, reached a non-zero duration, and reported no error — or
+    /// `timeoutSeconds` elapses. The duration gate matters because the video
+    /// output cannot produce a frame before the composition's tracks finish
+    /// loading (which is when duration becomes non-zero).
     private func waitForCompositionReady(timeoutSeconds: Double) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
@@ -2015,10 +2127,15 @@ extension EditorViewModel {
                 throw NSError(domain: "MovieCutUITest", code: 6,
                               userInfo: [NSLocalizedDescriptionKey: err])
             }
-            if playbackEngine.playerItem != nil {
+            if playbackEngine.playerItem != nil,
+               playbackEngine.duration > 0 {
                 return
             }
             try await Task.sleep(nanoseconds: 30_000_000)
+        }
+        // Last chance: item present but duration still settling.
+        if playbackEngine.playerItem != nil, playbackEngine.lastCompositionError == nil {
+            return
         }
         throw NSError(domain: "MovieCutUITest", code: 5,
                       userInfo: [NSLocalizedDescriptionKey: "timed out waiting for composition to become ready"])

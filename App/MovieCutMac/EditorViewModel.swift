@@ -111,6 +111,11 @@ final class EditorViewModel {
     var isMaskEditorActive: Bool = false
     var selectedAssetId: UUID?
     var playbackEngine: PlaybackEngine
+    /// When true, refreshFromSession skips the per-dispatch composition rebuild.
+    /// Used by the parity harness to batch a single rebuild after applying all
+    /// scenario gates (otherwise each gate's dispatch spawns a racing
+    /// restorePlaybackAfterRebuild task that hangs). Step 6.
+    var suppressCompositionRebuild = false
     var exportEngine: ExportEngine
     var musicLibrary: MusicLibrary
     var transcriptionService: TranscriptionService
@@ -4597,7 +4602,13 @@ final class EditorViewModel {
         // mutate `currentProject` directly without going through the session
         // — so drag ticks don't trigger a rebuild storm. Playback state is
         // preserved inside `rebuildPreviewComposition`.
-        rebuildPreviewComposition()
+        //
+        // The parity harness suppresses this during multi-gate scenario setup
+        // (each gate dispatches and would otherwise spawn a racing
+        // restorePlaybackAfterRebuild) and triggers a single rebuild at the end.
+        if !suppressCompositionRebuild {
+            rebuildPreviewComposition()
+        }
 
         scheduleAutosave()
         refreshScopes()

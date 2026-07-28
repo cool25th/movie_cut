@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Text alignment options for generated text clips.

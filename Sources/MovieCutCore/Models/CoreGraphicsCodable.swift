@@ -1,57 +1,24 @@
 import Foundation
 
-/// Adds JSON coding and equality support for the Core Graphics point type used by timeline models.
-extension CGPoint: @retroactive Codable, @retroactive Equatable {
-    /// The zero point.
-    public static let zero = CGPoint(x: 0, y: 0)
-
-    private enum CodingKeys: String, CodingKey {
-        case x
-        case y
-    }
-
-    public static func == (lhs: CGPoint, rhs: CGPoint) -> Bool {
-        lhs.x == rhs.x && lhs.y == rhs.y
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let x = try container.decode(Double.self, forKey: .x)
-        let y = try container.decode(Double.self, forKey: .y)
-        self.init(x: CGFloat(x), y: CGFloat(y))
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(Double(x), forKey: .x)
-        try container.encode(Double(y), forKey: .y)
-    }
-}
-
-/// Adds JSON coding and equality support for the Core Graphics size type used by canvas and proxy models.
-extension CGSize: @retroactive Codable, @retroactive Equatable {
-    /// The zero size.
-    public static let zero = CGSize(width: 0, height: 0)
-
-    private enum CodingKeys: String, CodingKey {
-        case width
-        case height
-    }
-
-    public static func == (lhs: CGSize, rhs: CGSize) -> Bool {
-        lhs.width == rhs.width && lhs.height == rhs.height
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let width = try container.decode(Double.self, forKey: .width)
-        let height = try container.decode(Double.self, forKey: .height)
-        self.init(width: CGFloat(width), height: CGFloat(height))
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(Double(width), forKey: .width)
-        try container.encode(Double(height), forKey: .height)
-    }
-}
+// CGPoint and CGSize are NOT given a local `@retroactive Codable` /
+// `@retroactive Equatable` conformance here.
+//
+// Earlier this file declared one, producing a duplicate-conformance warning
+// ("conformance of 'CGPoint' to protocol 'Decodable' was already stated in
+// the protocol's module 'CoreGraphics'", x6). On this toolchain CoreGraphics'
+// native conformance wins and serializes the array form `[x, y]` / `[width,
+// height]`; the local keyed form `{"x":..}` was therefore dead code on both
+// encode and decode. The winner of such a conflict is not language-guaranteed,
+// which is why the conformances were removed: relying on CoreGraphics' native
+// Codable (array form) removes the ambiguity entirely.
+//
+// The on-disk array form is pinned by `Tests/Fixtures/cg_codable_parity.moviecut`,
+// which exercises every Codable CG field (mask position/size/brushPoints, clip
+// transform position/offset/scale/anchorPoint, text position/shadowOffset,
+// timeline canvasSize). That fixture must keep loading losslessly across any
+// future change touching CG persistence.
+//
+// If a model ever needs a *different* on-disk shape for a point or size, give
+// that field an explicit wrapper type (see the historical A-option in the
+// reliability repair work order) rather than re-introducing a retroactive
+// conformance here.

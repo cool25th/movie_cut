@@ -290,12 +290,12 @@ struct IOSAutoAssistantView: View {
         let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
         guard sourceEnd > sourceStart else { return nil }
 
-        let playbackRate = max(clip.playbackRate, 0.25)
-        let timelineStart = clip.timelineRange.start + (sourceStart - clip.sourceRange.start) / playbackRate
-        let timelineEnd = min(
-            clip.timelineRange.end,
-            timelineStart + (sourceEnd - sourceStart) / playbackRate
-        )
+        // Route through the canonical ClipTimeMapping so the timeline range is
+        // correct for any rate or speed ramp (Step 7 of the core-editing
+        // repair). Previously this used an inline `/ playbackRate` formula.
+        guard let mapping = clip.makeTimeMapping() else { return nil }
+        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
+        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
         guard timelineEnd > timelineStart else { return nil }
 
         return (

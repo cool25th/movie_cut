@@ -226,7 +226,24 @@ struct PreviewView: View {
 
         do {
             try compositionTrack.insertTimeRange(sourceRange, of: sourceTrack, at: cursor)
-            cursor = CMTimeAdd(cursor, sourceRange.duration)
+
+            // Step 7: scale by the constant playback rate so the preview
+            // duration matches the timeline (a 2x clip plays in half the time).
+            // Speed ramps on iOS preview fall back to the clip's baseline rate
+            // (ramp segment scaling is in the export engine). Previously this
+            // assumed timeline 1s == source 1s.
+            let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
+            if clip.speedRampPoints.count < 2, playbackRate != 1 {
+                let scaledDuration = CMTime(
+                    seconds: sourceRange.duration.seconds / playbackRate,
+                    preferredTimescale: 600
+                )
+                let insertedRange = CMTimeRange(start: cursor, duration: sourceRange.duration)
+                compositionTrack.scaleTimeRange(insertedRange, toDuration: scaledDuration)
+                cursor = CMTimeAdd(cursor, scaledDuration)
+            } else {
+                cursor = CMTimeAdd(cursor, sourceRange.duration)
+            }
             return true
         } catch {
             return false
@@ -234,6 +251,19 @@ struct PreviewView: View {
     }
 
     private func sourceTimeRange(for clip: Clip) -> CMTimeRange? {
+        // Step 7: derive the source range from the canonical mapping so the
+        // preview reflects the correct source coverage for any rate. For
+        // freeze-frames (tiny source over long timeline), keep the minimal
+        // source window — the timeline span is produced by scaleTimeRange.
+        if let mapping = clip.makeTimeMapping() {
+            let renderedDuration = mapping.renderedTimelineDuration
+            guard renderedDuration > 0 else { return nil }
+            // Use the clip's source range directly; duration scaling happens in
+            // insertClip via scaleTimeRange.
+            let sourceDuration = max(clip.sourceRange.duration, 0)
+            guard sourceDuration > 0 else { return nil }
+            return CMTimeRange(start: cmTime(clip.sourceRange.start), duration: cmTime(sourceDuration))
+        }
         let duration = min(max(clip.sourceRange.duration, 0), max(clip.timelineRange.duration, 0))
         guard duration > 0 else { return nil }
         return CMTimeRange(start: cmTime(clip.sourceRange.start), duration: cmTime(duration))

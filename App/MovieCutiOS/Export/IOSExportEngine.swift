@@ -417,12 +417,32 @@ final class IOSExportEngine {
         into compositionTrack: AVMutableCompositionTrack,
         cursor: inout CMTime
     ) async throws {
-        guard let sourceTrack = try await asset.loadTracks(withMediaType: mediaType).first else {
+        // Step 7: handle reverse by substituting a pre-rendered reversed asset
+        // (same pattern as macOS ExportEngine). The reversed asset's time 0
+        // corresponds to the original sourceRange.end.
+        let effectiveAsset: AVURLAsset
+        let effectiveSourceStart: TimeInterval
+        if clip.isReversed, mediaType == .video, let reversedURL = await renderReversedAsset(for: clip, from: asset) {
+            effectiveAsset = AVURLAsset(url: reversedURL)
+            effectiveSourceStart = 0
+        } else {
+            effectiveAsset = asset
+            effectiveSourceStart = clip.sourceRange.start
+        }
+
+        guard let sourceTrack = try await effectiveAsset.loadTracks(withMediaType: mediaType).first else {
             return
         }
 
-        guard let sourceTimeRange = sourceTimeRange(for: clip) else {
+        guard var sourceTimeRange = sourceTimeRange(for: clip) else {
             return
+        }
+        if clip.isReversed {
+            // Reversed asset starts at 0; remap the source range.
+            sourceTimeRange = CMTimeRange(
+                start: cmTime(effectiveSourceStart),
+                duration: sourceTimeRange.duration
+            )
         }
 
         let timelineStart = cmTime(clip.timelineRange.start)
@@ -440,8 +460,127 @@ final class IOSExportEngine {
             compositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
         }
 
+        // Step 7: freeze-frame handling. A tiny source range held over a long
+        // timeline span stretches the single frame across the timeline duration.
+        let isFreezeFrame = clip.sourceRange.duration < 0.1 && clip.timelineRange.duration > 0.5
+        if isFreezeFrame {
+            // Insert a minimal source window, then scale it to the timeline duration.
+            let minimalSource = CMTimeRange(
+                start: sourceTimeRange.start,
+                duration: cmTime(0.04)
+            )
+            try compositionTrack.insertTimeRange(minimalSource, of: sourceTrack, at: cursor)
+            let scaled = CMTimeRange(start: cursor, duration: cmTime(clip.timelineRange.duration))
+            compositionTrack.scaleTimeRange(scaled, toDuration: cmTime(clip.timelineRange.duration))
+            cursor = CMTimeAdd(cursor, cmTime(clip.timelineRange.duration))
+            return
+        }
+
         try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: cursor)
-        cursor = CMTimeAdd(cursor, sourceTimeRange.duration)
+
+        // Step 7: constant-rate speed. Scale the inserted range by the rate so
+        // a 2x clip plays in half the timeline time. Speed ramps (>= 2 points)
+        // need segment-level scaling; that path is handled in
+        // applySpeedRampIfNeeded below for clips with ramps.
+        let hasRamp = clip.speedRampPoints.count >= 2
+        if !hasRamp {
+            let playbackRate = min(max(clip.playbackRate, 0.25), 4.0)
+            if playbackRate != 1 {
+                let scaledDuration = CMTime(seconds: sourceTimeRange.duration.seconds / playbackRate, preferredTimescale: 600)
+                let insertedRange = CMTimeRange(start: cursor, duration: cmTime(sourceTimeRange.duration.seconds))
+                compositionTrack.scaleTimeRange(insertedRange, toDuration: scaledDuration)
+                cursor = CMTimeAdd(cursor, scaledDuration)
+            } else {
+                cursor = CMTimeAdd(cursor, sourceTimeRange.duration)
+            }
+        } else {
+            // Speed ramp: scale per-segment using the ramp curve (macOS pattern).
+            cursor = try await applySpeedRamp(clip, sourceTrack: sourceTrack, sourceTimeRange: sourceTimeRange, into: compositionTrack, cursor: cursor)
+        }
+    }
+
+    /// Renders a reversed copy of the clip's source range (video only). Returns
+    /// nil if rendering fails. Mirrors macOS ReverseRenderService usage.
+    private func renderReversedAsset(for clip: Clip, from asset: AVURLAsset) async -> URL? {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mov")
+        do {
+            let reversedService = ReverseRenderService()
+            try await reversedService.renderReversed(
+                from: asset,
+                timeRange: CMTimeRange(
+                    start: cmTime(clip.sourceRange.start),
+                    duration: cmTime(clip.sourceRange.duration)
+                ),
+                to: outputURL
+            )
+            return outputURL
+        } catch {
+            return nil
+        }
+    }
+
+    /// Applies a speed ramp by walking the curve's segments and scaling each
+    /// portion of the inserted range. Mirrors macOS ExportEngine.applySpeedRamp.
+    private func applySpeedRamp(
+        _ clip: Clip,
+        sourceTrack: AVAssetTrack,
+        sourceTimeRange: CMTimeRange,
+        into compositionTrack: AVMutableCompositionTrack,
+        cursor: CMTime
+    ) async throws -> CMTime {
+        let curve = SpeedRampCurve(points: clip.speedRampPoints)
+        let sourceDuration = clip.sourceRange.duration
+        let destinationTime = cursor
+
+        // Collect normalized boundary times: ramp points + 0 and 1.
+        var boundaries: [TimeInterval] = [0]
+        for point in clip.speedRampPoints where point.time > 0 && point.time < 1 {
+            // Avoid duplicates near 0/1.
+            if boundaries.allSatisfy({ abs($0 - point.time) > 1e-9 }) {
+                boundaries.append(point.time)
+            }
+        }
+        if !boundaries.contains(where: { abs($0 - 1) < 1e-9 }) {
+            boundaries.append(1)
+        }
+        boundaries.sort()
+
+        var accumulatedOutput: TimeInterval = 0
+        var startRate = clip.speedRampPoints.first(where: { $0.time <= 0 })?.rate ?? (clip.speedRampPoints.first?.rate ?? 1)
+
+        for i in 0..<(boundaries.count - 1) {
+            let segStart = boundaries[i]
+            let segEnd = boundaries[i + 1]
+            let endRate = clip.speedRampPoints
+                .filter { abs($0.time - segEnd) < 1e-9 }
+                .last?.rate ?? startRate
+
+            let outputSegmentStart = curve.timeMapping(sourceTime: segStart) * sourceDuration
+            let outputSegmentEnd = curve.timeMapping(sourceTime: segEnd) * sourceDuration
+            let outputSegmentDuration = max(outputSegmentEnd - outputSegmentStart, 1.0 / 600.0)
+
+            let sourceSegmentStart = clip.sourceRange.start + segStart * sourceDuration
+            let sourceSegmentDuration = (segEnd - segStart) * sourceDuration
+            let segmentSourceRange = CMTimeRange(
+                start: cmTime(sourceSegmentStart),
+                duration: cmTime(sourceSegmentDuration)
+            )
+
+            // Insert the source segment at the accumulated destination time.
+            let segDestination = CMTimeAdd(destinationTime, cmTime(accumulatedOutput))
+            try compositionTrack.insertTimeRange(segmentSourceRange, of: sourceTrack, at: segDestination)
+
+            // Scale it to the ramp-derived output duration.
+            let scaledRange = CMTimeRange(start: segDestination, duration: cmTime(sourceSegmentDuration))
+            compositionTrack.scaleTimeRange(scaledRange, toDuration: cmTime(outputSegmentDuration))
+
+            accumulatedOutput += outputSegmentDuration
+            startRate = endRate
+        }
+
+        return CMTimeAdd(destinationTime, cmTime(accumulatedOutput))
     }
 
     private func sourceTimeRange(for clip: Clip) -> CMTimeRange? {

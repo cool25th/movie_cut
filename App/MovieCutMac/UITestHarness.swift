@@ -169,6 +169,10 @@ extension EditorViewModel {
             await runPreviewExportParityUITestScenario(environment: env)
             return
         }
+        if env["MOVIECUT_UITEST_UNSAVED_GUARD"] == "1" {
+            await runUnsavedChangesGuardUITestScenario(environment: env)
+            return
+        }
         var extractAudioSuffix = ""
         var scrubSuffix = ""
         var clipboardSuffix = ""
@@ -2139,6 +2143,69 @@ extension EditorViewModel {
         }
         throw NSError(domain: "MovieCutUITest", code: 5,
                       userInfo: [NSLocalizedDescriptionKey: "timed out waiting for composition to become ready"])
+    }
+
+    /// Exercises the unsaved-changes guard through an injected user choice so
+    /// XCUITest can drive the real guard path (policy + save) without an
+    /// Accessibility-permission dependency on the modal. Pairs with
+    /// `MOVIECUT_UITEST_UNSAVED_RESPONSE=save|discard|cancel`.
+    ///
+    /// Proves the guard actually runs in the harness (previously it was skipped
+    /// wholesale under MOVIECUT_UITEST=1, so no UI test could reach it):
+    /// - dirty a fresh project by adding a text clip;
+    /// - capture the pre-guard project identity (name + clip count);
+    /// - call newProject(), which routes through confirmDiscardUnsavedChanges;
+    /// - report whether the session was replaced (proceed) or preserved (cancel).
+    private func runUnsavedChangesGuardUITestScenario(environment: [String: String]) async {
+        let resultPath = environment["MOVIECUT_UITEST_RESULT"] ?? ""
+        var status = "UNSAVED_GUARD_INCOMPLETE error=not_run"
+
+        stopAutoSave()
+        lastErrorMessage = nil
+
+        // Make the project dirty via a real edit so the guard's isDirty check
+        // is true (a clean project proceeds without consulting the choice).
+        // addTextClip dispatches through the session and refreshFromSession,
+        // which sets isDirty. The added clip also gives a stable pre/post
+        // signal for whether the session was replaced.
+        await addTextClip(text: "guard probe")
+
+        let preDirty = isDirty
+        let preClipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+
+        // The guard reads MOVIECUT_UITEST_UNSAVED_RESPONSE; for "save" with no
+        // save URL it would present a Save As panel, which we avoid by using the
+        // discard/cancel branches here (no panel, fully deterministic).
+        await newProject()
+
+        let postClipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        // newProject replaces the session when it proceeds; the dirty project's
+        // clips vanish. On cancel the session is preserved.
+        let sessionReplaced = postClipCount != preClipCount
+        let response = environment["MOVIECUT_UITEST_UNSAVED_RESPONSE"] ?? "unset"
+
+        let outcome: String
+        switch response {
+        case "cancel":
+            // Cancel must preserve the session.
+            outcome = sessionReplaced ? "cancel_session_lost" : "cancel_session_preserved"
+        case "discard":
+            // Discard must proceed (replace the session).
+            outcome = sessionReplaced ? "discard_session_replaced" : "discard_session_kept"
+        default:
+            outcome = sessionReplaced ? "replaced" : "preserved"
+        }
+
+        lastErrorMessage = nil
+        status = "UNSAVED_GUARD_DONE response=\(response) pre_dirty=\(preDirty ? 1 : 0) pre_clips=\(preClipCount) post_clips=\(postClipCount) \(outcome) error=none"
+        lastStatusMessage = status
+
+        if !resultPath.isEmpty {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+        }
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
     }
 }
 #endif

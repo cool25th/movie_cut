@@ -873,22 +873,80 @@ final class EditorViewModel {
     }
 
     /// Guards session-replacing operations (new/open/import/template/cloud)
-    /// when there are unsaved changes. Presents a Save / Don't Save / Cancel
-    /// alert (skipped in headless harness / bootstrap runs so the modal never
-    /// blocks automation). Returns true to proceed; false to cancel.
+    /// when there are unsaved changes. Returns true to proceed; false to cancel.
     ///
-    /// - Save: prompts for a destination, awaits the save, and proceeds only if
-    ///   the save succeeded (so a failed save never discards work).
-    /// - Don't Save: proceeds, discarding unsaved work.
-    /// - Cancel: returns false, leaving the current session untouched.
+    /// All branching decisions live in `UnsavedChangesPolicy` (pure, unit-tested
+    /// in Core). This method is only the AppKit presentation layer: it obtains a
+    /// user choice (from an `NSAlert`, or injected by a test harness), performs
+    /// the save the policy asks for, then maps the policy's decision to a bool.
+    ///
+    /// The "a failed save never discards work" rule is enforced by the policy's
+    /// `resolveAfterSave`, not by this method.
+    ///
+    /// Harness coverage: historically the guard was skipped wholesale under
+    /// `MOVIECUT_UITEST=1`, so the UI test harness could never reach it. The
+    /// `MOVIECUT_UITEST_UNSAVED_RESPONSE=save|discard|cancel` gate instead
+    /// *injects* a choice, driving the real guard (and real save) path so the
+    /// three branches are exercisable by XCUITest without an Accessibility
+    /// permission dependency.
     func confirmDiscardUnsavedChanges() async -> Bool {
-        guard isDirty else { return true }
-
         let env = ProcessInfo.processInfo.environment
-        guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else {
+
+        // Injected choice: run the real guard + save path for any of the three
+        // branches. Falls through to the live alert only when no choice is
+        // injected, so ordinary test runs are unaffected.
+        if let raw = env["MOVIECUT_UITEST_UNSAVED_RESPONSE"],
+           let choice = UnsavedChangesUserChoice(rawValue: raw) {
+            return await applyUnsavedChoice(choice)
+        }
+
+        // Other automation contexts (import/export E2E, bootstrap) never expect
+        // a modal: keep the prior bypass so they are not blocked.
+        if env["MOVIECUT_UITEST"] == "1" || env["MOVIECUT_BOOTSTRAP_PROJECT"] != nil {
             return true
         }
 
+        return await applyUnsavedChoice(presentUnsavedChangesAlert())
+    }
+
+    /// Maps a user choice through the policy, performing any save it requests,
+    /// and returns whether the caller may proceed. Shared by the live alert path
+    /// and the injected harness path so both run the identical decision logic.
+    private func applyUnsavedChoice(_ choice: UnsavedChangesUserChoice) async -> Bool {
+        let decision = UnsavedChangesPolicy.decide(
+            isDirty: isDirty,
+            userChoice: choice,
+            hasSaveURL: currentProjectURL != nil
+        )
+
+        switch decision {
+        case .proceed:
+            return true
+        case .cancel:
+            return false
+        case .needsSave:
+            // Existing save URL: save in place, then resolve.
+            guard let url = currentProjectURL else { return false }
+            await saveProject(to: url)
+            let resolved = UnsavedChangesPolicy.resolveAfterSave(decision, didSaveSucceed: lastErrorMessage == nil)
+            return resolved == .proceed
+        case .needsSaveAs:
+            // No save URL yet: present Save As, then save and resolve.
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = "\(currentProject.name).moviecut"
+            guard panel.runModal() == .OK, let url = panel.url else { return false }
+            await saveProject(to: url)
+            let resolved = UnsavedChangesPolicy.resolveAfterSave(decision, didSaveSucceed: lastErrorMessage == nil)
+            return resolved == .proceed
+        }
+    }
+
+    /// Presents the Save / Don't Save / Cancel alert and returns the user's
+    /// choice as a policy input. Cancel is the default for an unknown response
+    /// (e.g. closing the alert), preserving work.
+    private func presentUnsavedChangesAlert() -> UnsavedChangesUserChoice {
         let alert = NSAlert()
         alert.messageText = "Save changes to \"\(currentProject.name)\"?"
         alert.informativeText = "Your changes will be lost if you don't save them."
@@ -899,22 +957,11 @@ final class EditorViewModel {
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            // Save first, then proceed only if it succeeded.
-            if let url = currentProjectURL {
-                await saveProject(to: url)
-                return lastErrorMessage == nil
-            }
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
-            panel.canCreateDirectories = true
-            panel.nameFieldStringValue = "\(currentProject.name).moviecut"
-            guard panel.runModal() == .OK, let url = panel.url else { return false }
-            await saveProject(to: url)
-            return lastErrorMessage == nil
+            return .save
         case .alertSecondButtonReturn:
-            return true
+            return .discard
         default:
-            return false
+            return .cancel
         }
     }
 

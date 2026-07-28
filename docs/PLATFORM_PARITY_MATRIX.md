@@ -98,24 +98,24 @@
   - Mac UI: ✅ toolbar/inspector action
   - iOS UI: ❌ action surface 미확인
   - Mac preview/export: ✅ E2E duration proof 있음
-  - iOS preview/export: ❌ freeze export/preview branch 미확인
-  - 상태: 🟡 iOS defer — 사유: `FreezeFrameCommand`를 호출하는 iOS UI와 export/preview special-case가 없음
+  - iOS preview/export: 🟡 Step 7 — `IOSExportEngine` freeze branch 구현됨(tiny source → scaleTimeRange), 시뮬레이터 E2E 미수행
+  - 상태: 🟡 구현/검증대기 — 사유: export 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
 
 - speed ramp
-  - Core: ✅ `SpeedRampCurve`
+  - Core: ✅ `SpeedRampCurve` + `ClipTimeMapping` (Step 3)
   - Mac UI: ✅ speed curve editor
   - iOS UI: ❌ 동등 editor 미확인
   - Mac preview/export: ✅ `insertSpeedRampSegments`
-  - iOS preview/export: ❌ `SpeedRampCurve` 미사용
-  - 상태: 🟡 iOS defer — 사유: iOS playback/export가 clip speed ramp points를 segment insert로 반영하지 않음
+  - iOS preview/export: 🟡 Step 7 — `IOSExportEngine.applySpeedRamp` segment walker 구현됨, 시뮬레이터 E2E 미수행
+  - 상태: 🟡 구현/검증대기 — 사유: export ramp 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
 
 - 역재생
   - Core: ✅ clip `isReversed` 모델/command path
   - Mac UI: ✅ reverse controls
   - iOS UI: ❌ action surface 미확인
   - Mac preview/export: ✅ reverse handling 존재
-  - iOS preview/export: ❌ reverse branch 미확인
-  - 상태: 🟡 iOS defer — 사유: iOS timeline/export가 `isReversed`를 소비하지 않음
+  - iOS preview/export: 🟡 Step 7 — `IOSExportEngine.renderReversedAsset` + `ReverseRenderService` 구현됨, 시뮬레이터 E2E 미수행
+  - 상태: 🟡 구현/검증대기 — 사유: export reverse 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
 
 - 오디오 덕킹
   - Core: ✅ `AudioDuckingPlanner`, clip ducking ranges
@@ -192,4 +192,33 @@
 
 - 이번 G-09 Inc 2는 재감사와 문서/정적 계약 갱신이다. iOS W1 시뮬레이터 녹화는 아직 없음.
 - Static contract는 회귀 잠금일 뿐 완료 증거가 아니다. iOS defer 항목은 Inc 3 이후 기능별 E2E 또는 실기기/시뮬레이터 증거가 필요하다.
+
+## 6. Step 7 업데이트 (core-editing repair handoff, 2026-07-28)
+
+> 핵심 경고: **iOS actual-app 테스트 인프라(XCUITest 타겟, 시뮬레이터 E2E)가 전혀 없다.** 아래 Step 7 항목은 코드 구현은 완료됐으나 런타임 검증이 불가능하므로, 모두 "구현 완료 / 검증 대기" 상태다. 완료로 처리하지 않는다.
+
+### 구현 완료 (검증 대기)
+- **속도(배속)**: `IOSExportEngine.insertClip`에 constant-rate `scaleTimeRange` 추가 + `IOSExportEngine.applySpeedRamp` segment walker 구현. iOS `PreviewView.insertClip`도 constant-rate scale 적용. — 시뮬레이터 E2E 미수행.
+- **역재생**: `IOSExportEngine.renderReversedAsset` + `ReverseRenderService` 연동 구현. — 시뮬레이터 E2E 미수행.
+- **정지프레임**: `IOSExportEngine` freeze branch(tiny source → scaleTimeRange) 구현. — 시뮬레이터 E2E 미수행.
+- **iOS 시간 매핑**: `IOSAutoAssistantView`, `IOSAutoSubtitlesView`, `IOSKeyframeEditorView`가 `Clip.makeTimeMapping()` 사용 (마일스톤 A의 macOS 경로와 동일). — 시뮬레이터 E2E 미수행.
+- **iOS Preview composition 수학**: `PreviewView.sourceTimeRange`가 `ClipTimeMapping` 기반으로 교정 (더 이상 `min(source, timeline)` 1:1 아님). — 시뮬레이터 E2E 미수행.
+
+### overclaim 강등 (정적 계약만으로 ✅ 표시된 항목)
+다음 6개 항목은 Core shared processor 위임은 사실이나, iOS actual-app E2E 없이 source-string StaticContract만으로 ✅ "parity 유지"를 표시한 것은 과대 표현이다. iOS 시뮬레이터 E2E가 확보되기 전까지 🟡(검증 미비)로 간주한다:
+- 색보정 (ColorCorrectionPixelProcessor) — 렌더 경로 shared, iOS 런타임 미검증
+- warmth/tint — 동일
+- 3-way color grade — 동일
+- 마스킹 (MaskPixelProcessor) — 동일
+- 텍스트 burn-in (TextOverlayPixelProcessor) — 동일
+- 캔버스 배경 (CanvasBackgroundPixelProcessor) — 동일
+
+### 여전히 defer (이번 Step 7 범위 외)
+- 크로마키 shared processor 위임 (iOS inline `applyChromaKey` → `ChromaKeyPixelProcessor` 전환)
+- two-source transitions (`TransitionPixelProcessor` iOS 배선)
+- 배경제거 shared compositor (`PersonSegmentationCompositor` iOS 사용)
+- 오디오 덕킹/EQ/노이즈감소 iOS UI action + export wiring
+- ProRes/GIF/스틸 export, platform preset export
+- iOS autosave/crash recovery lifecycle
+- `IOSPlaybackEngine` (dead code — 별도 제거 이슈)
 - CoreSimulator out-of-date 경고는 Mac build/E2E 중 simulator device support 경고로 계속 나타난다. iOS generic device build는 `CODE_SIGNING_ALLOWED=NO`로 검증한다.

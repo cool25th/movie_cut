@@ -115,7 +115,8 @@ public struct BeatDetectionProvider: Sendable {
     // MARK: - AVFoundation wrapper
 
     /// Reads the asset's first audio track as mono PCM and detects beats in
-    /// source-time seconds.
+    /// source-time seconds. The blocking PCM decode is moved off the
+    /// cooperative thread pool onto a non-cooperative GCD thread.
     public func analyze(asset: MediaAsset) async throws -> [TimeInterval] {
         let url = asset.proxy?.proxyURL ?? asset.originalURL
         let avAsset = AVAsset(url: url)
@@ -125,13 +126,33 @@ public struct BeatDetectionProvider: Sendable {
             return []
         }
 
-        let samples = try readMonoSamples(from: avAsset)
+        let samples = try await Self.decodeSamples { try readMonoSamples(at: url) }
         return detectBeats(monoSamples: samples, sampleRate: Self.analysisSampleRate)
     }
 
     private static let analysisSampleRate: Double = 22050
 
-    private func readMonoSamples(from avAsset: AVAsset) throws -> [Float] {
+    /// Moves a blocking decode closure off the cooperative thread pool onto a
+    /// non-cooperative GCD thread. `Task.detached` still runs on the
+    /// cooperative pool and would not relieve thread starvation, so it is
+    /// intentionally avoided.
+    private static func decodeSamples<T: Sendable>(
+        _ work: @escaping @Sendable () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try work())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Synchronously reads the asset's first audio track as mono PCM. Blocking.
+    private func readMonoSamples(at url: URL) throws -> [Float] {
+        let avAsset = AVAsset(url: url)
         guard let reader = try? AVAssetReader(asset: avAsset) else { return [] }
 
         let audioTracks = avAsset.tracks(withMediaType: .audio)

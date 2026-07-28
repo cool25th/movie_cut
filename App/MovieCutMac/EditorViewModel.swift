@@ -182,7 +182,13 @@ final class EditorViewModel {
     private var currentProjectURL: URL?
     @ObservationIgnored private var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
-    @ObservationIgnored private var waveformCache: [UUID: [CGFloat]] = [:]
+    /// Waveform bins per clip, populated lazily off the main thread. Observed
+    /// (not ignored) so that filling a cache miss after a background decode
+    /// triggers the timeline canvas to redraw with real samples.
+    private var waveformCache: [UUID: [CGFloat]] = [:]
+    /// Clip IDs whose waveform is currently decoding in the background, to
+    /// avoid scheduling redundant decodes for the same miss.
+    @ObservationIgnored private var waveformInFlight: Set<UUID> = []
     @ObservationIgnored private var clipEQPresets: [UUID: String] = [:]
     @ObservationIgnored private var noiseReductionClipIds: Set<UUID> = []
     @ObservationIgnored private var backgroundRemovedClipIds: Set<UUID> = []
@@ -437,6 +443,13 @@ final class EditorViewModel {
             .first
     }
 
+    /// Returns cached waveform bins for a clip, or an empty array when the
+    /// waveform has not been decoded yet. A cache miss never blocks: it kicks
+    /// off a background decode via ``WaveformGenerator/generateAsync(for:)``
+    /// (which runs on a non-cooperative GCD thread) and the decoded bins are
+    /// written back into ``waveformCache`` on the main actor. Because that
+    /// cache is observed, the timeline canvas redraws automatically once the
+    /// real samples arrive.
     func waveform(for clip: Clip) -> [CGFloat] {
         if let cached = waveformCache[clip.id] { return cached }
 
@@ -444,16 +457,31 @@ final class EditorViewModel {
             clip.kind == .video || clip.kind == .audio,
             let assetId = clip.assetId,
             let asset = currentProject.mediaLibrary.assets[assetId],
-            asset.kind == .video || asset.kind == .audio,
-            let waveformData = WaveformGenerator.generate(for: asset)
+            asset.kind == .video || asset.kind == .audio
         else {
             waveformCache[clip.id] = []
             return []
         }
 
-        let samples = waveformData.samples.map { CGFloat($0) }
-        waveformCache[clip.id] = samples
-        return samples
+        waveformCache[clip.id] = []
+        startWaveformDecode(for: clip.id, asset: asset)
+        return []
+    }
+
+    /// Schedules exactly one background waveform decode per clip id while a
+    /// decode for that clip is already in flight.
+    private func startWaveformDecode(for clipId: UUID, asset: MediaAsset) {
+        guard !waveformInFlight.contains(clipId) else { return }
+        waveformInFlight.insert(clipId)
+
+        Task { @MainActor [weak self] in
+            let waveformData = await WaveformGenerator.generateAsync(for: asset)
+            guard let self else { return }
+            // The asset may have been swapped out while decoding; only commit
+            // if this clip is still in flight for this decode.
+            guard self.waveformInFlight.remove(clipId) != nil else { return }
+            self.waveformCache[clipId] = waveformData?.samples.map { CGFloat($0) } ?? []
+        }
     }
 
     func thumbnailData(for clip: Clip) -> Data? {
@@ -3122,6 +3150,7 @@ final class EditorViewModel {
                 SetClipSourceAssetCommand(clipId: clipId, assetId: denoisedAsset.id, kind: .audio)
             )
             waveformCache.removeValue(forKey: clipId)
+            waveformInFlight.remove(clipId)
             selectedAssetId = denoisedAsset.id
         case .video:
             let audioTrack = try await ensureTrack(for: .audio)

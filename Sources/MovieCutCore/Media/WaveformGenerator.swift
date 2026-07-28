@@ -18,12 +18,59 @@ public struct WaveformData: Codable, Sendable, Equatable {
     }
 }
 
-/// Placeholder waveform generation API until audio decoding is introduced.
+/// Generates waveform sample data for an imported media asset by decoding the
+/// audio track into peak bins.
+///
+/// The underlying `AVAssetReader` performs **synchronous blocking reads**. Such
+/// work must never run on Swift Concurrency's cooperative thread pool, because
+/// a long decode starves the limited cooperative threads and can deadlock a
+/// test suite (or stall the UI). Always prefer ``generateAsync(for:)``, which
+/// dispatches the decode onto a non-cooperative GCD thread. The synchronous
+/// ``generate(for:)`` is retained only for non-concurrent callers; do not call
+/// it from a `Task`/`async`/`@MainActor` context.
 public struct WaveformGenerator: Sendable {
+    /// Asynchronously generates waveform sample data, decoding the asset audio
+    /// track on a non-cooperative GCD thread so the cooperative pool and the UI
+    /// thread are never blocked.
+    public static func generateAsync(for asset: MediaAsset) async -> WaveformData? {
+        // Capture only Sendable data (the URL); construct the non-Sendable
+        // AVAsset/AVAssetReader inside the off-pool closure.
+        let url = asset.originalURL
+        return await Self.decodeSamples { decodeWaveform(at: url) }
+    }
+
     /// Generates waveform sample data for an imported media asset.
+    ///
+    /// - Warning: This performs a synchronous, blocking `AVAssetReader` read.
+    ///   Do **not** call from a `Task`/`async`/`@MainActor` context — it will
+    ///   block the cooperative pool (deadlock risk) or the UI thread. Use
+    ///   ``generateAsync(for:)`` instead.
     public static func generate(for asset: MediaAsset) -> WaveformData? {
         #if canImport(AVFoundation)
-        let avAsset = AVAsset(url: asset.originalURL)
+        return decodeWaveform(at: asset.originalURL)
+        #else
+        return nil
+        #endif
+    }
+
+    /// Moves a blocking decode closure off the cooperative thread pool onto a
+    /// non-cooperative GCD thread. `Task.detached` is intentionally **not**
+    /// used: it still runs on the cooperative pool and would not relieve thread
+    /// starvation.
+    private static func decodeSamples<T: Sendable>(
+        _ work: @escaping @Sendable () -> T?
+    ) async -> T? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: work())
+            }
+        }
+    }
+
+    #if canImport(AVFoundation)
+    /// Synchronously decodes the audio track at `url` into peak bins. Blocking.
+    private static func decodeWaveform(at url: URL) -> WaveformData? {
+        let avAsset = AVAsset(url: url)
         guard let audioTrack = avAsset.tracks(withMediaType: .audio).first else {
             return nil
         }
@@ -101,8 +148,6 @@ public struct WaveformGenerator: Sendable {
         }
 
         return WaveformData(samples: bins, sampleCount: totalSamplesRead)
-        #else
-        nil
-        #endif
     }
+    #endif
 }

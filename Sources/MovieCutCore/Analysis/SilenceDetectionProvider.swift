@@ -63,9 +63,8 @@ public final class SilenceDetectionProvider: AnalysisProvider {
     /// Analyzes the asset audio track and returns silence-removal suggestions.
     public func analyze(asset: MediaAsset, in project: Project) async throws -> AnalysisResult {
         let url = asset.originalURL
-        let avAsset = AVAsset(url: url)
 
-        let silentRanges = try await detectSilentRanges(in: avAsset)
+        let silentRanges = try await detectSilentRanges(at: url)
 
         let suggestions: [AnalysisSuggestion]
         if silentRanges.isEmpty {
@@ -83,19 +82,48 @@ public final class SilenceDetectionProvider: AnalysisProvider {
 
     // MARK: - Private
 
-    private func detectSilentRanges(in avAsset: AVAsset) async throws -> [TimeRange] {
-        let duration = try await avAsset.load(.duration)
-        guard duration.isValid && duration.seconds > 0 else { return [] }
+    private func detectSilentRanges(at url: URL) async throws -> [TimeRange] {
+        let configuration = configuration.withLock { $0 }
+        // The PCM decode below is a synchronous, blocking AVAssetReader read.
+        // Capture only Sendable inputs (URL + config) and open the asset
+        // inside the off-pool closure so no non-Sendable object is captured.
+        // Running this on a cooperative thread starves the pool and deadlocks
+        // concurrent test runs.
+        return try await Self.decodeSamples {
+            try Self.decodeSilentRanges(at: url, configuration: configuration)
+        }
+    }
 
-        let totalDuration = duration.seconds
+    /// Moves a blocking decode closure off the cooperative thread pool onto a
+    /// non-cooperative GCD thread. `Task.detached` still runs on the
+    /// cooperative pool and would not relieve thread starvation, so it is
+    /// intentionally avoided.
+    private static func decodeSamples<T: Sendable>(
+        _ work: @escaping @Sendable () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try work())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
 
-        // Load audio tracks
-        let tracks = try await avAsset.load(.tracks)
-        let audioTracks = tracks.filter { $0.mediaType == .audio }
-        guard !audioTracks.isEmpty else { return [] }
+    /// Synchronously decodes silence ranges from the asset audio track. Blocking.
+    private static func decodeSilentRanges(
+        at url: URL,
+        configuration: SilenceDetectionConfiguration
+    ) throws -> [TimeRange] {
+        let avAsset = AVAsset(url: url)
+        let totalDuration = CMTimeGetSeconds(avAsset.duration)
+        guard totalDuration > 0 else { return [] }
 
-        // Use AVAssetReader to read PCM samples
         guard let reader = try? AVAssetReader(asset: avAsset) else { return [] }
+        let audioTracks = avAsset.tracks(withMediaType: .audio)
+        guard let firstAudioTrack = audioTracks.first else { return [] }
 
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -107,7 +135,7 @@ public final class SilenceDetectionProvider: AnalysisProvider {
         ]
 
         let trackOutput = AVAssetReaderTrackOutput(
-            track: audioTracks[0],
+            track: firstAudioTrack,
             outputSettings: outputSettings
         )
         trackOutput.alwaysCopiesSampleData = false
@@ -116,7 +144,6 @@ public final class SilenceDetectionProvider: AnalysisProvider {
         guard reader.startReading() else { return [] }
 
         let sampleRate: Double = 44100
-        let configuration = configuration.withLock { $0 }
         let samplesPerChunk = Int(sampleRate * configuration.chunkDuration)
         let bytesPerSample = 2 // 16-bit PCM
         let bytesPerChunk = samplesPerChunk * bytesPerSample
@@ -128,7 +155,7 @@ public final class SilenceDetectionProvider: AnalysisProvider {
         pendingBytes.reserveCapacity(bytesPerChunk * 2)
 
         func processChunk(_ chunkData: ArraySlice<UInt8>) {
-            let rms = computeRMS(chunkData)
+            let rms = Self.computeRMS(chunkData)
 
             let chunkStartTime = Double(chunkIndex) * configuration.chunkDuration
             let isSilent = rms < configuration.silenceThresholdDB
@@ -203,7 +230,7 @@ public final class SilenceDetectionProvider: AnalysisProvider {
     }
 
     /// Computes RMS power in dB for a chunk of 16-bit PCM samples.
-    private func computeRMS(_ data: ArraySlice<UInt8>) -> Float {
+    private static func computeRMS(_ data: ArraySlice<UInt8>) -> Float {
         var sumSquares: Float = 0
         let sampleCount = data.count / 2
 

@@ -79,7 +79,7 @@ struct WaveformGeneratorTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let asset = MediaAsset(originalURL: url, kind: .audio, duration: 0.5)
-        let waveform = WaveformGenerator.generate(for: asset)
+        let waveform = await WaveformGenerator.generateAsync(for: asset)
 
         #expect(waveform != nil)
         guard let waveform else { return }
@@ -108,7 +108,7 @@ struct WaveformGeneratorTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let asset = MediaAsset(originalURL: url, kind: .audio, duration: 0.25)
-        let waveform = WaveformGenerator.generate(for: asset)
+        let waveform = await WaveformGenerator.generateAsync(for: asset)
 
         #expect(waveform != nil)
         guard let waveform else { return }
@@ -138,7 +138,7 @@ struct WaveformGeneratorTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let asset = MediaAsset(originalURL: url, kind: .audio, duration: 0.9)
-        let waveform = WaveformGenerator.generate(for: asset)
+        let waveform = await WaveformGenerator.generateAsync(for: asset)
 
         #expect(waveform != nil)
         guard let waveform else { return }
@@ -173,7 +173,7 @@ struct WaveformGeneratorTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let asset = MediaAsset(originalURL: url, kind: .audio)
-        let waveform = WaveformGenerator.generate(for: asset)
+        let waveform = await WaveformGenerator.generateAsync(for: asset)
 
         #expect(waveform != nil)
         guard let waveform else { return }
@@ -187,12 +187,12 @@ struct WaveformGeneratorTests {
     // MARK: - Non-existent file
 
     @Test("Returns nil for non-existent file")
-    func nonExistentFile() {
+    func nonExistentFile() async {
         let asset = MediaAsset(
             originalURL: URL(fileURLWithPath: "/tmp/nonexistent_waveform_\(UUID().uuidString).wav"),
             kind: .audio
         )
-        let waveform = WaveformGenerator.generate(for: asset)
+        let waveform = await WaveformGenerator.generateAsync(for: asset)
         #expect(waveform == nil)
     }
 
@@ -238,7 +238,7 @@ struct WaveformGeneratorTests {
             defer { try? FileManager.default.removeItem(at: url) }
 
             let asset = MediaAsset(originalURL: url, kind: .audio, duration: durationSecs)
-            let waveform = WaveformGenerator.generate(for: asset)
+            let waveform = await WaveformGenerator.generateAsync(for: asset)
 
             #expect(waveform != nil, "Failed for duration \(durationSecs)s")
             #expect(waveform?.samples.count == 200, "Expected 200 bins for duration \(durationSecs)s, got \(waveform?.samples.count ?? -1)")

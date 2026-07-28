@@ -1150,7 +1150,14 @@ struct TimelineView: View {
         // by the background decode. Reading here makes the observation tracker
         // register the waveformCache access, so the view rebuilds (and the
         // Canvas re-renders) once the real bins arrive.
+        //
+        // The read is PURE: waveform(for:) never writes to waveformCache, so it
+        // cannot trip "modifying state during view update". The decode that
+        // fills a miss is requested from the .task modifier below, which runs
+        // outside body evaluation — mirroring TimelineFilmstripLayer's pattern
+        // (read snapshot in body, request from .task).
         let samples = viewModel.waveform(for: clip)
+        let clipId = clip.id
         return Canvas { context, size in
             let sampleCount = samples.isEmpty ? max(12, Int(size.width / 7)) : samples.count
             let barWidth = max(1, size.width / CGFloat(sampleCount))
@@ -1166,6 +1173,14 @@ struct TimelineView: View {
                     height: barHeight
                 )
                 context.fill(Path(rect), with: .color(.white.opacity(selected ? 0.36 : 0.24)))
+            }
+        }
+        .task(id: clipId) {
+            // Trigger the decode only when the sample array is empty AND a
+            // decode has not already populated the cache. Kept out of body so
+            // the cache write happens during the task, not during view update.
+            if viewModel.waveform(for: clip).isEmpty {
+                viewModel.requestWaveformDecode(for: clip)
             }
         }
         .allowsHitTesting(false)

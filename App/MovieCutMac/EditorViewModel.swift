@@ -453,28 +453,38 @@ final class EditorViewModel {
     }
 
     /// Returns cached waveform bins for a clip, or an empty array when the
-    /// waveform has not been decoded yet. A cache miss never blocks: it kicks
-    /// off a background decode via ``WaveformGenerator/generateAsync(for:)``
-    /// (which runs on a non-cooperative GCD thread) and the decoded bins are
-    /// written back into ``waveformCache`` on the main actor. Because that
-    /// cache is observed, the timeline canvas redraws automatically once the
-    /// real samples arrive.
+    /// waveform has not been decoded yet. This is a **pure read** — it never
+    /// writes to `waveformCache` and never schedules a decode, so it is safe to
+    /// call during a SwiftUI `body` evaluation without the "modifying state
+    /// during view update" anti-pattern. A miss is resolved by
+    /// ``requestWaveformDecode(for:)``, which the view invokes from a lifecycle
+    /// modifier (`.task`), not from body.
+    ///
+    /// Because `waveformCache` is observed (not `@ObservationIgnored`), reading
+    /// it in body registers the observation dependency, so the canvas redraws
+    /// once the background decode writes the real bins.
     func waveform(for clip: Clip) -> [CGFloat] {
-        if let cached = waveformCache[clip.id] { return cached }
+        waveformCache[clip.id] ?? []
+    }
 
-        guard
-            clip.kind == .video || clip.kind == .audio,
-            let assetId = clip.assetId,
-            let asset = currentProject.mediaLibrary.assets[assetId],
-            asset.kind == .video || asset.kind == .audio
+    /// Triggers a background waveform decode for a clip if one has not already
+    /// been requested. Intended to be called from a SwiftUI lifecycle modifier
+    /// (`.task` / `.onAppear`), NOT from `body` evaluation, so the cache writes
+    /// it performs (the in-flight mark and the eventual decoded-bin write) never
+    /// happen during a view update.
+    func requestWaveformDecode(for clip: Clip) {
+        guard clip.kind == .video || clip.kind == .audio,
+              let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId],
+              asset.kind == .video || asset.kind == .audio
         else {
-            waveformCache[clip.id] = []
-            return []
+            // Not a decodable media kind: record the negative result so the
+            // view stops requesting. Written here (outside body), not in
+            // waveform(for:).
+            if waveformCache[clip.id] == nil { waveformCache[clip.id] = [] }
+            return
         }
-
-        waveformCache[clip.id] = []
         startWaveformDecode(for: clip.id, asset: asset)
-        return []
     }
 
     /// Schedules exactly one background waveform decode per clip id while a

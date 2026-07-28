@@ -79,7 +79,7 @@ struct ClipTimeMappingTests {
 
     // MARK: - Speed ramp
 
-    @Test("Speed ramp mapping is monotonically increasing")
+    @Test("Speed ramp mapping is strictly increasing (no saturation)")
     func speedRampMonotonic() throws {
         // A ramp from 1x to 2x across the source.
         let ramp = [
@@ -90,12 +90,23 @@ struct ClipTimeMappingTests {
         let rendered = m.renderedTimelineDuration
         #expect(rendered > 0)
 
-        var previousSource: TimeInterval = -1
+        // Non-decreasing alone cannot catch a clamping bug: a saturated (flat)
+        // mapping is also non-decreasing. Require that interior timeline steps
+        // advance source time by more than a frame, so a clamp that collapses
+        // the clip tail onto one frame fails this assertion.
         let steps = 20
+        let frame = 1.0 / fps30
+        var previousSource: TimeInterval?
         for i in 0...steps {
             let t = m.timelineStart + rendered * Double(i) / Double(steps)
             let source = m.sourceTime(forTimelineTime: t)
-            #expect(source >= previousSource, "ramp not monotonic at step \(i): \(source) < \(previousSource)")
+            if let previous = previousSource {
+                #expect(source >= previous, "ramp not monotonic at step \(i): \(source) < \(previous)")
+                #expect(
+                    (source - previous) > frame,
+                    "ramp saturated at step \(i): source advanced only \(source - previous)s (<= 1 frame), expected real progression"
+                )
+            }
             previousSource = source
         }
     }
@@ -121,6 +132,41 @@ struct ClipTimeMappingTests {
             #expect(
                 ClipTimeMapping.isWithinFrames(back, t, frames: 1, fps: fps30),
                 "ramp fraction=\(f): round-trip \(back) != \(t) within 1 frame"
+            )
+        }
+    }
+
+    @Test("Net slow-mo ramp does not collapse the clip tail to one source frame")
+    func speedRampNetSlowMoNotSaturated() throws {
+        // A pure 0.5x ramp over 10s of source. The ramp integrates 1/rate, so
+        // source 1.0 -> output 2.0 and the clip renders to 20s on the timeline.
+        // Before the fix, sourceOffsetForLocalTimelineOffset clamped the
+        // normalized output to 1 (instead of the ramp's output span 2.0), so
+        // every timeline time beyond 10s collapsed onto source 5s, and
+        // timelineTime(forSourceTime: 10) returned 10s instead of 20s.
+        let ramp = [
+            SpeedRampPoint(time: 0, rate: 0.5),
+            SpeedRampPoint(time: 1, rate: 0.5)
+        ]
+        let m = mapping(sourceDuration: 10, rate: 1, ramp: ramp)
+
+        #expect(m.renderedTimelineDuration == 20.0)
+
+        // Timeline midpoint of a 0.5x clip -> source 7.5s (not 5.0).
+        #expect(ClipTimeMapping.isWithinFrames(m.sourceTime(forTimelineTime: 15), 7.5, frames: 1, fps: fps30))
+        // Timeline end -> source 10s (the full source range), not 5.0.
+        #expect(ClipTimeMapping.isWithinFrames(m.sourceTime(forTimelineTime: 20), 10.0, frames: 1, fps: fps30))
+        // Source end -> timeline 20s (the full rendered span), not 10.0.
+        #expect(ClipTimeMapping.isWithinFrames(m.timelineTime(forSourceTime: 10), 20.0, frames: 1, fps: fps30))
+
+        // Whole-timeline round-trip within one frame across the slow span.
+        for f in stride(from: 0.0, through: 1.0, by: 0.1) {
+            let t = m.timelineStart + m.renderedTimelineDuration * f
+            let source = m.sourceTime(forTimelineTime: t)
+            let back = m.timelineTime(forSourceTime: source)
+            #expect(
+                ClipTimeMapping.isWithinFrames(back, t, frames: 1, fps: fps30),
+                "slow-mo fraction=\(f): round-trip \(back) != \(t) within 1 frame"
             )
         }
     }

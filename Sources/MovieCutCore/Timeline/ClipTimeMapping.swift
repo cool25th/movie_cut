@@ -209,16 +209,17 @@ public struct ClipTimeMapping: Sendable, Equatable {
         }
 
         if let curve = rampCurve {
-            // The ramp curve operates in normalized [0,1] source space, and its
-            // output shares the SAME scale (both multiplied by sourceDuration
-            // to reach absolute seconds). So the normalized output time passed
-            // to inverseMapping must be `timelineOffset / sourceDuration`, NOT
-            // `timelineOffset / renderedDuration` — those only coincide for a
-            // constant 1x rate. Using renderedDuration here introduced a large
-            // round-trip error for any non-trivial ramp.
+            // The ramp curve integrates 1/rate over normalized [0,1] source
+            // time, so a pure slow-mo segment produces a normalized output
+            // GREATER than 1 (e.g. a 0.5x ramp maps source 1.0 -> output 2.0).
+            // The normalized-output domain therefore spans [0, rampOutputSpan],
+            // NOT [0,1]. Clamping the timeline offset to 1 collapsed the
+            // entire second half of a slow-mo clip onto the final source frame.
             let sourceDuration = sourceRange.duration
             guard sourceDuration > 0 else { return 0 }
-            let normalizedOutput = min(max(timelineOffset / sourceDuration, 0), 1)
+            let rampOutputSpan = curve.timeMapping(sourceTime: 1.0)
+            guard rampOutputSpan.isFinite, rampOutputSpan > 0 else { return 0 }
+            let normalizedOutput = min(max(timelineOffset / sourceDuration, 0), rampOutputSpan)
             let normalizedSource = curve.inverseMapping(outputTime: normalizedOutput)
             return min(max(normalizedSource * sourceDuration, 0), sourceDuration)
         }
@@ -241,10 +242,13 @@ public struct ClipTimeMapping: Sendable, Equatable {
         if let curve = rampCurve {
             let normalizedSource = min(max(sourceOffset / sourceDuration, 0), 1)
             let normalizedOutput = curve.timeMapping(sourceTime: normalizedSource)
-            // timeMapping returns normalized output in source-scale units, so
-            // multiply by sourceDuration (not renderedDuration) to get timeline
-            // seconds.
-            return min(max(normalizedOutput * sourceDuration, 0), sourceDuration)
+            // timeMapping returns normalized output on the ramp's output scale;
+            // scaling by sourceDuration gives timeline seconds. For a slow-mo
+            // ramp this exceeds sourceDuration (e.g. 0.5x -> 2x), so the upper
+            // bound is the rendered timeline span, not sourceDuration. The old
+            // clamp to sourceDuration truncated the clip's slow tail.
+            let timelineSpan = renderedTimelineDuration
+            return min(max(normalizedOutput * sourceDuration, 0), timelineSpan)
         }
 
         let rate = sanitizedRate

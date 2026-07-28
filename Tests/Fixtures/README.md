@@ -12,6 +12,7 @@ depend on `ffmpeg` at run time. Resolved in tests via `MediaFixtures`
 | `moving_subject_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | Vision motion tracking IoU verification |
 | `tone_440hz_2s_mono.wav` | pcm_s16le, 44100Hz, mono, 2.0s | audio import / ducking / beat analysis |
 | `swatch_blue_64x64.png` | PNG, 64×64 | image import |
+| `cg_codable_parity.moviecut` | project JSON with mask + brushPoints, text clip + shadowOffset, card document | CGPoint/CGSize persistence parity — locks the on-disk array form (`[x, y]`) produced by CoreGraphics' native Codable across conformance changes |
 
 ## Regenerating
 

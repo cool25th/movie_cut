@@ -1,6 +1,5 @@
 #if canImport(UIKit)
 import SwiftUI
-import UIKit
 
 /// A transient transform derived from touch gestures.
 public struct GestureTransform: Sendable {

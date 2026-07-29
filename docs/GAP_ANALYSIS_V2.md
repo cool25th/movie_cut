@@ -11,7 +11,7 @@
 ## 이전 V2 분석과의 차이
 이전 V2 분석은 실제 코드 검증 기준에서 일부 항목을 부분 또는 미완료 상태로 분류했다. 이후 아래 구현이 완료되어 현재는 72개 전체 기능이 완전 구현 상태다.
 
-- iOS 편집 화면은 `ContentView`의 전체 편집기 레이아웃으로 대체되었다.
+- iOS 편집 화면은 `iOSContentView`의 전체 편집기 레이아웃으로 대체되었다.
 - iOS 프리뷰는 `PreviewView`의 `AVPlayer` 기반 composition 재생으로 연결되었다.
 - 배경 제거는 Vision `VNGeneratePersonSegmentationRequest` 기반 person segmentation을 사용한다.
 - 노이즈 감소는 `AVAudioEngine` 기반 high-pass filter와 noise gate를 적용한다.
@@ -186,7 +186,7 @@
 ### N. iOS 앱
 | 기능 | 구현 근거 | Status |
 |---|---|---|
-| iOS 편집 UI | `App/MovieCutiOS/ContentView.swift` 전체 editor layout | ✅ |
+| iOS 편집 UI | `App/MovieCutiOS/iOSContentView.swift` 전체 editor layout | ✅ |
 | iOS 프리뷰 | `App/MovieCutiOS/Views/PreviewView.swift`의 `AVPlayer` composition preview | ✅ |
 
 완료 판정 근거: iOS `ContentView`는 placeholder가 아니라 프로젝트 로딩, 타임라인, 미디어 import, inspector를 포함한 편집 화면이며, `PreviewView`는 `AVPlayer` 기반 재생, seek, 현재 시간, preview composition 연결을 제공한다.
@@ -205,7 +205,7 @@
 | 6 | `Sources/MovieCutCore/Cloud/CloudSyncService.swift` | ✅ 완료 | iCloud Drive 및 `FileManager.ubiquityIdentityToken` 기반 동기화 |
 | 7 | `Sources/MovieCutCore/Templates/TemplateMarketplace.swift` | ✅ 완료 | 12개 템플릿을 포함한 로컬 JSON catalog |
 | 8 | `Sources/MovieCutCore/Export/ExportProgress.swift` | ✅ 완료 | 실제 `AVAssetExportSession.progress` polling |
-| 9 | `App/MovieCutiOS/ContentView.swift` | ✅ 완료 | 전체 iOS editor layout |
+| 9 | `App/MovieCutiOS/iOSContentView.swift` | ✅ 완료 | 전체 iOS editor layout |
 | 10 | `App/MovieCutiOS/Views/PreviewView.swift` | ✅ 완료 | `AVPlayer` 기반 preview composition |
 | 11 | 필터 intensity 적용 경로 | ✅ 완료 | 플러그인별 `intensity` 파라미터 반영 |
 | 12 | 속도 램핑 곡선 편집/렌더링 경로 | ✅ 완료 | `SpeedRampCurve` forward/inverse time mapping |

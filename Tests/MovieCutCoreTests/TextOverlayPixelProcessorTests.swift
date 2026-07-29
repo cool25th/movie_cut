@@ -116,6 +116,105 @@ struct TextOverlayPixelProcessorTests {
         #expect(processed.extent == image.extent)
     }
 
+    @Test("karaoke disabled renders identically to a uniform single color")
+    func karaokeDisabledMatchesUniformBaseline() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        let baseContent = TextClipContent(
+            text: "ONE TWO",
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "ONE", startTime: 0, endTime: 0.5, confidence: 1),
+                WordTiming(text: "TWO", startTime: 0.5, endTime: 1.0, confidence: 1)
+            ]
+        )
+        // karaokeEnabled stays at its default of false, so word timings must be
+        // ignored and the output must match the no-timings baseline exactly.
+        let baseline = TextOverlayPixelProcessor.apply(
+            TextClipContent(
+                text: "ONE TWO",
+                fontFamily: "Helvetica Neue",
+                fontSize: 42,
+                fontColor: "#FFFFFF",
+                alignment: .center,
+                position: CGPoint(x: 80, y: 40)
+            ),
+            to: image,
+            at: 0.25
+        )
+        let processed = TextOverlayPixelProcessor.apply(baseContent, to: image, at: 0.25)
+
+        #expect(totalAlpha(in: baseline) == totalAlpha(in: processed))
+    }
+
+    @Test("karaoke highlight recolors pixels as playback crosses each word")
+    func karaokeHighlightRecolorsPixelsAcrossWords() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        // Base font white (#FFFFFF), highlight red (#FF0000). The red channel is
+        // identical for both colors, so the tell is the green channel: white
+        // glyphs carry full green, red glyphs carry none.
+        let content = TextClipContent(
+            text: "AAA BBB",
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "AAA", startTime: 1.0, endTime: 1.5, confidence: 1),
+                WordTiming(text: "BBB", startTime: 2.0, endTime: 2.5, confidence: 1)
+            ],
+            karaokeEnabled: true,
+            highlightFontColor: "#FF0000"
+        )
+
+        // Before either word starts, every glyph is white → lots of green.
+        let beforeWords = TextOverlayPixelProcessor.apply(content, to: image, at: 0.1)
+        // After both words have started, every glyph is red → little green.
+        let afterWords = TextOverlayPixelProcessor.apply(content, to: image, at: 2.1)
+
+        let beforeGreen = totalGreen(in: beforeWords)
+        let afterGreen = totalGreen(in: afterWords)
+        // Highlighting in red strips green; a uniform-white renderer would leave
+        // both sums equal.
+        #expect(beforeGreen > afterGreen + 50, "karaoke highlight did not recolor glyphs (beforeGreen=\(beforeGreen), afterGreen=\(afterGreen))")
+    }
+
+    @Test("karaoke falls back to uniform color when token count disagrees with timings")
+    func karaokeFallsBackWhenTokenCountDisagrees() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        // Three words in text but only two timings: the feature must give up and
+        // render uniform white, so the red highlight never strips green.
+        let content = TextClipContent(
+            text: "ONE TWO THREE",
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "ONE", startTime: 0, endTime: 0.5, confidence: 1),
+                WordTiming(text: "TWO", startTime: 0.5, endTime: 1.0, confidence: 1)
+            ],
+            karaokeEnabled: true,
+            highlightFontColor: "#FF0000"
+        )
+
+        let processed = TextOverlayPixelProcessor.apply(content, to: image, at: 0.75)
+        // Uniform-white fallback means the green channel stays high (white text),
+        // rather than dropping toward zero (red highlight).
+        #expect(totalGreen(in: processed) > 200_000)
+    }
+
     private func coreImageRenderingAvailable() -> Bool {
         GoldenPixel.assertRendererFunctional()
         return true
@@ -173,6 +272,24 @@ struct TextOverlayPixelProcessorTests {
         }
 
         return stride(from: 3, to: bytes.count, by: 4).reduce(0) { total, offset in
+            total + Int(bytes[offset])
+        }
+    }
+
+    private func totalGreen(in image: CIImage) -> Int {
+        var bytes = [UInt8](repeating: 0, count: Int(imageBounds.width * imageBounds.height) * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            GoldenPixel.context.render(
+                image.cropped(to: imageBounds),
+                toBitmap: buffer.baseAddress!,
+                rowBytes: Int(imageBounds.width) * 4,
+                bounds: imageBounds,
+                format: .RGBA8,
+                colorSpace: colorSpace
+            )
+        }
+
+        return stride(from: 1, to: bytes.count, by: 4).reduce(0) { total, offset in
             total + Int(bytes[offset])
         }
     }

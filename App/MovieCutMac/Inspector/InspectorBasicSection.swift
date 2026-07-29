@@ -1064,9 +1064,58 @@ struct InspectorBasicSection: View {
             textBackgroundControls(textContent)
             textDecorationControls(textContent)
             textQuickStylePresets(textContent)
+            karaokeControls(textContent)
             textAnimationControls(textContent)
             userStylePresetControls(textContent)
             textToSpeechControls(textContent)
+        }
+    }
+
+    /// Karaoke (word-by-word highlight) controls. Only shown when the clip has
+    /// word timings from transcription; otherwise the feature has nothing to
+    /// highlight and stays hidden.
+    private func karaokeControls(_ textContent: TextClipContent) -> some View {
+        let hasWordTimings = textContent.wordTimings?.isEmpty == false
+        return Group {
+            if hasWordTimings {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Karaoke")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Highlight words", isOn: Binding(
+                        get: { textContent.karaokeEnabled },
+                        set: { isEnabled in
+                            var updated = textContent
+                            updated.karaokeEnabled = isEnabled
+                            Task { await viewModel.updateSelectedTextContent(updated) }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .disabled(!hasWordTimings)
+
+                    if textContent.karaokeEnabled {
+                        HStack(spacing: 8) {
+                            Text("Highlight")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            ColorPicker("Highlight", selection: Binding(
+                                get: {
+                                    colorFromHex(textContent.highlightFontColor ?? textContent.fontColor)
+                                },
+                                set: { newValue in
+                                    var updated = textContent
+                                    updated.highlightFontColor = hexFromColor(newValue)
+                                    Task { await viewModel.updateSelectedTextContent(updated) }
+                                }
+                            ))
+                            .labelsHidden()
+                        }
+                    }
+                }
+            }
         }
     }
 

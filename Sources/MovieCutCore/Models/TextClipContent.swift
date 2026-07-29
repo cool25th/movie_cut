@@ -84,6 +84,14 @@ public struct TextClipContent: Codable, Sendable, Equatable {
     /// Optional word timings relative to this text clip's source/timeline start.
     public var wordTimings: [WordTiming]?
 
+    /// When true and `wordTimings` are present, words are progressively highlighted
+    /// as playback/export passes their start time (karaoke-style captions).
+    public var karaokeEnabled: Bool
+
+    /// Highlight color (hex) used for the active and already-spoken words in
+    /// karaoke mode. When nil, `fontColor` is used for the active word too.
+    public var highlightFontColor: String?
+
     /// Whether this text payload should be treated as a sticker overlay.
     public var isSticker: Bool {
         contentKind == .sticker
@@ -109,6 +117,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         case isBold
         case isItalic
         case wordTimings
+        case karaokeEnabled
+        case highlightFontColor
     }
 
     private struct LegacyPoint: Decodable {
@@ -136,7 +146,9 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         shadowBlur: Double? = nil,
         isBold: Bool = false,
         isItalic: Bool = false,
-        wordTimings: [WordTiming]? = nil
+        wordTimings: [WordTiming]? = nil,
+        karaokeEnabled: Bool = false,
+        highlightFontColor: String? = nil
     ) {
         self.text = text
         self.fontFamily = fontFamily
@@ -157,6 +169,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         self.isBold = isBold
         self.isItalic = isItalic
         self.wordTimings = wordTimings
+        self.karaokeEnabled = karaokeEnabled
+        self.highlightFontColor = highlightFontColor
     }
 
     public init(from decoder: any Decoder) throws {
@@ -180,6 +194,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         isBold = try container.decodeIfPresent(Bool.self, forKey: .isBold) ?? false
         isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
         wordTimings = try container.decodeIfPresent([WordTiming].self, forKey: .wordTimings)
+        karaokeEnabled = try container.decodeIfPresent(Bool.self, forKey: .karaokeEnabled) ?? false
+        highlightFontColor = try container.decodeIfPresent(String.self, forKey: .highlightFontColor)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -203,6 +219,8 @@ public struct TextClipContent: Codable, Sendable, Equatable {
         if isBold { try container.encode(isBold, forKey: .isBold) }
         if isItalic { try container.encode(isItalic, forKey: .isItalic) }
         try container.encodeIfPresent(wordTimings, forKey: .wordTimings)
+        if karaokeEnabled { try container.encode(karaokeEnabled, forKey: .karaokeEnabled) }
+        try container.encodeIfPresent(highlightFontColor, forKey: .highlightFontColor)
     }
 
     private static func decodePointIfPresent(

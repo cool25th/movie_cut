@@ -139,11 +139,14 @@ public enum TextOverlayPixelProcessor {
             italic: textContent.isItalic
         )
         let textColor = cgColor(hexRGB: textContent.fontColor)
-        let attributedString = attributedText(
-            textState.visibleText,
+        let localTime = karaokeLocalTime(for: item, at: time)
+        let attributedString = karaokeAttributedText(
+            for: textContent,
+            visibleText: textState.visibleText,
             font: font,
-            color: textColor,
-            alignment: textContent.alignment
+            baseColor: textColor,
+            alignment: textContent.alignment,
+            localTime: localTime
         )
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
         let paddingX = max(fontSize * 0.35, 10)
@@ -313,6 +316,72 @@ public enum TextOverlayPixelProcessor {
 
             return NSAttributedString(string: text, attributes: attributes)
         }
+    }
+
+    /// Clip-relative time used to pick the active karaoke word.
+    private static func karaokeLocalTime(for item: TextOverlayRenderItem, at time: TimeInterval) -> TimeInterval {
+        guard time.isFinite, item.timeRangeStart.isFinite else { return 0 }
+        let local = time - item.timeRangeStart
+        return local.isFinite ? max(0, local) : 0
+    }
+
+    /// Returns a per-word colored attributed string when karaoke mode is on and
+    /// the clip carries word timings. Falls back to the uniform single-color
+    /// string otherwise, preserving prior render behavior exactly.
+    ///
+    /// Karaoke style: words whose `startTime` has already passed (including the
+    /// currently active word) render in the highlight color; words still to come
+    /// render in the base color. Matching pairs the visible text's whitespace-
+    /// split tokens with `wordTimings` in order; if counts differ the feature is
+    /// skipped and the uniform fallback is used.
+    private static func karaokeAttributedText(
+        for textContent: TextClipContent,
+        visibleText: String,
+        font: CTFont,
+        baseColor: CGColor,
+        alignment: TextAlignment,
+        localTime: TimeInterval
+    ) -> NSAttributedString {
+        let wordTimings = textContent.wordTimings ?? []
+        guard textContent.karaokeEnabled, !wordTimings.isEmpty else {
+            return attributedText(visibleText, font: font, color: baseColor, alignment: alignment)
+        }
+
+        // Preserve original whitespace exactly so the highlighted string still
+        // matches the layout of the uniform version.
+        let tokens = visibleText.unicodeScalars.split(omittingEmptySubsequences: false) { scalar in
+            CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }.map { String($0) }
+
+        guard tokens.count == wordTimings.count else {
+            return attributedText(visibleText, font: font, color: baseColor, alignment: alignment)
+        }
+
+        let highlightColor = cgColor(hexRGB: textContent.highlightFontColor ?? textContent.fontColor)
+
+        var ctAlignment = coreTextAlignment(for: alignment)
+        let paragraphStyle = withUnsafePointer(to: &ctAlignment) { alignmentPointer in
+            CTParagraphStyleCreate([
+                CTParagraphStyleSetting(
+                    spec: .alignment,
+                    valueSize: MemoryLayout<CTTextAlignment>.size,
+                    value: alignmentPointer
+                )
+            ], 1)
+        }
+
+        let result = NSMutableAttributedString()
+        for (index, token) in tokens.enumerated() {
+            let hasBegun = wordTimings[index].startTime <= localTime
+            let color = hasBegun ? highlightColor : baseColor
+            let attributes: [NSAttributedString.Key: Any] = [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
+            ]
+            result.append(NSAttributedString(string: token, attributes: attributes))
+        }
+        return result
     }
 
     private static func coreTextAlignment(for alignment: TextAlignment) -> CTTextAlignment {

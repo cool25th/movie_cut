@@ -34,6 +34,10 @@ final class PlaybackEngine {
     private var compositionGeneration: UInt64 = 0
 
     @ObservationIgnored private var textLayers: [CALayer] = []
+    /// Tracks karaoke text clips so their per-word layers can be recolored on
+    /// the playback tick. Keyed by the text clip's timeline start, which is
+    /// unique within a track and stable across the composition build.
+    @ObservationIgnored private var karaokeClips: [KaraokePreviewClip] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
@@ -277,6 +281,7 @@ final class PlaybackEngine {
         [URL]
     ) {
         textLayers = []
+        karaokeClips = []
         var temporaryReverseRenderURLs: [URL] = []
         var shouldKeepTemporaryReverseRenderURLs = false
         defer {
@@ -898,6 +903,36 @@ final class PlaybackEngine {
                         continue
                     }
 
+                    // Karaoke captions render into a single CATextLayer whose
+                    // attributed string (per-word color) is refreshed on the
+                    // playback tick. Falls through to the uniform-color layer for
+                    // ordinary text, so non-karaoke clips are unchanged.
+                    if textContent.karaokeEnabled,
+                       let wordTimings = textContent.wordTimings,
+                       !wordTimings.isEmpty,
+                       let karaokeLayer = makeKaraokeTextLayer(
+                           for: clip,
+                           textContent: textContent,
+                           fontSize: fontSize,
+                           layerPosition: layerPosition,
+                           canvasSize: canvasSize
+                       ) {
+                        textLayers.append(karaokeLayer.layer)
+                        karaokeClips.append(
+                            KaraokePreviewClip(
+                                timelineStart: clip.timelineRange.start,
+                                text: textContent.text,
+                                wordTimings: wordTimings,
+                                baseColor: textContent.fontColor,
+                                highlightColor: textContent.highlightFontColor ?? textContent.fontColor,
+                                alignment: textContent.alignment,
+                                layer: karaokeLayer.layer,
+                                font: karaokeLayer.font
+                            )
+                        )
+                        continue
+                    }
+
                     let textLayer = CATextLayer()
                     let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
                     let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
@@ -1307,6 +1342,141 @@ final class PlaybackEngine {
         if isPlaying, duration > 0, seconds >= duration {
             pause()
         }
+        refreshKaraokeHighlights(at: seconds)
+    }
+
+    /// Recolors the per-word attributed string of each karaoke text layer for
+    /// the current playback time. Called on the playback tick so the active
+    /// word advances in lockstep with audio. A no-op when no karaoke clips are
+    /// loaded, leaving ordinary playback untouched.
+    private func refreshKaraokeHighlights(at timelineTime: TimeInterval) {
+        guard !karaokeClips.isEmpty else { return }
+        for clip in karaokeClips {
+            let localTime = timelineTime - clip.timelineStart
+            clip.layer.string = clip.attributedString(at: max(0, localTime))
+        }
+    }
+
+    /// Alignment mapping duplicated at class scope because the build-composition
+    /// helper that the uniform-color path uses is a local function. Kept in sync
+    /// with the local `textAlignmentMode(for:)`.
+    private static func karaokeAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
+        switch alignment {
+        case .leading:
+            return .left
+        case .center:
+            return .center
+        case .trailing:
+            return .right
+        case .justified:
+            return .justified
+        }
+    }
+
+    /// Builds the single CATextLayer used for a karaoke caption. The layer's
+    /// attributed string is seeded once here for t=0 and then refreshed by
+    /// `refreshKaraokeHighlights` on each playback tick. Returns nil when the
+    /// text tokens do not line up with the word timings, in which case the
+    /// caller falls back to the ordinary uniform-color layer.
+    private func makeKaraokeTextLayer(
+        for clip: Clip,
+        textContent: TextClipContent,
+        fontSize: CGFloat,
+        layerPosition: CGPoint,
+        canvasSize: CGSize
+    ) -> (layer: CATextLayer, font: NSFont)? {
+        guard let wordTimings = textContent.wordTimings, !wordTimings.isEmpty else {
+            return nil
+        }
+
+        let fontName = textContent.fontFamily == "System" ? "Helvetica Neue" : textContent.fontFamily
+        let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
+
+        let textLayer = CATextLayer()
+        textLayer.font = font
+        textLayer.fontSize = fontSize
+        textLayer.alignmentMode = Self.karaokeAlignmentMode(for: textContent.alignment)
+        textLayer.contentsScale = 2.0
+        textLayer.opacity = Float(min(max(clip.opacity, 0), 1))
+        textLayer.frame = CGRect(
+            x: layerPosition.x - 100,
+            y: canvasSize.height - layerPosition.y - fontSize,
+            width: 200,
+            height: fontSize + 20
+        )
+        let layerTransform = CGAffineTransform(rotationAngle: CGFloat(clip.transform.rotation * .pi / 180))
+            .scaledBy(x: clip.transform.scale.width, y: clip.transform.scale.height)
+        textLayer.setAffineTransform(layerTransform)
+
+        textLayer.beginTime = AVCoreAnimationBeginTimeAtZero + clip.timelineRange.start
+        textLayer.duration = clip.timelineRange.duration
+
+        let preview = KaraokePreviewClip(
+            timelineStart: clip.timelineRange.start,
+            text: textContent.text,
+            wordTimings: wordTimings,
+            baseColor: textContent.fontColor,
+            highlightColor: textContent.highlightFontColor ?? textContent.fontColor,
+            alignment: textContent.alignment,
+            layer: textLayer,
+            font: font
+        )
+        // Seed the initial state; the playback tick takes over from here.
+        textLayer.string = preview.attributedString(at: 0)
+        return (textLayer, font)
+    }
+}
+
+/// Backing state for one karaoke text clip's live-preview recoloring.
+private struct KaraokePreviewClip {
+    let timelineStart: TimeInterval
+    let text: String
+    let wordTimings: [WordTiming]
+    let baseColor: String
+    let highlightColor: String
+    let alignment: TextAlignment
+    let layer: CATextLayer
+    let font: NSFont
+
+    /// Produces the per-word colored attributed string for the given clip-local
+    /// time. Spoken and active words use `highlightColor`; upcoming words use
+    /// `baseColor`. Returns the plain string (no attributes) when token/timing
+    /// counts disagree, matching the export renderer's fallback behavior.
+    func attributedString(at localTime: TimeInterval) -> NSAttributedString {
+        let tokens = text.unicodeScalars.split(omittingEmptySubsequences: false) { scalar in
+            CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }.map { String($0) }
+
+        guard tokens.count == wordTimings.count else {
+            return NSAttributedString(string: text)
+        }
+
+        let result = NSMutableAttributedString()
+        for (index, token) in tokens.enumerated() {
+            let hasBegun = wordTimings[index].startTime <= localTime
+            let hex = hasBegun ? highlightColor : baseColor
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: Self.color(hexRGB: hex)
+            ]
+            result.append(NSAttributedString(string: token, attributes: attributes))
+        }
+        return result
+    }
+
+    /// Builds an `NSColor` from a `#RRGGBB` hex string. Mirrors the Core
+    /// renderer's `CGColor` helper so preview colors match export output.
+    private static func color(hexRGB: String) -> NSColor {
+        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+            return NSColor(red: 1, green: 1, blue: 1, alpha: 1)
+        }
+        return NSColor(
+            calibratedRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 

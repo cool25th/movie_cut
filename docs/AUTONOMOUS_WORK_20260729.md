@@ -41,7 +41,7 @@
 
 - [ ] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄, `struct AutoAssistantView`, internal). `refactor/remove-dead-autoassistantview`. 게이트 통과 시 커밋 `refactor(moviecut): remove dead AutoAssistantView`.
 - [ ] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄, internal). 커밋 `refactor(moviecut): remove dead MaskCompositor wrapper`.
-- [ ] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`.
+- [x] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`. ✅ DONE — GATE_PASS, swift test 984 유지.
 - [ ] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄, internal). 커밋 `refactor(moviecut): remove dead ZoomTransitionPlugin`.
 - [ ] **A5** `App/MovieCutMac/Effects/BuiltinTransitionPlugins.swift` (76줄 전체 dead cluster: enum + 4 private plugin class + private protocol). `registerAll` 호출 0회. 커밋 `refactor(moviecut): remove dead BuiltinTransitionPlugins cluster`.
 - [ ] **A6** `App/MovieCutiOS/Views/IOSTrimHandleView.swift` (121줄, `#if os(iOS)`). ⚠️ **iOS 빌드 검증 불가** — 게이트(macOS+Core test) 통과만 확인 가능. iOS 미검증임을 LOG에 명시. 커밋 `refactor(moviecut): remove dead IOSTrimHandleView`.
@@ -77,3 +77,21 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 3 — 2026-07-29 (cron 발화) — A3 ✅ DONE
+- **항목**: A3 — `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` 제거
+- **상태**: DONE
+- **재검증**: grep `GlitchTransitionPlugin` → 자기 선언 1건뿐 (99줄, 단일 internal class, TransitionPlugin 준수하나 등록/인스턴스화 0회)
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK
+- **변경**: 파일 -99줄 + pbxproj 정리(net -5)
+- **비고**: Mac internal 코드. iOS 빌드 미검증이나 Mac 게이트로 검증 완료.
+
+### ENTRY 2 — 2026-07-29 (cron 발화) — A2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A2 — `App/MovieCutMac/Effects/MaskCompositor.swift` 제거
+- **상태**: DONE (브랜치 `refactor/remove-dead-maskcompositor`, 커밋 `5d8939b`)
+- **게이트 결과**: GATE_PASS — swift test 984/162 passed.
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A1 — `App/MovieCutMac/Analysis/AutoAssistantView.swift` 제거
+- **상태**: DONE (브랜치 `refactor/remove-dead-autoassistantview`, 커밋 `673b931`)
+- **게이트 결과**: GATE_PASS — swift test 984/162 passed.

@@ -39,25 +39,25 @@
 
 ### Track A — internal dead code 제거 (grep 1회 자기참조 확인됨)
 
-- [ ] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄, `struct AutoAssistantView`, internal). `refactor/remove-dead-autoassistantview`. 게이트 통과 시 커밋 `refactor(moviecut): remove dead AutoAssistantView`.
-- [ ] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄, internal). 커밋 `refactor(moviecut): remove dead MaskCompositor wrapper`.
-- [ ] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`.
-- [ ] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄, internal). 커밋 `refactor(moviecut): remove dead ZoomTransitionPlugin`.
-- [ ] **A5** `App/MovieCutMac/Effects/BuiltinTransitionPlugins.swift` (76줄 전체 dead cluster: enum + 4 private plugin class + private protocol). `registerAll` 호출 0회. 커밋 `refactor(moviecut): remove dead BuiltinTransitionPlugins cluster`.
-- [ ] **A6** `App/MovieCutiOS/Views/IOSTrimHandleView.swift` (121줄, `#if os(iOS)`). ⚠️ **iOS 빌드 검증 불가** — 게이트(macOS+Core test) 통과만 확인 가능. iOS 미검증임을 LOG에 명시. 커밋 `refactor(moviecut): remove dead IOSTrimHandleView`.
+- [x] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄). ✅ DONE + **main 병합**(2026-07-29 정리 세션).
+- [x] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄). ✅ DONE + **main 병합**.
+- [x] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄). ✅ DONE + **main 병합**.
+- [x] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄). ✅ DONE + **main 병합**.
+- [x] **A5** `App/MovieCutMac/Effects/BuiltinTransitionPlugins.swift` (76줄 dead cluster). ✅ DONE + **main 병합**.
+- [x] **A6** `App/MovieCutiOS/Views/IOSTrimHandleView.swift` (121줄, `#if os(iOS)`). ✅ DONE + **main 병합**. ⚠️ **iOS 빌드 미검증** — 이 호스트는 iOS 26.5 플랫폼 미설치라 컴파일 확인 불가. 병합 근거는 repo-wide grep 참조 **0건**(자기 선언뿐)이며, 그것이 이 항목의 증거 상한이다.
 
 ### Track B — unused import 제거 (HIGH 신뢰, 1개씩 컴파일 검증)
 
-- [x] **B1** `Tests/MovieCutCoreTests/CriticalHighCoreTests.swift` — `import XCTest` 제거 (Swift Testing만 사용). 커밋 `chore(moviecut): drop unused XCTest import`. ✅ DONE — GATE_PASS, swift test 984 유지. 재검증: XCTest 심볼 0건, Swift Testing 57건.
-- [ ] **B2** `App/MovieCutMac/Inspector/InspectorShared.swift` — `import AppKit` 제거 (SwiftUI만 사용). 커밋 `chore(moviecut): drop unused AppKit import`.
-- [ ] **B3** `Sources/MovieCutCore/Models/GestureTransform.swift` — `#if canImport(UIKit)` 블록의 `import UIKit` 제거. 커밋 `chore(moviecut): drop unused UIKit import in GestureTransform`.
-- [ ] **B4** `Sources/MovieCutCore/Rendering/CubeLUTParser.swift:100` — `import CoreImage` 제거 (doc comment에만 언급). 커밋 `chore(moviecut): drop unused CoreImage import in CubeLUTParser`.
+- [x] **B1** `Tests/MovieCutCoreTests/CriticalHighCoreTests.swift` — `import XCTest` 제거. ✅ DONE + **main 병합**. 재검증: XCTest 심볼 0건, Swift Testing 57건.
+- [x] **B2** `App/MovieCutMac/Inspector/InspectorShared.swift` — `import AppKit` 제거. ✅ DONE + **main 병합**. NS* 심볼 0건, SwiftUI가 macOS에서 AppKit re-export.
+- [x] **B3** `Sources/MovieCutCore/Models/GestureTransform.swift` — `#if canImport(UIKit)` 블록의 `import UIKit` 제거. ✅ DONE + **main 병합**. ⚠️ **iOS 전용 코드 경로라 컴파일 미검증**. 병합 전 파일 전문 확인: 사용 타입이 `CGSize`/`CGFloat`/`Angle`/`CGPoint`/`ClipTransform`뿐이고 UIKit 전용 심볼 0건 — SwiftUI가 CoreGraphics를 re-export하므로 안전 판정.
+- [x] **B4** `Sources/MovieCutCore/Rendering/CubeLUTParser.swift` — `import CoreImage` 제거. ✅ DONE + **main 병합**. `#if canImport(CoreImage)` 블록이 `Data`/`CubeLUT`만 사용하고 `CIColorCube`는 doc comment에만 등장 — macOS 빌드로 검증됨.
 
 ### Track C — 문서 stale 참조 정리 (코드 아님, 게이트는 swift build/test로 회귀만)
 
-- [ ] **C1** `docs/PLATFORM_PARITY_MATRIX.md:223` — `IOSPlaybackEngine (dead code)` 항목 → ✅ 제거됨(7b5b2ad)으로 갱신. 커밋 `docs: mark IOSPlaybackEngine removal in parity matrix`.
-- [ ] **C2** `docs/GAP_ANALYSIS_V2.md` — `ContentView.swift` → `iOSContentView.swift` 3곳(:14,:189,:208). 커밋 `docs: fix iOSContentView path in gap analysis`.
-- [ ] **C3** `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` — 허구 타입 `NoiseReductionProcessor` → `NoiseReductionService` 5곳. 커밋 `docs: fix NoiseReductionService name in gap analyses`.
+- [x] **C1** `docs/PLATFORM_PARITY_MATRIX.md` — `IOSPlaybackEngine (dead code)` → 제거됨(7b5b2ad)으로 갱신. ✅ DONE + **main 병합**.
+- [x] **C2** `docs/GAP_ANALYSIS_V2.md` — `ContentView.swift` → `iOSContentView.swift`. ✅ DONE + **main 병합**.
+- [ ] **C3** `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` — 허구 타입 `NoiseReductionProcessor` → `NoiseReductionService` 5곳. 커밋 `docs: fix NoiseReductionService name in gap analyses`. **← 유일한 잔여 PENDING**
 
 ### (귀환 후 검토 — 무인 처리 제외) Track X — public API dead code
 
@@ -77,6 +77,16 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 9 — 2026-07-29 — 브랜치 정리 세션 (사용자 요청, 대화형)
+
+- **작업**: 대기 중이던 자율 작업 브랜치 12개 + 갭 분석 브랜치 1개를 **main에 병합**하고 브랜치를 정리했다. 이 항목은 cron 발화가 아니라 사용자가 귀환해 지시한 정리 작업이다.
+- **병합**: A1~A6, B1~B4, C1~C2 (12건) + `docs/gap-analysis-v13-capcut`(V13 CapCut 격차 재감사). 이미 main 조상이던 `fix/task-waveform-invalidation-regression`·`refactor/remove-dead-iosplaybackengine` 2개는 삭제.
+- **충돌 처리**: 11개 브랜치가 이 로그를, 6개가 `project.pbxproj`를 공유해 순차 병합 시 충돌했다. 병합 중에는 두 파일을 `--ours`로 보류하고, 완료 후 (a) `project.pbxproj`는 `xcodegen generate`로 재생성, (b) 이 로그는 실제 최종 상태로 재작성했다. 충돌 마커를 수작업으로 꿰매는 것보다 정확하다.
+- **xcodegen 함정 확인**: 재생성 전후 `Info.plist` md5 동일(`07afe178...` / `f1ddf934...`) — hand-maintained plist가 덮어써지지 않았다. `project.yml`에 `info:` 블록이 없어야 한다는 규율이 지켜지고 있음을 실증.
+- **삭제 검증**: dead 파일 6종 모두 repo-wide grep 참조 0건 확인 후 병합. 재생성된 pbxproj에서 6종 참조 0건(`AutoAssistantView` 잔여 4건은 살아있는 별개 파일 `IOSAutoAssistantView.swift`의 부분 문자열 매치).
+- **미검증 잔여**: A6(IOSTrimHandleView 삭제)와 B3(GestureTransform UIKit import 제거)은 **iOS 코드 경로라 컴파일 검증 불가**. grep/코드 판독이 증거 상한이며, 큐 규칙 7("iOS 타입/파일은 큐에 넣지 않음")에 어긋나게 등재됐던 항목이다. iOS 26.5 플랫폼 설치 후 재확인 대상.
+- **잔여 PENDING**: C3 1건.
 
 ### ENTRY 7 — 2026-07-29 (cron 발화) — B1 ✅ DONE (Track B 시작)
 - **항목**: B1 — `Tests/MovieCutCoreTests/CriticalHighCoreTests.swift` 의 `import XCTest` 제거

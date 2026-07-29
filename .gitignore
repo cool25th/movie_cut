@@ -1,5 +1,6 @@
 # Build artifacts
 .build/
+.build-check/
 .build-local/
 .swiftpm/
 DerivedData/
@@ -18,6 +19,7 @@ artifacts/
 # Local AI wiki/session scratch files accidentally created at repo root
 /index.md
 /log.md
+.zcode/
 
 # macOS
 .DS_Store

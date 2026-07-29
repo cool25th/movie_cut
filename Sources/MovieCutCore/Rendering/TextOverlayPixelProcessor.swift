@@ -325,15 +325,44 @@ public enum TextOverlayPixelProcessor {
         return local.isFinite ? max(0, local) : 0
     }
 
+    /// Returns the ranges of each maximal run of non-whitespace characters in
+    /// `text` — the karaoke "words". Word timings are matched against these runs
+    /// in order, and whitespace between them is deliberately left outside the
+    /// ranges. That keeps spaces, double spaces, and newlines untouched in the
+    /// original string while only the word runs get recolored, which is what
+    /// makes a karaoke render (with highlight == base color) match the uniform
+    /// baseline pixel-for-pixel.
+    ///
+    /// Both the export renderer and the live-preview renderer go through this
+    /// helper, so the two paths can never disagree on what counts as a word.
+    public static func karaokeWordRanges(in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index].isWhitespace {
+                index = text.index(after: index)
+                continue
+            }
+            let start = index
+            while index < text.endIndex, !text[index].isWhitespace {
+                index = text.index(after: index)
+            }
+            ranges.append(start..<index)
+        }
+        return ranges
+    }
+
     /// Returns a per-word colored attributed string when karaoke mode is on and
     /// the clip carries word timings. Falls back to the uniform single-color
     /// string otherwise, preserving prior render behavior exactly.
     ///
     /// Karaoke style: words whose `startTime` has already passed (including the
     /// currently active word) render in the highlight color; words still to come
-    /// render in the base color. Matching pairs the visible text's whitespace-
-    /// split tokens with `wordTimings` in order; if counts differ the feature is
-    /// skipped and the uniform fallback is used.
+    /// render in the base color. The original `visibleText` is used verbatim as
+    /// the attributed string's backing storage and color is applied only to each
+    /// word's range, so every space, double space, and newline is preserved by
+    /// construction. If the word-run count disagrees with `wordTimings` the
+    /// feature gives up and the uniform fallback is used.
     private static func karaokeAttributedText(
         for textContent: TextClipContent,
         visibleText: String,
@@ -347,13 +376,8 @@ public enum TextOverlayPixelProcessor {
             return attributedText(visibleText, font: font, color: baseColor, alignment: alignment)
         }
 
-        // Preserve original whitespace exactly so the highlighted string still
-        // matches the layout of the uniform version.
-        let tokens = visibleText.unicodeScalars.split(omittingEmptySubsequences: false) { scalar in
-            CharacterSet.whitespacesAndNewlines.contains(scalar)
-        }.map { String($0) }
-
-        guard tokens.count == wordTimings.count else {
+        let wordRanges = karaokeWordRanges(in: visibleText)
+        guard wordRanges.count == wordTimings.count else {
             return attributedText(visibleText, font: font, color: baseColor, alignment: alignment)
         }
 
@@ -370,16 +394,26 @@ public enum TextOverlayPixelProcessor {
             ], 1)
         }
 
-        let result = NSMutableAttributedString()
-        for (index, token) in tokens.enumerated() {
+        // Build over the original string so whitespace is never dropped: the
+        // font and paragraph style apply to the whole string once, then only
+        // the foreground color is set per word range.
+        let result = NSMutableAttributedString(string: visibleText)
+        let fullRange = NSRange(location: 0, length: result.length)
+        result.setAttributes(
+            [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
+            ],
+            range: fullRange
+        )
+        for (index, wordRange) in wordRanges.enumerated() {
             let hasBegun = wordTimings[index].startTime <= localTime
             let color = hasBegun ? highlightColor : baseColor
-            let attributes: [NSAttributedString.Key: Any] = [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
-                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle
-            ]
-            result.append(NSAttributedString(string: token, attributes: attributes))
+            result.addAttribute(
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String),
+                value: color,
+                range: NSRange(wordRange, in: visibleText)
+            )
         }
         return result
     }

@@ -187,6 +187,97 @@ struct TextOverlayPixelProcessorTests {
         #expect(beforeGreen > afterGreen + 50, "karaoke highlight did not recolor glyphs (beforeGreen=\(beforeGreen), afterGreen=\(afterGreen))")
     }
 
+    @Test("karaoke with highlight equal to base color matches uniform baseline pixel-for-pixel")
+    func karaokeWithHighlightEqualToBaseColorMatchesUniformBaseline() {
+        // R1 acceptance criterion: when the highlight color equals the base
+        // color, the only possible difference between the karaoke path and the
+        // uniform path is layout. With whitespace correctly preserved the two
+        // outputs must be pixel-identical. A passing-green-sum test cannot
+        // catch whitespace loss (the glyphs are identical), so this compares
+        // the full RGBA byte buffer.
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        let text = "ONE TWO"
+        let karaokeContent = TextClipContent(
+            text: text,
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "ONE", startTime: 0, endTime: 0.5, confidence: 1),
+                WordTiming(text: "TWO", startTime: 0.5, endTime: 1.0, confidence: 1)
+            ],
+            karaokeEnabled: true,
+            highlightFontColor: "#FFFFFF"
+        )
+        let uniformContent = TextClipContent(
+            text: text,
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40)
+        )
+
+        // localTime well past every word's start so the karaoke path exercises
+        // its per-word recoloring loop rather than the fallback branch.
+        let karaokeRendered = TextOverlayPixelProcessor.apply(karaokeContent, to: image, at: 0.75)
+        let uniformRendered = TextOverlayPixelProcessor.apply(uniformContent, to: image, at: 0.75)
+
+        #expect(
+            renderBytes(in: karaokeRendered) == renderBytes(in: uniformRendered),
+            "karaoke layout diverged from uniform when highlight == base color (whitespace lost)"
+        )
+    }
+
+    @Test("karaoke whitespace preservation holds with double spaces and newlines")
+    func karaokePreservesWhitespaceWithDoubleSpacesAndNewlines() {
+        // R1 acceptance criterion #3: a single space is not the only whitespace
+        // that must survive. Two spaces and an embedded newline must round-trip
+        // through the karaoke path unchanged, so it still matches the uniform
+        // baseline pixel-for-pixel.
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        // "AA  BB\nCC" — two words on line one separated by a double space, one
+        // word on line two. The whitespace-split token count is 3.
+        let text = "AA  BB\nCC"
+        let karaokeContent = TextClipContent(
+            text: text,
+            fontFamily: "Helvetica Neue",
+            fontSize: 28,
+            fontColor: "#FFFFFF",
+            alignment: .leading,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "AA", startTime: 0, endTime: 0.3, confidence: 1),
+                WordTiming(text: "BB", startTime: 0.3, endTime: 0.6, confidence: 1),
+                WordTiming(text: "CC", startTime: 0.6, endTime: 0.9, confidence: 1)
+            ],
+            karaokeEnabled: true,
+            highlightFontColor: "#FFFFFF"
+        )
+        let uniformContent = TextClipContent(
+            text: text,
+            fontFamily: "Helvetica Neue",
+            fontSize: 28,
+            fontColor: "#FFFFFF",
+            alignment: .leading,
+            position: CGPoint(x: 80, y: 40)
+        )
+
+        let karaokeRendered = TextOverlayPixelProcessor.apply(karaokeContent, to: image, at: 0.8)
+        let uniformRendered = TextOverlayPixelProcessor.apply(uniformContent, to: image, at: 0.8)
+
+        #expect(
+            renderBytes(in: karaokeRendered) == renderBytes(in: uniformRendered),
+            "karaoke layout diverged from uniform for multi-whitespace text"
+        )
+    }
+
     @Test("karaoke falls back to uniform color when token count disagrees with timings")
     func karaokeFallsBackWhenTokenCountDisagrees() {
         guard coreImageRenderingAvailable() else { return }
@@ -292,6 +383,25 @@ struct TextOverlayPixelProcessorTests {
         return stride(from: 1, to: bytes.count, by: 4).reduce(0) { total, offset in
             total + Int(bytes[offset])
         }
+    }
+
+    /// Renders the full RGBA byte buffer of an image cropped to the suite's
+    /// fixed bounds. Used by the R1 whitespace-preservation tests to compare
+    /// karaoke and uniform outputs pixel-for-pixel: a green-sum comparison
+    /// cannot catch whitespace loss because the glyphs themselves are identical.
+    private func renderBytes(in image: CIImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: Int(imageBounds.width * imageBounds.height) * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            GoldenPixel.context.render(
+                image.cropped(to: imageBounds),
+                toBitmap: buffer.baseAddress!,
+                rowBytes: Int(imageBounds.width) * 4,
+                bounds: imageBounds,
+                format: .RGBA8,
+                colorSpace: colorSpace
+            )
+        }
+        return bytes
     }
 
     private func pixelDistance(_ lhs: Pixel, _ rhs: Pixel) -> Int {

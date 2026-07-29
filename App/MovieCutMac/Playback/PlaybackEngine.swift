@@ -1457,24 +1457,28 @@ private struct KaraokePreviewClip {
     /// time. Spoken and active words use `highlightColor`; upcoming words use
     /// `baseColor`. Returns the plain string (no attributes) when token/timing
     /// counts disagree, matching the export renderer's fallback behavior.
+    ///
+    /// Whitespace is preserved by building over the original `text` and applying
+    /// color only to each word range — the same rule the export renderer uses
+    /// (`TextOverlayPixelProcessor.karaokeWordRanges`), so preview and export
+    /// never disagree on layout.
     func attributedString(at localTime: TimeInterval) -> NSAttributedString {
-        let tokens = text.unicodeScalars.split(omittingEmptySubsequences: false) { scalar in
-            CharacterSet.whitespacesAndNewlines.contains(scalar)
-        }.map { String($0) }
+        let wordRanges = TextOverlayPixelProcessor.karaokeWordRanges(in: text)
 
-        guard tokens.count == wordTimings.count else {
+        guard wordRanges.count == wordTimings.count else {
             return NSAttributedString(string: text)
         }
 
-        let result = NSMutableAttributedString()
-        for (index, token) in tokens.enumerated() {
+        let result = NSMutableAttributedString(string: text)
+        result.addAttribute(.font, value: font, range: NSRange(location: 0, length: result.length))
+        for (index, wordRange) in wordRanges.enumerated() {
             let hasBegun = wordTimings[index].startTime <= localTime
             let hex = hasBegun ? highlightColor : baseColor
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: Self.color(hexRGB: hex)
-            ]
-            result.append(NSAttributedString(string: token, attributes: attributes))
+            result.addAttribute(
+                .foregroundColor,
+                value: Self.color(hexRGB: hex),
+                range: NSRange(wordRange, in: text)
+            )
         }
         return result
     }

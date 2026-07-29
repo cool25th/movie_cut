@@ -140,6 +140,8 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
+    /// - `MOVIECUT_UITEST_PROXY_BADGE=1` — generates a proxy for the first video asset and reports
+    ///   the timeline badge state. Pair with `MOVIECUT_UITEST_PROXY_PLAYBACK=1` to check the active state.
     /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
     /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport and hover consumers.
     /// - `MOVIECUT_UITEST_FILMSTRIP_PERF=density|memory` — drives real TimelineView zoom/scroll performance evidence.
@@ -177,6 +179,7 @@ extension EditorViewModel {
         var scrubSuffix = ""
         var clipboardSuffix = ""
         var filmstripSuffix = ""
+        var proxyBadgeSuffix = ""
         var timelineFilmstripSuffix = ""
         var filmstripPerformanceSuffix = ""
         let filmstripPerformanceScenario = env["MOVIECUT_UITEST_FILMSTRIP_PERF"]
@@ -241,6 +244,12 @@ extension EditorViewModel {
                 lastErrorMessage = "filmstrip harness failed: \(error.localizedDescription)"
                 filmstripSuffix = " filmstrip_frames=0 requested=none actual=none max_height=0"
             }
+        }
+
+        if env["MOVIECUT_UITEST_PROXY_BADGE"] == "1" {
+            proxyBadgeSuffix = await runProxyBadgeUITestScenario(
+                useProxyPlayback: env["MOVIECUT_UITEST_PROXY_PLAYBACK"] == "1"
+            )
         }
 
         if env["MOVIECUT_UITEST_CLIPBOARD"] == "1" {
@@ -509,7 +518,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -522,6 +531,43 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    /// R5 / benchmark B-I7 hook. Generates a proxy for the first video asset in
+    /// the library, optionally turns proxy playback on, then reports the badge
+    /// state the timeline resolves for each video clip.
+    ///
+    /// This exists because the badge is otherwise unverifiable outside a running
+    /// app: `ProxyBadgeStateTests` covers the decision, but only this path proves
+    /// the timeline reaches a real generated proxy through the real asset
+    /// library and the real playback setting.
+    ///
+    /// Emits ` proxy_generated=<0|1> proxy_playback=<0|1> proxy_badge=<none|idle|active>`.
+    private func runProxyBadgeUITestScenario(useProxyPlayback: Bool) async -> String {
+        guard let asset = currentProject.mediaLibrary.assets.values.first(where: { $0.kind == .video }) else {
+            return " proxy_generated=0 proxy_playback=0 proxy_badge=none"
+        }
+
+        await generateProxy(for: asset.id)
+        await updatePlaybackSettings(useProxyPlayback: useProxyPlayback)
+
+        let generated = currentProject.mediaLibrary.assets[asset.id]?.proxy?.proxyURL != nil
+        // Resolve through the same Core entry point the timeline view uses, so a
+        // divergence between this report and what is drawn is impossible.
+        let states = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .compactMap { clip -> ProxyBadgeState? in
+                guard clip.kind == .video, let assetID = clip.assetId,
+                      let clipAsset = currentProject.mediaLibrary.assets[assetID] else { return nil }
+                return ProxyBadgeState.resolve(
+                    proxy: clipAsset.proxy,
+                    useProxyPlayback: currentProject.playbackSettings.useProxyPlayback
+                )
+            }
+
+        let badge = states.first.map(\.rawValue) ?? "none"
+        let playbackFlag = currentProject.playbackSettings.useProxyPlayback ? 1 : 0
+        return " proxy_generated=\(generated ? 1 : 0) proxy_playback=\(playbackFlag) proxy_badge=\(badge)"
     }
 
     /// G-19 Inc 1 A6 hook. It executes the new resolver and both atomic

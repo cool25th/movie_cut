@@ -162,6 +162,14 @@
   - preview/export: 기능별 편차
   - 상태: 🟡 iOS defer — 사유: Mac Quick Tools 상당수와 marker management가 iOS touch sheet pattern으로 정리되지 않음
 
+- 프록시 재생 + 타임라인 배지 (B-I7)
+  - Core: ✅ `ProxyGenerator`(960x540 생성), `ProxyInfo`, `PlaybackSettings.useProxyPlayback`, `ProxyBadgeState.resolve`
+  - Mac UI: ✅ 라이브러리 생성 버튼/상태 + Inspector 재생 토글 + **타임라인 클립 배지**(idle/active 2상태)
+  - iOS UI: ❌ 없음
+  - Mac preview/export: ✅ preview가 프록시 소비, export는 원본 유지(B-I7 요구사항)
+  - iOS preview/export: ❌ `IOSPlaybackEngine`/`IOSExportEngine`에 프록시 분기 없음
+  - 상태: 🟡 iOS defer — 사유: Mac은 생성·소비·표시가 모두 배선됐으나 iOS는 프록시 경로 자체가 없음. 실앱 증거: `proxy_generated=1 proxy_playback=0 proxy_badge=idle` / `proxy_playback=1 proxy_badge=active` (2026-07-30, `MOVIECUT_UITEST_PROXY_BADGE`)
+
 ## 3. Mac-only 또는 iOS defer 항목
 
 - Mac-only 또는 iOS defer 항목: 3-way color grade advanced UI — 사유: iOS render는 shared이나 wheel/scope editing surface가 Mac 대비 얕음.
@@ -173,6 +181,7 @@
 - Mac-only 또는 iOS defer 항목: speed ramp — 사유: iOS preview/export가 `SpeedRampCurve` 미사용.
 - Mac-only 또는 iOS defer 항목: 역재생 — 사유: iOS preview/export가 `isReversed` 미소비.
 - Mac-only 또는 iOS defer 항목: 오디오 덕킹 — 사유: iOS duck/clear UI와 ramped volume parameter 검증 없음.
+- Mac-only 또는 iOS defer 항목: 프록시 재생 + 타임라인 배지 — 사유: iOS playback/export에 프록시 URL 분기가 없고 iOS 타임라인에 배지 표면이 없음. Core `ProxyBadgeState.resolve`는 플랫폼 중립이라 iOS 배선 시 재사용 가능.
 - Mac-only 또는 iOS defer 항목: EQ — 사유: iOS real EQ action/export path 없음.
 - Mac-only 또는 iOS defer 항목: 노이즈감소 apply — 사유: iOS destructive denoise/source replacement action 없음.
 - Mac-only 또는 iOS defer 항목: 자동저장/크래시 복구 — 사유: iOS lifecycle autosave/recovery UX 미배선.

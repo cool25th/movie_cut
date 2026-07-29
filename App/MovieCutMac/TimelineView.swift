@@ -869,6 +869,9 @@ struct TimelineView: View {
                                 .font(MovieCutTypography.metadata)
                                 .foregroundStyle(.white.opacity(0.85))
                         }
+                        if let proxyState = proxyBadgeState(for: clip) {
+                            clipProxyBadge(proxyState)
+                        }
                     }
                     .padding(.trailing, MovieCutSpacing.xSmall)
                 }
@@ -894,12 +897,17 @@ struct TimelineView: View {
                 .accessibilityElement()
                 .accessibilityLabel(clipAccessibilityLabel(for: clip))
                 .accessibilityValue(
-                    String(
-                        format: NSLocalizedString("Starts at %@, duration %@, layer %d", comment: ""),
-                        timelineSecondsString(clip.timelineRange.start),
-                        timelineSecondsString(clip.timelineRange.duration),
-                        clip.zIndex
-                    )
+                    [
+                        String(
+                            format: NSLocalizedString("Starts at %@, duration %@, layer %d", comment: ""),
+                            timelineSecondsString(clip.timelineRange.start),
+                            timelineSecondsString(clip.timelineRange.duration),
+                            clip.zIndex
+                        ),
+                        proxyAccessibilityPhrase(for: clip)
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: ", ")
                 )
                 .accessibilityHint(NSLocalizedString("Selects the clip. Drag to move it on the timeline. Layer actions adjust its zIndex.", comment: ""))
                 .accessibilityAddTraits(.isButton)
@@ -1087,6 +1095,53 @@ struct TimelineView: View {
                 #endif
         } else {
             clipPlaceholderRhythm(accent: accentForClip(clip: clip, trackKind: trackKind), selected: selected)
+        }
+    }
+
+    /// Whether this clip shows the proxy badge. The decision itself lives in
+    /// Core (`ProxyBadgeState.resolve`) so it is unit-testable and reusable by
+    /// iOS; this only resolves the clip's asset.
+    private func proxyBadgeState(for clip: Clip) -> ProxyBadgeState? {
+        // Proxies are only generated for video assets, which `filmstripAsset`
+        // already filters for.
+        guard let asset = filmstripAsset(for: clip) else { return nil }
+        return ProxyBadgeState.resolve(
+            proxy: asset.proxy,
+            useProxyPlayback: viewModel.currentProject.playbackSettings.useProxyPlayback
+        )
+    }
+
+    /// The proxy indicator drawn in the clip's trailing icon cluster.
+    ///
+    /// Deliberately not tinted with `accentCyan`: `UI_DESIGN_PRINCIPLES.md` §2
+    /// reserves the single accent for selection, playhead, and primary actions,
+    /// and a status indicator is none of those. State is carried by opacity and
+    /// by filled vs outline glyph instead.
+    private func clipProxyBadge(_ state: ProxyBadgeState) -> some View {
+        Image(systemName: state == .active ? "bolt.fill" : "bolt")
+            .font(MovieCutTypography.metadata)
+            .foregroundStyle(.white.opacity(state == .active ? 0.85 : 0.45))
+            .help(
+                state == .active
+                    ? NSLocalizedString("Playing the proxy for smoother editing. Export uses the original.", comment: "")
+                    : NSLocalizedString("A proxy is ready. Turn on proxy playback to use it.", comment: "")
+            )
+    }
+
+    /// Spoken description of the proxy state, appended to the clip's own
+    /// accessibility value.
+    ///
+    /// It has to live on the clip element: `clipView` calls
+    /// `.accessibilityElement()`, which ignores children, so a label attached to
+    /// the badge glyph itself would never be read aloud.
+    private func proxyAccessibilityPhrase(for clip: Clip) -> String? {
+        switch proxyBadgeState(for: clip) {
+        case .active:
+            return NSLocalizedString("proxy playback on", comment: "")
+        case .idle:
+            return NSLocalizedString("proxy ready", comment: "")
+        case nil:
+            return nil
         }
     }
 

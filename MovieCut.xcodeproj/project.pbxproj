@@ -34,7 +34,6 @@
 		248B46DEDC71F46D95501C0B /* CardEditorUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */; };
 		2503D56A9B64CF2E3B27BD0A /* KeyboardShortcutStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16947AA334227D5B01D6762 /* KeyboardShortcutStaticContractTests.swift */; };
 		264117F66CA3ED4E141B3A73 /* WaveformInvalidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04BC2FF152EAB929D8550A4E /* WaveformInvalidationTests.swift */; };
-		27336BC1218023B2196F6E40 /* ZoomTransitionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4E49F3FBF732565EBA8621 /* ZoomTransitionPlugin.swift */; };
 		276EBD2E2C53701A6F89405F /* R401InspectorContextStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0D9E4FD1959F3F95159BDB /* R401InspectorContextStaticContractTests.swift */; };
 		28DB68F4AD122FC24EC439BE /* ClaudeEditingProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC3B62C4FB755A0C4FEA27B1 /* ClaudeEditingProviderTests.swift */; };
 		2976DF50151A11BD8486C1AE /* AudioDuckingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BB6ADA409AABFE8034B844 /* AudioDuckingTests.swift */; };
@@ -449,7 +448,6 @@
 		E91C19BFC15D19B7518B7B78 /* MediaFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFixtureTests.swift; sourceTree = "<group>"; };
 		E9C5A5BBB8705C0D0D4EB0F3 /* VocalSeparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocalSeparationTests.swift; sourceTree = "<group>"; };
 		EAA94F9D52545BA88372975E /* TransitionPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionPixelProcessorTests.swift; sourceTree = "<group>"; };
-		ED4E49F3FBF732565EBA8621 /* ZoomTransitionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomTransitionPlugin.swift; sourceTree = "<group>"; };
 		EE67663CF085B8BB7796E082 /* AudioEqualizerDSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEqualizerDSPTests.swift; sourceTree = "<group>"; };
 		EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLayoutTests.swift; sourceTree = "<group>"; };
 		F18B8335F6E5C7F7C27CA6E2 /* TemplatePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatePickerView.swift; sourceTree = "<group>"; };
@@ -819,7 +817,6 @@
 				060D2155260E620900B7ED20 /* MaskCanvasView.swift */,
 				4F86B49A963CD2475609208E /* MaskCompositor.swift */,
 				9D7BF031B5F3AEC41F9338D1 /* TextAnimationRenderer.swift */,
-				ED4E49F3FBF732565EBA8621 /* ZoomTransitionPlugin.swift */,
 			);
 			path = Effects;
 			sourceTree = "<group>";
@@ -932,7 +929,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_7DCA2A72-BD9D-48D3-8D2B-E9E65DB097D1" /* Resources */ = {
+		"TEMP_B3661A69-32A9-4C89-8F90-5BE5EC0E94EB" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1280,7 +1277,6 @@
 				97F20409A0E39F876976E520 /* UITestHarness.swift in Sources */,
 				A356FBDD1CA3A79CAE211737 /* VideoPreviewView.swift in Sources */,
 				62A037EA5329E611EC7C3787 /* VoiceoverRecordingView.swift in Sources */,
-				27336BC1218023B2196F6E40 /* ZoomTransitionPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

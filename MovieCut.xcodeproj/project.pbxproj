@@ -64,6 +64,7 @@
 		3FF60E7359E6290463298ED0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6A53F6FAFD52587A598388A8 /* PrivacyInfo.xcprivacy */; };
 		41F0EC958B024257F36CB866 /* WaveformTaskIdentityStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CD67187088D82383D00EEC /* WaveformTaskIdentityStaticContractTests.swift */; };
 		41F4047FFC031C58FA3547D5 /* AutosaveWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2CCAC3025D6CF11BDB7A66 /* AutosaveWiringStaticContractTests.swift */; };
+		43913A0587BE329689E85ECA /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 083ADF921411B0DFE1A76BDE /* Localizable.xcstrings */; };
 		44D1A8007EDD8D71CB8731B9 /* ImportExportE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D810DCF9714A481FC4DEF6FA /* ImportExportE2ETests.swift */; };
 		46C2631C1E31626D3BABA13F /* MacMaskCanvasStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9EE139473BA73C5F9B57D5 /* MacMaskCanvasStaticContractTests.swift */; };
 		47CF65A4747E59882BE3D849 /* Phase33SpeedCurveEditorStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260B9848FD957FE79D9917F0 /* Phase33SpeedCurveEditorStaticContractTests.swift */; };
@@ -157,6 +158,7 @@
 		AA72CCB5560A8328F3785A10 /* IOSCustomVideoCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4968081AF3908D468A59F83 /* IOSCustomVideoCompositor.swift */; };
 		AC00D0DDCAF16EC2E7B3945B /* UndoIntegrityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0200BA83D8032C31919D0D2 /* UndoIntegrityTests.swift */; };
 		AD3955703B60A8174036F308 /* CardLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */; };
+		ADAF5BFBC1C2B41A20C754D6 /* PlaybackSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47BC43B313CD084D9B99756 /* PlaybackSettingsTests.swift */; };
 		AF7FADD6F46B982C17FA0A0E /* ColorScopeWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA7253A7E32D2A2B2C724F /* ColorScopeWiringStaticContractTests.swift */; };
 		B256920F8B7FAF9C6500862B /* CanvasSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18685F32B1B041132751CBBD /* CanvasSettingsView.swift */; };
 		B29B87B5497BBDF7CB856EED /* ScopeAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAAE040E06864543306ABEE1 /* ScopeAnalyzerTests.swift */; };
@@ -250,6 +252,7 @@
 		069552FC6F46DE9AABF78957 /* ColorGradeGoldenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorGradeGoldenTests.swift; sourceTree = "<group>"; };
 		06C563E8901DEE7630683696 /* SFXPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFXPickerView.swift; sourceTree = "<group>"; };
 		07CEB21F75F44FD1920C361E /* R504MainVideoTrackStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R504MainVideoTrackStaticContractTests.swift; sourceTree = "<group>"; };
+		083ADF921411B0DFE1A76BDE /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		0871E063E02565C04ED66045 /* ExportPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportPlannerTests.swift; sourceTree = "<group>"; };
 		0A2B035626DD3E3AEB7F6687 /* ScopeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeViews.swift; sourceTree = "<group>"; };
 		0A9EE139473BA73C5F9B57D5 /* MacMaskCanvasStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMaskCanvasStaticContractTests.swift; sourceTree = "<group>"; };
@@ -423,6 +426,7 @@
 		CD805232BCD87AD35EC8C1C7 /* CGCodableParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGCodableParityTests.swift; sourceTree = "<group>"; };
 		CFB36ACE204F1744AFBB0DFF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorUITests.swift; sourceTree = "<group>"; };
+		D47BC43B313CD084D9B99756 /* PlaybackSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSettingsTests.swift; sourceTree = "<group>"; };
 		D7DB8CF573214B64705831F0 /* CubeLUTTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubeLUTTests.swift; sourceTree = "<group>"; };
 		D810DCF9714A481FC4DEF6FA /* ImportExportE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportExportE2ETests.swift; sourceTree = "<group>"; };
 		D8688E1CF974185333371321 /* AssetCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetCatalogTests.swift; sourceTree = "<group>"; };
@@ -591,6 +595,7 @@
 				B82F4B4E0C5B4C681B9D4E01 /* Phase24TypographyDensityStaticContractTests.swift */,
 				260B9848FD957FE79D9917F0 /* Phase33SpeedCurveEditorStaticContractTests.swift */,
 				A432F49B38D5FC6B117CAC0C /* PipelineTests.swift */,
+				D47BC43B313CD084D9B99756 /* PlaybackSettingsTests.swift */,
 				A3306D0C4640352D27EF058E /* PluginRegistryTests.swift */,
 				A641EA50E67C3B3CA2C7F3DB /* ProjectModelTests.swift */,
 				B4737C524F0E5A48A3A794FF /* ProjectPackageTests.swift */,
@@ -696,6 +701,7 @@
 				2E13E81D689C5E73E0D5B0A9 /* EditorViewModel.swift */,
 				CFB36ACE204F1744AFBB0DFF /* Info.plist */,
 				E1AA1F3C0FE3E6F86EA86740 /* InspectorPanel.swift */,
+				083ADF921411B0DFE1A76BDE /* Localizable.xcstrings */,
 				22FE68DC0ED882BD0171B22D /* MediaLibraryPanel.swift */,
 				F21CAB901012C0BB13802BC6 /* MovieCutMacApp.swift */,
 				6FEA38AF3E3B928A0F7D90AB /* PreviewPanel.swift */,
@@ -912,7 +918,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_CA872E39-2589-4277-A06E-C73AAFA86522" /* Resources */ = {
+		"TEMP_5EB8F5E7-0567-4130-B12F-7D0EFD6BF6D6" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1037,6 +1043,7 @@
 			knownRegions = (
 				Base,
 				en,
+				ko,
 			);
 			mainGroup = 285B74944F91E99D14D632C2;
 			minimizedProjectReferenceProxies = 1;
@@ -1062,6 +1069,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				43913A0587BE329689E85ECA /* Localizable.xcstrings in Resources */,
 				151ECCDF426BB6B80964E751 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1171,6 +1179,7 @@
 				47CF65A4747E59882BE3D849 /* Phase33SpeedCurveEditorStaticContractTests.swift in Sources */,
 				4D046FDA240F4F7E20DBE764 /* Phase4ProviderTests.swift in Sources */,
 				A84BAA4AF887E26DA3F510B8 /* PipelineTests.swift in Sources */,
+				ADAF5BFBC1C2B41A20C754D6 /* PlaybackSettingsTests.swift in Sources */,
 				BBC488F2A0CD1AEB4526162D /* PluginRegistryTests.swift in Sources */,
 				22365771795F82112CFAAE6D /* ProjectModelTests.swift in Sources */,
 				646CB8DC9BF0F7526D49CC06 /* ProjectPackageTests.swift in Sources */,

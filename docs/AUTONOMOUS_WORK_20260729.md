@@ -39,7 +39,7 @@
 
 ### Track A — internal dead code 제거 (grep 1회 자기참조 확인됨)
 
-- [ ] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄, `struct AutoAssistantView`, internal). `refactor/remove-dead-autoassistantview`. 게이트 통과 시 커밋 `refactor(moviecut): remove dead AutoAssistantView`.
+- [x] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄, `struct AutoAssistantView`, internal). `refactor/remove-dead-autoassistantview`. 게이트 통과 시 커밋 `refactor(moviecut): remove dead AutoAssistantView`. ✅ DONE — GATE_PASS, swift test 984 유지.
 - [ ] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄, internal). 커밋 `refactor(moviecut): remove dead MaskCompositor wrapper`.
 - [ ] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`.
 - [ ] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄, internal). 커밋 `refactor(moviecut): remove dead ZoomTransitionPlugin`.
@@ -77,3 +77,11 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE
+- **항목**: A1 — `App/MovieCutMac/Analysis/AutoAssistantView.swift` 제거
+- **상태**: DONE
+- **재검증**: grep `AutoAssistantView` → 자기 선언 1건뿐 (내부 타입 단일, iOS용 IOSAutoAssistantView는 별개/보존)
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK
+- **변경**: 파일 -157줄 + pbxproj 정리(net -13). iOS 빌드 미검증(호스트 제약)이나 Mac 코드이므로 Mac 게이트로 검증 완료.
+- **비고**: 첫 무인 항목. 정상 동작 확인됨.

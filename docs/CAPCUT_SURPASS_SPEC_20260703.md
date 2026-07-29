@@ -1,11 +1,12 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
-> 버전: 1.8 / 작성일: 2026-07-03 (v1.8: 카드뉴스 사용성 G-18~G-22/U-10 등재) / 브랜치: `feat/core-backend-expansion`
+> 버전: 1.9 / 작성일: 2026-07-03 (v1.9: 배선 격차 재설정 + G-23/G-24 등재) / 브랜치: `main`
 > 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
 > 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
+- 2026-07-29 v1.9: V13 재감사(`GAP_ANALYSIS_V13_FUNC_UI_20260729.md`, 델타 62커밋) 반영. ① **격차 성격 재설정**: 주류가 "기능 부재"에서 **"배선 격차"**로 이동했다 — 워드 캡션 타이밍(Core 4파일/App 0), 프록시 소비(PlaybackEngine·ExportEngine 0회), 현지화(`NSLocalizedString` 8파일이나 `.lproj`/`.xcstrings` **0개**)가 전부 Core·래핑까지만 존재한다. ② **A6 원장 확대**: App 호출 0회인 Core 서브시스템 **1,279줄**을 G-12에 등재(`CollaborationService` 546, `ClaudeEditingProvider` 265, `StyleTransferProvider` 174, `VocalSeparationService` 121, `AIEditingProvider` 103, `VersionHistory` 70). `BackgroundRemovalProvider`는 기능이 다른 경로로 동작하는 위양성이므로 삭제 후보로 분류. ③ **G-23 블렌딩 모드 / G-24 컴파운드 클립 신설** — 벤치마크 §6에서 "다음 감사에서 G-ID 신설" 대기 중이던 확정 격차 2건. ④ **P0 부채 신설 — 판정 재확인**: 7/28 핵심 편집 수리가 "메인 Preview가 프로젝트 합성을 쓰지 않고 있었다"(`b398563`)를 드러냈으므로, `=` 판정이 붙은 B-ID는 preview+export 동시 증거로 재확인해야 한다. ⑤ Track.isLocked dead-field(v1.2 판정)는 **해소 확인**.
 - 2026-07-14 v1.8: `USABILITY_BENCHMARK_STANDARD.md` v1.0의 카드뉴스 경로를 개발 단위로 등록. **G-18 카드 문서 모델+편집기 / G-19 카드 템플릿+마스터 스타일 / G-20 브랜드 킷 / G-21 카드 PNG·JPG 세트 export+원클릭 영상화 / G-22 대본 자동 분배 / U-10 카드뉴스 진입점**을 신설하고 UB-C/SC-C의 클릭 수·시간·출력 규격을 AC에 그대로 고정했다.
 - 2026-07-13 v1.7: 사용자 보고 편집 체감 P0를 코드 실사 후 정식 등재. **G-16 타임라인 스크럽(B-I2)**과 **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1)**를 신설하고, 구현 순서를 G-16→G-17→G-04로 고정했다.
 - 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
@@ -1009,6 +1010,98 @@ public protocol OnDeviceScriptSummarizer: Sendable {
 - 요약 모델 가용성/OS 버전 차이로 결과가 비결정적일 수 있다. E2E는 fake provider, 실기기는 품질 표본을 별도로 기록한다.
 - 한국어 문단/목록 구분이 줄바꿈 습관에 민감하다. 원문 range를 보존해 사용자가 쉽게 병합/분할하게 한다.
 - 자동 분배가 문안 생성으로 확장되지 않도록 provider 계약과 UI 카피에 범위를 명시한다.
+
+---
+
+### G-23. 클립 블렌딩 모드 — **P1 / 확정 격차** / 규모 S ⭐
+
+> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F4.4. CapCut은 속성 패널 드롭다운으로 Multiply/Screen/Overlay/Soft Light 등 다수 블렌딩 모드를 제공하고 불투명도와 병용한다. v1.1 웹 검증으로 [확인]됐고 §6에 "확정 격차 — 다음 감사에서 G-ID 신설"로 대기 중이던 항목이다.
+
+#### 요구사항
+1. 상위 트랙 클립에 블렌딩 모드를 지정하면 하위 트랙 합성 결과에 반영된다. 최소 셋: normal(기본)/multiply/screen/overlay/softLight/hardLight/darken/lighten.
+2. 블렌딩 모드는 기존 `opacity`와 곱해져 동작한다. 둘은 독립 속성이다.
+3. preview와 export가 **동일한 결과**를 낸다 — 하나의 공유 프로세서를 양쪽이 호출한다.
+4. 기본값 normal에서는 현재 합성 결과와 픽셀 동일해야 한다(회귀 없음).
+
+#### 현재 상태 (2026-07-29 실사)
+- **사용자 노출 0.** repo 전체에서 `blendMode` 매치는 2건이며 둘 다 내부 필터 구현명이다: `Sources/MovieCutCore/Rendering/VisualEffectPixelProcessor.swift:178,188,200`의 `"CISoftLightBlendMode"`/`"CIOverlayBlendMode"` 문자열과 `App/MovieCutiOS/Export/IOSCustomVideoCompositor.swift`의 대응 코드.
+- 즉 CIFilter 이름으로만 존재하고, **모델 필드·UI·합성 분기가 전부 없다.**
+- 오버레이 합성 자체는 존재한다(`CanvasBackgroundPixelProcessor.compose`, 다중 트랙 레이어링) — 블렌딩 수식만 없다.
+
+#### 데이터 모델
+- `Clip`에 `blendMode: BlendMode = .normal` 추가. `BlendMode`는 `String` raw value enum(Codable 안정성 — `CGPoint` retroactive Codable 충돌 사례(`2e47780`)를 반복하지 않도록 raw string 고정).
+- 마이그레이션: 기존 프로젝트 파일에 필드가 없으므로 `decodeIfPresent ?? .normal`. **기존 파일이 열리는지 픽스처 테스트로 고정**한다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | `BlendMode` enum + `Clip.blendMode` + Codable 마이그레이션 픽스처 | `Sources/MovieCutCore/Models/`, `Tests/MovieCutCoreTests/` |
+| 2 | `BlendPixelProcessor` 신설 — 두 CIImage와 mode를 받아 합성. 골든 픽셀 테스트 동반 | `Sources/MovieCutCore/Rendering/BlendPixelProcessor.swift` |
+| 3 | macOS compositor 다중 트랙 합성 지점에서 호출 배선 (preview+export 공통 경로) | `App/MovieCutMac/Export/CustomVideoCompositor.swift` |
+| 4 | Inspector 드롭다운 + 불투명도 병용 UI | `App/MovieCutMac/Inspector/` |
+| 5 | iOS 배선 (**W4 선행 필요** — 현재 iOS 컴파일 불가) | `App/MovieCutiOS/Export/IOSCustomVideoCompositor.swift` |
+
+#### AC
+1. 8개 모드 각각에 대해 `GoldenPixelHarness` 골든 비교 통과. 알려진 입력 2색 합성 결과가 수식과 일치한다.
+2. `.normal`에서 이 기능 도입 전후 export 프레임이 픽셀 동일(회귀 없음).
+3. 같은 timestamp의 preview 캡처와 export 프레임이 허용 오차 내 일치 — **모드별로** 확인.
+4. blendMode 필드가 없는 기존 프로젝트 파일이 열리고 `.normal`로 해석된다(픽스처).
+5. opacity 0.5 + multiply 조합이 두 속성의 곱으로 동작한다.
+
+#### 검증 계획
+- 골든 픽셀(`GoldenPixelHarness` 패턴 필수 — headless silent skip 재현 금지).
+- Codable 마이그레이션 픽스처 (`5f7a63c`의 CG parity 픽스처 패턴 차용).
+- E2E: 2트랙 오버레이 프로젝트를 모드별 export 후 ffprobe + 프레임 색 실측.
+
+#### 리스크
+- CIFilter 블렌딩은 premultiplied alpha 처리에 민감하다. 투명 영역이 있는 클립에서 색 번짐이 발생할 수 있으므로 알파 있는 픽스처를 골든에 포함한다.
+- 색공간(sRGB vs linear)에 따라 결과가 달라진다. compositor의 working color space를 골든에 명시 고정한다.
+- iOS는 컴파일 불가 상태이므로 Inc 5를 "구현 완료"로 선언하지 말 것 — `NEXT_SESSION_WORKORDER_20260729.md` Track 2 규율.
+
+---
+
+### G-24. 컴파운드 클립 (중첩 시퀀스) — **P2 / 확정 격차** / 규모 L
+
+> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F2.3. CapCut은 컴파운드 클립(중첩)과 그룹으로 복잡한 타임라인을 정리한다. 그룹은 MovieCut에 구현돼 있으나 컴파운드는 부재다.
+
+#### 요구사항
+1. 선택한 복수 클립을 하나의 컴파운드 클립으로 접는다. 타임라인에서 단일 클립처럼 이동/트림/복사된다.
+2. 컴파운드 클립을 열어 내부 타임라인을 편집하고 다시 접을 수 있다.
+3. 컴파운드에 효과/속도/전환을 적용하면 내부 전체에 적용된다.
+4. undo 1회로 접기/펼치기가 원복된다.
+
+#### 현재 상태 (2026-07-29 실사)
+- **0파일.** `CompoundClip`/`NestedSequence`/`compoundClip` 어느 것도 매치 없음.
+- 인접 개념인 그룹은 구현됨(`GroupClipsCommand`), G-17 paste가 group id remap을 처리한다 — 컴파운드의 선행 인프라로 재사용 가능.
+
+#### 데이터 모델
+- 재귀 구조가 필요하다: `Clip`이 asset 대신 `nestedTimeline: Timeline?`을 참조할 수 있어야 한다. **이것이 이 항목을 규모 L로 만드는 핵심 리스크다** — 렌더 파이프라인, 시간 매핑(`ClipTimeMapping`), undo 스냅샷, Codable이 전부 재귀를 다뤄야 한다.
+- 대안(권고): 1차는 **평탄화 방식** — 접을 때 내부를 별도 composition으로 렌더해 임시 asset을 만들고 그것을 단일 클립 소스로 삽입한다. `ReverseRenderService`/`ImageVideoRenderService`가 확립한 "임시 asset 생성 → 기존 경로에 삽입" 패턴과 동일하며, 재귀 없이 효과 체인이 무수정으로 적용된다. 대신 "열어서 편집"은 재렌더가 필요하다.
+
+#### 구현 증분
+| Inc | 내용 | 파일 |
+|---|---|---|
+| 1 | 접기/펼치기 command + 원본 클립 보존 구조 | `Sources/MovieCutCore/Commands/` |
+| 2 | 평탄화 렌더 서비스 (`ReverseRenderService` 패턴) | `Sources/MovieCutCore/` |
+| 3 | 타임라인 UI: 컴파운드 클립 표면 + 열기/닫기 어포던스 | `App/MovieCutMac/TimelineView.swift` |
+| 4 | 효과/속도 적용 경로 + undo 무결성 | 기존 command 경로 |
+
+#### AC
+1. 3개 클립을 접으면 타임라인에 단일 클립 1개가 남고 총 duration이 보존된다.
+2. 접은 클립을 export하면 접기 전 export와 프레임 동일(허용 오차 내).
+3. 펼치기 후 원본 3개 클립이 id·효과·전환까지 복원된다.
+4. 접기/펼치기 각각 undo 1회로 원복된다.
+5. 컴파운드에 2배속 적용 시 내부 전체가 2배속된다.
+
+#### 검증 계획
+- behavioral: 접기→펼치기 왕복 후 project snapshot 동일성.
+- E2E: 접기 전/후 export를 ffprobe duration + 프레임 MAD 비교.
+- undo 무결성 테스트(`UndoIntegrityTests` 패턴).
+
+#### 리스크
+- **재귀 모델을 택하면 시간 매핑·undo·Codable 전부에 파급된다.** 7/28 수리에서 시간 매핑 일관성이 이미 P0였던 전례(`269d50a`, `0115e6c`)를 감안해 1차는 평탄화 방식을 강력 권고한다.
+- 평탄화는 "열어서 편집"이 재렌더를 요구하므로 대형 프로젝트에서 체감 지연이 생긴다. 캐시 전략을 Inc 2에 포함한다.
+- 이 항목은 P2다. §7 권장 순서상 배선 격차(3-B)와 홈 화면(U-01)이 먼저다.
 
 ---
 

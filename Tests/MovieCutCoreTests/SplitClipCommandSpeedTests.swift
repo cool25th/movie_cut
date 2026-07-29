@@ -205,4 +205,35 @@ struct SplitClipCommandSpeedTests {
             #expect(abs(sub.speedRampPoints.last!.time - 1.0) < 0.001)
         }
     }
+
+    @Test("Image clip split succeeds even though one half gets a zero-duration source range")
+    func imageClipSplitAllowsZeroDurationSourceHalf() throws {
+        // Pins the reason SplitClipCommand has no `duration > 0` guard on the
+        // source sub-ranges. An image clip maps every timeline time to
+        // `sourceRange.start`, so the timeline-left half necessarily gets a
+        // zero-length source range — while both timeline halves are correct and
+        // the photo renders fine, since image rendering is driven by the
+        // timeline duration, not the source duration.
+        //
+        // A guard rejecting a zero-duration source half would look like a
+        // reasonable tightening and would silently break splitting a photo.
+        let clip = Clip(
+            kind: .image,
+            sourceRange: TimeRange(start: 0, duration: 5),
+            timelineRange: TimeRange(start: 0, duration: 5),
+            playbackRate: 1
+        )
+        var project = project(with: clip)
+
+        _ = try SplitClipCommand(clipId: clip.id, splitTime: 2.0).apply(to: &project)
+
+        let halves = project.timeline.tracks[0].clips
+        #expect(halves.count == 2)
+        // Timeline is split exactly where asked.
+        #expect(abs(halves[0].timelineRange.duration - 2.0) <= tolerance)
+        #expect(abs(halves[1].timelineRange.duration - 3.0) <= tolerance)
+        // The zero-duration source half is expected, not a failure.
+        #expect(halves[0].sourceRange.duration == 0)
+        #expect(halves[1].sourceRange.duration > 0)
+    }
 }

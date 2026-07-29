@@ -74,26 +74,39 @@ public struct SplitClipCommand: EditorCommand {
         // `0...6` on the first half (which should play `10->6`) — the halves get
         // swapped. Timeline ranges never flip: the timeline always advances
         // forward regardless of playback direction.
+        //
+        // There is deliberately no out-of-range check here. `splitTime` is
+        // already validated to sit strictly inside the timeline range above, and
+        // `sourceTime(forTimelineTime:)` clamps its result into `sourceRange`,
+        // so neither duration can go negative on any reachable path. A guard
+        // that tested `>= 0` after `max(0, ...)` used to sit here and could
+        // never fire. Do not replace it with a `> 0` guard either: image clips
+        // map every timeline time to `sourceRange.start`, so splitting a photo
+        // legitimately gives the first half a zero-duration source range while
+        // both timeline halves stay correct. Rejecting that would break photo
+        // splitting, which works today.
         let firstSourceRange: TimeRange
         let secondSourceRange: TimeRange
         if clip.isReversed {
             // first  plays source [splitSourceTime, sourceEnd] (walks end -> split)
             // second plays source [sourceStart, splitSourceTime] (walks split -> start)
-            let firstSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
-            let secondSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
-            guard secondSourceDuration >= 0 else {
-                throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
-            }
-            firstSourceRange = TimeRange(start: splitSourceTime, duration: firstSourceDuration)
-            secondSourceRange = TimeRange(start: clip.sourceRange.start, duration: secondSourceDuration)
+            firstSourceRange = TimeRange(
+                start: splitSourceTime,
+                duration: max(0, clip.sourceRange.end - splitSourceTime)
+            )
+            secondSourceRange = TimeRange(
+                start: clip.sourceRange.start,
+                duration: max(0, splitSourceTime - clip.sourceRange.start)
+            )
         } else {
-            let firstSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
-            let secondSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
-            guard secondSourceDuration >= 0 else {
-                throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
-            }
-            firstSourceRange = TimeRange(start: clip.sourceRange.start, duration: firstSourceDuration)
-            secondSourceRange = TimeRange(start: splitSourceTime, duration: secondSourceDuration)
+            firstSourceRange = TimeRange(
+                start: clip.sourceRange.start,
+                duration: max(0, splitSourceTime - clip.sourceRange.start)
+            )
+            secondSourceRange = TimeRange(
+                start: splitSourceTime,
+                duration: max(0, clip.sourceRange.end - splitSourceTime)
+            )
         }
 
         var firstClip = clip

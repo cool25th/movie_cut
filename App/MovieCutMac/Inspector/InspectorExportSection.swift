@@ -92,7 +92,39 @@ struct InspectorExportSection: View {
             .toggleStyle(.checkbox)
             .accessibilityLabel("Use proxy media for playback")
             .accessibilityHint("When on, the preview plays back a lower-resolution proxy for smoother editing. The proxy must be generated per media asset; falls back to the original when absent.")
+
+            proxyResolutionPicker
         }
+    }
+
+    /// Chooses the resolution newly generated proxies are transcoded to (B-I7).
+    ///
+    /// Enabled independently of the playback toggle: the resolution governs
+    /// generation, which happens per asset in the media library, so it stays
+    /// adjustable while playback is still on the originals.
+    private var proxyResolutionPicker: some View {
+        Picker("Proxy resolution", selection: Binding(
+            get: { viewModel.currentProject.playbackSettings.proxyResolution },
+            set: { newValue in
+                Task { await viewModel.updatePlaybackSettings(proxyResolution: newValue) }
+            }
+        )) {
+            ForEach(ProxyResolution.allCases, id: \.self) { resolution in
+                Text(
+                    resolution.isRecommended
+                        ? String(
+                            format: NSLocalizedString("%@ (recommended)", comment: ""),
+                            resolution.shortLabel
+                        )
+                        : resolution.shortLabel
+                )
+                .tag(resolution)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .accessibilityLabel(NSLocalizedString("Proxy resolution", comment: ""))
+        .accessibilityHint(NSLocalizedString("Sets the resolution used when generating new proxies. Existing proxies are kept; each resolution is stored separately, so switching back reuses what was already generated.", comment: ""))
     }
 
     private var socialPresetButtons: some View {

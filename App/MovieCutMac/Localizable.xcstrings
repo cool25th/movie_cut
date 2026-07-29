@@ -121,6 +121,22 @@
         }
       }
     },
+    "%@ (recommended)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (recommended)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (권장)"
+          }
+        }
+      }
+    },
     "%@ background color": {
       "extractionState": "manual",
       "localizations": {
@@ -3213,6 +3229,22 @@
         }
       }
     },
+    "Proxy resolution": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy resolution"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프록시 해상도"
+          }
+        }
+      }
+    },
     "Remove the selected clip transition": {
       "extractionState": "manual",
       "localizations": {
@@ -3583,6 +3615,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 미디어를 선택합니다. 타임라인으로 드래그해 클립을 만들거나, 더블클릭하거나, 추가 버튼을 사용하세요."
+          }
+        }
+      }
+    },
+    "Sets the resolution used when generating new proxies. Existing proxies are kept; each resolution is stored separately, so switching back reuses what was already generated.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sets the resolution used when generating new proxies. Existing proxies are kept; each resolution is stored separately, so switching back reuses what was already generated."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 프록시를 생성할 때 사용할 해상도를 설정합니다. 기존 프록시는 유지되며, 해상도별로 따로 저장되므로 이전 해상도로 되돌리면 이미 생성된 파일을 재사용합니다."
           }
         }
       }

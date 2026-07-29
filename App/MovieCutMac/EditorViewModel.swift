@@ -1532,17 +1532,26 @@ final class EditorViewModel {
         }
 
         let directory = Self.proxyDirectory(for: snapshot.id)
-        guard let plan = ProxyGenerator.makeProxyPlan(for: asset, in: directory) else {
+        let resolution = snapshot.playbackSettings.proxyResolution
+        guard let plan = ProxyGenerator.makeProxyPlan(
+            for: asset,
+            in: directory,
+            proxyResolution: resolution
+        ) else {
             lastErrorMessage = "Could not create a proxy generation plan."
             lastStatusMessage = nil
             return
         }
 
         lastErrorMessage = nil
-        lastStatusMessage = "Generating proxy for \(asset.originalURL.lastPathComponent)..."
+        lastStatusMessage = "Generating \(resolution.shortLabel) proxy for \(asset.originalURL.lastPathComponent)..."
 
         do {
-            guard let proxyInfo = try await ProxyGenerator.generateProxy(for: asset, using: plan) else {
+            guard let proxyInfo = try await ProxyGenerator.generateProxy(
+                for: asset,
+                using: plan,
+                proxyResolution: resolution
+            ) else {
                 lastErrorMessage = "Proxy generation failed. The source file may not support proxy export."
                 lastStatusMessage = nil
                 return
@@ -3059,10 +3068,16 @@ final class EditorViewModel {
     /// Updates the project's playback (preview) settings. Toggling proxy
     /// playback requires reloading the preview composition so the proxy (or
     /// original) URL is picked up on the next build.
-    func updatePlaybackSettings(useProxyPlayback: Bool? = nil) async {
+    func updatePlaybackSettings(
+        useProxyPlayback: Bool? = nil,
+        proxyResolution: ProxyResolution? = nil
+    ) async {
         var settings = currentProject.playbackSettings
         if let useProxyPlayback {
             settings.useProxyPlayback = useProxyPlayback
+        }
+        if let proxyResolution {
+            settings.proxyResolution = proxyResolution
         }
 
         await apply(SetProjectPlaybackSettingsCommand(playbackSettings: settings))

@@ -74,7 +74,14 @@ struct ThumbnailProxyStaticContractTests {
         let plan = try #require(ProxyGenerator.makeProxyPlan(for: asset, in: directory))
 
         #expect(plan.sourceURL == asset.originalURL)
-        #expect(plan.targetURL.lastPathComponent == "\(assetId.uuidString)-proxy.mp4")
+        // The target carries the resolution token so proxies of different sizes
+        // do not collide on disk; without it `proxyInfoIfReady` would return a
+        // previously generated file and changing the resolution setting would
+        // silently do nothing. `ProxyResolutionTests` covers the switch itself.
+        #expect(
+            plan.targetURL.lastPathComponent
+                == "\(assetId.uuidString)-proxy-\(ProxyResolution.default.shortLabel).mp4"
+        )
         #expect(plan.resolution.width == 960)
         #expect(plan.resolution.height == 540)
         #expect(ProxyGenerator.proxyInfoIfReady(for: plan) == nil)

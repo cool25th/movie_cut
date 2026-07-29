@@ -1,4 +1,5 @@
 #if DEBUG
+import AVFoundation
 import AppKit
 import CoreImage
 import Foundation
@@ -141,7 +142,8 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_PROXY_BADGE=1` — generates a proxy for the first video asset and reports
-    ///   the timeline badge state. Pair with `MOVIECUT_UITEST_PROXY_PLAYBACK=1` to check the active state.
+    ///   the timeline badge state. Pair with `MOVIECUT_UITEST_PROXY_PLAYBACK=1` to check the active state,
+    ///   and `MOVIECUT_UITEST_PROXY_RESOLUTION=<p480|p540|p720|p1080>` to pick the generation resolution.
     /// - `MOVIECUT_UITEST_FILMSTRIP=1` — decodes four time-varying frames from the selected video.
     /// - `MOVIECUT_UITEST_TIMELINE_FILMSTRIP=1` — observes the real TimelineView viewport and hover consumers.
     /// - `MOVIECUT_UITEST_FILMSTRIP_PERF=density|memory` — drives real TimelineView zoom/scroll performance evidence.
@@ -248,7 +250,8 @@ extension EditorViewModel {
 
         if env["MOVIECUT_UITEST_PROXY_BADGE"] == "1" {
             proxyBadgeSuffix = await runProxyBadgeUITestScenario(
-                useProxyPlayback: env["MOVIECUT_UITEST_PROXY_PLAYBACK"] == "1"
+                useProxyPlayback: env["MOVIECUT_UITEST_PROXY_PLAYBACK"] == "1",
+                proxyResolution: env["MOVIECUT_UITEST_PROXY_RESOLUTION"].flatMap(ProxyResolution.init(rawValue:))
             )
         }
 
@@ -543,11 +546,19 @@ extension EditorViewModel {
     /// library and the real playback setting.
     ///
     /// Emits ` proxy_generated=<0|1> proxy_playback=<0|1> proxy_badge=<none|idle|active>`.
-    private func runProxyBadgeUITestScenario(useProxyPlayback: Bool) async -> String {
+    private func runProxyBadgeUITestScenario(
+        useProxyPlayback: Bool,
+        proxyResolution: ProxyResolution?
+    ) async -> String {
         guard let asset = currentProject.mediaLibrary.assets.values.first(where: { $0.kind == .video }) else {
-            return " proxy_generated=0 proxy_playback=0 proxy_badge=none"
+            return " proxy_generated=0 proxy_playback=0 proxy_badge=none proxy_resolution=none proxy_file=none"
         }
 
+        // The resolution must be committed before generating, since it selects
+        // both the export preset and the target filename.
+        if let proxyResolution {
+            await updatePlaybackSettings(proxyResolution: proxyResolution)
+        }
         await generateProxy(for: asset.id)
         await updatePlaybackSettings(useProxyPlayback: useProxyPlayback)
 
@@ -567,7 +578,23 @@ extension EditorViewModel {
 
         let badge = states.first.map(\.rawValue) ?? "none"
         let playbackFlag = currentProject.playbackSettings.useProxyPlayback ? 1 : 0
-        return " proxy_generated=\(generated ? 1 : 0) proxy_playback=\(playbackFlag) proxy_badge=\(badge)"
+        let settings = currentProject.playbackSettings
+        // Report the generated file's own name and measured size: the filename
+        // proves each resolution lands in its own file, and the size proves the
+        // export preset followed the selection rather than the old hardwired
+        // 960x540.
+        let proxyURL = currentProject.mediaLibrary.assets[asset.id]?.proxy?.proxyURL
+        let fileName = proxyURL?.lastPathComponent ?? "none"
+        var measured = "none"
+        if let proxyURL,
+           let tracks = try? await AVURLAsset(url: proxyURL).loadTracks(withMediaType: .video),
+           let track = tracks.first,
+           let size = try? await track.load(.naturalSize) {
+            measured = "\(Int(abs(size.width)))x\(Int(abs(size.height)))"
+        }
+        return " proxy_generated=\(generated ? 1 : 0) proxy_playback=\(playbackFlag)"
+            + " proxy_badge=\(badge) proxy_resolution=\(settings.proxyResolution.shortLabel)"
+            + " proxy_file=\(fileName) proxy_actual=\(measured)"
     }
 
     /// G-19 Inc 1 A6 hook. It executes the new resolver and both atomic

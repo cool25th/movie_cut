@@ -151,19 +151,21 @@ public enum ProxyGenerator {
     public static func makeProxyPlan(
         for asset: MediaAsset,
         in directory: URL,
-        maxDimension: CGFloat = defaultMaxDimension
+        proxyResolution selected: ProxyResolution = .default
     ) -> ProxyGenerationPlan? {
-        guard asset.kind == .video, maxDimension.isFinite, maxDimension > 0 else {
-            return nil
-        }
+        guard asset.kind == .video else { return nil }
 
+        // The resolution token keeps proxies of different sizes in separate
+        // files. They used to share one path, so `proxyInfoIfReady` handed back
+        // whatever had been generated first and changing the setting silently
+        // did nothing.
         let targetURL = directory
-            .appendingPathComponent("\(asset.id.uuidString)-proxy")
+            .appendingPathComponent("\(asset.id.uuidString)-proxy-\(selected.fileToken)")
             .appendingPathExtension("mp4")
         let resolution = proxyResolution(
             width: asset.metadata.width,
             height: asset.metadata.height,
-            maxDimension: maxDimension
+            maxDimension: selected.maxDimension
         )
 
         return ProxyGenerationPlan(
@@ -184,18 +186,19 @@ public enum ProxyGenerator {
     public static func generateProxy(
         for asset: MediaAsset,
         in directory: URL,
-        maxDimension: CGFloat = defaultMaxDimension
+        proxyResolution selected: ProxyResolution = .default
     ) async throws -> ProxyInfo? {
-        guard let plan = makeProxyPlan(for: asset, in: directory, maxDimension: maxDimension) else {
+        guard let plan = makeProxyPlan(for: asset, in: directory, proxyResolution: selected) else {
             return nil
         }
 
-        return try await generateProxy(for: asset, using: plan)
+        return try await generateProxy(for: asset, using: plan, proxyResolution: selected)
     }
 
     public static func generateProxy(
         for asset: MediaAsset,
-        using plan: ProxyGenerationPlan
+        using plan: ProxyGenerationPlan,
+        proxyResolution selected: ProxyResolution = .default
     ) async throws -> ProxyInfo? {
         guard asset.kind == .video else {
             return nil
@@ -216,9 +219,13 @@ public enum ProxyGenerator {
 
         #if canImport(AVFoundation)
         let sourceAsset = AVURLAsset(url: asset.originalURL)
+        // The preset has to follow the selected resolution. It used to be
+        // hardwired to 960x540 while `makeProxyPlan` computed a size from the
+        // caller's dimension, so `ProxyInfo.resolution` could report a size the
+        // file on disk never had.
         guard let exportSession = AVAssetExportSession(
             asset: sourceAsset,
-            presetName: AVAssetExportPreset960x540
+            presetName: exportPresetName(for: selected)
         ) else {
             return nil
         }
@@ -244,6 +251,19 @@ public enum ProxyGenerator {
         return nil
         #endif
     }
+
+    #if canImport(AVFoundation)
+    /// Maps a selected proxy resolution to the AVFoundation export preset that
+    /// produces it.
+    private static func exportPresetName(for selected: ProxyResolution) -> String {
+        switch selected {
+        case .p480: return AVAssetExportPreset640x480
+        case .p540: return AVAssetExportPreset960x540
+        case .p720: return AVAssetExportPreset1280x720
+        case .p1080: return AVAssetExportPreset1920x1080
+        }
+    }
+    #endif
 
     private static func proxyResolution(width: Int?, height: Int?, maxDimension: CGFloat) -> CGSize {
         guard

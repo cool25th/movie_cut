@@ -163,8 +163,8 @@
   - 상태: 🟡 iOS defer — 사유: Mac Quick Tools 상당수와 marker management가 iOS touch sheet pattern으로 정리되지 않음
 
 - 프록시 재생 + 타임라인 배지 (B-I7)
-  - Core: ✅ `ProxyGenerator`(960x540 생성), `ProxyInfo`, `PlaybackSettings.useProxyPlayback`, `ProxyBadgeState.resolve`
-  - Mac UI: ✅ 라이브러리 생성 버튼/상태 + Inspector 재생 토글 + **타임라인 클립 배지**(idle/active 2상태)
+  - Core: ✅ `ProxyGenerator`, `ProxyInfo`, `ProxyResolution`(480p/540p/720p/1080p), `PlaybackSettings.useProxyPlayback`+`.proxyResolution`, `ProxyBadgeState.resolve`
+  - Mac UI: ✅ 라이브러리 생성 버튼/상태 + Inspector 재생 토글 + **해상도 선택 4단**(720p 권장 표시) + **타임라인 클립 배지**(idle/active 2상태)
   - iOS UI: ❌ 없음
   - Mac preview/export: ✅ preview가 프록시 소비, export는 원본 유지(B-I7 요구사항)
   - iOS preview/export: ❌ `IOSPlaybackEngine`/`IOSExportEngine`에 프록시 분기 없음

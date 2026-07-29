@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		004B929A1A7D18BC1B9F4BCF /* IOSPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831B7E64367731593484646A /* IOSPlaybackEngine.swift */; };
 		011BDCA43DE0A1325892C14A /* MediaDragDropStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9BDF1B4BFEBE73BAB749340 /* MediaDragDropStaticContractTests.swift */; };
 		022A71092BB603C3B42BF95B /* IOSTemplatePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D653E933BCF5E2EA5A2470B /* IOSTemplatePickerView.swift */; };
 		02E76D985AD7C193527E970A /* BuiltinTransitionPlugins.swift in Sources */ = {isa = PBXBuildFile; fileRef = A914E824B38A1768662195AC /* BuiltinTransitionPlugins.swift */; };
@@ -63,6 +62,7 @@
 		3B8A823D411EB6B21E7B37C5 /* R503TrackHeaderStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86133809218139830BE31C7A /* R503TrackHeaderStaticContractTests.swift */; };
 		3EB7FD9D2B464781D286F6FA /* ReverseRenderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A45A72217F17E269568902 /* ReverseRenderService.swift */; };
 		3EFAD4DFEE0212BE77230BA1 /* TimelineScrubBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C834F5C80A614BA20A20BA1C /* TimelineScrubBehaviorTests.swift */; };
+		41F0EC958B024257F36CB866 /* WaveformTaskIdentityStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CD67187088D82383D00EEC /* WaveformTaskIdentityStaticContractTests.swift */; };
 		41F4047FFC031C58FA3547D5 /* AutosaveWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2CCAC3025D6CF11BDB7A66 /* AutosaveWiringStaticContractTests.swift */; };
 		44D1A8007EDD8D71CB8731B9 /* ImportExportE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D810DCF9714A481FC4DEF6FA /* ImportExportE2ETests.swift */; };
 		46C2631C1E31626D3BABA13F /* MacMaskCanvasStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9EE139473BA73C5F9B57D5 /* MacMaskCanvasStaticContractTests.swift */; };
@@ -356,7 +356,6 @@
 		7E85521618E0A1CE98CE9797 /* Phase23TimelineToolbarIconOnlyStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase23TimelineToolbarIconOnlyStaticContractTests.swift; sourceTree = "<group>"; };
 		812011A4E3191F04FBECFF30 /* IOSEffectsInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSEffectsInspectorView.swift; sourceTree = "<group>"; };
 		82CB5098CCE0239093CBC943 /* RenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderingTests.swift; sourceTree = "<group>"; };
-		831B7E64367731593484646A /* IOSPlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPlaybackEngine.swift; sourceTree = "<group>"; };
 		8359735002AEC4A0C42D6E4D /* BeatDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatDetectionTests.swift; sourceTree = "<group>"; };
 		84157882264AFA1BF0AF51F3 /* CurveEvaluatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurveEvaluatorTests.swift; sourceTree = "<group>"; };
 		86133809218139830BE31C7A /* R503TrackHeaderStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R503TrackHeaderStaticContractTests.swift; sourceTree = "<group>"; };
@@ -416,6 +415,7 @@
 		C5D5CA20BA212E82404DA466 /* R501TimelineToolbarStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R501TimelineToolbarStaticContractTests.swift; sourceTree = "<group>"; };
 		C5FF78ADB7D5D6A6CC04F38E /* RenderCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderCacheTests.swift; sourceTree = "<group>"; };
 		C722314775D9385EC73DDDC4 /* Phase02SmartToolsStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase02SmartToolsStaticContractTests.swift; sourceTree = "<group>"; };
+		C7CD67187088D82383D00EEC /* WaveformTaskIdentityStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformTaskIdentityStaticContractTests.swift; sourceTree = "<group>"; };
 		C7FC3496AF71946B48FC4185 /* ChromaKeyCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyCompositor.swift; sourceTree = "<group>"; };
 		C834F5C80A614BA20A20BA1C /* TimelineScrubBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrubBehaviorTests.swift; sourceTree = "<group>"; };
 		C9A45A72217F17E269568902 /* ReverseRenderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReverseRenderService.swift; sourceTree = "<group>"; };
@@ -647,6 +647,7 @@
 				AEEF76A5C9B415543DF40CCE /* VoiceoverRecordingStaticContractTests.swift */,
 				715FECB944523EAED4F30F7A /* WaveformGeneratorTests.swift */,
 				29C2B6635A7345FFC6A704AB /* WaveformRequestKeyTests.swift */,
+				C7CD67187088D82383D00EEC /* WaveformTaskIdentityStaticContractTests.swift */,
 				1FAE8ED538871F1147C7034C /* Support */,
 			);
 			name = MovieCutCoreTests;
@@ -689,7 +690,6 @@
 				3246BCE285678EDCF9CCD357 /* IOSTimelineView.swift */,
 				9507ABDD9B05124D7FE956AA /* MovieCutiOSApp.swift */,
 				EA2F6A28992ECA14D9B68ABE /* Export */,
-				59E357C9D5A0C4474E81191F /* Playback */,
 				F0031F660E7D426C4B700FBD /* Views */,
 			);
 			name = MovieCutiOS;
@@ -755,14 +755,6 @@
 				18685F32B1B041132751CBBD /* CanvasSettingsView.swift */,
 			);
 			path = ProjectSettings;
-			sourceTree = "<group>";
-		};
-		59E357C9D5A0C4474E81191F /* Playback */ = {
-			isa = PBXGroup;
-			children = (
-				831B7E64367731593484646A /* IOSPlaybackEngine.swift */,
-			);
-			path = Playback;
 			sourceTree = "<group>";
 		};
 		741C312B5CF580D091A2CCF6 /* MovieCutMacUITests */ = {
@@ -940,7 +932,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_6B60D42A-ECC2-47C6-B320-7E2F245A4657" /* Resources */ = {
+		"TEMP_7DCA2A72-BD9D-48D3-8D2B-E9E65DB097D1" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1226,6 +1218,7 @@
 				C336F67206F6589CABA10018 /* VoiceoverRecordingStaticContractTests.swift in Sources */,
 				CC4589E03E7501C7C525B5E0 /* WaveformGeneratorTests.swift in Sources */,
 				5A86D54059BAE0AA4AA7889E /* WaveformRequestKeyTests.swift in Sources */,
+				41F0EC958B024257F36CB866 /* WaveformTaskIdentityStaticContractTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1319,7 +1312,6 @@
 				154D96397B9CC1DD4F07439B /* IOSKeyframeEditorView.swift in Sources */,
 				F49AD1A74734665D2A91ACAC /* IOSMaskCanvasView.swift in Sources */,
 				1AED7492ABD4FDF88F7F0F35 /* IOSMusicLibraryView.swift in Sources */,
-				004B929A1A7D18BC1B9F4BCF /* IOSPlaybackEngine.swift in Sources */,
 				8CAC01DA7369CB8F203B97E0 /* IOSSFXPickerView.swift in Sources */,
 				9B72D3719B6AAD7EDEA05207 /* IOSStickerPickerView.swift in Sources */,
 				022A71092BB603C3B42BF95B /* IOSTemplatePickerView.swift in Sources */,

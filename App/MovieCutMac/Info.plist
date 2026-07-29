@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MovieCut needs microphone access to record voiceovers for your timeline.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>MovieCut uses speech recognition to generate subtitles from your clips. Audio is transcribed on this device.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

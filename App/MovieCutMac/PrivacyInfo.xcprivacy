@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  MovieCut processes media entirely on-device. It has no analytics, no
+	  accounts, and no third-party SDKs, so nothing is collected or tracked.
+	  Audited 2026-07-29 against the codebase: no UserDefaults/@AppStorage,
+	  no disk-space, boot-time, or active-keyboard API use.
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!--
+			  File timestamps are read for two purposes, both local:
+			  - RenderCache.fingerprint(ofFileAt:) builds a size+mtime cache key
+			    for media the user picked, so renders are not recomputed.
+			  - CloudSyncService reads .contentModificationDateKey to decide
+			    which project files changed.
+			  C617.1 covers files in the app container; DDA9.1 covers files the
+			  user granted access to through a picker.
+			-->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -83,7 +83,7 @@
 | 오디오 더킹 | ✅완료 | `AudioDuckingCommand`로 음성 구간 기반 자동 볼륨 감소 구현 |
 | 효과음 라이브러리 | ✅완료 | `SFXLibrary`로 효과음 탐색 및 삽입 흐름 구현 |
 | 이퀄라이저 | ✅완료 | `EqualizerPreset`으로 EQ 프리셋 적용 지원 |
-| 노이즈 감소 | ✅완료 | `NoiseReductionProcessor`로 오디오 노이즈 감소 처리 구현 |
+| 노이즈 감소 | ✅완료 | `NoiseReductionService`로 오디오 노이즈 감소 처리 구현 |
 
 ### G. 스티커/오버레이
 | 기능 | 상태 | 비고 |
@@ -174,6 +174,6 @@
 ### Low (있으면 좋음)
 1. 템플릿 마켓플레이스와 기존 프로젝트 기반 템플릿 생성은 `TemplateMarketplace`, `SaveAsTemplateCommand`로 구현됨.
 2. 소셜 공유 연동은 `SocialShareService`로 구현됨.
-3. 효과음 라이브러리, 이퀄라이저, 노이즈 감소는 `SFXLibrary`, `EqualizerPreset`, `NoiseReductionProcessor`로 구현됨.
+3. 효과음 라이브러리, 이퀄라이저, 노이즈 감소는 `SFXLibrary`, `EqualizerPreset`, `NoiseReductionService`로 구현됨.
 4. 배경 제거, 스타일 트랜스퍼 같은 고급 AI 기능은 Vision 및 CoreImage 기반 provider로 구현됨.
 5. 클라우드 프로젝트 동기화, 협업, 버전 히스토리는 `CloudSyncService`와 `VersionHistory`로 구현됨.

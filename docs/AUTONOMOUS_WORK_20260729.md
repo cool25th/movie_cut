@@ -57,7 +57,9 @@
 
 - [x] **C1** `docs/PLATFORM_PARITY_MATRIX.md` — `IOSPlaybackEngine (dead code)` → 제거됨(7b5b2ad)으로 갱신. ✅ DONE + **main 병합**.
 - [x] **C2** `docs/GAP_ANALYSIS_V2.md` — `ContentView.swift` → `iOSContentView.swift`. ✅ DONE + **main 병합**.
-- [ ] **C3** `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` — 허구 타입 `NoiseReductionProcessor` → `NoiseReductionService` 5곳. 커밋 `docs: fix NoiseReductionService name in gap analyses`. **← 유일한 잔여 PENDING**
+- [x] **C3** `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` — 허구 타입 `NoiseReductionProcessor` → `NoiseReductionService` 5곳. 커밋 `docs: fix NoiseReductionService name in gap analyses`. ✅ DONE — GATE_PASS, swift test 984 유지. 재검증: NoiseReductionProcessor 코드 0건(허구), 실제는 `public struct NoiseReductionService`. GAP_ANALYSIS.md 2곳 + GAP_ANALYSIS_V2.md 3곳 = 5곳 수정, 잔여 0건.
+
+**🎉 QUEUE EMPTY — Track A/B/C(13/13) 완료.**
 
 ### (귀환 후 검토 — 무인 처리 제외) Track X — public API dead code
 
@@ -77,6 +79,15 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 13 — 2026-07-29 (cron 발화) — C3 ✅ DONE → 🎉 QUEUE EMPTY
+- **항목**: C3 — `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` 의 허구 타입명 정정 (마지막 PENDING)
+- **상태**: DONE
+- **재검증**: 실제 타입은 `public struct NoiseReductionService` (Sources/MovieCutCore/Audio/NoiseReductionService.swift). `NoiseReductionProcessor`는 코드에 **0건** → 허구 타입 확정. GAP_ANALYSIS.md 2곳(:86,:177), GAP_ANALYSIS_V2.md 3곳(:117,:204,:225) = 총 5곳. 수정 후 잔여 `NoiseReductionProcessor` 0건, `NoiseReductionService` 5곳 정확히 반영 확인.
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK. (문서만 변경.)
+- **🎉 QUEUE EMPTY — 무인 작업 완료.** Track A(6)/B(4)/C(3) = 13/13 항목 전부 처리됨.
+- **비고**: C3는 사용자 귀환 후 ENTRY 9(브랜치 정리 세션)에서 A1-A6/B1-B4/C1-C2 12건이 이미 main에 병합된 상태에서 처리됨. main 기준 `eb828a7`. C3만 별도 브랜치 `docs/fix-noisereductionservice-name-gap-analyses`에 커밋(main 미병합). 귀환 후 병합 검토 필요.
+- **잔여 무인-외 항목**: Track X(public API dead code 6종)는 `docs/AUTONOMOUS_PUBLIC_API_DEADCODE_20260729.md`에 분리 보고 — 사용자 결정 대상.
 
 ### ENTRY 9 — 2026-07-29 — 브랜치 정리 세션 (사용자 요청, 대화형)
 

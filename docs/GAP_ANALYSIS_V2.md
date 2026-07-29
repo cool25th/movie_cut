@@ -114,7 +114,7 @@
 | 오디오 더킹 | `AudioDuckingCommand` | ✅ |
 | 효과음 | `SFXLibrary` | ✅ |
 | 이퀄라이저 | `AudioEqualizerService`의 `AVAudioUnitEQ` 5-band configuration | ✅ |
-| 노이즈 감소 | `NoiseReductionProcessor`의 high-pass filter 및 noise gate | ✅ |
+| 노이즈 감소 | `NoiseReductionService`의 high-pass filter 및 noise gate | ✅ |
 
 완료 판정 근거: 이퀄라이저는 프리셋 데이터뿐 아니라 실제 `AVAudioUnitEQ` filter chain에 연결되며, 노이즈 감소는 `AVAudioEngine` 기반 오디오 처리로 동작한다.
 
@@ -201,7 +201,7 @@
 | 2 | `Sources/MovieCutCore/Transcription/StubTranscriptionProvider.swift` | ✅ 의도적 fallback | `isAvailable=false`, 빈 결과 반환. 실제 구현은 `SpeechTranscriptionProvider`이며 완료율 계산 제외 |
 | 3 | `Sources/MovieCutCore/Analysis/BackgroundRemovalProvider.swift` | ✅ 완료 | Vision `VNGeneratePersonSegmentationRequest` 기반 person segmentation |
 | 4 | `Sources/MovieCutCore/Analysis/StyleTransferProvider.swift` | ✅ 완료 | comic, noir, vintage, cyberpunk, watercolor 5개 Core Image style chain |
-| 5 | `Sources/MovieCutCore/Audio/NoiseReductionProcessor.swift` | ✅ 완료 | `AVAudioEngine` 기반 high-pass filter 및 noise gate |
+| 5 | `Sources/MovieCutCore/Audio/NoiseReductionService.swift` | ✅ 완료 | `AVAudioEngine` 기반 high-pass filter 및 noise gate |
 | 6 | `Sources/MovieCutCore/Cloud/CloudSyncService.swift` | ✅ 완료 | iCloud Drive 및 `FileManager.ubiquityIdentityToken` 기반 동기화 |
 | 7 | `Sources/MovieCutCore/Templates/TemplateMarketplace.swift` | ✅ 완료 | 12개 템플릿을 포함한 로컬 JSON catalog |
 | 8 | `Sources/MovieCutCore/Export/ExportProgress.swift` | ✅ 완료 | 실제 `AVAssetExportSession.progress` polling |
@@ -222,7 +222,7 @@
 1. iOS 편집 화면: `ContentView`가 전체 editor layout으로 재작성되었다.
 2. iOS 프리뷰: `PreviewView`가 `AVPlayer` 기반 preview composition으로 재작성되었다.
 3. 배경 제거: `BackgroundRemovalProvider`가 Vision `VNGeneratePersonSegmentationRequest`를 사용한다.
-4. 노이즈 감소: `NoiseReductionProcessor`가 `AVAudioEngine` 기반 high-pass filter와 noise gate를 적용한다.
+4. 노이즈 감소: `NoiseReductionService`가 `AVAudioEngine` 기반 high-pass filter와 noise gate를 적용한다.
 5. 클라우드 동기화: `CloudSyncService`가 iCloud Drive와 `FileManager.ubiquityIdentityToken`을 사용한다.
 6. 템플릿 마켓플레이스: `TemplateMarketplace`가 12개 템플릿을 포함한 로컬 JSON catalog를 제공한다.
 7. 협업 기능: `CollaborationService`가 공유 링크, 역할, 변경 이벤트를 제공한다.

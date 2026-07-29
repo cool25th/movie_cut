@@ -145,4 +145,72 @@ struct ClipTrimMathTests {
         #expect(r1?.source == r2?.source)
         #expect(r1?.timeline == r2?.timeline)
     }
+
+    // MARK: - Reverse-clip trim
+
+    private func reversedClip(
+        sourceDuration: TimeInterval,
+        timelineDuration: TimeInterval? = nil,
+        rate: Double = 1,
+        sourceStart: TimeInterval = 0,
+        timelineStart: TimeInterval = 0
+    ) -> Clip {
+        Clip(
+            kind: .video,
+            sourceRange: TimeRange(start: sourceStart, duration: sourceDuration),
+            timelineRange: TimeRange(
+                start: timelineStart,
+                duration: timelineDuration ?? sourceDuration / max(rate, 0.25)
+            ),
+            playbackRate: rate,
+            isReversed: true
+        )
+    }
+
+    @Test("Reverse start trim moves sourceRange.end inward (keeps sourceStart)")
+    func reverseStartTrimReducesSourceEnd() throws {
+        // 10s source at 1x, reversed: timeline 0 plays source 10, timeline 10
+        // plays source 0. Trimming the START to timeline 2 moves the opening
+        // play point (source 10) inward to source 8, so sourceRange.end becomes
+        // 8 while sourceRange.start stays 0. Previously start-trim moved
+        // sourceRange.start, leaving the frames the user wanted to discard.
+        let c = reversedClip(sourceDuration: 10, timelineDuration: 10, rate: 1)
+        let result = try #require(ClipTrimMath.compute(
+            clip: c, edge: .start, targetTimelineTime: 2.0,
+            assetDuration: 10, minimumDuration: minimum
+        ))
+        #expect(abs(result.source.start - 0.0) <= tolerance)
+        #expect(abs(result.source.end - 8.0) <= tolerance)
+        #expect(abs(result.timeline.start - 2.0) <= tolerance)
+    }
+
+    @Test("Reverse end trim moves sourceRange.start inward (keeps sourceEnd)")
+    func reverseEndTrimRaisesSourceStart() throws {
+        // 10s source at 1x, reversed. Trimming the END to timeline 8 moves the
+        // closing play point (source 0) inward to source 2, so sourceRange.start
+        // becomes 2 while sourceRange.end stays 10.
+        let c = reversedClip(sourceDuration: 10, timelineDuration: 10, rate: 1)
+        let result = try #require(ClipTrimMath.compute(
+            clip: c, edge: .end, targetTimelineTime: 8.0,
+            assetDuration: 10, minimumDuration: minimum
+        ))
+        #expect(abs(result.source.start - 2.0) <= tolerance)
+        #expect(abs(result.source.end - 10.0) <= tolerance)
+        #expect(abs(result.timeline.duration - 8.0) <= tolerance)
+    }
+
+    @Test("Reverse 2x end trim maps the timeline delta to source correctly")
+    func reverseEndTrimAt2x() throws {
+        // 10s source at 2x, reversed -> 5s timeline (source 10 -> 0). Trim the
+        // end to timeline 4s (1s shorter): at 2x, 1s of timeline = 2s of source,
+        // so the closing source point moves from 0 to 2. sourceRange becomes
+        // [2, 10].
+        let c = reversedClip(sourceDuration: 10, timelineDuration: 5, rate: 2)
+        let result = try #require(ClipTrimMath.compute(
+            clip: c, edge: .end, targetTimelineTime: 4.0,
+            assetDuration: 10, minimumDuration: minimum
+        ))
+        #expect(abs(result.source.start - 2.0) <= tolerance)
+        #expect(abs(result.source.end - 10.0) <= tolerance)
+    }
 }

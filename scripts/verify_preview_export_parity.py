@@ -33,6 +33,28 @@ def run_bytes(cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(cmd, capture_output=True, check=True)
 
 
+def probe_duration(mp4: Path) -> float | None:
+    """Return the mp4 duration in seconds, or None if it cannot be probed.
+
+    Used to guard every requested sample timestamp against the export length so
+    an out-of-range request fails cleanly instead of making ffmpeg exit non-zero
+    and crashing the comparator via check=True.
+    """
+    try:
+        out = run_text([
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration", "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(mp4),
+        ]).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    try:
+        return float(out)
+    except ValueError:
+        return None
+
+
 def extract_export_frame(mp4: Path, time: float, out_png: Path, size: str) -> None:
     """Extract a single frame from the exported mp4 at `time`, scaled to `size`."""
     # Scale + center-pad so the comparator sees the same canvas region the
@@ -130,13 +152,29 @@ def main() -> int:
         print("FAIL: no times provided", file=sys.stderr)
         return 2
 
-    worst = 0.0
-    failed = False
+    export_duration = probe_duration(args.export_mp4)
+    if export_duration is None:
+        print("FAIL: could not probe export duration; cannot validate sample "
+              "timestamps", file=sys.stderr)
+        return 2
     print(f"Preview dir: {args.preview_dir}")
     print(f"Export mp4 : {args.export_mp4}")
+    print(f"Export dur : {export_duration:.3f}s")
     print(f"Tolerance  : overall MAD <= {args.tolerance:.2f}")
     print("-" * 60)
+
+    worst = 0.0
+    failed = False
     for t in times:
+        # Guard the requested timestamp against the export length BEFORE
+        # invoking ffmpeg. A timestamp past the end (e.g. requesting 1.5s on a
+        # 2x-shortened ~1.0s export) used to make ffmpeg exit non-zero and
+        # crash the comparator. Fail this sample explicitly instead.
+        if t < 0 or t > export_duration + 1e-3:
+            print(f"  t={t:.3f}s  FAIL out of range (export duration "
+                  f"{export_duration:.3f}s)")
+            failed = True
+            continue
         preview_png = args.preview_dir / f"preview_t{t:.3f}.png"
         if not preview_png.is_file():
             print(f"  t={t:.3f}s  SKIP (no preview dump {preview_png.name})")
@@ -144,6 +182,13 @@ def main() -> int:
             continue
         export_png = work / f"export_t{t:.3f}.png"
         extract_export_frame(args.export_mp4, t, export_png, args.size)
+        # Confirm the export frame actually landed before reading it; previously
+        # read_pixels() was called unconditionally and could raise on a missing
+        # or zero-byte file.
+        if not export_png.is_file() or export_png.stat().st_size == 0:
+            print(f"  t={t:.3f}s  SKIP (export frame not produced)")
+            failed = True
+            continue
 
         pw, ph, ppix = read_pixels(preview_png, force_size=args.size)
         ew, eh, epix = read_pixels(export_png, force_size=args.size)

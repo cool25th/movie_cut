@@ -83,10 +83,31 @@ public enum ClipTrimMath {
         let newDuration = timelineEnd - clampedTarget
         guard newDuration >= minimumDuration else { return nil }
 
-        // Map the new timeline start to source time.
-        let newSourceStart = mapping.sourceTime(forTimelineTime: clampedTarget)
-        guard newSourceStart.isFinite else { return nil }
+        // Map the new timeline start to the source time played there. The
+        // mapping is reverse-aware, but which source edge this maps to depends
+        // on playback direction, so the range assembly must branch.
+        let mappedSource = mapping.sourceTime(forTimelineTime: clampedTarget)
+        guard mappedSource.isFinite else { return nil }
 
+        if clip.isReversed {
+            // Reverse: the timeline start plays sourceRange.end and source
+            // walks down as the timeline advances. A start trim moves the
+            // opening play point inward, so the mapped source becomes the
+            // clip's NEW source end while the start (.start) stays fixed.
+            // Without this branch the start trim would move sourceRange.start
+            // and keep exactly the frames the user wanted to discard.
+            let newSourceEnd = mappedSource
+            guard newSourceEnd > clip.sourceRange.start else { return nil }
+            let newSourceDuration = newSourceEnd - clip.sourceRange.start
+            guard newSourceDuration > 0 else { return nil }
+            return (
+                source: TimeRange(start: clip.sourceRange.start, duration: newSourceDuration),
+                timeline: TimeRange(start: clampedTarget, duration: newDuration)
+            )
+        }
+
+        // Forward: the new timeline start maps to a new source start.
+        let newSourceStart = mappedSource
         // Guard source start: cannot go before 0.
         guard newSourceStart >= 0 else { return nil }
         // Guard source start against the clip's own source range (the new start
@@ -111,7 +132,6 @@ public enum ClipTrimMath {
         minimumDuration: TimeInterval
     ) -> (source: TimeRange, timeline: TimeRange)? {
         let timelineStart = clip.timelineRange.start
-        let timelineEnd = clip.timelineRange.end
 
         // Clamp target into the trimmable end region: must leave a minimum
         // duration at the start.
@@ -120,9 +140,10 @@ public enum ClipTrimMath {
         let newDuration = clampedTarget - timelineStart
         guard newDuration >= minimumDuration else { return nil }
 
-        // Map the new timeline end to source time.
-        let newSourceEnd = mapping.sourceTime(forTimelineTime: clampedTarget)
-        guard newSourceEnd.isFinite else { return nil }
+        // Map the new timeline end to the source time played there. The mapping
+        // is reverse-aware; the source edge this maps to depends on direction.
+        let mappedSource = mapping.sourceTime(forTimelineTime: clampedTarget)
+        guard mappedSource.isFinite else { return nil }
 
         // Guard the source end against the asset duration for video/audio.
         // Image clips have no asset limit (assetDuration == nil) and can be
@@ -134,6 +155,27 @@ public enum ClipTrimMath {
                 timeline: TimeRange(start: timelineStart, duration: newDuration)
             )
         }
+
+        if clip.isReversed {
+            // Reverse: the timeline end plays sourceRange.start and the closing
+            // play point walks down as the end moves out. An end trim moves the
+            // closing play point inward, so the mapped source becomes the clip's
+            // NEW source start while the end stays fixed. The asset-duration
+            // guard does not bind here (we are raising sourceRange.start toward
+            // the fixed end, never extending past the asset).
+            let newSourceStart = mappedSource
+            guard newSourceStart >= 0 else { return nil }
+            guard newSourceStart < clip.sourceRange.end else { return nil }
+            let newSourceDuration = clip.sourceRange.end - newSourceStart
+            guard newSourceDuration > 0 else { return nil }
+            return (
+                source: TimeRange(start: newSourceStart, duration: newSourceDuration),
+                timeline: TimeRange(start: timelineStart, duration: newDuration)
+            )
+        }
+
+        // Forward: the new timeline end maps to a new source end.
+        let newSourceEnd = mappedSource
 
         if let assetDuration, assetDuration.isFinite, assetDuration > 0 {
             guard newSourceEnd <= assetDuration else {

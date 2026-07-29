@@ -36,7 +36,8 @@ APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 FIXTURES="$ROOT/Tests/Fixtures"
 
 # run_scenario <name> <parity_times> <tolerance> <extra_env...>
-# Returns 0 on PASS, exits 1 on FAIL.
+# Returns 0 on PASS, exits 1 on FAIL. Preserves the per-scenario work dir on
+# failure (last checkpoint, preview frames, export) for inspection.
 run_scenario() {
   local name="$1"; local times="$2"; local tolerance="$3"; shift 3
   local extra_env=("$@")
@@ -58,15 +59,35 @@ run_scenario() {
     "${extra_env[@]}" \
     "$APP_BIN" >/dev/null 2>&1 &
   local pid=$!
-  for _ in $(seq 1 240); do [ -s "$result" ] && grep -q "parity_done\|error=" "$result" && break; sleep 0.5; done
-  wait "$pid" 2>/dev/null || true
 
+  # Hard watchdog: the app only self-quits cooperatively and has been observed
+  # to hang on teardown (notably the transition buildComposition path).
+  local scenario_timeout=240
+  ( sleep "$scenario_timeout"; echo "    WATCHDOG: $name exceeded ${scenario_timeout}s, killing app" >&2; kill "$pid" 2>/dev/null || true ) &
+  local wd=$!
+  for _ in $(seq 1 "$((scenario_timeout * 2))"); do [ -s "$result" ] && grep -q "parity_done\|error=" "$result" && break; sleep 0.5; done
+  wait "$pid" 2>/dev/null || true
+  kill "$wd" 2>/dev/null || true
+  wait "$wd" 2>/dev/null || true
+
+  # Order-independent status check: require the final parity_done marker and
+  # no error (the comparator downstream enforces the frame counts).
   local status; status="$(cat "$result" 2>/dev/null || echo MISSING)"
-  if ! echo "$status" | grep -q "error=none"; then
-    echo "    FAIL: harness reported error: $status" >&2
-    rm -rf "$work"; return 1
+  if ! echo "$status" | grep -q "parity_done"; then
+    echo "    FAIL: harness did not complete: $status" >&2
+    echo "    Preserving work dir: $work" >&2
+    return 1
   fi
-  [ -s "$export_mp4" ] || { echo "    FAIL: no export mp4" >&2; rm -rf "$work"; return 1; }
+  if ! echo "$status" | grep -qE '(^| )error=none( |$)'; then
+    echo "    FAIL: harness reported error: $status" >&2
+    echo "    Preserving work dir: $work" >&2
+    return 1
+  fi
+  if ! [ -s "$export_mp4" ]; then
+    echo "    FAIL: no export mp4" >&2
+    echo "    Preserving work dir: $work" >&2
+    return 1
+  fi
 
   python3 "$ROOT/scripts/verify_preview_export_parity.py" \
     --preview-dir "$preview_dir" \
@@ -76,7 +97,11 @@ run_scenario() {
     --size 320x240 \
     --work-dir "$work"
   local rc=$?
-  rm -rf "$work"
+  if [ "$rc" -ne 0 ]; then
+    echo "    Preserving work dir: $work" >&2
+  else
+    rm -rf "$work"
+  fi
   return $rc
 }
 
@@ -90,13 +115,17 @@ FAIL=0
 # available. Tracked as a Step 6 caveat.
 
 echo "Scenario 2: 2x clip split"
-run_scenario "split_2x" "0.5,1.5" 25.0 \
+# 2s source at 2x -> ~1.0s export; the old "0.5,1.5" requested a 1.5s frame
+# past the end, which crashed the comparator. Sample well inside ~1.0s.
+run_scenario "split_2x" "0.25,0.75" 25.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_SPEED_RATE=2" \
   "MOVIECUT_UITEST_SPLIT_AT=0.5" || FAIL=1
 
 echo "Scenario 3: speed ramp"
-run_scenario "speed_ramp" "0.5,1.5" 25.0 \
+# Ramp (1x->2x->1x over 2s source) renders ~1.386s; the old 1.5s sample was
+# past the end. Sample well inside ~1.386s.
+run_scenario "speed_ramp" "0.25,1.0" 25.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_SPEED_RAMP=1" || FAIL=1
 
@@ -123,7 +152,15 @@ run_scenario "image_video_mixed" "0.5,2.5" 25.0 \
   "MOVIECUT_UITEST_IMPORT=$IMAGE,$VIDEO_A" || FAIL=1
 
 echo "Scenario 8: normal delete (gap preserved)"
-run_scenario "normal_delete" "0.5,2.5" 25.0 \
+# The harness deletes the *last-imported* clip (VIDEO_B), leaving only VIDEO_A
+# at [0, 2], so the export is 2.0s. The old "0.5,2.5" requested a 2.5s frame
+# past the end, which now fails cleanly (out-of-range guard) instead of
+# crashing. Sample inside the 2.0s export.
+# NOTE: because deleteClip() always removes the selected (last) clip, this
+# scenario does not actually leave an on-timeline gap — it just tests that
+# Preview matches Export for the remaining clip after a delete. Exercising a
+# real gap would require a harness change to delete a non-trailing clip.
+run_scenario "normal_delete" "0.5,1.5" 25.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
   "MOVIECUT_UITEST_NORMAL_DELETE=1" || FAIL=1
 

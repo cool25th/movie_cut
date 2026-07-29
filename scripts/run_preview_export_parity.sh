@@ -35,7 +35,19 @@ APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# Preserve $WORK on failure so a hanging/crashing harness leaves evidence
+# (last checkpoint line, preview frames, export). The flag is set in every
+# non-zero exit path.
+PRESERVE_WORK=0
+cleanup() {
+  local rc=$?
+  if [ "$rc" -ne 0 ] && [ "$PRESERVE_WORK" -eq 1 ]; then
+    echo "Preserving parity work dir for inspection: $WORK" >&2
+  else
+    rm -rf "$WORK"
+  fi
+}
+trap cleanup EXIT
 
 RESULT="$WORK/result.txt"
 PREVIEW_DIR="$WORK/preview_frames"
@@ -59,17 +71,42 @@ env MOVIECUT_UITEST=1 \
   MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 HP=$!
-for _ in $(seq 1 180); do [ -s "$RESULT" ] && break; sleep 0.5; done
+
+# Hard watchdog: the app only self-quits cooperatively (NSApp.terminate) and
+# has been observed to hang on teardown. Bound its lifetime and force-kill it
+# if it overruns, then preserve the work dir so the last checkpoint is
+# inspectable.
+HARNESS_TIMEOUT=180
+kill_app() { kill "$HP" 2>/dev/null || true; }
+( sleep "$HARNESS_TIMEOUT"; echo "WATCHDOG: harness exceeded ${HARNESS_TIMEOUT}s, killing app" >&2; kill_app ) &
+WD=$!
+for _ in $(seq 1 "$((HARNESS_TIMEOUT * 2))"); do [ -s "$RESULT" ] && break; sleep 0.5; done
 wait "$HP" 2>/dev/null || true
+# Cancel the watchdog if the app exited on its own.
+kill "$WD" 2>/dev/null || true
+wait "$WD" 2>/dev/null || true
 
 STATUS="$(cat "$RESULT" 2>/dev/null || echo MISSING)"
 echo "Harness status: $STATUS"
-case "$STATUS" in
-  *"error=none"*"dumped_frames="*[!0]*) ;;
-  *) echo "FAIL: parity harness did not dump frames cleanly" >&2; exit 1 ;;
-esac
 
-[ -s "$EXPORT_MP4" ] || { echo "FAIL: export mp4 not produced" >&2; exit 1; }
+# Order-independent field parsing. The app emits the parity status with a fixed
+# field order (parity_done dumped_frames=N ... composition_error=... error=...),
+# but parsing must not depend on that order — a future field reorder would
+# otherwise turn a passing run into a failure. Require: the final `parity_done`
+# marker, no error, no composition error, and at least one dumped frame.
+parity_ok=1
+echo "$STATUS" | grep -q 'parity_done' || parity_ok=0
+echo "$STATUS" | grep -qE '(^| )error=none( |$)' || parity_ok=0
+echo "$STATUS" | grep -qE '(^| )composition_error=none( |$)' || parity_ok=0
+dumped="$(echo "$STATUS" | grep -oE 'dumped_frames=[0-9]+' | head -n1 | cut -d= -f2 || true)"
+{ [ -n "$dumped" ] && [ "$dumped" -ge 1 ]; } || parity_ok=0
+if [ "$parity_ok" -ne 1 ]; then
+  echo "FAIL: parity harness did not dump frames cleanly (dumped=${dumped:-0})" >&2
+  PRESERVE_WORK=1
+  exit 1
+fi
+
+[ -s "$EXPORT_MP4" ] || { echo "FAIL: export mp4 not produced" >&2; PRESERVE_WORK=1; exit 1; }
 
 echo ""
 echo "Comparing Preview vs Export frames…"
@@ -79,4 +116,4 @@ python3 "$ROOT/scripts/verify_preview_export_parity.py" \
   --times "$PARITY_TIMES" \
   --tolerance 12.0 \
   --size 320x240 \
-  --work-dir "$WORK"
+  --work-dir "$WORK" || { PRESERVE_WORK=1; exit 1; }

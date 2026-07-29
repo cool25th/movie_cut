@@ -5466,25 +5466,14 @@ final class EditorViewModel {
     }
 
     private func syncTimelinePlayhead(to playbackTime: TimeInterval) {
-        guard let clip = selectedClip else {
-            playheadTime = min(max(0, playbackTime), max(0, currentProject.timeline.duration))
-            return
-        }
-
-        // The playback engine reports composition timeline time. Map the
-        // playhead to the project timeline domain through the canonical mapping
-        // so the inspector/scrubber reflects the right position for any rate or
-        // speed ramp (Step 3).
-        if let mapping = clip.makeTimeMapping() {
-            let timelineTime = mapping.timelineTime(forSourceTime: playbackTime)
-            playheadTime = min(max(0, timelineTime), max(0, currentProject.timeline.duration))
-            return
-        }
-
-        let sourceOffset = max(0, playbackTime - clip.sourceRange.start)
-        let timelineOffset = sourceOffset / max(clip.playbackRate, 0.25)
-        let timelineTime = clip.timelineRange.start + timelineOffset
-        playheadTime = min(max(0, timelineTime), clip.timelineRange.end)
+        // The playback engine reports composition timeline time, which is already
+        // the project timeline domain (see PreviewPanel's
+        // `.onChange(of: playbackEngine.currentTime)` invariant). Feeding it
+        // through `timelineTime(forSourceTime:)` — which expects absolute source
+        // seconds — would double-convert it and warp the playhead on any non-1x
+        // or speed-ramp clip (e.g. a 2x clip's 1s point snapping back to ~0.5s).
+        // Just clamp to the project duration, the same as the no-selection path.
+        playheadTime = min(max(0, playbackTime), max(0, currentProject.timeline.duration))
     }
 
     /// Rebuilds the preview composition from the current project so the main

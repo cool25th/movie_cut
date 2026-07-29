@@ -63,45 +63,66 @@ public struct SplitClipCommand: EditorCommand {
         let splitSourceTime = mapping.sourceTime(forTimelineTime: splitTime)
         let firstTimelineDuration = splitTime - clip.timelineRange.start
         let secondTimelineDuration = clip.timelineRange.end - splitTime
-        let firstSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
-        let secondSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
-        guard secondSourceDuration >= 0 else {
-            throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
+
+        // Assign each resulting clip the source sub-range it actually plays.
+        // `splitSourceTime` is already reverse-correct (the mapping walks source
+        // `.end -> .start` for a reversed clip), but the *assignment* of the two
+        // sub-ranges must flip for reverse playback: a reversed clip walks source
+        // backward, so by the split point the timeline-left half has already
+        // played the *upper* source sub-range down to `splitSourceTime`. Without
+        // this branch a reversed source `0...10` split at timeline 4s would put
+        // `0...6` on the first half (which should play `10->6`) — the halves get
+        // swapped. Timeline ranges never flip: the timeline always advances
+        // forward regardless of playback direction.
+        let firstSourceRange: TimeRange
+        let secondSourceRange: TimeRange
+        if clip.isReversed {
+            // first  plays source [splitSourceTime, sourceEnd] (walks end -> split)
+            // second plays source [sourceStart, splitSourceTime] (walks split -> start)
+            let firstSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
+            let secondSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
+            guard secondSourceDuration >= 0 else {
+                throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
+            }
+            firstSourceRange = TimeRange(start: splitSourceTime, duration: firstSourceDuration)
+            secondSourceRange = TimeRange(start: clip.sourceRange.start, duration: secondSourceDuration)
+        } else {
+            let firstSourceDuration = max(0, splitSourceTime - clip.sourceRange.start)
+            let secondSourceDuration = max(0, clip.sourceRange.end - splitSourceTime)
+            guard secondSourceDuration >= 0 else {
+                throw EditorCommandError.invalidCommand("Split time exceeds the clip source range.")
+            }
+            firstSourceRange = TimeRange(start: clip.sourceRange.start, duration: firstSourceDuration)
+            secondSourceRange = TimeRange(start: splitSourceTime, duration: secondSourceDuration)
         }
 
         var firstClip = clip
         firstClip.timelineRange.duration = firstTimelineDuration
-        firstClip.sourceRange.duration = firstSourceDuration
+        firstClip.sourceRange = firstSourceRange
         // Re-normalize speed-ramp points into each sub-clip's own source
         // sub-range so the ramp curve still spans [0,1] after the split (Step 5
-        // of the core-editing repair). Previously both sub-clips inherited the
-        // parent's ramp points verbatim, so each curve referenced the wrong
-        // source domain.
+        // of the core-editing repair). The ramp curve is defined over the
+        // source domain; reverse only flips playback order, not the
+        // source-to-rate mapping, so feeding each new clip's own `sourceRange`
+        // is correct for both forward and reverse clips.
         if clip.speedRampPoints.count >= 2 {
-            let firstSubRange = TimeRange(start: clip.sourceRange.start, duration: firstSourceDuration)
-            let renormalizedFirst = clip.speedRampPoints.renormalized(
+            firstClip.speedRampPoints = clip.speedRampPoints.renormalized(
                 fromParentSourceStart: clip.sourceRange.start,
                 parentSourceDuration: clip.sourceRange.duration,
-                intoSubSourceRange: firstSubRange
+                intoSubSourceRange: firstSourceRange
             )
-            firstClip.speedRampPoints = renormalizedFirst
         }
 
         var secondClip = clip
         secondClip.id = newClipId
         secondClip.timelineRange = TimeRange(start: splitTime, duration: secondTimelineDuration)
-        secondClip.sourceRange = TimeRange(
-            start: splitSourceTime,
-            duration: secondSourceDuration
-        )
+        secondClip.sourceRange = secondSourceRange
         if clip.speedRampPoints.count >= 2 {
-            let secondSubRange = TimeRange(start: splitSourceTime, duration: secondSourceDuration)
-            let renormalizedSecond = clip.speedRampPoints.renormalized(
+            secondClip.speedRampPoints = clip.speedRampPoints.renormalized(
                 fromParentSourceStart: clip.sourceRange.start,
                 parentSourceDuration: clip.sourceRange.duration,
-                intoSubSourceRange: secondSubRange
+                intoSubSourceRange: secondSourceRange
             )
-            secondClip.speedRampPoints = renormalizedSecond
         }
 
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex] = firstClip

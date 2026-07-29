@@ -152,7 +152,8 @@ struct CoreFeatureTests {
             "timeline",
             "markers",
             "canvas",
-            "exportSettings"
+            "exportSettings",
+            "playbackSettings"
         ])
     }
 

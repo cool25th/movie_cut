@@ -561,6 +561,19 @@ final class PlaybackEngine {
             point.x == 0 && point.y == 0
         }
 
+        /// Picks the playback URL for a media asset. When proxy playback is on and
+        /// the asset has a ready proxy, the lower-resolution proxy is used for
+        /// smoother previewing; otherwise the original is used. Mirrors the
+        /// `BeatDetectionProvider` idiom so behavior stays consistent across the
+        /// codebase.
+        func playbackURL(for asset: MediaAsset) -> URL {
+            if project.playbackSettings.useProxyPlayback,
+               let proxyURL = asset.proxy?.proxyURL {
+                return proxyURL
+            }
+            return asset.originalURL
+        }
+
         let composition = AVMutableComposition()
         var videoCompositionTracks: [(track: AVMutableCompositionTrack, zIndex: Int)] = []
         var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
@@ -588,7 +601,9 @@ final class PlaybackEngine {
                         continue
                     }
 
-                    var sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    // Image clips render from the original, so proxy playback
+                    // only applies to the non-image (video/audio) branch below.
+                    var sourceAsset = AVURLAsset(url: playbackURL(for: mediaAsset))
                     var sourceTrack: AVAssetTrack
                     if mediaAsset.kind == .image {
                         let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
@@ -790,7 +805,7 @@ final class PlaybackEngine {
                         continue
                     }
 
-                    let sourceAsset = AVURLAsset(url: mediaAsset.originalURL)
+                    let sourceAsset = AVURLAsset(url: playbackURL(for: mediaAsset))
                     guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first else {
                         continue
                     }

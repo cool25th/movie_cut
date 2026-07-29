@@ -67,8 +67,32 @@ struct InspectorExportSection: View {
             Divider()
 
             exportEstimateView
+
+            Divider()
+
+            proxyPlaybackToggle
         }
         .padding(12)
+    }
+
+    /// Toggles whether the editing preview plays back a generated proxy in
+    /// place of the original media for smoother playback on heavy clips.
+    /// Export always uses the original regardless of this setting.
+    private var proxyPlaybackToggle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Playback")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Toggle("Use proxy media for playback", isOn: Binding(
+                get: { viewModel.currentProject.playbackSettings.useProxyPlayback },
+                set: { newValue in
+                    Task { await viewModel.updatePlaybackSettings(useProxyPlayback: newValue) }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .accessibilityLabel("Use proxy media for playback")
+            .accessibilityHint("When on, the preview plays back a lower-resolution proxy for smoother editing. The proxy must be generated per media asset; falls back to the original when absent.")
+        }
     }
 
     private var socialPresetButtons: some View {

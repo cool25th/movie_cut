@@ -3056,6 +3056,18 @@ final class EditorViewModel {
         await apply(SetProjectExportSettingsCommand(exportSettings: settings))
     }
 
+    /// Updates the project's playback (preview) settings. Toggling proxy
+    /// playback requires reloading the preview composition so the proxy (or
+    /// original) URL is picked up on the next build.
+    func updatePlaybackSettings(useProxyPlayback: Bool? = nil) async {
+        var settings = currentProject.playbackSettings
+        if let useProxyPlayback {
+            settings.useProxyPlayback = useProxyPlayback
+        }
+
+        await apply(SetProjectPlaybackSettingsCommand(playbackSettings: settings))
+    }
+
     func applyExportPreset(
         named name: String,
         canvas: CanvasPreset,

@@ -87,6 +87,50 @@ public struct SetProjectExportSettingsCommand: EditorCommand {
     }
 }
 
+/// Updates the project's playback (preview) settings.
+public struct SetProjectPlaybackSettingsCommand: EditorCommand {
+    /// The command identifier.
+    public let id: UUID
+
+    /// The new playback settings.
+    public var playbackSettings: PlaybackSettings
+
+    /// Optional prior settings used when constructing an inverse command.
+    public var previousPlaybackSettings: PlaybackSettings?
+
+    /// Creates a playback settings update command.
+    public init(
+        id: UUID = UUID(),
+        playbackSettings: PlaybackSettings,
+        previousPlaybackSettings: PlaybackSettings? = nil
+    ) {
+        self.id = id
+        self.playbackSettings = playbackSettings
+        self.previousPlaybackSettings = previousPlaybackSettings
+    }
+
+    public func apply(to project: inout Project) throws -> CommandResult {
+        let previousSettings = project.playbackSettings
+        project.playbackSettings = playbackSettings
+
+        return CommandResult(
+            description: "Set project playback settings",
+            undoValues: ["playbackSettings": .playbackSettings(previousSettings)]
+        )
+    }
+
+    public func invert(from result: CommandResult) throws -> any EditorCommand {
+        if case .playbackSettings(let settings)? = result.undoValues["playbackSettings"] {
+            return SetProjectPlaybackSettingsCommand(playbackSettings: settings)
+        }
+
+        guard let previousPlaybackSettings else {
+            return NoOpCommand(description: "Missing playback settings for inverse")
+        }
+        return SetProjectPlaybackSettingsCommand(playbackSettings: previousPlaybackSettings)
+    }
+}
+
 private extension ExportFrameRate {
     var rational: Rational {
         switch self {

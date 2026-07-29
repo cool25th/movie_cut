@@ -42,6 +42,9 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Optional card-news document. Nil preserves legacy timeline-only projects.
     public var cardDocument: CardDocument?
 
+    /// Editing preview (playback) settings. Defaults to proxy playback off.
+    public var playbackSettings: PlaybackSettings
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -56,6 +59,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case exportSettings
         case canvasBackground
         case cardDocument
+        case playbackSettings
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -72,7 +76,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         canvas: CanvasPreset = CanvasPreset.defaultPreset(),
         exportSettings: ExportSettings = ExportSettings(),
         canvasBackground: CanvasBackground? = nil,
-        cardDocument: CardDocument? = nil
+        cardDocument: CardDocument? = nil,
+        playbackSettings: PlaybackSettings = PlaybackSettings()
     ) {
         self.id = id
         self.name = name
@@ -87,6 +92,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.exportSettings = exportSettings
         self.canvasBackground = canvasBackground
         self.cardDocument = cardDocument
+        self.playbackSettings = playbackSettings
     }
 
     public init(from decoder: any Decoder) throws {
@@ -104,6 +110,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         exportSettings = try container.decode(ExportSettings.self, forKey: .exportSettings)
         canvasBackground = try container.decodeIfPresent(CanvasBackground.self, forKey: .canvasBackground)
         cardDocument = try container.decodeIfPresent(CardDocument.self, forKey: .cardDocument)
+        playbackSettings = try container.decodeIfPresent(PlaybackSettings.self, forKey: .playbackSettings) ?? PlaybackSettings()
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -121,5 +128,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         try container.encode(exportSettings, forKey: .exportSettings)
         try container.encodeIfPresent(canvasBackground, forKey: .canvasBackground)
         try container.encodeIfPresent(cardDocument, forKey: .cardDocument)
+        try container.encode(playbackSettings, forKey: .playbackSettings)
     }
 }

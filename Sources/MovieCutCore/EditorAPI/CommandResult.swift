@@ -38,6 +38,9 @@ public enum CommandResultValue: Sendable, Equatable {
     /// A project export settings snapshot.
     case exportSettings(ExportSettings)
 
+    /// A project playback settings snapshot.
+    case playbackSettings(PlaybackSettings)
+
     /// A canvas background snapshot.
     case canvasBackground(CanvasBackground)
 

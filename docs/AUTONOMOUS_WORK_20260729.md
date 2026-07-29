@@ -44,7 +44,7 @@
 - [ ] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`.
 - [ ] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄, internal). 커밋 `refactor(moviecut): remove dead ZoomTransitionPlugin`.
 - [ ] **A5** `App/MovieCutMac/Effects/BuiltinTransitionPlugins.swift` (76줄 전체 dead cluster: enum + 4 private plugin class + private protocol). `registerAll` 호출 0회. 커밋 `refactor(moviecut): remove dead BuiltinTransitionPlugins cluster`.
-- [ ] **A6** `App/MovieCutiOS/Views/IOSTrimHandleView.swift` (121줄, `#if os(iOS)`). ⚠️ **iOS 빌드 검증 불가** — 게이트(macOS+Core test) 통과만 확인 가능. iOS 미검증임을 LOG에 명시. 커밋 `refactor(moviecut): remove dead IOSTrimHandleView`.
+- [x] **A6** `App/MovieCutiOS/Views/IOSTrimHandleView.swift` (121줄, `#if os(iOS)`). ⚠️ **iOS 빌드 검증 불가** — 게이트(macOS+Core test) 통과만 확인 가능. iOS 미검증임을 LOG에 명시. 커밋 `refactor(moviecut): remove dead IOSTrimHandleView`. ✅ DONE — macOS 게이트 PASS, swift test 984 유지. **iOS 빌드 미검증 명시.**
 
 ### Track B — unused import 제거 (HIGH 신뢰, 1개씩 컴파일 검증)
 
@@ -77,3 +77,27 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 6 — 2026-07-29 (cron 발화) — A6 ✅ DONE (iOS 미검증 명시)
+- **항목**: A6 — `App/MovieCutiOS/Views/IOSTrimHandleView.swift` 제거
+- **상태**: DONE
+- **재검증**: grep `IOSTrimHandleView` → 자기 선언 1건뿐 (iOS struct). `clipTrimHandle` (Mac의 별개 lowercase 함수)은 다른 심볼로 살아있음(TimelineView + 2 테스트). iOS 소스 트리 전체에서 IOSTrimHandleView 참조 0건.
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK
+- **변경**: 파일 -121줄 + pbxproj 정리(net -5)
+- **⚠️ 미검증 항목 (분리 보고)**: A6은 `#if os(iOS)` 코드. 이 호스트는 iOS 26.5 미설치라 **iOS 빌드로 검증하지 못함**. macOS 게이트(swift build + Core test + Mac 빌드)만 통과. iOS 회귀 가능성은 사실상 없음(iOS 소스 전체 grep 0건)이나, "iOS 빌드로 검증했다"고는 주장할 수 없음.
+
+### ENTRY 5 — 2026-07-29 (cron 발화) — A5 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A5 — BuiltinTransitionPlugins.swift (76줄 cluster) 제거. 브랜치 `refactor/remove-dead-builtintransitionplugins`, 커밋 `478e6dc`.
+- **게이트 결과**: GATE_PASS — swift test 984/162 passed.
+
+### ENTRY 4 — 2026-07-29 (cron 발화) — A4 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A4 — ZoomTransitionPlugin.swift (83줄) 제거. 브랜치 `refactor/remove-dead-zoomtransitionplugin`, 커밋 `9cb3682`.
+
+### ENTRY 3 — 2026-07-29 (cron 발화) — A3 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A3 — GlitchTransitionPlugin.swift (99줄) 제거. 브랜치 `refactor/remove-dead-glitchtransitionplugin`, 커밋 `a4d069e`.
+
+### ENTRY 2 — 2026-07-29 (cron 발화) — A2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A2 — MaskCompositor.swift (9줄) 제거. 브랜치 `refactor/remove-dead-maskcompositor`, 커밋 `5d8939b`.
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A1 — AutoAssistantView.swift (157줄) 제거. 브랜치 `refactor/remove-dead-autoassistantview`, 커밋 `673b931`.

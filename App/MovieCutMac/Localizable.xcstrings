@@ -178,7 +178,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 오른쪽 트림 핸들"
+            "value": "%@ right trim handle"
           }
         },
         "ko": {
@@ -195,7 +195,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 왼쪽 트림 핸들"
+            "value": "%@ left trim handle"
           }
         },
         "ko": {
@@ -212,7 +212,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 클립 추가 영역"
+            "value": "%@ clip add region"
           }
         },
         "ko": {

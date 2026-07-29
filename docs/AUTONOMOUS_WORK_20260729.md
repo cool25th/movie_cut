@@ -51,7 +51,7 @@
 - [ ] **B1** `Tests/MovieCutCoreTests/CriticalHighCoreTests.swift` — `import XCTest` 제거 (Swift Testing만 사용). 커밋 `chore(moviecut): drop unused XCTest import`.
 - [ ] **B2** `App/MovieCutMac/Inspector/InspectorShared.swift` — `import AppKit` 제거 (SwiftUI만 사용). 커밋 `chore(moviecut): drop unused AppKit import`.
 - [ ] **B3** `Sources/MovieCutCore/Models/GestureTransform.swift` — `#if canImport(UIKit)` 블록의 `import UIKit` 제거. 커밋 `chore(moviecut): drop unused UIKit import in GestureTransform`.
-- [ ] **B4** `Sources/MovieCutCore/Rendering/CubeLUTParser.swift:100` — `import CoreImage` 제거 (doc comment에만 언급). 커밋 `chore(moviecut): drop unused CoreImage import in CubeLUTParser`.
+- [x] **B4** `Sources/MovieCutCore/Rendering/CubeLUTParser.swift:100` — `import CoreImage` 제거 (doc comment에만 언급). 커밋 `chore(moviecut): drop unused CoreImage import in CubeLUTParser`. ✅ DONE — GATE_PASS, swift test 984 유지. 재검증: CI 심볼 코드 0건 (CIColorCube는 doc comment에만). CoreImage는 macOS에도 있어 게이트가 블록 실컴파일 → 실제 검증.
 
 ### Track C — 문서 stale 참조 정리 (코드 아님, 게이트는 swift build/test로 회귀만)
 
@@ -77,3 +77,39 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 10 — 2026-07-29 (cron 발화) — B4 ✅ DONE (Track B 완료)
+- **항목**: B4 — `Sources/MovieCutCore/Rendering/CubeLUTParser.swift:100` 의 `#if canImport(CoreImage)` 블록 내 `import CoreImage` 제거
+- **상태**: DONE
+- **재검증**: 해당 파일에서 CI 접두 CoreImage 심볼(코드) **0건**. `CIColorCube`는 doc comment(`///`)에만 언급, 코드엔 미등장. 블록 내 `CubeLUTBox` 클래스는 `Data`(Foundation)만 사용. → CoreImage import unused 확정.
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK.
+- **검증 의미**: CoreImage는 macOS에도 존재하므로 이 `#if canImport(CoreImage)` 블록은 macOS에서 실컴파일됨 (B3 UIKit과 다름). 따라서 게이트 PASS가 **실제 검증** — import 제거 후 CubeLUTBox 정상 컴파일 확인, 숨은 의존성 없음.
+- **변경**: 1줄 제거 (-1).
+- **🎉 Track B 완료 (B1-B4).**
+
+### ENTRY 9 — 2026-07-29 (cron 발화) — B3 ✅ DONE (별도 브랜치, main 미병합; iOS 미검증)
+- **항목**: B3 — GestureTransform.swift 의 #if canImport(UIKit) 블록 내 import UIKit 제거. 브랜치 `chore/drop-unused-uikit-import`, 커밋 `23d9d4d`. macOS 게이트 PASS지만 파일이 UIKit 게이트라 iOS 미검증.
+
+### ENTRY 8 — 2026-07-29 (cron 발화) — B2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: B2 — InspectorShared.swift 의 import AppKit 제거. 브랜치 `chore/drop-unused-appkit-import`, 커밋 `562385f`. Mac 빌드 SUCCEEDED로 숨은 의존성 없음 확인.
+
+### ENTRY 7 — 2026-07-29 (cron 발화) — B1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: B1 — CriticalHighCoreTests.swift 의 import XCTest 제거. 브랜치 `chore/drop-unused-xctest-import`, 커밋 `127949c`.
+
+### ENTRY 6 — 2026-07-29 (cron 발화) — A6 ✅ DONE (별도 브랜치, main 미병합; iOS 미검증)
+- **항목**: A6 — IOSTrimHandleView.swift (121줄, #if os(iOS)) 제거. 브랜치 `refactor/remove-dead-iostrimhandleview`, 커밋 `bc85884`. macOS 게이트만 PASS.
+
+### ENTRY 5 — 2026-07-29 (cron 발화) — A5 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A5 — BuiltinTransitionPlugins.swift (76줄 cluster) 제거. 브랜치 `refactor/remove-dead-builtintransitionplugins`, 커밋 `478e6dc`.
+
+### ENTRY 4 — 2026-07-29 (cron 발화) — A4 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A4 — ZoomTransitionPlugin.swift (83줄) 제거. 브랜치 `refactor/remove-dead-zoomtransitionplugin`, 커밋 `9cb3682`.
+
+### ENTRY 3 — 2026-07-29 (cron 발화) — A3 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A3 — GlitchTransitionPlugin.swift (99줄) 제거. 브랜치 `refactor/remove-dead-glitchtransitionplugin`, 커밋 `a4d069e`.
+
+### ENTRY 2 — 2026-07-29 (cron 발화) — A2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A2 — MaskCompositor.swift (9줄) 제거. 브랜치 `refactor/remove-dead-maskcompositor`, 커밋 `5d8939b`.
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A1 — AutoAssistantView.swift (157줄) 제거. 브랜치 `refactor/remove-dead-autoassistantview`, 커밋 `673b931`.

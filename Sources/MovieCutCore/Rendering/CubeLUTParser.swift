@@ -97,7 +97,6 @@ public enum CubeLUTParser {
 }
 
 #if canImport(CoreImage)
-import CoreImage
 
 /// Reference wrapper so parsed cubes (with precomputed `CIColorCube` data) can
 /// live in an `NSCache`.

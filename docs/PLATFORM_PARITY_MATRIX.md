@@ -220,5 +220,5 @@
 - 오디오 덕킹/EQ/노이즈감소 iOS UI action + export wiring
 - ProRes/GIF/스틸 export, platform preset export
 - iOS autosave/crash recovery lifecycle
-- `IOSPlaybackEngine` (dead code — 별도 제거 이슈)
+- `IOSPlaybackEngine` (dead code — ✅ 제거됨, `7b5b2ad`)
 - CoreSimulator out-of-date 경고는 Mac build/E2E 중 simulator device support 경고로 계속 나타난다. iOS generic device build는 `CODE_SIGNING_ALLOWED=NO`로 검증한다.

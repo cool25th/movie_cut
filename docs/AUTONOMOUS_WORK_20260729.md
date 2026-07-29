@@ -55,7 +55,7 @@
 
 ### Track C — 문서 stale 참조 정리 (코드 아님, 게이트는 swift build/test로 회귀만)
 
-- [ ] **C1** `docs/PLATFORM_PARITY_MATRIX.md:223` — `IOSPlaybackEngine (dead code)` 항목 → ✅ 제거됨(7b5b2ad)으로 갱신. 커밋 `docs: mark IOSPlaybackEngine removal in parity matrix`.
+- [x] **C1** `docs/PLATFORM_PARITY_MATRIX.md:223` — `IOSPlaybackEngine (dead code)` 항목 → ✅ 제거됨(7b5b2ad)으로 갱신. 커밋 `docs: mark IOSPlaybackEngine removal in parity matrix`. ✅ DONE — GATE_PASS, swift test 984 유지.
 - [ ] **C2** `docs/GAP_ANALYSIS_V2.md` — `ContentView.swift` → `iOSContentView.swift` 3곳(:14,:189,:208). 커밋 `docs: fix iOSContentView path in gap analysis`.
 - [ ] **C3** `docs/GAP_ANALYSIS.md` + `docs/GAP_ANALYSIS_V2.md` — 허구 타입 `NoiseReductionProcessor` → `NoiseReductionService` 5곳. 커밋 `docs: fix NoiseReductionService name in gap analyses`.
 
@@ -77,3 +77,41 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 11 — 2026-07-29 (cron 발화) — C1 ✅ DONE (Track C 시작)
+- **항목**: C1 — `docs/PLATFORM_PARITY_MATRIX.md:223` 의 IOSPlaybackEngine 항목 갱신
+- **상태**: DONE
+- **재검증**: IOSPlaybackEngine 파일 main에서 확실히 제거됨 (`git show main:.../IOSPlaybackEngine.swift` → fatal: path does not exist). 223줄 "별도 제거 이슈" → stale.
+- **변경**: `- \`IOSPlaybackEngine\` (dead code — 별도 제거 이슈)` → `- \`IOSPlaybackEngine\` (dead code — ✅ 제거됨, \`7b5b2ad\`)`
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK. (문서만 변경이라 코드 회귀 없음은 당연.)
+- **비고**: Track C(문서 stale 참조 정리) 첫 항목.
+
+### ENTRY 10 — 2026-07-29 (cron 발화) — B4 ✅ DONE (별도 브랜치, main 미병합; Track B 완료)
+- **항목**: B4 — CubeLUTParser.swift 의 #if canImport(CoreImage) 블록 내 import CoreImage 제거. 브랜치 `chore/drop-unused-coreimage-import`, 커밋 `fccbd66`. CoreImage는 macOS에도 있어 게이트가 블록 실컴파일 → 실제 검증.
+
+### ENTRY 9 — 2026-07-29 (cron 발화) — B3 ✅ DONE (별도 브랜치, main 미병합; iOS 미검증)
+- **항목**: B3 — GestureTransform.swift 의 #if canImport(UIKit) 블록 내 import UIKit 제거. 브랜치 `chore/drop-unused-uikit-import`, 커밋 `23d9d4d`. 파일이 UIKit 게이트라 iOS 미검증.
+
+### ENTRY 8 — 2026-07-29 (cron 발화) — B2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: B2 — InspectorShared.swift 의 import AppKit 제거. 브랜치 `chore/drop-unused-appkit-import`, 커밋 `562385f`. Mac 빌드 SUCCEEDED로 숨은 의존성 없음 확인.
+
+### ENTRY 7 — 2026-07-29 (cron 발화) — B1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: B1 — CriticalHighCoreTests.swift 의 import XCTest 제거. 브랜치 `chore/drop-unused-xctest-import`, 커밋 `127949c`.
+
+### ENTRY 6 — 2026-07-29 (cron 발화) — A6 ✅ DONE (별도 브랜치, main 미병합; iOS 미검증)
+- **항목**: A6 — IOSTrimHandleView.swift (121줄, #if os(iOS)) 제거. 브랜치 `refactor/remove-dead-iostrimhandleview`, 커밋 `bc85884`. macOS 게이트만 PASS.
+
+### ENTRY 5 — 2026-07-29 (cron 발화) — A5 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A5 — BuiltinTransitionPlugins.swift (76줄 cluster) 제거. 브랜치 `refactor/remove-dead-builtintransitionplugins`, 커밋 `478e6dc`.
+
+### ENTRY 4 — 2026-07-29 (cron 발화) — A4 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A4 — ZoomTransitionPlugin.swift (83줄) 제거. 브랜치 `refactor/remove-dead-zoomtransitionplugin`, 커밋 `9cb3682`.
+
+### ENTRY 3 — 2026-07-29 (cron 발화) — A3 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A3 — GlitchTransitionPlugin.swift (99줄) 제거. 브랜치 `refactor/remove-dead-glitchtransitionplugin`, 커밋 `a4d069e`.
+
+### ENTRY 2 — 2026-07-29 (cron 발화) — A2 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A2 — MaskCompositor.swift (9줄) 제거. 브랜치 `refactor/remove-dead-maskcompositor`, 커밋 `5d8939b`.
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A1 — AutoAssistantView.swift (157줄) 제거. 브랜치 `refactor/remove-dead-autoassistantview`, 커밋 `673b931`.

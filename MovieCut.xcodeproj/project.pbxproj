@@ -84,7 +84,6 @@
 		5A761490AC0418358F0AAC70 /* DragDropFeedbackStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E431BC539712BD8DB8DC8A /* DragDropFeedbackStaticContractTests.swift */; };
 		5A86D54059BAE0AA4AA7889E /* WaveformRequestKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C2B6635A7345FFC6A704AB /* WaveformRequestKeyTests.swift */; };
 		5C787B1FAF3C910BF0FEA00E /* IOSFilterPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4553A93DFDEF78FD76AC4C /* IOSFilterPickerView.swift */; };
-		5D6416BAE380C865A5D04B7C /* MaskCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F86B49A963CD2475609208E /* MaskCompositor.swift */; };
 		5DD0F7F5A4F542353059A42A /* PreviewPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEA38AF3E3B928A0F7D90AB /* PreviewPanel.swift */; };
 		5FB259DFB1B94077C1A45EEE /* F06ImportMetadataStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CAD5DE75764AFD8C2F977F /* F06ImportMetadataStaticContractTests.swift */; };
 		5FB95B2BE4EFE4BA9166F837 /* CloudConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF976DAE2535069A620983A1 /* CloudConflictTests.swift */; };
@@ -311,7 +310,6 @@
 		4ADA7253A7E32D2A2B2C724F /* ColorScopeWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorScopeWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		4DB45FF6F6D577371FB4A06C /* MovieCutMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieCutMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4DEBBB88C112AC74DBB285B4 /* CardCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCanvasView.swift; sourceTree = "<group>"; };
-		4F86B49A963CD2475609208E /* MaskCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskCompositor.swift; sourceTree = "<group>"; };
 		4FB5835E9CEC4E581E218A30 /* ColorGradePreviewWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorGradePreviewWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		511D5D82251C0D91931B6BB3 /* AutoColorWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoColorWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		51FEA554B103D5F59420B2F1 /* PreviewProjectCompositionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewProjectCompositionUITests.swift; sourceTree = "<group>"; };
@@ -817,7 +815,6 @@
 				5BA251F4BE10E349135704E3 /* ChromaKeyView.swift */,
 				D907A54512853A0A7C82E362 /* GlitchTransitionPlugin.swift */,
 				060D2155260E620900B7ED20 /* MaskCanvasView.swift */,
-				4F86B49A963CD2475609208E /* MaskCompositor.swift */,
 				9D7BF031B5F3AEC41F9338D1 /* TextAnimationRenderer.swift */,
 				ED4E49F3FBF732565EBA8621 /* ZoomTransitionPlugin.swift */,
 			);
@@ -932,7 +929,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_7DCA2A72-BD9D-48D3-8D2B-E9E65DB097D1" /* Resources */ = {
+		"TEMP_4C598B1C-B605-40A2-BC29-06AADB2F38A1" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1262,7 +1259,6 @@
 				6BD68BAD7FE854CA3EAF1443 /* KeyframeListView.swift in Sources */,
 				2C2AFC201CFB1FFDC061C967 /* KeyframeUIFormatting.swift in Sources */,
 				D81656690729B2F09C50CE5E /* MaskCanvasView.swift in Sources */,
-				5D6416BAE380C865A5D04B7C /* MaskCompositor.swift in Sources */,
 				6697ABFAF075E9AB2BB5EDD7 /* MediaLibraryPanel.swift in Sources */,
 				60E6BC74583BC8039ECB5209 /* MovieCutMacApp.swift in Sources */,
 				E03214A9F37F9D23488D311C /* MusicLibraryView.swift in Sources */,

@@ -40,7 +40,7 @@
 ### Track A — internal dead code 제거 (grep 1회 자기참조 확인됨)
 
 - [ ] **A1** `App/MovieCutMac/Analysis/AutoAssistantView.swift` (157줄, `struct AutoAssistantView`, internal). `refactor/remove-dead-autoassistantview`. 게이트 통과 시 커밋 `refactor(moviecut): remove dead AutoAssistantView`.
-- [ ] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄, internal). 커밋 `refactor(moviecut): remove dead MaskCompositor wrapper`.
+- [x] **A2** `App/MovieCutMac/Effects/MaskCompositor.swift` (9줄, internal). 커밋 `refactor(moviecut): remove dead MaskCompositor wrapper`. ✅ DONE — GATE_PASS, swift test 984 유지.
 - [ ] **A3** `App/MovieCutMac/Effects/GlitchTransitionPlugin.swift` (99줄, internal). 커밋 `refactor(moviecut): remove dead GlitchTransitionPlugin`.
 - [ ] **A4** `App/MovieCutMac/Effects/ZoomTransitionPlugin.swift` (83줄, internal). 커밋 `refactor(moviecut): remove dead ZoomTransitionPlugin`.
 - [ ] **A5** `App/MovieCutMac/Effects/BuiltinTransitionPlugins.swift` (76줄 전체 dead cluster: enum + 4 private plugin class + private protocol). `registerAll` 호출 0회. 커밋 `refactor(moviecut): remove dead BuiltinTransitionPlugins cluster`.
@@ -77,3 +77,19 @@
 - **비고**: public API dead code(AutoReframeCommand 외 6개)는 무인 제외, 귀환 후 보고로 분리.
 
 <!-- 새 ENTRY를 이 줄 위에 추가 -->
+
+### ENTRY 2 — 2026-07-29 (cron 발화) — A2 ✅ DONE
+- **항목**: A2 — `App/MovieCutMac/Effects/MaskCompositor.swift` 제거
+- **상태**: DONE
+- **재검증**: grep `MaskCompositor` → 자기 선언 1건뿐 (9줄 wrapper, 단일 internal class)
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK
+- **변경**: 파일 -9줄 + pbxproj 정리(net -5)
+- **커밋**: 본 발화에서 브랜치 `refactor/remove-dead-maskcompositor` (아래 커밋)
+- **비고**: Mac internal 코드. iOS 빌드 미검증(호스트 제약)이나 Mac 게이트로 검증 완료.
+
+### ENTRY 1 — 2026-07-29 (cron 발화) — A1 ✅ DONE (별도 브랜치, main 미병합)
+- **항목**: A1 — `App/MovieCutMac/Analysis/AutoAssistantView.swift` 제거
+- **상태**: DONE (브랜치 `refactor/remove-dead-autoassistantview`, 커밋 `673b931`)
+- **재검증**: grep `AutoAssistantView` → 자기 선언 1건뿐 (iOS용 IOSAutoAssistantView는 별개/보존)
+- **게이트 결과**: GATE_PASS — swift build OK / swift test **984/162 suites passed** / xcodebuild MovieCutMac OK
+- **비고**: 첫 무인 항목. main 미병합 상태(귀환 후 리뷰 필요).

@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import XCTest
 @testable import MovieCutCore
 
 @MainActor

@@ -80,11 +80,25 @@ public actor ProjectStore {
         }
     }
 
-    /// Loads a project from a JSON file.
+    /// Loads a project from a JSON file, then validates and migrates its schema.
+    ///
+    /// Decoding itself remains lenient: Swift's `JSONDecoder` ignores unknown
+    /// keys, so a project with extra future keys still decodes. The schema
+    /// guard then runs:
+    /// - `schemaVersion > currentSchemaVersion` → throws
+    ///   `ProjectMigrationError.newerThanCurrent` (the user must update the
+    ///   app; we never silently drop keys a newer app wrote).
+    /// - `schemaVersion < currentSchemaVersion` → runs the migration chain in
+    ///   `ProjectSchema` forward to `currentSchemaVersion`.
+    /// - equal → loaded as-is.
+    ///
+    /// See S1 of `docs/PRO_SPEC_GAP_WORKORDER_20260730.md`.
     public func load(from url: URL) async throws -> Project {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(Project.self, from: data)
+        var project = try decoder.decode(Project.self, from: data)
+        try ProjectMigrationRunner.migrate(&project)
+        return project
     }
 }

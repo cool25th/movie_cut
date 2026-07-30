@@ -1,7 +1,7 @@
 # MovieCut vs CapCut 갭 분석 V13 — 배선 격차 재설정 — 2026-07-29
 
 > 작성일: 2026-07-29 / 브랜치: `main` (기준 커밋: `0ecdc6f`)
-> 기준선: V12 `docs/GAP_ANALYSIS_V12_FUNC_UI_20260706.md` (기준 커밋 `89e3795`) — **델타 62 커밋**
+> 기준선: V12 `docs/archive/GAP_ANALYSIS_V12_FUNC_UI_20260706.md` (기준 커밋 `89e3795`) — **델타 62 커밋**
 > 판정 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` v1.6 (B-ID)
 > 원천 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md`
 > 이 감사의 실측: 빌드 3종 + 전체 테스트 1회 + repo-wide grep 실사. **코드 수정 없음.**
@@ -163,7 +163,7 @@ V12는 "기능이 없다"(이미지 파이프라인 부재)를 P0로 잡았고 �
 | 3 | 판정 재확인 큐(§6) | 격차 목록의 신뢰도 복구 |
 | 4 | **B-L2 홈 화면**(U-01) | 유일한 구조적 IA 부재 — 프로젝트 관리 동선 자체가 없음 |
 | 5 | B-F4.4 블렌딩 모드 | 확정 격차, 오버레이 합성의 기본기 |
-| 병행 | StaticContract 정리 / 린트 베이스라인 | `NEXT_SESSION_WORKORDER_20260729.md` W2/W3 |
+| 병행 | StaticContract 정리 / 린트 베이스라인 | `docs/NEXT_SESSION_WORKORDER_20260729.md` W2/W3 |
 | 차단됨 | iOS 파리티 W4~W7 | **사용자 조치 필요**: iOS 26.5 플랫폼 설치 |
 
 ---

@@ -1,5 +1,11 @@
 # CapCut UI 유사도 — 요구사항 & 작업 가이드
 
+> **[상태: 대체됨 — 역사 기록]** 현역 문서가 아니다. 전체 문서 지도는 [docs/README.md](README.md).
+>
+> - 판정 근거: "CapCut 유사도(similarity ≥ 0.75)" 지표가 폐기됐다 — 능가가 목표인데 유사도를 재는 것은 모순이라는 2026-06-24 결정.
+> - 지금 볼 곳: 현행 UI 기준은 `docs/UI_DESIGN_PRINCIPLES.md`, UI 작업 단위는 `docs/CAPCUT_SURPASS_SPEC_20260703.md` §5 (U-ID).
+> - `docs/archive/`로 옮기지 않은 이유: StaticContract 테스트가 이 경로를 직접 읽는다(경로를 바꾸면 테스트가 깨진다).
+
 > 작성일: 2026-06-16 / 기준 브랜치: `feat/core-backend-expansion` / 관련 커밋: `a4d6116`(CapCut-style UI layout overhaul), `1f42054`(UI polish/accessibility guard), `77daf7d`(R1-01), `79cbba3`(R4-01), `f24a45d`(R4-03/UX-02)
 > **이 문서만 읽고 다른 세션에서 바로 작업을 시작할 수 있도록 작성됨.** UX 백로그 원본은 `docs/UIUX_HANDOFF.md`, 기능 명세는 `docs/CAPCUT_PARITY_SPEC.md` 참고.
 > **전제: 기능(F-01~F-24)과 백엔드는 구현 완료 상태다. 이 작업은 "기능 추가"가 아니라 CapCut 데스크탑 UI에 맞춘 "구조·인터랙션·시각" 프레젠테이션 정렬이다.** 명령/세션/렌더 아키텍처와 기존 테스트를 깨지 말 것.

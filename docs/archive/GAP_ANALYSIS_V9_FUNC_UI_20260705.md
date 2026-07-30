@@ -1,7 +1,12 @@
 # MovieCut vs CapCut 갭 분석 V9 — 기능 + UI 재평가 — 2026-07-05
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-05 재감사.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 > 작성일: 2026-07-05 / 브랜치: `feat/core-backend-expansion`
-> 기준선: V8 `docs/GAP_ANALYSIS_V8_FUNC_UI_20260704.md` (`c3788ed`) / 재평가 대상: `c3788ed..fe9b062`
+> 기준선: V8 `docs/archive/GAP_ANALYSIS_V8_FUNC_UI_20260704.md` (`c3788ed`) / 재평가 대상: `c3788ed..fe9b062`
 > 원천 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` v1.2+
 > 규칙: 코드 존재는 완료 증거가 아니다. 완료는 preview/export/iOS 또는 명시 defer + 골든/E2E/ffprobe/GUI 증거로만 판정한다. Static contract는 회귀 잠금 전용이다.
 
@@ -48,7 +53,7 @@ V8 이후 실제 진전은 **G-12 검증부채 3건 추가 상환(#10 오디오 
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | G-12 잔여 | 6개 잔여 | #7 title templates, #9 chapter/beat metadata, #11 background removal real person, #12 auto reframe real tracking, #13 iCloud 2-device, #14 Photos drag |
-| G-09 본대 | 진행중 | `PLATFORM_PARITY_MATRIX.md` defer 15건, iOS W1/E2E 없음, CI job은 여전히 Mac/SwiftPM 중심 |
+| G-09 본대 | 진행중 | `docs/PLATFORM_PARITY_MATRIX.md` defer 15건, iOS W1/E2E 없음, CI job은 여전히 Mac/SwiftPM 중심 |
 | G-02 Inc 1~2 | 순수 로직 검증만 | `CurveEvaluator` / `HSLCubeBuilder`는 아직 App-visible render chain 연결 전 |
 | G-01 Inc 1 | 저장 검증만 | `wordTimings` 저장은 있으나 active-word/karaoke renderer와 style gallery/export proof 없음 |
 | U-08 | 미착수 | populated UI capture/regression/click metric 인프라 없음 |

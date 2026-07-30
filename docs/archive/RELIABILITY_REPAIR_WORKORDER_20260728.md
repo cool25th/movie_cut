@@ -1,5 +1,10 @@
 # 신뢰성 수리 작업지시서 (전체 코드 실사 기반)
 
+> **[보관 — 완료]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: Task A~G 전부 커밋됨. 당시 최대 문제였던 `swift test` 행(hang)과 3건 실패가 해소됐다.
+> - 지금 볼 곳: 후속은 `docs/NEXT_SESSION_WORKORDER_20260729.md`.
+
 > 작성일: 2026-07-28
 > 기준: main 브랜치 `6b33aab` (작업트리 clean)
 > 대상: 후속 세션
@@ -20,7 +25,7 @@
 
 ### 이 지시서가 기존 지시서보다 우선하는 이유
 
-`CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md`(Task A~E)는 전부 **iOS 파리티**를 다룬다. 그러나:
+`docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md`(Task A~E)는 전부 **iOS 파리티**를 다룬다. 그러나:
 
 1. **iOS는 이 호스트에서 컴파일조차 불가**하므로 어떤 iOS 작업도 검증할 수 없다.
 2. **`swift test`가 완주하지 못한다.** 모든 회귀 검증의 전제가 무너져 있다.
@@ -384,7 +389,7 @@ Cmd+N / Cmd+O가 미저장 작업을 **경고 없이, 되돌리기 없이** 폐�
    #expect(!iosCompositor.contains("TransitionPixelProcessor.apply"))
    #expect(!iosCompositor.contains("PersonSegmentationCompositor"))
    ```
-   **기능을 구현하면 테스트가 깨진다.** 그래서 기존 지시서(`CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task C/D)에 "assertion을 반전하라"는 절차가 들어가 있다. 테스트가 개발을 막고 있다.
+   **기능을 구현하면 테스트가 깨진다.** 그래서 기존 지시서(`docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task C/D)에 "assertion을 반전하라"는 절차가 들어가 있다. 테스트가 개발을 막고 있다.
 
 ### 구현 방향 (판단이 필요하므로 단독 세션 권장)
 
@@ -394,7 +399,7 @@ Cmd+N / Cmd+O가 미저장 작업을 **경고 없이, 되돌리기 없이** 폐�
    - **(a) 삭제** — 문서 산문만 검증하는 것 (38개 중 다수). 문서는 테스트 대상이 아니다.
    - **(b) 동작 테스트로 승격** — 실제 기능을 다루는 것. 예: 파리티 매트릭스 assertion → Core processor 호출 결과의 골든 픽셀 비교로 전환.
    - **(c) 유지** — 아키텍처 경계 잠금 등 문자열 검사가 실제로 적합한 소수.
-2. **부정 assertion(`!contains`)은 전부 제거한다.** 결함을 잠그는 테스트는 유지할 가치가 없다. 미구현 상태는 문서(`PLATFORM_PARITY_MATRIX.md`)로 추적하면 충분하다.
+2. **부정 assertion(`!contains`)은 전부 제거한다.** 결함을 잠그는 테스트는 유지할 가치가 없다. 미구현 상태는 문서(`docs/PLATFORM_PARITY_MATRIX.md`)로 추적하면 충분하다.
 3. `GoldenPixelHarness`(`Tests/MovieCutCoreTests/Support/GoldenPixelHarness.swift`)가 이미 올바른 패턴을 확립해 두었다. (b) 승격은 이 harness를 재사용한다.
 
 ### 수용 기준
@@ -437,31 +442,31 @@ Task G (StaticContract 정리 — 방침 결정 필요, 단독 세션)
 
 ### Task A — 블로킹 오디오 디코드
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task A를 기준으로 작업해줘. `WaveformGenerator`, `SilenceDetectionProvider`, `BeatDetectionProvider`의 동기 `AVAssetReader` 읽기를 `withCheckedContinuation` + `DispatchQueue.global()` 패턴으로 협조적 풀 밖으로 내보내. `Task.detached`는 해결책이 아니니 쓰지 마. `EditorViewModel.waveform(for:)`를 캐시 조회 + 백그라운드 채움으로 분리해서 SwiftUI Canvas 드로우가 메인스레드를 막지 않게 해줘. 판정 기준은 **필터 없는 `swift test` 전체 완주**야. 완주 시간과 pass/fail 수를 반드시 보고해.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task A를 기준으로 작업해줘. `WaveformGenerator`, `SilenceDetectionProvider`, `BeatDetectionProvider`의 동기 `AVAssetReader` 읽기를 `withCheckedContinuation` + `DispatchQueue.global()` 패턴으로 협조적 풀 밖으로 내보내. `Task.detached`는 해결책이 아니니 쓰지 마. `EditorViewModel.waveform(for:)`를 캐시 조회 + 백그라운드 채움으로 분리해서 SwiftUI Canvas 드로우가 메인스레드를 막지 않게 해줘. 판정 기준은 **필터 없는 `swift test` 전체 완주**야. 완주 시간과 pass/fail 수를 반드시 보고해.
 
 ### Task B — 실패 테스트 3건
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task B를 기준으로 작업해줘. 지시서 §2의 표에 정확한 파일:줄과 변경 전/후 문자열이 있어. 내용 assertion은 이미 현재 코드와 일치하는 걸 확인했으니 마커 문자열만 고치면 돼. `swift test --filter "R301R302|R305"`로 검증하고 커밋해.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task B를 기준으로 작업해줘. 지시서 §2의 표에 정확한 파일:줄과 변경 전/후 문자열이 있어. 내용 assertion은 이미 현재 코드와 일치하는 걸 확인했으니 마커 문자열만 고치면 돼. `swift test --filter "R301R302|R305"`로 검증하고 커밋해.
 
 ### Task C — 램프 클램프
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task C를 기준으로 작업해줘. `ClipTimeMapping.swift:221`과 `:247`의 클램프 상한이 소스 스케일로 잡혀 있어서 순 감속 램프의 후반부가 붕괴돼. 출력 스케일 기준으로 고쳐줘. 그리고 기존 램프 테스트 2개가 왜 이걸 못 잡았는지 지시서에 적혀 있으니, 순 감속 케이스 회귀 테스트를 추가하고 `speedRampMonotonic`도 평탄화를 잡도록 강화해줘.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task C를 기준으로 작업해줘. `ClipTimeMapping.swift:221`과 `:247`의 클램프 상한이 소스 스케일로 잡혀 있어서 순 감속 램프의 후반부가 붕괴돼. 출력 스케일 기준으로 고쳐줘. 그리고 기존 램프 테스트 2개가 왜 이걸 못 잡았는지 지시서에 적혀 있으니, 순 감속 케이스 회귀 테스트를 추가하고 `speedRampMonotonic`도 평탄화를 잡도록 강화해줘.
 
 ### Task D — CG Codable
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task D를 기준으로 작업해줘. **먼저** 현재 main에서 마스크·텍스트·카드 레이아웃을 포함한 프로젝트를 저장해 `.moviecut` 픽스처로 커밋해. 그 다음 `CoreGraphicsCodable.swift`의 retroactive Codable 충돌을 제거하되, 실측된 현재 저장 포맷(배열 `[x,y]`)과의 호환을 반드시 유지해. 픽스처가 손실 없이 로드되는 게 수용 기준이야.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task D를 기준으로 작업해줘. **먼저** 현재 main에서 마스크·텍스트·카드 레이아웃을 포함한 프로젝트를 저장해 `.moviecut` 픽스처로 커밋해. 그 다음 `CoreGraphicsCodable.swift`의 retroactive Codable 충돌을 제거하되, 실측된 현재 저장 포맷(배열 `[x,y]`)과의 호환을 반드시 유지해. 픽스처가 손실 없이 로드되는 게 수용 기준이야.
 
 ### Task E — 미저장 보호
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task E를 기준으로 작업해줘. `EditorViewModel`에 `isDirty` 추적을 추가하고 `newProject()`/`openProject()`/종료 경로에 확인 다이얼로그를 붙여줘. 그리고 Auto Highlights(`:4364`)가 `EditorSession`을 리셋해서 undo를 파괴하는 문제를 커맨드 경로 전환으로 고쳐줘.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task E를 기준으로 작업해줘. `EditorViewModel`에 `isDirty` 추적을 추가하고 `newProject()`/`openProject()`/종료 경로에 확인 다이얼로그를 붙여줘. 그리고 Auto Highlights(`:4364`)가 `EditorSession`을 리셋해서 undo를 파괴하는 문제를 커맨드 경로 전환으로 고쳐줘.
 
 ### Task F — CI 확장
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task F를 기준으로 작업해줘. Task A/B가 완료됐는지 먼저 확인하고(main이 green이어야 함), `ci.yml`에 Mac 앱 빌드와 `swift test` 타임아웃을 추가해. lint는 non-blocking 리포트로만 넣어줘 — 1,005건을 게이트로 만들면 아무 것도 머지 못 해.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task F를 기준으로 작업해줘. Task A/B가 완료됐는지 먼저 확인하고(main이 green이어야 함), `ci.yml`에 Mac 앱 빌드와 `swift test` 타임아웃을 추가해. lint는 non-blocking 리포트로만 넣어줘 — 1,005건을 게이트로 만들면 아무 것도 머지 못 해.
 
 ### Task G — StaticContract 정리
 
-> `docs/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task G를 기준으로 작업해줘. 코드 수정 전에 62개 StaticContract 테스트를 삭제/승격/유지로 분류하고 근거를 문서로 먼저 제시해줘. 특히 `IOSParityMatrixStaticContractTests.swift:56-57` 같은 부정 assertion은 기능 구현을 막고 있으니 제거 대상이야. 승격은 `GoldenPixelHarness` 패턴을 재사용해.
+> `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md` Task G를 기준으로 작업해줘. 코드 수정 전에 62개 StaticContract 테스트를 삭제/승격/유지로 분류하고 근거를 문서로 먼저 제시해줘. 특히 `IOSParityMatrixStaticContractTests.swift:56-57` 같은 부정 assertion은 기능 구현을 막고 있으니 제거 대상이야. 승격은 `GoldenPixelHarness` 패턴을 재사용해.
 
 ---
 

@@ -1,7 +1,12 @@
 # MovieCut vs CapCut 갭 분석 V8 — 기능 + UI 재감사 — 2026-07-04
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-04 재감사.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 > 작성일: 2026-07-04 / 브랜치: `feat/core-backend-expansion`
-> 기준선: V7 `docs/GAP_ANALYSIS_V7_FUNC_UI_20260703.md` (`5cd5155`) / 재감사 대상: `5cd5155..8efa65e`
+> 기준선: V7 `docs/archive/GAP_ANALYSIS_V7_FUNC_UI_20260703.md` (`5cd5155`) / 재감사 대상: `5cd5155..8efa65e`
 > 원천 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` v1.2
 > 규칙: 코드 존재는 완료 증거가 아니다. 완료는 preview + export + iOS 또는 명시 defer + 골든/E2E/ffprobe/GUI 증거로만 판정한다. Static contract는 회귀 잠금 전용이다.
 
@@ -59,7 +64,7 @@ V7 이후 실제 진전은 **S0 검증부채 일부 상환(EQ/NR/덕킹/모션 �
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | G-12 잔여 | 9개 잔여 | #5 optical flow, #6 text animation, #7 title templates, #9 chapter/beat metadata, #10 audio extraction, #11 background removal real person, #12 auto reframe real tracking, #13 iCloud 2-device, #14 Photos drag |
-| G-09 본대 | 진행중 | `PLATFORM_PARITY_MATRIX.md` defer 15건, iOS W1/E2E 없음, `.github/workflows/ci.yml`은 `swift test`만 확인 |
+| G-09 본대 | 진행중 | `docs/PLATFORM_PARITY_MATRIX.md` defer 15건, iOS W1/E2E 없음, `.github/workflows/ci.yml`은 `swift test`만 확인 |
 | G-02 Inc 1~2 | 순수 로직 검증만 | `CurveEvaluator` App=0 / `HSLCubeBuilder` App=0. `ColorGradePixelProcessor.swift`는 lift/gamma/gain만 적용 |
 | G-01 Inc 1 | 저장 검증만 | `TextClipContent.wordTimings`는 저장/테스트 존재. `TextOverlayPixelProcessor`는 active word/highlight 미사용 |
 | U-08 | 미착수 | `scripts/ui_capture.sh`, `scripts/ui_regression.sh`, `Tests/UIEvidence` 0건 |
@@ -200,7 +205,7 @@ V7 이후 실제 진전은 **S0 검증부채 일부 상환(EQ/NR/덕킹/모션 �
 
 ## 11. 실사 명령 요약
 
-- 문서: `.claude/commands/gap-audit.md`, `CAPCUT_SURPASS_SPEC_20260703.md`, 직전 최신 `GAP_ANALYSIS_V7_FUNC_UI_20260703.md`, `CAPCUT_FEATURE_BACKLOG.md` §2.5, UI 원칙/감사 문서.
+- 문서: `.claude/commands/gap-audit.md`, `docs/CAPCUT_SURPASS_SPEC_20260703.md`, 직전 최신 `docs/archive/GAP_ANALYSIS_V7_FUNC_UI_20260703.md`, `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5, UI 원칙/감사 문서.
 - Git: `git status --short`, `git branch --show-current`, `git log --oneline -40`, `git diff --name-status 5cd5155..HEAD`, `git show --stat 5cd5155..HEAD`.
 - Code grep: `WordTiming|wordTimings`, `CurveEvaluator|HSLCubeBuilder|hslBands|ColorCurves`, audio E2E env, UI U-ID grep, App/Test/Sources symbol count.
 - Zero-result checks: `HomeView|RecentProjects`, exact `Settings {`, `SettingsView|AppPreferences`, `CommandPalette|CommandRegistry`, `ToastCenter|ToastOverlay`, `Localizable.xcstrings`, `clipBadges|transitionPill|FilmstripGenerator|onContinuousHover`.

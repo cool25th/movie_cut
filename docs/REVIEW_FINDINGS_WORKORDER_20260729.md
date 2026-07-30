@@ -275,7 +275,7 @@ UI 변경이므로 docs/UI_DESIGN_PRINCIPLES.md의 디자인 토큰을 쓰고 �
 
 ---
 
-## 6. 이월 항목 (`NEXT_SESSION_WORKORDER_20260729.md`)
+## 6. 이월 항목 (`docs/NEXT_SESSION_WORKORDER_20260729.md`)
 
 이 문서는 **검토 지적사항만** 다룬다. 아래는 그쪽 지시서에 그대로 살아 있다.
 
@@ -317,7 +317,7 @@ UI 변경이므로 docs/UI_DESIGN_PRINCIPLES.md의 디자인 토큰을 쓰고 �
 
 ## 8. 공통 규칙
 
-`NEXT_SESSION_WORKORDER_20260729.md` §5를 그대로 따른다. 특히:
+`docs/NEXT_SESSION_WORKORDER_20260729.md` §5를 그대로 따른다. 특히:
 
 1. **시작 전 `git log -1 --oneline main`과 `git branch -v`로 위치 확인.** 여러 세션이 동시에 돈다.
 2. **자가보고 수치 금지.** 명령을 직접 실행한 출력을 첨부한다. 기준선은 `swift test` **992개**(이 브랜치 기준), main 기준은 984개.

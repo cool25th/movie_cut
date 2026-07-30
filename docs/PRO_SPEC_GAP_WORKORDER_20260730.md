@@ -71,7 +71,7 @@ Track D — 착수 전 결정 필요
   S11 캡처 입력 (카메라 / 화면 녹화 / Continuity Camera)
 ```
 
-**무인 자율 큐(`AUTONOMOUS_WORK_*.md`)에 넣지 말 것.** S1·S2는 `Sources/MovieCutCore/**`의 public 모델을 변경하고, S3·S5는 빌드 설정·배포를, S6~S9는 판단을 요구한다. 셋 다 [무인 안전 정책](AUTONOMOUS_WORK_20260729.md)의 금지 항목이다.
+**무인 자율 큐(`AUTONOMOUS_WORK_*.md`)에 넣지 말 것.** S1·S2는 `Sources/MovieCutCore/**`의 public 모델을 변경하고, S3·S5는 빌드 설정·배포를, S6~S9는 판단을 요구한다. 셋 다 [무인 안전 정책](archive/AUTONOMOUS_WORK_20260729.md)의 금지 항목이다.
 
 ---
 
@@ -88,7 +88,7 @@ Track D — 착수 전 결정 필요
 
 ## Track R — 출시 차단
 
-> 이 트랙 전체가 [App Store 등록 목표](../.claude/projects/-Users-cool-mini4-MyDev-automation-movie-cut/memory/moviecut-appstore-goal.md)의 실제 차단 요소다. **S1 → S2 → S3 순서를 지킬 것.** 순서를 어기면 샌드박스를 켠 순간 기존 프로젝트가 열리지 않는다.
+> 이 트랙 전체가 App Store 등록 목표(세션 메모리 `moviecut-appstore-goal`)의 실제 차단 요소다. **S1 → S2 → S3 순서를 지킬 것.** 순서를 어기면 샌드박스를 켠 순간 기존 프로젝트가 열리지 않는다.
 
 ### S1 — 프로젝트 스키마 마이그레이션 경로
 
@@ -194,7 +194,7 @@ Track D — 착수 전 결정 필요
 
 **작업 내용**
 
-1. **먼저 배포 경로를 결정한다**: App Store 단독 / 직접 배포(공증+Sparkle) / 양쪽. [App Store 목표 메모](../.claude/projects/-Users-cool-mini4-MyDev-automation-movie-cut/memory/moviecut-appstore-goal.md)상 App Store가 1순위이나, Sparkle은 App Store 빌드에 **포함 불가**이므로 양쪽이면 빌드 구성이 갈린다. 결정 없이 코드부터 쓰지 말 것.
+1. **먼저 배포 경로를 결정한다**: App Store 단독 / 직접 배포(공증+Sparkle) / 양쪽. App Store 목표 메모(`moviecut-appstore-goal`)상 App Store가 1순위이나, Sparkle은 App Store 빌드에 **포함 불가**이므로 양쪽이면 빌드 구성이 갈린다. 결정 없이 코드부터 쓰지 말 것.
 2. `scripts/release.sh`: archive → export(`-exportOptionsPlist`) → `codesign --deep --options runtime` → `xcrun notarytool submit --wait` → `xcrun stapler staple` → DMG 패키징.
 3. 자격 증명은 **키체인 프로파일 참조만**(`--keychain-profile`). API 키·팀 ID·비밀번호를 스크립트나 저장소에 넣지 말 것.
 4. CI: 릴리스 태그 트리거 잡 추가. 시크릿 미설정 환경에서는 건너뛰되 **조용히 통과시키지 말 것**(현행 iOS 단계의 `continue-on-error`가 만든 무검증 상태를 반복하지 않는다).

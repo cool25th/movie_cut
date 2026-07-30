@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  iOS entitlements. (S3 of docs/PRO_SPEC_GAP_WORKORDER_20260730.md)
+
+	  iOS apps are always sandboxed, so there is no `com.apple.security.app-sandbox`
+	  key (it is macOS-only). Security-scoped bookmarks (S2) are a macOS concept,
+	  so the app-scope file entitlement is omitted here too — iOS media access is
+	  granted per-asset through the Photos/document pickers at runtime.
+
+	  Kept minimal to avoid shipping unused permissions (App Review risk). The
+	  microphone entitlement covers voiceover recording; camera is intentionally
+	  NOT included because capture input (S11) has not started.
+	-->
+</dict>
+</plist>

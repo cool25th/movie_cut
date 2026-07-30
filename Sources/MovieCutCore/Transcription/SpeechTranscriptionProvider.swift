@@ -3,14 +3,34 @@ import AVFoundation
 import Speech
 
 /// Transcription provider using Apple's on-device Speech framework.
+///
+/// On-device recognition is **enforced**: audio is never uploaded to Apple's
+/// servers. When the current locale/device does not support on-device
+/// recognition, transcription fails with an explicit, user-visible message
+/// rather than silently falling back to server recognition. See S8 of
+/// `docs/PRO_SPEC_GAP_WORKORDER_20260730.md`.
 public struct SpeechTranscriptionProvider: TranscriptionProvider {
 
     /// The locale used for speech recognition (default: current locale).
     public var locale: Locale
 
+    /// Resolves whether on-device recognition is supported for a recognizer.
+    /// Defaults to the recognizer's own `supportsOnDeviceRecognition` value.
+    /// Override is test-only; production callers must pass `nil`.
+    internal var supportsOnDeviceRecognition: @Sendable (SFSpeechRecognizer) -> Bool
+
     /// Creates a speech transcription provider.
     public init(locale: Locale = .current) {
         self.locale = locale
+        self.supportsOnDeviceRecognition = { $0.supportsOnDeviceRecognition }
+    }
+
+    /// Test-only initializer that fixes the on-device support answer, so the
+    /// enforced-on-device behaviour can be exercised without depending on the
+    /// device/locale the test host happens to run under.
+    internal init(locale: Locale = .current, onDeviceSupported: Bool) {
+        self.locale = locale
+        self.supportsOnDeviceRecognition = { _ in onDeviceSupported }
     }
 
     /// Whether Speech Recognition is authorized on this device.
@@ -73,6 +93,15 @@ public struct SpeechTranscriptionProvider: TranscriptionProvider {
             )
         }
 
+        // Enforce on-device recognition. Audio must never leave the device:
+        // if this locale/device cannot recognize on-device, fail explicitly
+        // instead of silently falling back to server recognition. (S8)
+        guard supportsOnDeviceRecognition(recognizer) else {
+            throw TranscriptionError.onDeviceRecognitionUnavailable(
+                locale: resolvedLocale.identifier
+            )
+        }
+
         // For video files, extract audio first
         let audioFileURL: URL
         let extractedAudioURL: URL?
@@ -94,9 +123,10 @@ public struct SpeechTranscriptionProvider: TranscriptionProvider {
             }
         }
 
-        // Perform recognition
+        // Perform recognition. On-device recognition is guaranteed by the
+        // guard above, so this is always forced to true and never falls back.
         let request = SFSpeechURLRecognitionRequest(url: audioFileURL)
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        request.requiresOnDeviceRecognition = true
 
         let result = try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<TranscriptionResult, Error>) in

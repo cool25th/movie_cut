@@ -1,7 +1,12 @@
 # MovieCut vs CapCut 갭 분석 V10 — 기능 + UI 재감사 — 2026-07-05
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-05 재감사.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 > 작성일: 2026-07-05 / 브랜치: `feat/core-backend-expansion` (기준 커밋: `738f4ce`)
-> 기준선: V9 `docs/GAP_ANALYSIS_V9_FUNC_UI_20260705.md` (`d756ab3`) / 재평가 대상: `d756ab3..738f4ce` + **전체 독립 실사**
+> 기준선: V9 `docs/archive/GAP_ANALYSIS_V9_FUNC_UI_20260705.md` (`d756ab3`) / 재평가 대상: `d756ab3..738f4ce` + **전체 독립 실사**
 > 원천 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` v1.4
 > 규칙: 코드 존재 ≠ 완료. 완료 = preview/export/iOS 반영 + 증거(골든/E2E/ffprobe/캡처). static contract는 회귀 잠금 전용.
 > 이 감사의 실측: `swift build` PASS, `swift test --filter 'StaticContract|Golden|CurveEvaluator|HSLCube|StyledCaption'` **361 tests / 86 suites PASS**, dead-code/dead-value grep 스캔 전수 재실행.

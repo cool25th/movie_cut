@@ -19,13 +19,13 @@
 
 ### 이전 지시서 대비 변경
 
-`RELIABILITY_REPAIR_WORKORDER_20260728.md`의 Task A~G는 **전부 커밋됨.** 특히 당시 최대 문제였던 두 가지가 해소됐다:
+`docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md`의 Task A~G는 **전부 커밋됨.** 특히 당시 최대 문제였던 두 가지가 해소됐다:
 
 - `swift test` hang (872 pass 후 정지, 재현 2/2) → **984개 완주, 18.6초**
 - main red (실패 3건) → **green**
 
-따라서 이 문서가 `RELIABILITY_REPAIR_WORKORDER_20260728.md`를 대체한다.
-`CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md`(iOS 파리티 Task A~E)는 **5개 전부 미착수**이며, 아래 Track 2로 이관·갱신한다.
+따라서 이 문서가 `docs/archive/RELIABILITY_REPAIR_WORKORDER_20260728.md`를 대체한다.
+`docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md`(iOS 파리티 Task A~E)는 **5개 전부 미착수**이며, 아래 Track 2로 이관·갱신한다.
 
 ### 이전 지시서의 죽은 참조 (이 문서에서 교정함)
 

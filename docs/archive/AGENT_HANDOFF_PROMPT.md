@@ -1,5 +1,10 @@
 # 외부 에이전트 핸드오프 프롬프트 (비-Claude 세션용)
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-18 체크포인트에서 멈춘 외부 에이전트용 프롬프트. 브랜치·다음 항목 정보가 낡았다.
+> - 지금 볼 곳: 동일 내용의 현행본은 `.claude/commands/surpass.md` / `.claude/commands/gap-audit.md`.
+
 > 이 파일의 §A(개발) / §B(감사) / §C(편집 체감 P0 묶음 작업지시서) 블록을 통째로 복사해 다른 모델 세션의 첫 메시지로 붙여넣는다.
 > Claude 세션이라면 이 파일 대신 `/surpass`, `/gap-audit` 슬래시 커맨드를 쓴다 (동일 내용의 원본: `.claude/commands/surpass.md`, `.claude/commands/gap-audit.md`).
 > **2026-07-18 체크포인트는 §D Cycle 6다** — G-16/G-17, G-04 AC1~AC5 자동 검증, G-18 Inc 1 model+commands가 완료됐다. G-04 실기기 display cadence/체감과 UB-V4 scrub·slider·playback-start latency는 별도 확인 과제이며, 다음 미구현 증분은 G-18 Mac UI다.
@@ -86,7 +91,7 @@ scripts/run_e2e_export.sh
 
 ### 3단계. CapCut 대비 재비교
 
-- `CAPCUT_BENCHMARK_STANDARD.md`의 B-ID가 판정 단위. §7 채점 시트를 복사·갱신해 신규 분석 문서에 첨부. 판정 변화는 반드시 증거와 함께.
+- `docs/CAPCUT_BENCHMARK_STANDARD.md`의 B-ID가 판정 단위. §7 채점 시트를 복사·갱신해 신규 분석 문서에 첨부. 판정 변화는 반드시 증거와 함께.
 - 새 격차 발견 시 근거(파일:라인 또는 grep 결과) 필수. **[추정] 표기 B-ID로 ⬇/❌ 판정하려면 먼저 웹 검색으로 CapCut 실동작을 확인하고 벤치마크 문서를 [확인]으로 승격(출처 병기).** CapCut 신기능 발견 시 B-ID 추가 + 벤치마크 버전 bump.
 - 능가 기회(온디바이스/오프라인/Pro 출력/macOS 네이티브 — CapCut이 구조적으로 못 하는 것)도 갱신.
 - 현재 등재 대기 중인 확정 격차: **블렌딩 모드(B-F4.4, [확인] 완료 — G-ID 신설 대상)**, 컴파운드 클립(B-F2.3), 캡션 VTT/ASS export(B-F3.2, F-13 확장).
@@ -95,7 +100,7 @@ scripts/run_e2e_export.sh
 
 1. 신규 분석 문서 `docs/GAP_ANALYSIS_V<N+1>_FUNC_UI_<YYYYMMDD>.md` — 델타 요약/3분류 현황(능가·부채·열위)/G-ID 현황판/UI 격차표/개선 방향/권장 실행 순서.
 2. 스펙 갱신 — 버전 bump + 변경 이력 1줄. 신규 격차는 새 G/U-ID로 기존 항목과 같은 밀도의 상세 명세(요구사항/현재 상태 실사/데이터 모델/구현 증분/AC/검증 계획/리스크). 무효화 항목은 삭제 대신 취소선+사유.
-3. `CAPCUT_FEATURE_BACKLOG.md` 재판정 반영.
+3. `docs/CAPCUT_FEATURE_BACKLOG.md` 재판정 반영.
 4. 커밋: `docs: …` conventional commit, attribution 없음.
 
 ### 규율
@@ -115,12 +120,12 @@ scripts/run_e2e_export.sh
 
 ### C-0. 선행 절차 (필수)
 
-1. 이 파일(`docs/AGENT_HANDOFF_PROMPT.md`) **§A의 1단계(컨텍스트 로드)와 3단계(콜드 스타트 체크)를 그대로 수행**하고, §A 4단계 규율 10개를 이 세션 내내 준수한다. 특히: 모든 편집은 `EditorSession.dispatch(Command)` 경유, Core 서비스/기능 신설 시 앱 배선+E2E 훅을 같은 커밋에, static contract는 완료 증거 불인정, `swift test`는 `--filter`로만, 커밋에 AI attribution 금지.
+1. 이 파일(`docs/archive/AGENT_HANDOFF_PROMPT.md`) **§A의 1단계(컨텍스트 로드)와 3단계(콜드 스타트 체크)를 그대로 수행**하고, §A 4단계 규율 10개를 이 세션 내내 준수한다. 특히: 모든 편집은 `EditorSession.dispatch(Command)` 경유, Core 서비스/기능 신설 시 앱 배선+E2E 훅을 같은 커밋에, static contract는 완료 증거 불인정, `swift test`는 `--filter`로만, 커밋에 AI attribution 금지.
 2. E2E FAIL이면 신규 작업 금지 — 회귀 수리부터.
 
 ### C-1. 등재 의무 (구현 착수 전, 첫 커밋)
 
-`docs/CAPCUT_SURPASS_SPEC_20260703.md`에 아래 두 항목을 **기존 G-ID와 같은 밀도**(요구사항/현재 상태 실사/데이터 모델/구현 증분/측정 가능한 AC/검증 계획/리스크)로 신설하고 버전 bump + 변경 이력 1줄. `docs/CAPCUT_FEATURE_BACKLOG.md`에 사용자 보고 P0로 추가. `CAPCUT_BENCHMARK_STANDARD.md` §6 해당 행의 "처리" 칸을 "G-16/G-17 등재됨"으로 갱신. 커밋: `docs: register G-16/G-17 editing-feel P0 from user report`.
+`docs/CAPCUT_SURPASS_SPEC_20260703.md`에 아래 두 항목을 **기존 G-ID와 같은 밀도**(요구사항/현재 상태 실사/데이터 모델/구현 증분/측정 가능한 AC/검증 계획/리스크)로 신설하고 버전 bump + 변경 이력 1줄. `docs/CAPCUT_FEATURE_BACKLOG.md`에 사용자 보고 P0로 추가. `docs/CAPCUT_BENCHMARK_STANDARD.md` §6 해당 행의 "처리" 칸을 "G-16/G-17 등재됨"으로 갱신. 커밋: `docs: register G-16/G-17 editing-feel P0 from user report`.
 
 - **G-16 타임라인 스크럽** (B-I2 대응, P0)
 - **G-17 클립 복사/잘라내기/붙여넣기** (B-F2.1 대응, P0)

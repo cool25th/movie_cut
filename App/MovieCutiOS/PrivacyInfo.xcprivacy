@@ -7,6 +7,10 @@
 	  accounts, and no third-party SDKs, so nothing is collected or tracked.
 	  Audited 2026-07-29 against the codebase: no UserDefaults/@AppStorage,
 	  no disk-space, boot-time, or active-keyboard API use.
+	  Re-audited 2026-07-30 (S8): speech recognition is enforced on-device.
+	  Audio is never uploaded — when a locale/device lacks on-device support,
+	  transcription fails explicitly instead of falling back to Apple servers
+	  (SpeechTranscriptionProvider.requiresOnDeviceRecognition = true).
 	-->
 	<key>NSPrivacyTracking</key>
 	<false/>

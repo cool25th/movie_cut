@@ -1,12 +1,17 @@
 # MovieCut vs CapCut 심층 갭 분석 (코드 검증 기반)
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: **전 기능 72/72 100% 완료**로 적혀 있으나 사실이 아니다.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 ## 요약
 - 전체 CapCut 비교 기능: 72개
 - 완전 구현 (실제 로직 있음): 72개 (100%)
 - 부분 구현: 0개
 - 미구현: 0개
 
-본 문서는 이전 `GAP_ANALYSIS.md`처럼 모델, 명령, UI 파일의 존재만으로 완료 여부를 판단하지 않고, 실제 런타임 동작 가능성을 기준으로 재분류한다. 최신 구현 기준에서 이전 Critical 및 High 갭은 모두 해소되었고, provider의 빈 결과 반환, 원본 그대로 반환, no-op 처리, mock 동기화, 시뮬레이션 progress, iOS placeholder UI는 실제 동작 가능한 구현으로 교체되었다.
+본 문서는 이전 `docs/archive/GAP_ANALYSIS.md`처럼 모델, 명령, UI 파일의 존재만으로 완료 여부를 판단하지 않고, 실제 런타임 동작 가능성을 기준으로 재분류한다. 최신 구현 기준에서 이전 Critical 및 High 갭은 모두 해소되었고, provider의 빈 결과 반환, 원본 그대로 반환, no-op 처리, mock 동기화, 시뮬레이션 progress, iOS placeholder UI는 실제 동작 가능한 구현으로 교체되었다.
 
 ## 이전 V2 분석과의 차이
 이전 V2 분석은 실제 코드 검증 기준에서 일부 항목을 부분 또는 미완료 상태로 분류했다. 이후 아래 구현이 완료되어 현재는 72개 전체 기능이 완전 구현 상태다.

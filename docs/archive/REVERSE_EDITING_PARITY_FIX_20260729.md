@@ -1,5 +1,10 @@
 # 역재생 편집 + parity 게이트 신뢰화 수정 기록
 
+> **[보관 — 완료]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: P1 3종 수정 + parity 게이트 신뢰화 완료(`d8fac5e`, `0d188c0`).
+> - 지금 볼 곳: —
+
 > 작성일: 2026-07-29
 > 브랜치: `fix/reverse-clip-editing-and-parity-gates`
 > 기준: main `75b6421`
@@ -85,7 +90,7 @@ composition 파이프라인의 호스트/GPU 의존적 한계다.
 개선점: 이제 watchdog가 240초에 앱을 강제 종료하므로(이전엔 무한 대기) 하네스가
 막히지 않고, 실패 시 WORK 디렉토리가 보존되어 원인 조사가 가능하다.
 
-해결 방향은 `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task E가 다룬다:
+해결 방향은 `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task E가 다룬다:
 duration 비교 추가, working GPU compositor host에서의 실행. 본 문서와 별개 과제.
 
 ### Scenario 1 (전환) — 여전히 의도적 제외

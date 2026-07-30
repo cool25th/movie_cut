@@ -1,5 +1,10 @@
 # MovieCut vs CapCut 기능 갭 분석
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: **전 기능 88/88 100% 완료**로 적혀 있으나 사실이 아니다 — 파일 존재만으로 판정한 문서다.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 ## 요약
 - 전체 CapCut 기능: 88개
 - 완전 구현: 88개 (100%)

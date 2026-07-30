@@ -1,7 +1,13 @@
 # CapCut UI 기능 가시화 — 작업 핸드오프
 
+> **[상태: 완료 — 역사 기록]** 현역 문서가 아니다. 전체 문서 지도는 [docs/README.md](README.md).
+>
+> - 판정 근거: IA/menu-position 패스 + P0/P1/P2 폴리시 완료 (`060b0e5` `05ca9a5` `a2b86a0`).
+> - 지금 볼 곳: UI 판정 기준은 `docs/UI_DESIGN_PRINCIPLES.md`로 이동했다 — 이 문서의 CapCut 유사도 지표는 폐기됐다.
+> - `docs/archive/`로 옮기지 않은 이유: StaticContract 테스트가 이 경로를 직접 읽는다(경로를 바꾸면 테스트가 깨진다).
+
 > 작성일: 2026-06-17 / 기준 브랜치: `feat/core-backend-expansion` / 직전 커밋: `4f8019f`(darken editor shell)
-> **이 문서만 읽고 다른 세션에서 바로 착수할 수 있도록 작성됨.** 상위 요구사항/가드레일은 `docs/CAPCUT_UI_PARITY_REQUIREMENTS.md`, 기능 갭은 `docs/GAP_ANALYSIS_V6.md` 참고.
+> **이 문서만 읽고 다른 세션에서 바로 착수할 수 있도록 작성됨.** 상위 요구사항/가드레일은 `docs/CAPCUT_UI_PARITY_REQUIREMENTS.md`, 기능 갭은 `docs/archive/GAP_ANALYSIS_V6.md` 참고.
 
 ---
 

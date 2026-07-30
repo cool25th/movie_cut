@@ -42,7 +42,7 @@
 
 ## 3. 부정 단언(`!contains`) 처리 원칙
 
-> **결함을 잠그는 부정 단언은 전부 제거한다.** 미구현 상태는 문서(`PLATFORM_PARITY_MATRIX.md`)로 추적하면 충분하다.
+> **결함을 잠그는 부정 단언은 전부 제거한다.** 미구현 상태는 문서(`docs/PLATFORM_PARITY_MATRIX.md`)로 추적하면 충분하다.
 
 두 종류의 `!contains`를 구분해야 한다:
 

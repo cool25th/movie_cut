@@ -39,4 +39,4 @@ The populated editor capture launches the Debug app with the existing DEBUG harn
 ## U-08 remaining work
 
 - [진행중] Expand from the first populated editor surface to the full four target surfaces: browser, preview+inspector, timeline populated, grading panel.
-- [진행중] Inc 3 discovery metric: record the representative flow click count (clip add → transition apply → export start) via XCUITest or harness log and compare against `UI_DESIGN_PRINCIPLES.md` discoverability target.
+- [진행중] Inc 3 discovery metric: record the representative flow click count (clip add → transition apply → export start) via XCUITest or harness log and compare against `docs/UI_DESIGN_PRINCIPLES.md` discoverability target.

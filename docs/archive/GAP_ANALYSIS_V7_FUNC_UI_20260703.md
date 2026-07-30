@@ -1,9 +1,14 @@
 # MovieCut vs CapCut 갭 분석 V7 — 기능 + UI 통합 — 2026-07-03
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-03 기능+UI 통합 감사. U-01~U-09 신설 시점.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 > 작성일: 2026-07-03 / 브랜치: `feat/core-backend-expansion` (기준 커밋: `5cd5155`)
 > **이 문서는 기능과 UI를 함께 보는 통합 격차 분석이다.** 다른 세션(콜드 스타트) 착수용.
-> 기능 상세 스펙: `CAPCUT_SURPASS_SPEC_20260703.md` §3 (G-ID) / **UI 상세 스펙: 같은 문서 §5 (U-ID, 이번에 신설)**
-> 선행 문서: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차), `MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md`(UI 감사), `UI_DESIGN_PRINCIPLES.md`(Phase 0.7 디자인 원칙), `UIUX_HANDOFF.md`(UX-01~ 이력)
+> 기능 상세 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` §3 (G-ID) / **UI 상세 스펙: 같은 문서 §5 (U-ID, 이번에 신설)**
+> 선행 문서: `docs/archive/CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차), `docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md`(UI 감사), `docs/UI_DESIGN_PRINCIPLES.md`(Phase 0.7 디자인 원칙), `docs/UIUX_HANDOFF.md`(UX-01~ 이력)
 > 판정 근거: 2026-07-03 코드 grep·git log·문서 실사. 자가보고 수치 신뢰 금지 원칙 유지.
 
 ---
@@ -54,7 +59,7 @@
 | 맥락형 인스펙터 | ✅ 선택 시 클립 속성 최상단, 전역 도구 접힘, 거버넌스 텍스트 제거 | UX-02/03, P1 폴리시 |
 | 타임라인 도구 집약 | ✅ Edit/Quick Tools/Markers/Zoom 단일 헤더 행 | UX-05 |
 | 창 기본 크기 | ✅ defaultSize + windowResizability (실사 확인 `MovieCutMacApp.swift:18`) | UX-01 |
-| 디자인 토큰 | ✅ Pro 다크(`#0F0F10`/`#17181A`), 단일 cyan 액센트, 클립 타입 색 | `UI_DESIGN_PRINCIPLES.md` |
+| 디자인 토큰 | ✅ Pro 다크(`#0F0F10`/`#17181A`), 단일 cyan 액센트, 클립 타입 색 | `docs/UI_DESIGN_PRINCIPLES.md` |
 | 트랙 mute/hide | ✅ 트랙 헤더 토글 (실사 `TimelineView.swift:656-672`) | 실사 |
 
 ### 3-B. CapCut이 앞서는 UI 격차 (2026-07-03 실사 — 신규 식별 포함)
@@ -105,7 +110,7 @@
 
 ---
 
-## 5. U-ID 개선안 요약 (상세 스펙: `CAPCUT_SURPASS_SPEC_20260703.md` §5)
+## 5. U-ID 개선안 요약 (상세 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` §5)
 
 | U-ID | 항목 | 우선순위 | 규모 | 비고 |
 |---|---|---|---|---|
@@ -132,4 +137,4 @@
 | 5 | S3: G-05/G-06 | U-06 현지화 |
 | 6 | S4: G-07/G-08 | U-07 병합 실행 → U-09 팔레트 |
 
-각 UI 세션 DoD는 스펙 §5 공통 규칙(레이아웃 계약 테스트 + U-08 캡처 증거 + `UI_DESIGN_PRINCIPLES.md` 지표) 준수.
+각 UI 세션 DoD는 스펙 §5 공통 규칙(레이아웃 계약 테스트 + U-08 캡처 증거 + `docs/UI_DESIGN_PRINCIPLES.md` 지표) 준수.

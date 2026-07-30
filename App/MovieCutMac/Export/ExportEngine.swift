@@ -23,6 +23,9 @@ final class ExportEngine {
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
+    /// Security scopes held open for the duration of an export so source
+    /// assets stay reachable under App Sandbox. (S2)
+    @ObservationIgnored private var activeSecurityScopes: [URL] = []
 
     private static let maximumOpticalFlowFrameRate: Int32 = 120
 
@@ -42,6 +45,8 @@ final class ExportEngine {
         lastExportURL = nil
 
         do {
+            beginSecurityScopes(for: project)
+            defer { endSecurityScopes() }
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {
@@ -153,6 +158,24 @@ final class ExportEngine {
         // fileLengthLimit is the available AVFoundation constraint here, so this applies the
         // selected target bitrate approximately while the chosen preset still controls encoding.
         exportSession.fileLengthLimit = Int64((targetBits / 8.0 * 1.05).rounded(.up))
+    }
+
+    /// Starts a security scope for every source asset in `project`, so source
+    /// files stay reachable under App Sandbox for the whole export. Pairs with
+    /// `endSecurityScopes()`. (S2)
+    private func beginSecurityScopes(for project: Project) {
+        endSecurityScopes()
+        activeSecurityScopes = project.mediaLibrary.assets.values.map { asset in
+            SecurityScopedAccess.beginScope(for: asset)
+        }
+    }
+
+    /// Stops every security scope started by `beginSecurityScopes(for:)`.
+    private func endSecurityScopes() {
+        for url in activeSecurityScopes {
+            SecurityScopedAccess.endScope(for: url)
+        }
+        activeSecurityScopes = []
     }
 
     private func makeExportPackage(
@@ -1280,6 +1303,8 @@ final class ExportEngine {
         lastExportURL = nil
 
         do {
+            beginSecurityScopes(for: project)
+            defer { endSecurityScopes() }
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks(withMediaType: .audio).isEmpty else {
@@ -1322,6 +1347,8 @@ final class ExportEngine {
         to url: URL,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
     ) async throws -> URL {
+        beginSecurityScopes(for: project)
+        defer { endSecurityScopes() }
         let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
         defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
         guard !exportPackage.composition.tracks(withMediaType: .video).isEmpty else {
@@ -1363,6 +1390,8 @@ final class ExportEngine {
         lastExportURL = nil
 
         do {
+            beginSecurityScopes(for: project)
+            defer { endSecurityScopes() }
             let plan = exportPlanner.plan(
                 settings: project.exportSettings,
                 canvas: project.canvas,
@@ -1457,6 +1486,8 @@ final class ExportEngine {
         lastExportURL = nil
 
         do {
+            beginSecurityScopes(for: project)
+            defer { endSecurityScopes() }
             let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {

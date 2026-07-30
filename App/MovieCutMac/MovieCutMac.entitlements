@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  App Sandbox entitlements for the Mac app. (S3 of
+	  docs/PRO_SPEC_GAP_WORKORDER_20260730.md)
+
+	  - app-sandbox: required for Mac App Store.
+	  - files.user-selected.read-write: read/write media the user picks via
+	    NSOpenPanel/NSSavePanel (import, export, project save/open).
+	  - files.bookmarks.app-scope: persist security-scoped bookmarks so media
+	    stays reachable across app restarts (S2). app-scope (not
+	    security-domain) is enough because all access is to user-selected files.
+	  - device.microphone: voiceover recording (NSMicrophoneUsageDescription is
+	    already in Info.plist).
+
+	  Intentionally NOT included:
+	  - device.camera / camera capture: capture input (S11) is not started yet;
+	    shipping an unused permission is an App Review risk.
+	  - network: the app is fully offline / on-device (S8).
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.device.microphone</key>
+	<true/>
+</dict>
+</plist>

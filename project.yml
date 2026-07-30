@@ -35,6 +35,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.mac
         INFOPLIST_FILE: App/MovieCutMac/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/MovieCutMac/MovieCutMac.entitlements
+        ENABLE_APP_SANDBOX: YES
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
   MovieCutiOS:
@@ -56,6 +58,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.ios
         INFOPLIST_FILE: App/MovieCutiOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/MovieCutiOS/MovieCutiOS.entitlements
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
   MovieCutCoreTests:

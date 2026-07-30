@@ -1107,7 +1107,8 @@ struct TimelineView: View {
         guard let asset = filmstripAsset(for: clip) else { return nil }
         return ProxyBadgeState.resolve(
             proxy: asset.proxy,
-            useProxyPlayback: viewModel.currentProject.playbackSettings.useProxyPlayback
+            useProxyPlayback: viewModel.currentProject.playbackSettings.useProxyPlayback,
+            autoDowngraded: viewModel.playbackEngine.autoProxyDowngrade
         )
     }
 
@@ -1118,13 +1119,19 @@ struct TimelineView: View {
     /// and a status indicator is none of those. State is carried by opacity and
     /// by filled vs outline glyph instead.
     private func clipProxyBadge(_ state: ProxyBadgeState) -> some View {
-        Image(systemName: state == .active ? "bolt.fill" : "bolt")
+        // thermalActive uses a thermometer glyph so the *reason* for the quality
+        // drop is visible — an unexplained drop reads as a bug. (S7)
+        let isActive = state == .active || state == .thermalActive
+        let systemName = state == .thermalActive ? "thermometer.medium" : (state == .active ? "bolt.fill" : "bolt")
+        return Image(systemName: systemName)
             .font(MovieCutTypography.metadata)
-            .foregroundStyle(.white.opacity(state == .active ? 0.85 : 0.45))
+            .foregroundStyle(.white.opacity(isActive ? 0.85 : 0.45))
             .help(
                 state == .active
                     ? NSLocalizedString("Playing the proxy for smoother editing. Export uses the original.", comment: "")
-                    : NSLocalizedString("A proxy is ready. Turn on proxy playback to use it.", comment: "")
+                    : (state == .thermalActive
+                        ? NSLocalizedString("Thermal pressure: preview is using the proxy. It restores when the device cools. Export uses the original.", comment: "")
+                        : NSLocalizedString("A proxy is ready. Turn on proxy playback to use it.", comment: ""))
             )
     }
 
@@ -1138,6 +1145,8 @@ struct TimelineView: View {
         switch proxyBadgeState(for: clip) {
         case .active:
             return NSLocalizedString("proxy playback on", comment: "")
+        case .thermalActive:
+            return NSLocalizedString("proxy playback on due to thermal pressure", comment: "")
         case .idle:
             return NSLocalizedString("proxy ready", comment: "")
         case nil:

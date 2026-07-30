@@ -93,6 +93,16 @@ struct InspectorExportSection: View {
             .accessibilityLabel("Use proxy media for playback")
             .accessibilityHint("When on, the preview plays back a lower-resolution proxy for smoother editing. The proxy must be generated per media asset; falls back to the original when absent.")
 
+            Toggle("Auto-use proxy under thermal pressure", isOn: Binding(
+                get: { viewModel.currentProject.playbackSettings.autoProxyOnThermalPressure },
+                set: { newValue in
+                    Task { await viewModel.updatePlaybackSettings(autoProxyOnThermalPressure: newValue) }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .accessibilityLabel("Auto-use proxy under thermal pressure")
+            .accessibilityHint("When on, the preview drops to a generated proxy while the device is hot, then restores the original when it cools. Turn off to keep the original at all times.")
+
             proxyResolutionPicker
         }
     }

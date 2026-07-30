@@ -57,7 +57,9 @@ struct SecurityScopedBookmarkMigrationTests {
         try ProjectMigrationRunner.migrate(&project)
 
         #expect(project.schemaVersion == currentSchemaVersion)
-        #expect(currentSchemaVersion == 2)
+        // The bookmark migration is the v1→v2 step; the chain must reach at
+        // least v2 (later migrators may run it further toward current).
+        #expect(currentSchemaVersion >= 2)
     }
 
     @Test("The bookmark migration is the v1→v2 step and is registered")

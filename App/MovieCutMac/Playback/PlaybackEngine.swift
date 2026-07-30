@@ -45,6 +45,20 @@ final class PlaybackEngine {
     /// asset or composition. Each entry pairs with a `stopAccessing` on clear
     /// or next load so the access pair never leaks across reloads. (S2)
     @ObservationIgnored private var activeSecurityScopes: [URL] = []
+    /// Runtime-only: preview dropped to proxy because of thermal pressure (S7).
+    /// Distinct from the user's persistent `useProxyPlayback` so cooling the
+    /// device restores the original even if the user never toggled proxy on.
+    var autoProxyDowngrade: Bool {
+        didSet {
+            guard oldValue != autoProxyDowngrade else { return }
+            AppLog.playback.info("thermal proxy downgrade: \(self.autoProxyDowngrade, privacy: .public)")
+        }
+    }
+    /// The last project + audio processing passed to `loadProject`, kept so a
+    /// thermal transition can rebuild the composition at the new proxy state.
+    @ObservationIgnored private var loadedProject: Project?
+    @ObservationIgnored private var loadedAudioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+    @ObservationIgnored private let thermalObserver = ThermalStateObserver()
     /// Video output used to pull the currently displayed preview pixel buffer
     /// for Preview↔Export parity verification. Lazily attached to the active
     /// player item.
@@ -57,6 +71,28 @@ final class PlaybackEngine {
         self.duration = 0
         self.playerItem = nil
         self.playbackRate = 1
+        self.autoProxyDowngrade = false
+        // Begin thermal observation: on serious/critical pressure (and if the
+        // user allows it), drop preview to proxy; on cooling, restore. (S7)
+        thermalObserver.onChange = { [weak self] state in
+            self?.thermalStateChanged(to: state)
+        }
+        thermalObserver.start()
+    }
+
+    /// Reacts to a thermal transition by toggling `autoProxyDowngrade` and
+    /// rebuilding the composition so the proxy/original swap takes effect. (S7)
+    private func thermalStateChanged(to state: ThermalState) {
+        guard let project = loadedProject else { return }
+        let shouldDowngrade = ProxyDowngradePolicy.shouldAutoDowngrade(
+            thermalState: state,
+            autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
+        )
+        guard shouldDowngrade != autoProxyDowngrade else { return }
+        autoProxyDowngrade = shouldDowngrade
+        // Rebuild at the new proxy state. loadProject preserves playback state
+        // (it re-stamps the generation guard).
+        loadProject(project, audioProcessing: loadedAudioProcessing)
     }
 
     func load(asset: MediaAsset) {
@@ -100,6 +136,11 @@ final class PlaybackEngine {
         activeSecurityScopes = project.mediaLibrary.assets.values.map { asset in
             SecurityScopedAccess.beginScope(for: asset)
         }
+
+        // Remember the project so a thermal transition can rebuild at the new
+        // proxy state. (S7)
+        loadedProject = project
+        loadedAudioProcessing = audioProcessing
 
         // Stamp a new generation before any async work. Only the holder of the
         // latest token is allowed to install a player item, so a slow earlier
@@ -596,7 +637,9 @@ final class PlaybackEngine {
         /// `BeatDetectionProvider` idiom so behavior stays consistent across the
         /// codebase.
         func playbackURL(for asset: MediaAsset) -> URL {
-            if project.playbackSettings.useProxyPlayback,
+            // Proxy is used when the user opted in OR when thermal pressure
+            // auto-downgraded preview (S7). Export never uses this path.
+            if (project.playbackSettings.useProxyPlayback || autoProxyDowngrade),
                let proxyURL = asset.proxy?.proxyURL {
                 return proxyURL
             }

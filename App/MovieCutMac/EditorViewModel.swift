@@ -3091,7 +3091,8 @@ final class EditorViewModel {
     /// original) URL is picked up on the next build.
     func updatePlaybackSettings(
         useProxyPlayback: Bool? = nil,
-        proxyResolution: ProxyResolution? = nil
+        proxyResolution: ProxyResolution? = nil,
+        autoProxyOnThermalPressure: Bool? = nil
     ) async {
         var settings = currentProject.playbackSettings
         if let useProxyPlayback {
@@ -3099,6 +3100,9 @@ final class EditorViewModel {
         }
         if let proxyResolution {
             settings.proxyResolution = proxyResolution
+        }
+        if let autoProxyOnThermalPressure {
+            settings.autoProxyOnThermalPressure = autoProxyOnThermalPressure
         }
 
         await apply(SetProjectPlaybackSettingsCommand(playbackSettings: settings))

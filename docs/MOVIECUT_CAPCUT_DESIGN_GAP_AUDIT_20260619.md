@@ -233,7 +233,7 @@ Why:
 - Docs contain stale state markers from older passes.
 
 Scope:
-- Update `CAPCUT_UI_PARITY_REQUIREMENTS.md` current-state snapshot.
+- Update `docs/CAPCUT_UI_PARITY_REQUIREMENTS.md` current-state snapshot.
 - Mark completed hover preview/project status/visual metric/IA pass consistently.
 - Add this audit to handoff references.
 
@@ -242,7 +242,7 @@ Acceptance criteria:
 - Remaining backlog is explicit and prioritized.
 
 Implementation note (2026-06-20):
-- P3 documentation cleanup refreshed `CAPCUT_UI_PARITY_REQUIREMENTS.md`, `UIUX_HANDOFF.md`, and `CAPCUT_UI_SHOWCASE_HANDOFF.md` so R1-02/R2-04 no longer appear as stale blockers, Loop 6 is recorded as the latest passing metric evidence, and Loop 3/4 failure metrics are historical.
+- P3 documentation cleanup refreshed `docs/CAPCUT_UI_PARITY_REQUIREMENTS.md`, `docs/UIUX_HANDOFF.md`, and `docs/CAPCUT_UI_SHOWCASE_HANDOFF.md` so R1-02/R2-04 no longer appear as stale blockers, Loop 6 is recorded as the latest passing metric evidence, and Loop 3/4 failure metrics are historical.
 - Current handoff docs now mark IA/menu-position plus P0/P1/P2 polish as implemented while keeping matching populated side-by-side recapture/metrics, standard workflow walkthroughs, optional R2-01/Captions/Adjust product decisions, and optional iOS sync as explicit backlog.
 - Static contracts should guard against reverting the recommended next prompt to P0 implementation or overclaiming post-P2 populated recapture.
 

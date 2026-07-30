@@ -1,17 +1,17 @@
 # MovieCut → CapCut 능가 개발 명세서 (Surpass Specification)
 
 > 버전: 1.9 / 작성일: 2026-07-03 (v1.9: 배선 격차 재설정 + G-23/G-24 등재) / 브랜치: `main`
-> 상위 분석: `CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
-> 형식·운영 규칙은 `CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
+> 상위 분석: `docs/archive/CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md`(기능 격차·우선순위), `docs/archive/GAP_ANALYSIS_V8_FUNC_UI_20260704.md`(기능+UI 통합 재감사) — 이 문서는 그 G-ID/U-ID들의 **개발 착수 가능한 상세 명세**다.
+> 형식·운영 규칙은 `docs/CAPCUT_PARITY_SPEC.md`를 계승한다: 작업은 G-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 > 모든 명세는 2026-07-04 V8 코드 실사 기준으로 실제 타입/파일에 앵커되어 있다.
 
 변경 이력:
-- 2026-07-29 v1.9: V13 재감사(`GAP_ANALYSIS_V13_FUNC_UI_20260729.md`, 델타 62커밋) 반영. ① **격차 성격 재설정**: 주류가 "기능 부재"에서 **"배선 격차"**로 이동했다 — 워드 캡션 타이밍(Core 4파일/App 0), 프록시 소비(PlaybackEngine·ExportEngine 0회), 현지화(`NSLocalizedString` 8파일이나 `.lproj`/`.xcstrings` **0개**)가 전부 Core·래핑까지만 존재한다. ② **A6 원장 확대**: App 호출 0회인 Core 서브시스템 **1,279줄**을 G-12에 등재(`CollaborationService` 546, `ClaudeEditingProvider` 265, `StyleTransferProvider` 174, `VocalSeparationService` 121, `AIEditingProvider` 103, `VersionHistory` 70). `BackgroundRemovalProvider`는 기능이 다른 경로로 동작하는 위양성이므로 삭제 후보로 분류. ③ **G-23 블렌딩 모드 / G-24 컴파운드 클립 신설** — 벤치마크 §6에서 "다음 감사에서 G-ID 신설" 대기 중이던 확정 격차 2건. ④ **P0 부채 신설 — 판정 재확인**: 7/28 핵심 편집 수리가 "메인 Preview가 프로젝트 합성을 쓰지 않고 있었다"(`b398563`)를 드러냈으므로, `=` 판정이 붙은 B-ID는 preview+export 동시 증거로 재확인해야 한다. ⑤ Track.isLocked dead-field(v1.2 판정)는 **해소 확인**.
-- 2026-07-14 v1.8: `USABILITY_BENCHMARK_STANDARD.md` v1.0의 카드뉴스 경로를 개발 단위로 등록. **G-18 카드 문서 모델+편집기 / G-19 카드 템플릿+마스터 스타일 / G-20 브랜드 킷 / G-21 카드 PNG·JPG 세트 export+원클릭 영상화 / G-22 대본 자동 분배 / U-10 카드뉴스 진입점**을 신설하고 UB-C/SC-C의 클릭 수·시간·출력 규격을 AC에 그대로 고정했다.
+- 2026-07-29 v1.9: V13 재감사(`docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`, 델타 62커밋) 반영. ① **격차 성격 재설정**: 주류가 "기능 부재"에서 **"배선 격차"**로 이동했다 — 워드 캡션 타이밍(Core 4파일/App 0), 프록시 소비(PlaybackEngine·ExportEngine 0회), 현지화(`NSLocalizedString` 8파일이나 `.lproj`/`.xcstrings` **0개**)가 전부 Core·래핑까지만 존재한다. ② **A6 원장 확대**: App 호출 0회인 Core 서브시스템 **1,279줄**을 G-12에 등재(`CollaborationService` 546, `ClaudeEditingProvider` 265, `StyleTransferProvider` 174, `VocalSeparationService` 121, `AIEditingProvider` 103, `VersionHistory` 70). `BackgroundRemovalProvider`는 기능이 다른 경로로 동작하는 위양성이므로 삭제 후보로 분류. ③ **G-23 블렌딩 모드 / G-24 컴파운드 클립 신설** — 벤치마크 §6에서 "다음 감사에서 G-ID 신설" 대기 중이던 확정 격차 2건. ④ **P0 부채 신설 — 판정 재확인**: 7/28 핵심 편집 수리가 "메인 Preview가 프로젝트 합성을 쓰지 않고 있었다"(`b398563`)를 드러냈으므로, `=` 판정이 붙은 B-ID는 preview+export 동시 증거로 재확인해야 한다. ⑤ Track.isLocked dead-field(v1.2 판정)는 **해소 확인**.
+- 2026-07-14 v1.8: `docs/USABILITY_BENCHMARK_STANDARD.md` v1.0의 카드뉴스 경로를 개발 단위로 등록. **G-18 카드 문서 모델+편집기 / G-19 카드 템플릿+마스터 스타일 / G-20 브랜드 킷 / G-21 카드 PNG·JPG 세트 export+원클릭 영상화 / G-22 대본 자동 분배 / U-10 카드뉴스 진입점**을 신설하고 UB-C/SC-C의 클릭 수·시간·출력 규격을 AC에 그대로 고정했다.
 - 2026-07-13 v1.7: 사용자 보고 편집 체감 P0를 코드 실사 후 정식 등재. **G-16 타임라인 스크럽(B-I2)**과 **G-17 클립 복사/잘라내기/붙여넣기(B-F2.1)**를 신설하고, 구현 순서를 G-16→G-17→G-04로 고정했다.
-- 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
-- 2026-07-05 v1.5: V11 재감사(`GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
-- 2026-07-05 v1.4: V10 재감사(`GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 10/14; #9 chapter metadata 상환 후 다음 자동 항목 G-02 Inc 3).
+- 2026-07-06 v1.6: **사용자 실사용 버그 재현**(사진 import→타임라인은 되나 preview 무표시 + export "Cannot Open" 실패, `docs/archive/GAP_ANALYSIS_V12_FUNC_UI_20260706.md`). ① **G-15 이미지(사진) 클립 파이프라인 신설 — 모든 큐에 최우선**(자동 선택: G-15 → U-08 → G-02 Inc 5~6 → G-01 Inc 2~4). ② **A7 신설**: 미디어 kind(video/audio/image)를 새로 소비하는 기능은 해당 kind fixture E2E 1건 의무(이번 버그가 못 잡힌 원인 = 전 E2E가 mp4/wav 전용). ③ **Works-First 규율**: `run_e2e_export.sh` 최상단에 실사용 스모크(사진+비디오+텍스트 혼합 → export) 상설, G-15 완료 시 사용자 실기기 확인 1회를 DoD에 포함. ④ 과거 "이미지 드래그앤드롭 ✅" 판정은 "라이브러리 진입까지만"으로 강등.
+- 2026-07-05 v1.5: V11 재감사(`docs/archive/GAP_ANALYSIS_V11_FUNC_UI_20260705.md`) 반영. G-12 #9 상환(10/14, 자동 상환 가능분 소진)과 **G-02 Inc 3 완료(HSL/커브 체이닝 + 골든 + E2E)를 독립 검증** — dead-value 4계열 중 3계열 상환, `wordTimings`만 잔존. v1.4 게이트에 따라 **다음 자동 선택은 U-08**(UI 트랙 4회 연속 미착수), 그다음 G-02 Inc 5~6(커브/HSL 편집기 UI → W5 완주), G-01 Inc 2 순. `StyleTransferProvider`는 폐기/G-07 흡수 결정 필요로 승격.
+- 2026-07-05 v1.4: V10 재감사(`docs/archive/GAP_ANALYSIS_V10_FUNC_UI_20260705.md`) 반영. ① **S0 게이트 완화**: G-12 #9 상환 후 자동 선택은 S1(G-02 Inc 3)→SU(U-08)→S2(G-01 Inc 2)로 진행. #11/#12는 fixture 제작 증분으로 세분화(병행 슬롯), #13/#14는 수동 검증 대기로 분리(자동 선택 제외). ② **A6 보강**: 순수 로직/모델 타입도 도입 후 다음 마일스톤 전환 시점까지 소비처 미연결이면 G-12 원장 자동 등재(현재 해당: CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand·wordTimings). ③ 버전 헤더 정리(G-12 10/14; #9 chapter metadata 상환 후 다음 자동 항목 G-02 Inc 3).
 - 2026-07-04 v1.3: G-12 #10 오디오 추출 app/E2E 상환. G-12 진행 상태를 6/14로 갱신.
 - 2026-07-04 v1.2: V8 재감사 반영. G-12 5/14 상환, G-09 Inc 2 진행, G-02 Inc 1~2 순수 로직, G-01 Inc 1 워드 타이밍, U-03 `Track.isLocked` dead-field 판정 정정, U-07 부분 구현 상태를 기록.
 
@@ -28,7 +28,7 @@
 | W7. 음악 편집 | BGM 임포트 → 보컬 분리 → 비트 마커 → 컷 동기화 → export | G-05 |
 | W8. NLE 연계 | MovieCut 컷 편집 → FCPXML export → Final Cut에서 열기 | G-10 |
 
-### 1.2 완료 기준 (DoD) — 전 기능 공통, `CAPCUT_PARITY_SPEC.md` §1.3 계승 + 강화
+### 1.2 완료 기준 (DoD) — 전 기능 공통, `docs/CAPCUT_PARITY_SPEC.md` §1.3 계승 + 강화
 
 1. **Core 로직**: SwiftPM 테스트 (픽셀 처리는 골든/guarded pixel sampling).
 2. **배선 검증**: preview(`PlaybackEngine`)와 export(`ExportEngine`) 양쪽 + **iOS compositor 동시**.
@@ -36,7 +36,7 @@
 4. **결과물 검증**: export 파일에서 효과 확인 (대표 기능은 E2E 해시/픽셀/ffprobe).
 5. **[신규] dead-code 금지 규칙**: Core에 서비스/프로세서를 신설하는 커밋은 **앱 호출부 + E2E 훅(또는 골든 테스트)을 같은 커밋에 포함**해야 한다. 위반 사례 2건(EQ `AudioEqualizerService`, 보컬 분리 `VocalSeparationService`)의 재발 방지.
 
-### 1.3 아키텍처 불변 원칙 (A1~A5 계승, `CAPCUT_PARITY_SPEC.md` §2.3)
+### 1.3 아키텍처 불변 원칙 (A1~A5 계승, `docs/CAPCUT_PARITY_SPEC.md` §2.3)
 
 - A1. 모든 편집 변형은 `EditorSession.dispatch(Command)` 경유.
 - A2. 시각 효과는 `Sources/MovieCutCore/Rendering/` shared processor(CIImage→CIImage), Mac/iOS compositor는 위임만.
@@ -66,9 +66,9 @@ V8 dead-code 감사 메모: `VocalSeparationService` 계열은 G-05의 명시 �
 | **S3. 체감·오디오** | 편집 체감 + 오디오 스위트 | G-04, G-05, G-06, G-09(본대) | W7 완주 + 필름스트립 성능 측정 |
 | **S4. 확장·상호운용** | 이펙트/에셋/NLE 연계 | G-07, G-08, G-10, G-11 | W8 완주 |
 | **S5. 합의 필요** | 범위 판단 후 착수 | G-13, G-14 | 별도 합의 |
-| **SU. UI 트랙 (병행)** | 제품 표면·체감 완성 | U-01~U-09 (§5) | 슬롯 순서: U-08 → U-02(+G-04) → U-01 → U-04/U-03/U-05 → U-06 → U-07/U-09 (`GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §9) |
+| **SU. UI 트랙 (병행)** | 제품 표면·체감 완성 | U-01~U-09 (§5) | 슬롯 순서: U-08 → U-02(+G-04) → U-01 → U-04/U-03/U-05 → U-06 → U-07/U-09 (`docs/archive/GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §9) |
 
-순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. **UI 트랙은 전 단계 병행하되 U-08(회귀 인프라)을 선행**하고, U-02는 G-04와, U-07은 G-07/G-08과 같은 세션 묶음을 권장. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `CAPCUT_FEATURE_BACKLOG.md` 갱신.
+순서 원칙: S0는 선행 필수(이후 모든 검증의 지반). S1↔S2는 교차 가능. S3의 G-04/G-06은 S1/S2와 병행 가능. **UI 트랙은 전 단계 병행하되 U-08(회귀 인프라)을 선행**하고, U-02는 G-04와, U-07은 G-07/G-08과 같은 세션 묶음을 권장. 각 마일스톤 종료 시 해당 워크플로우 1회 수동 완주 + `docs/CAPCUT_FEATURE_BACKLOG.md` 갱신.
 
 V8 재감사 상태(2026-07-04): S0는 아직 완료가 아니다. G-12는 14개 중 6개(#1 EQ, #2 NR, #3 ducking, #4 motion tracking, #8 platform presets, #10 audio extraction)가 상환됐고, G-09는 iOS generic build와 파리티 매트릭스 재감사까지 진행됐으나 CI job, iOS W1 녹화, iOS E2E가 남아 있다. G-02/G-01 착수분은 S1/S2 진행중 증거로만 본다.
 
@@ -450,7 +450,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 #### 요구사항
 1. **(S0)** `MovieCutiOS`가 이 머신(또는 CI)에서 빌드 통과 상태로 복구·유지된다.
-2. `PLATFORM_PARITY_MATRIX.md` 재감사로 "Mac만 있는 UI" 목록을 확정하고 전부 해소하거나 명시적 defer 처리한다.
+2. `docs/PLATFORM_PARITY_MATRIX.md` 재감사로 "Mac만 있는 UI" 목록을 확정하고 전부 해소하거나 명시적 defer 처리한다.
 3. 신규 G 기능은 iOS 배선을 AC에 포함한다(재발 방지).
 
 #### 구현 증분
@@ -469,8 +469,8 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 검증 기록:
 - 2026-07-03 G-09 Inc 1: `swift build`, `swift test --filter 'StaticContract|Golden'`(341 tests), Mac `xcodebuild ... MovieCutMac`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, `scripts/run_e2e_export.sh` 모두 PASS. CoreSimulator out-of-date는 simulator device support 경고로 기록.
-- 2026-07-04 G-09 Inc 2: `PLATFORM_PARITY_MATRIX.md`를 기능 × Core/Mac UI/iOS UI/Mac preview-export/iOS preview-export로 재감사하고 Mac-only/iOS defer 15건에 사유 1줄씩 기록. `IOSParityMatrixStaticContractTests`로 문서/코드 신호를 잠그고 `swift build`, `swift test --filter 'StaticContract|Golden|iOS|Parity'`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, Mac `xcodebuild ... MovieCutMac` PASS.
-- V8 caveat: `.github/workflows/ci.yml`은 `swift test`만 확인되며 iOS build job은 아직 명시되지 않았다. `PLATFORM_PARITY_MATRIX.md`도 스스로 "iOS simulator W1 녹화는 아직 미수행"이라고 제한한다. 따라서 G-09는 Inc 1~2 진행중이며 AC 1/3/4 완료가 아니다.
+- 2026-07-04 G-09 Inc 2: `docs/PLATFORM_PARITY_MATRIX.md`를 기능 × Core/Mac UI/iOS UI/Mac preview-export/iOS preview-export로 재감사하고 Mac-only/iOS defer 15건에 사유 1줄씩 기록. `IOSParityMatrixStaticContractTests`로 문서/코드 신호를 잠그고 `swift build`, `swift test --filter 'StaticContract|Golden|iOS|Parity'`, iOS generic `xcodebuild ... MovieCutiOS CODE_SIGNING_ALLOWED=NO`, Mac `xcodebuild ... MovieCutMac` PASS.
+- V8 caveat: `.github/workflows/ci.yml`은 `swift test`만 확인되며 iOS build job은 아직 명시되지 않았다. `docs/PLATFORM_PARITY_MATRIX.md`도 스스로 "iOS simulator W1 녹화는 아직 미수행"이라고 제한한다. 따라서 G-09는 Inc 1~2 진행중이며 AC 1/3/4 완료가 아니다.
 
 ---
 
@@ -553,7 +553,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 - 2026-07-05 G-12 #6 텍스트 애니메이션 13종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` + `scripts/run_e2e_export.sh` none-baseline 대비 frame-diff 측정 PASS. 13종 전체 export proof: none overlay_mad=16.512326, non-none max_residual_temporal_mad min=2.870069(fadeOut) / max=6.594722(popIn), E2E `text animations + E2E check OK` 통과.
 - 2026-07-05 G-12 #7 타이틀 템플릿 14종: DEBUG 앱 하니스 `MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=<name>`가 실제 템플릿 클립을 화면 안 fixture 중앙에 추가하고, `scripts/run_e2e_export.sh`가 no-template baseline 대비 frame-diff를 14종 전체에 대해 측정 PASS. 실측 max_overlay_mad: Title 7.450278, Subtitle 7.109653, Lower Third 6.524444, Caption 6.459444, Credits 7.125347, News Banner 6.722222, Quote 6.725417, Callout 6.875694, Kinetic 6.848056, Handwritten 6.700069, Neon Glow 6.790208, Outline 6.636806, Typewriter 6.506250, Social Handle 6.885069.
 - 2026-07-05 G-12 #9 챕터/비트 마커 메타데이터: DEBUG 앱 하니스 `MOVIECUT_UITEST_CHAPTER_MARKERS=1` + `MOVIECUT_UITEST_BEAT_CHAPTERS=1`가 표준 마커 Intro/Outro와 beat marker `Beat 1`을 command path로 추가하고, ExportEngine이 AssetWriter timed metadata track + `.chapterList` track association으로 실제 chapter atoms를 기록한다. `scripts/run_e2e_export.sh` ffprobe 실측 PASS: `count=3 starts=0.25,0.75,1.25 ends=0.75,1.25,1.75`. Caveat: ffprobe/QuickTime chapter atom timing proof이며 현재 ffprobe title tag는 AVFoundation timed metadata 특성상 빈 문자열로 표시되어 하니스 status로 marker name/count를 함께 검증한다.
-- 2026-07-05 loop-6/loop-7/V10 재감사: `docs/GAP_ANALYSIS_V10_FUNC_UI_20260705.md` 기준 G-12는 #9 상환 후 **10/14**로 갱신한다. v1.4 게이트에 따라 자동 선택은 이제 S1 **G-02 Inc 3**(ColorGrade 저장 필드 + HSL/curve renderer chain + golden/E2E)로 전환한다.
+- 2026-07-05 loop-6/loop-7/V10 재감사: `docs/archive/GAP_ANALYSIS_V10_FUNC_UI_20260705.md` 기준 G-12는 #9 상환 후 **10/14**로 갱신한다. v1.4 게이트에 따라 자동 선택은 이제 S1 **G-02 Inc 3**(ColorGrade 저장 필드 + HSL/curve renderer chain + golden/E2E)로 전환한다.
 - V10 원장 재편(2026-07-05, v1.4 게이트 완화): #11/#12는 선행 fixture 제작을 독립 증분으로 분리 — `#11a/#12a: scripts/make_fixtures.sh`에 이동 피사체(합성 도형 애니메이션 mp4) 및 실인물 대체(합성 인물 실루엣 또는 사용자 제공 클립 절차 문서화) fixture 추가 → `#11b/#12b`: 해당 fixture로 E2E 측정. **#13(iCloud 2기기)/#14(Photos 드래그)는 "수동 검증 대기"로 분리** — 자동 선택에서 제외하고, 사용자 실기기 세션용 절차를 각 1페이지로 준비하는 것까지가 자동 세션의 몫. A6 보강에 따라 dead-value 4계열(CurveEvaluator·HSLCubeBuilder·CurvePoint/HSLBand 미편입·wordTimings 미소비)을 원장에 등재하며, 상환처는 각각 G-02 Inc 3, G-01 Inc 2다.
 
 ---
@@ -571,7 +571,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ### G-15. 이미지(사진) 클립 파이프라인 — **P0 / 최우선(v1.6 게이트)** / 규모 M ⭐
 
-> 트리거: 사용자 실사용 버그 보고(2026-07-06) + 헤드리스 재현 확정. 상세 배경: `GAP_ANALYSIS_V12_FUNC_UI_20260706.md` §1.
+> 트리거: 사용자 실사용 버그 보고(2026-07-06) + 헤드리스 재현 확정. 상세 배경: `docs/archive/GAP_ANALYSIS_V12_FUNC_UI_20260706.md` §1.
 
 #### 요구사항
 1. 사진 파일(png/jpg/heic)을 import→타임라인 배치하면 **preview에 즉시 보인다**(기본 duration 5s, trim으로 연장/단축 가능).
@@ -628,7 +628,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ### G-16. 타임라인 스크럽 — **P0 / 사용자 보고 편집 체감** / 규모 S~M ⭐
 
-> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-I2. 룰러 클릭·드래그와 플레이헤드 드래그에 프리뷰가 프레임 단위로 즉시 추종해야 한다.
+> 대응 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` B-I2. 룰러 클릭·드래그와 플레이헤드 드래그에 프리뷰가 프레임 단위로 즉시 추종해야 한다.
 
 #### 요구사항
 1. 타임라인 룰러의 시간축 영역을 클릭하거나 드래그하면 플레이헤드와 프리뷰가 해당 시각으로 즉시 이동한다.
@@ -673,7 +673,7 @@ public struct CubicBezierControl: Codable, Sendable, Equatable {
 
 ### G-17. 클립 복사/잘라내기/붙여넣기 — **P0 / 사용자 보고 편집 체감** / 규모 M ⭐
 
-> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F2.1. Cmd+C/X/V로 단일·다중 클립을 복사/잘라내고 플레이헤드 위치에 붙여넣으며 undo 1회로 원복해야 한다.
+> 대응 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` B-F2.1. Cmd+C/X/V로 단일·다중 클립을 복사/잘라내고 플레이헤드 위치에 붙여넣으며 undo 1회로 원복해야 한다.
 
 #### 요구사항
 1. 선택한 단일 또는 복수 클립을 앱 내부 클립보드에 복사하고 Cmd+C/X/V 및 context menu로 실행한다.
@@ -1015,7 +1015,7 @@ public protocol OnDeviceScriptSummarizer: Sendable {
 
 ### G-23. 클립 블렌딩 모드 — **P1 / 확정 격차** / 규모 S ⭐
 
-> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F4.4. CapCut은 속성 패널 드롭다운으로 Multiply/Screen/Overlay/Soft Light 등 다수 블렌딩 모드를 제공하고 불투명도와 병용한다. v1.1 웹 검증으로 [확인]됐고 §6에 "확정 격차 — 다음 감사에서 G-ID 신설"로 대기 중이던 항목이다.
+> 대응 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` B-F4.4. CapCut은 속성 패널 드롭다운으로 Multiply/Screen/Overlay/Soft Light 등 다수 블렌딩 모드를 제공하고 불투명도와 병용한다. v1.1 웹 검증으로 [확인]됐고 §6에 "확정 격차 — 다음 감사에서 G-ID 신설"로 대기 중이던 항목이다.
 
 #### 요구사항
 1. 상위 트랙 클립에 블렌딩 모드를 지정하면 하위 트랙 합성 결과에 반영된다. 최소 셋: normal(기본)/multiply/screen/overlay/softLight/hardLight/darken/lighten.
@@ -1056,13 +1056,13 @@ public protocol OnDeviceScriptSummarizer: Sendable {
 #### 리스크
 - CIFilter 블렌딩은 premultiplied alpha 처리에 민감하다. 투명 영역이 있는 클립에서 색 번짐이 발생할 수 있으므로 알파 있는 픽스처를 골든에 포함한다.
 - 색공간(sRGB vs linear)에 따라 결과가 달라진다. compositor의 working color space를 골든에 명시 고정한다.
-- iOS는 컴파일 불가 상태이므로 Inc 5를 "구현 완료"로 선언하지 말 것 — `NEXT_SESSION_WORKORDER_20260729.md` Track 2 규율.
+- iOS는 컴파일 불가 상태이므로 Inc 5를 "구현 완료"로 선언하지 말 것 — `docs/NEXT_SESSION_WORKORDER_20260729.md` Track 2 규율.
 
 ---
 
 ### G-24. 컴파운드 클립 (중첩 시퀀스) — **P2 / 확정 격차** / 규모 L
 
-> 대응 기준: `CAPCUT_BENCHMARK_STANDARD.md` B-F2.3. CapCut은 컴파운드 클립(중첩)과 그룹으로 복잡한 타임라인을 정리한다. 그룹은 MovieCut에 구현돼 있으나 컴파운드는 부재다.
+> 대응 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` B-F2.3. CapCut은 컴파운드 클립(중첩)과 그룹으로 복잡한 타임라인을 정리한다. 그룹은 MovieCut에 구현돼 있으나 컴파운드는 부재다.
 
 #### 요구사항
 1. 선택한 복수 클립을 하나의 컴파운드 클립으로 접는다. 타임라인에서 단일 클립처럼 이동/트림/복사된다.
@@ -1107,9 +1107,9 @@ public protocol OnDeviceScriptSummarizer: Sendable {
 
 ## 5. UI 명세 (U-ID) — v1.1 신설 (2026-07-03)
 
-> 근거 분석: `GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §4~§9. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다.
+> 근거 분석: `docs/archive/GAP_ANALYSIS_V8_FUNC_UI_20260704.md` §4~§9. UI 트랙은 기능 S-마일스톤과 **병행 슬롯**으로 실행한다.
 > **UI 공통 DoD** (G-ID DoD에 추가로):
-> - `UI_DESIGN_PRINCIPLES.md` 원칙(반응성·밀도·발견성·접근성) 및 디자인 토큰(`MovieCutTheme`) 준수 — 새 색/간격 하드코딩 금지.
+> - `docs/UI_DESIGN_PRINCIPLES.md` 원칙(반응성·밀도·발견성·접근성) 및 디자인 토큰(`MovieCutTheme`) 준수 — 새 색/간격 하드코딩 금지.
 > - IA 계약 유지: `IAMenuPositionStaticContractTests` 통과 (Split/Delete/Add Marker의 상단 툴바 재유입 금지, transport 하단 도킹 유지).
 > - 레이아웃/카피 변경은 static contract로 잠금(회귀 방지 전용) + **U-08 캡처 증거**(populated 스크린샷)를 완료 증거로.
 > - 모든 신규 컨트롤에 접근성 label/hint + 키보드 도달성.
@@ -1308,7 +1308,7 @@ public protocol OnDeviceScriptSummarizer: Sendable {
 #### 요구사항
 1. **populated 상태 캡처 자동화**: 부트스트랩 프로젝트(비디오+오디오+텍스트+선택 상태)를 하니스로 구성 → 창 스크린샷 저장. 감사 문서의 "matching populated side-by-side 재캡처" 부채 상환.
 2. **골든 스크린샷 회귀**: 핵심 표면 4종(브라우저/프리뷰+인스펙터/타임라인 populated/그레이딩 패널)의 perceptual hash 비교(허용 오차 임계값) — 의도 변경 시 골든 갱신 절차 문서화.
-3. **발견성 지표**: 대표 플로우(클립 추가→전환 적용→export 시작)의 클릭 수를 XCUITest(또는 하니스 로그)로 기록 — `UI_DESIGN_PRINCIPLES.md` 목표(핵심 편집 ≤2클릭) 대조.
+3. **발견성 지표**: 대표 플로우(클립 추가→전환 적용→export 시작)의 클릭 수를 XCUITest(또는 하니스 로그)로 기록 — `docs/UI_DESIGN_PRINCIPLES.md` 목표(핵심 편집 ≤2클릭) 대조.
 
 #### 현재 상태 (실사)
 - `MOVIECUT_BOOTSTRAP_PROJECT` env 게이트 스크린샷 부트스트랩(사용자 커밋 `eb63f1d`)과 UITest 하니스(env 훅) 기존재 — 재료는 있음. 골든 스크린샷/클릭수 자동화 없음. 과거 캡처는 `/tmp` 휘발 — **증거는 리포지토리 내 `Tests/UIEvidence/`(골든) + 산출은 `artifacts/`(gitignore)로 이원화**.
@@ -1411,4 +1411,4 @@ scripts/run_e2e_export.sh                          # 기존 E2E 전부 PASS 확�
 - `swift test` 전체는 헤드리스 완주 곤란(네트워크/Speech/마이크) — 필터 스위트 사용.
 - AVAudioEngine offline render 검증은 앱 컨텍스트 E2E로(테스트 프로세스 SIGABRT 이력).
 - 픽셀 테스트는 `GoldenPixelHarness`(`CIContext(useSoftwareRenderer:true)`, silent-skip 금지) 사용.
-- 작업 완료 시: 이 문서 해당 AC에 검증 결과 1줄 + `CAPCUT_FEATURE_BACKLOG.md` 갱신 + 커밋.
+- 작업 완료 시: 이 문서 해당 AC에 검증 결과 1줄 + `docs/CAPCUT_FEATURE_BACKLOG.md` 갱신 + 커밋.

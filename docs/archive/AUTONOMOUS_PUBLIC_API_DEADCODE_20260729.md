@@ -1,5 +1,10 @@
 # 무인 작업 — 귀환 후 검토용: public API dead code
 
+> **[보관 — 완료]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 후보 4종 + 2종을 `3c438aa`에서 삭제(Core 816줄 감소). 사용자 결정 완료.
+> - 지금 볼 곳: 복원이 필요하면 `3c438aa`에서 되살릴 것.
+
 > 작성일: 2026-07-29 (자율 작업 세팅 단계)
 > 성격: **사용자 결정 필요.** 무인으로는 건드리지 않았음.
 
@@ -44,4 +49,4 @@ Sources/MovieCutCore/Commands/AutoReframeCommand.swift:5:public struct AutoRefra
 - **(b) 유지**: 공개 API surface 의도라면 그대로. 단 `@available(*, deprecated)` 등으로 의도 표시 검토.
 - **(c) 일부만**: 예: `MediaFolder`(39줄, 모델계)는 확실히 dead, `*Command` 4개는 API 의도 가능.
 
-이 항목들은 `docs/AUTONOMOUS_WORK_20260729.md` 큐에 넣지 않았음 (규칙: 무인 public API 제외).
+이 항목들은 `docs/archive/AUTONOMOUS_WORK_20260729.md` 큐에 넣지 않았음 (규칙: 무인 public API 제외).

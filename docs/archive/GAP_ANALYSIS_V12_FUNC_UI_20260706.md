@@ -1,7 +1,12 @@
 # MovieCut vs CapCut 갭 분석 V12 — 실사용 동작 기준 재설정 — 2026-07-06
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-06 실사용 버그 기준 재설정(G-15 신설).
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 > 작성일: 2026-07-06 / 브랜치: `feat/core-backend-expansion` (기준 커밋: `89e3795`+)
-> 기준선: V11 `docs/GAP_ANALYSIS_V11_FUNC_UI_20260705.md` / 트리거: **사용자 실사용 버그 보고 — "사진을 넣으면 제대로 동작하지 않는다"**
+> 기준선: V11 `docs/archive/GAP_ANALYSIS_V11_FUNC_UI_20260705.md` / 트리거: **사용자 실사용 버그 보고 — "사진을 넣으면 제대로 동작하지 않는다"**
 > 원천 스펙: `docs/CAPCUT_SURPASS_SPEC_20260703.md` v1.6
 > 이 감사의 실측: 헤드리스 재현 실험 1건(아래 §1), 코드 경로 추적, Mac 앱 빌드 PASS.
 

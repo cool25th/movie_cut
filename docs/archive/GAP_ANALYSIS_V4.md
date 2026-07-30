@@ -1,5 +1,10 @@
 # MovieCut vs CapCut 갭 분석 V4
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 지정 3개 파일만 읽은 제한 범위 감사다.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`. 판정 기준은 `docs/CAPCUT_BENCHMARK_STANDARD.md`.
+
 분석 범위는 요청된 3개 파일로 제한했다.
 
 - `App/MovieCutMac/Export/ExportEngine.swift`

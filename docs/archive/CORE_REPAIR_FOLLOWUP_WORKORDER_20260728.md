@@ -1,5 +1,10 @@
 # 핵심 편집 경로 수리 — 후속 작업 지시서
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: Task B는 `7b5b2ad`로 완료. Task A/C/D/E는 미완인 채 후속 지시서로 이관됐다.
+> - 지금 볼 곳: 이관 위치: `docs/NEXT_SESSION_WORKORDER_20260729.md` W4~W7.
+
 > 작성일: 2026-07-28
 > 기준: main 브랜치 `4088ee2` (CAPCUT_CORE_EDITING_REPAIR_HANDOFF Step 1~7 완료 병합)
 > 대상: 후속 세션
@@ -95,7 +100,7 @@ iOS compositor가 chroma key와 person segmentation을 inline으로 재구현하
 1. `IOSCustomVideoCompositor.applyChromaKey`를 `ChromaKeyPixelProcessor.apply(chromaKey, to: image)` 호출로 교체
 2. `IOSCustomVideoCompositor.applyPersonSegmentation`을 `PersonSegmentationCompositor` 호출로 교체 (또는 macOS 패턴 차용)
 3. `Tests/MovieCutCoreTests/IOSParityMatrixStaticContractTests.swift:56-57`의 `#expect(!iosCompositor.contains("PersonSegmentationCompositor"))` assertion을 `#expect(iosCompositor.contains(...))`로 반전
-4. `PLATFORM_PARITY_MATRIX.md` §6의 "여전히 defer" 항목 업데이트
+4. `docs/PLATFORM_PARITY_MATRIX.md` §6의 "여전히 defer" 항목 업데이트
 
 #### 주의
 - `IOSParityMatrixStaticContractTests.swift:63-65`가 iOS가 이 processors를 **사용하지 않음**을 적극적으로 강제하고 있다. 전환 시 이 assertion들을 반전해야 한다.
@@ -129,7 +134,7 @@ iOS compositor가 single-source만 처리한다. two-source cross dissolve/wipe/
 2. `IOSCustomVideoCompositor.startRequest`에 two-source branch 추가: 두 source buffer를 가져와 `TransitionPixelProcessor.apply` 호출
 3. `IOSCustomVideoCompositor`에 `secondSourceFrame` 헬퍼 추가
 4. `IOSParityMatrixStaticContractTests.swift:56`의 `#expect(!iosCompositor.contains("TransitionPixelProcessor.apply"))` 반전
-5. `PLATFORM_PARITY_MATRIX.md` 업데이트
+5. `docs/PLATFORM_PARITY_MATRIX.md` 업데이트
 
 #### 수용 기준
 - iOS export가 two-source transition을 렌더링함
@@ -209,23 +214,23 @@ Task B는 독립적이고 즉시 가능. Task A가 가장 중요한 선행 조�
 
 ### Task A — iOS 테스트 인프라
 
-> `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task A를 기준으로 작업해줘. 먼저 git status와 현재 코드를 재확인한 뒤, iOS UI test 타겟을 project.yml에 추가하고 xcodegen을 실행해. MovieCutiOS에 DEBUG harness 진입점을 추가하고(import → export → 결과 직렬화), 첫 iOS XCUITest를 작성해. iOS 시뮬레이터에서 빌드 + 테스트 실행까지 완료하고, 결과와 caveat를 보고해.
+> `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task A를 기준으로 작업해줘. 먼저 git status와 현재 코드를 재확인한 뒤, iOS UI test 타겟을 project.yml에 추가하고 xcodegen을 실행해. MovieCutiOS에 DEBUG harness 진입점을 추가하고(import → export → 결과 직렬화), 첫 iOS XCUITest를 작성해. iOS 시뮬레이터에서 빌드 + 테스트 실행까지 완료하고, 결과와 caveat를 보고해.
 
 ### Task B — Dead code 제거
 
-> `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task B를 기준으로 작업해줘. `App/MovieCutiOS/Playback/IOSPlaybackEngine.swift`가 dead code인지 재확인(repo-wide grep)한 뒤 삭제하고, iOS + macOS 빌드와 swift test로 회귀 없음을 확인해. 커밋까지 완료해.
+> `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task B를 기준으로 작업해줘. `App/MovieCutiOS/Playback/IOSPlaybackEngine.swift`가 dead code인지 재확인(repo-wide grep)한 뒤 삭제하고, iOS + macOS 빌드와 swift test로 회귀 없음을 확인해. 커밋까지 완료해.
 
 ### Task C — Chroma/Segmentation shared processor
 
-> `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task C를 기준으로 작업해줘. iOS compositor의 inline `applyChromaKey`와 `applyPersonSegmentation`을 Core의 `ChromaKeyPixelProcessor`와 `PersonSegmentationCompositor` 호출로 교체해. `IOSParityMatrixStaticContractTests`의 관련 assertion을 반전하고, PLATFORM_PARITY_MATRIX를 업데이트해. iOS 빌드 + Core 테스트로 검증해.
+> `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task C를 기준으로 작업해줘. iOS compositor의 inline `applyChromaKey`와 `applyPersonSegmentation`을 Core의 `ChromaKeyPixelProcessor`와 `PersonSegmentationCompositor` 호출로 교체해. `IOSParityMatrixStaticContractTests`의 관련 assertion을 반전하고, PLATFORM_PARITY_MATRIX를 업데이트해. iOS 빌드 + Core 테스트로 검증해.
 
 ### Task D — Two-source transition
 
-> `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task D를 기준으로 작업해줘. iOS compositor에 two-source transition branch를 추가해. macOS `CustomVideoCompositor.startRequest`의 two-source 패턴을 차용하고, `TransitionPixelProcessor.apply`를 호출해. `CustomCompositionInstruction`에 transition 정보를 추가하고, StaticContract assertion을 반전해.
+> `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task D를 기준으로 작업해줘. iOS compositor에 two-source transition branch를 추가해. macOS `CustomVideoCompositor.startRequest`의 two-source 패턴을 차용하고, `TransitionPixelProcessor.apply`를 호출해. `CustomCompositionInstruction`에 transition 정보를 추가하고, StaticContract assertion을 반전해.
 
 ### Task E — 수동 완주 + parity
 
-> `docs/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task E를 기준으로 작업해줘. harness에 sticker/trim/undo/play 게이트를 추가하고, verify_preview_export_parity.py에 duration 비교를 추가해. 12단계 수동 완주 시나리오를 하나의 harness 구동으로 만들고, working GPU host에서 전체 parity 스크립트를 실행해.
+> `docs/archive/CORE_REPAIR_FOLLOWUP_WORKORDER_20260728.md` Task E를 기준으로 작업해줘. harness에 sticker/trim/undo/play 게이트를 추가하고, verify_preview_export_parity.py에 duration 비교를 추가해. 12단계 수동 완주 시나리오를 하나의 harness 구동으로 만들고, working GPU host에서 전체 parity 스크립트를 실행해.
 
 ---
 

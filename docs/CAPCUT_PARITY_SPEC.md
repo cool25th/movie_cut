@@ -1,7 +1,13 @@
 # MovieCut → CapCut 수준 개발 명세서 (Development Specification)
 
+> **[상태: 대체됨 — 역사 기록]** 현역 문서가 아니다. 전체 문서 지도는 [docs/README.md](README.md).
+>
+> - 판정 근거: F-ID 파리티(따라잡기) 명세다. 목표가 2026-06-22에 "능가"로 전환되며 G-ID 체계가 이를 계승했다.
+> - 지금 볼 곳: 현행 사실의 원천은 `docs/CAPCUT_SURPASS_SPEC_20260703.md` (형식·운영 규칙을 이 문서에서 계승).
+> - `docs/archive/`로 옮기지 않은 이유: StaticContract 테스트가 이 경로를 직접 읽는다(경로를 바꾸면 테스트가 깨진다).
+
 > 버전: 1.2 / 작성일: 2026-06-11 / 기준 커밋: `08db5a0`
-> 관련 문서: `CAPCUT_FEATURE_BACKLOG.md`(기능 목록·상태), `SESSION_HANDOFF.md`(세션 인수인계)
+> 관련 문서: `docs/CAPCUT_FEATURE_BACKLOG.md`(기능 목록·상태), `docs/SESSION_HANDOFF.md`(세션 인수인계)
 > 이 문서는 "무엇을"(백로그)이 아니라 **"어떻게, 어떤 기준으로, 어떤 순서로"**를 정의한다.
 > 운영 규칙: 신규 기능 작업은 이 문서의 F-ID 단위로 진행하고, 완료 시 해당 AC에 검증 결과를 1줄 추가한다. AC를 바꿔야 하면 이 문서를 먼저 수정·커밋한다(스펙이 사실의 원천).
 

@@ -3,7 +3,7 @@
 > 작성일: 2026-06-22 / 브랜치: `feat/core-backend-expansion`
 > 이 문서는 전략 전환점을 기록한다. 이전 모든 작업은 **CapCut 파리티(따라잡기)** 가 목표였다.
 > 이제부터의 목표는 **기능·화면 모두 CapCut을 월등히 능가하는 것**이다.
-> 상위 기능 백로그는 `CAPCUT_FEATURE_BACKLOG.md`, 명세는 `CAPCUT_PARITY_SPEC.md`, UI 격차는 `MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` 참조.
+> 상위 기능 백로그는 `docs/CAPCUT_FEATURE_BACKLOG.md`, 명세는 `docs/CAPCUT_PARITY_SPEC.md`, UI 격차는 `docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` 참조.
 
 ---
 
@@ -103,7 +103,7 @@ Phase 2(Metal)에서 "더 빠르다"를 증명하려면 먼저 현재 수치를 
 
 ### 0.5 정직한 상태판 리셋
 
-- `CAPCUT_FEATURE_BACKLOG.md`를 **증거 기반**으로 재작성: 각 기능에 ✅(증거 링크)/🟡(검증 중)/❌. 자가보고 수치 제거.
+- `docs/CAPCUT_FEATURE_BACKLOG.md`를 **증거 기반**으로 재작성: 각 기능에 ✅(증거 링크)/🟡(검증 중)/❌. 자가보고 수치 제거.
 
 ### 0.6 안정성·신뢰성 트랙 착수 (Pro 핵심 가치)
 
@@ -165,7 +165,7 @@ Phase 2(Metal)에서 "더 빠르다"를 증명하려면 먼저 현재 수치를 
 > 단 경쟁 기준선 결정("CapCut을 Pro급으로")에 따라 **CapCut의 우수한 UX/속도/발견성은 계승**하고, 그 위에 Pro 밀도·제어를 얹는다.
 
 - 측정 전환: 유사도 → **반응성(상호작용 지연)·정보 밀도·발견성(기능 도달 클릭 수)·접근성**.
-- `MovieCutTheme` 토큰을 **자체 Pro 다크 에디터 디자인 언어**로 발전(모방 아닌 정체성). 방향은 Phase 0.7 산출물(`UI_DESIGN_PRINCIPLES.md` + 목업)로 구체화.
+- `MovieCutTheme` 토큰을 **자체 Pro 다크 에디터 디자인 언어**로 발전(모방 아닌 정체성). 방향은 Phase 0.7 산출물(`docs/UI_DESIGN_PRINCIPLES.md` + 목업)로 구체화.
 - 실제 사용자 플로우를 XCUITest로 녹화·회귀 보호(시각 지표 스크립트와 병행).
 
 ---

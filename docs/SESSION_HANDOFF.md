@@ -1,5 +1,11 @@
 # 세션 핸드오프 — 다음 개발 세션 시작 가이드
 
+> **[상태: 대체됨 — 역사 기록]** 현역 문서가 아니다. 전체 문서 지도는 [docs/README.md](README.md).
+>
+> - 판정 근거: 2026-06-11 시점 기록이다. 이후 F-ID 체계가 G-ID/U-ID로 교체됐고 브랜치·커밋 참조가 전부 낡았다.
+> - 지금 볼 곳: 현행 세션 시작점은 `docs/README.md` → 현역 작업지시서.
+> - `docs/archive/`로 옮기지 않은 이유: StaticContract 테스트가 이 경로를 직접 읽는다(경로를 바꾸면 테스트가 깨진다).
+
 > 작성일: 2026-06-11 / 브랜치: `main` / 기준 커밋: `08db5a0` (magnetic timeline + clip z-index)
 > **UI/UX 개선 작업은 `docs/UIUX_HANDOFF.md` 참고** (기능은 완료, 레이아웃·사용성 개선이 다음 큰 과제 — CapCut/OpenCut 대비 부족). 이 문서만 읽고 바로 작업을 시작할 수 있도록 작성됨. 기능 백로그 전체는 `docs/CAPCUT_FEATURE_BACKLOG.md`, **개발 명세서(F-ID별 요구사항/구현 방안/수용 기준/마일스톤/DoD)는 `docs/CAPCUT_PARITY_SPEC.md`** 참고. 신규 기능 작업은 명세서의 F-ID 단위로 진행.
 
@@ -112,7 +118,7 @@ P2 이후(배경제거 실DSP, EQ/덕킹, 비트감지, AI 어시스턴트, 클�
 - **명령 기반 편집**: 모든 편집은 `EditorSession.dispatch(Command)` 경유 (undo/redo 호환). ViewModel에서 직접 모델 변형 금지.
 - **iOS 동기화**: Mac에서 compositor/모델 변경 시 `App/MovieCutiOS/`의 대응 파일도 함께 갱신 (IOSCustomVideoCompositor 등).
 - **테스트**: 픽셀 테스트는 sandbox에서 `CIContext`가 transparent black을 반환하는 환경이 있어 guarded 패턴 사용 (기존 `*PixelProcessorTests.swift` 참고). 배선 검증은 static-contract 테스트 패턴.
-- 백로그 문서(`CAPCUT_FEATURE_BACKLOG.md`)는 배치 완료 시마다 해당 항목에 ✅/caveat을 갱신하는 관례.
+- 백로그 문서(`docs/CAPCUT_FEATURE_BACKLOG.md`)는 배치 완료 시마다 해당 항목에 ✅/caveat을 갱신하는 관례.
 
 ## 5. 빌드/테스트 명령
 

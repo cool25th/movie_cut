@@ -1,9 +1,14 @@
 # CapCut 대비 격차 분석 & 상세 개선안 — 2026-07-03
 
+> **[보관 — 대체됨]** 이 문서는 `docs/archive/`에 있다. 현역이 아니며 갱신되지 않는다. 전체 문서 지도는 [docs/README.md](../README.md).
+>
+> - 상태: 2026-07-03 시점 격차 분석. 이후 V8~V13 재감사가 판정을 여러 번 정정했다.
+> - 지금 볼 곳: 최신 격차 분석은 `docs/GAP_ANALYSIS_V13_FUNC_UI_20260729.md`.
+
 > 작성일: 2026-07-03 / 브랜치: `feat/core-backend-expansion` (기준 커밋: `c242632`)
 > **이 문서는 다른 세션(콜드 스타트)에서 바로 개발에 착수할 수 있는 핸드오프 문서다.**
-> **개발 착수용 상세 스펙(데이터 모델·구현 증분·AC·검증 계획)은 `CAPCUT_SURPASS_SPEC_20260703.md` — 실제 작업은 그 문서의 G-ID 단위로 진행한다.**
-> 전략 배경: `MOVIECUT_PRO_ROADMAP_20260622.md` / 기능 백로그: `CAPCUT_FEATURE_BACKLOG.md` / 이전 갭 분석: `GAP_ANALYSIS_V6.md`(자가보고 수치 신뢰 금지)
+> **개발 착수용 상세 스펙(데이터 모델·구현 증분·AC·검증 계획)은 `docs/CAPCUT_SURPASS_SPEC_20260703.md` — 실제 작업은 그 문서의 G-ID 단위로 진행한다.**
+> 전략 배경: `docs/MOVIECUT_PRO_ROADMAP_20260622.md` / 기능 백로그: `docs/CAPCUT_FEATURE_BACKLOG.md` / 이전 갭 분석: `docs/archive/GAP_ANALYSIS_V6.md`(자가보고 수치 신뢰 금지)
 > 판정 근거: 2026-07-03 코드 grep·문서·git log 실사. "코드 존재"가 아니라 **"preview에 보이고 export에 반영 + 증거"** 를 완료 기준으로 유지한다.
 > 2026-07-04 loop-9 재평가 기준 커밋: `84b696c feat(moviecut): preserve subtitle word timings`.
 
@@ -55,7 +60,7 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 2026-07-04 실측 스프린트(EQ/NR/�
 
 ## 2. 개선 방향성 — 4개 축
 
-전략(`MOVIECUT_PRO_ROADMAP_20260622.md`)은 유지한다: **CapCut의 UX/속도는 계승, 화질·출력·제어는 Pro급, 클라우드 약점은 온디바이스로 공략.** 이번 계획은 그 위에 다음 4개 축으로 정렬한다.
+전략(`docs/MOVIECUT_PRO_ROADMAP_20260622.md`)은 유지한다: **CapCut의 UX/속도는 계승, 화질·출력·제어는 Pro급, 클라우드 약점은 온디바이스로 공략.** 이번 계획은 그 위에 다음 4개 축으로 정렬한다.
 
 1. **축 A — Pro 정체성 완성**: HSL/커브, 조정 레이어, 키프레임 이징, FCPXML 상호운용. "Pro라면서 CapCut보다 색 도구가 얕다"는 모순을 제거하고, CapCut이 구조적으로 못 따라오는 항목(FCPXML, 스코프 연동 2차 보정)으로 격차를 벌린다.
 2. **축 B — 숏폼 필수 기능의 깊이**: 워드 단위 스타일 자막이 단일 최대 격차. Apple Speech의 워드 타임스탬프(온디바이스 강제 — 지원 로케일 한정, 미지원은 서버 전송 없이 실패, S8)로 CapCut의 클라우드 자막보다 빠르고 프라이버시 우위인 구현이 가능하다.
@@ -193,7 +198,7 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 2026-07-04 실측 스프린트(EQ/NR/�
 
 **구현 방안**:
 1. **빌드 복구 최우선**: iOS 플랫폼/시뮬레이터 설치 확인 → `xcodebuild MovieCutiOS build`를 CI/로컬에서 상시 통과 상태로. (이게 안 되면 iOS 커밋 전부 미검증 상태로 누적된다.)
-2. `PLATFORM_PARITY_MATRIX.md` 재감사 → 미배선 UI 목록화(그레이드 휠/스코프, 이펙트 파라미터, 캡션 스타일, 마커, export 프리셋 등).
+2. `docs/PLATFORM_PARITY_MATRIX.md` 재감사 → 미배선 UI 목록화(그레이드 휠/스코프, 이펙트 파라미터, 캡션 스타일, 마커, export 프리셋 등).
 3. 우선순위: 그레이딩 조절 UI(읽기전용 해소) → 자막 워크플로우 → export 옵션 → 나머지. 터치 UX는 Mac 이식이 아니라 시트/제스처 중심 재설계(기존 `IOSInspectorSheet` 패턴).
 4. 신규 기능(G-01/02/03/06)은 **iOS 배선을 AC에 포함**해 격차 재발 방지.
 
@@ -272,7 +277,7 @@ Phase 2A(색 그레이딩·ProRes/HDR)와 2026-07-04 실측 스프린트(EQ/NR/�
 
 ## 5. 권장 착수 순서
 
-> 병렬 가능하지만 단일 세션 흐름 기준 순서. 각 항목은 백로그 관례대로 완료 시 `CAPCUT_FEATURE_BACKLOG.md`에 ✅/caveat 갱신.
+> 병렬 가능하지만 단일 세션 흐름 기준 순서. 각 항목은 백로그 관례대로 완료 시 `docs/CAPCUT_FEATURE_BACKLOG.md`에 ✅/caveat 갱신.
 
 | 순서 | 항목 | 이유 |
 |---|---|---|

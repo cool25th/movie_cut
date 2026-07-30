@@ -116,6 +116,11 @@ public enum TranscriptionError: Error, LocalizedError, Sendable, Equatable {
     /// Transcription is unavailable on the current system or provider.
     case notSupported
 
+    /// On-device speech recognition is enforced, but the given locale/device
+    /// does not support it. Audio is never uploaded to Apple's servers, so
+    /// transcription cannot proceed. (S8)
+    case onDeviceRecognitionUnavailable(locale: String)
+
     public var errorDescription: String? {
         switch self {
         case .assetNotReady:
@@ -124,6 +129,14 @@ public enum TranscriptionError: Error, LocalizedError, Sendable, Equatable {
             return message
         case .notSupported:
             return "Transcription is unavailable on this system or provider."
+        case .onDeviceRecognitionUnavailable(let locale):
+            return """
+            On-device speech recognition is unavailable for language “\(locale)” \
+            on this device. MovieCut never uploads audio to Apple’s servers, so \
+            subtitles can’t be generated for this language here. Try a language \
+            that supports on-device recognition, or transcribe on a device that \
+            supports it.
+            """
         }
     }
 }

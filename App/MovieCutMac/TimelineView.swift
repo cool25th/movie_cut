@@ -109,6 +109,14 @@ struct TimelineView: View {
                 .coordinateSpace(name: TimelineFilmstripCoordinateSpace.viewport)
                 .background(timelineScrollViewportWidthReader)
                 .movieCutScrollBackground(MovieCutTheme.timelineBackground)
+                // Blade tool cursor feedback (S9).
+                .cursor(viewModel.timelineTool == .blade ? .crosshair : nil)
+                // Cmd + scroll to zoom the timeline (S9). Without ⌘, the scroll
+                // view pans normally.
+                .background(TimelineScrollZoomReader { delta in
+                    let next = viewModel.timelineZoom + delta * (viewModel.timelineZoom / 8)
+                    viewModel.timelineZoom = clampedTimelineZoom(next)
+                })
                 #if DEBUG
                 .onAppear {
                     TimelineFilmstripDebugProbe.shared.registerPerformanceDriver(
@@ -478,6 +486,16 @@ struct TimelineView: View {
             pixelsPerSecond: pixelsPerSecond,
             duration: viewModel.currentProject.timeline.duration
         )
+        // Blade tool (S9): instead of scrubbing, a tap/click splits the
+        // topmost clip at the clicked time. Move the playhead there first so
+        // the split point is visible, then dispatch the blade split on release.
+        if viewModel.timelineTool == .blade {
+            viewModel.scrubPlayhead(to: time, phase: phase)
+            if phase == .ended {
+                Task { await viewModel.bladeSplitAtPlayhead() }
+            }
+            return
+        }
         viewModel.scrubPlayhead(to: time, phase: phase)
     }
 

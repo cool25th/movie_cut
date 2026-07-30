@@ -127,6 +127,12 @@ final class EditorViewModel {
     private var subtitleAlignmentClipId: UUID?
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
+    /// Active timeline tool (S9). `.select` by default; `.blade` turns clicks
+    /// into splits at the playhead.
+    var timelineTool: EditTool = .select
+    /// J/K/L shuttle state (S9). Direction + repeated-tap count drive speed.
+    var shuttleDirection: ShuttleDirection = .stopped
+    var shuttleTapCount: Int = 0
     var lastErrorMessage: String?
     var lastStatusMessage: String?
     var quickToolProgressMessage: String?
@@ -2022,6 +2028,31 @@ final class EditorViewModel {
         }
     }
 
+    /// Blade tool: split the topmost video clip under the playhead (S9). Reuses
+    /// `SplitClipCommand` so the split is speed/ramp/reverse-aware and export-
+    /// consistent. Called by a timeline click in blade mode after the playhead
+    /// is moved to the click position.
+    func bladeSplitAtPlayhead() async {
+        let time = playheadTime
+        // Find the topmost (highest zIndex) video clip whose range contains the
+        // playhead, across all tracks.
+        let snapshot = await session.snapshot()
+        let candidate = snapshot.timeline.tracks
+            .flatMap { track in track.clips.map { (track.id, $0) } }
+            .filter { $0.1.kind == .video && $0.1.timelineRange.contains(time) }
+            .max { $0.1.zIndex < $1.1.zIndex }
+        guard let candidate else { return }
+        let (trackId, clip) = (candidate.0, candidate.1)
+        do {
+            try await session.dispatch(
+                SplitClipCommand(clipId: clip.id, trackId: trackId, splitTime: time)
+            )
+            try await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func trimClip(
         clipId: UUID,
         trackId: UUID?,
@@ -2378,6 +2409,54 @@ final class EditorViewModel {
 
     func togglePlayPause() {
         playbackEngine.togglePlayPause()
+    }
+
+    // MARK: - J/K/L shuttle (S9)
+
+    /// Shuttle direction. Kept in the App layer (not Core) because it couples to
+    /// the live playback engine. `ShuttleRate` (Core) holds the pure step math.
+    enum ShuttleDirection: Sendable, Equatable {
+        case stopped
+        case forward
+        case reverse
+    }
+
+    /// L: forward play. Repeated taps raise the speed step (1× → 2× → 4×).
+    func shuttleForward() {
+        if shuttleDirection != .forward {
+            shuttleDirection = .forward
+            shuttleTapCount = 0
+        }
+        shuttleTapCount += 1
+        let rate = ShuttleRate.forwardStep(forTapCount: shuttleTapCount)
+        if !playbackEngine.isPlaying { playbackEngine.play() }
+        playbackEngine.setRate(rate)
+    }
+
+    /// K: stop. Pauses and resets the shuttle step so the next L/J starts at 1×.
+    func shuttleStop() {
+        shuttleDirection = .stopped
+        shuttleTapCount = 0
+        playbackEngine.setRate(1.0)
+        playbackEngine.pause()
+    }
+
+    /// J: reverse. AVPlayer cannot play at a negative rate, so this drives a
+    /// back-step cadence proportional to the speed step (faster on repeated
+    /// taps) rather than true reverse playback. Documented limitation of the
+    /// JKL approximation (S9). True reverse playback needs a pre-rendered file.
+    func shuttleReverse() {
+        if shuttleDirection != .reverse {
+            shuttleDirection = .reverse
+            shuttleTapCount = 0
+        }
+        shuttleTapCount += 1
+        playbackEngine.pause()
+        shuttleDirection = .reverse
+        // Back-step a chunk proportional to the speed step; a repeating Task
+        // would be needed for continuous reverse — kept as discrete steps here.
+        let stepSeconds = TimeInterval(ShuttleRate.forwardStep(forTapCount: shuttleTapCount))
+        seekBySeconds(-stepSeconds)
     }
 
     func seekByFrames(_ frameCount: Int) {

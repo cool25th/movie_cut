@@ -112,6 +112,7 @@
 		6E1D5D0AD152B04A0DD1F689 /* Phase12InspectorDefaultStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D3977387186F7C1203A41B /* Phase12InspectorDefaultStaticContractTests.swift */; };
 		6E9D2B9DEFBC2DACF6D67363 /* KeyframeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12241A89AD30CCEAB719243 /* KeyframeEditorView.swift */; };
 		7098421206E75F994C9102A1 /* RenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CB5098CCE0239093CBC943 /* RenderingTests.swift */; };
+		70BC093BA2C5B6AB2A82A7AF /* TimelineScrollZoomReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A73D9C1F160B02F583BBAD6 /* TimelineScrollZoomReader.swift */; };
 		727F91B308F28E857431043B /* InspectorShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C4AA2C586EB64187E79354 /* InspectorShared.swift */; };
 		7374A6ED11477F22B06F6F64 /* ProxyBadgeStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D3A70506097D0C52C9AA23 /* ProxyBadgeStateTests.swift */; };
 		741B733367632E63A586D33C /* R205LibraryAddInteractionStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD750BAD723E5A16B72D939 /* R205LibraryAddInteractionStaticContractTests.swift */; };
@@ -166,6 +167,7 @@
 		AC00D0DDCAF16EC2E7B3945B /* UndoIntegrityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0200BA83D8032C31919D0D2 /* UndoIntegrityTests.swift */; };
 		AD3955703B60A8174036F308 /* CardLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7C5F3523C1397F938B71E5 /* CardLayoutTests.swift */; };
 		ADAF5BFBC1C2B41A20C754D6 /* PlaybackSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47BC43B313CD084D9B99756 /* PlaybackSettingsTests.swift */; };
+		AEABA1B149DA62C2F75C876C /* ThermalProxyDowngradeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D13667DB869E3999F7E5DEA /* ThermalProxyDowngradeTests.swift */; };
 		AF7FADD6F46B982C17FA0A0E /* ColorScopeWiringStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA7253A7E32D2A2B2C724F /* ColorScopeWiringStaticContractTests.swift */; };
 		B256920F8B7FAF9C6500862B /* CanvasSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18685F32B1B041132751CBBD /* CanvasSettingsView.swift */; };
 		B29B87B5497BBDF7CB856EED /* ScopeAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAAE040E06864543306ABEE1 /* ScopeAnalyzerTests.swift */; };
@@ -366,6 +368,7 @@
 		7B9402CDE8A4A1F7519AA00F /* P0BrowserTimelinePolishStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BrowserTimelinePolishStaticContractTests.swift; sourceTree = "<group>"; };
 		7C70FA8B23C5C5C662723D31 /* ExportEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportEngine.swift; sourceTree = "<group>"; };
 		7C8034A487928203AD2F29C4 /* Phase13CardDensityStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase13CardDensityStaticContractTests.swift; sourceTree = "<group>"; };
+		7D13667DB869E3999F7E5DEA /* ThermalProxyDowngradeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalProxyDowngradeTests.swift; sourceTree = "<group>"; };
 		7D41C0143E8DCD7C2C7ABC2D /* ClipTimeMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipTimeMappingTests.swift; sourceTree = "<group>"; };
 		7E153A00A96E57DE91C30CA5 /* ColorGradeExportWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorGradeExportWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		7E85521618E0A1CE98CE9797 /* Phase23TimelineToolbarIconOnlyStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase23TimelineToolbarIconOnlyStaticContractTests.swift; sourceTree = "<group>"; };
@@ -377,6 +380,7 @@
 		88E309B5C02197EF6E4D053D /* AnalysisDataContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisDataContractTests.swift; sourceTree = "<group>"; };
 		895CE3B57E887E42F50F6BB9 /* Phase11DarkTopToolbarStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase11DarkTopToolbarStaticContractTests.swift; sourceTree = "<group>"; };
 		8A604E0CC9B9501459ABEB5D /* IAMenuPositionStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAMenuPositionStaticContractTests.swift; sourceTree = "<group>"; };
+		8A73D9C1F160B02F583BBAD6 /* TimelineScrollZoomReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrollZoomReader.swift; sourceTree = "<group>"; };
 		8D653E933BCF5E2EA5A2470B /* IOSTemplatePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSTemplatePickerView.swift; sourceTree = "<group>"; };
 		8E1E731CFE909C2E16FFBA13 /* IOSMaskCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSMaskCanvasView.swift; sourceTree = "<group>"; };
 		93B96917052DBC7959584EAA /* IOSEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSEditorViewModel.swift; sourceTree = "<group>"; };
@@ -659,6 +663,7 @@
 				CC21BDE1B94E3053E65BF0FC /* TextTemplateInspectorStaticContractTests.swift */,
 				F308FEFD3F815D6230A094D2 /* TextTemplateLibraryTests.swift */,
 				FEDD5411E0694AED63809262 /* TextToSpeechTests.swift */,
+				7D13667DB869E3999F7E5DEA /* ThermalProxyDowngradeTests.swift */,
 				68525DA1CAB2C942A43B2D03 /* ThumbnailProxyStaticContractTests.swift */,
 				C834F5C80A614BA20A20BA1C /* TimelineScrubBehaviorTests.swift */,
 				7AAFF2CDE9785FC9996C93D3 /* TransitionExportFixtureTests.swift */,
@@ -739,6 +744,7 @@
 				F21CAB901012C0BB13802BC6 /* MovieCutMacApp.swift */,
 				6FEA38AF3E3B928A0F7D90AB /* PreviewPanel.swift */,
 				299648B97F0218BECBEBE394 /* PrivacyInfo.xcprivacy */,
+				8A73D9C1F160B02F583BBAD6 /* TimelineScrollZoomReader.swift */,
 				BFC0BB919197BDE4D9C135D1 /* TimelineView.swift */,
 				178B3BD8D0B6A33F7C8502CF /* UITestHarness.swift */,
 				1EB65CE2A1197BA531B5CBE7 /* Audio */,
@@ -955,7 +961,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_24CC2149-1503-4C49-B0D0-0D429A070439" /* Resources */ = {
+		"TEMP_7C458B81-9150-4493-B35B-8BC1713323E3" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1258,6 +1264,7 @@
 				EA173C88D920868372026FC1 /* TextTemplateInspectorStaticContractTests.swift in Sources */,
 				EF75770A1E362961C4B54A67 /* TextTemplateLibraryTests.swift in Sources */,
 				A16CB194E9CB4F5D979ADAC6 /* TextToSpeechTests.swift in Sources */,
+				AEABA1B149DA62C2F75C876C /* ThermalProxyDowngradeTests.swift in Sources */,
 				800164A6FC598EE9DFEC9B9A /* ThumbnailProxyStaticContractTests.swift in Sources */,
 				3EFAD4DFEE0212BE77230BA1 /* TimelineScrubBehaviorTests.swift in Sources */,
 				D13875B432358F42E68F2C6B /* TransitionExportFixtureTests.swift in Sources */,
@@ -1329,6 +1336,7 @@
 				4D69FA00233FDD96D31E5CF4 /* TextAnimationRenderer.swift in Sources */,
 				F22907C0595D3465C89D5AFA /* ThermalStateObserver.swift in Sources */,
 				E3237A5300CA1759AA0A6A3D /* TimelineFilmstripStore.swift in Sources */,
+				70BC093BA2C5B6AB2A82A7AF /* TimelineScrollZoomReader.swift in Sources */,
 				316EF08543782A41891B8ECC /* TimelineView.swift in Sources */,
 				169097017E98EB3D424358DC /* TranscriptionService.swift in Sources */,
 				97F20409A0E39F876976E520 /* UITestHarness.swift in Sources */,

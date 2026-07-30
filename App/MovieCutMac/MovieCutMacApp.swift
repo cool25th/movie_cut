@@ -162,9 +162,58 @@ struct MovieCutMacApp: App {
                 }
                 .keyboardShortcut(.downArrow, modifiers: [])
                 .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Divider()
+
+                // J/K/L shuttle (S9). J = reverse back-step, K = stop, L =
+                // forward; repeated L/J taps raise the speed step.
+                Button("Shuttle Reverse (J)") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.shuttleReverse()
+                    }
+                }
+                .keyboardShortcut("j", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Button("Shuttle Stop (K)") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.shuttleStop()
+                    }
+                }
+                .keyboardShortcut("k", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Button("Shuttle Forward (L)") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.shuttleForward()
+                    }
+                }
+                .keyboardShortcut("l", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
             }
 
             CommandMenu("Timeline") {
+                // Edit tool modes (S9). V = select, B = blade. Distinct from
+                // Cmd+B (split at playhead): blade mode turns timeline clicks
+                // into splits at the clicked point.
+                Button("Select Tool") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.timelineTool = .select
+                    }
+                }
+                .keyboardShortcut("v", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Button("Blade Tool") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.timelineTool = .blade
+                    }
+                }
+                .keyboardShortcut("b", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Divider()
+
                 Button("Split at Playhead") {
                     Task { await viewModel.splitClip() }
                 }

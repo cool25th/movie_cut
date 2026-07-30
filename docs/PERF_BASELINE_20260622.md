@@ -55,6 +55,36 @@ export는 오프라인 경로다. preview fps는 **프레임당 GPU 렌더 시�
 2. **고해상도/장시간** — 4K·장편 비선형 악화 여부.
 3. 위 시나리오에서 프레임당 렌더가 16.6ms를 넘기면 그때 preview 한정 최적화/Metal 재검토.
 
+## 4K 합성 + 메모리 실측 (2026-07-30, S6)
+
+재현: `bash scripts/perf_4k.sh`. 두 재검토 트리거(무거운 합성, 4K)를 채운 측정.
+
+픽스처: 10초 / 3840×2160 / 30fps. 세 export 경로:
+
+- **passthrough**: 효과 없음 (바닥).
+- **color**: 5단계 색보정 → 매 프레임 CoreImage 경유.
+- **heavy**: crossDissolve 전환 + 마스크 + 동일 4K 소스 3겹 중첩(최악 케이스). 출력 길이는 3배(30초).
+
+**측정 한계(정직한 기록)**: 두 가지 구조적 제약으로 Debug-only·샌드박스-OFF 빌드로 측정했다.
+
+1. 헤드리스 export harness(`UITestHarness.swift`)가 `#if DEBUG`로 보호돼 있어 **Release 빌드에 컴파일되지 않는다** → Release는 헤드리스 export를 구동할 수 없다.
+2. S3가 활성화한 **App Sandbox**가 시작 시 환경변수로 전달된 파일(`MOVIECUT_UITEST_IMPORT`)에 대한 보안 스코프 부여가 없어 harness의 import/export를 차단한다 → 산출물 없이 종료. 그래서 스크립트는 `ENABLE_APP_SANDBOX=NO` 빌드로 측정한다(샌드박스는 보안 경계지 렌더링 비용이 아니므로 측정 대상에 영향 없다).
+
+Debug는 최적화 전 빌드이므로 **보수적 상한**이다. Release는 더 빠르므로, 아래 "병목 아님" 판정은 Release에서 더 견고하다(기존 1080p 베이스라인과 동일 논리).
+
+| 경로 | export 시간 | realtime 배율 | peak 메모리 |
+|---|---|---|---|
+| passthrough | 9.42s | **0.94×** | 205 MB |
+| color (CoreImage) | 9.17s | **0.92×** | 221 MB |
+| heavy (전환+마스크+3레이어, 30s 출력) | 18.75s | **0.63×** (초당) | 214 MB |
+| **peak across paths** | | | **221 MB** |
+
+- 4K에서도 color와 passthrough 차이는 ±3% 이내(5단계 색보정이 사실상 무료). CoreImage 합성은 4K에서도 병목이 아니다.
+- heavy는 3배 긴 출력을 처리하면서도 realtime의 1.6배 빠르다(0.63×).
+- **4 GB 메모리 상한 판정: 이내.** peak 221 MB는 4 GB(4,096 MB)의 **5.4%**. 외부 스펙 "4K 60fps 실시간 · 4GB 이하" 기준 메모리는 대폭 여유.
+
+**→ 결정: Phase 2B Metal 전면 재작성 유지(defer).** 4K 최악 합성(전환+마스크+3겹 중첩)에서도 CoreImage는 realtime 이내이고, peak 메모리는 상한의 5.4%. 1080p 베이스라인(+9%, 0.49×)에 이어 4K 베이스라인(±3%, ≤0.94×)까지 양쪽 모두 CoreImage가 병목이 아님을 확정. 재검토 트리거(프레임당 렌더 16.6ms 초과, 메모리 4GB 초과) 중 어느 것도 발생하지 않았다.
+
 ## G-04 실제 TimelineView 필름스트립 (2026-07-18, Debug)
 
 재현: `bash scripts/run_g04_filmstrip_perf.sh`. 스크립트는 저장소 밖 임시 디렉터리에 low-bitrate generated fixture를 만들고 종료 시 삭제한다. Core-only loop가 아니라 DEBUG actual app를 실행해 실제 `TimelineView`의 `ScrollViewReader`, `timelineZoom`, `TimelineFilmstripStore`, `FilmstripGenerator`, publish 및 AppKit-backed image consumer를 구동한다.

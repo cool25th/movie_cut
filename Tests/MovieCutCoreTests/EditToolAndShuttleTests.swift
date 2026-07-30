@@ -1,0 +1,35 @@
+import Foundation
+import Testing
+@testable import MovieCutCore
+
+/// S9 — J/K/L shuttle and edit tool modes.
+///
+/// Covers the pure Core pieces: the `EditTool` enum and the `ShuttleRate`
+/// speed-step math. The live keyboard/scroll behaviour needs a GUI run, so it
+/// is left as a user checklist; these pin the decision logic the UI relies on.
+@Suite("Edit tool and shuttle (S9)")
+struct EditToolAndShuttleTests {
+
+    @Test("EditTool has select and blade cases and select/blade rawValues")
+    func editToolCases() {
+        #expect(EditTool.allCases == [.select, .blade])
+        #expect(EditTool.select.rawValue == "select")
+        #expect(EditTool.blade.rawValue == "blade")
+    }
+
+    @Test("Shuttle forward speed steps up 1→2→4 and caps at 4")
+    func forwardSpeedSteps() {
+        #expect(ShuttleRate.forwardStep(forTapCount: 0) == 1.0)
+        #expect(ShuttleRate.forwardStep(forTapCount: 1) == 1.0)
+        #expect(ShuttleRate.forwardStep(forTapCount: 2) == 2.0)
+        #expect(ShuttleRate.forwardStep(forTapCount: 3) == 4.0)
+        #expect(ShuttleRate.forwardStep(forTapCount: 5) == 4.0) // capped
+    }
+
+    @Test("Shuttle reverse speed mirrors forward with a negative sign")
+    func reverseSpeedMirrorsForward() {
+        #expect(ShuttleRate.reverseStep(forTapCount: 1) == -1.0)
+        #expect(ShuttleRate.reverseStep(forTapCount: 2) == -2.0)
+        #expect(ShuttleRate.reverseStep(forTapCount: 3) == -4.0)
+    }
+}

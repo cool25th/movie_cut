@@ -138,6 +138,8 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
+    /// - `MOVIECUT_UITEST_EXPORT_RESOLUTION=<rawValue>` — sets `ExportSettings.resolution` before export
+    ///   (e.g. `p4K`), independent of any platform preset. Used by the 4K perf baseline (S6).
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
@@ -399,6 +401,17 @@ extension EditorViewModel {
                 await applyPlatformExportPreset(preset)
             } else {
                 lastErrorMessage = "unknown platform preset: \(rawPlatformPreset)"
+            }
+        }
+
+        // Export resolution override (S6 4K baseline). Independent of a full
+        // platform preset so a path can be measured at 4K without changing the
+        // codec/container/quality the preset would also set.
+        if let rawResolution = env["MOVIECUT_UITEST_EXPORT_RESOLUTION"], !rawResolution.isEmpty {
+            if let resolution = ExportResolution(rawValue: rawResolution) {
+                await updateExportSettings(resolution: resolution)
+            } else {
+                lastErrorMessage = "unknown export resolution: \(rawResolution)"
             }
         }
 

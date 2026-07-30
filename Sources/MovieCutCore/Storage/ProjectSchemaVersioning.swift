@@ -12,7 +12,10 @@ import Foundation
 /// - v1 → v2 (S2): `MediaAsset.originalBookmark` added. The field decodes
 ///   as nil for v1 projects; this migrator only bumps the version so the
 ///   loader recognises them and the app can re-create bookmarks on load.
-public let currentSchemaVersion: Int = 2
+/// - v2 → v3 (S7): `PlaybackSettings.autoProxyOnThermalPressure` added
+///   (default true). The field decodes as true for v2 projects, so this
+///   migrator only bumps the version.
+public let currentSchemaVersion: Int = 3
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -20,8 +23,23 @@ public enum ProjectSchema {
     /// v2 → v3, and so on. A project at version `n` is run through every
     /// migrator from index `n - 1` onward until it reaches `currentSchemaVersion`.
     public static let migrations: [any ProjectMigration] = [
-        AddSecurityScopedBookmarkMigration()
+        AddSecurityScopedBookmarkMigration(),
+        AddAutoProxyOnThermalPressureMigration()
     ]
+}
+
+/// v2 → v3: introduces `PlaybackSettings.autoProxyOnThermalPressure`. The field
+/// is optional and v2 projects decode with the default (true), so no payload
+/// transform is needed — this migrator only bumps the version so the chain
+/// reaches `currentSchemaVersion`. (S7)
+public struct AddAutoProxyOnThermalPressureMigration: ProjectMigration {
+    public let version = 3
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: the new field's default (true) applies on decode.
+    }
 }
 
 /// v1 → v2: introduces `MediaAsset.originalBookmark`. No data transformation is

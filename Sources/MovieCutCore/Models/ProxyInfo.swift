@@ -30,6 +30,10 @@ public enum ProxyBadgeState: String, Sendable, Equatable, CaseIterable {
     case idle
     /// The proxy is what preview is playing.
     case active
+    /// The proxy is what preview is playing because of thermal pressure (S7).
+    /// Distinct from `.active` so the UI can show *why* the quality dropped —
+    /// an unexplained drop reads as a bug.
+    case thermalActive
 
     /// Resolves the badge state for one media asset.
     ///
@@ -42,5 +46,18 @@ public enum ProxyBadgeState: String, Sendable, Equatable, CaseIterable {
     public static func resolve(proxy: ProxyInfo?, useProxyPlayback: Bool) -> ProxyBadgeState? {
         guard proxy?.proxyURL != nil else { return nil }
         return useProxyPlayback ? .active : .idle
+    }
+
+    /// Resolves the badge state, distinguishing a thermal-driven auto-downgrade.
+    /// `autoDowngraded` is true only when the engine dropped to the proxy
+    /// because of heat (not because the user toggled proxy playback). (S7)
+    public static func resolve(
+        proxy: ProxyInfo?,
+        useProxyPlayback: Bool,
+        autoDowngraded: Bool
+    ) -> ProxyBadgeState? {
+        guard proxy?.proxyURL != nil else { return nil }
+        if useProxyPlayback { return .active }
+        return autoDowngraded ? .thermalActive : .idle
     }
 }

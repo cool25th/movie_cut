@@ -80,6 +80,7 @@ final class ExportEngine {
             finishExport()
             return url
         } catch {
+            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
             exportError = error.localizedDescription
             finishExport()
             throw error
@@ -1331,6 +1332,7 @@ final class ExportEngine {
             finishExport()
             return url
         } catch {
+            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
             exportError = error.localizedDescription
             finishExport()
             throw error
@@ -1461,6 +1463,7 @@ final class ExportEngine {
             finishExport()
             return url
         } catch {
+            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
             exportError = error.localizedDescription
             finishExport()
             throw error
@@ -1644,6 +1647,7 @@ final class ExportEngine {
             finishExport()
             return url
         } catch {
+            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
             exportError = error.localizedDescription
             finishExport()
             throw error

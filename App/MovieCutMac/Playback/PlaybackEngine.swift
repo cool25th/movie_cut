@@ -132,6 +132,7 @@ final class PlaybackEngine {
             } catch {
                 // Stale guard applies to the failure path too.
                 guard requestedGeneration == compositionGeneration else { return }
+                AppLog.playback.error("composition build failed: \(error.localizedDescription, privacy: .public)")
                 lastCompositionError = error.localizedDescription
                 clearPreviewVideoOutput()
                 player.replaceCurrentItem(with: nil)

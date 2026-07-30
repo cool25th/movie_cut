@@ -792,6 +792,7 @@ final class EditorViewModel {
             // instead of failing silently on the next playback/export. (S2)
             reportMediaNeedingRelocation(in: project)
         } catch {
+            AppLog.importLog.error("project load failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
             lastStatusMessage = nil
         }
@@ -3982,6 +3983,7 @@ final class EditorViewModel {
                 lastStatusMessage = "Transcribed \(result.segments.count) segments with \(providerName); prepared \(subtitleClips.count) pending subtitle clips starting at 00:00 because no timeline clip is selected."
             }
         } catch {
+            AppLog.ai.error("transcription failed: \(error.localizedDescription, privacy: .public)")
             lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
         }

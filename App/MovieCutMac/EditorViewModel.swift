@@ -787,9 +787,29 @@ final class EditorViewModel {
             // The loaded file is the clean baseline.
             lastSavedProject = project
             isDirty = false
+            // Under App Sandbox, media imported before bookmarks existed (or
+            // whose files moved) can't be re-reached. Surface a relocate hint
+            // instead of failing silently on the next playback/export. (S2)
+            reportMediaNeedingRelocation(in: project)
         } catch {
             lastErrorMessage = error.localizedDescription
             lastStatusMessage = nil
+        }
+    }
+
+    /// Scans the project's assets for ones that no longer resolve and tells the
+    /// user how many need re-importing. Re-import is the existing
+    /// `importMedia(_:)` path, so this only sets a status message. (S2)
+    private func reportMediaNeedingRelocation(in project: Project) {
+        let unreachable = project.mediaLibrary.assets.values.filter { asset in
+            SecurityScopedAccess.needsRelocation(asset)
+                || !FileManager.default.fileExists(atPath: asset.originalURL.path)
+        }
+        if !unreachable.isEmpty {
+            lastStatusMessage = """
+            \(unreachable.count) media file(s) can’t be found. \
+            Re-import them with File ▸ Import Media.
+            """
         }
     }
 
@@ -5546,6 +5566,10 @@ final class EditorViewModel {
 
     private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
         var asset = MediaImporter.probe(url: url)
+
+        // Capture a security-scoped bookmark at import time so the file stays
+        // reachable after restart under App Sandbox. (S2)
+        asset.originalBookmark = SecurityScopedAccess.makeBookmark(for: url)
 
         let probe = await Self.appMetadataProbe(
             for: url,

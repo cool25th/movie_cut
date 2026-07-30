@@ -101,12 +101,27 @@ struct ProjectSchemaMigrationTests {
         }
 
         var project = Project(name: "original", schemaVersion: 1)
-        // With currentSchemaVersion == 1, the runner is a no-op even with a
-        // chain, so we assert the no-op path explicitly: a current-version
-        // project is never run through migrators.
+        // A v1 project (below currentSchemaVersion) must be stepped forward by
+        // the supplied chain to v2, and the migrator's effect must be visible.
         try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField()])
-        #expect(project.schemaVersion == 1)
-        #expect(project.name == "original") // migrator NOT invoked at current
+        #expect(project.schemaVersion == 2)
+        #expect(project.name == "original [migrated v1→v2]")
+    }
+
+    @Test("A current-version project is never run through migrators")
+    func currentVersionSkipsMigration() throws {
+        struct AddFakeField: ProjectMigration {
+            let version = 2
+            func migrate(_ project: inout Project) throws {
+                project.name = project.name + " [should not run]"
+            }
+        }
+
+        var project = Project(name: "fresh", schemaVersion: currentSchemaVersion)
+        try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField()])
+        // Already at current: the migrator must NOT be invoked.
+        #expect(project.schemaVersion == currentSchemaVersion)
+        #expect(project.name == "fresh")
     }
 
     @Test("A migrator that throws surfaces as migrationFailed with versions")

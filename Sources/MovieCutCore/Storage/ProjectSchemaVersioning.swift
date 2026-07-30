@@ -8,18 +8,37 @@ import Foundation
 /// `Project` JSON shape, and register a `ProjectMigration` for the previous
 /// version in `ProjectSchema.migrations`. (S1 of
 /// `docs/PRO_SPEC_GAP_WORKORDER_20260730.md`.)
-public let currentSchemaVersion: Int = 1
+///
+/// - v1 → v2 (S2): `MediaAsset.originalBookmark` added. The field decodes
+///   as nil for v1 projects; this migrator only bumps the version so the
+///   loader recognises them and the app can re-create bookmarks on load.
+public let currentSchemaVersion: Int = 2
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
     /// The ordered migration chain. Index 0 migrates v1 → v2, index 1 migrates
     /// v2 → v3, and so on. A project at version `n` is run through every
     /// migrator from index `n - 1` onward until it reaches `currentSchemaVersion`.
-    ///
-    /// There is currently no real migration (v1 is the only version), so the
-    /// chain is empty. The first real migrator — v1 → v2, which adds
-    /// security-scoped bookmarks to `MediaAsset` — is added by S2.
-    public static let migrations: [any ProjectMigration] = []
+    public static let migrations: [any ProjectMigration] = [
+        AddSecurityScopedBookmarkMigration()
+    ]
+}
+
+/// v1 → v2: introduces `MediaAsset.originalBookmark`. No data transformation is
+/// required — the field is optional and v1 projects decode with `nil` bookmarks.
+/// The app layer re-creates bookmarks on load when the file path still lives.
+/// This migrator exists so the loader recognises a v1 file as needing v1→v2
+/// handling and so the chain reaches `currentSchemaVersion`. (S2)
+public struct AddSecurityScopedBookmarkMigration: ProjectMigration {
+    public let version = 2
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: bookmarks are regenerated lazily on load by the
+        // app layer when the resolved path is still reachable. v1 assets keep
+        // `originalBookmark == nil`, which is a valid post-v2 state.
+    }
 }
 
 // MARK: - Migration protocol

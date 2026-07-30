@@ -69,7 +69,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         appVersion: String = "0.1.0",
-        schemaVersion: Int = 1,
+        schemaVersion: Int = currentSchemaVersion,
         mediaLibrary: MediaLibrary = MediaLibrary(),
         timeline: Timeline = Timeline(),
         markers: [Marker] = [],

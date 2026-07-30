@@ -18,7 +18,6 @@ struct AutosaveRecoveryTests {
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_100),
             appVersion: "0.1.0",
-            schemaVersion: 1,
             mediaLibrary: MediaLibrary(),
             timeline: Timeline(
                 id: UUID(uuidString: "00000000-0000-0000-0000-0000000000B2")!,

@@ -9,7 +9,7 @@ struct ProjectModelTests {
         let project = Project(name: "Untitled")
 
         #expect(project.name == "Untitled")
-        #expect(project.schemaVersion == 1)
+        #expect(project.schemaVersion == currentSchemaVersion)
         #expect(project.appVersion == "0.1.0")
         #expect(project.mediaLibrary.assets.isEmpty)
         #expect(project.timeline.frameRate == Rational(numerator: 30, denominator: 1))

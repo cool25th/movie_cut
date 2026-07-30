@@ -53,8 +53,12 @@ public enum ProjectPackage {
             }
 
             // Store a package-relative reference; proxies are machine-local.
+            // Bookmarks are also machine-local (security-scoped to the origin
+            // device/account), so drop them too — a stale bookmark from another
+            // machine would only mislead the loader. (S2)
             copy.originalURL = URL(fileURLWithPath: "\(mediaDirectoryName)/\(fileName)")
             copy.proxy = nil
+            copy.originalBookmark = nil
             rewritten[id] = copy
         }
         packaged.mediaLibrary.assets = rewritten
@@ -91,6 +95,8 @@ public enum ProjectPackage {
             let fileName = asset.originalURL.lastPathComponent
             copy.originalURL = mediaURL.appendingPathComponent(fileName)
             copy.proxy = nil
+            // Package media lives inside the package, so it needs no bookmark.
+            copy.originalBookmark = nil
             resolved[id] = copy
         }
         project.mediaLibrary.assets = resolved

@@ -41,6 +41,10 @@ final class PlaybackEngine {
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
+    /// Security scopes started for the assets in the currently loaded single
+    /// asset or composition. Each entry pairs with a `stopAccessing` on clear
+    /// or next load so the access pair never leaks across reloads. (S2)
+    @ObservationIgnored private var activeSecurityScopes: [URL] = []
     /// Video output used to pull the currently displayed preview pixel buffer
     /// for Preview↔Export parity verification. Lazily attached to the active
     /// player item.
@@ -60,8 +64,13 @@ final class PlaybackEngine {
         statusObservation?.invalidate()
         statusObservation = nil
         clearPreviewVideoOutput()
+        endActiveSecurityScopes()
 
-        let avAsset = AVURLAsset(url: asset.originalURL)
+        // Resolve the bookmark and start a scope so the file stays reachable
+        // under App Sandbox for the lifetime of this player item. (S2)
+        let resolvedURL = SecurityScopedAccess.beginScope(for: asset)
+        activeSecurityScopes = [resolvedURL]
+        let avAsset = AVURLAsset(url: resolvedURL)
         let item = AVPlayerItem(asset: avAsset)
 
         playerItem = item
@@ -83,6 +92,14 @@ final class PlaybackEngine {
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
+        endActiveSecurityScopes()
+
+        // Start a security scope for every source asset referenced by the
+        // composition, so each stays reachable under App Sandbox while the
+        // player holds the composition. (S2)
+        activeSecurityScopes = project.mediaLibrary.assets.values.map { asset in
+            SecurityScopedAccess.beginScope(for: asset)
+        }
 
         // Stamp a new generation before any async work. Only the holder of the
         // latest token is allowed to install a player item, so a slow earlier
@@ -198,10 +215,21 @@ final class PlaybackEngine {
         clearPreviewVideoOutput()
         player.replaceCurrentItem(with: nil)
         cleanupTemporaryReverseRenderURLs()
+        endActiveSecurityScopes()
         playerItem = nil
         currentTime = 0
         duration = 0
         playbackRate = 1
+    }
+
+    /// Stops every security scope started for the current composition/single
+    /// asset and forgets them. Called on clear and before starting fresh scopes
+    /// so the start/stop pair never leaks across reloads. (S2)
+    private func endActiveSecurityScopes() {
+        for url in activeSecurityScopes {
+            SecurityScopedAccess.endScope(for: url)
+        }
+        activeSecurityScopes = []
     }
 
     func play() {

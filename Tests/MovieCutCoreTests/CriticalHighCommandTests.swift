@@ -122,36 +122,6 @@ struct CriticalHighCommandTests {
         #expect(editor.project.timeline.tracks[0].clips[0].mask == nil)
     }
 
-    @Test("Background removal provider name is non-empty")
-    func testProviderName() {
-        let provider = BackgroundRemovalProvider()
-
-        #expect(provider.providerName.isEmpty == false)
-    }
-
-    @Test("Background removal provider availability is accessible")
-    func testIsAvailable() {
-        let provider = BackgroundRemovalProvider()
-        let isAvailable: Bool = provider.isAvailable
-
-        #expect(isAvailable == true || isAvailable == false)
-    }
-
-    @Test("Style transfer provider exposes available styles")
-    func testAvailableStyles() {
-        let provider = StyleTransferProvider()
-
-        #expect(provider.availableStyles == ["comic", "noir", "vintage", "cyberpunk", "watercolor"])
-    }
-
-    @Test("Style transfer provider handles empty images")
-    func testApplyReturnsNilForEmptyImage() {
-        let provider = StyleTransferProvider()
-        let styledImage = provider.apply(style: "noir", to: CIImage.empty())
-
-        #expect(styledImage == nil || styledImage?.extent.isEmpty == true)
-    }
-
     @Test("Audio equalizer service initializes")
     func testInitSucceeds() {
         guard isAudioEqualizerRuntimeAvailable() else {

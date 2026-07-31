@@ -87,6 +87,22 @@ struct AssistantCommandParserTests {
     func exampleCommandsExist() {
         #expect(AssistantCommandParser.exampleCommands.count >= 5)
     }
+
+    @Test("rule-based provider plans recognized instructions and rejects unknown input")
+    func ruleBasedProvider() async throws {
+        let provider = RuleBasedEditingProvider()
+        #expect(provider.isAvailable)
+
+        let plan = try await provider.plan(
+            for: "convert all clips to black and white",
+            context: .empty
+        )
+        #expect(plan.intents == [AssistantIntent(target: .allClips, action: .applyFilter(.grayscale))])
+
+        await #expect(throws: AIEditingError.noApplicableActions) {
+            try await provider.plan(for: "qwzx nonsense", context: .empty)
+        }
+    }
 }
 
 /// Wiring visibility for the assistant UI (not a completion criterion by

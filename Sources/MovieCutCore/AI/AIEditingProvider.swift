@@ -56,15 +56,7 @@ public struct AIEditPlan: Sendable, Equatable {
 
 /// Errors surfaced while producing an AI edit plan.
 public enum AIEditingError: Error, Sendable, Equatable {
-    /// No API key was available for the provider.
-    case missingAPIKey
-    /// The transport failed before an HTTP response was received.
-    case transport(String)
-    /// The API returned a non-success HTTP status.
-    case http(status: Int, body: String)
-    /// The API response could not be decoded into a plan.
-    case malformedResponse(String)
-    /// The response decoded but contained no applicable actions.
+    /// The instruction did not map to an applicable editing action.
     case noApplicableActions
 }
 

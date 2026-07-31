@@ -1,4 +1,3 @@
-import CoreVideo
 import Foundation
 import Testing
 @testable import MovieCutCore
@@ -38,17 +37,6 @@ struct PipelineTests {
         #endif
     }
 
-    @Test("Background removal provider returns an image")
-    func testBackgroundRemovalProviderReturnsImage() throws {
-        let provider = BackgroundRemovalProvider()
-        let sourceBuffer = try makePipelineTestPixelBuffer(width: 128, height: 128)
-        let outputBuffer = try #require(provider.removeBackground(from: sourceBuffer))
-
-        #expect(CVPixelBufferGetWidth(outputBuffer) == 128)
-        #expect(CVPixelBufferGetHeight(outputBuffer) == 128)
-        #expect(CVPixelBufferGetPixelFormatType(outputBuffer) == kCVPixelFormatType_32BGRA)
-    }
-
     @Test("Audio fade command inverts correctly")
     func testAudioFadeCommandInvertsCorrectly() throws {
         let clipId = UUID()
@@ -81,68 +69,4 @@ struct PipelineTests {
         #expect(inverse.fadeInDuration == originalFadeIn)
         #expect(inverse.fadeOutDuration == originalFadeOut)
     }
-}
-
-private func makePipelineTestPixelBuffer(width: Int, height: Int) throws -> CVPixelBuffer {
-    let attributes: [String: Any] = [
-        kCVPixelBufferCGImageCompatibilityKey as String: true,
-        kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
-        kCVPixelBufferIOSurfacePropertiesKey as String: [:]
-    ]
-    var pixelBuffer: CVPixelBuffer?
-    let status = CVPixelBufferCreate(
-        kCFAllocatorDefault,
-        width,
-        height,
-        kCVPixelFormatType_32BGRA,
-        attributes as CFDictionary,
-        &pixelBuffer
-    )
-
-    guard status == kCVReturnSuccess, let pixelBuffer else {
-        throw PipelineTestError.pixelBufferCreationFailed(status)
-    }
-
-    CVPixelBufferLockBaseAddress(pixelBuffer, [])
-    defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-
-    guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-        throw PipelineTestError.baseAddressUnavailable
-    }
-
-    let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-    let centerX = width / 2
-    let headCenterY = height / 3
-    let headRadius = max(width, height) / 8
-
-    for y in 0..<height {
-        let row = baseAddress.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
-
-        for x in 0..<width {
-            let dx = x - centerX
-            let dy = y - headCenterY
-            let isHead = dx * dx + dy * dy <= headRadius * headRadius
-            let isBody = abs(dx) <= width / 7 && y > headCenterY && y < height * 5 / 6
-            let offset = x * 4
-
-            if isHead || isBody {
-                row[offset] = 70
-                row[offset + 1] = 70
-                row[offset + 2] = 70
-                row[offset + 3] = 255
-            } else {
-                row[offset] = 210
-                row[offset + 1] = 225
-                row[offset + 2] = 235
-                row[offset + 3] = 255
-            }
-        }
-    }
-
-    return pixelBuffer
-}
-
-private enum PipelineTestError: Error {
-    case pixelBufferCreationFailed(CVReturn)
-    case baseAddressUnavailable
 }

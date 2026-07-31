@@ -106,7 +106,6 @@ public final class CloudSyncService: ObservableObject, Sendable {
 
     private let fileManager: FileManager
     private let projectStore: ProjectStore
-    private let versionHistory = VersionHistory()
     private var metadataQuery: NSMetadataQuery?
     private var metadataQueryObservers: [NSObjectProtocol]
     private var autoSyncTasks: [UUID: Task<Void, Never>]
@@ -136,7 +135,6 @@ public final class CloudSyncService: ObservableObject, Sendable {
         status = .syncing
 
         do {
-            try await versionHistory.save(project, description: "Auto-save before cloud sync")
             let fileURL = try projectFileURL(name: project.name, createDirectory: true)
             try await projectStore.save(project, to: fileURL)
             try await syncMetadata(project: project)

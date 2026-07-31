@@ -154,8 +154,6 @@ struct AnalysisDataContractTests {
             SilenceDetectionProvider(),
             SceneChangeProvider(),
             AutoReframeProvider(),
-            StyleTransferProvider(),
-            BackgroundRemovalProvider(),
             StubAnalysisProvider(),
         ]
         for provider in providers {
@@ -197,47 +195,13 @@ struct AnalysisDataContractTests {
         #expect(provider.providerName == "AutoReframe")
     }
 
-    @Test("StyleTransferProvider explicit name and available styles")
-    func styleTransferProviderContract() {
-        let provider = StyleTransferProvider()
-        #expect(provider.providerName == "StyleTransfer")
-        #expect(provider.availableStyles.count == 5)
-        #expect(provider.availableStyles.contains("comic"))
-        #expect(provider.availableStyles.contains("noir"))
-        #expect(provider.availableStyles.contains("vintage"))
-        #expect(provider.availableStyles.contains("cyberpunk"))
-        #expect(provider.availableStyles.contains("watercolor"))
-    }
-
-    @Test("BackgroundRemovalProvider explicit name")
-    func backgroundRemovalProviderName() {
-        let provider = BackgroundRemovalProvider()
-        #expect(provider.providerName == "BackgroundRemoval")
-    }
-
-    @Test("Vision-dependent providers have consistent isAvailable")
+    @Test("Vision-dependent provider has consistent isAvailable")
     func visionProviderAvailability() {
+        let autoReframe = AutoReframeProvider()
         #if canImport(Vision)
-        let autoReframe = AutoReframeProvider()
-        let bgRemoval = BackgroundRemovalProvider()
         #expect(autoReframe.isAvailable == true)
-        #expect(bgRemoval.isAvailable == true)
         #else
-        let autoReframe = AutoReframeProvider()
-        let bgRemoval = BackgroundRemovalProvider()
         #expect(autoReframe.isAvailable == false)
-        #expect(bgRemoval.isAvailable == false)
-        #endif
-    }
-
-    @Test("CoreImage-dependent providers have consistent isAvailable")
-    func coreImageProviderAvailability() {
-        #if canImport(CoreImage)
-        let styleTransfer = StyleTransferProvider()
-        #expect(styleTransfer.isAvailable == true)
-        #else
-        let styleTransfer = StyleTransferProvider()
-        #expect(styleTransfer.isAvailable == false)
         #endif
     }
 

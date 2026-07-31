@@ -164,48 +164,6 @@ struct CloudSyncServiceCriticalHighTests {
 }
 
 @MainActor
-@Suite("CollaborationService critical and high coverage")
-struct CollaborationServiceCriticalHighTests {
-    @Test("Collaboration service initializer sets local user")
-    func testInitSetsLocalUser() {
-        let service = CollaborationService(userName: "Test")
-
-        #expect(service.localCollaborator.name == "Test")
-    }
-
-    @Test("Collaboration service creates share link")
-    func testCreateShareLink() {
-        let service = CollaborationService(userName: "Test")
-        let link = service.createShareLink(projectId: UUID(), role: .editor)
-
-        #expect(link.invitedCollaborators.isEmpty == false)
-    }
-
-    @Test("Collaboration service records change")
-    func testRecordChange() {
-        let service = CollaborationService(userName: "Test")
-
-        service.recordChange(action: "addClip", details: ["clipId": "clip-1"])
-
-        #expect(service.recentChanges.count == 1)
-    }
-
-    @Test("Collaboration service fetches changes since date")
-    func testFetchChangesSince() async throws {
-        let service = CollaborationService(userName: "Test")
-
-        service.recordChange(action: "addClip", details: ["clipId": "clip-1"])
-        let firstChangeDate = try #require(service.recentChanges.first?.timestamp)
-        try await Task.sleep(nanoseconds: 1_000_000)
-        service.recordChange(action: "splitClip", details: ["clipId": "clip-1"])
-
-        let fetchedChanges = service.fetchChanges(since: firstChangeDate)
-
-        #expect(fetchedChanges.count == 1)
-    }
-}
-
-@MainActor
 @Suite("TemplateMarketplace critical and high coverage")
 struct TemplateMarketplaceCriticalHighTests {
     @Test("Template marketplace featured items are not empty")

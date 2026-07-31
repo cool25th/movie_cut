@@ -120,21 +120,38 @@
 
 ## 3. 미배선 서브시스템 정리 및 보컬 분리 배선 (요구사항 10, 9)
 
-- [~] 3.1 삭제 전 참조 상태 grep 재측정
+- [x] 3.1 삭제 전 참조 상태 grep 재측정
   - `ClaudeEditingProvider`, `StyleTransferProvider`, `CollaborationService`, `VersionHistory`, `AIEditingProvider`, `BackgroundRemovalProvider` 각각의 현재 App 참조 수를 측정
   - `requirements.md` 요구사항 10의 결정 표와 대조. 불일치가 있으면 표를 갱신하고 결정을 재검토
+  - **2026-07-31 재측정:** `App/**/*.swift`를 정확 심볼명으로 각각 검색했으며 6종 모두 App 참조 **0건**이었다.
+
+    | 심볼 | App 참조 | App 외 현재 참조 | 요구사항 10 결정 대조 |
+    |---|---:|---|---|
+    | `ClaudeEditingProvider` | 0 | Core 정의/conformance, `ClaudeEditingProviderTests` | 삭제 결정과 일치 |
+    | `StyleTransferProvider` | 0 | Core 정의, `AnalysisDataContractTests` | 삭제 결정과 일치 |
+    | `CollaborationService` | 0 | Core 정의, `InMemoryLoopbackPeer` extension, `CriticalHighCoreTests`·`CollaborationTransportTests` | 삭제 결정과 일치 |
+    | `VersionHistory` | 0 | Core 정의, `CloudSyncService`가 인스턴스 보유 | 삭제 결정과 일치 |
+    | `AIEditingProvider` | 0 | 프로토콜 정의, `RuleBasedEditingProvider`·`ClaudeEditingProvider` conformance | 유지+배선 결정과 일치 |
+    | `BackgroundRemovalProvider` | 0 | Core 정의, `AnalysisDataContractTests` | 3.2 무회귀 확인 후 삭제 결정과 일치 |
+
+  - App 기준 불일치가 없어 `requirements.md` 결정 표 수정은 필요 없다. 단 3.3 삭제 범위에는 `CollaborationService` 전용 extension/테스트와 `CloudSyncService`의 `VersionHistory` 결합 제거를 포함해야 하며, 후자는 나머지 cloud sync 동작을 보존해야 한다.
   - _Requirements: 10.1_
 
-- [~] 3.2 `BackgroundRemovalProvider` 삭제 전 기능 무회귀 확인
+- [x] 3.2 `BackgroundRemovalProvider` 삭제 전 기능 무회귀 확인
   - 배경 제거 기능이 `PersonSegmentationCompositor` 경로로 여전히 동작함을 먼저 보인다
   - 위양성 판정 근거를 기록해 다음 감사에서 재등재되지 않게 한다
+  - **실제 제품 경로:** `InspectorEffectsSection`의 Remove Background 토글 → `EditorViewModel.toggleBackgroundRemoval` → `SetClipPropertyCommand(.isBackgroundRemoved)` → `PlaybackEngine`/`ExportEngine`의 `CustomCompositionInstruction` → macOS `CustomVideoCompositor.applyPersonSegmentation` → `PersonSegmentationCompositor.align/removeBackground`로 연결된다. preview는 같은 compositor에 `prefersFastSegmentation: true`, export는 정확 품질 기본 경로를 사용한다.
+  - **2026-07-31 실행 증거:** `BackgroundRemovalGoldenTests` 2건, `BackgroundRemovalTests` 6건, `BackgroundRemovalStaticContractTests` 2건 — 총 **10 tests / 3 suites PASS**. non-skippable GoldenPixel 결과는 foreground center alpha **255**, background corner alpha **0**이었다.
+  - **위양성 판정:** `BackgroundRemovalProvider` App 참조는 0건이며 위 제품 경로 어느 단계에서도 사용하지 않는다. 따라서 provider 제거는 Remove Background UI, 클립 직렬화/undo, preview/export Vision mask 생성, 공유 alpha 합성 경로를 제거하지 않는다.
+  - **검증 범위:** 공유 compositor의 합성은 소프트웨어 렌더러와 synthetic mask로 실제 검증했다. Vision의 실인물 mask 품질을 별도 실기기 fixture로 재측정한 것은 아니며, 이 품질 범위는 provider 삭제와 독립적이다.
   - _Requirements: 10.4, 10.5_
 
-- [~] 3.3 삭제 5건 실행
-  - `ClaudeEditingProvider`(+`URLSessionClaudeTransport`), `StyleTransferProvider`, `CollaborationService`, `VersionHistory`, `BackgroundRemovalProvider` 제거
-  - 그것만을 대상으로 하던 테스트를 함께 제거
-  - 삭제 후 빌드와 전체 테스트 green 확인, 테스트 수 감소를 실측으로 기록
-  - 삭제로 새 CapCut 격차가 생기지 않았음을 확인
+- [x] 3.3 삭제 5건 실행
+  - `ClaudeEditingProvider`(+`URLSessionClaudeTransport`), `StyleTransferProvider`, `CollaborationService`, `VersionHistory`, `BackgroundRemovalProvider`를 제거했다. `CollaborationService` 전용 보조 구현 `InMemoryLoopbackPeer`도 함께 제거했다.
+  - 전용 테스트 파일 `ClaudeEditingProviderTests.swift`, `CollaborationTransportTests.swift`와 Xcode 프로젝트 참조를 제거하고, 혼합 테스트 파일에서는 삭제 구현만 검증하던 항목만 건별로 제거했다. Claude 테스트 파일에 섞여 있던 `RuleBasedEditingProvider` 테스트 1건은 `AssistantCommandParserTests.swift`로 이관해 3.4 대상인 오프라인 provider 검증을 보존했다.
+  - **테스트 수 실측:** 삭제 전 **1,044 tests** → 삭제 후 **1,019 tests / 166 suites PASS**, 순감소 **25건**. 감소 내역은 Claude 전용 9건, collaboration 8건, `CriticalHighCommandTests` provider 4건, `AnalysisDataContractTests` provider 3건, `PipelineTests` provider 1건이다.
+  - **2026-07-31 최종 검증:** `swift build` RC 0, 전체 `swift test` RC 0, `MovieCutMac` Debug `xcodebuild` RC 0. 삭제 심볼의 `Sources/**/*.swift` 참조와 삭제 테스트 파일의 `project.pbxproj` 참조는 모두 0건이며, 변경 Swift diagnostics 0건과 `git diff --check` 통과를 확인했다.
+  - **무회귀 근거:** 3.2에서 확인한 `PersonSegmentationCompositor` 기반 Remove Background UI/preview/export 경로는 그대로 유지했다. `CloudSyncService`에서는 `VersionHistory` snapshot 결합만 제거하고 프로젝트 저장·metadata·conflict 동작을 보존했다. `AIEditingProvider`/`RuleBasedEditingProvider`도 유지했으며 네트워크 entitlement를 추가하지 않았다. 따라서 삭제 대상은 App 참조 0건인 고립 구현과 전용 검증뿐이고 새 CapCut 기능 격차를 만들지 않는다.
   - _Requirements: 10.2, 10.5_
 
 - [~] 3.4 `AIEditingProvider` 프로토콜 경유로 어시스턴트 UI 배선

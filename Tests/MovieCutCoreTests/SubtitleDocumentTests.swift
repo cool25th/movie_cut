@@ -132,7 +132,7 @@ struct SubtitleEditingStaticContractTests {
         #expect(viewModel.contains("SubtitleDocument.srtString"))
     }
 
-    @Test("auto subtitles view exposes row editing and SRT buttons")
+    @Test("auto subtitles view exposes row editing and subtitle export with format selection")
     func viewExposesEditingControls() throws {
         let view = try source("App/MovieCutMac/Transcription/AutoSubtitlesView.swift")
         #expect(view.contains("SubtitleSegmentRow"))
@@ -141,6 +141,12 @@ struct SubtitleEditingStaticContractTests {
         #expect(view.contains("mergeGeneratedSubtitleSegmentWithNext"))
         #expect(view.contains("deleteGeneratedSubtitleSegment"))
         #expect(view.contains("Import SRT"))
-        #expect(view.contains("Export SRT"))
+        // SRT remains the default export path, now joined by VTT/ASS via a
+        // format picker whose selection drives the NSSavePanel extension.
+        #expect(view.contains("SubtitleExportFormat"))
+        #expect(view.contains("exportSubtitles()"))
+        #expect(view.contains("exportSRT()"))
+        #expect(view.contains(".vtt"))
+        #expect(view.contains(".ass"))
     }
 }

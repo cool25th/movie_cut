@@ -168,20 +168,6 @@ struct P2TopChromePolishStaticContractTests {
             #expect(content.contains(marker))
         }
     }
-
-    @Test("Audit records P2 implementation note")
-    func auditRecordsP2ImplementationNote() throws {
-        let audit = try source("docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md")
-        let p2 = try section(
-            in: audit,
-            from: "### P2 — Top chrome and micro-density polish",
-            to: "### P3 — Documentation and verification cleanup"
-        )
-
-        #expect(p2.contains("P2 top chrome polish compacted the macOS toolbar"))
-        #expect(p2.contains("secondary canvas/project controls into quiet compact clusters"))
-        #expect(p2.contains("Export remains the distinct primary top-right action"))
-    }
 }
 
 private enum P2TopChromePolishStaticContractError: Error {

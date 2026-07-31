@@ -105,14 +105,20 @@ struct ProjectSchemaMigrationTests {
                 project.name = project.name + " [migrated v2→v3]"
             }
         }
+        struct AddBatchedFields: ProjectMigration {
+            let version = 4
+            func migrate(_ project: inout Project) throws {
+                project.name = project.name + " [migrated v3→v4]"
+            }
+        }
 
         var project = Project(name: "original", schemaVersion: 1)
         // A v1 project (below currentSchemaVersion) must be stepped forward by
         // the supplied chain all the way to current, with each step's effect
         // visible. The chain must reach currentSchemaVersion or the runner fails.
-        try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField(), AddAnotherField()])
+        try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField(), AddAnotherField(), AddBatchedFields()])
         #expect(project.schemaVersion == currentSchemaVersion)
-        #expect(project.name == "original [migrated v1→v2] [migrated v2→v3]")
+        #expect(project.name == "original [migrated v1→v2] [migrated v2→v3] [migrated v3→v4]")
     }
 
     @Test("A current-version project is never run through migrators")
@@ -170,6 +176,56 @@ struct ProjectSchemaMigrationTests {
         let project = try await store.load(from: url)
         #expect(project.schemaVersion == currentSchemaVersion)
         #expect(project.name == "Schema v1 fixture")
+    }
+
+    // MARK: - v3 → v4 batch migration (blend / previewQuality / compounds)
+
+    @Test("A committed v3 fixture migrates to current through ProjectStore (real decode + chain)")
+    func v3FixtureMigratesToCurrent() async throws {
+        // Task 6.1 DoD: a project written at the previous schema (v3) must load
+        // through the full ProjectStore path (decode + v3→v4 identity migrator)
+        // and reach currentSchemaVersion, with the new batched fields resolving
+        // to their defaults.
+        let store = ProjectStore(autosaveDirectory: nil)
+        let url = try await writeFixture("project_v3.moviecut", json: v1ProjectJSON(schemaVersion: 3))
+
+        let project = try await store.load(from: url)
+
+        #expect(project.schemaVersion == currentSchemaVersion)
+        // Batched v3→v4 fields fall back to defaults for a v3 project.
+        #expect(project.playbackSettings.previewQuality == .full)
+        #expect(project.compounds.isEmpty)
+        for clip in project.timeline.tracks.flatMap(\.clips) {
+            #expect(clip.blendMode == .normal)
+            #expect(clip.compoundId == nil)
+        }
+    }
+
+    @Test("The production chain reaches currentSchemaVersion from every prior version")
+    func productionChainReachesCurrentFromAllPriorVersions() throws {
+        // Exercises the real, registered `ProjectSchema.migrations` chain (not an
+        // injected one): a project at each prior schema version must be stepped
+        // forward to `currentSchemaVersion`, proving no migrator is missing.
+        for priorVersion in 1...max(1, currentSchemaVersion - 1) {
+            var project = Project(name: "v\(priorVersion)", schemaVersion: priorVersion)
+            try ProjectMigrationRunner.migrate(&project)
+            #expect(project.schemaVersion == currentSchemaVersion,
+                   "Chain did not reach current from schema \(priorVersion)")
+        }
+    }
+
+    @Test("A schemaVersion one above current is rejected (forward gate holds after the bump)")
+    func oneAboveCurrentRejected() async throws {
+        // Pins the future-version gate at the new boundary: a project claiming
+        // exactly currentSchemaVersion + 1 must be refused, not silently loaded.
+        let store = ProjectStore(autosaveDirectory: nil)
+        let url = try await writeFixture(
+            "project_one_above_current.moviecut",
+            json: v1ProjectJSON(schemaVersion: currentSchemaVersion + 1)
+        )
+        await #expect(throws: ProjectMigrationError.self) {
+            _ = try await store.load(from: url)
+        }
     }
 
     // MARK: - Helpers

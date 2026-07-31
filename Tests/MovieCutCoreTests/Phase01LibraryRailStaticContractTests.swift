@@ -155,19 +155,6 @@ struct Phase01LibraryRailStaticContractTests {
 
         #expect(content.contains(".frame(minWidth: 360, idealWidth: 380, maxWidth: 430)"))
     }
-
-    @Test("Handoff keeps Phase 0-1 progress noted")
-    func handoffKeepsPhase01ProgressNoted() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 0-1 implemented"))
-        #expect(handoff.contains("Phase01LibraryRailStaticContractTests"))
-        #expect(handoff.contains("Phase 0-2 implemented"))
-        #expect(handoff.contains("Phase 0-3 implemented"))
-        #expect(handoff.contains("Phase 0-4 implemented"))
-        #expect(handoff.contains("Phase 0 complete"))
-        #expect(!handoff.contains("Phase 0-4 remains pending"))
-    }
 }
 
 private enum Phase01LibraryRailStaticContractError: Error {

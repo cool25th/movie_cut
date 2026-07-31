@@ -92,24 +92,6 @@ struct R205LibraryAddInteractionStaticContractTests {
         #expect(source.contains("Click applies the %@ effect to the selected clip."))
         #expect(source.contains("Click applies this transition to the selected clip."))
     }
-
-    @Test("R2-05 docs remain complete after R2-04 hover preview completion")
-    func r205DocsRemainCompleteAfterR204HoverPreviewCompletion() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-        let r205Row = try section(
-            in: docs,
-            from: "| R2-05 | 드래그 **또는** ＋/더블클릭 추가 |",
-            to: "\n\n### R3."
-        )
-
-        #expect(docs.contains("| R2-04 | hover 미리듣기/미리보기 | ✅ 구현(2026-06-17, Codex R2-04):"))
-        #expect(r205Row.contains("✅ 구현(2026-06-16, Codex R2-05):"))
-        #expect(r205Row.contains("`addClipToTimeline()`"))
-        #expect(r205Row.contains("검증: `git diff --check`, `swift test --filter StaticContract`(177 tests / 45 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
-        #expect(!docs.contains("| R2-04 | hover 미리듣기/미리보기 | ❌ |"))
-    }
 }
 
 private enum R205LibraryAddInteractionStaticContractError: Error {

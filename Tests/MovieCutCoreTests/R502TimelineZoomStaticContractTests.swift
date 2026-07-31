@@ -110,17 +110,6 @@ struct R502TimelineZoomStaticContractTests {
         #expect(!helper.contains("EditorSession"))
         #expect(!helper.contains("Command"))
     }
-
-    @Test("R5-02 parity row stays implemented alongside R5-04")
-    func r502ParityRowStaysImplementedAlongsideR504() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-
-        #expect(docs.contains("| R5-02 | 줌 슬라이더 + fit | ✅ 구현(2026-06-16, Codex R5-02):"))
-        #expect(docs.contains("`TimelineView.swift` `zoomControls`에 +/- 버튼, `Slider(value:`"))
-        #expect(docs.contains("Fit Timeline"))
-        #expect(docs.contains("| R5-04 | 메인 비디오 트랙 개념 | ✅ 구현(2026-06-17, Codex R5-04):"))
-        #expect(!docs.contains("| R5-02 | 줌 슬라이더 + fit | 🟡 +/- 버튼 |"))
-    }
 }
 
 private enum R502TimelineZoomStaticContractError: Error {

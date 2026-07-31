@@ -334,7 +334,8 @@ final class ExportEngine {
                         stickerImageURL: stickerImageURL,
                         stickerFontSize: stickerFontSize,
                         keyframes: clip.keyframes,
-                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id)
+                        isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id),
+                        blendMode: clip.blendMode
                     ))
                 }
 
@@ -564,7 +565,8 @@ final class ExportEngine {
                         keyframes: clip.keyframes,
                         isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id),
                         useOpticalFlow: clip.useOpticalFlow,
-                        playbackRate: playbackRate
+                        playbackRate: playbackRate,
+                        blendMode: clip.blendMode
                     ))
                 }
 
@@ -635,6 +637,7 @@ final class ExportEngine {
                 || !clip.keyframes.isEmpty
                 || !clip.effects.isEmpty
                 || clip.isBackgroundRemoved
+                || clip.blendMode != .normal
         } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -770,6 +773,7 @@ final class ExportEngine {
                             stickerImageURL: clip.stickerImageURL,
                             stickerFontSize: clip.stickerFontSize,
                             isBackgroundRemoved: clip.isBackgroundRemoved,
+                            blendMode: clip.blendMode,
                             includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
@@ -2363,6 +2367,7 @@ private struct ExportClipInstructionMetadata {
     var isBackgroundRemoved: Bool
     var useOpticalFlow: Bool = false
     var playbackRate: Double = 1.0
+    var blendMode: BlendMode = .normal
 
     var usesOpticalFlowSlowMotion: Bool {
         opticalFlowSlowMotionRate != nil
@@ -2385,6 +2390,7 @@ private struct ExportClipInstructionMetadata {
             || chromaKeyColor != nil
             || !effects.isEmpty
             || isBackgroundRemoved
+            || blendMode != .normal
             || !keyframes.isEmpty
     }
 }

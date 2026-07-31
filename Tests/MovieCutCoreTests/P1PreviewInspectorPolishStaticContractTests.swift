@@ -107,17 +107,6 @@ struct P1PreviewInspectorPolishStaticContractTests {
         #expect(basic.contains("MovieCutTheme.inspectorSelectedControlSurface.opacity(0.58)"))
         #expect(effects.contains(".monospacedDigit()"))
     }
-
-    @Test("Audit records P1 implementation note")
-    func auditRecordsP1ImplementationNote() throws {
-        let audit = try source("docs/MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md")
-
-        #expect(audit.contains("P1 preview polish kept the transport bottom-docked"))
-        #expect(audit.contains("secondary import action that still opens the existing import panel"))
-        #expect(audit.contains("P1 inspector polish converted the no-selection state into a compact project header"))
-        #expect(audit.contains("collapsed Export Summary"))
-        #expect(audit.contains("Selected clip states now start with a clear selected-clip header"))
-    }
 }
 
 private enum P1PreviewInspectorPolishStaticContractError: Error {

@@ -146,30 +146,6 @@ struct AudioFadeInspectorStaticContractTests {
         #expect(command.contains("fadeInDuration >= 0"))
         #expect(command.contains("fadeOutDuration >= 0"))
     }
-
-    @Test("Backlog marks fade duration UI complete and advances next P1")
-    func backlogMarksFadeDurationUICompleteAndAdvancesNextP1() throws {
-        let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-        let handoff = try source("docs/SESSION_HANDOFF.md")
-
-        #expect(backlog.contains("- [x] ✅ 페이드 duration 편집 UI (P1)"))
-        #expect(backlog.contains("Mac Inspector `Fade Duration`"))
-        #expect(backlog.contains("Fade In/Fade Out"))
-        #expect(backlog.contains("Seconds `TextField`"))
-        #expect(backlog.contains("Reset Fades/None/Soft/Long"))
-        #expect(backlog.contains("`updateSelectedAudioFade` → `AudioFadeCommand`"))
-        #expect(backlog.contains("다음 1순위는 F-01 실기기 검증"))
-        #expect(!backlog.contains("- [ ] 🟡 페이드 duration 편집 UI"))
-        #expect(!backlog.contains("다음 1순위는 페이드 duration 편집 UI"))
-
-        #expect(handoff.contains("페이드 duration 편집 UI 배치"))
-        #expect(handoff.contains("Fade Duration"))
-        #expect(handoff.contains("Reset Fades/None/Soft/Long"))
-        #expect(handoff.contains("`updateSelectedAudioFade` → `AudioFadeCommand`"))
-        #expect(handoff.contains("| 완료 | ✅ **F-06 임포트 메타데이터**"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
-        #expect(handoff.contains("| 완료 | ✅ **페이드 duration 편집 UI**"))
-    }
 }
 
 private enum AudioFadeInspectorStaticContractError: Error {

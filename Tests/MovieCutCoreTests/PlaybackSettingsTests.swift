@@ -63,4 +63,68 @@ struct PlaybackSettingsTests {
         let decoded = try JSONDecoder().decode(Project.self, from: encoded)
         #expect(decoded.playbackSettings == modified.playbackSettings)
     }
+
+    // MARK: - Requirement 5: PreviewQuality
+
+    @Test("Project defaults preview quality to full")
+    func projectDefaultsPreviewQualityFull() {
+        let project = Project(name: "Preview")
+        #expect(project.playbackSettings.previewQuality == .full)
+    }
+
+    @Test("A PlaybackSettings JSON without previewQuality decodes to .full")
+    func playbackSettingsWithoutPreviewQualityDecodesToFull() throws {
+        // Requirement 5.3 + 4.6: a payload written before the previewQuality key
+        // existed must decode without throwing and default to .full, so existing
+        // projects render identically.
+        let preR5JSON = """
+        { "useProxyPlayback": false, "proxyResolution": "p540", "autoProxyOnThermalPressure": true }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(PlaybackSettings.self, from: preR5JSON)
+        #expect(settings.previewQuality == .full)
+        // The other keys are untouched by the new field.
+        #expect(settings.useProxyPlayback == false)
+        #expect(settings.proxyResolution == .p540)
+        #expect(settings.autoProxyOnThermalPressure == true)
+    }
+
+    @Test("The default quality is not encoded, so a no-op project is unchanged")
+    func defaultPreviewQualityIsOmittedFromEncoding() throws {
+        // Encoding only when not default keeps project files byte-stable for
+        // users who never touched the dial. The encoded JSON must NOT contain a
+        // previewQuality key.
+        let settings = PlaybackSettings()
+        let encoded = try JSONEncoder().encode(settings)
+        guard let object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            Issue.record("PlaybackSettings did not encode to a JSON object")
+            return
+        }
+        #expect(object["previewQuality"] == nil)
+    }
+
+    @Test("A non-default preview quality round-trips through JSON")
+    func nonDefaultPreviewQualityRoundTrips() throws {
+        let settings = PlaybackSettings(useProxyPlayback: false, previewQuality: .half)
+        let encoded = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(PlaybackSettings.self, from: encoded)
+        #expect(decoded == settings)
+        #expect(decoded.previewQuality == .half)
+
+        // The key must be present in the encoded payload.
+        guard let object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            Issue.record("PlaybackSettings did not encode to a JSON object")
+            return
+        }
+        #expect(object["previewQuality"] as? String == "half")
+    }
+
+    @Test("An unknown previewQuality raw value falls back to .full rather than throwing")
+    func unknownPreviewQualityFallsBackToFull() throws {
+        // Forward compatibility: if a case is removed in the future, an old file
+        // referencing it must still load, defaulting to full.
+        let json = #"{ "useProxyPlayback": false, "previewQuality": "ultraHD" }"#.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(PlaybackSettings.self, from: json)
+        #expect(settings.previewQuality == .full)
+    }
 }

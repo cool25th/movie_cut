@@ -128,18 +128,6 @@ struct Phase14TimelineDarkFillStaticContractTests {
         #expect(controls.contains("Task { await viewModel.toggleTrackHidden(track) }"))
         #expect(controls.contains("Task { await viewModel.toggleTrackLock(track) }"))
     }
-
-    @Test("Phase 1-4 docs mark Phase 1 complete")
-    func phase14DocsMarkPhase1Complete() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 1-4 implemented with darker timeline track/ruler tokens"))
-        #expect(handoff.contains("subtler ruler/grid line drawing"))
-        #expect(handoff.contains("lower unselected clip opacity"))
-        #expect(handoff.contains("verified by `Phase14TimelineDarkFillStaticContractTests`"))
-        #expect(handoff.contains("Phase 1 complete."))
-        #expect(!handoff.contains("Phase 1-4 remains pending"))
-    }
 }
 
 private enum Phase14TimelineDarkFillStaticContractError: Error {

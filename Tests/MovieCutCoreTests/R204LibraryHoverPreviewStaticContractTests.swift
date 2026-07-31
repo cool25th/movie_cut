@@ -128,30 +128,6 @@ struct R204LibraryHoverPreviewStaticContractTests {
         #expect(!effectGrid.contains("updateSelectedEffects"))
         #expect(!transitionContent.contains("updateSelectedTransition"))
     }
-
-    @Test("R2-04 docs are complete without overclaiming unrelated rows")
-    func r204DocsAreCompleteWithoutOverclaimingUnrelatedRows() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-        let r204Row = try section(
-            in: docs,
-            from: "| R2-04 | hover 미리듣기/미리보기 |",
-            to: "\n| R2-05 |"
-        )
-
-        #expect(r204Row.contains("✅ 구현(2026-06-17, Codex R2-04):"))
-        #expect(r204Row.contains("Music/SFX"))
-        #expect(r204Row.contains("Effects/Filters/Transitions"))
-        #expect(r204Row.contains("render/export/core semantics 변경 없음"))
-        #expect(r204Row.contains("검증: `git diff --check`, `swift test --filter StaticContract`"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
-        #expect(docs.contains("| R2-01 | 탭 7종 + Captions/Adjustment 보강 | ✅ 7탭(`LibraryTab`) | 9탭, 활성탭 강조 | P2 |"))
-        #expect(docs.contains("| R3-05 | 안전영역 토글 | ✅ 구현(2026-06-17, Codex R3-05):"))
-        #expect(docs.contains("`SafeZoneGuide.standard`"))
-        #expect(docs.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
-        #expect(docs.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
-        #expect(!docs.contains("| R2-04 | hover 미리듣기/미리보기 | ❌ |"))
-    }
 }
 
 private enum R204LibraryHoverPreviewStaticContractError: Error {

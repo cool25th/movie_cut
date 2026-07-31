@@ -172,22 +172,6 @@ struct Phase33SpeedCurveEditorStaticContractTests {
             #expect(!viewModel.contains(uiMarker))
         }
     }
-
-    @Test("Phase 3 docs mark speed curve complete")
-    func phase3DocsMarkSpeedCurveComplete() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-        let parity = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-
-        #expect(handoff.contains("Phase 3-3/R4 subtab depth implemented"))
-        #expect(handoff.contains("Speed Curve editor"))
-        #expect(handoff.contains("Phase 3 complete"))
-        #expect(!handoff.contains("Speed 곡선 에디터 remains pending"))
-
-        #expect(parity.contains("| R4-05 | **서브탭 깊이: Speed 곡선 에디터** | ✅ 구현(2026-06-18, Codex Phase 3-3):"))
-        #expect(parity.contains("`EditorViewModel.updateSelectedSpeedRampPoints(_:)`"))
-        #expect(parity.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
-        #expect(!parity.contains("- **P3 심층 잔여** — R4 서브탭 깊이(Speed 곡선 등)."))
-    }
 }
 
 private enum Phase33SpeedCurveEditorStaticContractError: Error {

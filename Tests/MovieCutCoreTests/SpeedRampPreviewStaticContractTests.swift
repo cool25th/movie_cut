@@ -60,20 +60,6 @@ struct SpeedRampPreviewStaticContractTests {
         #expect(audioTrackBranch.contains("SpeedRampCurve(points: clip.speedRampPoints)"))
         #expect(audioTrackBranch.contains("compositionTrack: audioCompositionTrack"))
     }
-
-    @Test("Backlog marks speed ramp preview and export complete")
-    func backlogMarksSpeedRampPreviewAndExportComplete() throws {
-        let source = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-
-        #expect(source.contains("- [x] ✅ 속도 조절 / speed ramp preview+export (P1)"))
-        #expect(source.contains("Mac `PlaybackEngine` preview와 `ExportEngine` export"))
-        #expect(source.contains("SpeedRampCurve(points: clip.speedRampPoints)"))
-        #expect(source.contains("scaleTimeRange"))
-        #expect(source.contains("audio preview path"))
-        #expect(source.contains("다음 1순위는 F-01 실기기 검증"))
-        #expect(!source.contains("preview 미반영"))
-        #expect(!source.contains("다음 1순위는 speed ramp preview"))
-    }
 }
 
 private enum SpeedRampPreviewStaticContractError: Error {

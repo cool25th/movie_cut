@@ -93,6 +93,7 @@ struct InspectorBasicSection: View {
             stickerTransformSection
         }
         opacitySection
+        blendModeSection
 
         if clip.kind.supportsVolume {
             volumeSection
@@ -126,6 +127,7 @@ struct InspectorBasicSection: View {
             stickerTransformSection
         }
         opacitySection
+        blendModeSection
 
         if clip.kind == .video {
             autoReframeSection
@@ -175,6 +177,7 @@ struct InspectorBasicSection: View {
             stickerTransformSection
         }
         opacitySection
+        blendModeSection
     }
 
     /// Subject-tracking auto reframe with preview/apply/cancel (F-19).
@@ -488,6 +491,54 @@ struct InspectorBasicSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
             }
+        }
+    }
+
+    /// Per-clip compositing blend mode (Requirement 4.1). Sits next to opacity
+    /// since both govern how the clip layers over the frame beneath. Applied
+    /// through the existing `SetClipPropertyCommand` so it is a single undoable
+    /// edit like every other basic property.
+    private var blendModeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Blend")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Picker("Blend Mode", selection: Binding(
+                get: { clip.blendMode },
+                set: { newValue in
+                    guard newValue != clip.blendMode else { return }
+                    Task {
+                        try? await viewModel.dispatchCommand(
+                            SetClipPropertyCommand(clipId: clip.id, property: .blendMode(newValue))
+                        )
+                    }
+                }
+            )) {
+                ForEach(MovieCutCore.BlendMode.allCases, id: \.self) { mode in
+                    Text(blendModeDisplayName(mode)).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Blend mode")
+            .accessibilityValue(blendModeDisplayName(clip.blendMode))
+            .accessibilityHint("Sets how this clip composites over the clip beneath it.")
+        }
+    }
+
+    private func blendModeDisplayName(_ mode: MovieCutCore.BlendMode) -> String {
+        switch mode {
+        case .normal: return "Normal"
+        case .multiply: return "Multiply"
+        case .screen: return "Screen"
+        case .overlay: return "Overlay"
+        case .softLight: return "Soft Light"
+        case .hardLight: return "Hard Light"
+        case .darken: return "Darken"
+        case .lighten: return "Lighten"
+        case .colorDodge: return "Color Dodge"
+        case .colorBurn: return "Color Burn"
+        case .add: return "Add"
+        case .subtract: return "Subtract"
         }
     }
 

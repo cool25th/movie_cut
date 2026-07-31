@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct AutoSubtitlesView: View {
     var viewModel: EditorViewModel
 
+    @State private var exportFormat: SubtitleExportFormat = .srt
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Provider", selection: Binding(
@@ -38,11 +40,21 @@ struct AutoSubtitlesView: View {
                 .controlSize(.small)
                 .accessibilityHint(NSLocalizedString("Imports SubRip subtitles as pending subtitle clips.", comment: ""))
 
-                Button("Export SRT...") {
-                    exportSRT()
+                Picker("Subtitle export format", selection: $exportFormat) {
+                    ForEach(SubtitleExportFormat.allCases) { format in
+                        Text(format.displayName).tag(format)
+                    }
                 }
                 .controlSize(.small)
-                .accessibilityHint(NSLocalizedString("Exports the current subtitles as a SubRip file.", comment: ""))
+                .labelsHidden()
+                .help(NSLocalizedString("Subtitle export format", comment: ""))
+                .accessibilityLabel(NSLocalizedString("Subtitle export format", comment: ""))
+
+                Button("Export \(exportFormat.displayName)...") {
+                    exportSubtitles()
+                }
+                .controlSize(.small)
+                .accessibilityHint(NSLocalizedString("Exports the current subtitles in the selected format.", comment: ""))
             }
 
             if viewModel.transcriptionService.isTranscribing {
@@ -77,6 +89,55 @@ struct AutoSubtitlesView: View {
         }
         if panel.runModal() == .OK, let url = panel.url {
             Task { await viewModel.importSubtitles(from: url) }
+        }
+    }
+
+    /// Exports the current subtitles in the format chosen via `exportFormat`.
+    /// SRT delegates to the view model (preserving the existing behavior); VTT
+    /// and ASS serialize directly from the Core model and write to disk here.
+    private func exportSubtitles() {
+        switch exportFormat {
+        case .srt:
+            exportSRT()
+        case .vtt:
+            exportSerialized(fileName: "subtitles.vtt", fileExtension: "vtt") { segments in
+                SubtitleDocument.vttString(from: segments)
+            }
+        case .ass:
+            exportSerialized(fileName: "subtitles.ass", fileExtension: "ass") { segments in
+                SubtitleDocument.assString(from: segments)
+            }
+        }
+    }
+
+    private func exportSerialized(
+        fileName: String,
+        fileExtension: String,
+        serialize: ([TranscriptionSegment]) -> String
+    ) {
+        let segments = viewModel.generatedSubtitleSegments
+        guard !segments.isEmpty else {
+            viewModel.lastStatusMessage = nil
+            viewModel.lastErrorMessage = "There are no subtitle segments to export."
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = fileName
+        if let type = UTType(filenameExtension: fileExtension) {
+            panel.allowedContentTypes = [type]
+        } else {
+            panel.allowedContentTypes = [.plainText]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try serialize(segments).write(to: url, atomically: true, encoding: .utf8)
+            viewModel.lastErrorMessage = nil
+            viewModel.lastStatusMessage = "Exported \(segments.count) subtitle cues to \(url.lastPathComponent)."
+        } catch {
+            viewModel.lastStatusMessage = nil
+            viewModel.lastErrorMessage = error.localizedDescription
         }
     }
 
@@ -195,6 +256,26 @@ private struct SubtitleSegmentRow: View {
                 startTime: changedStart,
                 endTime: changedEnd
             )
+        }
+    }
+}
+
+/// The subtitle container format the user can export from the auto-subtitle
+/// panel. The raw value is the file extension, which also drives the
+/// `NSSavePanel` allowed content type.
+enum SubtitleExportFormat: String, CaseIterable, Identifiable {
+    case srt
+    case vtt
+    case ass
+
+    var id: String { rawValue }
+
+    /// Short label shown in the format picker.
+    var displayName: String {
+        switch self {
+        case .srt: return "SRT"
+        case .vtt: return "VTT"
+        case .ass: return "ASS"
         }
     }
 }

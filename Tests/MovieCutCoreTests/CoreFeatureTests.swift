@@ -29,6 +29,48 @@ struct CoreFeatureTests {
         #expect(snapshot.timeline.tracks.first?.clips.isEmpty == true)
     }
 
+    @Test("Delete of a non-trailing clip preserves the trailing clip's position (gap kept), unlike ripple delete")
+    func normalDeletePreservesGapWhileRippleClosesIt() async throws {
+        // Three contiguous clips at [0,4], [4,4], [8,4]. Deleting the middle
+        // clip: a NORMAL delete must leave the third clip at start=8 (a real
+        // on-timeline gap), while a RIPPLE delete must shift it to start=4.
+        // This is the gap semantics the parity harness relies on for the
+        // non-trailing delete scenario (task 7.1 / requirement 2.1).
+        let clipA = makeClip(
+            sourceRange: TimeRange(start: 0, duration: 4),
+            timelineRange: TimeRange(start: 0, duration: 4)
+        )
+        let clipB = makeClip(
+            sourceRange: TimeRange(start: 4, duration: 4),
+            timelineRange: TimeRange(start: 4, duration: 4)
+        )
+        let clipC = makeClip(
+            sourceRange: TimeRange(start: 8, duration: 4),
+            timelineRange: TimeRange(start: 8, duration: 4)
+        )
+        let track = makeTrack(clips: [clipA, clipB, clipC])
+
+        // Normal delete of the middle clip → gap preserved.
+        let normalSession = EditorSession(project: makeProject(tracks: [track]))
+        try await normalSession.dispatch(DeleteClipCommand(clipId: clipB.id))
+        let afterNormal = await normalSession.snapshot()
+        let normalClips = afterNormal.timeline.tracks[0].clips
+        #expect(normalClips.count == 2)
+        #expect(normalClips.contains(where: { $0.id == clipB.id }) == false)
+        #expect(normalClips.first(where: { $0.id == clipC.id })?.timelineRange.start == 8)
+        // The timeline's nominal duration is still anchored by clipC at [8,12].
+        #expect(afterNormal.timeline.duration == 12)
+
+        // Ripple delete of the middle clip → gap closed (clipC shifts left by 4).
+        let rippleSession = EditorSession(project: makeProject(tracks: [track]))
+        try await rippleSession.dispatch(RippleDeleteCommand(clipId: clipB.id))
+        let afterRipple = await rippleSession.snapshot()
+        let rippleClips = afterRipple.timeline.tracks[0].clips
+        #expect(rippleClips.count == 2)
+        #expect(rippleClips.first(where: { $0.id == clipC.id })?.timelineRange.start == 4)
+        #expect(afterRipple.timeline.duration == 8)
+    }
+
     @Test("Split clip command creates two clips")
     func splitClipCommandCreatesTwoClips() async throws {
         let track = makeTrack()

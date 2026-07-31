@@ -2194,10 +2194,79 @@ extension EditorViewModel {
             )
         }
 
+        // 8b. Trim the selected clip's end to the playhead — covers the "trim"
+        //     parity scenario (requirement 2.1). TRIM_AT positions the playhead
+        //     inside the selected clip, then trimSelectedClipEndToPlayhead runs
+        //     through the same ClipTrimMath the drag/keyboard paths use and
+        //     dispatches TrimClipCommand. The default fixture is a 2s clip; an
+        //     end-trim at 1s halves its duration to ~1.0s.
+        if let trimAtString = environment["MOVIECUT_UITEST_TRIM_AT"],
+           let trimAt = Double(trimAtString),
+           let clip = selectedClip {
+            let clampedTrim = min(max(0, trimAt), clip.timelineRange.start + clip.timelineRange.duration)
+            playheadTime = clampedTrim
+            await trimSelectedClipEndToPlayhead()
+        }
+
+        // 8c. Move the selected clip to a new timeline start — covers the "move"
+        //     parity scenario (requirement 2.1). MOVE_TO sets a new timeline
+        //     start for the selected clip through the same moveClip VM entry
+        //     point the timeline drag uses (MoveClipCommand), preserving its
+        //     duration and source range. Pair with a second clip to observe the
+        //     moved clip's new position in preview/export.
+        if let moveToRaw = environment["MOVIECUT_UITEST_MOVE_TO"],
+           let moveTo = Double(moveToRaw),
+           let clip = selectedClip,
+           let trackId = selectedClipTrackId {
+            await moveClip(
+                clipId: clip.id,
+                sourceTrackId: trackId,
+                targetTrackId: trackId,
+                timelineRange: TimeRange(start: moveTo, duration: clip.timelineRange.duration)
+            )
+        }
+
+        // 8d. Reverse the selected clip — covers the "reverse playback" parity
+        //     scenario (requirement 2.2). updateSelectedReversePlayback toggles
+        //     the clip's isReversed flag through ReverseClipCommand, so preview
+        //     and export must both play the frames in reverse order.
+        if environment["MOVIECUT_UITEST_REVERSE"] == "1", selectedClipId != nil {
+            await updateSelectedReversePlayback(true)
+        }
+
+        // 8e. Freeze-frame the selected clip at the playhead — covers the
+        //     "freeze" parity scenario (requirement 2.2). FREEZE positions the
+        //     playhead at the clip midpoint and holds that frame for
+        //     FREEZE_DURATION seconds (default 2.0), so the export duration
+        //     grows by the freeze duration. This is the parity-path analog of
+        //     the generic-harness FREEZE gate; it dispatches FreezeFrameCommand
+        //     through freezeSelectedFrame.
+        if environment["MOVIECUT_UITEST_FREEZE"] == "1", let clip = selectedClip {
+            let freezeDuration = Double(environment["MOVIECUT_UITEST_FREEZE_DURATION"] ?? "2.0") ?? 2.0
+            playheadTime = clip.timelineRange.start + clip.timelineRange.duration / 2
+            await freezeSelectedFrame(freezeDuration: freezeDuration)
+        }
+
         // 9. Delete scenarios — covers "normal delete (gap preserved)" and
         //    "ripple delete (gap closed)".
+        //
+        //    MOVIECUT_UITEST_DELETE_CLIP_INDEX=<0-based index> overrides the
+        //    default delete target so a NON-trailing clip can be removed, which
+        //    is the only way a real on-timeline gap is produced. Without it the
+        //    harness deletes the selected (last) clip and no gap exists. The
+        //    index is resolved against timeline order on the first track
+        //    (`timelineClipId(at:)`) and deleted through the same command-backed
+        //    VM entry point (`deleteClips(_:)`) the menu uses, dispatching
+        //    DeleteClipCommand (the gap-preserving variant) rather than the
+        //    ripple one.
         if environment["MOVIECUT_UITEST_NORMAL_DELETE"] == "1" {
-            await deleteClip()
+            if let deleteIndexString = environment["MOVIECUT_UITEST_DELETE_CLIP_INDEX"],
+               let deleteIndex = Int(deleteIndexString),
+               let targetClipId = timelineClipId(at: deleteIndex) {
+                await deleteClips([targetClipId])
+            } else {
+                await deleteClip()
+            }
         }
         if environment["MOVIECUT_UITEST_RIPPLE_DELETE"] == "1", let firstClipId = firstTimelineClipId() {
             await rippleDeleteClip(clipId: firstClipId)
@@ -2207,7 +2276,18 @@ extension EditorViewModel {
     /// Returns the id of the first clip on the first track, for delete
     /// scenarios that need a deterministic target.
     private func firstTimelineClipId() -> UUID? {
-        currentProject.timeline.tracks.first?.clips.first?.id
+        timelineClipId(at: 0)
+    }
+
+    /// Returns the id of the clip at `index` (0-based) in timeline order on the
+    /// first track. Used by the parity delete scenario to target a deterministic
+    /// non-trailing clip so an actual gap is left on the timeline. Returns nil
+    /// when the index is out of bounds (the harness falls back to `deleteClip()`
+    /// in that case rather than mutating nothing).
+    private func timelineClipId(at index: Int) -> UUID? {
+        let clips = currentProject.timeline.tracks.first?.clips.sorted(by: Track.clipTimelineOrder) ?? []
+        guard index >= 0, index < clips.count else { return nil }
+        return clips[index].id
     }
 
     /// Polls the playback engine until a composition has installed a player

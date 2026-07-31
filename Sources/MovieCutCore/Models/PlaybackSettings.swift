@@ -21,14 +21,22 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
     /// times. Does not override an explicit `useProxyPlayback = true`. (S7)
     public var autoProxyOnThermalPressure: Bool
 
+    /// The render resolution `PlaybackEngine` scales the project canvas down to
+    /// for the editing preview (Requirement 5). Export always uses
+    /// `project.canvas`, so this never changes the exported file. `.full` (the
+    /// default) leaves the canvas untouched.
+    public var previewQuality: PreviewQuality
+
     public init(
         useProxyPlayback: Bool = false,
         proxyResolution: ProxyResolution = .default,
-        autoProxyOnThermalPressure: Bool = true
+        autoProxyOnThermalPressure: Bool = true,
+        previewQuality: PreviewQuality = .default
     ) {
         self.useProxyPlayback = useProxyPlayback
         self.proxyResolution = proxyResolution
         self.autoProxyOnThermalPressure = autoProxyOnThermalPressure
+        self.previewQuality = previewQuality
     }
 
     public init(from decoder: any Decoder) throws {
@@ -40,6 +48,16 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         proxyResolution = try container.decodeIfPresent(ProxyResolution.self, forKey: .proxyResolution) ?? .default
         // Projects saved before S7 carry no key; default to the safety net on.
         autoProxyOnThermalPressure = try container.decodeIfPresent(Bool.self, forKey: .autoProxyOnThermalPressure) ?? true
+        // Projects saved before Requirement 5 carry no key; default to full
+        // canvas so their preview renders identically. The raw value is decoded
+        // as a String and mapped through `init(rawValue:)` so an unknown value
+        // (e.g. a case removed in a future schema) falls back to the default
+        // rather than throwing — old files keep loading.
+        if let rawValue = try container.decodeIfPresent(String.self, forKey: .previewQuality) {
+            previewQuality = PreviewQuality(rawValue: rawValue) ?? .default
+        } else {
+            previewQuality = .default
+        }
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -47,11 +65,18 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         try container.encode(useProxyPlayback, forKey: .useProxyPlayback)
         try container.encode(proxyResolution, forKey: .proxyResolution)
         try container.encode(autoProxyOnThermalPressure, forKey: .autoProxyOnThermalPressure)
+        // Encode only when not default so existing project files stay
+        // byte-identical when the user never touched this dial. This keeps the
+        // schema-stability guarantee that a no-op setting writes nothing new.
+        if previewQuality != .default {
+            try container.encode(previewQuality, forKey: .previewQuality)
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
         case useProxyPlayback
         case proxyResolution
         case autoProxyOnThermalPressure
+        case previewQuality
     }
 }

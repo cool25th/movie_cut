@@ -52,6 +52,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Person-segmentation background removal toggle.
     case isBackgroundRemoved(Bool)
+
+    /// Replaces the clip compositing blend mode (Requirement 4.1).
+    case blendMode(BlendMode)
 }
 
 /// Sets one editable clip property.
@@ -138,6 +141,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .isBackgroundRemoved(let isBackgroundRemoved):
             previousProperty = .isBackgroundRemoved(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isBackgroundRemoved)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isBackgroundRemoved = isBackgroundRemoved
+        case .blendMode(let blendMode):
+            previousProperty = .blendMode(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode = blendMode
         }
 
         return CommandResult(

@@ -7,15 +7,52 @@ import UniformTypeIdentifiers
 struct MovieCutMacApp: App {
     @State private var viewModel = EditorViewModel()
     @State private var didLoadBootstrapProject = false
+    /// The editor ↔ home router (requirement 3 / design §4.2). Owns the current
+    /// `AppStage`; the `WindowGroup` branches on `router.stage`. Under the
+    /// harness gate (`MOVIECUT_UITEST` / `MOVIECUT_BOOTSTRAP_PROJECT`) the router
+    /// starts in `.editor`, so existing E2E / parity / bootstrap paths are
+    /// unchanged (requirement 3.6).
+    @State private var router: AppStageRouter?
+    /// File-backed recent-projects list (requirement 3.3). Shared by `HomeView`
+    /// and by the save-time recording in
+    /// `EditorViewModel.recordCurrentProjectToRecent`.
+    private let recentProjectsStore = RecentProjectsStore()
     @NSApplicationDelegateAdaptor(MovieCutAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
-            ContentView(viewModel: viewModel)
-                .task {
-                    appDelegate.viewModel = viewModel
-                    await loadBootstrapProjectIfNeeded()
+            // Branch on the router's stage. The router is created lazily on
+            // first appear so its `@Observable` identity is stable for the
+            // window's lifetime. Until it exists (first frame only) show a
+            // neutral background — the `.task` below flips it to home/editor.
+            Group {
+                if let router {
+                    switch router.stage {
+                    case .home:
+                        HomeView(
+                            router: router,
+                            viewModel: viewModel,
+                            store: recentProjectsStore
+                        )
+                        .accessibilityIdentifier("home.surface")
+                    case .editor:
+                        ContentView(viewModel: viewModel)
+                            .accessibilityIdentifier("editor.surface")
+                    }
+                } else {
+                    MovieCutTheme.editorBackground.ignoresSafeArea()
                 }
+            }
+            .task {
+                appDelegate.viewModel = viewModel
+                // Create the router once so its stage decision (home vs editor,
+                // gate-aware) is made from the live process env. Subsequent launches
+                // of the same window reuse the existing router.
+                if router == nil {
+                    router = AppStageRouter(viewModel: viewModel, store: recentProjectsStore)
+                }
+                await loadBootstrapProjectIfNeeded()
+            }
         }
         .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
         .windowResizability(.contentSize)
@@ -35,6 +72,17 @@ struct MovieCutMacApp: App {
                     }
                 }
                     .keyboardShortcut("o", modifiers: .command)
+                // Return to the home/recent-projects screen from the editor
+                // (requirement 3.7). Routes through AppStageRouter so the dirty
+                // Save/Don't Save/Cancel guard runs with the same policy as
+                // applicationShouldTerminate (design §4.2). Disabled when already
+                // home or when the harness gate is active (home is unreachable
+                // under the gate, so the command is a no-op there).
+                Button("Go to Home") {
+                    Task { await router?.requestReturnToHome() }
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(router?.stage != .editor)
                 Button("Save...") {
                     Task { await viewModel.saveProject() }
                 }

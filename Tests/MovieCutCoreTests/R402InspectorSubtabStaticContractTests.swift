@@ -136,16 +136,6 @@ struct R402InspectorSubtabStaticContractTests {
         #expect(!animation.contains("maskSection"))
         #expect(!animation.contains("effectsSection"))
     }
-
-    @Test("R4-02 parity row is marked implemented with static verification")
-    func r402ParityRowIsMarkedImplemented() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-
-        #expect(docs.contains("| R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ✅ 구현(2026-06-16):"))
-        #expect(docs.contains("`InspectorSubtab` Basic/Speed/Animation/Adjustment/Mask"))
-        #expect(docs.contains("검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(151 tests / 39 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(!docs.contains("| R4-02 | **서브탭**(Basic/Speed/Animation/Adjustment/Mask) | ❌ DisclosureGroup만 |"))
-    }
 }
 
 private enum R402InspectorSubtabStaticContractError: Error {

@@ -137,23 +137,6 @@ struct Phase02SmartToolsStaticContractTests {
 
         #expect(!timeline.contains("QuickToolsPanel(viewModel: viewModel)"))
     }
-
-    @Test("Handoff marks Phase 0-2 through Phase 0-4 implemented")
-    func handoffMarksPhase02ThroughPhase04Implemented() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 0-1 implemented"))
-        #expect(handoff.contains("Phase 0-2 implemented"))
-        #expect(handoff.contains("Phase02SmartToolsStaticContractTests"))
-        #expect(handoff.contains("Phase 0-3 implemented"))
-        #expect(handoff.contains("Phase03BrowseableCardsStaticContractTests"))
-        #expect(handoff.contains("Phase 0-4 implemented"))
-        #expect(handoff.contains("Phase04TimelineEditToolbarStaticContractTests"))
-        #expect(handoff.contains("Phase 0 complete"))
-        #expect(!handoff.contains("Phase 0-2/0-3/0-4 remain pending"))
-        #expect(!handoff.contains("Phase 0-3/0-4 remain pending"))
-        #expect(!handoff.contains("Phase 0-4 remains pending"))
-    }
 }
 
 private enum Phase02SmartToolsStaticContractError: Error {

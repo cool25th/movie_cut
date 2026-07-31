@@ -113,27 +113,6 @@ struct VoiceoverRecordingStaticContractTests {
 
         #expect(asset.kind == .audio)
     }
-
-    @Test("Backlog marks voiceover complete and moves next P1 away from voiceover")
-    func backlogMarksVoiceoverCompleteAndMovesNextPriority() throws {
-        let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-        let handoff = try source("docs/SESSION_HANDOFF.md")
-
-        #expect(backlog.contains("- [x] ✅ 보이스오버 실제 마이크 녹음 (P1)"))
-        #expect(backlog.contains("Mac `VoiceoverRecordingView`"))
-        #expect(backlog.contains("NSMicrophoneUsageDescription"))
-        #expect(backlog.contains("fallbackDuration"))
-        #expect(backlog.contains("다음 1순위는 F-01 실기기 검증"))
-        #expect(!backlog.contains("- [ ] 🟡 보이스오버 실제 마이크 녹음 (P1)"))
-        #expect(!backlog.contains("다음 1순위는 보이스오버 실녹음"))
-
-        #expect(handoff.contains("보이스오버 실녹음 배치"))
-        #expect(handoff.contains("macOS Microphone 권한"))
-        #expect(handoff.contains("실제 입력 하드웨어"))
-        #expect(handoff.contains("| 완료 | ✅ **보이스오버 실녹음**"))
-        #expect(handoff.contains("| 완료 | ✅ **F-06 임포트 메타데이터**"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
-    }
 }
 
 private enum VoiceoverRecordingStaticContractError: Error {

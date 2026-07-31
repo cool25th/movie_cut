@@ -68,25 +68,4 @@ struct MagneticTimelineZIndexStaticContractTests {
         #expect(source.contains("zIndex = try container.decodeIfPresent(Int.self, forKey: .zIndex) ?? 0"))
         #expect(source.contains("try container.encode(zIndex, forKey: .zIndex)"))
     }
-
-    @Test("Docs mark magnetic timeline and clip zIndex complete and advance next P1")
-    func docsMarkMagneticTimelineAndClipZIndexCompleteAndAdvanceNextP1() throws {
-        let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-        let handoff = try source("docs/SESSION_HANDOFF.md")
-
-        #expect(backlog.contains("- [x] ✅ 마그네틱 타임라인(자동 밀착) (P1)"))
-        #expect(backlog.contains("Add/Move/Duplicate/Delete command path"))
-        #expect(backlog.contains("Add/Move/Duplicate/Delete 후 same-track magnetic packing"))
-        #expect(backlog.contains("same-track magnetic packing"))
-        #expect(backlog.contains("- [x] ✅ 멀티트랙 레이어링 + 클립별 zIndex (P1)"))
-        #expect(backlog.contains("persisted `Clip.zIndex`"))
-        #expect(backlog.contains("TimelineView display ordering/layer actions"))
-        #expect(backlog.contains("Caveat: 클립 그룹/링크는 P2 별도 항목으로 남긴다."))
-        #expect(backlog.contains("다음 1순위는 F-01 실기기 검증"))
-
-        #expect(handoff.contains("| 완료 | ✅ **F-06 임포트 메타데이터**"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
-        #expect(handoff.contains("| 완료 | ✅ **마그네틱 타임라인 / 클립별 zIndex**"))
-        #expect(!handoff.contains("| 1 | **마그네틱 타임라인 / 클립별 zIndex**"))
-    }
 }

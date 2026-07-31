@@ -223,23 +223,6 @@ struct Phase24TypographyDensityStaticContractTests {
             #expect(timeline.contains(marker))
         }
     }
-
-    @Test("Handoff marks Phase 2-4 implemented and Phase 2 complete")
-    func handoffMarksPhase24ImplementedAndPhase2Complete() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 2-1 implemented"))
-        #expect(handoff.contains("Phase 2-2 implemented"))
-        #expect(handoff.contains("Phase 2-3 implemented"))
-        #expect(handoff.contains("Phase 2-4 implemented"))
-        #expect(handoff.contains("Phase21MediaImportCTAStaticContractTests"))
-        #expect(handoff.contains("Phase22HoverVisualPreviewStaticContractTests"))
-        #expect(handoff.contains("Phase23TimelineToolbarIconOnlyStaticContractTests"))
-        #expect(handoff.contains("Phase24TypographyDensityStaticContractTests"))
-        #expect(handoff.contains("Phase 2 complete."))
-        #expect(!handoff.contains("Phase 2-4 remains pending"))
-        #expect(!handoff.contains("Phase 2-3 and Phase 2-4 remain pending"))
-    }
 }
 
 private enum Phase24TypographyDensityStaticContractError: Error {

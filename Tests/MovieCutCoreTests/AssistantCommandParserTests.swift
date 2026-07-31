@@ -113,13 +113,22 @@ struct AssistantStaticContractTests {
         try String(contentsOfFile: path, encoding: .utf8)
     }
 
-    @Test("view model parses and executes assistant intents")
+    @Test("view model routes assistant intents via AIEditingProvider")
     func viewModelExecutes() throws {
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
         #expect(viewModel.contains("func runAssistantCommand"))
-        #expect(viewModel.contains("AssistantCommandParser.parse"))
         #expect(viewModel.contains("func executeAssistantIntent"))
         #expect(viewModel.contains("assistantTargetClips"))
+
+        // Requirement 10.3: the assistant UI must go through the
+        // `AIEditingProvider` protocol rather than parsing directly. The provider
+        // seam lives in the dedicated extension file, and the (now-wrapped)
+        // parser is still reachable there as the unrecognized-input fallback.
+        let provider = try source("App/MovieCutMac/EditorViewModel+AssistantProvider.swift")
+        #expect(provider.contains("any AIEditingProvider"))
+        #expect(provider.contains("RuleBasedEditingProvider"))
+        #expect(provider.contains("func executeAssistantPlan"))
+        #expect(provider.contains("AssistantCommandParser.parse"))
     }
 
     @Test("inspector exposes the assistant panel")

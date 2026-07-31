@@ -99,6 +99,10 @@ public actor ProjectStore {
         decoder.dateDecodingStrategy = .iso8601
         var project = try decoder.decode(Project.self, from: data)
         try ProjectMigrationRunner.migrate(&project)
+        // Compound-clip structural validation (Requirement 7.6): enforce
+        // no-nesting and resolved references after decode + migration so a
+        // damaged file is rejected explicitly instead of rendered half-flat.
+        try project.validateCompounds()
         return project
     }
 }

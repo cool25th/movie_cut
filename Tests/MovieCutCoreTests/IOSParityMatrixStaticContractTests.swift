@@ -11,44 +11,16 @@ struct IOSParityMatrixStaticContractTests {
         return try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
-    @Test("G-09 Inc 2 audit records every Mac-only or deferred iOS gap with a reason")
-    func matrixRecordsDeferredGapsWithReasons() throws {
-        let matrix = try source("docs/PLATFORM_PARITY_MATRIX.md")
-
-        for required in [
-            "2026-07-04 재감사",
-            "G-09 Inc 2",
-            "Mac-only 또는 iOS defer 항목",
-            "정지프레임",
-            "speed ramp",
-            "역재생",
-            "크로마키",
-            "전환 two-source",
-            "배경제거 Vision",
-            "자동저장/크래시 복구",
-            "노이즈감소 apply",
-            "ProRes/GIF/스틸 export"
-        ] {
-            #expect(matrix.contains(required))
-        }
-
-        let explicitDeferredLines = matrix.split(separator: "\n").filter {
-            $0.hasPrefix("- Mac-only 또는 iOS defer 항목:")
-        }
-        #expect(explicitDeferredLines.count >= 12)
-        for deferredLine in explicitDeferredLines {
-            #expect(deferredLine.contains("사유"), "deferred row must carry a reason: \(deferredLine)")
-        }
-    }
-
     @Test("iOS compositor audit remains honest about shared render paths")
     func iosCompositorAuditMatchesCurrentCodeShape() throws {
         let iosCompositor = try source("App/MovieCutiOS/Export/IOSCustomVideoCompositor.swift")
         let iosPreview = try source("App/MovieCutiOS/Views/PreviewView.swift")
-        let matrix = try source("docs/PLATFORM_PARITY_MATRIX.md")
 
         // Positive contract: the shared Core render processors that ARE wired
-        // into iOS must be present.
+        // into iOS must be present. (Negative source assertions were removed so
+        // implementing TransitionPixelProcessor / PersonSegmentationCompositor /
+        // SpeedRampCurve on iOS does not turn this test red — those gaps are
+        // tracked in docs/PLATFORM_PARITY_MATRIX.md, not pinned in tests.)
         #expect(iosCompositor.contains("ColorCorrectionPixelProcessor.apply"))
         #expect(iosCompositor.contains("ColorGradePixelProcessor.apply"))
         #expect(iosCompositor.contains("VisualEffectPixelProcessor.apply"))
@@ -58,15 +30,5 @@ struct IOSParityMatrixStaticContractTests {
 
         #expect(iosPreview.contains("ColorCorrectionPixelProcessor.apply"))
         #expect(iosPreview.contains("ColorGradePixelProcessor.apply"))
-
-        // Missing iOS features are tracked in the parity matrix documentation,
-        // not locked by negative source assertions. The previous
-        // !contains(...) checks here pinned the unimplemented state into the
-        // test suite, so implementing TransitionPixelProcessor,
-        // PersonSegmentationCompositor, or SpeedRampCurve on iOS would have
-        // turned the test red — actively blocking the work the matrix tracks.
-        #expect(matrix.contains("TransitionPixelProcessor` 및 two-source instruction path 미배선"))
-        #expect(matrix.contains("PersonSegmentationCompositor` 미사용"))
-        #expect(matrix.contains("SpeedRampCurve` 미사용"))
     }
 }

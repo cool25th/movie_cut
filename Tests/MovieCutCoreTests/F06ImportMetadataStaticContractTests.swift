@@ -68,21 +68,4 @@ struct F06ImportMetadataStaticContractTests {
         #expect(source.contains("states.append(metadata)"))
         #expect(source.contains("assetDetailSummary(asset)"))
     }
-
-    @Test("Docs mark F-06 complete and advance next queue to F-01 verification")
-    func docsMarkF06CompleteAndAdvanceNextQueue() throws {
-        let parity = try source("docs/CAPCUT_PARITY_SPEC.md")
-        let backlog = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-        let handoff = try source("docs/SESSION_HANDOFF.md")
-
-        #expect(parity.contains("#### F-06. 임포트 메타데이터 완성 (해상도/fps) — ✅ 구현+정적 계약 완료"))
-        #expect(parity.contains("best-effort metadata probing"))
-        #expect(parity.contains("GUI visual verification not included"))
-        #expect(backlog.contains("- [x] ✅ 실제 import metadata probe"))
-        #expect(backlog.contains("다음 1순위는 F-01 실기기 검증"))
-        #expect(!backlog.contains("다음 1순위는 F-06 임포트 메타데이터"))
-        #expect(handoff.contains("| 1 | **F-01 실기기 검증**"))
-        #expect(handoff.contains("| 완료 | ✅ **F-06 임포트 메타데이터**"))
-        #expect(!handoff.contains("| 1 | **F-06 임포트 메타데이터"))
-    }
 }

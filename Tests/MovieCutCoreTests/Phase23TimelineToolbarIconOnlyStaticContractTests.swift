@@ -215,36 +215,18 @@ struct Phase23TimelineToolbarIconOnlyStaticContractTests {
         }
     }
 
-    @Test("TimelineView remains edit only without Smart or QuickTools actions")
-    func timelineViewRemainsEditOnlyWithoutSmartOrQuickToolsActions() throws {
+    @Test("TimelineView remains free of the removed QuickToolsPanel")
+    func timelineViewRemainsFreeOfTheRemovedQuickToolsPanel() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
 
-        for forbidden in [
-            "QuickToolsPanel",
-            "runAutoCutOnSelection",
-            "detectSceneChangesForSelection",
-            "detectBeats",
-            "autoReframeSelection",
-            "applyNoiseReductionToSelection",
-            "extractAudioFromSelection"
-        ] {
-            #expect(!timeline.contains(forbidden))
-        }
-    }
-
-    @Test("Handoff marks Phase 2-3 implemented through Phase 2 completion")
-    func handoffMarksPhase23ImplementedThroughPhase2Completion() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 2-1 implemented"))
-        #expect(handoff.contains("Phase 2-2 implemented"))
-        #expect(handoff.contains("Phase 2-3 implemented"))
-        #expect(handoff.contains("Phase23TimelineToolbarIconOnlyStaticContractTests"))
-        #expect(handoff.contains("Phase 2-4 implemented"))
-        #expect(handoff.contains("Phase24TypographyDensityStaticContractTests"))
-        #expect(!handoff.contains("Phase 2-3 and Phase 2-4 remain pending"))
-        #expect(handoff.contains("Phase 2 complete."))
-        #expect(!handoff.contains("Phase 2-4 remains pending"))
+        // Boundary-direction (req 15.2, KEEP): QuickToolsPanel was removed and must
+        // not return — a removal-regression guard, not feature policy.
+        // The AI Smart tool entries that used to live here (runAutoCutOnSelection,
+        // detectBeats, autoReframeSelection, applyNoiseReductionToSelection,
+        // extractAudioFromSelection) were defect-pinning: they locked those tools
+        // out of TimelineView and blocked legitimate CapCut-parity wiring
+        // (req 9 vocal separation, req 10 provider wiring). Removed.
+        #expect(!timeline.contains("QuickToolsPanel"))
     }
 }
 

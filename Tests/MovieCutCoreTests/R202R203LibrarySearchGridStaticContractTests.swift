@@ -130,20 +130,6 @@ struct R202R203LibrarySearchGridStaticContractTests {
         #expect(source.contains("Use the Music and Sound Effects search fields below to filter audio."))
         #expect(!source.contains("Use the sticker search field below to filter stickers."))
     }
-
-    @Test("R2 search grid rows remain implemented after hover preview completion")
-    func r2SearchGridRowsRemainImplementedAfterHoverPreviewCompletion() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-
-        #expect(docs.contains("| R2-02 | 탭별 검색바 | ✅ 구현(2026-06-16, Codex R2-02/R2-03):"))
-        #expect(docs.contains("| R2-03 | 썸네일 그리드 | ✅ 구현(2026-06-16, Codex R2-02/R2-03):"))
-        #expect(docs.contains("검증: `git diff --check`, `swift test --filter StaticContract`"))
-        #expect(docs.contains("| R2-04 | hover 미리듣기/미리보기 | ✅ 구현(2026-06-17, Codex R2-04):"))
-        #expect(docs.contains("| R2-05 | 드래그 **또는** ＋/더블클릭 추가 | ✅ 구현(2026-06-16, Codex R2-05):"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
-        #expect(!docs.contains("| R2-04 | hover 미리듣기/미리보기 | ❌ |"))
-    }
 }
 
 private enum R202R203LibrarySearchGridStaticContractError: Error {

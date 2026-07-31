@@ -37,28 +37,12 @@ struct Phase04TimelineEditToolbarStaticContractTests {
         #expect(!timeline.contains("QuickToolsPanel(viewModel: viewModel)"))
     }
 
-    @Test("TimelineView does not call AI Smart tool actions")
-    func timelineViewDoesNotCallAISmartToolActions() throws {
-        let timeline = try source("App/MovieCutMac/TimelineView.swift")
-
-        for forbidden in [
-            "runAutoCutOnSelection",
-            "detectSceneChangesForSelection",
-            "detectBeats",
-            "autoReframeSelection",
-            "applyNoiseReductionToSelection",
-            "extractAudioFromSelection",
-            "Auto Cut",
-            "Detect Scenes",
-            "Detect Beats",
-            "Clear Beats",
-            "Auto Reframe",
-            "Noise Reduce",
-            "Extract Audio"
-        ] {
-            #expect(!timeline.contains(forbidden))
-        }
-    }
+    // Removed `timelineViewDoesNotCallAISmartToolActions` (defect-pinning, req 15.2):
+    // it locked "TimelineView must not call any AI Smart tool action" by forbidding
+    // runAutoCutOnSelection / detectBeats / autoReframeSelection / Noise Reduce /
+    // Extract Audio, etc. That actively blocked legitimate CapCut-parity wiring of
+    // those tools into the timeline surface. The edit-toolbar scope boundary is
+    // still guarded by editToolbarExposesOnlyRequestedEditActions below.
 
     @Test("Edit toolbar exposes only requested edit actions")
     func editToolbarExposesOnlyRequestedEditActions() throws {
@@ -215,17 +199,6 @@ struct Phase04TimelineEditToolbarStaticContractTests {
         ] {
             #expect(performer.contains(marker))
         }
-    }
-
-    @Test("Handoff marks Phase 0-4 implemented and Phase 0 complete")
-    func handoffMarksPhase04ImplementedAndPhase0Complete() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 0-4 implemented"))
-        #expect(handoff.contains("edit-only timeline toolbar"))
-        #expect(handoff.contains("Phase 0 complete"))
-        #expect(handoff.contains("Phase04TimelineEditToolbarStaticContractTests"))
-        #expect(!handoff.contains("Phase 0-4 remains pending"))
     }
 }
 

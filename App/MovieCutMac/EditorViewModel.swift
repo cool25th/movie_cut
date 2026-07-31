@@ -4750,22 +4750,19 @@ final class EditorViewModel {
 
     /// Parses a natural-language instruction and executes the mapped intent
     /// across the targeted clips using existing commands (F-21).
+    ///
+    /// Routed through `AIEditingProvider` (requirement 10.3) — see
+    /// `executeAssistantPlan(for:)` in `EditorViewModel+AssistantProvider.swift`.
     func runAssistantCommand(_ text: String) async {
-        assistantResultMessage = nil
-        assistantSuggestions = []
-
-        switch AssistantCommandParser.parse(text) {
-        case .unrecognized(let suggestions):
-            assistantSuggestions = suggestions
-            assistantResultMessage = "I couldn't map that to an edit. Try one of the examples."
-            lastStatusMessage = nil
-
-        case .recognized(let intent):
-            await executeAssistantIntent(intent)
-        }
+        await executeAssistantPlan(for: text)
     }
 
-    private func executeAssistantIntent(_ intent: AssistantIntent) async {
+    /// Applies one parsed intent to the timeline.
+    ///
+    /// Internal (not private) so `EditorViewModel+AssistantProvider.swift` can feed
+    /// the intents produced by `AIEditingProvider.plan` through the same path the
+    /// legacy direct-parse flow used (requirement 10.3).
+    func executeAssistantIntent(_ intent: AssistantIntent) async {
         do {
             let snapshot = await session.snapshot()
 

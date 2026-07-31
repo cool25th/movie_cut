@@ -140,6 +140,23 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// `duckingRanges` (0.25 is roughly -12 dB). Nil disables ducking.
     public var duckingLevel: Double?
 
+    /// The compositing blend mode applied when this clip overlays another clip.
+    /// Defaults to `.normal` (source-over), matching the layering behavior that
+    /// predated this field. Projects saved before the field existed decode to
+    /// `.normal`, and the value is only written when it differs from the
+    /// default so `.normal` clips stay byte-identical to their pre-feature JSON.
+    /// (Requirements 4.4 / 4.7 — CapCut clip-blending parity.)
+    public var blendMode: BlendMode
+
+    /// When non-nil, this clip is a container for the referenced
+    /// `CompoundDefinition` (Requirement 7). The flatten pass (task 5.8)
+    /// replaces this clip in the rendered timeline with the definition's child
+    /// clips, shifted by this clip's timeline start. **Inc 1 forbids nesting**:
+    /// a clip carrying a `compoundId` is rejected at creation time and at load
+    /// time, and it may not itself appear inside another compound's children.
+    /// Decodes to nil for legacy projects. The schema bump is deferred to task 6.
+    public var compoundId: UUID?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -169,6 +186,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case groupId
         case duckingRanges
         case duckingLevel
+        case blendMode
+        case compoundId
     }
 
     /// Creates a clip.
@@ -202,7 +221,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         colorGrade: ColorGrade? = nil,
         groupId: UUID? = nil,
         duckingRanges: [TimeRange] = [],
-        duckingLevel: Double? = nil
+        duckingLevel: Double? = nil,
+        blendMode: BlendMode = .normal,
+        compoundId: UUID? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -243,6 +264,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.groupId = groupId
         self.duckingRanges = duckingRanges
         self.duckingLevel = duckingLevel
+        self.blendMode = blendMode
+        self.compoundId = compoundId
     }
 
     public init(from decoder: any Decoder) throws {
@@ -275,6 +298,13 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
         duckingRanges = try container.decodeIfPresent([TimeRange].self, forKey: .duckingRanges) ?? []
         duckingLevel = try container.decodeIfPresent(Double.self, forKey: .duckingLevel)
+        // Projects predating the blendMode field carry no key; decode to .normal
+        // so multi-track layering matches the historical source-over behavior.
+        blendMode = try container.decodeIfPresent(BlendMode.self, forKey: .blendMode) ?? .defaultValue
+        // decodeIfPresent ?? nil so a clip carrying no compoundId (the legacy
+        // and the common case) loads with a nil reference. No-nesting and
+        // broken-ref validation happens in `Project.validateCompounds` at load.
+        compoundId = try container.decodeIfPresent(UUID.self, forKey: .compoundId) ?? nil
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -309,6 +339,14 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
             try container.encode(duckingRanges, forKey: .duckingRanges)
         }
         try container.encodeIfPresent(duckingLevel, forKey: .duckingLevel)
+        // Only persist the blend mode when it is not the default, so a .normal
+        // clip stays byte-identical to its pre-feature JSON (Requirement 4.4).
+        if blendMode != .defaultValue {
+            try container.encode(blendMode, forKey: .blendMode)
+        }
+        // Persist the compound reference only when set, so a plain clip stays
+        // byte-identical to its pre-feature JSON (Requirement 7.6).
+        try container.encodeIfPresent(compoundId, forKey: .compoundId)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

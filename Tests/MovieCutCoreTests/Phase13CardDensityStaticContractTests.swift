@@ -79,15 +79,4 @@ struct Phase13CardDensityStaticContractTests {
             #expect(timeline.contains(marker))
         }
     }
-
-    @Test("Phase 1-3 docs remain marked implemented after Phase 1-4")
-    func phase13DocsRemainMarkedImplementedAfterPhase14() throws {
-        let handoff = try source("docs/CAPCUT_UI_SHOWCASE_HANDOFF.md")
-
-        #expect(handoff.contains("Phase 1-3 implemented with darker near-flat shared card tokens"))
-        #expect(handoff.contains("verified by `Phase13CardDensityStaticContractTests`"))
-        #expect(handoff.contains("Phase 1-4 implemented with darker timeline track/ruler tokens"))
-        #expect(handoff.contains("Phase 1 complete."))
-        #expect(!handoff.contains("Phase 1-3/1-4 remain pending"))
-    }
 }

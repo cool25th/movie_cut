@@ -68,13 +68,12 @@ struct ThermalProxyDowngradeTests {
 
     // MARK: - Migration
 
-    @Test("A schema v2 project migrates to v3 through the registered chain")
-    func v2ProjectMigratesToV3() throws {
+    @Test("A schema v2 project migrates to current through the registered chain")
+    func v2ProjectMigratesToCurrent() throws {
         var project = Project(name: "pre-thermal", schemaVersion: 2)
         try ProjectMigrationRunner.migrate(&project)
         #expect(project.schemaVersion == currentSchemaVersion)
-        #expect(currentSchemaVersion == 3)
-        // The new field's default applies.
+        // The thermal field's v2→v3 default applies and survives later steps.
         #expect(project.playbackSettings.autoProxyOnThermalPressure == true)
     }
 

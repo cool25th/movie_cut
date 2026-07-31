@@ -213,6 +213,50 @@ run_scenario "normal_delete" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
   "MOVIECUT_UITEST_NORMAL_DELETE=1" || FAIL=1
 
+# ---------------------------------------------------------------------------
+# Task 7.2 — additional editing-operation parity scenarios (requirement 2.1,
+# 2.2, 2.5). Each reuses run_scenario so it inherits the watchdog, the
+# work-dir preservation on failure, and the no-silent-skip discipline.
+# `--expect-duration` is fed from the harness's own measured composition
+# duration (the helper extracts `duration=` from the result line and passes
+# it to verify_preview_export_parity.py), so the export length is asserted
+# against the preview engine's measurement rather than a hand-tuned constant.
+# ---------------------------------------------------------------------------
+
+echo "Scenario 9: trim end to playhead"
+# 2s source VIDEO_A, end-trimmed at 1.0s -> ~1.0s export. Sample well inside.
+run_scenario "trim_end" "0.25,0.75" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_TRIM_AT=1.0" || FAIL=1
+
+echo "Scenario 10: move clip to new timeline start"
+# Single 2s clip moved from start=0 to start=1.0 (duration preserved) -> 2.0s
+# export spanning [1.0, 3.0]. Sample inside the clip body.
+run_scenario "move_clip" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_MOVE_TO=1.0" || FAIL=1
+
+echo "Scenario 11: ripple delete (gap closed)"
+# VIDEO_A (2s) + VIDEO_B (3s) = 5s. Ripple-delete the first clip closes the
+# gap -> ~3.0s export. Sample inside the remaining clip.
+run_scenario "ripple_delete" "0.5,2.0" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
+  "MOVIECUT_UITEST_RIPPLE_DELETE=1" || FAIL=1
+
+echo "Scenario 12: reverse playback"
+# VIDEO_A (2s) reversed; duration is unchanged -> ~2.0s export. Sample inside.
+run_scenario "reverse_playback" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_REVERSE=1" || FAIL=1
+
+echo "Scenario 13: freeze frame"
+# VIDEO_A (2s) with a 2.0s freeze at its midpoint -> ~4.0s export. Sample
+# inside, bracketing the freeze hold region.
+run_scenario "freeze_frame" "0.5,3.0" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_FREEZE=1" \
+  "MOVIECUT_UITEST_FREEZE_DURATION=2.0" || FAIL=1
+
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"

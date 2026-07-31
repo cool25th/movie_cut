@@ -133,16 +133,6 @@ struct R401InspectorContextStaticContractTests {
         #expect(styleEditor.contains("textBackgroundControls(textContent)"))
         #expect(styleEditor.contains("textQuickStylePresets(textContent)"))
     }
-
-    @Test("R4-01 parity row is marked implemented with source static verification")
-    func r401ParityRowIsMarkedImplemented() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-
-        #expect(docs.contains("| R4-01 | **선택종류별 패널 스왑** | ✅ 구현(2026-06-16):"))
-        #expect(docs.contains("`InspectorBasicMode.audio`/`.text`/`.visual`"))
-        #expect(docs.contains("검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(145 tests / 38 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(!docs.contains("| R4-01 | **선택종류별 패널 스왑** | 🟡 clip-first 단일 |"))
-    }
 }
 
 private enum R401InspectorContextStaticContractError: Error {

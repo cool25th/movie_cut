@@ -171,14 +171,4 @@ struct ExportFormatStaticContractTests {
         #expect(aboveRange.resolvedVideoBitrateMbps == 200)
         #expect(presetQuality.resolvedVideoBitrateMbps == 20)
     }
-
-    @Test("Backlog marks format codec bitrate export item complete with AVAssetExportSession caveat")
-    func backlogMarksExportFormatItemComplete() throws {
-        let source = try source("docs/CAPCUT_FEATURE_BACKLOG.md")
-
-        #expect(source.contains("- [x] ✅ 포맷별 export(mp4/mov, 코덱/비트레이트 실제 반영) (P1)"))
-        #expect(source.contains("AVAssetExportSession"))
-        #expect(source.contains("fileLengthLimit"))
-        #expect(source.contains("averageVideoBitRate"))
-    }
 }

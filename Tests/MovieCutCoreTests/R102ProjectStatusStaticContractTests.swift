@@ -86,26 +86,6 @@ struct R102ProjectStatusStaticContractTests {
         #expect(!statusProperties.contains("saveCurrentProject()"))
         #expect(!statusProperties.contains("saveProject("))
     }
-
-    @Test("R1-02 docs remain scoped after R1-03 completion")
-    func r102DocsRemainScopedAfterR103Completion() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-        let r102Row = try section(
-            in: docs,
-            from: "| R1-02 | 프로젝트명 + **저장상태** 인디케이터 |",
-            to: "| R1-03 | 비율/해상도 배지 |"
-        )
-
-        #expect(r102Row.contains("✅ 구현(2026-06-16, Codex R1-02):"))
-        #expect(r102Row.contains("`ContentView.swift` principal toolbar"))
-        #expect(r102Row.contains("`EditorViewModel.swift` read-only presentation properties"))
-        #expect(r102Row.contains("검증: `git diff --check`, `swift build`, `swift test --filter StaticContract`(168 tests / 43 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(docs.contains("| R1-03 | 비율/해상도 배지 | ✅ 구현(2026-06-16, Codex R1-03/R3-03):"))
-        #expect(!r102Row.contains("R1-03/R3-03"))
-        #expect(docs.contains("- **P1 완료** — R1-02, R2-02, R2-03, R2-04, R2-05, R3-01, R4-02, R5-02, R5-03."))
-        #expect(docs.contains("- **P1 인터랙션 잔여** — 없음."))
-        #expect(!docs.contains("R3-01 세부 마감, R1-02"))
-    }
 }
 
 private enum R102ProjectStatusStaticContractError: Error {

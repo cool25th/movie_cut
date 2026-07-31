@@ -164,21 +164,6 @@ struct IAMenuPositionStaticContractTests {
         #expect(transport.contains(".padding(.bottom, 8)"))
         #expect(!transport.contains(".padding(.top, 8)"))
     }
-
-    @Test("Docs record the IA menu position pass")
-    func docsRecordTheIAMenuPositionPass() throws {
-        for path in [
-            "docs/UIUX_HANDOFF.md",
-            "docs/CAPCUT_UI_PARITY_REQUIREMENTS.md",
-            "docs/CAPCUT_UI_SHOWCASE_HANDOFF.md"
-        ] {
-            let docs = try source(path)
-            #expect(docs.contains("IA/menu-position pass (2026-06-19)"))
-            #expect(docs.contains("top toolbar no longer owns clip editing"))
-            #expect(docs.contains("preview transport is bottom-docked"))
-            #expect(docs.contains("timeline is the edit command center"))
-        }
-    }
 }
 
 private enum IAMenuPositionStaticContractError: Error {

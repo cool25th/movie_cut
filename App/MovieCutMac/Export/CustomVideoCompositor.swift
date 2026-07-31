@@ -24,6 +24,7 @@ struct CustomCompositionClipEffect {
     let stickerImageURL: URL?
     let stickerFontSize: CGFloat?
     let isBackgroundRemoved: Bool
+    let blendMode: BlendMode
 
     init?(
         trackID: CMPersistentTrackID,
@@ -44,6 +45,7 @@ struct CustomCompositionClipEffect {
         stickerImageURL: URL? = nil,
         stickerFontSize: CGFloat? = nil,
         isBackgroundRemoved: Bool = false,
+        blendMode: BlendMode = .normal,
         includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -57,6 +59,7 @@ struct CustomCompositionClipEffect {
             || stickerEmoji != nil
             || stickerImageURL != nil
             || isBackgroundRemoved
+            || blendMode != .normal
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
             || (includeIdentitySource && trackID != kCMPersistentTrackID_Invalid)
         else {
@@ -81,6 +84,7 @@ struct CustomCompositionClipEffect {
         self.stickerImageURL = stickerImageURL
         self.stickerFontSize = stickerFontSize
         self.isBackgroundRemoved = isBackgroundRemoved
+        self.blendMode = blendMode
     }
 
     var hasStickerOverlay: Bool {
@@ -465,14 +469,27 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
             }
-            
+
             var image = CIImage(cvPixelBuffer: sourceBuffer)
-            
+
             if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 image = self.applyClipEffects(
                     to: image,
                     effect: effect,
+                    instruction: instruction,
+                    request: request
+                )
+
+                // Layer any additional active tracks beneath/over the primary
+                // frame so a clip with a non-`.normal` blend mode is composited
+                // over the frame beneath it (Requirement 4.2 / 4.5). `.normal`
+                // clips take plain source-over compositing, byte-identical to
+                // the pre-feature layering step (Requirement 4.3).
+                image = self.layerActiveTracks(
+                    over: image,
+                    primaryEffect: effect,
+                    primaryTrackID: trackID,
                     instruction: instruction,
                     request: request
                 )
@@ -498,6 +515,103 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             }
 
             self.finishRequest(request, with: image)
+        }
+    }
+
+    /// Composites the remaining active source tracks over the primary frame.
+    ///
+    /// The primary track (the top-most active clip, already rendered into
+    /// `primaryImage`) is composited last so its blend mode can apply against
+    /// the frame beneath it. Each lower track is fetched, has its per-clip
+    /// effects applied, and is layered bottom-to-top: `.normal` clips take plain
+    /// source-over compositing (no blend filter, so the pre-feature pixels are
+    /// unchanged); any other mode routes through `BlendPixelProcessor` so
+    /// opacity and blending are both reflected. Finally the primary is laid on
+    /// top using its own blend mode.
+    ///
+    /// **Pixel-identity gate (Requirement 4.3).** This step is skipped entirely
+    /// — returning `primaryImage` untouched — unless at least one active clip
+    /// (the primary included) carries a non-`.normal` blend mode. A project
+    /// that never sets a blend mode therefore renders byte-identically to
+    /// before this feature existed, including the pre-existing single-track
+    /// custom-compositor behavior. The multi-track layering only engages when
+    /// blending is actually requested.
+    private func layerActiveTracks(
+        over primaryImage: CIImage,
+        primaryEffect: CustomCompositionClipEffect?,
+        primaryTrackID: CMPersistentTrackID,
+        instruction: CustomCompositionInstruction,
+        request: AVAsynchronousVideoCompositionRequest
+    ) -> CIImage {
+        let activeEffects = instruction.clipEffects.filter { effect in
+            effect.trackID != kCMPersistentTrackID_Invalid
+                && effect.trackID != primaryTrackID
+                && CMTimeRangeContainsTime(effect.timeRange, time: request.compositionTime)
+        }
+
+        // Pixel-identity gate: if no active clip (primary included) uses a blend
+        // mode, the frame is returned as-is so exports are unchanged for
+        // `.normal`-only projects (Requirement 4.3).
+        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
+        let needsBlending = primaryBlendMode != .normal
+            || activeEffects.contains { $0.blendMode != .normal }
+        guard needsBlending else {
+            return primaryImage
+        }
+
+        // No other active track beneath the primary: there is nothing to blend
+        // against, so the primary frame is returned as-is. The canvas background
+        // is composited separately afterwards by CanvasBackgroundPixelProcessor.
+        guard !activeEffects.isEmpty else {
+            return primaryImage
+        }
+
+        // `clipEffects` is ordered bottom-to-top by z-order (matching the
+        // layer-instruction construction in the engines). Build the backdrop by
+        // compositing lower tracks first; `a.composited(over: b)` draws `a` in
+        // front of `b`, so each accumulated result becomes the foreground over
+        // the next lower track, preserving z-order.
+        var backdrop = CIImage.empty()
+        for effect in activeEffects {
+            guard let sourceBuffer = request.sourceFrame(byTrackID: effect.trackID) else {
+                continue
+            }
+
+            var layerImage = CIImage(cvPixelBuffer: sourceBuffer)
+            layerImage = applyClipEffects(
+                to: layerImage,
+                effect: effect,
+                instruction: instruction,
+                request: request
+            )
+
+            // `.normal` MUST bypass the blend processor so the export frame is
+            // pixel-identical to the layering step that predates this feature
+            // (Requirement 4.3). The processor itself routes `.normal` to plain
+            // source-over, but bypassing here avoids any color-space round trip.
+            if effect.blendMode == .normal {
+                backdrop = layerImage.composited(over: backdrop)
+            } else {
+                // Routes through the shared Core processor, which applies the
+                // Core Image blend filter and crops back to the base extent.
+                // Note on the `.add` quirk: `CIAdditionBlendMode` collapses to
+                // transparent black on opaque inputs under the *software*
+                // renderer (the committed golden in BlendPixelProcessorGoldenTests).
+                // This export path uses the default GPU `CIContext`, where `.add`
+                // produces the expected clamped-to-white additive result, and
+                // the processor's extent crop keeps the frame from collapsing to
+                // an empty extent regardless of renderer.
+                backdrop = BlendPixelProcessor.apply(layerImage, over: backdrop, mode: effect.blendMode)
+            }
+        }
+
+        // Lay the primary (top-most) clip over the built backdrop, applying its
+        // own blend mode. Bypass the processor for `.normal` to preserve the
+        // exact pre-feature compositing pixels for the default case.
+        if primaryBlendMode == .normal {
+            return primaryImage.composited(over: backdrop)
+        } else {
+            return BlendPixelProcessor.apply(primaryImage, over: backdrop, mode: primaryBlendMode)
         }
     }
     

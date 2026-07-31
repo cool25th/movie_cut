@@ -896,8 +896,8 @@ struct TimelineView: View {
                                 .font(MovieCutTypography.metadata)
                                 .foregroundStyle(.white.opacity(0.85))
                         }
-                        if let proxyState = proxyBadgeState(for: clip) {
-                            clipProxyBadge(proxyState)
+                        if let degrState = qualityDegradeState(for: clip).primaryState {
+                            clipProxyBadge(degrState, activeCauses: qualityDegradeState(for: clip).activeCauses)
                         }
                     }
                     .padding(.trailing, MovieCutSpacing.xSmall)
@@ -1125,17 +1125,20 @@ struct TimelineView: View {
         }
     }
 
-    /// Whether this clip shows the proxy badge. The decision itself lives in
-    /// Core (`ProxyBadgeState.resolve`) so it is unit-testable and reusable by
-    /// iOS; this only resolves the clip's asset.
-    private func proxyBadgeState(for clip: Clip) -> ProxyBadgeState? {
-        // Proxies are only generated for video assets, which `filmstripAsset`
-        // already filters for.
-        guard let asset = filmstripAsset(for: clip) else { return nil }
+    /// The full quality-degradation display state (Requirement 5.4): the single
+    /// primary badge state plus every simultaneously-active cause. The decision
+    /// lives in Core (`ProxyBadgeState.resolve`) so the priority table is
+    /// unit-testable; this only resolves the clip's asset and forwards the
+    /// project's preview quality.
+    private func qualityDegradeState(for clip: Clip) -> QualityDegradeDisplayState {
+        guard let asset = filmstripAsset(for: clip) else {
+            return QualityDegradeDisplayState(primaryState: nil, activeCauses: [])
+        }
         return ProxyBadgeState.resolve(
             proxy: asset.proxy,
             useProxyPlayback: viewModel.currentProject.playbackSettings.useProxyPlayback,
-            autoDowngraded: viewModel.playbackEngine.autoProxyDowngrade
+            autoDowngraded: viewModel.playbackEngine.autoProxyDowngrade,
+            previewQuality: viewModel.currentProject.playbackSettings.previewQuality
         )
     }
 
@@ -1145,21 +1148,59 @@ struct TimelineView: View {
     /// reserves the single accent for selection, playhead, and primary actions,
     /// and a status indicator is none of those. State is carried by opacity and
     /// by filled vs outline glyph instead.
-    private func clipProxyBadge(_ state: ProxyBadgeState) -> some View {
-        // thermalActive uses a thermometer glyph so the *reason* for the quality
-        // drop is visible — an unexplained drop reads as a bug. (S7)
-        let isActive = state == .active || state == .thermalActive
-        let systemName = state == .thermalActive ? "thermometer.medium" : (state == .active ? "bolt.fill" : "bolt")
+    ///
+    /// Requirement 5.4: the glyph shows a SINGLE cause (the highest-priority
+    /// active one, `state`) — icons never stack. The tooltip enumerates ALL
+    /// simultaneously-active causes (`activeCauses`) so the user can tell
+    /// everything that is lowering preview quality, not just the top reason.
+    private func clipProxyBadge(_ state: ProxyBadgeState, activeCauses: [QualityDegradeCause]) -> some View {
+        // The glyph carries the single primary reason only.
+        // - thermalActive: thermometer so heat is visible (S7)
+        // - previewQualityReduced: speedometer-style dial so a deliberate
+        //   resolution cut is distinguishable from a proxy
+        // - active/idle: bolt, filled when in use
+        let isActive = state == .active || state == .thermalActive || state == .previewQualityReduced
+        let systemName: String
+        switch state {
+        case .thermalActive: systemName = "thermometer.medium"
+        case .previewQualityReduced: systemName = "speedometer"
+        case .active: systemName = "bolt.fill"
+        case .idle: systemName = "bolt"
+        }
         return Image(systemName: systemName)
             .font(MovieCutTypography.metadata)
             .foregroundStyle(.white.opacity(isActive ? 0.85 : 0.45))
-            .help(
-                state == .active
-                    ? NSLocalizedString("Playing the proxy for smoother editing. Export uses the original.", comment: "")
-                    : (state == .thermalActive
-                        ? NSLocalizedString("Thermal pressure: preview is using the proxy. It restores when the device cools. Export uses the original.", comment: "")
-                        : NSLocalizedString("A proxy is ready. Turn on proxy playback to use it.", comment: ""))
-            )
+            .help(qualityDegradeTooltip(state: state, activeCauses: activeCauses))
+    }
+
+    /// Builds the badge tooltip / accessibility label string. When several
+    /// causes are active at once, every one is listed (highest priority first)
+    /// so the reason for a quality drop is never hidden behind the top cause.
+    private func qualityDegradeTooltip(state: ProxyBadgeState, activeCauses: [QualityDegradeCause]) -> String {
+        if activeCauses.isEmpty {
+            // No degradation active: this is the legacy "proxy ready" hint.
+            switch state {
+            case .idle:
+                return NSLocalizedString("A proxy is ready. Turn on proxy playback to use it.", comment: "")
+            default:
+                return ""
+            }
+        }
+        let parts = activeCauses.map { cause -> String in
+            switch cause {
+            case .thermalDowngrade:
+                return NSLocalizedString("thermal pressure is using the proxy", comment: "")
+            case .manualProxy:
+                return NSLocalizedString("proxy playback is on", comment: "")
+            case .manualPreviewQuality:
+                return NSLocalizedString("preview quality is reduced", comment: "")
+            }
+        }
+        let joined = parts.joined(separator: ", ")
+        return NSLocalizedString(
+            "Preview quality lowered: \(joined). Export uses the original.",
+            comment: "Tooltip listing every active preview-quality cause; the list is substituted into the sentence"
+        )
     }
 
     /// Spoken description of the proxy state, appended to the clip's own
@@ -1169,15 +1210,22 @@ struct TimelineView: View {
     /// `.accessibilityElement()`, which ignores children, so a label attached to
     /// the badge glyph itself would never be read aloud.
     private func proxyAccessibilityPhrase(for clip: Clip) -> String? {
-        switch proxyBadgeState(for: clip) {
-        case .active:
-            return NSLocalizedString("proxy playback on", comment: "")
-        case .thermalActive:
-            return NSLocalizedString("proxy playback on due to thermal pressure", comment: "")
+        let display = qualityDegradeState(for: clip)
+        // The spoken phrase reports every active cause (Requirement 5.4); the
+        // drawn glyph only carries the primary one.
+        if !display.activeCauses.isEmpty {
+            return qualityDegradeTooltip(state: display.primaryState ?? .idle, activeCauses: display.activeCauses)
+        }
+        switch display.primaryState {
         case .idle:
             return NSLocalizedString("proxy ready", comment: "")
         case nil:
             return nil
+        // Quality-degradation states are reported through the multi-cause phrase
+        // above; reaching here means a single primary state with no listed cause,
+        // which only happens for the idle/nil hint.
+        case .active, .thermalActive, .previewQualityReduced:
+            return qualityDegradeTooltip(state: display.primaryState ?? .idle, activeCauses: display.activeCauses)
         }
     }
 

@@ -45,6 +45,13 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Editing preview (playback) settings. Defaults to proxy playback off.
     public var playbackSettings: PlaybackSettings
 
+    /// Compound-clip definitions (Requirement 7). Empty for projects predating
+    /// the field, which decode to `[]` so compound-free legacy files stay
+    /// byte-identical. Each `Clip.compoundId` references an entry here. The
+    /// schema version is intentionally not bumped for this additive field;
+    /// the bump is deferred to task 6.
+    public var compounds: [CompoundDefinition]
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -60,6 +67,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case canvasBackground
         case cardDocument
         case playbackSettings
+        case compounds
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -77,7 +85,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         exportSettings: ExportSettings = ExportSettings(),
         canvasBackground: CanvasBackground? = nil,
         cardDocument: CardDocument? = nil,
-        playbackSettings: PlaybackSettings = PlaybackSettings()
+        playbackSettings: PlaybackSettings = PlaybackSettings(),
+        compounds: [CompoundDefinition] = []
     ) {
         self.id = id
         self.name = name
@@ -93,6 +102,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.canvasBackground = canvasBackground
         self.cardDocument = cardDocument
         self.playbackSettings = playbackSettings
+        self.compounds = compounds
     }
 
     public init(from decoder: any Decoder) throws {
@@ -111,6 +121,10 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         canvasBackground = try container.decodeIfPresent(CanvasBackground.self, forKey: .canvasBackground)
         cardDocument = try container.decodeIfPresent(CardDocument.self, forKey: .cardDocument)
         playbackSettings = try container.decodeIfPresent(PlaybackSettings.self, forKey: .playbackSettings) ?? PlaybackSettings()
+        // decodeIfPresent ?? [] so compound-free legacy projects stay byte-
+        // identical and partial payloads still load. The schema bump is
+        // deferred to task 6.
+        compounds = try container.decodeIfPresent([CompoundDefinition].self, forKey: .compounds) ?? []
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -129,5 +143,10 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         try container.encodeIfPresent(canvasBackground, forKey: .canvasBackground)
         try container.encodeIfPresent(cardDocument, forKey: .cardDocument)
         try container.encode(playbackSettings, forKey: .playbackSettings)
+        // Persist compounds only when non-empty so a compound-free project
+        // stays byte-identical to its pre-feature JSON (Requirement 7.6).
+        if !compounds.isEmpty {
+            try container.encode(compounds, forKey: .compounds)
+        }
     }
 }

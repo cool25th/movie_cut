@@ -836,7 +836,8 @@ final class PlaybackEngine {
                             chromaKeyThreshold: clip.chromaKeyThreshold,
                             mask: clip.mask,
                             effects: clip.effects,
-                            isBackgroundRemoved: clip.isBackgroundRemoved
+                            isBackgroundRemoved: clip.isBackgroundRemoved,
+                            blendMode: clip.blendMode
                         ))
                     }
 
@@ -1119,7 +1120,15 @@ final class PlaybackEngine {
             videoComposition = nil
         } else {
             let mutableVideoComposition = AVMutableVideoComposition()
-            mutableVideoComposition.renderSize = project.timeline.canvasSize
+            // Requirement 5: lower the *preview* render resolution when the user
+            // picked a performance-priority quality. Export derives its size
+            // from `project.canvas` + `ExportSettings.resolution` and never
+            // reads this setting, so export output is unaffected. `.full` is a
+            // no-op here.
+            mutableVideoComposition.renderSize = PreviewRenderSize.resolve(
+                canvas: project.timeline.canvasSize,
+                quality: project.playbackSettings.previewQuality
+            )
             mutableVideoComposition.frameDuration = CMTime(
                 seconds: 1 / max(project.timeline.frameRate.doubleValue, 1),
                 preferredTimescale: 600
@@ -1133,6 +1142,7 @@ final class PlaybackEngine {
                     || clipInstruction.chromaKeyColor != nil
                     || clipInstruction.mask != nil
                     || !clipInstruction.effects.isEmpty
+                    || clipInstruction.blendMode != .normal
             } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
@@ -1244,7 +1254,8 @@ final class PlaybackEngine {
                                 chromaKeyThreshold: clipInstruction.chromaKeyThreshold,
                                 mask: clipInstruction.mask,
                                 effects: clipInstruction.effects,
-                                isBackgroundRemoved: clipInstruction.isBackgroundRemoved
+                                isBackgroundRemoved: clipInstruction.isBackgroundRemoved,
+                                blendMode: clipInstruction.blendMode
                             )
                         } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
@@ -1642,6 +1653,7 @@ private struct PlaybackClipInstructionMetadata {
     var mask: Mask?
     var effects: [Effect]
     var isBackgroundRemoved: Bool
+    var blendMode: BlendMode = .normal
 }
 
 private enum PlaybackEqualizerAudioTap {

@@ -34,6 +34,12 @@ public enum ProxyBadgeState: String, Sendable, Equatable, CaseIterable {
     /// Distinct from `.active` so the UI can show *why* the quality dropped —
     /// an unexplained drop reads as a bug.
     case thermalActive
+    /// Preview is rendering below full canvas resolution because the user chose
+    /// a performance-priority preview quality (Requirement 5). This is the
+    /// lowest-priority quality-degradation cause; a simultaneously-active proxy
+    /// or thermal cause takes the badge instead. Like `.active`, it carries a
+    /// reason for a visible quality drop rather than a "proxy ready" hint.
+    case previewQualityReduced
 
     /// Resolves the badge state for one media asset.
     ///
@@ -59,5 +65,124 @@ public enum ProxyBadgeState: String, Sendable, Equatable, CaseIterable {
         guard proxy?.proxyURL != nil else { return nil }
         if useProxyPlayback { return .active }
         return autoDowngraded ? .thermalActive : .idle
+    }
+}
+
+/// The distinct reasons preview quality can be below full (Requirement 5.4).
+///
+/// More than one cause can be active at once — e.g. the user picked a reduced
+/// preview quality *and* a thermal downgrade fired. The badge must show a single
+/// cause (the highest-priority one) so it never stacks icons, while the full set
+/// is surfaced in the accessibility label / tooltip so a screen-reader user
+/// hears every active reason.
+public enum QualityDegradeCause: String, Sendable, Equatable, CaseIterable {
+    /// The engine auto-dropped to a proxy under serious/critical thermal
+    /// pressure (S7). Highest priority: heat is involuntary and urgent.
+    case thermalDowngrade
+    /// The user turned on proxy playback manually (B-I7).
+    case manualProxy
+    /// The user lowered the preview render quality manually (Requirement 5).
+    /// Lowest priority: it is the user's own, deliberate choice.
+    case manualPreviewQuality
+}
+
+/// Resolved quality-degradation display state for a clip's preview badge
+/// (Requirement 5.4).
+///
+/// Carries two things at once:
+/// - `primaryState`: the **single** `ProxyBadgeState` the badge glyph draws —
+///   the highest-priority active cause, so icons never stack.
+/// - `activeCauses`: **every** simultaneously-active cause, in priority order,
+///   which the accessibility label / tooltip enumerates verbatim.
+public struct QualityDegradeDisplayState: Sendable, Equatable {
+    /// The one badge state to draw. `nil` means no quality-degradation badge at
+    /// all (no causes active, or the asset has no proxy and no reduced quality).
+    public let primaryState: ProxyBadgeState?
+
+    /// Every active cause, highest priority first. Empty when there is nothing
+    /// to report. The badge shows only `primaryState`; this list is for the
+    /// spoken/tooltip description so a user hears all reasons, not just the top
+    /// one.
+    public let activeCauses: [QualityDegradeCause]
+
+    public init(primaryState: ProxyBadgeState?, activeCauses: [QualityDegradeCause]) {
+        self.primaryState = primaryState
+        self.activeCauses = activeCauses
+    }
+}
+
+extension ProxyBadgeState {
+    /// Resolves the full quality-degradation display state across all causes
+    /// (Requirement 5.4). Pure and device-free so it is unit-testable in Core.
+    ///
+    /// Priority (badge shows exactly one cause): thermal downgrade > manual
+    /// proxy > manual preview quality. The full set of active causes is returned
+    /// in `activeCauses` for the accessibility label / tooltip — the badge glyph
+    /// itself never stacks icons.
+    ///
+    /// - Parameters:
+    ///   - proxy: the asset's proxy metadata, if any. `ProxyInfo` with a `nil`
+    ///     `proxyURL` counts as no proxy.
+    ///   - useProxyPlayback: the project's proxy-playback setting (manual proxy).
+    ///   - autoDowngraded: true only when the engine dropped to the proxy
+    ///     because of heat (S7), not because of the user toggle.
+    ///   - previewQuality: the project's preview render quality. Anything other
+    ///     than `.full` counts as a manual preview-quality reduction.
+    /// - Returns: A `QualityDegradeDisplayState` with the single primary badge
+    ///   state and the full ordered list of active causes. When nothing is
+    ///   active but a proxy file exists and is unused, the result is the legacy
+    ///   `.idle` hint (no quality drop, just "proxy ready"). When no proxy
+    ///   exists and quality is full, `primaryState` is `nil` and the badge is
+    ///   not drawn.
+    public static func resolve(
+        proxy: ProxyInfo?,
+        useProxyPlayback: Bool,
+        autoDowngraded: Bool,
+        previewQuality: PreviewQuality
+    ) -> QualityDegradeDisplayState {
+        let hasProxy = proxy?.proxyURL != nil
+        let reducedPreview = previewQuality != .full
+
+        // Gather every active cause, then order them by priority. Building the
+        // list first (rather than short-circuiting) is what lets the
+        // accessibility label report simultaneous causes.
+        var causes: [QualityDegradeCause] = []
+        if autoDowngraded { causes.append(.thermalDowngrade) }
+        if useProxyPlayback { causes.append(.manualProxy) }
+        if reducedPreview { causes.append(.manualPreviewQuality) }
+        // Keep the list in canonical priority order regardless of input order.
+        let priorityOrder: [QualityDegradeCause] = [.thermalDowngrade, .manualProxy, .manualPreviewQuality]
+        let orderedCauses = priorityOrder.filter { causes.contains($0) }
+
+        // The badge draws exactly one state: the highest-priority cause, or a
+        // legacy idle/nil hint when no degradation is active.
+        let primaryState: ProxyBadgeState?
+        if let top = orderedCauses.first {
+            primaryState = Self.state(for: top, hasProxy: hasProxy)
+        } else if hasProxy {
+            // Proxy exists but nothing is degrading quality — the "ready but
+            // not in use" hint, not a quality drop.
+            primaryState = .idle
+        } else {
+            primaryState = nil
+        }
+
+        return QualityDegradeDisplayState(primaryState: primaryState, activeCauses: orderedCauses)
+    }
+
+    /// Maps a single cause to the badge state that represents it. Proxy-derived
+    /// causes require a proxy file to actually exist; if the cause is active but
+    /// the asset has no proxy file (e.g. thermal downgrade requested but
+    /// generation not finished), the badge still shows the cause so the user
+    /// sees *why* quality dropped rather than a silent gap.
+    private static func state(for cause: QualityDegradeCause, hasProxy: Bool) -> ProxyBadgeState {
+        switch cause {
+        case .thermalDowngrade:
+            return .thermalActive
+        case .manualProxy:
+            return .active
+        case .manualPreviewQuality:
+            return .previewQualityReduced
+        }
     }
 }

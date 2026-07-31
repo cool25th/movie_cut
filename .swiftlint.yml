@@ -35,3 +35,23 @@ file_length:
 function_body_length:
   warning: 60
   error: 100
+
+# Relaxation decision (req 15.5 / task 8.4, measured 2026-07-31):
+# identifier_name produced 436 ERROR-level violations, ~99% of them short
+# loop / DSP / pixel variables — `r`, `g`, `b`, `a` (color channels), `x`, `y`
+# (coordinates), `i`, `t` (loop / time) — where the short name is the correct,
+# readable choice in a media-processing codebase. The default min_length of 3
+# is miscalibrated here: forcing `redChannel`/`greenChannel` would actively
+# harm readability of pixel math. min_length is lowered to 1 so these false
+# errors clear while genuine mis-names (>40 chars) still flag. The high-signal
+# allow-list gate (scripts/lint_gate.sh) makes real correctness-risk rules
+# (force_cast / force_try / shorthand_operator) CI-blocking instead. This is a
+# recorded, codebase-specific reason, not an off-switch.
+identifier_name:
+  min_length:
+    error: 1
+    warning: 1
+  max_length:
+    error: 40
+    warning: 40
+  allowed_symbols: ["_"]

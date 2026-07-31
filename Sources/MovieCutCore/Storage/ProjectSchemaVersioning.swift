@@ -15,7 +15,12 @@ import Foundation
 /// - v2 → v3 (S7): `PlaybackSettings.autoProxyOnThermalPressure` added
 ///   (default true). The field decodes as true for v2 projects, so this
 ///   migrator only bumps the version.
-public let currentSchemaVersion: Int = 3
+/// - v3 → v4 (parity spec §6): `Clip.blendMode`, `PlaybackSettings.previewQuality`,
+///   `Project.compounds`, and `Clip.compoundId` added in a single batch. Every
+///   new field decodes to its default for v3 projects (`decodeIfPresent ??
+///   default`), so no payload transform is needed — this migrator only bumps
+///   the version so the chain reaches `currentSchemaVersion`.
+public let currentSchemaVersion: Int = 4
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -24,8 +29,24 @@ public enum ProjectSchema {
     /// migrator from index `n - 1` onward until it reaches `currentSchemaVersion`.
     public static let migrations: [any ProjectMigration] = [
         AddSecurityScopedBookmarkMigration(),
-        AddAutoProxyOnThermalPressureMigration()
+        AddAutoProxyOnThermalPressureMigration(),
+        AddBlendPreviewQualityCompoundMigration()
     ]
+}
+
+/// v3 → v4: introduces `Clip.blendMode`, `PlaybackSettings.previewQuality`,
+/// `Project.compounds`, and `Clip.compoundId`. All four fields are optional on
+/// decode and fall back to their defaults for v3 projects, so this migrator
+/// performs no payload transform — it only bumps the schema version so the chain
+/// reaches `currentSchemaVersion`. (parity spec §6 / task 6.1)
+public struct AddBlendPreviewQualityCompoundMigration: ProjectMigration {
+    public let version = 4
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: the new fields' defaults apply on decode.
+    }
 }
 
 /// v2 → v3: introduces `PlaybackSettings.autoProxyOnThermalPressure`. The field

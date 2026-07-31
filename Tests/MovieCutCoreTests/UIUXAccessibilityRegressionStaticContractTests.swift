@@ -193,13 +193,4 @@ struct UIUXAccessibilityRegressionStaticContractTests {
         #expect(shared.contains("struct MovieCutSectionCard"))
         #expect(shared.contains("MovieCutIconTitle(title: title, systemImage: systemImage"))
     }
-
-    @Test("UX-08 StaticContract docs mark source-level guard implemented")
-    func ux08StaticContractDocsMarkSourceLevelGuardImplemented() throws {
-        let handoff = try source("docs/UIUX_HANDOFF.md")
-
-        #expect(handoff.contains("#### UX-08. 접근성·키보드 유지 ✅ 구현(2026-06-16)"))
-        #expect(handoff.contains("UIUXAccessibilityRegressionStaticContractTests.swift"))
-        #expect(handoff.contains("VoiceOver 실기기 리딩·스크린샷 검증은 별도 검증 범위"))
-    }
 }

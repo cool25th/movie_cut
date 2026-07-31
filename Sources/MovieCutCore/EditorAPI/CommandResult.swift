@@ -53,6 +53,10 @@ public enum CommandResultValue: Sendable, Equatable {
     /// A complete project snapshot, used by whole-project replacement commands
     /// (e.g. Auto Highlights) so undo can restore the prior project.
     case project(Project)
+
+    /// Compound-definition snapshots, used by the create/release compound-clip
+    /// commands (Requirement 7.7) so undo restores the prior compounds list.
+    case compounds([CompoundDefinition])
 }
 
 /// The observable result of applying an editor command.

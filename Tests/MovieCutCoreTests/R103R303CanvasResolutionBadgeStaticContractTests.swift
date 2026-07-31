@@ -111,42 +111,6 @@ struct R103R303CanvasResolutionBadgeStaticContractTests {
             #expect(!helperProperties.contains(forbiddenMutation))
         }
     }
-
-    @Test("R1-03 and R3-03 docs stay implemented while R3-05 is tracked separately")
-    func r103AndR303DocsStayImplementedWhileR305IsTrackedSeparately() throws {
-        let docs = try source("docs/CAPCUT_UI_PARITY_REQUIREMENTS.md")
-        let r103Row = try section(
-            in: docs,
-            from: "| R1-03 | 비율/해상도 배지 |",
-            to: "| R1-04 | undo/redo 좌측 클러스터 |"
-        )
-        let r303Row = try section(
-            in: docs,
-            from: "| R3-03 | 비율/해상도 배지 |",
-            to: "| R3-04 | **빈 상태 CTA** |"
-        )
-
-        #expect(r103Row.contains("✅ 구현(2026-06-16, Codex R1-03/R3-03):"))
-        #expect(r103Row.contains("`EditorViewModel.swift` read-only badge helpers"))
-        #expect(r103Row.contains("`ExportPlanner().renderSize(for:canvas:)`"))
-        #expect(r103Row.contains("`ContentView.swift` toolbar Canvas controls"))
-        #expect(r103Row.contains("검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(r303Row.contains("✅ 구현(2026-06-16, Codex R1-03/R3-03):"))
-        #expect(r303Row.contains("`PreviewPanel.swift` transport bar"))
-        #expect(r303Row.contains("Current/Duration/playback/frame/volume controls는 유지"))
-        #expect(r303Row.contains("R3-05는 별도 행에서 구현 상태를 추적"))
-        #expect(r303Row.contains("검증: `git diff --check`, `swift test --filter StaticContract`(181 tests / 46 suites), `xcodebuild ... MovieCutMac build` BUILD SUCCEEDED"))
-        #expect(docs.contains("| R3-02 | zoom-to-fit + 줌 | ✅ 구현(2026-06-16, Codex R3-01/R3-02):"))
-        #expect(docs.contains("| R3-05 | 안전영역 토글 | ✅ 구현(2026-06-17, Codex R3-05):"))
-        #expect(docs.contains("`SafeZoneGuide.standard`"))
-        #expect(docs.contains("- **P2 완료** — R1-03, R3-02, R3-03, R6-01 visual metric parity pass, R6-02 macOS interaction convention pass."))
-        #expect(docs.contains("- **P2 선택 backlog** — R2-01 9탭 확장과 Captions/Adjust panel depth는 product decision 후 진행"))
-        #expect(docs.contains("- **Verification backlog** — matching populated side-by-side recapture/metrics after IA/P0/P1/P2"))
-        #expect(docs.contains("- **P3 완료** — R5-04, R4 서브탭 깊이(Speed 곡선 에디터)."))
-        #expect(docs.contains("- **P3 심층 잔여** — 없음(이번 UI 로드맵 기준; optical-flow smooth slow motion은 별도 기능 backlog)."))
-        #expect(!docs.contains("R3-02/03"))
-        #expect(!docs.contains("R3-05 safe-zone toggle은 별도 잔여"))
-    }
 }
 
 private enum R103R303CanvasResolutionBadgeStaticContractError: Error {

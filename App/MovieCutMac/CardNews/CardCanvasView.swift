@@ -169,11 +169,7 @@ struct CardCanvasView: View {
                         selectedElementID = element.id
                     }
                     .simultaneousGesture(moveGesture(for: element, canvasSize: canvasSize))
-                    .accessibilityIdentifier("cardCanvas.element.\(element.id.uuidString)")
-                    .accessibilityLabel(elementAccessibilityLabel(element))
-                    .accessibilityHint(element.kind == .text
-                        ? "Double-click to edit inline. Drag to move."
-                        : "Drag to move. Select to reveal image replacement and resize controls.")
+                    .accessibilityHidden(true)
             }
 
             if isSelected, !isEditing {
@@ -190,6 +186,14 @@ struct CardCanvasView: View {
             }
         }
         .frame(width: pixelRect.width, height: pixelRect.height)
+        .nativeAccessibilityStaticText(
+            identifier: "cardCanvas.element.\(element.id.uuidString)",
+            label: elementAccessibilityLabel(element),
+            hint: element.kind == .text
+                ? "Double-click to edit inline. Drag to move."
+                : "Drag to move. Select to reveal image replacement and resize controls.",
+            hidesContent: false
+        )
         .position(x: pixelRect.midX, y: pixelRect.midY)
         .overlay {
             if isSelected {

@@ -13,6 +13,8 @@ depend on `ffmpeg` at run time. Resolved in tests via `MediaFixtures`
 | `tone_440hz_2s_mono.wav` | pcm_s16le, 44100Hz, mono, 2.0s | audio import / ducking / beat analysis |
 | `swatch_blue_64x64.png` | PNG, 64×64 | image import |
 | `cg_codable_parity.moviecut` | project JSON with mask + brushPoints, text clip + shadowOffset, card document | CGPoint/CGSize persistence parity — locks the on-disk array form (`[x, y]`) produced by CoreGraphics' native Codable across conformance changes |
+| `timeline_accessibility_bootstrap.moviecut` | project JSON, no card document, fixed track UUIDs: video `Video 1`, video `Video 2`, audio `Audio 1`, zero clips | `MOVIECUT_BOOTSTRAP_PROJECT` source for `TimelineAccessibilityLabelUITests`. Two video tracks so the non-first video track reaches the generic track-header accessibility label; fixed UUIDs let the test address one specific lane instead of relying on ordering |
+| `timeline_localization_bootstrap.moviecut` | project JSON, no card document, fixed track UUIDs: video `Video 1` (1 clip), video `Video 2` (empty), audio `Audio 1` (1 clip), text `Text 1` (1 clip), one standard + one beat marker, no media assets | `MOVIECUT_BOOTSTRAP_PROJECT` source for `LocalizedAccessibilityLabelUITests`. Clips are present but reference no asset, which is enough to publish clip, trim-handle, and marker accessibility labels — the elements requirement 1 cites — without baking machine-specific media paths into the fixture. All strings are ASCII so any Hangul the sweep finds comes from the app's localization, not from project data |
 
 ## Regenerating
 

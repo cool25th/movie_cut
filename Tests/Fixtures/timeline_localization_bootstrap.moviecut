@@ -1,0 +1,233 @@
+{
+  "id": "30000000-0000-4000-8000-000000000001",
+  "name": "Timeline localization fixture",
+  "createdAt": "1970-01-01T00:00:00Z",
+  "updatedAt": "1970-01-01T00:00:00Z",
+  "appVersion": "0.1.0",
+  "schemaVersion": 1,
+  "mediaLibrary": {
+    "assets": []
+  },
+  "timeline": {
+    "id": "30000000-0000-4000-8000-000000000002",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvasSize": [
+      1920,
+      1080
+    ],
+    "aspectRatio": "landscape16x9",
+    "tracks": [
+      {
+        "id": "30000000-0000-4000-8000-000000000003",
+        "kind": "video",
+        "name": "Video 1",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 0,
+        "clips": [
+          {
+            "id": "30000000-0000-4000-8000-000000000010",
+            "kind": "video",
+            "sourceRange": {
+              "start": 0,
+              "duration": 4
+            },
+            "timelineRange": {
+              "start": 0,
+              "duration": 4
+            },
+            "zIndex": 0,
+            "transform": {
+              "position": [
+                0,
+                0
+              ],
+              "offset": [
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1
+              ],
+              "rotation": 0,
+              "anchorPoint": [
+                0.5,
+                0.5
+              ]
+            },
+            "opacity": 1,
+            "volume": 1,
+            "fadeInDuration": 0,
+            "fadeOutDuration": 0,
+            "playbackRate": 1,
+            "speedRampPoints": [],
+            "keyframes": [],
+            "effects": [],
+            "isReversed": false
+          }
+        ]
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000004",
+        "kind": "video",
+        "name": "Video 2",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 1,
+        "clips": []
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000005",
+        "kind": "audio",
+        "name": "Audio 1",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 2,
+        "clips": [
+          {
+            "id": "30000000-0000-4000-8000-000000000011",
+            "kind": "audio",
+            "sourceRange": {
+              "start": 0,
+              "duration": 3
+            },
+            "timelineRange": {
+              "start": 0,
+              "duration": 3
+            },
+            "zIndex": 0,
+            "transform": {
+              "position": [
+                0,
+                0
+              ],
+              "offset": [
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1
+              ],
+              "rotation": 0,
+              "anchorPoint": [
+                0.5,
+                0.5
+              ]
+            },
+            "opacity": 1,
+            "volume": 1,
+            "fadeInDuration": 0,
+            "fadeOutDuration": 0,
+            "playbackRate": 1,
+            "speedRampPoints": [],
+            "keyframes": [],
+            "effects": [],
+            "isReversed": false
+          }
+        ]
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000006",
+        "kind": "text",
+        "name": "Text 1",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 3,
+        "clips": [
+          {
+            "id": "30000000-0000-4000-8000-000000000012",
+            "kind": "text",
+            "sourceRange": {
+              "start": 0,
+              "duration": 2
+            },
+            "timelineRange": {
+              "start": 0,
+              "duration": 2
+            },
+            "zIndex": 0,
+            "transform": {
+              "position": [
+                0,
+                0
+              ],
+              "offset": [
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1
+              ],
+              "rotation": 0,
+              "anchorPoint": [
+                0.5,
+                0.5
+              ]
+            },
+            "opacity": 1,
+            "volume": 1,
+            "fadeInDuration": 0,
+            "fadeOutDuration": 0,
+            "playbackRate": 1,
+            "speedRampPoints": [],
+            "keyframes": [],
+            "effects": [],
+            "isReversed": false,
+            "textContent": {
+              "text": "Localization sweep",
+              "fontFamily": "System",
+              "fontSize": 48,
+              "fontColor": "#FFFFFF",
+              "alignment": "center",
+              "position": [
+                50,
+                75
+              ],
+              "contentKind": "text"
+            }
+          }
+        ]
+      }
+    ],
+    "markers": []
+  },
+  "markers": [
+    {
+      "id": "30000000-0000-4000-8000-000000000020",
+      "time": 1,
+      "name": "Intro",
+      "kind": "standard"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000021",
+      "time": 2,
+      "name": "Beat 1",
+      "kind": "beat"
+    }
+  ],
+  "canvas": {
+    "aspectRatio": "landscape16x9",
+    "frameRate": "fps30"
+  },
+  "exportSettings": {
+    "resolution": "p1080",
+    "frameRate": "fps30",
+    "codec": "h264",
+    "audioCodec": "aac",
+    "containerFormat": "mp4",
+    "quality": "high",
+    "videoBitrateMbps": 10,
+    "includeChapters": false,
+    "includeBeatChapters": false
+  }
+}

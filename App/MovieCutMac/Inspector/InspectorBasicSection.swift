@@ -223,7 +223,7 @@ struct InspectorBasicSection: View {
     private var motionTrackingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("모션 트래킹")
+                Text("Motion Tracking")
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
@@ -243,7 +243,7 @@ struct InspectorBasicSection: View {
             }
 
             HStack(spacing: 6) {
-                Button("영역 조정") {
+                Button("Adjust Region") {
                     viewModel.beginMotionTrackingSelection()
                 }
                 .controlSize(.small)
@@ -632,7 +632,7 @@ struct InspectorBasicSection: View {
             }
 
             if clip.kind == .video {
-                Toggle("부드러운 슬로우모션", isOn: Binding(
+                Toggle("Smooth slow motion", isOn: Binding(
                     get: { clip.useOpticalFlow },
                     set: { newValue in
                         Task { await viewModel.updateSelectedOpticalFlow(newValue) }
@@ -641,7 +641,7 @@ struct InspectorBasicSection: View {
                 .disabled(clip.playbackRate >= 1.0)
                 .accessibilityHint("Exports opted-in slow motion with frame interpolation.")
 
-                Text("내보낼 때 프레임 보간이 적용됩니다")
+                Text("Frame interpolation is applied on export")
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
             }

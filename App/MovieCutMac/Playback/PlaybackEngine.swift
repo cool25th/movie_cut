@@ -232,13 +232,38 @@ final class PlaybackEngine {
             if lastCompositionError != nil { return nil }
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
-        seek(to: time)
-        // Give AVFoundation time to service the seek and the video output to
-        // render a fresh frame. Poll for the frame for up to ~300ms so a slow
-        // first-frame decode is still captured.
-        let frameDeadline = Date().addingTimeInterval(0.3)
+        let targetTime: TimeInterval
+        if duration > 0 {
+            targetTime = min(max(0, time), duration)
+        } else {
+            targetTime = max(0, time)
+        }
+        currentTime = targetTime
+        let itemTime = CMTime(seconds: targetTime, preferredTimescale: 600)
+        await withCheckedContinuation { continuation in
+            player.seek(
+                to: itemTime,
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            ) { _ in
+                continuation.resume()
+            }
+        }
+
+        // Poll the exact requested item time. Custom-compositor frames can take
+        // longer than a decoded passthrough frame on their first request, and
+        // host-time lookup is ambiguous while the player is paused after seek.
+        let frameDeadline = Date().addingTimeInterval(2)
         while Date() < frameDeadline {
-            if let image = snapshotCurrentFrame() { return image }
+            if let output = previewVideoOutput,
+               output.hasNewPixelBuffer(forItemTime: itemTime),
+               let pixelBuffer = output.copyPixelBuffer(
+                   forItemTime: itemTime,
+                   itemTimeForDisplay: nil
+               ),
+               let image = Self.cgImage(from: pixelBuffer) {
+                return image
+            }
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
         return snapshotCurrentFrame()
@@ -649,6 +674,7 @@ final class PlaybackEngine {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [(track: AVMutableCompositionTrack, zIndex: Int)] = []
         var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
+        var textOverlayClipEffects: [CustomCompositionClipEffect] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
         var equalizerSegmentsByTrackID: [CMPersistentTrackID: [ClipEqualizerTimelineSegment]] = [:]
 
@@ -934,6 +960,36 @@ final class PlaybackEngine {
                 for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
                     guard let textContent = clip.textContent else { continue }
 
+                    // Ordinary text uses the same shared Core Image processor as
+                    // export. Besides removing the Preview↔Export implementation
+                    // split, this avoids AVVideoCompositionCoreAnimationTool
+                    // stalling in headless parity runs. Keep sticker layers on
+                    // their established Core Animation path.
+                    if !textContent.isSticker,
+                       textContent.fontFamily != "Apple Color Emoji",
+                       let textEffect = CustomCompositionClipEffect(
+                           trackID: kCMPersistentTrackID_Invalid,
+                           timeRange: CMTimeRange(
+                               start: cmTime(clip.timelineRange.start),
+                               duration: cmTime(clip.timelineRange.duration)
+                           ),
+                           transform: clip.transform,
+                           opacity: clip.opacity,
+                           keyframes: clip.keyframes,
+                           colorCorrection: clip.colorCorrection,
+                           colorGrade: clip.colorGrade,
+                           chromaKey: clip.chromaKey,
+                           chromaKeyColor: clip.chromaKeyColor,
+                           chromaKeyThreshold: clip.chromaKeyThreshold,
+                           mask: clip.mask,
+                           effects: clip.effects,
+                           textContent: textContent,
+                           isBackgroundRemoved: clip.isBackgroundRemoved
+                       ) {
+                        textOverlayClipEffects.append(textEffect)
+                        continue
+                    }
+
                     let fontSize = CGFloat(textContent.fontSize)
                     let canvasSize = project.timeline.canvasSize
                     let fallbackPosition = CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
@@ -1077,7 +1133,7 @@ final class PlaybackEngine {
                     || clipInstruction.chromaKeyColor != nil
                     || clipInstruction.mask != nil
                     || !clipInstruction.effects.isEmpty
-            } || !transitionEffects.isEmpty
+            } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
 
@@ -1190,7 +1246,7 @@ final class PlaybackEngine {
                                 effects: clipInstruction.effects,
                                 isBackgroundRemoved: clipInstruction.isBackgroundRemoved
                             )
-                        },
+                        } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
                         canvasBackground: project.canvasBackground,
                         prefersFastSegmentation: true

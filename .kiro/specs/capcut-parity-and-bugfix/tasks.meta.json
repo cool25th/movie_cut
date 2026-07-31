@@ -1,0 +1,742 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "0.1 골든 픽셀 하니스가 이 호스트에서 실제로 도는지 확인": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255138
+      },
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405265406
+      },
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785409198185
+      }
+    ],
+    "0.2 접근성 레이블을 읽는 XCUITest 경로가 이 호스트에서 완주하는지 확인": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255299
+      },
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785409205525
+      },
+      {
+        "executionId": "47514fb1-9d93-48ca-b801-33eb2362c187",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785411338728
+      },
+      {
+        "executionId": "3ccb6bb0-b1bc-4e9b-a5ce-e739009b3c5d",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785412162387
+      },
+      {
+        "executionId": "f1f619ba-f48d-4a2a-b977-3a9f86e901f6",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785418378800
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785420768848
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785426668823
+      }
+    ],
+    "0.3 기준선 3종 측정 후 기록": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255399
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785426677348
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785427586081
+      }
+    ],
+    "1.1 한국어 `NSLocalizedString` 키 전수 조사 및 대조 스크립트 작성": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255454
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785427595314
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785428810225
+      }
+    ],
+    "1.2 한국어 키를 영어 키로 교체하고 카탈로그 재정렬": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255506
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785428816485
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785430696483
+      }
+    ],
+    "1.3 깨지는 StaticContract 처리": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255557
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785430702206
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785458288190
+      }
+    ],
+    "1.4 영어 로케일 접근성 레이블 검증": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255599
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785458292834
+      },
+      {
+        "executionId": "a9c75b65-96af-43ef-a676-944d91dd04f8",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785460209840
+      }
+    ],
+    "2.1 하니스에 합성 길이 리포트 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255669
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250734
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460263335
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460963834
+      }
+    ],
+    "2.2 파리티 스크립트에 `--expect-duration` 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255708
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250799
+      }
+    ],
+    "2.3 기존 7종 시나리오 실행 후 기준선 기록": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255759
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250880
+      }
+    ],
+    "2.4 허용 오차 정책 확정": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255810
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250921
+      }
+    ],
+    "2.5 기준선이 red인 항목 처리": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255841
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250961
+      }
+    ],
+    "3.1 삭제 전 참조 상태 grep 재측정": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255878
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460250999
+      }
+    ],
+    "3.2 `BackgroundRemovalProvider` 삭제 전 기능 무회귀 확인": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255919
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251037
+      }
+    ],
+    "3.3 삭제 5건 실행": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255961
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251082
+      }
+    ],
+    "3.4 `AIEditingProvider` 프로토콜 경유로 어시스턴트 UI 배선": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405255999
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251133
+      }
+    ],
+    "3.5 `VocalSeparationRenderer` 구현 (App 계층)": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256040
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251185
+      }
+    ],
+    "3.6 보컬 분리 UI + 명령 배선": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256086
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251256
+      }
+    ],
+    "3.7 보컬 분리 오디오 측정 검증": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256135
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251290
+      }
+    ],
+    "4.1 `SecurityScopedAccess`에 URL 수준 오버로드 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256199
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251330
+      }
+    ],
+    "4.2 `RecentProjectsStore` 구현": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256240
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251385
+      }
+    ],
+    "4.3 `AppStage` 전이 로직을 테스트 가능한 타입으로 분리": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256280
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251426
+      }
+    ],
+    "4.4 `HomeView` 구현 및 `WindowGroup` 분기": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256321
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251473
+      }
+    ],
+    "4.5 홈 경유 경로 검증": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256361
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251535
+      }
+    ],
+    "4.6 `PreviewQuality` 모델 + 프리뷰 렌더 해상도 적용": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256402
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251602
+      }
+    ],
+    "4.7 화질 저하 원인 표시 우선순위 구현": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256451
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251654
+      }
+    ],
+    "4.8 WebVTT / ASS 자막 직렬화 구현": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256503
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251686
+      }
+    ],
+    "4.9 자막 export UI 확장 및 검증": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256546
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251720
+      }
+    ],
+    "5.1 `BlendMode` 모델 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256585
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251759
+      }
+    ],
+    "5.2 `BlendPixelProcessor` 구현 + 골든 픽셀 테스트": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256630
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251806
+      }
+    ],
+    "5.3 macOS 합성 경로에 블렌딩 배선": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256680
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251860
+      }
+    ],
+    "5.4 인스펙터에 블렌딩 모드 드롭다운 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256727
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251894
+      }
+    ],
+    "5.5 `ClipTrimMath`에 slip / slide 순수 함수 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256787
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251931
+      }
+    ],
+    "5.6 slip / slide 명령 및 제스처 배선": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256827
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460251962
+      }
+    ],
+    "5.7 컴파운드 Inc 1a — 모델·직렬화": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256865
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252025
+      }
+    ],
+    "5.8 컴파운드 Inc 1b — flatten 렌더 (단일 출처 캐시)": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256906
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252082
+      }
+    ],
+    "5.9 컴파운드 Inc 1c — 편집 UI": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405256962
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252133
+      }
+    ],
+    "6.1 `currentSchemaVersion` 인상 및 항등 마이그레이터 등록": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257011
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252166
+      }
+    ],
+    "7.1 하니스에 비후행 클립 삭제 경로 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257055
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252201
+      }
+    ],
+    "7.2 편집 조작 파리티 시나리오 신규": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257106
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252246
+      }
+    ],
+    "7.3 undo 왕복 검증 추가": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257148
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252295
+      }
+    ],
+    "8.1 `docs/` 산문 단언 테스트 제거": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257188
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252345
+      }
+    ],
+    "8.2 부정 단언 전수 분류": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257232
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252393
+      }
+    ],
+    "8.3 렌더 프로세서 문자열 단언을 골든 픽셀로 승격": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257269
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252451
+      }
+    ],
+    "8.4 린트 게이트 판단": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257309
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252505
+      }
+    ],
+    "9.1 iOS 플랫폼 설치 여부 확인 후 진행 판단": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257350
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252559
+      }
+    ],
+    "9.2 iOS 테스트 타깃 및 하니스 진입점 구축": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257402
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252601
+      }
+    ],
+    "9.3 CI iOS 단계가 실패를 조용히 통과시키지 않게 수정": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257442
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252632
+      }
+    ],
+    "9.4 iOS 합성기를 공유 프로세서로 전환 (크로마키 / 배경 제거)": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257485
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252664
+      }
+    ],
+    "9.5 iOS two-source 전환 배선": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257536
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252707
+      }
+    ],
+    "9.6 iOS 문자열 현지화 래핑": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257575
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252759
+      }
+    ],
+    "9.7 iOS 현지화 카탈로그 추가 및 실행 확인": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257615
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252801
+      }
+    ],
+    "9.8 iOS 블렌딩 배선 (작업 5에서 이관)": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257656
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252841
+      }
+    ],
+    "10.1 완료 항목을 근거와 함께 표시": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257705
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252900
+      }
+    ],
+    "10.2 최신 판정 단일 진입점 정리": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257750
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252948
+      }
+    ],
+    "10.3 이 스펙의 미완 항목을 명시 기록": [
+      {
+        "executionId": "98ba77cf-b991-49fd-ac6d-3d09a55bd1f9",
+        "chatSessionId": "sess_cfed50a5-1d95-4741-b407-933a6af102dd",
+        "timestamp": 1785405257800
+      },
+      {
+        "executionId": "4b5311fc-a6dc-4d91-87a2-d8b2484be037",
+        "chatSessionId": "sess_2a7d0058-a956-4837-adc3-49296e874893",
+        "timestamp": 1785460252988
+      }
+    ]
+  }
+}

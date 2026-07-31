@@ -1,9 +1,63 @@
+import Carbon.HIToolbox
 import XCTest
 
 final class CardEditorUITests: XCTestCase {
+    /// XCUITest turns `typeText` into synthesized key events that the *host's*
+    /// active keyboard input source interprets. With a CJK input method
+    /// selected — this host's default selection is
+    /// `com.apple.inputmethod.Korean.2SetKorean` — individual characters are
+    /// swallowed by the input method before they ever reach the app: measured on
+    /// this host, every `f` typed into the focused inline editor was lost while
+    /// every other character arrived (`"of"` produced `"o"`, `"gh"` produced
+    /// `"gh"`). Pin an ASCII-capable keyboard layout for the duration of the
+    /// test and restore the user's selection afterwards so text entry is
+    /// deterministic and independent of the developer's input source.
+    private var inputSourceToRestore: TISInputSource?
+
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        inputSourceToRestore = Self.pinASCIICapableKeyboardLayout()
+    }
+
+    override func tearDown() {
+        if let inputSourceToRestore {
+            TISSelectInputSource(inputSourceToRestore)
+        }
+        inputSourceToRestore = nil
+        super.tearDown()
+    }
+
+    /// Selects an ASCII-capable keyboard layout and returns the previously
+    /// selected source so `tearDown` can restore it. Returns `nil` when the
+    /// current source is already a keyboard layout or when no switch happened.
+    private static func pinASCIICapableKeyboardLayout() -> TISInputSource? {
+        guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else { return nil }
+        let currentID = inputSourceID(current) ?? "<unknown>"
+        guard !currentID.hasPrefix("com.apple.keylayout.") else {
+            print("[input-source] already a keyboard layout: \(currentID)")
+            return nil
+        }
+        guard let candidates = TISCreateASCIICapableInputSourceList()?
+            .takeRetainedValue() as? [TISInputSource] else {
+            print("[input-source] no ASCII-capable sources; keeping \(currentID)")
+            return nil
+        }
+        let preferred = ["com.apple.keylayout.ABC", "com.apple.keylayout.US"]
+        let replacement = candidates.first { preferred.contains(inputSourceID($0) ?? "") }
+            ?? candidates.first { (inputSourceID($0) ?? "").hasPrefix("com.apple.keylayout.") }
+        guard let replacement else {
+            print("[input-source] no ASCII keyboard layout enabled; keeping \(currentID)")
+            return nil
+        }
+        let status = TISSelectInputSource(replacement)
+        print("[input-source] \(currentID) -> \(inputSourceID(replacement) ?? "<unknown>") status=\(status)")
+        return status == noErr ? current : nil
+    }
+
+    private static func inputSourceID(_ source: TISInputSource) -> String? {
+        guard let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return nil }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
     }
 
     private var cardProjectFixture: URL {

@@ -180,9 +180,9 @@ private struct ProjectOverviewInspectorView: View {
             )
 
             ProjectOverviewSummaryStrip(items: [
-                ProjectOverviewSummaryItem(title: "Canvas", value: viewModel.canvasResolutionBadgeText),
-                ProjectOverviewSummaryItem(title: "Timeline", value: durationText),
-                ProjectOverviewSummaryItem(title: "Clips", value: countText(clipCount, singular: "clip"))
+                ProjectOverviewSummaryItem(title: NSLocalizedString("Canvas", comment: ""), value: viewModel.canvasResolutionBadgeText),
+                ProjectOverviewSummaryItem(title: NSLocalizedString("Timeline", comment: ""), value: durationText),
+                ProjectOverviewSummaryItem(title: NSLocalizedString("Clips", comment: ""), value: countText(clipCount, singular: "clip"))
             ])
 
             ProjectOverviewInfoCard(

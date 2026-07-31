@@ -156,17 +156,21 @@ struct Phase23TimelineToolbarIconOnlyStaticContractTests {
 
         #expect(occurrenceCount(of: "timelineToolbarIconButton(", in: controls) == 3)
 
+        // Task 1.3: the two Korean zoom-label markers (`타임라인 축소` /
+        // `타임라인 확대`) were deleted from this array. This suite's own subject is
+        // the *icon-only* treatment, so "the icon button still carries an
+        // accessibility label" is the intent worth keeping — it is verified at
+        // runtime by
+        // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         for marker in [
             #"systemImage: "minus.magnifyingglass""#,
             #"title: "Zoom Timeline Out""#,
-            #"accessibilityLabel: "타임라인 축소""#,
             #"hint: "Zooms the timeline out.""#,
             "viewModel.zoomTimelineOut()",
             "Slider(value:",
             "Text(timelineZoomDisplay)",
             #"systemImage: "plus.magnifyingglass""#,
             #"title: "Zoom Timeline In""#,
-            #"accessibilityLabel: "타임라인 확대""#,
             #"hint: "Zooms the timeline in.""#,
             "viewModel.zoomTimelineIn()",
             #"systemImage: "arrow.left.and.right""#,

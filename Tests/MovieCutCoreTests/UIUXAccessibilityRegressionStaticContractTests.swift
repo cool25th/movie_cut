@@ -111,11 +111,16 @@ struct UIUXAccessibilityRegressionStaticContractTests {
     func ux08StaticContractPreservesTimelineAccessibility() throws {
         let timeline = try source("App/MovieCutMac/TimelineView.swift")
 
+        // Task 1.3: the four Korean-key markers that used to sit in this array
+        // (timeline container label, `%@ 클립 추가 영역`, the two zoom-button
+        // labels) were deleted, not re-pinned to their new English keys. They
+        // asserted the exact defect requirement 1 removed, and re-pinning would
+        // add a new StaticContract (requirement 15.6 forbids that). Their
+        // accessibility-regression intent is verified at runtime by
+        // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         for marker in [
             #"title: NSLocalizedString("Timeline", comment: "")"#,
-            #"accessibilityLabel(NSLocalizedString("타임라인", comment: ""))"#,
             #"accessibilityLabel(trackHeaderAccessibilityLabel(for: track))"#,
-            #"accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))"#,
             #"accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))"#,
             #"accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))"#,
             "private func timelineToolbarIconButton(",
@@ -147,10 +152,8 @@ struct UIUXAccessibilityRegressionStaticContractTests {
             #"hint: "Moves the playhead to the next marker.""#,
             #"accessibilityLabel(NSLocalizedString("Timeline zoom controls", comment: ""))"#,
             #"title: "Zoom Timeline Out""#,
-            #"accessibilityLabel: "타임라인 축소""#,
             #"hint: "Zooms the timeline out.""#,
             #"title: "Zoom Timeline In""#,
-            #"accessibilityLabel: "타임라인 확대""#,
             #"hint: "Zooms the timeline in.""#,
             #"title: "Fit Timeline""#,
             #"hint: "Fits the visible timeline duration in the available timeline width.""#,

@@ -97,7 +97,11 @@ struct R504MainVideoTrackStaticContractTests {
             "playheadOverlay",
             "onDrop(of: [.fileURL, .movie, .image, .movieCutMediaAssetID], isTargeted: nil)",
             "handleTrackDrop(providers: providers, location: location, trackId: track.id)",
-            #"accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))"#,
+            // Task 1.3: the `%@ 클립 추가 영역` marker was deleted here. The lane
+            // drop region still needs an accessibility label, but that is now
+            // verified at runtime by
+            // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`
+            // instead of by pinning a source literal.
             #"accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))"#
         ] {
             #expect(lane.contains(marker))
@@ -116,9 +120,13 @@ struct R504MainVideoTrackStaticContractTests {
         #expect(accessibility.contains("if isMainVideoTrack(track)"))
         #expect(accessibility.contains(#"NSLocalizedString("Main video track, %@", comment: "")"#))
         #expect(accessibility.contains("track.name"))
-        #expect(accessibility.contains(#"return NSLocalizedString("비디오 트랙 헤더", comment: "")"#))
+        // Task 1.3: the `비디오 트랙 헤더` fallback assertion and the
+        // `%@ 클립 추가 영역` lane assertion were deleted. Both pinned the Korean
+        // keys requirement 1 removed. The behaviour they guarded — a main video
+        // track reads differently from a plain video track, and the lane drop
+        // region derives its label from the header label — is verified at runtime
+        // by `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         #expect(timeline.contains("accessibilityLabel(trackHeaderAccessibilityLabel(for: track))"))
-        #expect(timeline.contains(#"accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))"#))
     }
 
     @Test("Main video visuals remain presentation only with no command service or model coupling")

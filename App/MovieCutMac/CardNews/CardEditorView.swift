@@ -2,6 +2,74 @@ import AppKit
 import MovieCutCore
 import SwiftUI
 
+private struct NativeAccessibilityStaticTextBacking: NSViewRepresentable {
+    let identifier: String
+    let label: String
+    let hint: String?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        configure(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        configure(nsView)
+    }
+
+    private func configure(_ view: NSView) {
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.staticText)
+        view.setAccessibilityIdentifier(identifier)
+        view.setAccessibilityLabel(label)
+        view.setAccessibilityHelp(hint)
+    }
+}
+
+private struct NativeAccessibilityStaticTextModifier: ViewModifier {
+    let identifier: String
+    let label: String
+    let hint: String?
+    let hidesContent: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if hidesContent {
+            content
+                .accessibilityHidden(true)
+                .overlay { accessibilityBacking }
+        } else {
+            content
+                .overlay { accessibilityBacking }
+        }
+    }
+
+    private var accessibilityBacking: some View {
+        NativeAccessibilityStaticTextBacking(
+            identifier: identifier,
+            label: label,
+            hint: hint
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+extension View {
+    func nativeAccessibilityStaticText(
+        identifier: String,
+        label: String,
+        hint: String? = nil,
+        hidesContent: Bool = true
+    ) -> some View {
+        modifier(NativeAccessibilityStaticTextModifier(
+            identifier: identifier,
+            label: label,
+            hint: hint,
+            hidesContent: hidesContent
+        ))
+    }
+}
+
 extension CardFormat {
     var accessibilityTitle: String {
         switch self {
@@ -56,7 +124,6 @@ struct CardEditorView: View {
             }
             .frame(minWidth: 1024, minHeight: 720)
             .background(MovieCutTheme.editorBackground)
-            .accessibilityIdentifier("cardEditor.surface")
             .onAppear {
                 reconcileSelection(with: document.pages)
             }
@@ -79,7 +146,10 @@ struct CardEditorView: View {
             Text("\(document.pages.count) pages")
                 .font(MovieCutTypography.metadata.monospacedDigit())
                 .foregroundStyle(MovieCutTheme.mutedText)
-                .accessibilityIdentifier("cardEditor.pageCount")
+                .nativeAccessibilityStaticText(
+                    identifier: "cardEditor.pageCount",
+                    label: "\(document.pages.count) pages"
+                )
 
             Spacer(minLength: MovieCutSpacing.large)
 
@@ -106,7 +176,10 @@ struct CardEditorView: View {
                 Text("Format: \(document.format.accessibilityTitle)")
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(MovieCutTheme.mutedText)
-                    .accessibilityIdentifier("cardEditor.formatStatus")
+                    .nativeAccessibilityStaticText(
+                        identifier: "cardEditor.formatStatus",
+                        label: "Format: \(document.format.accessibilityTitle)"
+                    )
             }
         }
         .padding(.horizontal, MovieCutSpacing.large)
@@ -345,10 +418,16 @@ struct CardEditorView: View {
         HStack(spacing: MovieCutSpacing.medium) {
             if let selection = selectedPage(in: document) {
                 Text("Selected page \(selection.index + 1) of \(document.pages.count)")
-                    .accessibilityIdentifier("cardEditor.selectionStatus")
+                    .nativeAccessibilityStaticText(
+                        identifier: "cardEditor.selectionStatus",
+                        label: "Selected page \(selection.index + 1) of \(document.pages.count)"
+                    )
             } else {
                 Text("No page selected")
-                    .accessibilityIdentifier("cardEditor.selectionStatus")
+                    .nativeAccessibilityStaticText(
+                        identifier: "cardEditor.selectionStatus",
+                        label: "No page selected"
+                    )
             }
 
             Text("IDs and normalized element frames are preserved across format changes")

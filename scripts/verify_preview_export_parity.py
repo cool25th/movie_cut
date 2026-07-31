@@ -15,11 +15,17 @@ Usage:
         --preview-dir <dir with preview_t<t>.png> \\
         --export-mp4   <exported.mp4> \\
         --times        0.5,1.5,2.5 \\
+        [--expect-duration 3.0] [--frame-rate 30] \\
         [--tolerance 8.0] [--size 320x240]
+
+When --expect-duration is supplied, the probed export duration must be within
+one project frame (1 / --frame-rate seconds) of that value. Omitting it keeps
+the historical pixel-only behavior.
 """
 from __future__ import annotations
 
 import argparse
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -132,6 +138,12 @@ def main() -> int:
                     help="exported mp4 to extract comparison frames from")
     ap.add_argument("--times", required=True,
                     help="comma-separated seconds, e.g. 0.5,1.5,2.5")
+    ap.add_argument("--expect-duration", type=float, default=None,
+                    help="expected composition duration in seconds; when set, "
+                         "the export must match within one project frame")
+    ap.add_argument("--frame-rate", type=float, default=30.0,
+                    help="project frames per second used for duration tolerance "
+                         "(default 30; only used with --expect-duration)")
     ap.add_argument("--tolerance", type=float, default=8.0,
                     help="max acceptable overall MAD (default 8.0/255)")
     ap.add_argument("--size", default="320x240",
@@ -157,6 +169,32 @@ def main() -> int:
         print("FAIL: could not probe export duration; cannot validate sample "
               "timestamps", file=sys.stderr)
         return 2
+
+    failed = False
+    duration_tolerance = None
+    if args.expect_duration is not None:
+        if not math.isfinite(args.expect_duration) or args.expect_duration < 0:
+            print("FAIL: --expect-duration must be a finite non-negative value",
+                  file=sys.stderr)
+            return 2
+        if not math.isfinite(args.frame_rate) or args.frame_rate <= 0:
+            print("FAIL: --frame-rate must be a finite positive value when "
+                  "--expect-duration is used", file=sys.stderr)
+            return 2
+        duration_tolerance = 1.0 / args.frame_rate
+        duration_delta = abs(export_duration - args.expect_duration)
+        duration_ok = duration_delta <= duration_tolerance + 1e-9
+        verdict = "OK" if duration_ok else "FAIL"
+        print(
+            f"Duration    : {verdict} export={export_duration:.3f}s "
+            f"expected={args.expect_duration:.3f}s "
+            f"delta={duration_delta:.3f}s "
+            f"limit={duration_tolerance:.3f}s "
+            f"({args.frame_rate:g} fps)"
+        )
+        if not duration_ok:
+            failed = True
+
     print(f"Preview dir: {args.preview_dir}")
     print(f"Export mp4 : {args.export_mp4}")
     print(f"Export dur : {export_duration:.3f}s")
@@ -164,7 +202,6 @@ def main() -> int:
     print("-" * 60)
 
     worst = 0.0
-    failed = False
     for t in times:
         # Guard the requested timestamp against the export length BEFORE
         # invoking ffmpeg. A timestamp past the end (e.g. requesting 1.5s on a

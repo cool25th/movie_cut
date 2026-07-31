@@ -36,11 +36,16 @@ struct Phase33SpeedCurveEditorStaticContractTests {
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(newValue)"))
         #expect(speedSection.contains("ForEach(speedPresets, id: \\.self)"))
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(preset)"))
-        #expect(speedSection.contains("Toggle(\"부드러운 슬로우모션\""))
+        // Task 1.3: the `Toggle("부드러운 슬로우모션"` and
+        // `Text("내보낼 때 프레임 보간이 적용됩니다")` assertions were deleted. Both were
+        // copy trivia on SwiftUI implicit `LocalizedStringKey`s, and the three
+        // assertions that follow already pin the optical-flow control itself
+        // (binding, command call, disabled rule). Whether that toggle reads
+        // English in an English locale is task 1.4's locale sweep, not a source
+        // literal check.
         #expect(speedSection.contains("get: { clip.useOpticalFlow }"))
         #expect(speedSection.contains("viewModel.updateSelectedOpticalFlow(newValue)"))
         #expect(speedSection.contains(".disabled(clip.playbackRate >= 1.0)"))
-        #expect(speedSection.contains("Text(\"내보낼 때 프레임 보간이 적용됩니다\")"))
         #expect(speedSection.contains("speedCurveEditor"))
         #expect(speedSection.contains(#".accessibilityLabel("Constant speed")"#))
     }

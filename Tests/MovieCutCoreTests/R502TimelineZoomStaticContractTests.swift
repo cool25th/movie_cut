@@ -58,8 +58,11 @@ struct R502TimelineZoomStaticContractTests {
         #expect(zoomControls.contains("Text(timelineZoomDisplay)"))
         #expect(zoomControls.contains(#"title: "Zoom Timeline Out""#))
         #expect(zoomControls.contains(#"title: "Zoom Timeline In""#))
-        #expect(zoomControls.contains(#"accessibilityLabel: "타임라인 축소""#))
-        #expect(zoomControls.contains(#"accessibilityLabel: "타임라인 확대""#))
+        // Task 1.3: the two `타임라인 축소` / `타임라인 확대` assertions were deleted.
+        // They pinned the Korean accessibility labels requirement 1 removed. The
+        // icon-only zoom buttons still must expose distinct accessibility labels;
+        // that is verified at runtime by
+        // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         #expect(display.contains(#""\(Int(clampedTimelineZoom(viewModel.timelineZoom).rounded())) px/s""#))
     }
 

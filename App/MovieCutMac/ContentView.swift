@@ -8,9 +8,26 @@ struct ContentView: View {
     @State private var isExportPresetsPresented = false
     @State private var isTemplatePickerPresented = false
 
+    /// The parity harness mutates the project and rebuilds compositions rapidly.
+    /// Rendering the full editor concurrently is unnecessary and triggers
+    /// host-specific SwiftUI/AppKit executor crashes on macOS 26/Xcode 26.
+    /// Keep this isolation strictly behind the DEBUG harness environment gate.
+    private var isPreviewExportParityHarness: Bool {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        return environment["MOVIECUT_UITEST"] == "1"
+            && environment["MOVIECUT_UITEST_PARITY"] == "1"
+        #else
+        return false
+        #endif
+    }
+
     var body: some View {
         Group {
-            if viewModel.isCardEditorMode {
+            if isPreviewExportParityHarness {
+                Color.clear
+                    .accessibilityIdentifier("parity.harness.surface")
+            } else if viewModel.isCardEditorMode {
                 CardEditorView(viewModel: viewModel)
             } else {
                 timelineEditorSurface
@@ -30,9 +47,10 @@ struct ContentView: View {
             Task { await viewModel.clearRecoveryAutosave() }
         }
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                projectStatusToolbarItem
-            }
+            if !isPreviewExportParityHarness {
+                ToolbarItem(placement: .principal) {
+                    projectStatusToolbarItem
+                }
 
             // IA/menu-position contract: the top toolbar owns project, view,
             // sync, and export chrome. Clip editing actions are timeline-local.
@@ -141,11 +159,14 @@ struct ContentView: View {
                     exportToolbarControl
                 }
             }
+            }
         }
         .toolbarBackground(MovieCutTheme.panelBackgroundRaised, for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
         .sheet(isPresented: Binding(
-            get: { viewModel.exportEngine.isExporting },
+            get: {
+                !isPreviewExportParityHarness && viewModel.exportEngine.isExporting
+            },
             set: { _ in }
         )) {
             ExportSheet(viewModel: viewModel)

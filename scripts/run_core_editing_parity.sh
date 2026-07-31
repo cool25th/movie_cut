@@ -24,14 +24,40 @@ done
 command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 
 echo "Building MovieCutMac (Debug)…"
+# Use a dedicated DerivedData location so an open Xcode workspace cannot lock
+# the CLI parity build database.
+PARITY_DERIVED_DATA="${MOVIECUT_PARITY_DERIVED_DATA:-/tmp/MovieCutParityDerivedData}"
+# Xcode 26 may emit a tiny Debug Dylib launcher stub that exits immediately
+# when invoked outside Xcode. The parity harness launches through
+# LaunchServices below, but a self-contained binary also makes watchdog
+# process matching deterministic.
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination 'platform=macOS' build >/dev/null
+  -destination 'platform=macOS' -derivedDataPath "$PARITY_DERIVED_DATA" \
+  ENABLE_DEBUG_DYLIB=NO build >/dev/null
 
 PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination 'platform=macOS' -showBuildSettings 2>/dev/null \
+  -destination 'platform=macOS' -derivedDataPath "$PARITY_DERIVED_DATA" \
+  ENABLE_DEBUG_DYLIB=NO -showBuildSettings 2>/dev/null \
   | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2; exit}')"
-APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
+APP_BUNDLE="$PRODUCTS_DIR/MovieCutMac.app"
+APP_BIN="$APP_BUNDLE/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
+
+# The app is sandboxed, so direct paths under the repository or /tmp are not
+# readable/writable after LaunchServices starts it. Stage fixtures and all
+# per-scenario evidence inside the app container without weakening entitlements.
+APP_CONTAINER_TMP="$HOME/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-parity"
+STAGED_FIXTURES="$APP_CONTAINER_TMP/fixtures-$$"
+mkdir -p "$STAGED_FIXTURES"
+cp "$VIDEO_A" "$STAGED_FIXTURES/video-a.mp4"
+cp "$VIDEO_B" "$STAGED_FIXTURES/video-b.mp4"
+cp "$AUDIO" "$STAGED_FIXTURES/audio.wav"
+cp "$IMAGE" "$STAGED_FIXTURES/image.png"
+VIDEO_A="$STAGED_FIXTURES/video-a.mp4"
+VIDEO_B="$STAGED_FIXTURES/video-b.mp4"
+AUDIO="$STAGED_FIXTURES/audio.wav"
+IMAGE="$STAGED_FIXTURES/image.png"
+trap 'rm -rf "$STAGED_FIXTURES"' EXIT
 
 FIXTURES="$ROOT/Tests/Fixtures"
 
@@ -42,28 +68,40 @@ run_scenario() {
   local name="$1"; local times="$2"; local tolerance="$3"; shift 3
   local extra_env=("$@")
 
-  local work; work="$(mktemp -d)"
+  if [ -n "${MOVIECUT_PARITY_SCENARIO:-}" ] && [ "$MOVIECUT_PARITY_SCENARIO" != "$name" ]; then
+    echo "  ↷ $name (filtered)"
+    return 0
+  fi
+
+  local work; work="$(mktemp -d "$APP_CONTAINER_TMP/$name.XXXXXX")"
   local result="$work/result.txt"
   local preview_dir="$work/preview"
   local export_mp4="$work/export.mp4"
   mkdir -p "$preview_dir"
 
   echo "  → $name (times=$times tolerance=$tolerance)"
-  env MOVIECUT_UITEST=1 \
-    MOVIECUT_UITEST_PARITY=1 \
-    MOVIECUT_UITEST_PARITY_TIMES="$times" \
-    MOVIECUT_UITEST_PREVIEW_DUMP="$preview_dir" \
-    MOVIECUT_UITEST_EXPORT="$export_mp4" \
-    MOVIECUT_UITEST_RESULT="$result" \
-    MOVIECUT_UITEST_QUIT=1 \
-    "${extra_env[@]}" \
-    "$APP_BIN" >/dev/null 2>&1 &
+  local open_env=(
+    --env "MOVIECUT_UITEST=1"
+    --env "MOVIECUT_UITEST_PARITY=1"
+    --env "MOVIECUT_UITEST_PARITY_TIMES=$times"
+    --env "MOVIECUT_UITEST_PREVIEW_DUMP=$preview_dir"
+    --env "MOVIECUT_UITEST_EXPORT=$export_mp4"
+    --env "MOVIECUT_UITEST_RESULT=$result"
+    --env "MOVIECUT_UITEST_QUIT=1"
+  )
+  local setting
+  for setting in "${extra_env[@]}"; do
+    open_env+=(--env "$setting")
+  done
+  open -n -W "${open_env[@]}" "$APP_BUNDLE" >/dev/null 2>&1 &
   local pid=$!
 
   # Hard watchdog: the app only self-quits cooperatively and has been observed
   # to hang on teardown (notably the transition buildComposition path).
   local scenario_timeout=240
-  ( sleep "$scenario_timeout"; echo "    WATCHDOG: $name exceeded ${scenario_timeout}s, killing app" >&2; kill "$pid" 2>/dev/null || true ) &
+  # `pid` is the `open -W` waiter. On timeout also terminate the app process
+  # from this dedicated build, otherwise a compositor hang survives the waiter.
+  ( sleep "$scenario_timeout"; echo "    WATCHDOG: $name exceeded ${scenario_timeout}s, killing app" >&2; kill "$pid" 2>/dev/null || true; pkill -f "$APP_BIN" 2>/dev/null || true ) &
   local wd=$!
   for _ in $(seq 1 "$((scenario_timeout * 2))"); do [ -s "$result" ] && grep -q "parity_done\|error=" "$result" && break; sleep 0.5; done
   wait "$pid" 2>/dev/null || true
@@ -83,6 +121,15 @@ run_scenario() {
     echo "    Preserving work dir: $work" >&2
     return 1
   fi
+
+  local expected_duration frame_rate
+  expected_duration="$(printf '%s\n' "$status" | tr ' ' '\n' | awk -F= '$1 == "duration" { print $2; exit }')"
+  frame_rate="$(printf '%s\n' "$status" | tr ' ' '\n' | awk -F= '$1 == "frame_rate" { print $2; exit }')"
+  if [ -z "$expected_duration" ] || [ -z "$frame_rate" ]; then
+    echo "    FAIL: harness omitted duration/frame_rate: $status" >&2
+    echo "    Preserving work dir: $work" >&2
+    return 1
+  fi
   if ! [ -s "$export_mp4" ]; then
     echo "    FAIL: no export mp4" >&2
     echo "    Preserving work dir: $work" >&2
@@ -93,6 +140,8 @@ run_scenario() {
     --preview-dir "$preview_dir" \
     --export-mp4 "$export_mp4" \
     --times "$times" \
+    --expect-duration "$expected_duration" \
+    --frame-rate "$frame_rate" \
     --tolerance "$tolerance" \
     --size 320x240 \
     --work-dir "$work"
@@ -117,7 +166,7 @@ FAIL=0
 echo "Scenario 2: 2x clip split"
 # 2s source at 2x -> ~1.0s export; the old "0.5,1.5" requested a 1.5s frame
 # past the end, which crashed the comparator. Sample well inside ~1.0s.
-run_scenario "split_2x" "0.25,0.75" 25.0 \
+run_scenario "split_2x" "0.25,0.75" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_SPEED_RATE=2" \
   "MOVIECUT_UITEST_SPLIT_AT=0.5" || FAIL=1
@@ -125,30 +174,30 @@ run_scenario "split_2x" "0.25,0.75" 25.0 \
 echo "Scenario 3: speed ramp"
 # Ramp (1x->2x->1x over 2s source) renders ~1.386s; the old 1.5s sample was
 # past the end. Sample well inside ~1.386s.
-run_scenario "speed_ramp" "0.25,1.0" 25.0 \
+run_scenario "speed_ramp" "0.25,1.0" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_SPEED_RAMP=1" || FAIL=1
 
 echo "Scenario 4: text overlay at 0.5s"
-run_scenario "text_overlay" "0.5,1.5" 25.0 \
+run_scenario "text_overlay" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_TEXT_AT=0.5" || FAIL=1
 
 echo "Scenario 5: BGM at 0.5s"
-run_scenario "bgm" "0.5,1.5" 25.0 \
+run_scenario "bgm" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_BGM_AT=0.5" \
   "MOVIECUT_UITEST_BGM_PATH=$AUDIO" || FAIL=1
 
 echo "Scenario 6: filter + mask + subtitle"
-run_scenario "filter_mask_subtitle" "0.5,1.5" 25.0 \
+run_scenario "filter_mask_subtitle" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_COLOR=1" \
   "MOVIECUT_UITEST_MASK=1" \
   "MOVIECUT_UITEST_TEXT_AT=0.5" || FAIL=1
 
 echo "Scenario 7: image + video mixed"
-run_scenario "image_video_mixed" "0.5,2.5" 25.0 \
+run_scenario "image_video_mixed" "0.5,2.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$IMAGE,$VIDEO_A" || FAIL=1
 
 echo "Scenario 8: normal delete (gap preserved)"
@@ -160,7 +209,7 @@ echo "Scenario 8: normal delete (gap preserved)"
 # scenario does not actually leave an on-timeline gap — it just tests that
 # Preview matches Export for the remaining clip after a delete. Exercising a
 # real gap would require a harness change to delete a non-trailing clip.
-run_scenario "normal_delete" "0.5,1.5" 25.0 \
+run_scenario "normal_delete" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
   "MOVIECUT_UITEST_NORMAL_DELETE=1" || FAIL=1
 

@@ -37,7 +37,10 @@ struct R503TrackHeaderStaticContractTests {
 
         #expect(lane.contains("trackHeaderControls(for: track)"))
         #expect(lane.contains(".accessibilityElement(children: .contain)"))
-        #expect(lane.contains(#"accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))"#))
+        // Task 1.3: the `%@ 클립 추가 영역` assertion was deleted (it pinned the
+        // Korean key requirement 1 removed). The lane drop region's runtime
+        // accessibility label is covered by
+        // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         #expect(lane.contains("handleTrackDrop(providers: providers, location: location, trackId: track.id)"))
 
         #expect(controls.components(separatedBy: "Button {").count - 1 == 3)

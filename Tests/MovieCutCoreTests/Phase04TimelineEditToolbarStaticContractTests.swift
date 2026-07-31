@@ -160,8 +160,9 @@ struct Phase04TimelineEditToolbarStaticContractTests {
             #"title: "Zoom Timeline Out""#,
             #"title: "Zoom Timeline In""#,
             #"title: "Fit Timeline""#,
-            #"accessibilityLabel: "타임라인 축소""#,
-            #"accessibilityLabel: "타임라인 확대""#,
+            // Task 1.3: the two Korean zoom-label markers were deleted here; the
+            // runtime label check lives in
+            // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
             #"hint: "Zooms the timeline out.""#,
             #"hint: "Zooms the timeline in.""#,
             #"hint: "Fits the visible timeline duration in the available timeline width.""#,

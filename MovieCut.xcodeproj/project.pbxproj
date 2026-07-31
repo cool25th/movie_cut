@@ -35,6 +35,8 @@
 		22365771795F82112CFAAE6D /* ProjectModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A641EA50E67C3B3CA2C7F3DB /* ProjectModelTests.swift */; };
 		248B46DEDC71F46D95501C0B /* CardEditorUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */; };
 		2503D56A9B64CF2E3B27BD0A /* KeyboardShortcutStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16947AA334227D5B01D6762 /* KeyboardShortcutStaticContractTests.swift */; };
+		3F1C7A94B2D5E60817A4C33D /* TimelineAccessibilityLabelUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B62D40E9AC1F35D2E80B617 /* TimelineAccessibilityLabelUITests.swift */; };
+		8524EF261792F081F2A87EEE /* LocalizedAccessibilityLabelUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566C98DBDEDA47ED41E85F8C /* LocalizedAccessibilityLabelUITests.swift */; };
 		264117F66CA3ED4E141B3A73 /* WaveformInvalidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04BC2FF152EAB929D8550A4E /* WaveformInvalidationTests.swift */; };
 		276EBD2E2C53701A6F89405F /* R401InspectorContextStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0D9E4FD1959F3F95159BDB /* R401InspectorContextStaticContractTests.swift */; };
 		28DB68F4AD122FC24EC439BE /* ClaudeEditingProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC3B62C4FB755A0C4FEA27B1 /* ClaudeEditingProviderTests.swift */; };
@@ -365,6 +367,8 @@
 		7B4BD982EA9102CECD530C2A /* MaskPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskPixelProcessorTests.swift; sourceTree = "<group>"; };
 		7B50D9EEAF04DF595EC954F8 /* iOSContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSContentView.swift; sourceTree = "<group>"; };
 		7B55E9023F8839A8EFABA360 /* IOSTextClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSTextClipSheet.swift; sourceTree = "<group>"; };
+		7B62D40E9AC1F35D2E80B617 /* TimelineAccessibilityLabelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineAccessibilityLabelUITests.swift; sourceTree = "<group>"; };
+		566C98DBDEDA47ED41E85F8C /* LocalizedAccessibilityLabelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedAccessibilityLabelUITests.swift; sourceTree = "<group>"; };
 		7B9402CDE8A4A1F7519AA00F /* P0BrowserTimelinePolishStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BrowserTimelinePolishStaticContractTests.swift; sourceTree = "<group>"; };
 		7C70FA8B23C5C5C662723D31 /* ExportEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportEngine.swift; sourceTree = "<group>"; };
 		7C8034A487928203AD2F29C4 /* Phase13CardDensityStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase13CardDensityStaticContractTests.swift; sourceTree = "<group>"; };
@@ -800,7 +804,9 @@
 			children = (
 				D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */,
 				D810DCF9714A481FC4DEF6FA /* ImportExportE2ETests.swift */,
+				566C98DBDEDA47ED41E85F8C /* LocalizedAccessibilityLabelUITests.swift */,
 				51FEA554B103D5F59420B2F1 /* PreviewProjectCompositionUITests.swift */,
+				7B62D40E9AC1F35D2E80B617 /* TimelineAccessibilityLabelUITests.swift */,
 				19B298E1702B20592B5E5573 /* UnsavedChangesGuardUITests.swift */,
 			);
 			name = MovieCutMacUITests;
@@ -1351,7 +1357,9 @@
 			files = (
 				248B46DEDC71F46D95501C0B /* CardEditorUITests.swift in Sources */,
 				44D1A8007EDD8D71CB8731B9 /* ImportExportE2ETests.swift in Sources */,
+				8524EF261792F081F2A87EEE /* LocalizedAccessibilityLabelUITests.swift in Sources */,
 				12D7AB11FF91CD4B6DA96B2A /* PreviewProjectCompositionUITests.swift in Sources */,
+				3F1C7A94B2D5E60817A4C33D /* TimelineAccessibilityLabelUITests.swift in Sources */,
 				8AFEF05F6391FB56098F8EB9 /* UnsavedChangesGuardUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

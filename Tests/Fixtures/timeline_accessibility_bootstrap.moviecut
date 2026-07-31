@@ -1,0 +1,72 @@
+{
+  "id": "20000000-0000-4000-8000-000000000001",
+  "name": "Timeline accessibility fixture",
+  "createdAt": "1970-01-01T00:00:00Z",
+  "updatedAt": "1970-01-01T00:00:00Z",
+  "appVersion": "0.1.0",
+  "schemaVersion": 1,
+  "mediaLibrary": {
+    "assets": []
+  },
+  "timeline": {
+    "id": "20000000-0000-4000-8000-000000000002",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvasSize": [
+      1920,
+      1080
+    ],
+    "aspectRatio": "landscape16x9",
+    "tracks": [
+      {
+        "id": "20000000-0000-4000-8000-000000000003",
+        "kind": "video",
+        "name": "Video 1",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 0,
+        "clips": []
+      },
+      {
+        "id": "20000000-0000-4000-8000-000000000004",
+        "kind": "video",
+        "name": "Video 2",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 1,
+        "clips": []
+      },
+      {
+        "id": "20000000-0000-4000-8000-000000000005",
+        "kind": "audio",
+        "name": "Audio 1",
+        "isMuted": false,
+        "isLocked": false,
+        "isHidden": false,
+        "zIndex": 2,
+        "clips": []
+      }
+    ],
+    "markers": []
+  },
+  "markers": [],
+  "canvas": {
+    "aspectRatio": "landscape16x9",
+    "frameRate": "fps30"
+  },
+  "exportSettings": {
+    "resolution": "p1080",
+    "frameRate": "fps30",
+    "codec": "h264",
+    "audioCodec": "aac",
+    "containerFormat": "mp4",
+    "quality": "high",
+    "videoBitrateMbps": 10,
+    "includeChapters": false,
+    "includeBeatChapters": false
+  }
+}

@@ -158,7 +158,8 @@ struct TimelineView: View {
         .background(MovieCutTheme.timelineBackground)
         .background(timelineViewportWidthReader)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(NSLocalizedString("타임라인", comment: ""))
+        .accessibilityLabel(NSLocalizedString("Timeline", comment: ""))
+        .accessibilityIdentifier("timeline.root")
         .onDisappear {
             filmstripStore.cancelAll()
         }
@@ -410,11 +411,16 @@ struct TimelineView: View {
             timelineToolbarIconButton(
                 systemImage: "minus.magnifyingglass",
                 title: "Zoom Timeline Out",
-                accessibilityLabel: "타임라인 축소",
+                accessibilityLabel: "Timeline zoom out",
                 hint: "Zooms the timeline out."
             ) {
                 viewModel.zoomTimelineOut()
             }
+            // Locale-independent anchor for the accessibility-label regression
+            // check in TimelineAccessibilityLabelUITests (task 1.3). The label
+            // itself resolves through the catalog, so it cannot be used to
+            // locate the button.
+            .accessibilityIdentifier("timeline.zoomOut")
 
             Slider(value: Binding(
                     get: { viewModel.timelineZoom },
@@ -430,11 +436,12 @@ struct TimelineView: View {
             timelineToolbarIconButton(
                 systemImage: "plus.magnifyingglass",
                 title: "Zoom Timeline In",
-                accessibilityLabel: "타임라인 확대",
+                accessibilityLabel: "Timeline zoom in",
                 hint: "Zooms the timeline in."
             ) {
                 viewModel.zoomTimelineIn()
             }
+            .accessibilityIdentifier("timeline.zoomIn")
 
             Text(timelineZoomDisplay)
                 .font(MovieCutTypography.metadata.monospacedDigit())
@@ -542,9 +549,9 @@ struct TimelineView: View {
         .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
         .highPriorityGesture(playheadScrubGesture())
         .accessibilityElement()
-        .accessibilityLabel(NSLocalizedString("재생 헤드", comment: ""))
+        .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
         .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
-        .accessibilityHint(NSLocalizedString("드래그하여 타임라인을 프레임 단위로 스크럽합니다.", comment: ""))
+        .accessibilityHint(NSLocalizedString("Drag to scrub the timeline frame by frame.", comment: ""))
     }
 
     private var timeRuler: some View {
@@ -603,7 +610,7 @@ struct TimelineView: View {
                                 viewModel.goToMarker(marker)
                             }
                             .help(markerHelp(marker))
-                            .accessibilityLabel(NSLocalizedString("비트 마커", comment: ""))
+                            .accessibilityLabel(NSLocalizedString("Beat marker", comment: ""))
                             .accessibilityValue(timelineSecondsString(marker.time))
                     } else {
                         TimelineMarkerFlag(marker: marker)
@@ -635,8 +642,8 @@ struct TimelineView: View {
             .contentShape(Rectangle())
             .simultaneousGesture(rulerScrubGesture())
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(NSLocalizedString("타임라인 룰러", comment: ""))
-            .accessibilityHint(NSLocalizedString("클릭하거나 드래그하여 프리뷰를 스크럽합니다.", comment: ""))
+            .accessibilityLabel(NSLocalizedString("Timeline ruler", comment: ""))
+            .accessibilityHint(NSLocalizedString("Click or drag to scrub the preview.", comment: ""))
         }
     }
 
@@ -744,6 +751,7 @@ struct TimelineView: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(trackHeaderAccessibilityLabel(for: track))
+            .accessibilityIdentifier("timeline.trackHeader.\(track.id.uuidString)")
 
             // Clips area
             ZStack(alignment: .leading) {
@@ -764,7 +772,7 @@ struct TimelineView: View {
                         .frame(width: max(1, CGFloat(range.duration) * CGFloat(pixelsPerSecond)), height: trackHeight)
                         .offset(x: CGFloat(range.start) * CGFloat(pixelsPerSecond))
                         .allowsHitTesting(false)
-                        .accessibilityLabel(NSLocalizedString("자동 컷 제거 예정 구간", comment: ""))
+                        .accessibilityLabel(NSLocalizedString("Auto cut removal span", comment: ""))
                 }
 
                 ForEach(sortedMarkers.filter { $0.kind != .beat }) { marker in
@@ -785,8 +793,9 @@ struct TimelineView: View {
                 handleTrackDrop(providers: providers, location: location, trackId: track.id)
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(String(format: NSLocalizedString("%@ 클립 추가 영역", comment: ""), trackHeaderAccessibilityLabel(for: track)))
+            .accessibilityLabel(String(format: NSLocalizedString("%@ clip add region", comment: ""), trackHeaderAccessibilityLabel(for: track)))
             .accessibilityHint(NSLocalizedString("Drop media files or library assets here to add clips at the drop position.", comment: ""))
+            .accessibilityIdentifier("timeline.trackLane.\(track.id.uuidString)")
         }
         .frame(height: trackHeight)
         .overlay(alignment: .bottom) {
@@ -938,7 +947,7 @@ struct TimelineView: View {
                     .contentShape(Rectangle())
                     .gesture(leftTrimGesture(for: clip))
                     .accessibilityElement()
-                    .accessibilityLabel(String(format: NSLocalizedString("%@ 왼쪽 트림 핸들", comment: ""), clipAccessibilityLabel(for: clip)))
+                    .accessibilityLabel(String(format: NSLocalizedString("%@ left trim handle", comment: ""), clipAccessibilityLabel(for: clip)))
                     .accessibilityHint(NSLocalizedString("Drag to trim the clip start.", comment: ""))
 
                 Spacer(minLength: 0)
@@ -947,7 +956,7 @@ struct TimelineView: View {
                     .contentShape(Rectangle())
                     .gesture(rightTrimGesture(for: clip))
                     .accessibilityElement()
-                    .accessibilityLabel(String(format: NSLocalizedString("%@ 오른쪽 트림 핸들", comment: ""), clipAccessibilityLabel(for: clip)))
+                    .accessibilityLabel(String(format: NSLocalizedString("%@ right trim handle", comment: ""), clipAccessibilityLabel(for: clip)))
                     .accessibilityHint(NSLocalizedString("Drag to trim the clip end.", comment: ""))
             }
         }
@@ -1582,14 +1591,14 @@ struct TimelineView: View {
     private func clipAccessibilityLabel(for clip: Clip) -> String {
         switch clip.kind {
         case .video, .image:
-            return NSLocalizedString("비디오 클립", comment: "")
+            return NSLocalizedString("Video clip", comment: "")
         case .audio:
-            return NSLocalizedString("오디오 클립", comment: "")
+            return NSLocalizedString("Audio clip", comment: "")
         case .text:
             if isStickerClip(clip) {
-                return NSLocalizedString("스티커 클립", comment: "")
+                return NSLocalizedString("Sticker clip", comment: "")
             }
-            return NSLocalizedString("텍스트 클립", comment: "")
+            return NSLocalizedString("Text clip", comment: "")
         }
     }
 
@@ -1600,11 +1609,11 @@ struct TimelineView: View {
 
         switch track.kind {
         case .video:
-            return NSLocalizedString("비디오 트랙 헤더", comment: "")
+            return NSLocalizedString("Video track header", comment: "")
         case .audio:
-            return NSLocalizedString("오디오 트랙 헤더", comment: "")
+            return NSLocalizedString("Audio track header", comment: "")
         case .text:
-            return NSLocalizedString("텍스트 트랙 헤더", comment: "")
+            return NSLocalizedString("Text track header", comment: "")
         }
     }
 

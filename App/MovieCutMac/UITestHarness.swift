@@ -1994,6 +1994,8 @@ extension EditorViewModel {
     private func runPreviewExportParityUITestScenario(environment: [String: String]) async {
         var dumpedFrames = 0
         var previewDumpDir = "none"
+        var compositionDuration = 0.0
+        let projectFrameRate = currentProject.timeline.frameRate.doubleValue
         // Progressive status writer so a hang or crash still leaves evidence
         // about how far the harness got (the parity path is newer and has no
         // prior in-the-wild run).
@@ -2031,6 +2033,7 @@ extension EditorViewModel {
             // produce frames.
             rebuildPreviewComposition()
             try await waitForCompositionReady(timeoutSeconds: 10)
+            compositionDuration = playbackEngine.duration
             checkpoint("composition_ready")
             guard playbackEngine.playerItem != nil,
                   playbackEngine.lastCompositionError == nil else {
@@ -2088,6 +2091,8 @@ extension EditorViewModel {
         let status = "parity_done" +
             " dumped_frames=\(dumpedFrames)" +
             " preview_dump_dir=\(previewDumpDir)" +
+            String(format: " duration=%.3f", compositionDuration) +
+            String(format: " frame_rate=%.3f", projectFrameRate) +
             " composition_error=\(playbackEngine.lastCompositionError ?? "none")" +
             " error=\(lastErrorMessage ?? "none")" +
             timelineSummarySuffix()

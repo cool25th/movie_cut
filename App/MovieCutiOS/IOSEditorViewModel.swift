@@ -12,6 +12,7 @@ final class IOSEditorViewModel {
     var lastErrorMessage: String? = nil
     var exportEngine: IOSExportEngine = IOSExportEngine()
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
+    var templateStore: TemplateStore
 
     private let session: EditorSession
     private var sfxURLResolver: [String: URL]
@@ -24,6 +25,10 @@ final class IOSEditorViewModel {
         isPlaying = false
         session = EditorSession(project: project)
         sfxURLResolver = Self.makeSFXURLResolver()
+        templateStore = TemplateStore()
+        for bundle in TemplateStore.builtInTemplates() {
+            templateStore.add(bundle)
+        }
     }
 
     var mediaAssets: [MediaAsset] {

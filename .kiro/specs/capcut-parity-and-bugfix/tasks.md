@@ -407,11 +407,14 @@
 
 > **선행 조건: iOS 플랫폼 설치.** 미설치 상태에서는 이 절의 어떤 작업도 완료로 표시하지 않는다. 검증되지 않은 iOS 관련 주장을 기록하지 않는다. (요구사항 11의 수용 기준 6)
 
-- [~] 9.1 iOS 플랫폼 설치 여부 확인 후 진행 판단 (블로커 확인, 플랫폼 설치 전 완료 처리 금지)
+- [x] 9.1 iOS 플랫폼 설치 여부 확인 후 진행 판단 (블로커 확인, 플랫폼 설치 전 완료 처리 금지)
   - 시뮬레이터 목록과 iOS 스킴 빌드를 시도해 가능 여부를 확인
   - 불가하면 여기서 멈추고 그 사실을 보고한다. 이후 작업에 손대지 않는다
   - **실행 결과(2026-07-31):** iOS 플랫폼 미설치 확인. `xcrun simctl list runtimes` → 런타임 0개, `/Library/Developer/CoreSimulator/Profiles/Runtimes/` 디렉토리 부재. 디바이스 스텁 11개 존재하나 전부 unavailable(`runtime profile not found`). iOS Simulator **SDK**(`iphonesimulator26.5`)는 존재하나 런타임 없이는 destination 빌드 불가. `MovieCutiOS` 타깃은 `project.yml`에 올바로 정의됐으나 빌드 시 `Unable to find a destination` + `iOS 26.5 is not installed` 실패.
   - **판정:** iOS §9는 이 호스트에서 **블로커**. 요구사항 11 수용기준 6에 따라 9.2~9.8을 완료로 표시하지 않고 검증되지 않은 iOS 주장을 기록하지 않는다. 사용자가 `xcodebuild -downloadPlatform iOS`(또는 Xcode → Settings → Platforms)로 런타임 설치 후 9.2~9.8 착수 가능.
+  - **실행 결과(2026-08-01):** `xcodebuild -downloadPlatform iOS`로 iOS 26.5 시뮬레이터 런타임(8.52 GB) 설치 완료. `xcrun simctl list runtimes` → `iOS 26.5 (26.5 - 23F77)` 1건, iPhone 17 Pro 등 기기 11종 available. `xcodebuild -scheme MovieCutiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 빌드 성공.
+  - **블로커 해소 중 확인된 수정 사항:** iOS 빌드 통과를 위해 3건 수정 — (1) `RecentProjectsStore.resolveBookmarkData`의 macOS 전용 `withSecurityScope`를 `#if os(macOS)`로 분리, (2) `IOSEditorViewModel`에 `templateStore` 추가 + `IOSTemplatePickerView`가 `TemplateStore.shared` 대신 이를 사용하도록 수정(기존 `shared` 미존재로 빌드 실패), (3) `ReverseRenderService`를 `App/MovieCutMac/Export/`에서 `Sources/MovieCutCore/Rendering/`으로 이전(public·Sendable)하고 `IOSExportEngine` 호출부를 시그니처에 맞게 조정.
+  - **검증:** iOS 빌드 `BUILD SUCCEEDED`, macOS 빌드 `BUILD SUCCEEDED`, `swift test` 1139 tests / 179 suites 전체 통과. 이로써 9.2~9.8 착수 가능.
   - _Requirements: 11.1, 11.6_
 
 - [~] 9.2 iOS 테스트 타깃 및 하니스 진입점 구축

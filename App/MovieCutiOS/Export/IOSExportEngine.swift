@@ -508,12 +508,13 @@ final class IOSExportEngine {
         do {
             let reversedService = ReverseRenderService()
             try await reversedService.renderReversed(
-                from: asset,
+                clip: asset,
                 timeRange: CMTimeRange(
                     start: cmTime(clip.sourceRange.start),
                     duration: cmTime(clip.sourceRange.duration)
                 ),
-                to: outputURL
+                outputURL: outputURL,
+                progress: { _ in }
             )
             return outputURL
         } catch {

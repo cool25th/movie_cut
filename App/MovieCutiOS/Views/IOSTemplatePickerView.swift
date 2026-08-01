@@ -9,7 +9,7 @@ struct IOSTemplatePickerView: View {
     @State private var selectedTemplateID: String?
 
     private var templates: [TemplateBundle] {
-        TemplateStore.shared.bundles
+        viewModel.templateStore.bundles
     }
 
     private var selectedTemplate: TemplateBundle? {
@@ -137,7 +137,7 @@ struct IOSTemplatePickerView: View {
 
     @MainActor
     private func applyTemplate(_ template: TemplateBundle) async {
-        let project = TemplateStore.shared.createProject(from: template)
+        let project = viewModel.templateStore.createProject(from: template)
         viewModel.currentProject = project
         viewModel.selectedClipId = nil
         viewModel.playheadTime = 0

@@ -173,11 +173,17 @@ public actor RecentProjectsStore {
         // User-selected files carry security-scoped bookmarks, while files in
         // the app container may carry ordinary minimal bookmarks because no
         // persistent scope is required there. Support both persisted forms.
-        for options in [URL.BookmarkResolutionOptions.withSecurityScope, []] {
+        // `withSecurityScope` is macOS-only; iOS resolves plain bookmarks.
+        var options: [URL.BookmarkResolutionOptions] = []
+        #if os(macOS)
+        options.append(.withSecurityScope)
+        #endif
+        options.append([])
+        for option in options {
             var isStale = false
             if let url = try? URL(
                 resolvingBookmarkData: data,
-                options: options,
+                options: option,
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             ) {

@@ -126,24 +126,3 @@ struct TemplatePickerView: View {
             : Color(nsColor: .separatorColor)
     }
 }
-
-private extension AspectRatio {
-    var shortDisplayName: String {
-        switch self {
-        case .landscape16x9:
-            return "16:9"
-        case .portrait9x16:
-            return "9:16"
-        case .portrait4x5:
-            return "4:5"
-        case .square1x1:
-            return "1:1"
-        case .wide21x9:
-            return "21:9"
-        case .ultrawide21x9:
-            return "21:9 Ultra"
-        case .custom:
-            return "Custom"
-        }
-    }
-}

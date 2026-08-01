@@ -290,6 +290,28 @@ struct CoreFeatureTests {
         #expect(aspectRatio(of: square) == 1.0)
     }
 
+    @Test("AspectRatio short display tokens preserve fixed labels for presets")
+    func aspectRatioShortDisplayTokensPreserveFixedLabelsForPresets() {
+        #expect(AspectRatio.landscape16x9.shortDisplayName == "16:9")
+        #expect(AspectRatio.portrait9x16.shortDisplayName == "9:16")
+        #expect(AspectRatio.portrait4x5.shortDisplayName == "4:5")
+        #expect(AspectRatio.square1x1.shortDisplayName == "1:1")
+        #expect(AspectRatio.wide21x9.shortDisplayName == "21:9")
+        #expect(AspectRatio.ultrawide21x9.shortDisplayName == "21:9")
+    }
+
+    @Test("AspectRatio short display tokens for a size ignore pixels for presets")
+    func aspectRatioShortDisplayTokensForSizeIgnorePixelsForPresets() {
+        // Regression: the canvas badge must keep "21:9" for wide/ultrawide even
+        // though their pixel dimensions (2560×1080, 2520×1080) reduce to
+        // "64:27"/"7:3" via GCD. Only `.custom` derives from the given size.
+        #expect(AspectRatio.wide21x9.shortDisplayName(forSize: CGSize(width: 2560, height: 1080)) == "21:9")
+        #expect(AspectRatio.ultrawide21x9.shortDisplayName(forSize: CGSize(width: 2520, height: 1080)) == "21:9")
+        #expect(AspectRatio.landscape16x9.shortDisplayName(forSize: CGSize(width: 1920, height: 1080)) == "16:9")
+        #expect(AspectRatio.custom.shortDisplayName(forSize: CGSize(width: 1920, height: 1080)) == "16:9")
+        #expect(AspectRatio.custom.shortDisplayName(forSize: CGSize(width: 800, height: 600)) == "4:3")
+    }
+
     @Test("ExportSettings default values")
     func exportSettingsDefaultValues() {
         let settings = ExportSettings()

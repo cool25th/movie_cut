@@ -124,17 +124,21 @@ struct ThumbnailProxyStaticContractTests {
 
     @Test("EditorViewModel enriches imported media with thumbnails and proxy command")
     func editorViewModelImportEnrichesThumbnailsAndGeneratesProxy() throws {
-        let source = try source("App/MovieCutMac/EditorViewModel.swift")
+        // The thumbnail enrichment probe moved to Core's AVFoundationProbe
+        // (Sources/MovieCutCore/Media/AVFoundationProbe.swift); the call site
+        // and proxy commands remain in EditorViewModel.swift.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        let probes = try source("Sources/MovieCutCore/Media/AVFoundationProbe.swift")
 
-        #expect(source.contains("func thumbnailData(for clip: Clip) -> Data?"))
-        #expect(source.contains("func generateProxyForSelectedAsset()"))
-        #expect(source.contains("func generateProxy(for assetId: UUID)"))
-        #expect(source.contains("ProxyGenerator.makeProxyPlan"))
-        #expect(source.contains("ProxyGenerator.generateProxy"))
-        #expect(source.contains("UpdateMediaAssetCommand(asset: asset)"))
-        #expect(source.contains("func enrichAssetWithThumbnail"))
-        #expect(source.contains("ThumbnailGenerator.generate(for: asset"))
-        #expect(source.contains("return await Self.enrichAssetWithThumbnail(asset)"))
-        #expect(source.contains("ImportMediaCommand(asset: asset)"))
+        #expect(viewModel.contains("func thumbnailData(for clip: Clip) -> Data?"))
+        #expect(viewModel.contains("func generateProxyForSelectedAsset()"))
+        #expect(viewModel.contains("func generateProxy(for assetId: UUID)"))
+        #expect(viewModel.contains("ProxyGenerator.makeProxyPlan"))
+        #expect(viewModel.contains("ProxyGenerator.generateProxy"))
+        #expect(viewModel.contains("UpdateMediaAssetCommand(asset: asset)"))
+        #expect(probes.contains("func enrichAssetWithThumbnail"))
+        #expect(probes.contains("ThumbnailGenerator.generate(for: asset"))
+        #expect(viewModel.contains("return await Self.enrichAssetWithThumbnail(asset)"))
+        #expect(viewModel.contains("ImportMediaCommand(asset: asset)"))
     }
 }

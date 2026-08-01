@@ -48,16 +48,21 @@ struct MediaDragDropStaticContractTests {
 
     @Test("mac view model probes AVAsset duration before import and supports drop insertion")
     func viewModelProbesDurationAndInsertsDroppedMedia() throws {
-        let source = try source("App/MovieCutMac/EditorViewModel.swift")
+        // The drop path (`importMediaAndAddToTimeline`) delegates to
+        // `mediaAssetWithAppProbe`, whose AVURLAsset / .duration probing lives
+        // in Core's AVFoundationProbe. The drop insertion commands remain in
+        // EditorViewModel.swift.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        let probes = try source("Sources/MovieCutCore/Media/AVFoundationProbe.swift")
 
-        #expect(source.contains("func importMediaAndAddToTimeline"))
-        #expect(source.contains("MediaImporter.probe(url: url)"))
-        #expect(source.contains("AVURLAsset(url: url)"))
-        #expect(source.contains("try await asset.load(.duration)"))
-        #expect(source.contains("ImportMediaCommand(asset: asset)"))
-        #expect(source.contains("AddClipCommand(trackId: track.id, clip: clip)"))
-        #expect(source.contains("sourceRange: TimeRange(start: 0, duration: duration)"))
-        #expect(source.contains("timelineRange: TimeRange(start: max(0, startTime), duration: duration)"))
-        #expect(source.contains("preferredTrack.kind == destinationKind"))
+        #expect(viewModel.contains("func importMediaAndAddToTimeline"))
+        #expect(viewModel.contains("MediaImporter.probe(url: url)"))
+        #expect(probes.contains("AVURLAsset(url: url)"))
+        #expect(probes.contains("try await asset.load(.duration)"))
+        #expect(viewModel.contains("ImportMediaCommand(asset: asset)"))
+        #expect(viewModel.contains("AddClipCommand(trackId: track.id, clip: clip)"))
+        #expect(viewModel.contains("sourceRange: TimeRange(start: 0, duration: duration)"))
+        #expect(viewModel.contains("timelineRange: TimeRange(start: max(0, startTime), duration: duration)"))
+        #expect(viewModel.contains("preferredTrack.kind == destinationKind"))
     }
 }

@@ -94,6 +94,61 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
             return "Custom"
         }
     }
+
+    /// Compact ratio token used in badges, template pickers, and settings
+    /// (e.g. "16:9", "9:16", "1:1"). For `.custom`, the token is derived from
+    /// the preset's pixel dimensions via their greatest common divisor.
+    public var shortDisplayName: String {
+        switch self {
+        case .landscape16x9:
+            return "16:9"
+        case .portrait9x16:
+            return "9:16"
+        case .portrait4x5:
+            return "4:5"
+        case .square1x1:
+            return "1:1"
+        case .wide21x9, .ultrawide21x9:
+            return "21:9"
+        case .custom:
+            return Self.shortNameForCustomSize
+        }
+    }
+
+    /// Placeholder for the `.custom` short name; callers that know the actual
+    /// pixel dimensions should use `shortDisplayName(forSize:)` instead.
+    private static let shortNameForCustomSize = "custom"
+
+    /// Compact ratio token for a canvas. Non-custom presets use the fixed
+    /// token table (e.g. wide/ultrawide stay "21:9" regardless of their pixel
+    /// dimensions); a `.custom` canvas derives its token from the supplied
+    /// pixel dimensions via their greatest common divisor (1920×1080 → "16:9").
+    public func shortDisplayName(forSize size: CGSize) -> String {
+        switch self {
+        case .landscape16x9, .portrait9x16, .portrait4x5, .square1x1, .wide21x9, .ultrawide21x9:
+            return shortDisplayName
+        case .custom:
+            let width = max(Int(size.width.rounded()), 1)
+            let height = max(Int(size.height.rounded()), 1)
+            let divisor = AspectRatio.greatestCommonDivisor(width, height)
+            return "\(width / divisor):\(height / divisor)"
+        }
+    }
+
+    /// Euclidean algorithm. Returns `max(a, 1)` so a zero dimension never
+    /// produces a division by zero.
+    private static func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
+        var a = abs(lhs)
+        var b = abs(rhs)
+
+        while b != 0 {
+            let remainder = a % b
+            a = b
+            b = remainder
+        }
+
+        return max(a, 1)
+    }
 }
 
 /// Canvas and playback-rate defaults for the editable project.

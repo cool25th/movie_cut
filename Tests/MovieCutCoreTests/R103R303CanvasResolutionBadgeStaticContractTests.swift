@@ -73,32 +73,37 @@ struct R103R303CanvasResolutionBadgeStaticContractTests {
 
     @Test("EditorViewModel exposes read-only canvas and export badge helpers")
     func editorViewModelExposesReadOnlyCanvasAndExportBadgeHelpers() throws {
+        // The computed badge properties stay on the VM (views bind to them);
+        // the compact ratio token now lives on `AspectRatio.shortDisplayName`
+        // in Core (Sources/MovieCutCore/Models/CanvasPreset.swift), shared by
+        // Mac and iOS so the ratio→string table is no longer duplicated.
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        let coreModel = try source("Sources/MovieCutCore/Models/CanvasPreset.swift")
         let badgeProperties = try section(
             in: viewModel,
             from: "var canvasAspectBadgeText: String",
             to: "    var mediaAssets"
         )
-        let helperProperties = try section(
-            in: viewModel,
-            from: "private static func aspectRatioBadgeText(for canvas: CanvasPreset) -> String",
-            to: "    private static func ensureDefaultTracks"
+        let ratioHelpers = try section(
+            in: coreModel,
+            from: "public var shortDisplayName: String {",
+            to: "private static func greatestCommonDivisor"
         )
 
         #expect(badgeProperties.contains("var canvasAspectBadgeText: String"))
-        #expect(badgeProperties.contains("Self.aspectRatioBadgeText(for: currentProject.canvas)"))
+        #expect(badgeProperties.contains("shortDisplayName(forSize:"))
         #expect(badgeProperties.contains("var exportResolutionBadgeText: String"))
         #expect(badgeProperties.contains("ExportPlanner().renderSize("))
         #expect(badgeProperties.contains("for: currentProject.exportSettings.resolution"))
         #expect(badgeProperties.contains("canvas: currentProject.canvas"))
         #expect(badgeProperties.contains("var canvasResolutionBadgeText: String"))
         #expect(badgeProperties.contains(#""\(canvasAspectBadgeText) · \(exportResolutionBadgeText)""#))
-        #expect(helperProperties.contains(#"return "16:9""#))
-        #expect(helperProperties.contains(#"return "9:16""#))
-        #expect(helperProperties.contains(#"return "4:5""#))
-        #expect(helperProperties.contains(#"return "1:1""#))
-        #expect(helperProperties.contains(#"return "21:9""#))
-        #expect(helperProperties.contains("greatestCommonDivisor(width, height)"))
+        #expect(ratioHelpers.contains(#"return "16:9""#))
+        #expect(ratioHelpers.contains(#"return "9:16""#))
+        #expect(ratioHelpers.contains(#"return "4:5""#))
+        #expect(ratioHelpers.contains(#"return "1:1""#))
+        #expect(ratioHelpers.contains(#"return "21:9""#))
+        #expect(coreModel.contains("greatestCommonDivisor(width, height)"))
 
         for forbiddenMutation in [
             "updateExportSettings",
@@ -108,7 +113,6 @@ struct R103R303CanvasResolutionBadgeStaticContractTests {
             "apply("
         ] {
             #expect(!badgeProperties.contains(forbiddenMutation))
-            #expect(!helperProperties.contains(forbiddenMutation))
         }
     }
 }

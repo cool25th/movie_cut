@@ -634,10 +634,7 @@ private struct IOSMaskMetrics {
     }
 
     func clampedCanvasPoint(_ point: CGPoint) -> CGPoint {
-        CGPoint(
-            x: min(max(point.x, 0), canvasSize.width),
-            y: min(max(point.y, 0), canvasSize.height)
-        )
+        CanvasGeometry.clampedCanvasPoint(point, canvasSize: canvasSize)
     }
 }
 

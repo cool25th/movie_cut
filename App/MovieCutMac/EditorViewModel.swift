@@ -8,15 +8,6 @@ import MovieCutCore
 import Observation
 import UniformTypeIdentifiers
 
-enum CanvasOverlayAlignment: Sendable {
-    case leading
-    case centerX
-    case trailing
-    case top
-    case centerY
-    case bottom
-}
-
 enum TimelineScrubPhase: Sendable {
     case began
     case changed
@@ -298,7 +289,8 @@ final class EditorViewModel {
     }
 
     var canvasAspectBadgeText: String {
-        Self.aspectRatioBadgeText(for: currentProject.canvas)
+        let canvas = currentProject.canvas
+        return canvas.aspectRatio.shortDisplayName(forSize: canvas.size)
     }
 
     var exportResolutionBadgeText: String {
@@ -311,6 +303,10 @@ final class EditorViewModel {
 
     var canvasResolutionBadgeText: String {
         "\(canvasAspectBadgeText) · \(exportResolutionBadgeText)"
+    }
+
+    private static func pixelDimensionText(_ value: CGFloat) -> String {
+        "\(max(Int(value.rounded()), 1))"
     }
 
     var mediaAssets: [MediaAsset] {
@@ -1162,22 +1158,6 @@ final class EditorViewModel {
             .appendingPathComponent("MovieCut", isDirectory: true)
             .appendingPathComponent("Autosave", isDirectory: true)
             .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
-    }
-
-    private nonisolated static func proxyDirectory(for projectId: UUID) -> URL {
-        let baseDirectory = (
-            try? FileManager.default.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-        ) ?? FileManager.default.temporaryDirectory
-
-        return baseDirectory
-            .appendingPathComponent("MovieCut", isDirectory: true)
-            .appendingPathComponent("Proxies", isDirectory: true)
-            .appendingPathComponent(projectId.uuidString, isDirectory: true)
     }
 
     func exportProject() async {
@@ -5113,35 +5093,6 @@ final class EditorViewModel {
         throw EditorCommandError.clipNotFound(clipId)
     }
 
-    private func effectiveCanvasSize(in project: Project) -> CGSize {
-        let timelineSize = project.timeline.canvasSize
-        if timelineSize.width > 0, timelineSize.height > 0 {
-            return timelineSize
-        }
-
-        return project.canvas.size
-    }
-
-    private func canvasCenter() -> CGPoint {
-        let canvasSize = effectiveCanvasSize(in: currentProject)
-        guard canvasSize.width > 0, canvasSize.height > 0 else {
-            return CGPoint(x: 0, y: 0)
-        }
-
-        return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
-    }
-
-    private func socialSafeAreaRect() -> CGRect {
-        let canvasSize = effectiveCanvasSize(in: currentProject)
-        guard canvasSize.width > 0, canvasSize.height > 0 else {
-            return CGRect(x: 0, y: 0, width: 0, height: 0)
-        }
-
-        let horizontalInset = canvasSize.width * 0.12
-        let verticalInset = canvasSize.height * 0.18
-        return CGRect(origin: CGPoint(x: 0, y: 0), size: canvasSize).insetBy(dx: horizontalInset, dy: verticalInset)
-    }
-
     private func selectedCanvasOverlayOperationClips() -> [Clip] {
         let clips = selectedCanvasOverlayClips
         if clips.count > 1 {
@@ -5196,108 +5147,6 @@ final class EditorViewModel {
         }
     }
 
-    private func resolvedCanvasOverlayTransform(for clip: Clip) -> ClipTransform {
-        var transform = clip.transform
-        guard isZeroPoint(transform.position) else {
-            return transform
-        }
-
-        if let textContent = clip.textContent, !isZeroPoint(textContent.position) {
-            transform.position = textContent.position
-        } else {
-            transform.position = canvasCenter()
-        }
-
-        return transform
-    }
-
-    private func canvasOverlayVisualCenter(for clip: Clip) -> CGPoint {
-        let transform = resolvedCanvasOverlayTransform(for: clip)
-        return CGPoint(
-            x: transform.position.x + transform.offset.x,
-            y: transform.position.y + transform.offset.y
-        )
-    }
-
-    private func boundingCenter(for points: [CGPoint]) -> CGPoint {
-        guard let first = points.first else {
-            return canvasCenter()
-        }
-
-        var minX = first.x
-        var maxX = first.x
-        var minY = first.y
-        var maxY = first.y
-
-        for point in points.dropFirst() {
-            minX = min(minX, point.x)
-            maxX = max(maxX, point.x)
-            minY = min(minY, point.y)
-            maxY = max(maxY, point.y)
-        }
-
-        return CGPoint(x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5)
-    }
-
-    private func alignmentTarget(
-        for alignment: CanvasOverlayAlignment,
-        centers: [CGPoint],
-        canvasSize: CGSize,
-        isMultiple: Bool
-    ) -> CGFloat {
-        guard isMultiple, let first = centers.first else {
-            let safeRect = socialSafeAreaRect()
-            switch alignment {
-            case .leading:
-                return safeRect.minX
-            case .centerX:
-                return canvasSize.width * 0.5
-            case .trailing:
-                return safeRect.maxX
-            case .top:
-                return safeRect.maxY
-            case .centerY:
-                return canvasSize.height * 0.5
-            case .bottom:
-                return safeRect.minY
-            }
-        }
-
-        var minX = first.x
-        var maxX = first.x
-        var minY = first.y
-        var maxY = first.y
-
-        for center in centers.dropFirst() {
-            minX = min(minX, center.x)
-            maxX = max(maxX, center.x)
-            minY = min(minY, center.y)
-            maxY = max(maxY, center.y)
-        }
-
-        switch alignment {
-        case .leading:
-            return minX
-        case .centerX:
-            return (minX + maxX) * 0.5
-        case .trailing:
-            return maxX
-        case .top:
-            return maxY
-        case .centerY:
-            return (minY + maxY) * 0.5
-        case .bottom:
-            return minY
-        }
-    }
-
-    private func clampedCanvasPoint(_ point: CGPoint, canvasSize: CGSize) -> CGPoint {
-        CGPoint(
-            x: min(max(point.x, 0), canvasSize.width),
-            y: min(max(point.y, 0), canvasSize.height)
-        )
-    }
-
     func scrubPlayhead(to time: TimeInterval, phase: TimelineScrubPhase = .ended) {
         let duration = max(0, currentProject.timeline.duration)
         let safeTime = time.isFinite ? time : 0
@@ -5340,10 +5189,6 @@ final class EditorViewModel {
         playbackEngine.seek(to: time)
     }
 
-    private func isZeroPoint(_ point: CGPoint) -> Bool {
-        pointsEqual(point, CGPoint(x: 0, y: 0))
-    }
-
     private func isStickerClip(_ clip: Clip) -> Bool {
         guard clip.kind == .text, let textContent = clip.textContent else {
             return false
@@ -5354,47 +5199,6 @@ final class EditorViewModel {
 
     private func isLegacyStickerContent(_ textContent: TextClipContent) -> Bool {
         textContent.fontFamily == "Apple Color Emoji"
-    }
-
-    private func nonZeroPoint(_ point: CGPoint) -> CGPoint? {
-        pointsEqual(point, CGPoint(x: 0, y: 0)) ? nil : point
-    }
-
-    private func pointsEqual(_ lhs: CGPoint, _ rhs: CGPoint) -> Bool {
-        abs(lhs.x - rhs.x) <= 1.0e-9 && abs(lhs.y - rhs.y) <= 1.0e-9
-    }
-
-    private func scaledTemplatePosition(_ position: CGPoint) -> CGPoint {
-        let canvasSize = effectiveCanvasSize(in: currentProject)
-        guard canvasSize.width > 0, canvasSize.height > 0 else {
-            return position
-        }
-
-        if abs(position.x) <= 1.0e-9 && abs(position.y) <= 1.0e-9 {
-            return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
-        }
-
-        return CGPoint(
-            x: position.x / 1920 * canvasSize.width,
-            y: position.y / 1080 * canvasSize.height
-        )
-    }
-
-    private func defaultStickerPlacement(
-        for sticker: StickerAsset
-    ) -> (xRatio: CGFloat, yRatio: CGFloat, fontScale: Double, transformScale: CGFloat) {
-        let builtInStickers = StickerLibrary.builtIn().stickers
-        let stickerIndex = builtInStickers.firstIndex {
-            $0.id == sticker.id || ($0.name == sticker.name && $0.emoji == sticker.emoji)
-        } ?? 0
-        let placements: [(xRatio: CGFloat, yRatio: CGFloat, fontScale: Double, transformScale: CGFloat)] = [
-            (0.78, 0.32, 0.12, 1.00),
-            (0.24, 0.30, 0.11, 0.95),
-            (0.72, 0.68, 0.13, 1.08),
-            (0.30, 0.70, 0.10, 0.92)
-        ]
-
-        return placements[stickerIndex % placements.count]
     }
 
     private func sourceClipAndAsset(for clipId: UUID, in project: Project) throws -> (clip: Clip, asset: MediaAsset) {
@@ -5653,272 +5457,6 @@ final class EditorViewModel {
         asset.metadata = probe.metadata
 
         return await Self.enrichAssetWithThumbnail(asset)
-    }
-
-    private nonisolated static func appMetadataProbe(
-        for url: URL,
-        kind: MediaKind,
-        baseMetadata: MediaMetadata
-    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
-        switch kind {
-        case .video:
-            return await videoMetadataProbe(for: url, baseMetadata: baseMetadata)
-        case .audio:
-            return await audioMetadataProbe(for: url, baseMetadata: baseMetadata)
-        case .image:
-            return (nil, imageMetadataProbe(for: url, baseMetadata: baseMetadata))
-        }
-    }
-
-    private nonisolated static func videoMetadataProbe(
-        for url: URL,
-        baseMetadata: MediaMetadata
-    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
-        let avAsset = AVURLAsset(url: url)
-        var metadata = baseMetadata
-
-        let duration = await Self.avAssetDuration(for: avAsset)
-        guard let videoTrack = await Self.firstTrack(in: avAsset, mediaType: .video) else {
-            return (duration, metadata)
-        }
-
-        if let dimensions = await Self.videoDisplayDimensions(for: videoTrack) {
-            metadata.width = dimensions.width
-            metadata.height = dimensions.height
-        }
-        if let frameRate = await Self.videoFrameRate(for: videoTrack) {
-            metadata.frameRate = frameRate
-        }
-        if let codec = await Self.codecDescription(for: videoTrack) {
-            metadata.codec = codec
-        }
-
-        return (duration, metadata)
-    }
-
-    private nonisolated static func audioMetadataProbe(
-        for url: URL,
-        baseMetadata: MediaMetadata
-    ) async -> (duration: TimeInterval?, metadata: MediaMetadata) {
-        let avAsset = AVURLAsset(url: url)
-        var metadata = baseMetadata
-
-        let duration = await Self.avAssetDuration(for: avAsset)
-        guard let audioTrack = await Self.firstTrack(in: avAsset, mediaType: .audio) else {
-            return (duration, metadata)
-        }
-
-        if let audioDescription = await Self.audioFormatDescription(for: audioTrack) {
-            if let sampleRate = audioDescription.sampleRate {
-                metadata.sampleRate = sampleRate
-            }
-            if let channelCount = audioDescription.channelCount {
-                metadata.channelCount = channelCount
-            }
-        }
-        if let codec = await Self.codecDescription(for: audioTrack) {
-            metadata.codec = codec
-        }
-
-        return (duration, metadata)
-    }
-
-    private nonisolated static func imageMetadataProbe(
-        for url: URL,
-        baseMetadata: MediaMetadata
-    ) -> MediaMetadata {
-        var metadata = baseMetadata
-
-        if let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-           let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any] {
-            if let width = properties[kCGImagePropertyPixelWidth] as? NSNumber {
-                metadata.width = width.intValue
-            }
-            if let height = properties[kCGImagePropertyPixelHeight] as? NSNumber {
-                metadata.height = height.intValue
-            }
-        }
-
-        if metadata.width == nil || metadata.height == nil,
-           let image = NSImage(contentsOf: url),
-           let representation = image.representations.first {
-            if metadata.width == nil, representation.pixelsWide > 0 {
-                metadata.width = representation.pixelsWide
-            }
-            if metadata.height == nil, representation.pixelsHigh > 0 {
-                metadata.height = representation.pixelsHigh
-            }
-        }
-
-        return metadata
-    }
-
-    private nonisolated static func enrichAssetWithThumbnail(_ asset: MediaAsset) async -> MediaAsset {
-        guard asset.kind == .video || asset.kind == .image else {
-            return asset
-        }
-
-        var enrichedAsset = asset
-        let thumbnailTime = Self.thumbnailTime(for: asset)
-        let thumbnailSize = ThumbnailGenerator.defaultSize
-        enrichedAsset.thumbnailData = await Task.detached(priority: .utility) {
-            ThumbnailGenerator.generate(for: asset, at: thumbnailTime, size: thumbnailSize)
-        }.value
-        return enrichedAsset
-    }
-
-    private nonisolated static func thumbnailTime(for asset: MediaAsset) -> TimeInterval {
-        guard asset.kind == .video else {
-            return 0
-        }
-
-        guard let duration = asset.duration, duration.isFinite, duration > 0 else {
-            return 0
-        }
-
-        return min(max(duration * 0.05, 0), 1)
-    }
-
-    private nonisolated static func avAssetDuration(for url: URL) async -> TimeInterval? {
-        await avAssetDuration(for: AVURLAsset(url: url))
-    }
-
-    private nonisolated static func avAssetDuration(for asset: AVURLAsset) async -> TimeInterval? {
-        do {
-            let duration = try await asset.load(.duration)
-            let seconds = duration.seconds
-            guard seconds.isFinite, seconds > 0 else {
-                return nil
-            }
-            return seconds
-        } catch {
-            return nil
-        }
-    }
-
-    private nonisolated static func videoAssetContainsAudioTrack(_ url: URL) async -> Bool {
-        await firstTrack(in: AVURLAsset(url: url), mediaType: .audio) != nil
-    }
-
-    private nonisolated static func firstTrack(
-        in asset: AVURLAsset,
-        mediaType: AVMediaType
-    ) async -> AVAssetTrack? {
-        do {
-            return try await asset.loadTracks(withMediaType: mediaType).first
-        } catch {
-            return nil
-        }
-    }
-
-    private nonisolated static func videoDisplayDimensions(for track: AVAssetTrack) async -> (width: Int, height: Int)? {
-        do {
-            let naturalSize = try await track.load(.naturalSize)
-            let preferredTransform = try await track.load(.preferredTransform)
-            let transformedBounds = CGRect(origin: CGPoint(x: 0, y: 0), size: naturalSize)
-                .applying(preferredTransform)
-            let width = Int(abs(transformedBounds.width).rounded())
-            let height = Int(abs(transformedBounds.height).rounded())
-
-            if width > 0, height > 0 {
-                return (width, height)
-            }
-
-            let fallbackWidth = Int(abs(naturalSize.width).rounded())
-            let fallbackHeight = Int(abs(naturalSize.height).rounded())
-            guard fallbackWidth > 0, fallbackHeight > 0 else {
-                return nil
-            }
-            return (fallbackWidth, fallbackHeight)
-        } catch {
-            return nil
-        }
-    }
-
-    private nonisolated static func videoFrameRate(for track: AVAssetTrack) async -> Double? {
-        do {
-            let frameRate = try await track.load(.nominalFrameRate)
-            guard frameRate.isFinite, frameRate > 0 else {
-                return nil
-            }
-            return Double(frameRate)
-        } catch {
-            return nil
-        }
-    }
-
-    private nonisolated static func audioFormatDescription(for track: AVAssetTrack) async -> (sampleRate: Int?, channelCount: Int?)? {
-        guard let formatDescription = await Self.firstFormatDescription(for: track),
-              let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee else {
-            return nil
-        }
-
-        let sampleRate = streamDescription.mSampleRate.isFinite && streamDescription.mSampleRate > 0
-            ? Int(streamDescription.mSampleRate.rounded())
-            : nil
-        let channelCount = streamDescription.mChannelsPerFrame > 0
-            ? Int(streamDescription.mChannelsPerFrame)
-            : nil
-        return (sampleRate, channelCount)
-    }
-
-    private nonisolated static func codecDescription(for track: AVAssetTrack) async -> String? {
-        guard let formatDescription = await Self.firstFormatDescription(for: track) else {
-            return nil
-        }
-
-        return codecName(from: CMFormatDescriptionGetMediaSubType(formatDescription))
-    }
-
-    private nonisolated static func firstFormatDescription(for track: AVAssetTrack) async -> CMFormatDescription? {
-        do {
-            return try await track.load(.formatDescriptions).first
-        } catch {
-            return nil
-        }
-    }
-
-    private nonisolated static func codecName(from mediaSubType: FourCharCode) -> String? {
-        guard let subtype = fourCharacterCodeString(from: mediaSubType) else {
-            return nil
-        }
-
-        switch subtype {
-        case "avc1":
-            return "H.264"
-        case "hvc1", "hev1":
-            return "HEVC"
-        case "apch":
-            return "ProRes 422 HQ"
-        case "apcn":
-            return "ProRes 422"
-        case "apcs":
-            return "ProRes 422 LT"
-        case "apco":
-            return "ProRes 422 Proxy"
-        case "ap4h":
-            return "ProRes 4444"
-        case "mp4a":
-            return "AAC"
-        case "lpcm":
-            return "PCM"
-        default:
-            return subtype
-        }
-    }
-
-    private nonisolated static func fourCharacterCodeString(from code: FourCharCode) -> String? {
-        var bigEndianCode = code.bigEndian
-        let bytes = withUnsafeBytes(of: &bigEndianCode) { Array($0) }
-        guard bytes.allSatisfy({ byte in
-            byte >= 32 && byte <= 126
-        }) else {
-            return nil
-        }
-
-        let string = String(bytes: bytes, encoding: .ascii)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return string?.isEmpty == false ? string : nil
     }
 
     private func insertMediaAssetOnTimeline(
@@ -6312,43 +5850,6 @@ final class EditorViewModel {
         default:
             return nil
         }
-    }
-
-    private static func aspectRatioBadgeText(for canvas: CanvasPreset) -> String {
-        switch canvas.aspectRatio {
-        case .landscape16x9:
-            return "16:9"
-        case .portrait9x16:
-            return "9:16"
-        case .portrait4x5:
-            return "4:5"
-        case .square1x1:
-            return "1:1"
-        case .wide21x9, .ultrawide21x9:
-            return "21:9"
-        case .custom:
-            let width = max(Int(canvas.size.width.rounded()), 1)
-            let height = max(Int(canvas.size.height.rounded()), 1)
-            let divisor = greatestCommonDivisor(width, height)
-            return "\(width / divisor):\(height / divisor)"
-        }
-    }
-
-    private static func pixelDimensionText(_ value: CGFloat) -> String {
-        "\(max(Int(value.rounded()), 1))"
-    }
-
-    private static func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
-        var a = abs(lhs)
-        var b = abs(rhs)
-
-        while b != 0 {
-            let remainder = a % b
-            a = b
-            b = remainder
-        }
-
-        return max(a, 1)
     }
 
     private static func ensureDefaultTracks(in project: Project) -> Project {

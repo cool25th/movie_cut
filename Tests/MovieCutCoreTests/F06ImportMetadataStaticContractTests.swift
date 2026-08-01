@@ -11,12 +11,15 @@ struct F06ImportMetadataStaticContractTests {
 
     @Test("EditorViewModel has best-effort AV and image metadata probe helpers")
     func editorViewModelHasBestEffortMetadataProbeHelpers() throws {
-        let source = try source("App/MovieCutMac/EditorViewModel.swift")
+        // The probe implementation lives in Core's AVFoundationProbe
+        // (Sources/MovieCutCore/Media/AVFoundationProbe.swift), shared by Mac
+        // and iOS. The Mac VM forwards to it from EditorViewModel+MediaProbe.swift.
+        let source = try source("Sources/MovieCutCore/Media/AVFoundationProbe.swift")
 
-        #expect(source.contains("private nonisolated static func appMetadataProbe"))
-        #expect(source.contains("private nonisolated static func videoMetadataProbe"))
-        #expect(source.contains("private nonisolated static func audioMetadataProbe"))
-        #expect(source.contains("private nonisolated static func imageMetadataProbe"))
+        #expect(source.contains("static func appMetadataProbe"))
+        #expect(source.contains("static func videoMetadataProbe"))
+        #expect(source.contains("static func audioMetadataProbe"))
+        #expect(source.contains("static func imageMetadataProbe"))
         #expect(source.contains("AVURLAsset(url: url)"))
         #expect(source.contains("firstTrack(in: avAsset, mediaType: .video)"))
         #expect(source.contains("firstTrack(in: avAsset, mediaType: .audio)"))
@@ -28,22 +31,25 @@ struct F06ImportMetadataStaticContractTests {
         #expect(source.contains("CMFormatDescriptionGetMediaSubType"))
         #expect(source.contains("CMAudioFormatDescriptionGetStreamBasicDescription"))
         #expect(source.contains("CGImageSourceCreateWithURL"))
-        #expect(source.contains("NSImage(contentsOf: url)"))
     }
 
     @Test("EditorViewModel fills F-06 metadata without dropping Core fileSize")
     func editorViewModelFillsMetadataWithoutDroppingFileSize() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        // The probe call site (passing baseMetadata) stays in EditorViewModel.swift;
+        // the probe body that fills the metadata fields lives in Core's
+        // AVFoundationProbe. Both files are checked.
+        let callSite = try source("App/MovieCutMac/EditorViewModel.swift")
+        let probes = try source("Sources/MovieCutCore/Media/AVFoundationProbe.swift")
         let importer = try source("Sources/MovieCutCore/Media/MediaImporter.swift")
 
-        #expect(viewModel.contains("baseMetadata: asset.metadata"))
-        #expect(viewModel.contains("var metadata = baseMetadata"))
-        #expect(viewModel.contains("metadata.width = dimensions.width"))
-        #expect(viewModel.contains("metadata.height = dimensions.height"))
-        #expect(viewModel.contains("metadata.frameRate = frameRate"))
-        #expect(viewModel.contains("metadata.codec = codec"))
-        #expect(viewModel.contains("metadata.sampleRate = sampleRate"))
-        #expect(viewModel.contains("metadata.channelCount = channelCount"))
+        #expect(callSite.contains("baseMetadata: asset.metadata"))
+        #expect(probes.contains("var metadata = baseMetadata"))
+        #expect(probes.contains("metadata.width = dimensions.width"))
+        #expect(probes.contains("metadata.height = dimensions.height"))
+        #expect(probes.contains("metadata.frameRate = frameRate"))
+        #expect(probes.contains("metadata.codec = codec"))
+        #expect(probes.contains("metadata.sampleRate = sampleRate"))
+        #expect(probes.contains("metadata.channelCount = channelCount"))
         #expect(importer.contains("metadata: MediaMetadata(fileSize: fileSize)"))
     }
 

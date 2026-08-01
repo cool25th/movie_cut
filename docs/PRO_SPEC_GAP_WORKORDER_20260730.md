@@ -1,5 +1,7 @@
 # Pro 스펙 대조 갭 작업지시서 — 2026-07-30
 
+> **[상태: 대체됨 — 역사 기록]** 이 문서의 S1~S11 열린 항목은 `.kiro/specs/capcut-parity-and-bugfix/` 스펙(2026-07-31)으로 이관·실행됐다. 현역 판정은 그 스펙의 `tasks.md`와 `docs/README.md`를 본다. 이 파일은 경로 참조(`StaticContract` 테스트 주석) 보존을 위해 제자리에 둔다.
+>
 > 작성일: 2026-07-30 / 브랜치: `main` (기준 커밋 `d8bfc8c`, 작업트리 clean)
 > 출처: 외부 "Principal macOS Architect" Pro 아키텍처 스펙(5 Phase)을 현 코드베이스와 대조
 > 성격: **코드 수정 없음.** repo-wide grep + `Info.plist` / `project.pbxproj` / `.github/workflows` 직접 열람으로 도출

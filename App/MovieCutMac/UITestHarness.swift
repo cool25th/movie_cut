@@ -152,6 +152,8 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_PERF_PHASE=<path>` — optional phase handshake for external RSS sampling.
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
+    /// - `MOVIECUT_UITEST_VOCAL_SEPARATION=<removeVocals|isolateCenter>` — applies real offline separation to the selected audio clip.
+    /// - `MOVIECUT_UITEST_PREVIEW_AUDIO=<path>` — renders Preview's installed composition/audio mix for PCM verification.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -180,6 +182,7 @@ extension EditorViewModel {
             return
         }
         var extractAudioSuffix = ""
+        var vocalSeparationSuffix = ""
         var scrubSuffix = ""
         var clipboardSuffix = ""
         var filmstripSuffix = ""
@@ -370,6 +373,45 @@ extension EditorViewModel {
             await applyEQPreset(eqPreset)
         }
 
+        // App-level vocal separation proof: process the selected stereo audio
+        // clip through the real renderer/source-swap command, then render the
+        // exact Preview composition and audio mix for external PCM measurement.
+        if let rawMode = env["MOVIECUT_UITEST_VOCAL_SEPARATION"], !rawMode.isEmpty {
+            do {
+                guard let mode = VocalSeparationMode(rawValue: rawMode) else {
+                    throw NSError(
+                        domain: "MovieCutUITest",
+                        code: 30,
+                        userInfo: [NSLocalizedDescriptionKey: "unknown vocal separation mode: \(rawMode)"]
+                    )
+                }
+                guard let clipId = selectedClipId else {
+                    throw NSError(
+                        domain: "MovieCutUITest",
+                        code: 31,
+                        userInfo: [NSLocalizedDescriptionKey: "vocal separation requires a selected audio clip"]
+                    )
+                }
+
+                try await applyVocalSeparation(for: clipId, mode: mode, strength: 1)
+                vocalSeparationSuffix = " vocal_mode=\(mode.rawValue) vocal_applied=1"
+
+                if let previewAudioPath = env["MOVIECUT_UITEST_PREVIEW_AUDIO"], !previewAudioPath.isEmpty {
+                    rebuildPreviewComposition()
+                    let expectedGeneration = playbackEngine.currentCompositionGeneration
+                    try await waitForCompositionReady(
+                        timeoutSeconds: 10,
+                        expectedGeneration: expectedGeneration
+                    )
+                    try await playbackEngine.renderCurrentPreviewAudio(to: URL(filePath: previewAudioPath))
+                    vocalSeparationSuffix += " preview_audio=1"
+                }
+            } catch {
+                lastErrorMessage = "vocal separation failed: \(error.localizedDescription)"
+                vocalSeparationSuffix = " vocal_mode=\(rawMode) vocal_applied=0 preview_audio=0"
+            }
+        }
+
         // Optional Extract Audio step: runs the real ViewModel command-backed
         // extraction path and leaves the extracted audio clip selected.
         if env["MOVIECUT_UITEST_EXTRACT_AUDIO"] == "1" {
@@ -534,7 +576,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -2295,21 +2337,33 @@ extension EditorViewModel {
     /// `timeoutSeconds` elapses. The duration gate matters because the video
     /// output cannot produce a frame before the composition's tracks finish
     /// loading (which is when duration becomes non-zero).
-    private func waitForCompositionReady(timeoutSeconds: Double) async throws {
+    private func waitForCompositionReady(
+        timeoutSeconds: Double,
+        expectedGeneration: UInt64? = nil
+    ) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
             if let err = playbackEngine.lastCompositionError {
                 throw NSError(domain: "MovieCutUITest", code: 6,
                               userInfo: [NSLocalizedDescriptionKey: err])
             }
-            if playbackEngine.playerItem != nil,
+            let installedExpectedGeneration = expectedGeneration.map {
+                playbackEngine.installedCompositionGeneration >= $0
+            } ?? true
+            if installedExpectedGeneration,
+               playbackEngine.playerItem != nil,
                playbackEngine.duration > 0 {
                 return
             }
             try await Task.sleep(nanoseconds: 30_000_000)
         }
         // Last chance: item present but duration still settling.
-        if playbackEngine.playerItem != nil, playbackEngine.lastCompositionError == nil {
+        let installedExpectedGeneration = expectedGeneration.map {
+            playbackEngine.installedCompositionGeneration >= $0
+        } ?? true
+        if installedExpectedGeneration,
+           playbackEngine.playerItem != nil,
+           playbackEngine.lastCompositionError == nil {
             return
         }
         throw NSError(domain: "MovieCutUITest", code: 5,

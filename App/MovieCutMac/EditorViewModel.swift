@@ -117,6 +117,10 @@ final class EditorViewModel {
     /// restorePlaybackAfterRebuild task that hangs). Step 6.
     var suppressCompositionRebuild = false
     var exportEngine: ExportEngine
+    /// Shared home recent-projects store, configured by AppStageRouter. Keeping
+    /// the reference here lets every successful Save/Cmd-S update Home instead
+    /// of only the router's open path.
+    @ObservationIgnored var recentProjectsStore: RecentProjectsStore?
     var musicLibrary: MusicLibrary
     var transcriptionService: TranscriptionService
     var templateStore: TemplateStore
@@ -143,15 +147,15 @@ final class EditorViewModel {
     var motionTrackingClipId: UUID?
     var recentAnalysisResults: [AnalysisHistoryItem] = []
     var lastExportURL: URL?
-    var isCloudSyncing: Bool = false
-    var cloudSyncError: String?
     var exportFormat: String = "mp4"
-    var cloudProjects: [CloudProjectInfo] = []
 
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored private var session: EditorSession
     @ObservationIgnored private let projectStore = EditorViewModel.makeProjectStore()
+    /// Single owner of compound flattening. Engines receive the same value
+    /// snapshot and never compute or cache flattened timelines themselves.
+    @ObservationIgnored private let flattenedTimelineCache = FlattenedTimelineCache()
     private var clipClipboardPayload: ClipboardPayload?
 
     private static func makeProjectStore() -> ProjectStore {
@@ -161,6 +165,26 @@ final class EditorViewModel {
         }
         #endif
         return ProjectStore()
+    }
+
+    /// Recomputes compound flattening exactly once for this committed project
+    /// state and distributes the identical snapshot to both rendering engines.
+    private func refreshFlattenedTimeline(for project: Project) async {
+        await flattenedTimelineCache.update(for: project)
+        await flattenedTimelineCache.distribute(
+            to: [playbackEngine, exportEngine],
+            project: project
+        )
+    }
+
+    /// Diagnostic seam used by integration validation to pin that both real
+    /// engines are attached to the exact same snapshot.
+    func renderingEnginesHoldIdenticalTimeline() async -> Bool {
+        await FlattenedTimelineParity.bothHoldIdentical(
+            for: currentProject.id,
+            playbackEngine,
+            exportEngine
+        )
     }
 
     /// Writes the current project to the crash-recovery autosave off the edit
@@ -235,6 +259,13 @@ final class EditorViewModel {
         }
 
         startAutoSave()
+
+        // Bind the initial project to the single flatten cache. Subsequent
+        // committed mutations refresh synchronously in refreshFromSession().
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refreshFlattenedTimeline(for: project)
+        }
     }
 
     var projectDisplayName: String {
@@ -745,11 +776,13 @@ final class EditorViewModel {
         return didApply
     }
 
-    func newProject() async {
-        guard await confirmDiscardUnsavedChanges() else { return }
+    @discardableResult
+    func newProject() async -> Bool {
+        guard await confirmDiscardUnsavedChanges() else { return false }
         let project = Self.defaultProject()
         session = EditorSession(project: project)
         currentProject = project
+        await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
         syncExportUI(from: project.exportSettings)
@@ -767,6 +800,7 @@ final class EditorViewModel {
         // A brand-new project is its own clean baseline.
         lastSavedProject = project
         isDirty = false
+        return true
     }
 
     func openProject(from url: URL) async {
@@ -776,6 +810,7 @@ final class EditorViewModel {
             let project = Self.ensureDefaultTracks(in: loadedProject)
             session = EditorSession(project: project)
             currentProject = project
+            await refreshFlattenedTimeline(for: project)
             currentProjectURL = url
             canvasSelection = project.canvas.aspectRatio
             syncExportUI(from: project.exportSettings)
@@ -830,6 +865,12 @@ final class EditorViewModel {
             // the dirty flag.
             lastSavedProject = snapshot
             isDirty = false
+            // A successful manual save is now the durable baseline; retaining
+            // crash recovery would incorrectly offer stale unsaved work later.
+            await projectStore.clearAutosave()
+            if let recentProjectsStore {
+                await recordCurrentProjectToRecent(recentProjectsStore, savedTo: url)
+            }
         } catch {
             lastErrorMessage = error.localizedDescription
         }
@@ -840,6 +881,7 @@ final class EditorViewModel {
         let project = Self.ensureDefaultTracks(in: recovered)
         session = EditorSession(project: project)
         currentProject = project
+        await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
         syncExportUI(from: project.exportSettings)
@@ -922,6 +964,15 @@ final class EditorViewModel {
     }
 
     func saveProject() async {
+        // Deterministic path injection for the ungated home relaunch XCUITest.
+        // This does not enable MOVIECUT_UITEST or alter app routing; it only
+        // replaces NSSavePanel so the test can exercise the real save/store path.
+        if let injectedPath = ProcessInfo.processInfo.environment["MOVIECUT_UITEST_HOME_SAVE_PATH"],
+           !injectedPath.isEmpty {
+            await saveProject(to: URL(filePath: injectedPath))
+            return
+        }
+
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "moviecut") ?? .json]
         panel.canCreateDirectories = true
@@ -952,6 +1003,8 @@ final class EditorViewModel {
     /// three branches are exercisable by XCUITest without an Accessibility
     /// permission dependency.
     func confirmDiscardUnsavedChanges() async -> Bool {
+        guard isDirty else { return true }
+
         let env = ProcessInfo.processInfo.environment
 
         // Injected choice: run the real guard + save path for any of the three
@@ -1125,69 +1178,6 @@ final class EditorViewModel {
             .appendingPathComponent("MovieCut", isDirectory: true)
             .appendingPathComponent("Proxies", isDirectory: true)
             .appendingPathComponent(projectId.uuidString, isDirectory: true)
-    }
-
-    func syncToCloud() async {
-        isCloudSyncing = true
-        defer { isCloudSyncing = false }
-
-        do {
-            let sync = CloudSyncService()
-            try await sync.sync(project: currentProject)
-            cloudSyncError = nil
-        } catch {
-            cloudSyncError = error.localizedDescription
-        }
-    }
-
-    func loadFromCloud() async {
-        isCloudSyncing = true
-        defer { isCloudSyncing = false }
-
-        do {
-            let sync = CloudSyncService()
-            let projects = try await sync.listRemoteProjects()
-            cloudProjects = projects
-            cloudSyncError = nil
-        } catch {
-            cloudSyncError = error.localizedDescription
-        }
-    }
-
-    func listCloudProjects() async {
-        await loadFromCloud()
-    }
-
-    func openCloudProject(name: String) async {
-        guard await confirmDiscardUnsavedChanges() else { return }
-        isCloudSyncing = true
-        defer { isCloudSyncing = false }
-
-        do {
-            let sync = CloudSyncService()
-            let project = try await sync.download(name: name)
-            let loaded = Self.ensureDefaultTracks(in: project)
-            session = EditorSession(project: loaded)
-            currentProject = loaded
-            canvasSelection = loaded.canvas.aspectRatio
-            syncExportUI(from: loaded.exportSettings)
-            selectedClipId = nil
-            selectedAssetId = nil
-            isMaskEditorActive = false
-            playbackEngine.clear()
-            playheadTime = 0
-            clearGeneratedSubtitles()
-            clearClipProcessingState()
-            recentAnalysisResults = []
-            lastErrorMessage = nil
-            lastExportURL = nil
-            cloudSyncError = nil
-            // The downloaded cloud project is the clean baseline.
-            lastSavedProject = loaded
-            isDirty = false
-        } catch {
-            cloudSyncError = error.localizedDescription
-        }
     }
 
     func exportProject() async {
@@ -4935,6 +4925,7 @@ final class EditorViewModel {
 
     private func refreshFromSession() async throws {
         currentProject = await session.snapshot()
+        await refreshFlattenedTimeline(for: currentProject)
         canvasSelection = currentProject.canvas.aspectRatio
         syncExportUI(from: currentProject.exportSettings)
 

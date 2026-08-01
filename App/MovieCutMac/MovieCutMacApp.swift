@@ -34,9 +34,11 @@ struct MovieCutMacApp: App {
                             viewModel: viewModel,
                             store: recentProjectsStore
                         )
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("home.surface")
                     case .editor:
                         ContentView(viewModel: viewModel)
+                            .accessibilityElement(children: .contain)
                             .accessibilityIdentifier("editor.surface")
                     }
                 } else {

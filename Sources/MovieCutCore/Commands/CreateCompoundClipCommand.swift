@@ -252,17 +252,14 @@ public struct ReleaseCompoundClipCommand: EditorCommand {
             }
             var rebuilt = previousTrackClips
             rebuilt.remove(at: containerIndex)
-            // Shift each child back to absolute timeline coordinates and drop
-            // the container reference (children are never containers).
-            let expanded = definition.childClips.map { child -> Clip in
-                var absolute = child
-                absolute.timelineRange = TimeRange(
-                    start: child.timelineRange.start + container.timelineRange.start,
-                    duration: child.timelineRange.duration
-                )
-                absolute.compoundId = nil
-                return absolute
-            }
+            // Expand exactly the same visible child window used by playback
+            // and export flattening. This preserves container move/trim edits
+            // when the user releases the compound instead of resurrecting
+            // trimmed-away child ranges.
+            let expanded = CompoundFlattener.visibleChildren(
+                of: definition,
+                in: container
+            )
             // Insert expanded clips where the container was, in definition order.
             for (offset, child) in expanded.enumerated() {
                 rebuilt.insert(child, at: containerIndex + offset)

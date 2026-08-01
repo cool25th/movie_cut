@@ -168,16 +168,23 @@ public actor RecentProjectsStore {
     /// store is testable without App/UIKit. `SecurityScopedAccess` remains the
     /// sole owner of the access-pair lifecycle.
     private static func resolveBookmarkData(_ data: Data) -> URL? {
-        var isStale = false
-        guard let url = try? URL(
-            resolvingBookmarkData: data,
-            options: [.withSecurityScope],
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        ) else {
-            return nil
+        guard !data.isEmpty else { return nil }
+
+        // User-selected files carry security-scoped bookmarks, while files in
+        // the app container may carry ordinary minimal bookmarks because no
+        // persistent scope is required there. Support both persisted forms.
+        for options in [URL.BookmarkResolutionOptions.withSecurityScope, []] {
+            var isStale = false
+            if let url = try? URL(
+                resolvingBookmarkData: data,
+                options: options,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) {
+                return url
+            }
         }
-        return url
+        return nil
     }
 
     // MARK: - Default location

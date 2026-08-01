@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import CoreImage
 import CoreVideo
 import ImageIO
 
@@ -9,14 +10,21 @@ final class ReverseRenderService {
         timeRange: CMTimeRange,
         outputURL: URL,
         progress: @escaping (Double) -> Void
-    ) async throws {
+    ) async throws -> CMTimeRange {
         let videoTracks = try await clip.loadTracks(withMediaType: .video)
         guard let videoTrack = videoTracks.first else {
             throw ReverseRenderServiceError.noVideoTrack
         }
+        let availableRange = try await videoTrack.load(.timeRange)
+        let effectiveTimeRange = CMTimeRangeGetIntersection(timeRange, otherRange: availableRange)
+        guard effectiveTimeRange.isValid,
+              effectiveTimeRange.duration.isNumeric,
+              effectiveTimeRange.duration > .zero else {
+            throw ReverseRenderServiceError.invalidTimeRange
+        }
 
         let reader = try AVAssetReader(asset: clip)
-        reader.timeRange = timeRange
+        reader.timeRange = effectiveTimeRange
 
         let readerOutput = AVAssetReaderTrackOutput(
             track: videoTrack,
@@ -49,12 +57,19 @@ final class ReverseRenderService {
             ]
         )
         writerInput.expectsMediaDataInRealTime = false
-        writerInput.transform = try await videoTrack.load(.preferredTransform)
 
         guard writer.canAdd(writerInput) else {
             throw ReverseRenderServiceError.cannotAddWriterInput
         }
         writer.add(writerInput)
+        let pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: writerInput,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height
+            ]
+        )
 
         var sampleBuffers: [CMSampleBuffer] = []
 
@@ -63,15 +78,18 @@ final class ReverseRenderService {
                 throw reader.error ?? ReverseRenderServiceError.readerFailed
             }
 
-            let durationSeconds = timeRange.duration.seconds
+            let durationSeconds = effectiveTimeRange.duration.seconds
             while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
                 try Task.checkCancellation()
                 sampleBuffers.append(sampleBuffer)
 
                 if durationSeconds.isFinite, durationSeconds > 0 {
                     let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                    let elapsed = CMTimeSubtract(presentationTime, timeRange.start).seconds
-                    Self.report(progress, readFraction: elapsed / durationSeconds, writeFraction: 0)
+                    let elapsedSeconds: Double = CMTimeSubtract(
+                        presentationTime,
+                        effectiveTimeRange.start
+                    ).seconds
+                    Self.report(progress, readFraction: elapsedSeconds / durationSeconds, writeFraction: 0)
                 }
             }
 
@@ -84,6 +102,10 @@ final class ReverseRenderService {
                 throw reader.error ?? ReverseRenderServiceError.readerFailed
             default:
                 break
+            }
+
+            guard !sampleBuffers.isEmpty else {
+                throw ReverseRenderServiceError.noSamples
             }
 
             guard writer.startWriting() else {
@@ -103,6 +125,7 @@ final class ReverseRenderService {
 
             var nextPresentationTime = CMTime.zero
             let totalSamples = max(sampleBuffers.count, 1)
+            let imageContext = CIContext(options: [.useSoftwareRenderer: false])
 
             for (writeIndex, sampleBuffer) in sampleBuffers.reversed().enumerated() {
                 try Task.checkCancellation()
@@ -110,13 +133,24 @@ final class ReverseRenderService {
 
                 let sourceIndex = sampleBuffers.count - 1 - writeIndex
                 let duration = sampleDurations[sourceIndex]
-                let retimedSample = try Self.retimedSampleBuffer(
-                    sampleBuffer,
-                    presentationTime: nextPresentationTime,
-                    duration: duration
+                guard let sourcePixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+                      let pixelBufferPool = pixelBufferAdaptor.pixelBufferPool else {
+                    throw ReverseRenderServiceError.appendFailed
+                }
+                var normalizedPixelBuffer: CVPixelBuffer?
+                let poolStatus = CVPixelBufferPoolCreatePixelBuffer(
+                    kCFAllocatorDefault,
+                    pixelBufferPool,
+                    &normalizedPixelBuffer
                 )
-
-                guard writerInput.append(retimedSample) else {
+                guard poolStatus == kCVReturnSuccess, let normalizedPixelBuffer else {
+                    throw ReverseRenderServiceError.appendFailed
+                }
+                imageContext.render(CIImage(cvPixelBuffer: sourcePixelBuffer), to: normalizedPixelBuffer)
+                guard pixelBufferAdaptor.append(
+                    normalizedPixelBuffer,
+                    withPresentationTime: nextPresentationTime
+                ) else {
                     throw writer.error ?? ReverseRenderServiceError.appendFailed
                 }
 
@@ -134,21 +168,42 @@ final class ReverseRenderService {
                     continuation.resume()
                 }
             }
+            sampleBuffers.removeAll(keepingCapacity: false)
+            reader.cancelReading()
 
             switch writer.status {
             case .completed:
                 progress(1)
+                let renderedAsset = AVURLAsset(url: outputURL)
+                guard let renderedTrack = try await renderedAsset.loadTracks(withMediaType: .video).first else {
+                    throw ReverseRenderServiceError.noOutputTrack
+                }
+                let renderedRange = try await renderedTrack.load(.timeRange)
+                guard renderedRange.isValid,
+                      CMTIME_IS_NUMERIC(renderedRange.duration),
+                      renderedRange.duration > .zero else {
+                    throw ReverseRenderServiceError.invalidOutputDuration
+                }
+                return renderedRange
             case .cancelled:
                 throw CancellationError()
             case .failed:
                 throw writer.error ?? ReverseRenderServiceError.writerFailed
             default:
-                break
+                throw writer.error ?? ReverseRenderServiceError.writerFailed
             }
         } catch {
             reader.cancelReading()
             writer.cancelWriting()
-            throw error
+            let underlyingError = error as NSError
+            throw NSError(
+                domain: "MovieCutMac.ReverseRenderService",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Reverse rendering failed: \(underlyingError.localizedDescription)",
+                    NSUnderlyingErrorKey: underlyingError
+                ]
+            )
         }
     }
 
@@ -167,32 +222,6 @@ final class ReverseRenderService {
 
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-    }
-
-    private static func retimedSampleBuffer(
-        _ sampleBuffer: CMSampleBuffer,
-        presentationTime: CMTime,
-        duration: CMTime
-    ) throws -> CMSampleBuffer {
-        var timing = CMSampleTimingInfo(
-            duration: duration,
-            presentationTimeStamp: presentationTime,
-            decodeTimeStamp: .invalid
-        )
-        var retimedSampleBuffer: CMSampleBuffer?
-        let status = CMSampleBufferCreateCopyWithNewTiming(
-            allocator: kCFAllocatorDefault,
-            sampleBuffer: sampleBuffer,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timing,
-            sampleBufferOut: &retimedSampleBuffer
-        )
-
-        guard status == noErr, let retimedSampleBuffer else {
-            throw ReverseRenderServiceError.retimingFailed(status)
-        }
-
-        return retimedSampleBuffer
     }
 
     private static func duration(
@@ -266,17 +295,24 @@ final class ReverseRenderService {
 
 private enum ReverseRenderServiceError: LocalizedError, Sendable {
     case noVideoTrack
+    case invalidTimeRange
+    case noSamples
     case cannotAddReaderOutput
     case cannotAddWriterInput
     case readerFailed
     case writerFailed
     case appendFailed
-    case retimingFailed(OSStatus)
+    case noOutputTrack
+    case invalidOutputDuration
 
     var errorDescription: String? {
         switch self {
         case .noVideoTrack:
             return "The asset does not contain a video track."
+        case .invalidTimeRange:
+            return "The requested reverse range does not intersect the source video track."
+        case .noSamples:
+            return "The reverse renderer found no video samples in the requested range."
         case .cannotAddReaderOutput:
             return "The reverse renderer could not add the asset reader output."
         case .cannotAddWriterInput:
@@ -286,9 +322,11 @@ private enum ReverseRenderServiceError: LocalizedError, Sendable {
         case .writerFailed:
             return "The reverse renderer failed while writing samples."
         case .appendFailed:
-            return "The reverse renderer failed to append a reversed sample."
-        case .retimingFailed(let status):
-            return "The reverse renderer failed to retime a sample buffer. OSStatus: \(status)."
+            return "The reverse renderer failed to append a reversed frame."
+        case .noOutputTrack:
+            return "The reverse renderer produced no readable video track."
+        case .invalidOutputDuration:
+            return "The reverse renderer produced a video track with no valid duration."
         }
     }
 }
@@ -496,6 +534,78 @@ private enum ImageVideoRenderServiceError: LocalizedError, Sendable {
             return "The image renderer could not create a drawing context."
         case .appendFailed:
             return "The image renderer failed to append an image frame."
+        }
+    }
+}
+
+
+@MainActor
+enum ReverseCompositionInserter {
+    static func insertReversedFrames(
+        from sourceTrack: AVAssetTrack,
+        sourceTimeRange: CMTimeRange,
+        into compositionTrack: AVMutableCompositionTrack,
+        at destinationTime: CMTime
+    ) async throws -> CMTime {
+        let availableRange = try await sourceTrack.load(.timeRange)
+        let effectiveRange = CMTimeRangeGetIntersection(sourceTimeRange, otherRange: availableRange)
+        guard effectiveRange.isValid,
+              effectiveRange.duration.isNumeric,
+              effectiveRange.duration > .zero else {
+            throw ReverseCompositionInserterError.invalidSourceRange
+        }
+
+        let minimumFrameDuration = try await sourceTrack.load(.minFrameDuration)
+        let nominalFrameRate = try await sourceTrack.load(.nominalFrameRate)
+        let frameDuration: CMTime
+        if minimumFrameDuration.isNumeric, minimumFrameDuration > .zero {
+            frameDuration = minimumFrameDuration
+        } else if nominalFrameRate > 0 {
+            frameDuration = CMTime(
+                seconds: 1 / Double(nominalFrameRate),
+                preferredTimescale: 60_000
+            )
+        } else {
+            frameDuration = CMTime(value: 1, timescale: 30)
+        }
+
+        var sourceEnd = CMTimeRangeGetEnd(effectiveRange)
+        var insertedDuration = CMTime.zero
+        while sourceEnd > effectiveRange.start {
+            try Task.checkCancellation()
+            let candidateStart = CMTimeSubtract(sourceEnd, frameDuration)
+            let segmentStart = candidateStart > effectiveRange.start
+                ? candidateStart
+                : effectiveRange.start
+            let segmentDuration = CMTimeSubtract(sourceEnd, segmentStart)
+            guard segmentDuration.isNumeric, segmentDuration > .zero else { break }
+
+            try compositionTrack.insertTimeRange(
+                CMTimeRange(start: segmentStart, duration: segmentDuration),
+                of: sourceTrack,
+                at: CMTimeAdd(destinationTime, insertedDuration)
+            )
+            insertedDuration = CMTimeAdd(insertedDuration, segmentDuration)
+            sourceEnd = segmentStart
+        }
+
+        guard insertedDuration.isNumeric, insertedDuration > .zero else {
+            throw ReverseCompositionInserterError.noFramesInserted
+        }
+        return insertedDuration
+    }
+}
+
+private enum ReverseCompositionInserterError: LocalizedError {
+    case invalidSourceRange
+    case noFramesInserted
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidSourceRange:
+            return "The reverse clip source range is invalid."
+        case .noFramesInserted:
+            return "The reverse clip did not contain any insertable frames."
         }
     }
 }

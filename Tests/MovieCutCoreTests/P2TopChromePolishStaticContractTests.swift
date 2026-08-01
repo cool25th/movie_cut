@@ -59,7 +59,6 @@ struct P2TopChromePolishStaticContractTests {
             "isTemplatePickerPresented.toggle()",
             #"Button("Export Package…")"#,
             #"Button("Import Package…")"#,
-            "await viewModel.syncToCloud()",
             "exportToolbarControl"
         ])
         #expect(compactHelper.contains("HStack(spacing: MovieCutSpacing.xxSmall)"))
@@ -72,6 +71,10 @@ struct P2TopChromePolishStaticContractTests {
         #expect(secondaryStyle.contains(".controlSize(.small)"))
         #expect(secondaryStyle.contains(".foregroundStyle(.secondary)"))
         #expect(!toolbar.contains("Divider()"))
+        // Cloud sync was removed from the shipping build (no iCloud entitlement);
+        // the toolbar must not surface a non-functional "Sync to Cloud" control.
+        #expect(!content.contains("syncToCloud"))
+        #expect(!content.contains("isCloudSyncing"))
     }
 
     @Test("Project status and canvas badge are quieter context chrome")
@@ -161,9 +164,7 @@ struct P2TopChromePolishStaticContractTests {
             #".accessibilityLabel("Templates")"#,
             #".accessibilityHint("Open template picker.")"#,
             #".accessibilityLabel("Package")"#,
-            #".accessibilityHint("Export or import a self-contained .mctemplate project package.")"#,
-            #".accessibilityLabel("Sync to Cloud")"#,
-            #".accessibilityHint("Sync the current project to Cloud.")"#
+            #".accessibilityHint("Export or import a self-contained .mctemplate project package.")"#
         ] {
             #expect(content.contains(marker))
         }

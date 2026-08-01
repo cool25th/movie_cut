@@ -103,14 +103,10 @@ public enum CompoundFlattener {
                 // container's timeline start. Single level only — children
                 // never themselves carry a compoundId (load validates this).
                 if let compound = compoundsById[compoundId] {
-                    for child in compound.childClips {
-                        var shifted = child
-                        shifted.timelineRange = TimeRange(
-                            start: child.timelineRange.start + clip.timelineRange.start,
-                            duration: child.timelineRange.duration
-                        )
-                        newClips.append(shifted)
-                    }
+                    newClips.append(contentsOf: visibleChildren(
+                        of: compound,
+                        in: clip
+                    ))
                 }
                 // An unresolved compoundId is unreachable for a validated
                 // project; if it occurs we drop the container rather than emit
@@ -129,6 +125,58 @@ public enum CompoundFlattener {
             tracks: flattenedTracks,
             contentDigest: digest(of: flattenedTracks)
         )
+    }
+
+    /// Returns the definition children visible through a container's current
+    /// source window, shifted onto the parent timeline. Moving a container only
+    /// changes the final shift; trimming it changes `sourceRange`, which clips
+    /// child timeline/source ranges through the shared ClipTrimMath mapping.
+    /// Release uses this same function so rendered and released results agree.
+    public static func visibleChildren(
+        of definition: CompoundDefinition,
+        in container: Clip
+    ) -> [Clip] {
+        let windowStart = max(0, container.sourceRange.start)
+        let windowEnd = max(windowStart, container.sourceRange.end)
+        let minimumDuration = 1.0 / 600.0
+
+        return definition.childClips.compactMap { child in
+            let visibleStart = max(child.timelineRange.start, windowStart)
+            let visibleEnd = min(child.timelineRange.end, windowEnd)
+            guard visibleEnd - visibleStart >= minimumDuration else { return nil }
+
+            var visible = child
+            if visibleStart > visible.timelineRange.start,
+               let startTrim = ClipTrimMath.compute(
+                   clip: visible,
+                   edge: .start,
+                   targetTimelineTime: visibleStart,
+                   assetDuration: visible.kind == .image ? nil : visible.sourceRange.end,
+                   minimumDuration: minimumDuration
+               ) {
+                visible.sourceRange = startTrim.source
+                visible.timelineRange = startTrim.timeline
+            }
+
+            if visibleEnd < visible.timelineRange.end,
+               let endTrim = ClipTrimMath.compute(
+                   clip: visible,
+                   edge: .end,
+                   targetTimelineTime: visibleEnd,
+                   assetDuration: visible.kind == .image ? nil : visible.sourceRange.end,
+                   minimumDuration: minimumDuration
+               ) {
+                visible.sourceRange = endTrim.source
+                visible.timelineRange = endTrim.timeline
+            }
+
+            visible.timelineRange = TimeRange(
+                start: container.timelineRange.start + (visible.timelineRange.start - windowStart),
+                duration: visible.timelineRange.duration
+            )
+            visible.compoundId = nil
+            return visible
+        }
     }
 
     /// Stable content digest over the flattened clip layout, so two snapshots

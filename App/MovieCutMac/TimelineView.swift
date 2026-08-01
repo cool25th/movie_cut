@@ -8,11 +8,18 @@ extension UTType {
 }
 
 struct TimelineView: View {
+    private enum ClipBodyDragMode {
+        case move
+        case slip
+        case slide
+    }
+
     var viewModel: EditorViewModel
 
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging: Bool = false
     @State private var draggedClipId: UUID? = nil
+    @State private var clipBodyDragMode: ClipBodyDragMode?
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
     @State private var timelineViewportWidth: CGFloat = 900
@@ -885,6 +892,12 @@ struct TimelineView: View {
                 }
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 2) {
+                        if clip.compoundId != nil {
+                            Image(systemName: "rectangle.stack")
+                                .font(MovieCutTypography.metadata)
+                                .foregroundStyle(.white.opacity(0.9))
+                                .accessibilityLabel(NSLocalizedString("Compound clip", comment: ""))
+                        }
                         if clip.groupId != nil {
                             Image(systemName: "link")
                                 .font(MovieCutTypography.metadata)
@@ -1021,6 +1034,17 @@ struct TimelineView: View {
                     Task { await viewModel.ungroupSelectedClips() }
                 }
                 .disabled(clip.groupId == nil && !viewModel.hasGroupedSelection)
+                Divider()
+                Button(NSLocalizedString("Create Compound Clip", comment: "")) {
+                    _ = contextMenuClipIds(anchor: clip.id)
+                    Task { await viewModel.createCompoundFromSelection() }
+                }
+                .disabled(contextMenuCandidateClipIds(anchor: clip.id).count < 2 || clip.compoundId != nil)
+                Button(NSLocalizedString("Release Compound Clip", comment: "")) {
+                    selectClip(clip.id, extendingSelection: false)
+                    Task { await viewModel.releaseSelectedCompound() }
+                }
+                .disabled(clip.compoundId == nil)
                 Divider()
                 Button("Snap Playhead to Start") {
                     selectClip(clip.id, extendingSelection: false)
@@ -1393,8 +1417,15 @@ struct TimelineView: View {
             .onChanged { value in
                 beginClipDrag(clip)
                 dragOffset = value.translation.width
+                if clipBodyDragMode == nil {
+                    clipBodyDragMode = currentClipBodyDragMode()
+                }
 
-                guard let initialRange = dragInitialTimelineRange else { return }
+                // Slip and slide are committed exactly once on drag end. Do
+                // not mutate the live project during their drag ticks, or the
+                // command would snapshot an already-provisional state.
+                guard clipBodyDragMode == .move,
+                      let initialRange = dragInitialTimelineRange else { return }
                 let rawStart = max(0, initialRange.start + Double(value.translation.width) / pixelsPerSecond)
                 let newStart = max(0, snappedTime(rawStart, allClips: allClips(excluding: clip.id)))
 
@@ -1403,10 +1434,30 @@ struct TimelineView: View {
                     timelineRange: TimeRange(start: newStart, duration: initialRange.duration)
                 )
             }
-            .onEnded { _ in
-                commitMove(for: clip.id)
+            .onEnded { value in
+                let mode = clipBodyDragMode ?? currentClipBodyDragMode()
+                let delta = Double(value.translation.width) / pixelsPerSecond
+                switch mode {
+                case .move:
+                    commitMove(for: clip.id)
+                case .slip:
+                    Task { await viewModel.slipSelectedClip(sourceDelta: delta) }
+                case .slide:
+                    Task { await viewModel.slideSelectedClip(timelineDelta: delta) }
+                }
                 endClipDrag()
             }
+    }
+
+    private func currentClipBodyDragMode() -> ClipBodyDragMode {
+        let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.contains(.option) {
+            return .slip
+        }
+        if modifiers.contains(.command) {
+            return .slide
+        }
+        return .move
     }
 
     private func leftTrimGesture(for clip: Clip) -> some Gesture {
@@ -1505,6 +1556,7 @@ struct TimelineView: View {
         dragOffset = 0
         isDragging = false
         draggedClipId = nil
+        clipBodyDragMode = nil
         dragInitialTimelineRange = nil
         dragInitialSourceRange = nil
     }
@@ -1611,6 +1663,10 @@ struct TimelineView: View {
     }
 
     private func clipLabel(_ clip: Clip) -> String {
+        if let compoundId = clip.compoundId,
+           let definition = viewModel.currentProject.compounds.first(where: { $0.id == compoundId }) {
+            return definition.name
+        }
         if let textContent = clip.textContent {
             if isStickerClip(clip) {
                 return "Sticker \(textContent.text)"
@@ -1637,6 +1693,9 @@ struct TimelineView: View {
     }
 
     private func clipAccessibilityLabel(for clip: Clip) -> String {
+        if clip.compoundId != nil {
+            return NSLocalizedString("Compound clip", comment: "")
+        }
         switch clip.kind {
         case .video, .image:
             return NSLocalizedString("Video clip", comment: "")

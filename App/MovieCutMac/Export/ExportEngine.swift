@@ -9,11 +9,43 @@ import UniformTypeIdentifiers
 
 @MainActor
 @Observable
-final class ExportEngine {
+final class ExportEngine: FlattenedTimelineConsumer {
     var isExporting = false
     var exportProgress: Double = 0
     var exportError: String?
     var lastExportURL: URL?
+
+    /// The exact single-source snapshot attached by EditorViewModel. Export
+    /// consumes it verbatim and never invokes CompoundFlattener itself.
+    @ObservationIgnored private var flattenedTimeline: FlattenedTimeline?
+    @ObservationIgnored private var flattenedProjectId: UUID?
+
+    func boundProjectId() async -> UUID? {
+        flattenedProjectId
+    }
+
+    func attach(_ project: Project, flattened: FlattenedTimeline) async {
+        guard flattened.projectId == project.id else {
+            flattenedTimeline = nil
+            flattenedProjectId = nil
+            return
+        }
+        flattenedTimeline = flattened
+        flattenedProjectId = project.id
+    }
+
+    func currentFlattenedTimeline() async -> FlattenedTimeline? {
+        flattenedTimeline
+    }
+
+    private func renderingTracks(for project: Project) -> [Track] {
+        guard flattenedProjectId == project.id,
+              flattenedTimeline?.schemaVersion == project.schemaVersion,
+              let flattenedTimeline else {
+            return project.timeline.tracks
+        }
+        return flattenedTimeline.tracks
+    }
 
     /// Legacy UI mirrors. Export behavior is driven by Project.exportSettings.
     var exportResolution: String = "1080p"
@@ -300,7 +332,7 @@ final class ExportEngine {
             }
         }
 
-        for track in project.timeline.tracks where !track.isMuted {
+        for track in renderingTracks(for: project) where !track.isMuted {
             if track.kind == .text {
                 for clip in track.clips {
                     guard let textContent = clip.textContent else {
@@ -479,9 +511,13 @@ final class ExportEngine {
                     didRenderOpticalFlowSlowMotion = true
                 }
 
+                let effectiveSourceTrack = sourceTrack
+                let effectiveSourceTimeRange = insertionSourceTimeRange
+
                 let destinationTime: CMTime
                 let clipDuration: CMTime
 
+                let insertedCompositionDuration: CMTime
                 if isFreezeFrame && mediaType == .video {
                     let frozenSourceRange = try await freezeFrameSourceTimeRange(
                         for: sourceTrack,
@@ -494,37 +530,29 @@ final class ExportEngine {
 
                     let insertedRange = CMTimeRange(start: destinationTime, duration: frozenSourceRange.duration)
                     compositionTrack.scaleTimeRange(insertedRange, toDuration: clipDuration)
+                    insertedCompositionDuration = clipDuration
+                } else if clip.isReversed && mediaType == .video {
+                    destinationTime = CMTime(seconds: adjustedTimelineStart, preferredTimescale: 600)
+                    clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
+                    insertedCompositionDuration = try await ReverseCompositionInserter.insertReversedFrames(
+                        from: effectiveSourceTrack,
+                        sourceTimeRange: effectiveSourceTimeRange,
+                        into: compositionTrack,
+                        at: destinationTime
+                    )
                 } else {
                     destinationTime = CMTime(seconds: adjustedTimelineStart, preferredTimescale: 600)
                     clipDuration = CMTime(seconds: clip.timelineRange.duration, preferredTimescale: 600)
 
-                    try compositionTrack.insertTimeRange(insertionSourceTimeRange, of: sourceTrack, at: destinationTime)
-                }
-
-                var effectiveSourceTrack = sourceTrack
-                var effectiveSourceTimeRange = insertionSourceTimeRange
-                var clipCompositionDuration = isFreezeFrame ? clipDuration : insertionSourceTimeRange.duration
-
-                if clip.isReversed, mediaType == .video, !isFreezeFrame {
-                    let reversedOutputURL = temporaryReverseRenderURL(for: clip)
-                    try await ReverseRenderService().renderReversed(
-                        clip: sourceAsset,
-                        timeRange: sourceTimeRange,
-                        outputURL: reversedOutputURL,
-                        progress: { @Sendable _ in }
+                    try compositionTrack.insertTimeRange(
+                        effectiveSourceTimeRange,
+                        of: effectiveSourceTrack,
+                        at: destinationTime
                     )
-
-                    let reversedAsset = AVURLAsset(url: reversedOutputURL)
-                    guard let reversedTrack = try await reversedAsset.loadTracks(withMediaType: mediaType).first else {
-                        continue
-                    }
-
-                    compositionTrack.removeTimeRange(CMTimeRange(start: destinationTime, duration: sourceTimeRange.duration))
-                    effectiveSourceTrack = reversedTrack
-                    effectiveSourceTimeRange = CMTimeRange(start: .zero, duration: sourceTimeRange.duration)
-                    clipCompositionDuration = effectiveSourceTimeRange.duration
-                    try compositionTrack.insertTimeRange(effectiveSourceTimeRange, of: effectiveSourceTrack, at: destinationTime)
+                    insertedCompositionDuration = effectiveSourceTimeRange.duration
                 }
+
+                var clipCompositionDuration = insertedCompositionDuration
 
                 var didApplySpeedRamp = false
                 if clip.speedRampPoints.count >= 2, !isFreezeFrame {
@@ -600,7 +628,9 @@ final class ExportEngine {
             composition: composition,
             videoComposition: videoComposition,
             audioMix: audioMix,
-            temporaryRenderURLs: temporaryEqualizedAudioURLs + temporaryOpticalFlowURLs + temporaryImageRenderURLs
+            temporaryRenderURLs: temporaryEqualizedAudioURLs
+                + temporaryOpticalFlowURLs
+                + temporaryImageRenderURLs
         )
     }
 
@@ -916,12 +946,6 @@ final class ExportEngine {
 
         guard addedTextLayer else { return nil }
         return AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoLayer, in: parentLayer)
-    }
-
-    private func temporaryReverseRenderURL(for clip: Clip) -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutReverse-\(clip.id.uuidString)")
-            .appendingPathExtension("mov")
     }
 
     private func temporaryEqualizedAudioURL(for clip: Clip) -> URL {

@@ -1,5 +1,7 @@
 # 후속 세션 작업지시서 (실측 기반)
 
+> **[상태: 대체됨 — 역사 기록]** 이 문서의 W1~W7 열린 항목은 `.kiro/specs/capcut-parity-and-bugfix/` 스펙(2026-07-31)으로 이관·실행됐다. 현역 판정은 그 스펙의 `tasks.md`와 `docs/README.md`를 본다. 이 파일은 역사 기록으로 제자리에 둔다.
+>
 > 작성일: 2026-07-29
 > 기준: main `7b5b2ad` (작업트리 clean, untracked `.build-check/` `.zcode/` 제외)
 > 목적: 신뢰성 수리(Tasks A~G) 완료 후 남은 작업 7종(W1 완료, 6종 대기)의 세션 시작 프롬프트

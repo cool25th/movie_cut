@@ -30,10 +30,15 @@ struct SpeedRampPreviewStaticContractTests {
         #expect(source.contains("SpeedRampCurve(points: clip.speedRampPoints)"))
         #expect(source.contains("compositionTrack.scaleTimeRange"))
 
+        // The video branch ends at the transform load that follows the
+        // freeze/reversed/speed-ramp/normal insertion ladder. The reverse-play
+        // refactor (commit 737c036) split reverse insertion into its own branch
+        // and renamed the post-insertion source to `effectiveSourceTrack`; the
+        // four contracted properties below are unchanged.
         let videoBranch = try section(
             in: source,
             from: "if isFreezeFrame {",
-            to: "let preferredTransform = try await sourceTrack.load(.preferredTransform)"
+            to: "let preferredTransform = try await effectiveSourceTrack.load(.preferredTransform)"
         )
         #expect(videoBranch.contains("clip.speedRampPoints.count >= 2"))
         #expect(videoBranch.contains("targetDuration = try insertSpeedRampSegments("))

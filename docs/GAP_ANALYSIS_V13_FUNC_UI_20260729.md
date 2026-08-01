@@ -1,5 +1,7 @@
 # MovieCut vs CapCut 갭 분석 V13 — 배선 격차 재설정 — 2026-07-29
 
+> **[상태: 대체됨 — 역사 기록]** V13의 G-ID/U-ID 격차 항목은 `.kiro/specs/capcut-parity-and-bugfix/` 스펙(2026-07-31)의 요구사항으로 재설계·실행됐다. 현역 격차 판정은 그 스펙의 `requirements.md`와 `docs/README.md`를 본다. 이 파일은 역사 기록으로 제자리에 둔다.
+>
 > 작성일: 2026-07-29 / 브랜치: `main` (기준 커밋: `0ecdc6f`)
 > 기준선: V12 `docs/archive/GAP_ANALYSIS_V12_FUNC_UI_20260706.md` (기준 커밋 `89e3795`) — **델타 62 커밋**
 > 판정 기준: `docs/CAPCUT_BENCHMARK_STANDARD.md` v1.6 (B-ID)

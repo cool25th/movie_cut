@@ -82,81 +82,11 @@ struct AssetCatalogTests {
         }
     }
 
-    @Test("Remote provider decodes a JSON catalog and searches it")
-    func remoteProvider() async throws {
-        let data = try JSONEncoder().encode(sampleItems())
-        let transport = StubCatalogTransport(payload: data)
-        let provider = RemoteAssetCatalogProvider(
-            catalogURL: URL(string: "https://example.com/catalog.json")!,
-            transport: transport
-        )
-        let page = try await provider.items(matching: CatalogQuery(searchText: "calm"))
-        #expect(page.items.map(\.id) == ["m2"])
-    }
-
     @Test("Catalog item survives a Codable round trip")
     func codableRoundTrip() throws {
         let item = sampleItems()[1]
         let data = try JSONEncoder().encode(item)
         let decoded = try JSONDecoder().decode(CatalogItem.self, from: data)
         #expect(decoded == item)
-    }
-
-    // MARK: - Downloader
-
-    @Test("Downloader caches assets by content hash and avoids refetching")
-    func downloaderCaches() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutCatalogTests", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cache = RenderCache(directory: directory)
-        let transport = StubCatalogTransport(payload: Data("asset-bytes".utf8))
-        let downloader = CatalogDownloader(transport: transport, cache: cache)
-
-        let item = CatalogItem(
-            id: "m1",
-            kind: .music,
-            name: "Upbeat Loop",
-            license: CatalogLicense(kind: .royaltyFree, allowsCommercialUse: true),
-            downloadURL: URL(string: "https://example.com/m1.m4a")!
-        )
-
-        let firstURL = try await downloader.download(item)
-        #expect(FileManager.default.fileExists(atPath: firstURL.path))
-        #expect(try Data(contentsOf: firstURL) == Data("asset-bytes".utf8))
-
-        let secondURL = try await downloader.download(item)
-        #expect(secondURL.path == firstURL.path)
-        // The asset was fetched from the network only once; the second call hit the cache.
-        #expect(await transport.callCount == 1)
-    }
-
-    @Test("Downloading an item without a URL throws")
-    func downloaderRejectsMissingURL() async {
-        let cache = RenderCache(directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true))
-        let downloader = CatalogDownloader(transport: StubCatalogTransport(payload: Data()), cache: cache)
-        let item = CatalogItem(id: "x", kind: .filter, name: "No URL",
-                               license: CatalogLicense(kind: .royaltyFree, allowsCommercialUse: true))
-        await #expect(throws: CatalogError.notDownloadable) {
-            _ = try await downloader.download(item)
-        }
-    }
-}
-
-/// A transport that returns a fixed payload and counts calls.
-private actor StubCatalogTransport: CatalogDataTransport {
-    private let payload: Data
-    private(set) var count = 0
-
-    init(payload: Data) {
-        self.payload = payload
-    }
-
-    var callCount: Int { count }
-
-    func data(from url: URL) async throws -> Data {
-        count += 1
-        return payload
     }
 }

@@ -32,24 +32,26 @@ public enum SecurityScopedAccess {
     ///   or the file does not exist at the resolved path — all cases the caller
     ///   should treat as "re-prompt the user to relocate the media".
     public static func resolveBookmark(for bookmark: Data?) -> (url: URL, isStale: Bool)? {
-        guard let bookmark else { return nil }
+        guard let bookmark, !bookmark.isEmpty else { return nil }
 
-        var isStale = false
-        // `.withSecurityScope` is required to re-reach user-selected files under
-        // the sandbox; the call is a no-op outside the sandbox, so non-sandboxed
-        // builds and tests behave identically.
-        guard let resolved = try? URL(
-            resolvingBookmarkData: bookmark,
-            options: [.withSecurityScope],
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        ) else {
-            return nil
+        // Prefer security-scoped resolution for user-selected files. Container-
+        // internal files need no scope and may only carry a regular bookmark,
+        // so fall back to plain resolution when the scoped form is rejected.
+        for options in [URL.BookmarkResolutionOptions.withSecurityScope, []] {
+            var isStale = false
+            guard let resolved = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: options,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) else {
+                continue
+            }
+            guard FileManager.default.fileExists(atPath: resolved.path) else { return nil }
+            return (resolved, isStale)
         }
 
-        // A resolved URL whose file no longer exists is treated as missing too.
-        guard FileManager.default.fileExists(atPath: resolved.path) else { return nil }
-        return (resolved, isStale)
+        return nil
     }
 
     /// Asset overload: resolves the asset's bookmark. Delegates to the URL-level
@@ -127,11 +129,21 @@ public enum SecurityScopedAccess {
         needsRelocation(for: asset.originalBookmark)
     }
 
-    /// Builds a security-scoped bookmark for `url`, returning `nil` if one
-    /// cannot be captured (e.g. the URL is in the app container and needs none).
+    /// Builds a persistent bookmark for `url`. User-selected files prefer a
+    /// security-scoped bookmark; container-internal files fall back to a regular
+    /// minimal bookmark because they require no scope but still need a durable
+    /// path for the recent-projects list.
     public static func makeBookmark(for url: URL) -> Data? {
-        try? url.bookmarkData(
-            options: [.withSecurityScope, .minimalBookmark],
+        if let scoped = try? url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) {
+            return scoped
+        }
+
+        return try? url.bookmarkData(
+            options: [.minimalBookmark],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )

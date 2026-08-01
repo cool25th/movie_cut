@@ -1,5 +1,7 @@
 # MovieCut 문서 지도 — 현역 / 보관 / 열린 작업
 
+> **최신 현역 판정 단일 진입점 (2026-07-31 갱신):** CapCut 파리티 및 버그 수정 작업은 이제 `.kiro/specs/capcut-parity-and-bugfix/` 스펙이 담당한다. 완료 상태·실행 증거는 그 `tasks.md`를, 요구사항 판정은 `requirements.md`를 본다. 아래 §1~§4의 workorder 4종(`PRO_SPEC_GAP_*`·`NEXT_SESSION_*`·`REVIEW_FINDINGS_*`·`GAP_ANALYSIS_V13_*`)은 해당 스펙으로 대체됐으며(각 상단 배너 확인), 역사 기록으로 제자리에 둔다.
+
 > 작성일: 2026-07-30 / 기준 커밋: `7e0c466` / 브랜치: `docs/inventory-and-requirements`
 > 목적: `docs/`에 42개까지 쌓인 문서를 **현역 23 / 보관 19**로 갈라, "지금 열려 있는 작업이 무엇인가"를 한 화면에 고정한다.
 > **이 문서의 성격 — 문서 상태 인덱스다.** 기능 완료 판정을 새로 내리지 않는다. 기능 판정은 §6의 원천 문서와 `gap-audit` 세션의 몫이다.

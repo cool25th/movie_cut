@@ -53,8 +53,17 @@ struct ContentView: View {
                 }
 
             // IA/menu-position contract: the top toolbar owns project, view,
-            // sync, and export chrome. Clip editing actions are timeline-local.
+            // and export chrome. Clip editing actions are timeline-local.
             ToolbarItemGroup(placement: .navigation) {
+                Button(action: { Task { await viewModel.saveProject() } }) {
+                    Label("Save", systemImage: "square.and.arrow.down")
+                }
+                .topChromeSecondaryToolbarStyle()
+                .help("Save project")
+                .accessibilityLabel("Save project")
+                .accessibilityHint("Save the current project.")
+                .accessibilityIdentifier("editor.saveProject")
+
                 Button(action: { Task { await viewModel.undo() } }) {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
@@ -140,20 +149,6 @@ struct ContentView: View {
                         .help("Export or import a self-contained .mctemplate project package")
                         .accessibilityLabel("Package")
                         .accessibilityHint("Export or import a self-contained .mctemplate project package.")
-
-                        Button(action: { Task { await viewModel.syncToCloud() } }) {
-                            if viewModel.isCloudSyncing {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Label("Sync to Cloud", systemImage: "cloud.and.arrow.up")
-                            }
-                        }
-                        .topChromeSecondaryToolbarStyle()
-                        .help("Sync to Cloud")
-                        .accessibilityLabel("Sync to Cloud")
-                        .accessibilityHint("Sync the current project to Cloud.")
                     }
 
                     exportToolbarControl

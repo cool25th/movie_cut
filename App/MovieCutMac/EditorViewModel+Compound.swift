@@ -92,9 +92,15 @@ extension EditorViewModel {
         }
 
         do {
+            let containerClipId = UUID()
             try await dispatchCommand(
-                CreateCompoundClipCommand(trackId: track.id, clipIds: selected)
+                CreateCompoundClipCommand(
+                    trackId: track.id,
+                    clipIds: selected,
+                    containerClipId: containerClipId
+                )
             )
+            selectedClipId = containerClipId
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription

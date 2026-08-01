@@ -125,45 +125,6 @@ struct ExportProgressCriticalHighTests {
 }
 
 @MainActor
-@Suite("CloudSyncService critical and high coverage")
-struct CloudSyncServiceCriticalHighTests {
-    @Test("Cloud sync service initial state is idle")
-    func testInitialState() {
-        let service = CloudSyncService()
-
-        #expect(isIdle(service.status))
-    }
-
-    @Test("Cloud sync conflict resolution can keep local project")
-    func testResolveConflictKeepLocal() {
-        let localProject = makeProject(name: "Local Project")
-        let remoteProject = makeProject(name: "Remote Project")
-
-        let resolvedProject = CloudSyncService().resolveConflict(
-            local: localProject,
-            remote: remoteProject,
-            strategy: .keepLocal
-        )
-
-        #expect(resolvedProject.name == localProject.name)
-    }
-
-    @Test("Cloud sync conflict resolution can keep remote project")
-    func testResolveConflictKeepRemote() {
-        let localProject = makeProject(name: "Local Project")
-        let remoteProject = makeProject(name: "Remote Project")
-
-        let resolvedProject = CloudSyncService().resolveConflict(
-            local: localProject,
-            remote: remoteProject,
-            strategy: .keepRemote
-        )
-
-        #expect(resolvedProject.name == remoteProject.name)
-    }
-}
-
-@MainActor
 @Suite("TemplateMarketplace critical and high coverage")
 struct TemplateMarketplaceCriticalHighTests {
     @Test("Template marketplace featured items are not empty")
@@ -217,15 +178,6 @@ private func makeClip(
     )
 }
 
-private func makeProject(name: String) -> Project {
-    Project(
-        id: UUID(),
-        name: name,
-        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-        updatedAt: Date(timeIntervalSince1970: 1_700_000_100)
-    )
-}
-
 private func isIdle(_ state: ExportProgress.ExportState) -> Bool {
     if case .idle = state {
         return true
@@ -242,13 +194,6 @@ private func isExporting(_ state: ExportProgress.ExportState) -> Bool {
 
 private func isCancelled(_ state: ExportProgress.ExportState) -> Bool {
     if case .cancelled = state {
-        return true
-    }
-    return false
-}
-
-private func isIdle(_ status: SyncStatus) -> Bool {
-    if case .idle = status {
         return true
     }
     return false

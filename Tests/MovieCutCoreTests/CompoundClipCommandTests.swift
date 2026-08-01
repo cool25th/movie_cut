@@ -374,6 +374,51 @@ struct CompoundClipCommandTests {
         #expect(secondAtCopy.count == 1)
     }
 
+    @Test("trimming and moving the container clips children consistently for flatten and release")
+    func trimAndMovePreserveVisibleComposition() throws {
+        var (project, trackId, a, b, _) = makeProject()
+        let compoundId = UUID()
+        let containerId = UUID()
+        _ = try CreateCompoundClipCommand(
+            trackId: trackId,
+            clipIds: [a.id, b.id],
+            compoundId: compoundId,
+            containerClipId: containerId
+        ).apply(to: &project)
+
+        // Keep the compound-local window [1,4] and move that visible 3-second
+        // span to timeline [10,13]. Child A is left-trimmed to one second and
+        // child B is right-trimmed to two seconds.
+        _ = try TrimClipCommand(
+            clipId: containerId,
+            trackId: trackId,
+            newSourceRange: TimeRange(start: 1, duration: 3),
+            newTimelineRange: TimeRange(start: 10, duration: 3)
+        ).apply(to: &project)
+
+        let flattened = CompoundFlattener.flatten(project)
+        let flatA = try #require(flattened.tracks[0].clips.first { $0.id == a.id })
+        let flatB = try #require(flattened.tracks[0].clips.first { $0.id == b.id })
+        #expect(abs(flatA.timelineRange.start - 10) <= tolerance)
+        #expect(abs(flatA.timelineRange.duration - 1) <= tolerance)
+        #expect(abs(flatA.sourceRange.start - 1) <= tolerance)
+        #expect(abs(flatB.timelineRange.start - 11) <= tolerance)
+        #expect(abs(flatB.timelineRange.duration - 2) <= tolerance)
+        #expect(abs(flatB.sourceRange.start - 5) <= tolerance)
+        #expect(abs(flatB.sourceRange.duration - 2) <= tolerance)
+
+        _ = try ReleaseCompoundClipCommand(
+            trackId: trackId,
+            containerClipId: containerId,
+            compoundId: compoundId
+        ).apply(to: &project)
+        let releasedA = try #require(project.timeline.tracks[0].clips.first { $0.id == a.id })
+        let releasedB = try #require(project.timeline.tracks[0].clips.first { $0.id == b.id })
+        #expect(releasedA == flatA)
+        #expect(releasedB == flatB)
+        #expect(project.compounds.isEmpty)
+    }
+
     @Test("flatten of a created-then-released project equals flatten of the original")
     func flattenMatchesAfterReleaseRoundTrip() throws {
         var (project, trackId, a, b, _) = makeProject()

@@ -18,13 +18,44 @@ struct ClipAudioProcessingOptions: Sendable {
 
 @MainActor
 @Observable
-final class PlaybackEngine {
+final class PlaybackEngine: FlattenedTimelineConsumer {
     var player: AVPlayer
     var isPlaying: Bool
     var currentTime: TimeInterval
     var duration: TimeInterval
     var playerItem: AVPlayerItem?
     var playbackRate: Float
+    /// The exact single-source snapshot attached by EditorViewModel. This is
+    /// not an engine-owned cache: the engine never computes or refreshes it.
+    @ObservationIgnored private var flattenedTimeline: FlattenedTimeline?
+    @ObservationIgnored private var flattenedProjectId: UUID?
+
+    func boundProjectId() async -> UUID? {
+        flattenedProjectId
+    }
+
+    func attach(_ project: Project, flattened: FlattenedTimeline) async {
+        guard flattened.projectId == project.id else {
+            flattenedTimeline = nil
+            flattenedProjectId = nil
+            return
+        }
+        flattenedTimeline = flattened
+        flattenedProjectId = project.id
+    }
+
+    func currentFlattenedTimeline() async -> FlattenedTimeline? {
+        flattenedTimeline
+    }
+
+    private func renderingTracks(for project: Project) -> [Track] {
+        guard flattenedProjectId == project.id,
+              flattenedTimeline?.schemaVersion == project.schemaVersion,
+              let flattenedTimeline else {
+            return project.timeline.tracks
+        }
+        return flattenedTimeline.tracks
+    }
     /// Most recent composition build error, surfaced to the UI instead of being
     /// silently swallowed by `clear()`. Reset to `nil` on a successful build.
     var lastCompositionError: String?
@@ -32,6 +63,10 @@ final class PlaybackEngine {
     /// checked before applying a built composition, so a slow stale rebuild can
     /// never overwrite a newer composition (Step 1 stale-rebuild guard).
     private var compositionGeneration: UInt64 = 0
+    /// Generation of the composition currently installed in `playerItem`.
+    /// Harnesses use this to avoid mistaking an older ready item for a newly
+    /// requested asynchronous rebuild.
+    private(set) var installedCompositionGeneration: UInt64 = 0
 
     @ObservationIgnored private var textLayers: [CALayer] = []
     /// Tracks karaoke text clips so their per-word layers can be recolored on
@@ -40,6 +75,7 @@ final class PlaybackEngine {
     @ObservationIgnored private var karaokeClips: [KaraokePreviewClip] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var compositionBuildTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
     /// Security scopes started for the assets in the currently loaded single
     /// asset or composition. Each entry pairs with a `stopAccessing` on clear
@@ -96,6 +132,10 @@ final class PlaybackEngine {
     }
 
     func load(asset: MediaAsset) {
+        compositionBuildTask?.cancel()
+        compositionBuildTask = nil
+        compositionGeneration &+= 1
+        installedCompositionGeneration = 0
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
@@ -148,7 +188,8 @@ final class PlaybackEngine {
         compositionGeneration &+= 1
         let requestedGeneration = compositionGeneration
 
-        Task { @MainActor [weak self] in
+        compositionBuildTask?.cancel()
+        compositionBuildTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
             do {
@@ -165,6 +206,7 @@ final class PlaybackEngine {
                 playerItem = item
                 currentTime = 0
                 duration = composition.duration.seconds.isFinite ? composition.duration.seconds : 0
+                installedCompositionGeneration = requestedGeneration
                 lastCompositionError = nil
                 player.replaceCurrentItem(with: item)
                 cleanupTemporaryReverseRenderURLs()
@@ -173,8 +215,17 @@ final class PlaybackEngine {
             } catch {
                 // Stale guard applies to the failure path too.
                 guard requestedGeneration == compositionGeneration else { return }
-                AppLog.playback.error("composition build failed: \(error.localizedDescription, privacy: .public)")
-                lastCompositionError = error.localizedDescription
+                let nsError = error as NSError
+                var errorDetail = "\(nsError.localizedDescription) [\(nsError.domain):\(nsError.code)]"
+                if let failureReason = nsError.localizedFailureReason, !failureReason.isEmpty {
+                    errorDetail += " reason=\(failureReason)"
+                }
+                if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                    errorDetail += " underlying=\(underlyingError.localizedDescription) [\(underlyingError.domain):\(underlyingError.code)]"
+                }
+                AppLog.playback.error("composition build failed: \(errorDetail, privacy: .public)")
+                installedCompositionGeneration = 0
+                lastCompositionError = errorDetail
                 clearPreviewVideoOutput()
                 player.replaceCurrentItem(with: nil)
                 cleanupTemporaryReverseRenderURLs()
@@ -269,6 +320,33 @@ final class PlaybackEngine {
         return snapshotCurrentFrame()
     }
 
+    /// Renders the exact asset/audio-mix currently installed in Preview to an
+    /// audio file. The integration harness decodes this output as PCM so it can
+    /// measure Preview's real composition path rather than the processed source
+    /// file in isolation.
+    func renderCurrentPreviewAudio(to outputURL: URL) async throws {
+        guard let playerItem else {
+            throw PlaybackPreviewAudioError.noPlayerItem
+        }
+        guard let exportSession = AVAssetExportSession(
+            asset: playerItem.asset,
+            presetName: AVAssetExportPresetAppleM4A
+        ) else {
+            throw PlaybackPreviewAudioError.exportSessionCreationFailed
+        }
+
+        if FileManager.default.fileExists(atPath: outputURL.path) {
+            try FileManager.default.removeItem(at: outputURL)
+        }
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        exportSession.audioMix = playerItem.audioMix
+        try await exportSession.export(to: outputURL, as: .m4a)
+    }
+
     private static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext(options: [.useSoftwareRenderer: false])
@@ -276,6 +354,10 @@ final class PlaybackEngine {
     }
 
     func clear() {
+        compositionBuildTask?.cancel()
+        compositionBuildTask = nil
+        compositionGeneration &+= 1
+        installedCompositionGeneration = 0
         pause()
         statusObservation?.invalidate()
         statusObservation = nil
@@ -678,7 +760,7 @@ final class PlaybackEngine {
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
         var equalizerSegmentsByTrackID: [CMPersistentTrackID: [ClipEqualizerTimelineSegment]] = [:]
 
-        for track in project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex }) {
+        for track in renderingTracks(for: project).sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
             case .video:
                 var videoCompositionTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
@@ -754,28 +836,10 @@ final class PlaybackEngine {
                             videoCompositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
                         }
 
-                        var effectiveSourceTrack = sourceTrack
-                        var effectiveSourceTimeRange = isFreezeFrame
+                        let effectiveSourceTrack = sourceTrack
+                        let effectiveSourceTimeRange = isFreezeFrame
                             ? freezeFrameSourceTimeRange(for: clip)
                             : sourceTimeRange
-                        if clip.isReversed && !isFreezeFrame {
-                            let reversedOutputURL = temporaryReverseRenderURL(for: clip)
-                            temporaryReverseRenderURLs.append(reversedOutputURL)
-                            try await ReverseRenderService().renderReversed(
-                                clip: sourceAsset,
-                                timeRange: sourceTimeRange,
-                                outputURL: reversedOutputURL,
-                                progress: { @Sendable _ in }
-                            )
-
-                            let reversedAsset = AVURLAsset(url: reversedOutputURL)
-                            guard let reversedTrack = try await reversedAsset.loadTracks(withMediaType: .video).first else {
-                                continue
-                            }
-
-                            effectiveSourceTrack = reversedTrack
-                            effectiveSourceTimeRange = CMTimeRange(start: .zero, duration: sourceTimeRange.duration)
-                        }
 
                         let targetDuration: CMTime
                         if isFreezeFrame {
@@ -791,6 +855,20 @@ final class PlaybackEngine {
                                 CMTimeRange(start: destinationTime, duration: insertedDuration),
                                 toDuration: targetDuration
                             )
+                        } else if clip.isReversed {
+                            let insertedDuration = try await ReverseCompositionInserter.insertReversedFrames(
+                                from: effectiveSourceTrack,
+                                sourceTimeRange: effectiveSourceTimeRange,
+                                into: videoCompositionTrack,
+                                at: destinationTime
+                            )
+                            targetDuration = cmTime(clip.timelineRange.duration)
+                            if targetDuration != insertedDuration {
+                                videoCompositionTrack.scaleTimeRange(
+                                    CMTimeRange(start: destinationTime, duration: insertedDuration),
+                                    toDuration: targetDuration
+                                )
+                            }
                         } else if clip.speedRampPoints.count >= 2 {
                             targetDuration = try insertSpeedRampSegments(
                                 SpeedRampCurve(points: clip.speedRampPoints),
@@ -816,8 +894,8 @@ final class PlaybackEngine {
                             }
                         }
 
-                        let preferredTransform = try await sourceTrack.load(.preferredTransform)
-                        let sourceSize = try await sourceTrack.load(.naturalSize)
+                        let preferredTransform = try await effectiveSourceTrack.load(.preferredTransform)
+                        let sourceSize = try await effectiveSourceTrack.load(.naturalSize)
                         videoClipInstructions.append(PlaybackClipInstructionMetadata(
                             timelineTrackID: track.id,
                             trackID: videoCompositionTrack.trackID,
@@ -1313,14 +1391,15 @@ final class PlaybackEngine {
         if audioProcessing.duckLevel > 0, !audioProcessing.voiceClipIds.isEmpty {
             let duckMultiplier = 1.0 - audioProcessing.duckLevel
             var voiceTimeRanges: [(start: Double, end: Double)] = []
-            for projTrack in project.timeline.tracks where projTrack.kind == .video {
+            let renderingTracks = renderingTracks(for: project)
+            for projTrack in renderingTracks where projTrack.kind == .video {
                 for clip in projTrack.clips where audioProcessing.voiceClipIds.contains(clip.id) {
                     voiceTimeRanges.append((clip.timelineRange.start, clip.timelineRange.end))
                 }
             }
             // Lower volume of audio-track clips during voice ranges
             for mutableParams in audioMixInputParameters {
-                for projTrack in project.timeline.tracks where projTrack.kind == .audio {
+                for projTrack in renderingTracks where projTrack.kind == .audio {
                     for clip in projTrack.clips {
                         let clipRange = clip.timelineRange
                         for voiceRange in voiceTimeRanges {
@@ -1439,12 +1518,6 @@ final class PlaybackEngine {
         animation.fillMode = .both
         animation.isRemovedOnCompletion = false
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-    }
-
-    private func temporaryReverseRenderURL(for clip: Clip) -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutPlaybackReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
-            .appendingPathExtension("mov")
     }
 
     private func temporaryImageRenderURL(for clip: Clip) -> URL {
@@ -1900,6 +1973,21 @@ private final class PlaybackEqualizerAudioTapContext {
             destinationBuffers[index].mNumberChannels = sourceBuffers[index].mNumberChannels
             destinationBuffers[index].mDataByteSize = sourceBuffers[index].mDataByteSize
             destinationBuffers[index].mData = sourceBuffers[index].mData
+        }
+    }
+}
+
+
+private enum PlaybackPreviewAudioError: LocalizedError {
+    case noPlayerItem
+    case exportSessionCreationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .noPlayerItem:
+            return "Preview has no installed player item to render."
+        case .exportSessionCreationFailed:
+            return "Could not create the Preview audio export session."
         }
     }
 }

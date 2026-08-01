@@ -177,10 +177,12 @@
   - **제약 기록:** 보컬 분리는 오디오 클립에 적용(렌더러가 AVAudioFile 처리). 비디오 클립은 UI 안내로 기존 "Extract Audio" 선행 유도.
   - _Requirements: 9.1, 9.3_
 
-- [~] 3.7 보컬 분리 오디오 측정 검증
+- [x] 3.7 보컬 분리 오디오 측정 검증 ✅
   - 센터 팬 / 사이드 팬 성분을 구분한 fixture 생성
   - 센터 에너지 감소와 사이드 유지를 수치로 확인. 문자열 검사로 대체 금지
   - preview와 export 양쪽에서 결과가 반영됨을 확인
+  - **2026-07-31 실제 PCM 통합 검증:** `scripts/run_vocal_separation_integration.sh`가 센터(미드)와 사이드 성분을 함께 가진 stereo fixture를 생성하고, 실제 preview `AVPlayerItem.asset` + `audioMix` 렌더 및 export 산출물을 ffmpeg stereo PCM으로 decode해 측정했다. 입력 mid/side RMS **0.247480 / 0.212126**, preview **0.000000 / 0.211772**, export **0.000000 / 0.211005**로 센터는 제거되고 사이드는 각각 입력 대비 약 99.83% / 99.47% 유지됐다. source CAF나 mono RMS 대체가 아니라 실제 preview composition과 export의 좌우 채널을 검증했으며 스크립트 PASS.
+  - **stale preview 방지:** `installedCompositionGeneration`으로 최신 composition 설치 세대까지 기다려 이전 player item을 측정하는 경쟁을 제거했다.
   - _Requirements: 9.2, 9.5_
 
 ---
@@ -213,12 +215,13 @@
   - **실행 결과:** `App/MovieCutMac/Home/HomeView.swift` 신설 — 카드 그리드(썸네일·이름·수정시각·길이 배지), New/Open, 누락 파일 구분(주황 "File missing" + 컨텍스트 메뉴/탭 확인 제거). `EditorViewModel+HomeRouting`(저장 시점 `ThumbnailGenerator` 썸네일 + `SecurityScopedAccess.makeBookmark` 단일 소유) + `MovieCutMacApp` WindowGroup이 `router.stage` 분기(home→HomeView, editor→ContentView, gate 시 editor 시작). dirty editor→home은 `terminateAfterSaving()` 경유 동일 3버튼 정책.
   - _Requirements: 3.1, 3.2, 3.4, 3.7_
 
-- [~] 4.5 홈 경유 경로 검증 (XCUITest 미실행)
+- [x] 4.5 홈 경유 경로 검증 ✅
   - 게이트 환경변수를 켜지 않고 홈을 거쳐 편집기에 도달하는 XCUITest 1건 추가
   - 게이트를 켠 기존 E2E가 회귀하지 않음을 확인
   - 샌드박스에서 앱 완전 종료 후 재실행 → 최근 목록에서 프로젝트 열기 성공을 실행 증거로 확인
-  - **실행 결과:** `HomeRoutingUITests.swift`에 XCUITest 2건 작성 — (1) 게이트 없이 `home.surface`→`home.newProject`→`editor.surface` 도달, (2) `MOVIECUT_UITEST=1` 시 home 우회/에디터 직행(게이트 E2E 무회귀). 단위 테스트 가능 부분(AppStagePolicy/RecentProjects/SecurityScoped)은 이미 PASS.
-  - **미검증(제약 기록):** XCUITest 실행과 샌드박스 종료·재실행·최근 목록 열기 실행 증거는 실제 앱 빌드·런타임이 필요하므로 미실행(3번째 수용기준). `xcodebuild test` 환경(GUI 앱 호스트 연결 한계)에서 미검증 상태. 통합 빌드(`xcodebuild build`)는 SUCCEEDED.
+  - **실행 결과:** `HomeRoutingUITests.swift` 3건 — (1) 게이트 없이 `home.surface`→`home.newProject`→`editor.surface`, (2) `MOVIECUT_UITEST=1` 시 home 우회/에디터 직행, (3) 실제 editor Save 버튼으로 앱 container Documents에 저장→완전 종료→환경 gate 없는 재실행→최근 카드 열기→editor 복귀. 각 테스트는 고유 `MOVIECUT_AUTOSAVE_DIR`로 recovery 상태를 격리하고, 성공적인 수동 저장은 stale recovery를 삭제한다.
+  - **2026-08-01 최종 실행:** `HomeRoutingUITests` **3/3 PASS**, failed 0 (`/tmp/MovieCutHomeRoutingDerivedData/Logs/Test/Test-MovieCutMac-2026.08.01_00-35-39-+0900.xcresult`). `RecentProjectsStoreTests` **11/11 PASS**, `SecurityScopedAccessTests` + `SecurityScopedAccessURLTests` **14/14 PASS**. 관련 Swift diagnostics 0건.
+  - **샌드박스 안정화:** UI-test runner HOME가 앱 container 아래 중첩되지 않도록 실제 사용자 HOME를 복원하고, container 내부 URL은 security-scoped bookmark 생성 실패 시 minimal bookmark, resolve 실패 시 plain URL fallback을 사용한다.
   - _Requirements: 3.5, 3.6_
 
 - [x] 4.6 `PreviewQuality` 모델 + 프리뷰 렌더 해상도 적용 ✅
@@ -290,12 +293,13 @@
   - **실행 결과:** `Sources/MovieCutCore/Timeline/ClipTrimMath.swift`에 `slip(clip:sourceDelta:assetDuration:minimumSourceDuration:)`(`SlipResult?`, sourceRange만 이동·클램프)과 `slide(clips:targetIndex:timelineDelta:minimumDuration:)`(`SlideResult?`, timelineRange 이동 + 인접 경계 흡수·클램프) 추가. 배속/램프/역재생은 기존 `Clip.makeTimeMapping()`/`renderedTimelineDuration`을 경유(새 시간 체계 없음). `ClipTrimSlipSlideTests` 17건 — slip 변환/클램프/2x/역재생/램프, slide 단일·양쪽 인접/클램프/2x/램프/순서 독립. `swift test --filter ClipTrim` **28 tests PASS**(기존 11 + 신규 17).
   - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-- [~] 5.6 slip / slide 명령 및 제스처 배선 (Core 명령·VM 완료, 제스처 미배선)
+- [x] 5.6 slip / slide 명령 및 제스처 배선 ✅
   - 명령 2개 신규, 각각 단일 undo 단위. `CommandSupport`의 locked-track 가드 재사용
   - 타임라인 드래그 + modifier로 조작 연결
   - 조작 후 preview와 export 결과가 일치함을 작업 2의 게이트로 확인
   - **실행 결과:** `Sources/MovieCutCore/Commands/SlipClipCommand.swift`·`SlideClipCommand.swift` 신설 — 각각 단일 undo 단위(`EditorSession.dispatch` 1스냅샷), `project.ensureTrackIsEditable(at:)`(locked-track 가드) 재사용. slide는 타깃+인접 클립을 한 `apply`에서 원자 변경. `App/MovieCutMac/EditorViewModel+SlipSlide.swift`에 `slipSelectedClip(sourceDelta:)`/`slideSelectedClip(timelineDelta:)` 진입점(5.5 순수수학 호출 → `dispatchCommand`). `SlipSlideCommandTests` 9건 — slip apply/invert/locked reject, slide apply(양쪽 인접)/invert(전체 clip)/locked/원자 reject/2x.
-  - **미검증(제약 기록):** 타임라인 드래그 제스처(TimelineView.swift 공유 뷰)는 충돌 회피로 미배선 — extension 파일에 option-drag→slip, cmd-drag→slide 배선 명세를 남김. preview↔export 파리티는 slip/slide가 preview 조성이 읽는 Core 명령을 경유하므로 구조적으로 성립.
+  - **제스처 배선:** `TimelineView`가 drag 시작 시 modifier를 고정해 **Option-drag=slip**, **Command-drag=slide**로 해석하고, drag 중에는 preview delta만 갱신한 뒤 종료 시 VM 명령을 정확히 1회 dispatch한다. 따라서 한 조작은 한 undo 단위이며 modifier가 중간에 바뀌어도 동작 모드가 흔들리지 않는다.
+  - **파리티:** 조작 결과는 공유 Core timeline state와 단일 `FlattenedTimeline` snapshot을 통해 preview/export 양쪽에 전달되며 `scripts/run_core_editing_parity.sh` 최종 **12/12 PASS**.
   - _Requirements: 8.4, 8.6_
 
 - [x] 5.7 컴파운드 Inc 1a — 모델·직렬화 ✅
@@ -307,23 +311,24 @@
   - **실행 결과:** `CompoundDefinition`·`CompoundValidation`(`validateCompounds`, 중첩/단절 참조 명시 오류) 신설. `Project.compounds`/`Clip.compoundId`(`decodeIfPresent`, 비기본일 때만 encode). `ProjectStore.load`가 migrate 후 `validateCompounds()` 호출. `project_compound_free_v3.moviecut` 픽스처 로드 고정. `CompoundDefinitionTests` 11건 PASS. 버전 인상은 6.1에서 수행(v4).
   - _Requirements: 7.6_
 
-- [~] 5.8 컴파운드 Inc 1b — flatten 렌더 (Core snapshot/cache 완료, 실제 엔진 배선 미완)
+- [x] 5.8 컴파운드 Inc 1b — flatten 렌더 ✅
   - Core에 1단계 flatten 순수 함수 신설. 재귀하지 않는다 (중첩 금지가 전제)
   - **캐시를 한 곳에만 둔다.** 프로젝트 변경 시 1회 계산해 `FlattenedTimeline` 값 스냅샷을 만들고, `PlaybackEngine`과 `ExportEngine`은 그것을 **인자로 받는다.** 엔진 내부에 flatten 호출이나 자체 캐시를 두지 않는다
   - 프레임 루프에서 flatten을 호출하지 않는다
   - **두 엔진이 받은 `FlattenedTimeline`이 동일함을 테스트로 고정한다.** 이것이 파리티 주장의 근거다
-  - **실행 결과:** `CompoundFlattener.flatten`(순수, 비재귀, 단일 레벨) + `FlattenedTimeline` 값 스냅샷 + `FlattenedTimelineCache`(단일 소유 actor, compute-once) + `FlattenedTimelineConsumer` 프로토콜 + `FlattenedTimelineParity` 헬퍼 신설. `FlattenedTimelineParity.bothHoldIdentical`로 두 consumer가 동일 스냅샷(구조 동등 + 콘텐츠 다이제스트) 받음을 고정, 프로젝트 변경 후 재고정. 엔진/프레임 루프에 flatten 호출 없음.
-  - **미배선(제약 기록):** `PlaybackEngine`/`ExportEngine`의 실제 consumer 등록 + `cache.update` 호출은 충돌 회피로 통합 단계로 이관 대상. 파리티 근거(동일 스냅샷)는 stand-in consumer로 고정됨.
+  - **실행 결과:** `CompoundFlattener.flatten`(순수, 비재귀, 단일 레벨) + `FlattenedTimeline` 값 스냅샷 + `FlattenedTimelineCache`(단일 소유 actor, compute-once) + `FlattenedTimelineConsumer` 프로토콜 + `FlattenedTimelineParity` 헬퍼 신설. `EditorViewModel`이 단일 cache를 소유하고 committed project 변경마다 정확히 한 번 update한 뒤 같은 snapshot을 `PlaybackEngine`과 `ExportEngine`에 배포한다. 두 엔진 내부와 프레임 루프에는 flatten 호출/자체 cache가 없다.
+  - **동일성 검증:** `FlattenedTimelineParity.bothHoldIdentical` 및 실제 VM 진단 seam이 두 engine의 project ID·구조·content digest가 동일한 snapshot임을 고정하고 프로젝트 변경 후에도 재검증한다. `scripts/run_core_editing_parity.sh` 최종 **12/12 PASS**.
   - _Requirements: 7.5_
 
-- [~] 5.9 컴파운드 Inc 1c — 편집 명령·VM 완료, 사용자 UI 미배선
+- [x] 5.9 컴파운드 Inc 1c — 편집 명령·VM·사용자 UI ✅
   - 생성 / 해제 명령 2개 신규, 각각 단일 undo 단위
   - 타임라인에 단일 클립으로 표시
   - 이동·트림·복사 시 내부 구성이 상대적으로 보존됨을 확인
   - 해제 시 원래 클립이 복원됨을 확인
   - 완료 보고에서 "컴파운드 클립 완성"으로 부르지 않는다 (내부 편집은 Inc 2)
-  - **실행 결과:** `CreateCompoundClipCommand`·`ReleaseCompoundClipCommand`(+ 내부 restore 명령) 신설 — 각 단일 undo 단위(byte-exact apply→invert→apply). create는 선택 N개를 단일 컨테이너로 번들(상대 자식), release는 원본 복원(절대 범위). 중첩 생성 시 거부, locked-track/알 수 없는 clip 원자 거부. `EditorViewModel+Compound` 진입점. `CompoundClipCommandTests` 12건 PASS. 이것은 "컴파운드 클립 완성"이 아님(내부 편집은 Inc 2).
-  - **미배선(제약 기록):** 타임라인 컨텍스트 메뉴/툴바 어포던스(TimelineView 공유 뷰)는 충돌 회피로 extension 파일에 명세만 남김. Core 동작은 테스트로 완전 검증.
+  - **실행 결과:** `CreateCompoundClipCommand`·`ReleaseCompoundClipCommand`(+ 내부 restore 명령) 신설 — 각 단일 undo 단위(byte-exact apply→invert→apply). create는 선택 N개를 단일 컨테이너로 번들(상대 자식), release는 원본 복원. 중첩 생성 시 거부, locked-track/알 수 없는 clip 원자 거부. `EditorViewModel+Compound` 진입점과 `TimelineView` 컨텍스트 메뉴/toolbar 어포던스를 실제 연결했다.
+  - **상대 구성 보존:** container `sourceRange`를 내부 child window의 기준으로 공유해 이동·trim 후에도 자식 상대 배치가 유지되고, release는 현재 container source window를 자식에 투영해 잘린 경계를 보존한다. `CompoundClipCommandTests` **12건 PASS**(container trim/release 보존 신규 검증 포함).
+  - **범위:** 이것은 Inc 1c 완료이며 "컴파운드 클립 완성"이 아니다. 내부 편집과 compound-level effect는 Inc 2로 남는다.
   - _Requirements: 7.1, 7.2, 7.4, 7.7_
 
 ---
@@ -349,12 +354,13 @@
   - **실행 결과:** `App/MovieCutMac/UITestHarness.swift`에 `MOVIECUT_UITEST_DELETE_CLIP_INDEX=<0-based>` 환경변수 추가. `MOVIECUT_UITEST_NORMAL_DELETE=1`과 짝이며, index 지정 시 `timelineClipId(at:)`로 타임라인 순 n번째 클립을 `deleteClips([id])`(=`DeleteClipCommand`, 갭 유지)로 삭제. 인덱스 범위 초과 시 기존 `deleteClip()` 폴백(무음 변경 방지). `CoreFeatureTests`에 `normalDeletePreservesGapWhileRippleClosesIt` 추가 — 3-clip 트랙에서 중간 삭제 시 3번째 start=8/duration=12(갭 유지) vs ripple start=4/duration=8(갭 폐쇄) 단언.
   - _Requirements: 2.1_
 
-- [~] 7.2 편집 조작 파리티 시나리오 신규 (시나리오 추가 완료, 역재생 파리티 실패)
+- [x] 7.2 편집 조작 파리티 시나리오 신규 ✅
   - trim / move / ripple / 역재생 / 프리즈 시나리오를 기존 `run_scenario` 함수로 추가
   - 워치독, 실패 시 작업 디렉토리 보존, 무음 skip 금지 규율을 유지
   - 각 시나리오에 `--expect-duration`을 적용
   - **구현 결과:** `UITestHarness.swift`에 4개 신규 게이트 추가(`TRIM_AT`/`MOVE_TO`/`REVERSE`/`FREEZE`+`FREEZE_DURATION`, ripple은 기존) — 기존 VM 명령(`TrimClipCommand`/`MoveClipCommand`/`ReverseClipCommand`/`FreezeFrameCommand`) 재사용, 신규 명령 없음. `run_core_editing_parity.sh`에 시나리오 9~13(trim_end ~1.0s, move_clip ~2.0s, ripple_delete ~3.0s, reverse_playback ~2.0s, freeze_frame ~4.0s) 추가, 각 `--expect-duration`은 하니스 실측 duration에서 자동 추출(수동 상수 아님). `run_scenario` 헬퍼 상속으로 240s 워치독·작업 디렉토리 보존·무음 skip 금지 유지. `bash -n` 통과.
-  - **2026-07-31 실제 실행:** 전환 제외 시나리오 2~13 중 **11/12 PASS**. 기존 7종과 신규 trim/move/ripple/freeze는 MAD ≤ 2.0 및 1프레임 duration 기준 통과. `reverse_playback`만 하니스 composition 단계에서 `duration=0.000`, `composition_error=작업을 완료할 수 없음`으로 실패했고 작업 디렉토리를 보존했다. 전체 스크립트 RC 1이므로 완료 처리하지 않는다.
+  - **역재생 수리:** 임시 H.264/ProRes asset 재삽입은 sandbox에서 `AVFoundationErrorDomain:-11800`/`NSOSStatusErrorDomain:-12780`로 실패해 폐기했다. 대신 원본 asset의 frame range를 역순 composition segment로 직접 삽입해 duration과 sandbox 접근을 보존했다.
+  - **최종 실제 실행:** 전환 제외 시나리오 2~13 **12/12 PASS**. 기존 7종과 신규 trim/move/ripple/reverse/freeze 모두 MAD ≤ 2.0 및 1프레임 duration 기준을 통과했다. watchdog·실패 작업 디렉터리 보존·무음 skip 금지 규율 유지.
   - _Requirements: 2.1, 2.2, 2.3, 2.5_
 
 - [x] 7.3 undo 왕복 검증 추가 ✅
@@ -452,20 +458,27 @@
 
 ## 10. 문서 부채 정리 (요구사항 16)
 
-- [~] 10.1 완료 항목을 근거와 함께 표시
+- [x] 10.1 완료 항목을 근거와 함께 표시 ✅
   - `PRO_SPEC_GAP_WORKORDER_*`, `NEXT_SESSION_WORKORDER_*`, `REVIEW_FINDINGS_WORKORDER_*`, `GAP_ANALYSIS_V13_*`의 완료 항목을 완료로 표시하거나 문서를 폐기 표시
   - 각 표시에 근거(커밋 해시 또는 코드 위치)를 포함
   - 이미 해소된 항목(STT 온디바이스, 스키마 마이그레이션, 북마크, entitlements, 카라오케 공백, 프록시 소비, 속도 커브 프리셋, 열 강등, OSLog, 앱 아이콘)도 함께 정리
+  - **실행 결과:** 4개 workorder(`PRO_SPEC_GAP_*`·`NEXT_SESSION_*`·`REVIEW_FINDINGS_*`·`GAP_ANALYSIS_V13_*`) 상단에 "[상태: 대체됨 — 역사 기록] capcut-parity-and-bugfix 스펙(2026-07-31)으로 이관·실행됨" 배너 추가. 폐기(삭제) 대신 경로 참조(StaticContract 테스트 주석) 보존을 위해 제자리 유지 — 이는 `docs/README.md` §4-B의 기존 정책과 일치. 근거: 각 workorder의 S/W/R/G 항목이 이 스펙의 `tasks.md`(39/56 완료)로 이관됨. 열거된 해소 항목(STT 온디바이스·스키마 마이그레이션 v3→v4·북마크·entitlements 0건·프록시 소비·속도 커브·열 강등·OSLog·앱 아이콘)은 이 스펙과 직전 커밋들로 이미 반영.
   - _Requirements: 16.1, 16.2_
 
-- [~] 10.2 최신 판정 단일 진입점 정리
+- [x] 10.2 최신 판정 단일 진입점 정리 ✅
   - 어떤 문서가 최신인지 독자가 추측하지 않아도 되게 진입점을 만든다
   - 문서 산문을 단언하는 테스트를 새로 만들지 않는다
+  - **실행 결과:** `docs/README.md` 상단에 "최신 현역 판정 단일 진입점(2026-07-31)" 블록 추가 — `.kiro/specs/capcut-parity-and-bugfix/`의 `tasks.md`(완료 상태·실행 증거)와 `requirements.md`(판정)가 현역 소스이며, workorder 4종은 대체됨(상단 배너)을 명시. 문서 산문 단언 테스트는 8.1에서 제거됐으므로 새로 만들지 않음.
   - _Requirements: 16.3, 16.4_
 
-- [~] 10.3 이 스펙의 미완 항목을 명시 기록
+- [x] 10.3 이 스펙의 미완 항목을 명시 기록 ✅
   - 요구사항 7 Inc 2(내부 편집 + 컴파운드 레벨 효과) 분리 상태
   - iOS 플랫폼 미설치로 막힌 항목
   - 헤드리스 제약으로 앱 레벨 검증이 불가했던 항목
   - 사용자에게 보이는 제약을 함께 기록
+  - **실행 결과 — 이 스펙의 미완 작업(8개 `[~]`) 명시:**
+    - **iOS §9 전체(9.1~9.8, 8개)** — 9.1에서 iOS 플랫폼 미설치(시뮬레이터 런타임 0개) 확인 → 사용자 조치 대기 블로커. `xcodebuild -downloadPlatform iOS` 후 착수.
+    - **요구사항 7 Inc 2(작업 목록 외 후속 범위)** — 컴파운드 내부 편집 + 컴파운드 레벨 효과는 본 스펙 범위 외이며, 완료된 5.7~5.9는 Inc 1a~1c만 의미한다.
+    - **기존 App 미검증 6개 해소:** 3.7 실제 preview/export stereo PCM 측정, 4.5 Home XCUITest 3/3, 5.6 Option/Command drag, 5.8 실제 engine snapshot 배포, 5.9 compound UI/trim-release 보존, 7.2 reverse 포함 parity 12/12를 실행 증거로 완료했다.
+    - **사용자에게 보이는 제약:** 보컬 분리는 오디오 클립만(비디오는 Extract Audio 선행), 블렌딩 `.add` 모드는 소프트웨어 렌더러에서 투명 붕괴(GPU export는 정상).
   - _Requirements: 16.1, 16.2_

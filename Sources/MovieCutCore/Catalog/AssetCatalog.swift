@@ -60,10 +60,6 @@ public struct CatalogItem: Codable, Sendable, Identifiable, Equatable {
     public var tags: [String]
     /// Licensing terms.
     public var license: CatalogLicense
-    /// Where to download the asset, when available.
-    public var downloadURL: URL?
-    /// A preview/thumbnail URL, when available.
-    public var previewURL: URL?
     /// Duration in seconds for time-based assets (music, SFX).
     public var durationSeconds: Double?
     /// File size in bytes, when known.
@@ -76,8 +72,6 @@ public struct CatalogItem: Codable, Sendable, Identifiable, Equatable {
         name: String,
         tags: [String] = [],
         license: CatalogLicense,
-        downloadURL: URL? = nil,
-        previewURL: URL? = nil,
         durationSeconds: Double? = nil,
         fileSizeBytes: Int? = nil
     ) {
@@ -86,8 +80,6 @@ public struct CatalogItem: Codable, Sendable, Identifiable, Equatable {
         self.name = name
         self.tags = tags
         self.license = license
-        self.downloadURL = downloadURL
-        self.previewURL = previewURL
         self.durationSeconds = durationSeconds
         self.fileSizeBytes = fileSizeBytes
     }
@@ -151,18 +143,14 @@ public struct CatalogPage: Sendable, Equatable {
     }
 }
 
-/// Errors surfaced by catalog providers and the downloader.
+/// Errors surfaced by catalog providers.
 public enum CatalogError: Error, Sendable, Equatable {
-    /// A transport failure or non-success HTTP status.
-    case transport(String)
-    /// The item has no download URL.
-    case notDownloadable
     /// The catalog payload could not be decoded.
     case malformedCatalog(String)
 }
 
-/// Pure search and pagination over an in-memory catalog. Shared by the local and
-/// remote providers so filtering behavior is identical and testable.
+/// Pure search and pagination over an in-memory catalog, shared by all
+/// providers so filtering behavior is identical and testable.
 public enum CatalogSearch {
     /// Filters items by a query (without pagination).
     public static func filter(_ items: [CatalogItem], with query: CatalogQuery) -> [CatalogItem] {

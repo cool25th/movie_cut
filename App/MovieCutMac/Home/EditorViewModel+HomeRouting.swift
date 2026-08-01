@@ -27,13 +27,10 @@ extension EditorViewModel {
 
     /// Records the current project into the recent list (requirement 3.3).
     ///
-    /// Captures a security-scoped bookmark for the project file URL via the
-    /// single-owner `SecurityScopedAccess.makeBookmark(for:)`, renders a single
-    /// thumbnail at save time via the existing `ThumbnailGenerator` (design
-    /// §4.2), and upserts the entry. Safe to call when bookmark capture fails
-    /// (e.g. a container-internal URL): the entry is recorded with empty
-    /// bookmark data and the store's missing-file partition will flag it if the
-    /// file cannot be reached.
+    /// `SecurityScopedAccess.makeBookmark(for:)`, renders a single thumbnail
+    /// at save time via the existing `ThumbnailGenerator` (design §4.2), and
+    /// upserts the entry. User-selected files retain security scope; files in
+    /// the app container use the bookmark helper's regular-bookmark fallback.
     ///
     /// - Parameters:
     ///   - store: The recent-projects store to upsert into.

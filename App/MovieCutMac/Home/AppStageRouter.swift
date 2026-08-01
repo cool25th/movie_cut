@@ -18,15 +18,12 @@ import MovieCutCore
 /// (which already handles the save-URL-or-Save-As + save + success cases), so
 /// no save logic is duplicated.
 ///
-/// The router also records opened/saved projects into the recent list
-/// (requirement 3.3) whenever it observes a URL it can attribute — i.e. the
-/// open-from-home path. (Recording on every Cmd+S-while-in-editor would require
-/// a hook inside `EditorViewModel`, which the spec's "do not edit
-/// EditorViewModel.swift" constraint defers; the home transition's own Save path
-/// and the open path cover the user-visible flows.)
+/// The router records projects opened from Home, while successful saves are
+/// recorded by `EditorViewModel.saveProject(to:)` through the shared
+/// `RecentProjectsStore`. This keeps Cmd-S, the editor Save button, and
+/// home-originated opens on the same persisted recent-project list.
 ///
-/// `EditorViewModel` is NOT modified to host this (constraint: do not edit
-/// `EditorViewModel.swift`); the router calls its existing entry points
+/// The router calls the view model's project lifecycle entry points
 /// (`currentProject`, `isDirty`, `terminateAfterSaving()`, `openProject(from:)`,
 /// `newProject()`) and the home-routing extension's
 /// `recordCurrentProjectToRecent(_:savedTo:)`.
@@ -42,6 +39,7 @@ final class AppStageRouter {
     init(viewModel: EditorViewModel, store: RecentProjectsStore) {
         self.viewModel = viewModel
         self.store = store
+        viewModel.recentProjectsStore = store
         // Read the harness gate once at construction (launch). The gate is
         // static for the process lifetime, so this is the only read.
         let env = ProcessInfo.processInfo.environment
@@ -57,7 +55,7 @@ final class AppStageRouter {
     /// `confirmDiscardUnsavedChanges` (shared policy) guards the session swap;
     /// on success the router flips to the editor.
     func requestNewProject() async {
-        await viewModel.newProject()
+        guard await viewModel.newProject() else { return }
         stage = .editor
     }
 

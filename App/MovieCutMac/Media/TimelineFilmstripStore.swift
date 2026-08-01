@@ -829,7 +829,7 @@ struct TimelineFilmstripLayer: View {
     }
 }
 
-#if DEBUG
+#if DEBUG || MOVIECUT_HARNESS
 struct TimelineFilmstripDebugScrollAnchor: Hashable {
     let milliseconds: Int
 }

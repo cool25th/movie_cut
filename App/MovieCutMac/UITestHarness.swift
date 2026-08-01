@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || MOVIECUT_HARNESS
 import AVFoundation
 import AppKit
 import CoreImage
@@ -198,9 +198,9 @@ extension EditorViewModel {
         }
 
         let primaryImportURLs = env["MOVIECUT_UITEST_IMPORT"]
-            .map(uiTestImportURLs(from:)) ?? []
+            .map(uiTestImportURLs(from:)).map(containerizeImportURLs) ?? []
         let extraImportURLs = env["MOVIECUT_UITEST_IMPORT_EXTRA"]
-            .map(uiTestImportExtraURLs(from:)) ?? []
+            .map(uiTestImportExtraURLs(from:)).map(containerizeImportURLs) ?? []
         if filmstripPerformanceScenario != nil {
             if !primaryImportURLs.isEmpty {
                 await importMediaAndAddToTimeline(
@@ -502,22 +502,30 @@ extension EditorViewModel {
 
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
-            await exportProject(to: URL(filePath: exportPath))
+            let dest = containerizedExportDestination(for: URL(filePath: exportPath))
+            await exportProject(to: dest.write)
+            finalizeContainerizedExport(from: dest.write, to: dest.requested)
         }
 
         if lastErrorMessage == nil,
            let audioPath = env["MOVIECUT_UITEST_EXPORT_AUDIO"], !audioPath.isEmpty {
-            await exportAudioOnly(to: URL(filePath: audioPath))
+            let dest = containerizedExportDestination(for: URL(filePath: audioPath))
+            await exportAudioOnly(to: dest.write)
+            finalizeContainerizedExport(from: dest.write, to: dest.requested)
         }
 
         if lastErrorMessage == nil,
            let proResPath = env["MOVIECUT_UITEST_EXPORT_PRORES"], !proResPath.isEmpty {
-            await exportProResMaster(to: URL(filePath: proResPath))
+            let dest = containerizedExportDestination(for: URL(filePath: proResPath))
+            await exportProResMaster(to: dest.write)
+            finalizeContainerizedExport(from: dest.write, to: dest.requested)
         }
 
         if lastErrorMessage == nil,
            let hdrPath = env["MOVIECUT_UITEST_EXPORT_HDR"], !hdrPath.isEmpty {
-            await exportHDRMaster(to: URL(filePath: hdrPath))
+            let dest = containerizedExportDestination(for: URL(filePath: hdrPath))
+            await exportHDRMaster(to: dest.write)
+            finalizeContainerizedExport(from: dest.write, to: dest.requested)
         }
 
         // Optional preview render benchmark: per-frame 1080p compositor cost on
@@ -584,7 +592,7 @@ extension EditorViewModel {
         // permission), it writes its outcome to `MOVIECUT_UITEST_RESULT` and
         // `MOVIECUT_UITEST_QUIT=1` terminates so a script / CI can assert results.
         if let resultPath = env["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
-            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            writeHarnessStatus(status, to: resultPath)
         }
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
@@ -719,7 +727,7 @@ extension EditorViewModel {
         }
 
         if !resultPath.isEmpty {
-            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
@@ -1881,6 +1889,173 @@ extension EditorViewModel {
             .map { URL(filePath: $0) }
     }
 
+    /// Copies harness fixtures into the app's sandbox container so the
+    /// sandboxed (shipping) build can read them without a security-scoped
+    /// grant. Only files that already live inside the container (e.g. a prior
+    /// copy) are returned unchanged. The container's tmp/ and Application
+    /// Support/ are grant-free under App Sandbox, and `makeBookmark`'s
+    /// `.minimalBookmark` fallback yields a valid bookmark there
+    /// (SecurityScopedAccessTests covers that round-trip).
+    ///
+    /// This is gated by `MOVIECUT_UITEST_CONTAINERIZE=1` so the existing
+    /// sandbox-OFF measurement scripts (perf_4k.sh, perf_baseline.sh) keep
+    /// importing the original fixture path directly — copying would add I/O
+    /// that perturbs the wall-clock numbers those scripts measure.
+    private func containerizeImportURLs(_ urls: [URL]) -> [URL] {
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST_CONTAINERIZE"] == "1", !urls.isEmpty else {
+            return urls
+        }
+        let fm = FileManager.default
+        // NSTemporaryDirectory() is inside the sandbox container on macOS,
+        // so reads/writes here need no security-scoped grant.
+        let staging = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("MovieCutHarnessImports", isDirectory: true)
+        try? fm.createDirectory(at: staging, withIntermediateDirectories: true)
+        let containerRoot = URL(fileURLWithPath: NSHomeDirectory())
+            .standardizedFileURL.path
+        return urls.compactMap { source -> URL? in
+            // Already inside the container (a previous copy, or a proxy/auto-
+            // save artifact): leave it where it is.
+            if source.standardizedFileURL.path.hasPrefix(containerRoot) {
+                return source
+            }
+            guard fm.fileExists(atPath: source.path) else { return source }
+            let dest = staging.appendingPathComponent(source.lastPathComponent)
+            do {
+                if fm.fileExists(atPath: dest.path) {
+                    try fm.removeItem(at: dest)
+                }
+                try fm.copyItem(at: source, to: dest)
+                return dest
+            } catch {
+                // Fall back to the original path; the caller surfaces any
+                // import failure through its normal error path.
+                return source
+            }
+        }
+    }
+
+    /// Resolves an export destination that a sandboxed build can write to.
+    /// When `MOVIECUT_UITEST_CONTAINERIZE=1` and the requested path is outside
+    /// the sandbox container, the export is written into the container's tmp/
+    /// and the result is moved to the requested path afterward. Writing into
+    /// the container needs no security-scoped grant; the final move is best-
+    /// effort and failures are surfaced through `lastErrorMessage`.
+    ///
+    /// Returns a tuple of (effectiveWriteURL, requestedURL). When container-
+    /// ization is off, both are the input URL.
+    private func containerizedExportDestination(for requested: URL)
+        -> (write: URL, requested: URL) {
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST_CONTAINERIZE"] == "1" else {
+            return (requested, requested)
+        }
+        let containerRoot = URL(fileURLWithPath: NSHomeDirectory())
+            .standardizedFileURL.path
+        if requested.standardizedFileURL.path.hasPrefix(containerRoot) {
+            return (requested, requested)
+        }
+        // Stage inside the container's tmp/ (grant-free under App Sandbox).
+        let staging = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("MovieCutHarnessExports", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: staging, withIntermediateDirectories: true)
+        return (staging.appendingPathComponent(requested.lastPathComponent),
+                requested)
+    }
+
+    /// Moves a containerized export artifact to its requested destination.
+    /// No-op when the export already wrote there. Best-effort: a move failure
+    /// sets `lastErrorMessage` so the harness status reports it.
+    private func finalizeContainerizedExport(from write: URL, to requested: URL) {
+        guard write.standardizedFileURL != requested.standardizedFileURL else { return }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: write.path) else { return }
+        do {
+            let parent = requested.deletingLastPathComponent()
+            try? fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: requested.path) {
+                try fm.removeItem(at: requested)
+            }
+            // Try a cheap rename first; fall back to a copy if the destination
+            // is on a different volume than the container.
+            do {
+                try fm.moveItem(at: write, to: requested)
+            } catch {
+                try fm.copyItem(at: write, to: requested)
+                try? fm.removeItem(at: write)
+            }
+        } catch {
+            lastErrorMessage = "export move failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Writes the harness status line to `resultPath`, routing through the
+    /// sandbox container when `MOVIECUT_UITEST_CONTAINERIZE=1` so a sandboxed
+    /// (shipping) build can report its outcome even when the requested path is
+    /// outside the container. The staged file is moved to the requested path
+    /// on success. When containerization is off this is a plain atomic write.
+    private func writeHarnessStatus(_ status: String, to resultPath: String) {
+        guard !resultPath.isEmpty else { return }
+        let env = ProcessInfo.processInfo.environment
+        let requested = URL(fileURLWithPath: resultPath)
+        guard env["MOVIECUT_UITEST_CONTAINERIZE"] == "1" else {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            return
+        }
+        let containerRoot = URL(fileURLWithPath: NSHomeDirectory())
+            .standardizedFileURL.path
+        if requested.standardizedFileURL.path.hasPrefix(containerRoot) {
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            return
+        }
+        // Stage inside the container tmp/, then move to the requested path.
+        let staging = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("MovieCutHarnessResult.txt")
+        try? status.write(to: staging, atomically: true, encoding: .utf8)
+        let fm = FileManager.default
+        do {
+            let parent = requested.deletingLastPathComponent()
+            try? fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: requested.path) {
+                try fm.removeItem(at: requested)
+            }
+            do {
+                try fm.moveItem(at: staging, to: requested)
+            } catch {
+                try fm.copyItem(at: staging, to: requested)
+                try? fm.removeItem(at: staging)
+            }
+        } catch {
+            // Last resort: direct write to the requested path; the staged
+            // file is already on disk in the container tmp/ as a fallback.
+            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Resolves a directory the harness should write into (e.g. the preview
+    /// dump dir) so a sandboxed build can write there. When
+    /// `MOVIECUT_UITEST_CONTAINERIZE=1` and `requestedPath` is outside the
+    /// container, returns a staging dir under the container tmp/ and reports
+    /// that path back through the status line. Otherwise returns `requestedPath`.
+    private func containerizedDirectory(for requestedPath: String) -> String {
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOVIECUT_UITEST_CONTAINERIZE"] == "1",
+              !requestedPath.isEmpty else {
+            return requestedPath
+        }
+        let requested = URL(fileURLWithPath: requestedPath).standardizedFileURL
+        let containerRoot = URL(fileURLWithPath: NSHomeDirectory())
+            .standardizedFileURL.path
+        if requested.path.hasPrefix(containerRoot) {
+            return requestedPath
+        }
+        let staging = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("MovieCutHarnessDump", isDirectory: true)
+        return staging.path
+    }
+
     private func timelineSummarySuffix() -> String {
         let parts = currentProject.timeline.tracks.flatMap { track in
             track.clips.map { clip in
@@ -2019,7 +2194,7 @@ extension EditorViewModel {
             timelineSummarySuffix()
         lastStatusMessage = status
         if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
-            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            writeHarnessStatus(status, to: resultPath)
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
@@ -2044,16 +2219,18 @@ extension EditorViewModel {
         func checkpoint(_ stage: String) {
             let line = "parity_checkpoint stage=\(stage) dumped_frames=\(dumpedFrames) composition_error=\(playbackEngine.lastCompositionError ?? "none")\n"
             if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
-                try? line.write(toFile: resultPath, atomically: true, encoding: .utf8)
+                writeHarnessStatus(line, to: resultPath)
             }
         }
         checkpoint("start")
         do {
-            let importURLs = (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
-                .split(separator: ",")
-                .map { String($0) }
-                .filter { !$0.isEmpty }
-                .map(URL.init(fileURLWithPath:))
+            let importURLs = containerizeImportURLs(
+                (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
+                    .split(separator: ",")
+                    .map { String($0) }
+                    .filter { !$0.isEmpty }
+                    .map(URL.init(fileURLWithPath:))
+            )
             guard !importURLs.isEmpty else {
                 throw NSError(domain: "MovieCutUITest", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_IMPORT not set"])
@@ -2091,7 +2268,8 @@ extension EditorViewModel {
                               userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_PARITY_TIMES not set or empty"])
             }
 
-            previewDumpDir = environment["MOVIECUT_UITEST_PREVIEW_DUMP"] ?? ""
+            previewDumpDir = containerizedDirectory(
+                for: environment["MOVIECUT_UITEST_PREVIEW_DUMP"] ?? "")
             guard !previewDumpDir.isEmpty else {
                 throw NSError(domain: "MovieCutUITest", code: 4,
                               userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_PREVIEW_DUMP not set"])
@@ -2123,7 +2301,9 @@ extension EditorViewModel {
             // timestamps from the rendered mp4.
             if let exportPath = environment["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
                 checkpoint("export_before")
-                await exportProject(to: URL(filePath: exportPath))
+                let dest = containerizedExportDestination(for: URL(filePath: exportPath))
+                await exportProject(to: dest.write)
+                finalizeContainerizedExport(from: dest.write, to: dest.requested)
                 checkpoint("export_after")
             }
         } catch {
@@ -2140,7 +2320,7 @@ extension EditorViewModel {
             timelineSummarySuffix()
         lastStatusMessage = status
         if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
-            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            writeHarnessStatus(status, to: resultPath)
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
@@ -2234,6 +2414,25 @@ extension EditorViewModel {
                            gamma: 0.8,
                            gain: .init(red: 1.2, green: 1.0, blue: 0.8))
             )
+        }
+        // 8a. G-02 Inc 3 grade (HSL + curves only, no 3-way change) — parity
+        //     mirror of the generic harness gate, so the non-3-way renderer
+        //     chain gets preview+export parity evidence, not export-only.
+        if environment["MOVIECUT_UITEST_HSL_CURVES"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(
+                    hslBands: [HSLBand(center: .red, saturation: -1, luminance: 0.5)],
+                    curves: ColorCurves(master: [
+                        CurvePoint(x: 0.5, y: 0.65)
+                    ])
+                )
+            )
+        }
+        // 8a2. Optical-flow slow-mo on the selected clip — parity mirror of the
+        //     generic harness gate. Pair with SPEED_RATE to observe frame
+        //     interpolation in preview+export.
+        if environment["MOVIECUT_UITEST_OPTICAL_FLOW"] == "1", selectedClipId != nil {
+            await updateSelectedOpticalFlow(true)
         }
 
         // 8b. Trim the selected clip's end to the playhead — covers the "trim"
@@ -2426,7 +2625,7 @@ extension EditorViewModel {
         lastStatusMessage = status
 
         if !resultPath.isEmpty {
-            try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)

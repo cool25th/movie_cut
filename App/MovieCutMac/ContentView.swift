@@ -13,7 +13,7 @@ struct ContentView: View {
     /// host-specific SwiftUI/AppKit executor crashes on macOS 26/Xcode 26.
     /// Keep this isolation strictly behind the DEBUG harness environment gate.
     private var isPreviewExportParityHarness: Bool {
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         let environment = ProcessInfo.processInfo.environment
         return environment["MOVIECUT_UITEST"] == "1"
             && environment["MOVIECUT_UITEST_PARITY"] == "1"
@@ -38,7 +38,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .tint(MovieCutTheme.accentCyan)
         .task {
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             await viewModel.runUITestHarnessIfRequested()
             #endif
             await presentRecoveryIfNeeded()

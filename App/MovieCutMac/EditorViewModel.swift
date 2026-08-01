@@ -150,7 +150,7 @@ final class EditorViewModel {
     private var clipClipboardPayload: ClipboardPayload?
 
     private static func makeProjectStore() -> ProjectStore {
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         if let dir = ProcessInfo.processInfo.environment["MOVIECUT_AUTOSAVE_DIR"], !dir.isEmpty {
             return ProjectStore(autosaveDirectory: URL(fileURLWithPath: dir))
         }
@@ -1716,7 +1716,7 @@ final class EditorViewModel {
         }
     }
 
-#if DEBUG
+#if DEBUG || MOVIECUT_HARNESS
     func addUITestTextAnimationClip(preset: TextAnimationPreset) async {
         do {
             let track = try await ensureTrack(for: .text)
@@ -2756,7 +2756,7 @@ final class EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
-    #if DEBUG
+    #if DEBUG || MOVIECUT_HARNESS
     /// Deterministic two-track ducking fixture used by the headless E2E harness.
     /// It builds the same project state a user would create, then applies
     /// `SetAudioDuckingCommand` so export/preview ramp wiring is exercised for real.

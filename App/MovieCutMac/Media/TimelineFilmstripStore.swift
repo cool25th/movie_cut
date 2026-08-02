@@ -149,7 +149,7 @@ final class TimelineFilmstripStore {
                 signpostID: workSignpostID
             )
             let duration = DispatchTime.now().uptimeNanoseconds - workStart
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
                 phase: .request,
                 requestID: requestID,
@@ -168,7 +168,7 @@ final class TimelineFilmstripStore {
             var previousState = previousEntry.loadState
             let previousGeneration = previousState.currentGeneration
             if previousState.cancel(generation: previousGeneration) {
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 TimelineFilmstripDebugProbe.shared.recordCancellation(
                     fallbackThumbnailAvailable: fallbackThumbnailAvailable
                 )
@@ -191,7 +191,7 @@ final class TimelineFilmstripStore {
         touch(requestID.clipID)
         pruneIfNeeded(keeping: requestID.clipID)
 
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordRequest(
             requestID: requestID,
             generation: generation
@@ -211,7 +211,7 @@ final class TimelineFilmstripStore {
                 return
             }
             do {
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 if TimelineFilmstripDebugProbe.shared.shouldDelayFirstGeneration(
                     requestID: requestID,
                     generation: generation
@@ -227,7 +227,7 @@ final class TimelineFilmstripStore {
                 if let cachedFrames {
                     frames = cachedFrames
                 } else {
-                    #if DEBUG
+                    #if DEBUG || MOVIECUT_HARNESS
                     TimelineFilmstripDebugProbe.shared.recordGenerationStarted()
                     #endif
                     trace.beginDecode()
@@ -274,7 +274,7 @@ final class TimelineFilmstripStore {
             let generation = entry.loadState.currentGeneration
             if entry.loadState.cancel(generation: generation) {
                 entries[clipID] = entry
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 TimelineFilmstripDebugProbe.shared.recordCancellation(
                     fallbackThumbnailAvailable: false
                 )
@@ -285,7 +285,7 @@ final class TimelineFilmstripStore {
             entries[clipID] = nil
             recency.removeAll { $0 == clipID }
         }
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         if offscreen {
             TimelineFilmstripDebugProbe.shared.recordOffscreenSkip(clipID: clipID)
         }
@@ -313,7 +313,7 @@ final class TimelineFilmstripStore {
         let workStart = DispatchTime.now().uptimeNanoseconds
         defer {
             let duration = DispatchTime.now().uptimeNanoseconds - workStart
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
                 phase: .publish,
                 requestID: requestID,
@@ -327,7 +327,7 @@ final class TimelineFilmstripStore {
               entry.loadState.accept(frameCount: frames.count, generation: generation) else {
             trace.endPublish(accepted: false)
             trace.endLifecycle(outcome: "stale_publish")
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
             return
@@ -338,7 +338,7 @@ final class TimelineFilmstripStore {
         if tasks[requestID.clipID] != nil {
             tasks[requestID.clipID] = nil
         }
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordReady(
             requestID: requestID,
             frames: frames
@@ -355,7 +355,7 @@ final class TimelineFilmstripStore {
         guard var entry = entries[requestID.clipID],
               entry.requestID == requestID else {
             trace.endLifecycle(outcome: "stale_failure")
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
             return
@@ -366,7 +366,7 @@ final class TimelineFilmstripStore {
             : entry.loadState.fail(generation: generation)
         guard accepted else {
             trace.endLifecycle(outcome: "unaccepted_failure")
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordStaleRejection()
             #endif
             return
@@ -425,7 +425,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
                         )
                 }
             }
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             .onAppear {
                 registerDebugHoverDriver()
             }
@@ -455,7 +455,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
     private func resolveHover(localX: CGFloat) {
         guard supportsFilmstrip else {
             preview = nil
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordHoverHidden(
                 clipID: clip.id,
                 reason: .unsupported
@@ -470,7 +470,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
             clipWidth: Double(clipWidth)
         )
         preview = resolved
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         if let resolved {
             TimelineFilmstripDebugProbe.shared.recordHoverResolved(resolved)
         } else {
@@ -484,7 +484,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
 
     @MainActor
     private func endHover() {
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordHoverExitRequested(clipID: clip.id)
         #endif
         preview = nil
@@ -509,7 +509,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
                     height: Self.previewImageSize.height
                 )
                 .clipped()
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 .background {
                     GeometryReader { proxy in
                         Color.clear
@@ -537,7 +537,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
                 .padding(.vertical, MovieCutSpacing.xSmall)
                 .frame(maxWidth: .infinity)
                 .background(MovieCutTheme.controlSurface)
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 .onAppear {
                     TimelineFilmstripDebugProbe.shared.recordHoverLabelRendered(
                         preview,
@@ -558,7 +558,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(NSLocalizedString("Filmstrip hover preview", comment: ""))
         .accessibilityValue(label)
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         .onDisappear {
             TimelineFilmstripDebugProbe.shared.recordHoverOverlayDisappeared(clipID: preview.clipID)
         }
@@ -576,7 +576,7 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
         )
     }
 
-    #if DEBUG
+    #if DEBUG || MOVIECUT_HARNESS
     @MainActor
     private func registerDebugHoverDriver() {
         TimelineFilmstripDebugProbe.shared.registerHoverDriver(
@@ -659,7 +659,7 @@ private final class TimelineFilmstripImageStripNSView: NSView {
         }
         trace.endUIConsumerDraw(frameCount: images.count)
         let duration = DispatchTime.now().uptimeNanoseconds - start
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
             phase: .consumerDraw,
             requestID: requestID,
@@ -717,7 +717,7 @@ private struct TimelineFilmstripImageStripRepresentable: NSViewRepresentable {
         )
         snapshot.trace.endUIConsumerUpdate(frameCount: snapshot.frames.count)
         let duration = DispatchTime.now().uptimeNanoseconds - start
-        #if DEBUG
+        #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
             phase: .consumerUpdate,
             requestID: snapshot.requestID,
@@ -777,7 +777,7 @@ struct TimelineFilmstripLayer: View {
                     store.cancel(clipID: clip.id, offscreen: true)
                     return
                 }
-                #if DEBUG
+                #if DEBUG || MOVIECUT_HARNESS
                 if fallbackThumbnailAvailable,
                    store.snapshot(for: clip.id)?.loadState.showsFallbackThumbnail != false {
                     TimelineFilmstripDebugProbe.shared.recordFallbackBeforeReadiness()
@@ -812,7 +812,7 @@ struct TimelineFilmstripLayer: View {
     ) -> some View {
         TimelineFilmstripImageStripRepresentable(snapshot: snapshot) {
             store.recordConsumerRendered(snapshot)
-            #if DEBUG
+            #if DEBUG || MOVIECUT_HARNESS
             TimelineFilmstripDebugProbe.shared.recordConsumerRendered(
                 requestID: snapshot.requestID,
                 frameCount: snapshot.frames.count
@@ -829,7 +829,7 @@ struct TimelineFilmstripLayer: View {
     }
 }
 
-#if DEBUG || MOVIECUT_HARNESS
+#if DEBUG || MOVIECUT_HARNESS || MOVIECUT_HARNESS
 struct TimelineFilmstripDebugScrollAnchor: Hashable {
     let milliseconds: Int
 }

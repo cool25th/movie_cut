@@ -130,6 +130,15 @@ final class EditorViewModel {
     var shuttleTapCount: Int = 0
     var lastErrorMessage: String?
     var lastStatusMessage: String?
+    #if DEBUG || MOVIECUT_HARNESS
+    /// Container-staged artifact paths for the headless harness: when a
+    /// sandboxed build blocks the final move out of the container, the export
+    /// is still intact at the staging path. The harness reads this to report
+    /// `container_artifacts=` in its status line. Declared here (not in the
+    /// UITestHarness extension) because extensions cannot hold stored
+    /// properties; reset at the start of each harness run.
+    var containerArtifactPaths: [String] = []
+    #endif
     var quickToolProgressMessage: String?
     var isMotionTrackingSelectionActive: Bool = false
     var isMotionTrackingRunning: Bool = false

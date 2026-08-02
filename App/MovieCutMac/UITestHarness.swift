@@ -157,6 +157,9 @@ extension EditorViewModel {
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
+        // Reset per-run container-artifact tracking so stale paths from a
+        // previous invocation don't leak into this run's status line.
+        containerArtifactPaths.removeAll()
         if env["MOVIECUT_UITEST_CARD_TEMPLATE"] == "1" {
             await runCardTemplateUITestScenario(environment: env)
             return
@@ -584,7 +587,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -1987,7 +1990,11 @@ extension EditorViewModel {
                 try? fm.removeItem(at: write)
             }
         } catch {
-            lastErrorMessage = "export move failed: \(error.localizedDescription)"
+            // The sandbox blocked the move/copy out of the container, but the
+            // artifact is intact at the staging path. Record it so the status
+            // line can tell the script where to look instead of reporting a
+            // spurious error — the export itself succeeded.
+            containerArtifactPaths.append(write.path)
         }
     }
 
@@ -2015,6 +2022,7 @@ extension EditorViewModel {
             .appendingPathComponent("MovieCutHarnessResult.txt")
         try? status.write(to: staging, atomically: true, encoding: .utf8)
         let fm = FileManager.default
+        var movedToRequested = false
         do {
             let parent = requested.deletingLastPathComponent()
             try? fm.createDirectory(at: parent, withIntermediateDirectories: true)
@@ -2023,14 +2031,25 @@ extension EditorViewModel {
             }
             do {
                 try fm.moveItem(at: staging, to: requested)
+                movedToRequested = true
             } catch {
                 try fm.copyItem(at: staging, to: requested)
                 try? fm.removeItem(at: staging)
+                movedToRequested = true
             }
         } catch {
             // Last resort: direct write to the requested path; the staged
             // file is already on disk in the container tmp/ as a fallback.
             try? status.write(toFile: resultPath, atomically: true, encoding: .utf8)
+            if fm.fileExists(atPath: resultPath) { movedToRequested = true }
+        }
+        // If the result never reached the requested path, the staged file in
+        // the container tmp/ is the only copy. Emit its path on stderr so the
+        // driving script (which reads stderr) can find it — the status line
+        // itself is the thing we failed to deliver to the requested path.
+        if !movedToRequested, fm.fileExists(atPath: staging.path) {
+            FileHandle.standardError.write(
+                Data("MOVIECUT_CONTAINER_RESULT=\(staging.path)\n".utf8))
         }
     }
 
@@ -2054,6 +2073,15 @@ extension EditorViewModel {
         let staging = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("MovieCutHarnessDump", isDirectory: true)
         return staging.path
+    }
+
+    /// Suffix listing container-staged artifact paths, so a sandboxed run can
+    /// tell the driving script where exports/results actually landed when the
+    /// final move out of the container was blocked. Empty when nothing was
+    /// staged (the common, non-sandboxed case).
+    private func containerArtifactSuffix() -> String {
+        guard !containerArtifactPaths.isEmpty else { return "" }
+        return " container_artifacts=" + containerArtifactPaths.joined(separator: ":")
     }
 
     private func timelineSummarySuffix() -> String {

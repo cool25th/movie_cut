@@ -44,7 +44,12 @@ struct ContentView: View {
             await presentRecoveryIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-            Task { await viewModel.clearRecoveryAutosave() }
+            // On a clean quit the recovery file is no longer needed; a crash
+            // (which never fires willTerminate) leaves it so the next launch
+            // can offer recovery. The harness skips this clear to simulate a
+            // crash — leaving the recovery file behind across a terminate.
+            let skipClear = ProcessInfo.processInfo.environment["MOVIECUT_UITEST_SKIP_RECOVERY_CLEAR"] == "1"
+            Task { guard !skipClear else { return }; await viewModel.clearRecoveryAutosave() }
         }
         .toolbar {
             if !isPreviewExportParityHarness {
@@ -369,8 +374,28 @@ struct ContentView: View {
 
     /// Offers crash recovery when an autosave from a non-clean session exists.
     /// Skipped in headless harness / bootstrap runs so the modal never blocks.
+    ///
+    /// Test injection (`MOVIECUT_UITEST_RECOVERY=1`): bypasses the modal gate
+    /// and drives the recover/discard choice directly from
+    /// `MOVIECUT_UITEST_RECOVERY_RESPONSE`, mirroring the verified
+    /// `confirmDiscardUnsavedChanges` injection pattern. The modal alert's
+    /// accessibility handshake is unstable under XCUITest
+    /// (UnsavedChangesGuardUITests documents this), so the recovery regression
+    /// gate exercises the same `recoverableProject` → `adoptRecoveredProject`
+    /// logic through injection rather than tapping the alert.
     private func presentRecoveryIfNeeded() async {
         let env = ProcessInfo.processInfo.environment
+
+        #if DEBUG || MOVIECUT_HARNESS
+        // Headless recovery regression: create the autosave via flushAutosave()
+        // in the harness scenario, then this injection path runs the same
+        // recover/discard logic the modal would, reporting the outcome.
+        if env["MOVIECUT_UITEST_RECOVERY"] == "1" {
+            await runRecoveryInjection(environment: env)
+            return
+        }
+        #endif
+
         guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else { return }
         guard let recovered = await viewModel.recoverableProject() else { return }
 
@@ -385,6 +410,36 @@ struct ContentView: View {
             await viewModel.clearRecoveryAutosave()
         }
     }
+
+    #if DEBUG || MOVIECUT_HARNESS
+    /// Drives the recovery choice from `MOVIECUT_UITEST_RECOVERY_RESPONSE`
+    /// without presenting the modal, then writes a status line the driving
+    /// script asserts on. Reports `recovered_clips` so the gate can confirm
+    /// the recovered project actually populated the timeline.
+    private func runRecoveryInjection(environment: [String: String]) async {
+        let response = environment["MOVIECUT_UITEST_RECOVERY_RESPONSE"] ?? "recover"
+        let recovered = await viewModel.recoverableProject()
+        var recoveredClips = 0
+        var status = "no_autosave"
+        if let project = recovered {
+            if response == "discard" {
+                await viewModel.clearRecoveryAutosave()
+                status = "discarded"
+            } else {
+                await viewModel.adoptRecoveredProject(project)
+                recoveredClips = viewModel.currentProject.timeline.tracks
+                    .reduce(0) { $0 + $1.clips.count }
+                status = viewModel.lastStatusMessage ?? "recovered"
+            }
+        }
+        let line = "recovery_done response=\(response) recovered=\(recovered != nil) "
+            + "recovered_clips=\(recoveredClips) status=\(status)"
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            viewModel.writeHarnessStatus(line, to: resultPath)
+        }
+        viewModel.lastStatusMessage = line
+    }
+    #endif
 
     private var statusBar: some View {
         HStack(spacing: MovieCutSpacing.medium) {

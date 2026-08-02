@@ -180,6 +180,10 @@ extension EditorViewModel {
             await runPreviewExportParityUITestScenario(environment: env)
             return
         }
+        if env["MOVIECUT_UITEST_RECOVERY"] == "1" {
+            await runRecoveryUITestScenario(environment: env)
+            return
+        }
         if env["MOVIECUT_UITEST_UNSAVED_GUARD"] == "1" {
             await runUnsavedChangesGuardUITestScenario(environment: env)
             return
@@ -2003,7 +2007,11 @@ extension EditorViewModel {
     /// (shipping) build can report its outcome even when the requested path is
     /// outside the container. The staged file is moved to the requested path
     /// on success. When containerization is off this is a plain atomic write.
-    private func writeHarnessStatus(_ status: String, to resultPath: String) {
+    /// Writes the harness status line to `resultPath`, routing through the
+    /// sandbox container when `MOVIECUT_UITEST_CONTAINERIZE=1`. Internal so the
+    /// ContentView recovery injection path (which runs outside the harness
+    /// extension, gated by DEBUG || MOVIECUT_HARNESS) can share it.
+    func writeHarnessStatus(_ status: String, to resultPath: String) {
         guard !resultPath.isEmpty else { return }
         let env = ProcessInfo.processInfo.environment
         let requested = URL(fileURLWithPath: resultPath)
@@ -2654,6 +2662,91 @@ extension EditorViewModel {
 
         if !resultPath.isEmpty {
             writeHarnessStatus(status, to: resultPath)
+        }
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// B-U7 recovery regression. Builds a project with real clips, flushes the
+    /// crash-recovery autosave (the file a crash would leave behind), then
+    /// triggers the recovery flow via the injection gate in ContentView. The
+    /// injection reads `MOVIECUT_UITEST_RECOVERY_RESPONSE` and runs the same
+    /// `recoverableProject` → `adoptRecoveredProject`/`clearRecoveryAutosave`
+    /// logic the modal would, reporting the outcome so the driving script can
+    /// assert the recovered timeline actually repopulated.
+    ///
+    /// Single-process simulation: the autosave is written and re-read within
+    /// one launch, so no SIGKILL/relaunch is needed. The terminate-clear gate
+    /// (`MOVIECUT_UITEST_SKIP_RECOVERY_CLEAR`) keeps the file across the quit
+    /// so a future XCUITest two-launch path can also exercise it.
+    private func runRecoveryUITestScenario(environment: [String: String]) async {
+        let importURLs = containerizeImportURLs(
+            (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
+                .split(separator: ",")
+                .map { String($0) }
+                .filter { !$0.isEmpty }
+                .map(URL.init(fileURLWithPath:))
+        )
+        let response = environment["MOVIECUT_UITEST_RECOVERY_RESPONSE"] ?? "recover"
+
+        func report(_ stage: String, recoveredClips: Int = 0, autosavePresent: Bool = false) {
+            let line = "recovery_checkpoint stage=\(stage) response=\(response) "
+                + "autosave_present=\(autosavePresent ? 1 : 0) "
+                + "pre_edit_clips=\(currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }) "
+                + "recovered_clips=\(recoveredClips)"
+            if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+                writeHarnessStatus(line, to: resultPath)
+            }
+        }
+        report("start")
+
+        // 1. Build a project with real clips so the recovery has content.
+        if !importURLs.isEmpty {
+            suppressCompositionRebuild = true
+            await importMediaAndAddToTimeline(importURLs, startTime: 0)
+            suppressCompositionRebuild = false
+            rebuildPreviewComposition()
+        } else {
+            // No fixture supplied: still add a text clip so the project is non-empty.
+            await addTextClip(text: "Recovery harness clip")
+        }
+        let preEditClips = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        report("edited", autosavePresent: false)
+
+        // 2. Flush the crash-recovery autosave — the file a crash leaves behind.
+        await flushAutosave()
+        let autosavePresent = await recoverableProject() != nil
+        report("flushed", autosavePresent: autosavePresent)
+
+        // 3. Reset the session to a fresh project so adoption is observable,
+        //    then run the same recover/discard logic the launch-time
+        //    presentRecoveryIfNeeded() injection path runs.
+        await newProject()
+        let clipsAfterReset = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        report("reset", recoveredClips: clipsAfterReset, autosavePresent: autosavePresent)
+
+        let recovered = await recoverableProject()
+        var recoveredClips = 0
+        var status = "no_autosave"
+        if let project = recovered {
+            if response == "discard" {
+                await clearRecoveryAutosave()
+                status = "discarded"
+            } else {
+                await adoptRecoveredProject(project)
+                recoveredClips = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+                status = lastStatusMessage ?? "recovered"
+            }
+        }
+
+        // 4. Surface the final outcome and quit.
+        let line = "recovery_done response=\(response) pre_edit_clips=\(preEditClips) "
+            + "autosave_present=\(autosavePresent ? 1 : 0) "
+            + "recovered_clips=\(recoveredClips) status=\(status)"
+        lastStatusMessage = line
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            writeHarnessStatus(line, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)

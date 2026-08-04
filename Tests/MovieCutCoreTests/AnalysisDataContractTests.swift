@@ -154,7 +154,6 @@ struct AnalysisDataContractTests {
             SilenceDetectionProvider(),
             SceneChangeProvider(),
             AutoReframeProvider(),
-            StubAnalysisProvider(),
         ]
         for provider in providers {
             #expect(!provider.providerName.isEmpty)
@@ -211,9 +210,6 @@ struct AnalysisDataContractTests {
         let scene = SceneChangeProvider()
         #expect(silence.isAvailable == true)
         #expect(scene.isAvailable == true)
-        // StubAnalysisProvider is a test double, intentionally unavailable
-        let stub = StubAnalysisProvider()
-        #expect(stub.isAvailable == false)
     }
 
     // MARK: - Cross-provider data contract consistency

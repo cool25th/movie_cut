@@ -10,7 +10,7 @@ public struct CutClipsCommand: EditorCommand {
         self.clipIds = clipIds
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard !clipIds.isEmpty else {
             throw EditorCommandError.invalidCommand("Cut selection cannot be empty.")
         }
@@ -39,18 +39,6 @@ public struct CutClipsCommand: EditorCommand {
             tracks[index].zIndex = index
         }
         project.timeline.tracks = tracks
-
-        return CommandResult(
-            affectedClipIds: clipIds,
-            description: "Cut \(clipIds.count) clips",
-            undoValues: ["timelineTracks": .tracks(previousTracks)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .tracks(let tracks)? = result.undoValues["timelineTracks"] else {
-            return NoOpCommand(description: "Missing pre-cut timeline snapshot for inverse")
-        }
-        return RestoreTimelineTracksCommand(tracks: tracks, description: "Restored cut clips")
     }
-}

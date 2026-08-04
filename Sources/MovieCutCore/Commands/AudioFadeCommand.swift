@@ -24,7 +24,7 @@ public struct AudioFadeCommand: EditorCommand, Sendable, Codable {
         self.oldFadeOut = oldFadeOut
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard fadeInDuration >= 0, fadeOutDuration >= 0 else {
             throw EditorCommandError.invalidCommand("Audio fade durations cannot be negative.")
         }
@@ -35,33 +35,5 @@ public struct AudioFadeCommand: EditorCommand, Sendable, Codable {
         let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].fadeInDuration = fadeInDuration
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].fadeOutDuration = fadeOutDuration
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Set audio fade for \(clipId)",
-            undoValues: ["clip": .clip(previousClip)]
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .clip(let clip)? = result.undoValues["clip"] {
-            return AudioFadeCommand(
-                clipId: clipId,
-                fadeInDuration: clip.fadeInDuration,
-                fadeOutDuration: clip.fadeOutDuration
-            )
-        }
-
-        guard let oldFadeIn, let oldFadeOut else {
-            return NoOpCommand(description: "Missing previous audio fade values for inverse")
-        }
-        return AudioFadeCommand(clipId: clipId, fadeInDuration: oldFadeIn, fadeOutDuration: oldFadeOut)
-    }
-
-    public func invert() -> any EditorCommand {
-        guard let oldFadeIn, let oldFadeOut else {
-            return NoOpCommand(description: "Missing previous audio fade values for inverse")
-        }
-        return AudioFadeCommand(clipId: clipId, fadeInDuration: oldFadeIn, fadeOutDuration: oldFadeOut)
     }
 }

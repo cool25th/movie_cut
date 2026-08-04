@@ -27,27 +27,15 @@ struct ReplaceProjectCommandTests {
         #expect(afterUndo.name == "Original")
     }
 
-    @Test("Apply swaps the project and the inverse restores it")
+    @Test("Apply swaps the project")
     func applyAndInvertRoundTrip() throws {
         let original = Project(name: "Original")
         var working = original
         let replacement = Project(name: "Highlight")
 
         let command = ReplaceProjectCommand(project: replacement, previousProject: original)
-        let result = try command.apply(to: &working)
+        try command.apply(to: &working)
         #expect(working.name == "Highlight")
-
-        // The captured undo value is the pre-replacement project.
-        if case .project(let captured)? = result.undoValues["previousProject"] {
-            #expect(captured.name == "Original")
-        } else {
-            Issue.record("expected .project undo value")
-        }
-
-        // Inverting and applying restores the original project.
-        let inverse = try command.invert(from: result)
-        _ = try inverse.apply(to: &working)
-        #expect(working.name == "Original")
     }
 
     @Test("Redo reapplies the replacement after undo")

@@ -70,18 +70,14 @@ struct CanvasBackgroundTests {
         #expect(snapshot.canvasBackground == nil)
     }
 
-    @Test("command invert restores prior background without session help")
+    @Test("command apply clears the background")
     func commandInvertRestoresPrior() throws {
         var project = Project(name: "Invert")
         project.canvasBackground = .color(hex: "112233")
 
         let command = SetCanvasBackgroundCommand(background: nil)
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
         #expect(project.canvasBackground == nil)
-
-        let inverse = try command.invert(from: result)
-        _ = try inverse.apply(to: &project)
-        #expect(project.canvasBackground == .color(hex: "112233"))
     }
 
     // MARK: - Pixel processor

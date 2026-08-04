@@ -19,7 +19,7 @@ public struct SetClipSourceAssetCommand: EditorCommand, Sendable, Codable {
         self.kind = kind
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
@@ -32,19 +32,6 @@ public struct SetClipSourceAssetCommand: EditorCommand, Sendable, Codable {
         if let kind {
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].kind = kind
         }
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Set source asset for clip \(clipId)",
-            undoValues: ["clip": .clip(previousClip)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .clip(let clip)? = result.undoValues["clip"] {
-            return SetClipSourceAssetCommand(clipId: clipId, assetId: clip.assetId, kind: clip.kind)
-        }
-
-        return NoOpCommand(description: "Missing clip snapshot for inverse")
     }
-}

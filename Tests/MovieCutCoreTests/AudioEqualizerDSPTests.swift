@@ -56,7 +56,7 @@ struct AudioEqualizerDSPTests {
         #expect(decoded.equalizer?.bands.map(\.gain) == custom.bands.map(\.gain))
     }
 
-    @Test("set clip property applies equalizer metadata and inverts")
+    @Test("set clip property applies equalizer metadata")
     func setClipPropertyEqualizerAppliesAndInverts() throws {
         let clip = Clip(
             kind: .audio,
@@ -71,12 +71,8 @@ struct AudioEqualizerDSPTests {
             clipId: clip.id,
             property: .equalizer(.settings(for: .voiceEnhance))
         )
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
         #expect(project.timeline.tracks[0].clips[0].equalizer?.preset == .voiceEnhance)
-
-        let inverse = try command.invert(from: result)
-        _ = try inverse.apply(to: &project)
-        #expect(project.timeline.tracks[0].clips[0].equalizer == nil)
     }
 
     @Test("preview and export no longer collapse EQ to volume")

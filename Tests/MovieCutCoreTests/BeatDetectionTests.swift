@@ -142,7 +142,7 @@ struct BeatDetectionTests {
         #expect(snapshot.markers.count == 1)
     }
 
-    @Test("remove command invert restores the removed markers")
+    @Test("remove command clears the matching markers")
     func removeInvertRestores() throws {
         var project = Project(name: "Invert")
         let beat = Marker(time: 2, name: "Beat 1", kind: .beat)
@@ -150,13 +150,8 @@ struct BeatDetectionTests {
         project.timeline.markers = [beat]
 
         let remove = RemoveMarkersCommand(kind: .beat)
-        let result = try remove.apply(to: &project)
+        try remove.apply(to: &project)
         #expect(project.markers.isEmpty)
-
-        let inverse = try remove.invert(from: result)
-        _ = try inverse.apply(to: &project)
-        #expect(project.markers.count == 1)
-        #expect(project.markers[0].kind == .beat)
     }
 
     @Test("empty batch add and no-match removal are rejected")

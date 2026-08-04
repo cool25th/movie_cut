@@ -32,7 +32,7 @@ public struct DeleteClipCommand: EditorCommand {
         self.deletedClipIndex = deletedClipIndex
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         let previousClips = project.timeline.tracks[location.trackIndex].clips
         let removed = try project.removeClip(id: clipId)
@@ -40,39 +40,6 @@ public struct DeleteClipCommand: EditorCommand {
         // zIndexes but does NOT compact the track. Ripple Delete (a separate
         // command) is the gap-closing variant. Step 2 of the core-editing
         // repair handoff.
-        try project.normalizeClipZIndexes(in: removed.trackId)
-        return CommandResult(
-            affectedClipIds: Set(previousClips.map(\.id)),
-            description: "Deleted clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(removed.trackId),
-                "clipIndex": .int(removed.clipIndex),
-                "clip": .clip(removed.clip),
-                RestoreTrackClipsCommand.snapshotKey(for: removed.trackId): .clips(previousClips)
-            ]
-        )
+        try project.normalizeClipZIndexes(in: removed.trackId)    }
+
     }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
-        if !snapshots.isEmpty {
-            return RestoreTrackClipsCommand(
-                snapshots: snapshots,
-                description: "Restored deleted clip \(clipId)"
-            )
-        }
-
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .clip(let clip)? = result.undoValues["clip"],
-            case .int(let clipIndex)? = result.undoValues["clipIndex"]
-        {
-            return AddClipCommand(trackId: trackId, clip: clip, insertionIndex: clipIndex)
-        }
-
-        guard let deletedTrackId, let deletedClip else {
-            return NoOpCommand(description: "Missing deleted clip snapshot for inverse")
-        }
-        return AddClipCommand(trackId: deletedTrackId, clip: deletedClip, insertionIndex: deletedClipIndex)
-    }
-}

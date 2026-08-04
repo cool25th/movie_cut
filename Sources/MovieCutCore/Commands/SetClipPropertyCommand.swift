@@ -84,7 +84,7 @@ public struct SetClipPropertyCommand: EditorCommand {
         self.previousProperty = previousProperty
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
@@ -145,22 +145,6 @@ public struct SetClipPropertyCommand: EditorCommand {
             previousProperty = .blendMode(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode = blendMode
         }
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Set clip property for \(clipId)",
-            undoValues: ["property": .clipProperty(previousProperty)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .clipProperty(let property)? = result.undoValues["property"] {
-            return SetClipPropertyCommand(clipId: clipId, property: property)
-        }
-
-        guard let previousProperty else {
-            return NoOpCommand(description: "Missing previous clip property for inverse")
-        }
-        return SetClipPropertyCommand(clipId: clipId, property: previousProperty)
     }
-}

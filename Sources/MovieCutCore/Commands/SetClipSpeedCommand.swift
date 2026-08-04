@@ -46,7 +46,7 @@ public struct SetClipSpeedCommand: EditorCommand {
         self.change = change
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = if let trackId {
             try project.clipLocation(for: clipId, in: trackId)
         } else {
@@ -99,34 +99,6 @@ public struct SetClipSpeedCommand: EditorCommand {
             try project.compactTrackMagnetically(trackIdValue)
             try project.normalizeClipZIndexes(in: trackIdValue)
         }
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Set clip speed for \(clipId)",
-            undoValues: [
-                "trackId": .uuid(trackIdValue),
-                "clip": .clip(oldClip)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        // The editor session restores the whole-project snapshot on undo, so
-        // this invert is a best-effort restore of the original clip for any
-        // composed-command path that uses it directly.
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .clip(let oldClip)? = result.undoValues["clip"]
-        {
-            // Restore the prior speed fields by inferring the change kind.
-            let restoreChange: SpeedChange
-            if oldClip.speedRampPoints.count >= 2 {
-                restoreChange = .rampPoints(oldClip.speedRampPoints)
-            } else {
-                restoreChange = .constantRate(oldClip.playbackRate)
-            }
-            return SetClipSpeedCommand(clipId: clipId, trackId: trackId, change: restoreChange)
-        }
-        return SetClipSpeedCommand(clipId: clipId, trackId: trackId, change: change)
     }
-}

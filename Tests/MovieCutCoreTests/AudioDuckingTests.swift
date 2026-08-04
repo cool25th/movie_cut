@@ -164,7 +164,7 @@ struct AudioDuckingTests {
         #expect(stored.duckingLevel == nil)
     }
 
-    @Test("nil level clears existing ducking and invert restores it")
+    @Test("nil level clears existing ducking")
     func clearAndInvert() throws {
         var project = Project(name: "Clear")
         var bgm = Clip(
@@ -179,14 +179,9 @@ struct AudioDuckingTests {
         project.timeline.tracks = [track]
 
         let clear = SetAudioDuckingCommand(duckingRangesByClip: [bgm.id: []], level: nil)
-        let result = try clear.apply(to: &project)
+        try clear.apply(to: &project)
         #expect(project.timeline.tracks[0].clips[0].duckingRanges.isEmpty)
         #expect(project.timeline.tracks[0].clips[0].duckingLevel == nil)
-
-        let inverse = try clear.invert(from: result)
-        _ = try inverse.apply(to: &project)
-        #expect(project.timeline.tracks[0].clips[0].duckingRanges == [TimeRange(start: 1, duration: 2)])
-        #expect(project.timeline.tracks[0].clips[0].duckingLevel == 0.3)
     }
 
     @Test("out-of-range level is rejected")

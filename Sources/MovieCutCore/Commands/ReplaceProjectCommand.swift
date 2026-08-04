@@ -29,24 +29,8 @@ public struct ReplaceProjectCommand: EditorCommand {
         self.previousProject = previousProject
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let previous = project
-        project = self.project
-        return CommandResult(
-            affectedClipIds: [],
-            description: "Replace project",
-            undoValues: ["previousProject": .project(previous)]
-        )
-    }
+        project = self.project    }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .project(let previous)? = result.undoValues["previousProject"] {
-            return ReplaceProjectCommand(project: previous)
-        }
-
-        guard let previousProject else {
-            return NoOpCommand(description: "Missing previous project for inverse")
-        }
-        return ReplaceProjectCommand(project: previousProject)
     }
-}

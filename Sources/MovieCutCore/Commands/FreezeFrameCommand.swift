@@ -14,7 +14,7 @@ public struct FreezeFrameCommand: EditorCommand, Sendable, Codable {
         self.freezeDuration = freezeDuration
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
         let clip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
@@ -44,46 +44,12 @@ public struct FreezeFrameCommand: EditorCommand, Sendable, Codable {
         trailingClip.sourceRange = TimeRange(start: clip.sourceRange.start + freezeTime, duration: trailingSourceDuration)
         trailingClip.timelineRange = TimeRange(start: freezeStart + freezeDuration, duration: clip.timelineRange.duration - freezeTime)
 
-        var affectedClipIds: Set<UUID> = [clipId, freezeClip.id, trailingClip.id]
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex] = leadingClip
         project.timeline.tracks[location.trackIndex].clips.insert(freezeClip, at: location.clipIndex + 1)
         project.timeline.tracks[location.trackIndex].clips.insert(trailingClip, at: location.clipIndex + 2)
         for index in (location.clipIndex + 3)..<project.timeline.tracks[location.trackIndex].clips.count {
             project.timeline.tracks[location.trackIndex].clips[index].timelineRange.start += freezeDuration
-            affectedClipIds.insert(project.timeline.tracks[location.trackIndex].clips[index].id)
         }
-
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Inserted freeze frame for clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(trackId),
-                "clipIndex": .int(location.clipIndex),
-                "clip": .clip(clip),
-                "freezeClipId": .uuid(freezeClip.id),
-                "trailingClipId": .uuid(trailingClip.id)
-            ]
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .uuid(let trackId)? = result.undoValues["trackId"],
-           case .int(let clipIndex)? = result.undoValues["clipIndex"],
-           case .clip(let clip)? = result.undoValues["clip"],
-           case .uuid(let freezeClipId)? = result.undoValues["freezeClipId"],
-           case .uuid(let trailingClipId)? = result.undoValues["trailingClipId"] {
-            return RemoveFreezeFrameCommand(
-                originalClipId: clipId,
-                freezeClipId: freezeClipId,
-                trailingClipId: trailingClipId,
-                trackId: trackId,
-                originalClipIndex: clipIndex,
-                originalClip: clip,
-                freezeTime: freezeTime,
-                freezeDuration: freezeDuration
-            )
-        }
-        return NoOpCommand(description: "Missing freeze-frame snapshot for inverse")
     }
 }
 
@@ -98,7 +64,7 @@ private struct RemoveFreezeFrameCommand: EditorCommand {
     var freezeTime: TimeInterval
     var freezeDuration: TimeInterval
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let trackIndex = try project.trackIndex(for: trackId)
         try project.ensureTrackIsEditable(at: trackIndex)
         var clips = project.timeline.tracks[trackIndex].clips
@@ -111,16 +77,9 @@ private struct RemoveFreezeFrameCommand: EditorCommand {
         clips.remove(at: originalClipIndex + 2)
         clips.remove(at: originalClipIndex + 1)
         clips[originalClipIndex] = originalClip
-        var affectedClipIds: Set<UUID> = [originalClipId, freezeClipId, trailingClipId]
         for index in (originalClipIndex + 1)..<clips.count {
             clips[index].timelineRange.start -= freezeDuration
-            affectedClipIds.insert(clips[index].id)
         }
         project.timeline.tracks[trackIndex].clips = clips
-        return CommandResult(affectedClipIds: affectedClipIds, description: "Removed freeze frame for clip \(originalClipId)")
-    }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        FreezeFrameCommand(clipId: originalClipId, freezeTime: freezeTime, freezeDuration: freezeDuration)
     }
 }

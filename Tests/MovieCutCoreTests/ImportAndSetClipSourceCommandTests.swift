@@ -99,28 +99,11 @@ struct ImportAndSetClipSourceCommandTests {
             kind: .audio
         )
 
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
 
         // The asset was registered and the clip was repointed in one apply.
         #expect(project.mediaLibrary.assets[processedAsset.id] != nil)
         #expect(project.timeline.tracks[0].clips[0].assetId == processedAsset.id)
-        #expect(result.affectedClipIds == [clipId])
-
-        // The previous clip snapshot is captured so the inverse could rebuild
-        // it if the session didn't already do whole-project snapshot undo.
-        if case .clip(let captured)? = result.undoValues["clip"] {
-            #expect(captured.assetId == originalAssetId)
-        } else {
-            Issue.record("expected .clip undo value capturing the previous clip")
-        }
-
-        // Inverse is a no-op: the session restores the whole project on undo
-        // (same as AutoCutCommand), so no inverse work is required.
-        let inverse = try command.invert(from: result)
-        var working = project
-        _ = try inverse.apply(to: &working)
-        // No-op inverse leaves the post-apply state intact.
-        #expect(working.timeline.tracks[0].clips[0].assetId == processedAsset.id)
     }
 
     @Test("Apply rejects an unknown clip id")

@@ -18,30 +18,15 @@ public struct SetProjectCanvasCommand: EditorCommand {
         self.previousCanvas = previousCanvas
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let previousCanvas = project.canvas
         project.canvas = canvas
         project.timeline.canvasSize = canvas.size
         project.timeline.aspectRatio = canvas.aspectRatio
         project.timeline.frameRate = canvas.frameRate.rational
-
-        return CommandResult(
-            description: "Set project canvas",
-            undoValues: ["canvas": .canvasPreset(previousCanvas)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .canvasPreset(let canvas)? = result.undoValues["canvas"] {
-            return SetProjectCanvasCommand(canvas: canvas)
-        }
-
-        guard let previousCanvas else {
-            return NoOpCommand(description: "Missing canvas preset for inverse")
-        }
-        return SetProjectCanvasCommand(canvas: previousCanvas)
     }
-}
 
 /// Updates the project's default export preset settings.
 public struct SetProjectExportSettingsCommand: EditorCommand {
@@ -65,27 +50,12 @@ public struct SetProjectExportSettingsCommand: EditorCommand {
         self.previousExportSettings = previousExportSettings
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let previousSettings = project.exportSettings
         project.exportSettings = exportSettings
-
-        return CommandResult(
-            description: "Set project export settings",
-            undoValues: ["exportSettings": .exportSettings(previousSettings)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .exportSettings(let settings)? = result.undoValues["exportSettings"] {
-            return SetProjectExportSettingsCommand(exportSettings: settings)
-        }
-
-        guard let previousExportSettings else {
-            return NoOpCommand(description: "Missing export settings for inverse")
-        }
-        return SetProjectExportSettingsCommand(exportSettings: previousExportSettings)
     }
-}
 
 /// Updates the project's playback (preview) settings.
 public struct SetProjectPlaybackSettingsCommand: EditorCommand {
@@ -109,27 +79,12 @@ public struct SetProjectPlaybackSettingsCommand: EditorCommand {
         self.previousPlaybackSettings = previousPlaybackSettings
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let previousSettings = project.playbackSettings
         project.playbackSettings = playbackSettings
-
-        return CommandResult(
-            description: "Set project playback settings",
-            undoValues: ["playbackSettings": .playbackSettings(previousSettings)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .playbackSettings(let settings)? = result.undoValues["playbackSettings"] {
-            return SetProjectPlaybackSettingsCommand(playbackSettings: settings)
-        }
-
-        guard let previousPlaybackSettings else {
-            return NoOpCommand(description: "Missing playback settings for inverse")
-        }
-        return SetProjectPlaybackSettingsCommand(playbackSettings: previousPlaybackSettings)
     }
-}
 
 private extension ExportFrameRate {
     var rational: Rational {

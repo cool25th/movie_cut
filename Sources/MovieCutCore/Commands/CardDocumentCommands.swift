@@ -12,7 +12,7 @@ public struct AddCardPageCommand: EditorCommand {
         self.insertionIndex = insertionIndex
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         guard !document.pages.contains(where: { $0.id == page.id }) else {
@@ -28,17 +28,9 @@ public struct AddCardPageCommand: EditorCommand {
         document.pages.insert(page, at: index)
         try CardDocumentCommandValidation.validate(document)
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Added card page \(page.id)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Removed added card page \(page.id)")
     }
-}
 
 /// Duplicates a page immediately after its source with stable fresh IDs.
 public struct DuplicateCardPageCommand: EditorCommand {
@@ -52,7 +44,7 @@ public struct DuplicateCardPageCommand: EditorCommand {
         self.duplicatePageId = duplicatePageId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         let sourceIndex = try document.pageIndex(for: pageId)
@@ -76,21 +68,9 @@ public struct DuplicateCardPageCommand: EditorCommand {
         document.pages.insert(duplicate, at: sourceIndex + 1)
         try CardDocumentCommandValidation.validate(document)
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Duplicated card page \(pageId)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(
-            result: result,
-            fallbackDescription: "Removed duplicated card page \(duplicatePageId)"
-        )
-    }
-
-    private static func duplicateElementId(pageId: UUID, sourceElementId: UUID, index: Int) -> UUID {
+        private static func duplicateElementId(pageId: UUID, sourceElementId: UUID, index: Int) -> UUID {
         var pageUUID = pageId.uuid
         var sourceUUID = sourceElementId.uuid
         let pageBytes = withUnsafeBytes(of: &pageUUID) { Array($0) }
@@ -120,7 +100,7 @@ public struct DeleteCardPageCommand: EditorCommand {
         self.pageId = pageId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         let pageIndex = try document.pageIndex(for: pageId)
@@ -131,17 +111,9 @@ public struct DeleteCardPageCommand: EditorCommand {
         let previousDocument = document
         document.pages.remove(at: pageIndex)
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Deleted card page \(pageId)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Restored card page \(pageId)")
     }
-}
 
 /// Moves a page to a final index in the ordered card-page array.
 public struct MoveCardPageCommand: EditorCommand {
@@ -155,7 +127,7 @@ public struct MoveCardPageCommand: EditorCommand {
         self.destinationIndex = destinationIndex
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         let sourceIndex = try document.pageIndex(for: pageId)
@@ -170,17 +142,9 @@ public struct MoveCardPageCommand: EditorCommand {
         let page = document.pages.remove(at: sourceIndex)
         document.pages.insert(page, at: destinationIndex)
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Moved card page \(pageId)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Restored card page order")
     }
-}
 
 /// Changes the document canvas format without rewriting normalized element
 /// geometry or page/element identifiers.
@@ -193,7 +157,7 @@ public struct SetCardFormatCommand: EditorCommand {
         self.format = format
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         guard document.format != format else {
@@ -203,17 +167,9 @@ public struct SetCardFormatCommand: EditorCommand {
         let previousDocument = document
         document.format = format
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Changed card format to \(format.rawValue)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Restored card format")
     }
-}
 
 /// Replaces one card element while retaining its stable identifier.
 public struct UpdateCardElementCommand: EditorCommand {
@@ -229,7 +185,7 @@ public struct UpdateCardElementCommand: EditorCommand {
         self.element = element
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var document = try project.requiredCardDocument()
         try CardDocumentCommandValidation.validate(document)
         let pageIndex = try document.pageIndex(for: pageId)
@@ -242,17 +198,9 @@ public struct UpdateCardElementCommand: EditorCommand {
         document.pages[pageIndex].elements[elementIndex] = element
         try CardDocumentCommandValidation.validate(document)
         project.cardDocument = document
-
-        return CommandResult(
-            description: "Updated card element \(elementId)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreCardDocumentCommand.from(result: result, fallbackDescription: "Restored card element \(elementId)")
     }
-}
 
 /// Imports or reuses one project image and points an image/logo card element at
 /// it atomically. EditorSession therefore records one replacement gesture as one
@@ -275,7 +223,7 @@ public struct ReplaceCardElementImageCommand: EditorCommand {
         self.asset = asset
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard asset.kind == .image else {
             throw EditorCommandError.invalidCommand("Card elements only accept image media.")
         }
@@ -300,40 +248,9 @@ public struct ReplaceCardElementImageCommand: EditorCommand {
         try CardDocumentCommandValidation.validate(document)
         project.cardDocument = document
 
-        var undoValues: [String: CommandResultValue] = [
-            "cardDocument": .cardDocument(previousDocument),
-            "replacementAssetID": .uuid(asset.id),
-            "hadPreviousAsset": .int(previousAsset == nil ? 0 : 1)
-        ]
-        if let previousAsset {
-            undoValues["previousAsset"] = .mediaAsset(previousAsset)
-        }
-        return CommandResult(
-            description: "Replaced card element image \(elementId)",
-            undoValues: undoValues
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .cardDocument(let document)? = result.undoValues["cardDocument"],
-              case .uuid(let replacementAssetID)? = result.undoValues["replacementAssetID"],
-              case .int(let hadPreviousAsset)? = result.undoValues["hadPreviousAsset"] else {
-            return NoOpCommand(description: "Missing card image replacement snapshot for inverse")
-        }
-        let previousAsset: MediaAsset?
-        if hadPreviousAsset == 1,
-           case .mediaAsset(let asset)? = result.undoValues["previousAsset"] {
-            previousAsset = asset
-        } else {
-            previousAsset = nil
-        }
-        return RestoreCardImageReplacementCommand(
-            document: document,
-            replacementAssetID: replacementAssetID,
-            previousAsset: previousAsset
-        )
-    }
 }
+
+    }
 
 private struct RestoreCardImageReplacementCommand: EditorCommand {
     let id: UUID
@@ -353,7 +270,7 @@ private struct RestoreCardImageReplacementCommand: EditorCommand {
         self.previousAsset = previousAsset
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let currentDocument = project.cardDocument
         let currentAsset = project.mediaLibrary.assets[replacementAssetID]
         project.cardDocument = document
@@ -363,37 +280,9 @@ private struct RestoreCardImageReplacementCommand: EditorCommand {
             project.mediaLibrary.assets.removeValue(forKey: replacementAssetID)
         }
 
-        var undoValues: [String: CommandResultValue] = [
-            "cardDocument": .cardDocument(currentDocument),
-            "replacementAssetID": .uuid(replacementAssetID),
-            "hadPreviousAsset": .int(currentAsset == nil ? 0 : 1)
-        ]
-        if let currentAsset {
-            undoValues["previousAsset"] = .mediaAsset(currentAsset)
-        }
-        return CommandResult(description: "Restored card image replacement", undoValues: undoValues)
-    }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .cardDocument(let document)? = result.undoValues["cardDocument"],
-              case .uuid(let replacementAssetID)? = result.undoValues["replacementAssetID"],
-              case .int(let hadPreviousAsset)? = result.undoValues["hadPreviousAsset"] else {
-            return NoOpCommand(description: "Missing restored card image replacement snapshot")
-        }
-        let previousAsset: MediaAsset?
-        if hadPreviousAsset == 1,
-           case .mediaAsset(let asset)? = result.undoValues["previousAsset"] {
-            previousAsset = asset
-        } else {
-            previousAsset = nil
-        }
-        return RestoreCardImageReplacementCommand(
-            document: document,
-            replacementAssetID: replacementAssetID,
-            previousAsset: previousAsset
-        )
-    }
 }
+
+    }
 
 private struct RestoreCardDocumentCommand: EditorCommand {
     let id: UUID
@@ -406,24 +295,8 @@ private struct RestoreCardDocumentCommand: EditorCommand {
         self.restoreDescription = description
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
-        let previousDocument = project.cardDocument
+    func apply(to project: inout Project) throws {
         project.cardDocument = document
-        return CommandResult(
-            description: restoreDescription,
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
-    }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        Self.from(result: result, fallbackDescription: "Restored card document")
-    }
-
-    static func from(result: CommandResult, fallbackDescription: String) -> any EditorCommand {
-        guard case .cardDocument(let document)? = result.undoValues["cardDocument"] else {
-            return NoOpCommand(description: "Missing card document snapshot for inverse")
-        }
-        return RestoreCardDocumentCommand(document: document, description: fallbackDescription)
     }
 }
 

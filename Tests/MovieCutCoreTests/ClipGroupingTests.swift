@@ -100,26 +100,6 @@ struct ClipGroupingTests {
         }
     }
 
-    @Test("invert regroups clips that had heterogeneous prior membership")
-    func invertRestoresHeterogeneousMembership() throws {
-        let previousGroup = UUID()
-        var grouped = makeClip()
-        grouped.groupId = previousGroup
-        let ungrouped = makeClip(timelineRange: TimeRange(start: 4, duration: 4))
-        var project = makeProject(tracks: [
-            Track(kind: .video, name: "V1", zIndex: 0, clips: [grouped, ungrouped])
-        ])
-
-        let command = GroupClipsCommand(clipIds: [grouped.id, ungrouped.id], groupId: UUID())
-        let result = try command.apply(to: &project)
-        let inverse = try command.invert(from: result)
-        _ = try inverse.apply(to: &project)
-
-        let clips = project.timeline.tracks[0].clips
-        #expect(clips.first { $0.id == grouped.id }?.groupId == previousGroup)
-        #expect(clips.first { $0.id == ungrouped.id }?.groupId == nil)
-    }
-
     // MARK: - Helpers
 
     private func makeProject(tracks: [Track]) -> Project {

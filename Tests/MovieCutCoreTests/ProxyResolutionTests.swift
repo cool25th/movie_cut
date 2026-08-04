@@ -99,18 +99,15 @@ struct ProxyResolutionTests {
         #expect(migrated.proxyResolution == .default)
     }
 
-    @Test("changing resolution is undoable through the command path")
-    func resolutionChangeIsUndoable() throws {
+    @Test("changing resolution applies through the command path")
+    func resolutionChangeApplies() throws {
         var project = Project(name: "P")
         #expect(project.playbackSettings.proxyResolution == .default)
 
         var updated = project.playbackSettings
         updated.proxyResolution = .p720
         let command = SetProjectPlaybackSettingsCommand(playbackSettings: updated)
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
         #expect(project.playbackSettings.proxyResolution == .p720)
-
-        _ = try command.invert(from: result).apply(to: &project)
-        #expect(project.playbackSettings.proxyResolution == .default)
     }
 }

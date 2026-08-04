@@ -14,7 +14,7 @@ public struct DuplicateClipCommand: EditorCommand {
         self.clipId = clipId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
@@ -38,30 +38,6 @@ public struct DuplicateClipCommand: EditorCommand {
             try project.compactTrackMagnetically(trackId)
         }
         try project.normalizeClipZIndexes(in: trackId)
-
-        return CommandResult(
-            affectedClipIds: Set(previousClips.map(\.id)).union([duplicateClip.id]),
-            description: "Duplicated clip \(clipId)",
-            undoValues: [
-                "duplicateClipId": .uuid(duplicateClip.id),
-                RestoreTrackClipsCommand.snapshotKey(for: trackId): .clips(previousClips)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
-        if !snapshots.isEmpty {
-            return RestoreTrackClipsCommand(
-                snapshots: snapshots,
-                description: "Removed duplicated clip \(clipId)"
-            )
-        }
-
-        if case .uuid(let duplicateClipId)? = result.undoValues["duplicateClipId"] {
-            return DeleteClipCommand(clipId: duplicateClipId)
-        }
-
-        return NoOpCommand(description: "Missing duplicate clip identifier for inverse")
     }
-}

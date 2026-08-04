@@ -72,18 +72,20 @@ struct ClipboardCommandTests {
         unselected.groupId = oldGroupId
         let track = Track(kind: .video, name: "Video 1", clips: [first, second, unselected, ungrouped])
         var destination = project(tracks: [track])
+        let originalIds = Set([first.id, second.id, unselected.id, ungrouped.id])
         let groupedPayload = try ClipboardPayload(
             project: destination,
             clipIds: [first.id, second.id]
         )
 
-        let groupedResult = try PasteClipsCommand(
+        try PasteClipsCommand(
             payload: groupedPayload,
             anchorTime: 10
         ).apply(to: &destination)
 
         let clips = destination.timeline.tracks.flatMap(\.clips)
-        let pastedGrouped = clips.filter { groupedResult.affectedClipIds.contains($0.id) }
+        // Pasted copies carry new ids, so they are the ones not in the original set.
+        let pastedGrouped = clips.filter { !originalIds.contains($0.id) }
         #expect(clips.first { $0.id == first.id }?.groupId == oldGroupId)
         #expect(clips.first { $0.id == second.id }?.groupId == oldGroupId)
         #expect(clips.first { $0.id == unselected.id }?.groupId == oldGroupId)
@@ -96,14 +98,15 @@ struct ClipboardCommandTests {
             project: destination,
             clipIds: [ungrouped.id]
         )
-        let ungroupedResult = try PasteClipsCommand(
+        let idsAfterFirstPaste = Set(clips.map(\.id))
+        try PasteClipsCommand(
             payload: ungroupedPayload,
             anchorTime: 20
         ).apply(to: &destination)
         let pastedUngrouped = try #require(
             destination.timeline.tracks
                 .flatMap(\.clips)
-                .first { ungroupedResult.affectedClipIds.contains($0.id) }
+                .first { !idsAfterFirstPaste.contains($0.id) }
         )
         #expect(pastedUngrouped.groupId == nil)
     }

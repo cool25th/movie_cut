@@ -27,7 +27,7 @@ public struct CopyClipCommand: EditorCommand {
         self.targetStartTime = targetStartTime
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard targetStartTime >= 0 else {
             throw EditorCommandError.invalidCommand("Target start time cannot be negative.")
         }
@@ -43,19 +43,6 @@ public struct CopyClipCommand: EditorCommand {
         )
 
         try project.insertClip(copiedClip, into: targetTrackId, at: nil)
-
-        return CommandResult(
-            affectedClipIds: [copiedClip.id],
-            description: "Copied clip \(clipId)",
-            undoValues: ["copiedClipId": .uuid(copiedClip.id)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .uuid(let copiedClipId)? = result.undoValues["copiedClipId"] {
-            return DeleteClipCommand(clipId: copiedClipId)
-        }
-
-        return NoOpCommand(description: "Missing copied clip identifier for inverse")
     }
-}

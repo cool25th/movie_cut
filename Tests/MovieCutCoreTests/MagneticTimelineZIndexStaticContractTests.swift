@@ -22,13 +22,12 @@ struct MagneticTimelineZIndexStaticContractTests {
         #expect(source.contains("Button(\"Send to Back\")"))
     }
 
-    @Test("Command support exposes magnetic compaction and track snapshot restore")
-    func commandSupportExposesMagneticCompactionAndSnapshotRestore() throws {
+    @Test("Command support exposes magnetic compaction and clip normalization")
+    func commandSupportExposesMagneticCompactionAndClipNormalization() throws {
         let source = try source("Sources/MovieCutCore/Commands/CommandSupport.swift")
 
         #expect(source.contains("compactClipsMagnetically"))
         #expect(source.contains("normalizeClipZIndexes"))
-        #expect(source.contains("RestoreTrackClipsCommand"))
     }
 
     @Test("Delete command preserves gaps (no compaction) and normalizes clip zIndex")
@@ -40,7 +39,6 @@ struct MagneticTimelineZIndexStaticContractTests {
 
         #expect(!source.contains("project.compactTrackMagnetically(removed.trackId)"))
         #expect(source.contains("project.normalizeClipZIndexes(in: removed.trackId)"))
-        #expect(source.contains("RestoreTrackClipsCommand.snapshotKey(for: removed.trackId)"))
     }
 
     @Test("Magnetic compaction is scoped to the main video track via derived policy")

@@ -13,7 +13,7 @@ public struct ApplyCardTemplateCommand: EditorCommand {
         self.seed = seed
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard let previousDocument = project.cardDocument else {
             throw EditorCommandError.cardDocumentMissing
         }
@@ -26,20 +26,9 @@ public struct ApplyCardTemplateCommand: EditorCommand {
             documentMasterStyle: nil,
             seed: seed
         )
-        project.cardDocument = resolved
-        return CommandResult(
-            description: "Applied card template \(template.name)",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
-    }
+        project.cardDocument = resolved    }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreTemplateCardDocumentCommand.from(
-            result: result,
-            fallbackDescription: "Restored card document before template application"
-        )
     }
-}
 
 /// Updates the document master and propagates inherited values while preserving
 /// page-local overrides, as one EditorSession snapshot.
@@ -52,7 +41,7 @@ public struct SetCardMasterStyleCommand: EditorCommand {
         self.masterStyle = masterStyle
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard let previousDocument = project.cardDocument else {
             throw EditorCommandError.cardDocumentMissing
         }
@@ -61,20 +50,9 @@ public struct SetCardMasterStyleCommand: EditorCommand {
         guard resolved != previousDocument else {
             throw EditorCommandError.invalidCommand("Card document already uses the requested master style.")
         }
-        project.cardDocument = resolved
-        return CommandResult(
-            description: "Updated card master style",
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
-    }
+        project.cardDocument = resolved    }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RestoreTemplateCardDocumentCommand.from(
-            result: result,
-            fallbackDescription: "Restored previous card master style"
-        )
     }
-}
 
 private struct RestoreTemplateCardDocumentCommand: EditorCommand {
     let id: UUID
@@ -87,26 +65,7 @@ private struct RestoreTemplateCardDocumentCommand: EditorCommand {
         self.restoreDescription = description
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
-        let previousDocument = project.cardDocument
+    func apply(to project: inout Project) throws {
         project.cardDocument = document
-        return CommandResult(
-            description: restoreDescription,
-            undoValues: ["cardDocument": .cardDocument(previousDocument)]
-        )
-    }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        Self.from(result: result, fallbackDescription: "Restored card template snapshot")
-    }
-
-    static func from(result: CommandResult, fallbackDescription: String) -> any EditorCommand {
-        guard case .cardDocument(let document)? = result.undoValues["cardDocument"] else {
-            return NoOpCommand(description: "Missing card template snapshot for inverse")
-        }
-        return RestoreTemplateCardDocumentCommand(
-            document: document,
-            description: fallbackDescription
-        )
     }
 }

@@ -47,7 +47,7 @@ discard    status=PASS recovered_clips=0
 
 - **B-U7 회귀 게이트 확립.** 복구 플로우의 두 분기(recover/discard)가 자동 검증된다. 단위 테스트(`AutosaveRecoveryTests`)가 ProjectStore actor 수준의 시맨틱을, 이 게이트가 EditorViewModel 수준의 플로우를 각각 커버.
 - **검증된 패턴 재사용.** `confirmDiscardUnsavedChanges`의 주입 패턴을 복제했으므로, 모달 alert 불안정성에 영향받지 않는다. 접근성 식별자 추가는 이 방식에선 불필요(주입 경로가 alert를 건너뛰므로).
-- **terminate-clear 게이트**(`MOVIECUT_UITEST_SKIP_RECOVERY_CLEAR`)는 `run_e2e_export_sandbox.sh`의 autosave 섹션(현재 SKIP)을 미래에 활성화할 수도 있는 인프라. 현재 게이트에선 단일 프로세스라 불필요하지만, 별도 비용 없이 추가됐다.
+- **terminate-clear 게이트**(`MOVIECUT_UITEST_SKIP_RECOVERY_CLEAR`)는 `run_e2e_export.sh`의 sandbox 모드(`SANDBOX=1`) autosave 섹션(현재 SKIP)을 미래에 활성화할 수도 있는 인프라. 현재 게이트에선 단일 프로세스라 불필요하지만, 별도 비용 없이 추가됐다.
 
 ## 한계
 

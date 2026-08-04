@@ -56,17 +56,8 @@ public enum ChromaKeyPixelProcessor {
 
     /// Parses "#RRGGBB" or "RRGGBB" into normalized RGB components.
     public static func rgbComponents(from hex: String) -> SIMD3<Float>? {
-        let clean = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
-            return nil
-        }
-
-        return SIMD3<Float>(
-            Float((value >> 16) & 0xFF) / 255,
-            Float((value >> 8) & 0xFF) / 255,
-            Float(value & 0xFF) / 255
-        )
+        guard let rgb = HexColorMath.rgb(fromHex: hex) else { return nil }
+        return SIMD3<Float>(Float(rgb.red), Float(rgb.green), Float(rgb.blue))
     }
 
     private static let chromaKeyKernel = CIColorKernel(source: """

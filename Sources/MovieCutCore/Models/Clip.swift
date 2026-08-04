@@ -350,26 +350,11 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {
-        let clean = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
-            return nil
-        }
-
-        return SIMD3<Float>(
-            Float((value >> 16) & 0xFF) / 255,
-            Float((value >> 8) & 0xFF) / 255,
-            Float(value & 0xFF) / 255
-        )
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else { return nil }
+        return SIMD3<Float>(Float(rgb.red), Float(rgb.green), Float(rgb.blue))
     }
 
     private static func hexRGB(from color: SIMD3<Float>) -> String {
-        let red = byteValue(color.x)
-        let green = byteValue(color.y)
-        let blue = byteValue(color.z)
-        return String(format: "#%02X%02X%02X", red, green, blue)
-    }
-
-    private static func byteValue(_ component: Float) -> Int {
-        Int((min(max(component, 0), 1) * 255).rounded())
+        HexColorMath.hexRGB(red: Double(color.x), green: Double(color.y), blue: Double(color.z))
     }
 }

@@ -116,25 +116,18 @@ struct ChromaKeyView: View {
 
 private extension Color {
     init?(hexRGB: String) {
-        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
-            return nil
-        }
-
-        let red = Double((value >> 16) & 0xFF) / 255.0
-        let green = Double((value >> 8) & 0xFF) / 255.0
-        let blue = Double(value & 0xFF) / 255.0
-        self.init(red: red, green: green, blue: blue)
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else { return nil }
+        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     var hexRGB: String? {
         guard let color = NSColor(self).usingColorSpace(.sRGB) else {
             return nil
         }
-
-        let red = Int((color.redComponent * 255).rounded())
-        let green = Int((color.greenComponent * 255).rounded())
-        let blue = Int((color.blueComponent * 255).rounded())
-        return String(format: "#%02X%02X%02X", red, green, blue)
+        return HexColorMath.hexRGB(
+            red: Double(color.redComponent),
+            green: Double(color.greenComponent),
+            blue: Double(color.blueComponent)
+        )
     }
 }

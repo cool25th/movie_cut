@@ -90,16 +90,8 @@ public enum CanvasBackgroundPixelProcessor {
     }
 
     static func ciColor(fromHex hex: String) -> CIColor? {
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
-            return nil
-        }
-
-        return CIColor(
-            red: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255
-        )
+        guard let rgb = HexColorMath.rgb(fromHex: hex) else { return nil }
+        return CIColor(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     private static func solid(color: CIColor, in rect: CGRect) -> CIImage {

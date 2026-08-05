@@ -473,16 +473,9 @@ public enum TextOverlayPixelProcessor {
     }
 
     private static func cgColor(hexRGB: String) -> CGColor {
-        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
             return CGColor(red: 1, green: 1, blue: 1, alpha: 1)
         }
-
-        return CGColor(
-            red: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255,
-            alpha: 1
-        )
+        return CGColor(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
     }
 }

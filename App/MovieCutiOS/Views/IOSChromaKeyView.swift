@@ -97,63 +97,28 @@ struct IOSChromaKeyView: View {
 
 private extension Color {
     init?(hexRGB: String) {
-        let hex = hexRGB.hasPrefix("#") ? String(hexRGB.dropFirst()) : hexRGB
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
-            return nil
-        }
-
-        let red = CGFloat((value >> 16) & 0xFF) / 255.0
-        let green = CGFloat((value >> 8) & 0xFF) / 255.0
-        let blue = CGFloat(value & 0xFF) / 255.0
-
-        guard
-            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-            let cgColor = CGColor(colorSpace: colorSpace, components: [red, green, blue, 1.0])
-        else {
-            return nil
-        }
-
-        self.init(cgColor: cgColor)
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else { return nil }
+        self.init(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue, opacity: 1)
     }
 
     var hexRGB: String? {
-        guard
-            let sourceColor = self.cgColor,
-            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
-        else {
-            return nil
-        }
-
-        let color = sourceColor.converted(to: colorSpace, intent: .defaultIntent, options: nil) ?? sourceColor
-        guard let components = color.components else {
-            return nil
-        }
-
-        let red: CGFloat
-        let green: CGFloat
-        let blue: CGFloat
-
-        switch color.numberOfComponents {
+        guard let components = self.cgColor?.components else { return nil }
+        switch self.cgColor?.numberOfComponents {
         case 2:
-            red = components[0]
-            green = components[0]
-            blue = components[0]
+            return HexColorMath.hexRGB(
+                red: Double(components[0]),
+                green: Double(components[0]),
+                blue: Double(components[0])
+            )
         case 4:
-            red = components[0]
-            green = components[1]
-            blue = components[2]
+            return HexColorMath.hexRGB(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2])
+            )
         default:
             return nil
         }
-
-        return "#\(Self.hexPair(for: red))\(Self.hexPair(for: green))\(Self.hexPair(for: blue))"
-    }
-
-    private static func hexPair(for component: CGFloat) -> String {
-        let clamped = min(max(component, 0), 1)
-        let value = Int((clamped * 255).rounded())
-        let digits = String(value, radix: 16, uppercase: true)
-        return digits.count == 1 ? "0\(digits)" : digits
     }
 }
 #endif

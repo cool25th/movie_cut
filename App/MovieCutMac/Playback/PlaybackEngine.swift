@@ -710,15 +710,10 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
 
         func cgColor(hexRGB: String) -> CGColor {
-            let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-            guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+            guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
                 return NSColor.white.cgColor
             }
-
-            let red = CGFloat((value >> 16) & 0xFF) / 255.0
-            let green = CGFloat((value >> 8) & 0xFF) / 255.0
-            let blue = CGFloat(value & 0xFF) / 255.0
-            return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1).cgColor
+            return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1).cgColor
         }
 
         func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
@@ -1508,18 +1503,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         )
     }
 
-    private func configureStickerLayerAnimation(
-        _ animation: CAAnimation,
-        duration: TimeInterval,
-        delay: TimeInterval
-    ) {
-        animation.duration = duration
-        animation.beginTime = delay
-        animation.fillMode = .both
-        animation.isRemovedOnCompletion = false
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-    }
-
     private func temporaryImageRenderURL(for clip: Clip) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutPlaybackImage-\(clip.id.uuidString)-\(UUID().uuidString)")
@@ -1698,14 +1681,13 @@ private struct KaraokePreviewClip {
     /// Builds an `NSColor` from a `#RRGGBB` hex string. Mirrors the Core
     /// renderer's `CGColor` helper so preview colors match export output.
     private static func color(hexRGB: String) -> NSColor {
-        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
             return NSColor(red: 1, green: 1, blue: 1, alpha: 1)
         }
         return NSColor(
-            calibratedRed: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255,
+            calibratedRed: CGFloat(rgb.red),
+            green: CGFloat(rgb.green),
+            blue: CGFloat(rgb.blue),
             alpha: 1
         )
     }

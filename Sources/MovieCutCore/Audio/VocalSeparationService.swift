@@ -30,23 +30,16 @@ public struct StereoFrames: Sendable, Equatable {
     }
 }
 
-/// A stereo stem separator. Conformers may be DSP-based or, in future, ML-based.
-public protocol AudioStemSeparator: Sendable {
-    /// Processes stereo frames for the requested mode.
-    func process(_ frames: StereoFrames, mode: VocalSeparationMode) -> StereoFrames
-}
-
 /// Real-time-friendly vocal separation using center-channel (mid/side)
 /// cancellation.
 ///
 /// Lead vocals are typically panned to the center, so they appear nearly
 /// identically in the left and right channels. Estimating the center as
 /// `mid = (L + R) / 2` lets the processor either subtract it (karaoke) or keep
-/// it (isolation). This is a true DSP technique — not ML stem separation — so it
-/// works best on center-panned vocals and leaves stereo-panned instruments
-/// audible. The ``AudioStemSeparator`` protocol is the seam for a future ML
-/// provider (e.g. a Demucs-style model) without changing call sites.
-public struct CenterChannelVocalSeparator: AudioStemSeparator {
+/// it (isolation). This is a true DSP technique — not ML stem separation — so
+/// it works best on center-panned vocals and leaves stereo-panned instruments
+/// audible.
+public struct CenterChannelVocalSeparator: Sendable {
     /// Effect amount in `[0, 1]`; 0 is a passthrough, 1 is full cancellation/isolation.
     public let wetMix: Float
 

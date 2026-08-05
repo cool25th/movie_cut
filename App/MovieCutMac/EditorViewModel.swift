@@ -5601,46 +5601,6 @@ final class EditorViewModel {
         }
     }
 
-    private func renderEmojiSticker(_ emoji: String, id: UUID) throws -> URL {
-        let folderURL = FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutStickers", isDirectory: true)
-        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-
-        let fileURL = folderURL.appendingPathComponent("\(id.uuidString).png")
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            return fileURL
-        }
-
-        let size = CGSize(width: 512, height: 512)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.clear.setFill()
-        NSRect(origin: NSPoint(x: 0, y: 0), size: size).fill()
-
-        let font = NSFont.systemFont(ofSize: 280)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font
-        ]
-        let attributedEmoji = NSAttributedString(string: emoji, attributes: attributes)
-        let textSize = attributedEmoji.size()
-        let origin = CGPoint(
-            x: (size.width - textSize.width) / 2,
-            y: (size.height - textSize.height) / 2
-        )
-        attributedEmoji.draw(at: origin)
-        image.unlockFocus()
-
-        guard
-            let tiffData = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiffData),
-            let pngData = bitmap.representation(using: .png, properties: [:])
-        else {
-            throw CocoaError(.fileWriteUnknown)
-        }
-
-        try pngData.write(to: fileURL, options: .atomic)
-        return fileURL
-    }
-
 
     func toggleNoiseReduction(_ enabled: Bool) {
         guard let clipId = selectedClipId else { return }

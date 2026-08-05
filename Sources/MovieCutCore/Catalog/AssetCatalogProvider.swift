@@ -1,20 +1,10 @@
 import Foundation
 
-/// A source of catalog items (local bundle, built-in, etc.).
+/// A catalog provider backed by an in-memory item list.
 ///
 /// The app is fully offline / on-device (no `com.apple.security.network.client`
-/// entitlement), so there is intentionally no remote provider. A bundled or
-/// in-memory provider is the only kind.
-public protocol AssetCatalogProvider: Sendable {
-    /// User-visible provider name.
-    var providerName: String { get }
-
-    /// Returns a page of items matching the query.
-    func items(matching query: CatalogQuery) async throws -> CatalogPage
-}
-
-/// A catalog provider backed by an in-memory item list.
-public struct LocalAssetCatalogProvider: AssetCatalogProvider {
+/// entitlement), so this in-memory provider is the only kind.
+public struct LocalAssetCatalogProvider: Sendable {
     public let providerName: String
     private let allItems: [CatalogItem]
 

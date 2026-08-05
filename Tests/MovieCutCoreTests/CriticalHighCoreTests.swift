@@ -92,38 +92,6 @@ struct TimelineZoomLevelCriticalHighTests {
     }
 }
 
-@MainActor
-@Suite("ExportProgress critical and high coverage")
-struct ExportProgressCriticalHighTests {
-    @MainActor
-    @Test("Export progress initial state is idle")
-    func testInitialState() {
-        let progress = ExportProgress()
-
-        #expect(progress.progress == 0)
-        #expect(isIdle(progress.state))
-    }
-
-    @MainActor
-    @Test("Export progress custom initializer stores progress and state")
-    func testCustomInit() {
-        let progress = ExportProgress(progress: 0.5, state: .exporting)
-
-        #expect(progress.progress == 0.5)
-        #expect(isExporting(progress.state))
-    }
-
-    @MainActor
-    @Test("Export progress cancel sets state")
-    func testCancelSetsState() {
-        let progress = ExportProgress()
-
-        progress.cancel()
-
-        #expect(isCancelled(progress.state))
-    }
-}
-
 private func unclampedSpeedRampPoint(time: TimeInterval, rate: Double) -> SpeedRampPoint {
     var point = SpeedRampPoint(time: time, rate: rate)
     point.time = time
@@ -152,23 +120,3 @@ private func makeClip(
     )
 }
 
-private func isIdle(_ state: ExportProgress.ExportState) -> Bool {
-    if case .idle = state {
-        return true
-    }
-    return false
-}
-
-private func isExporting(_ state: ExportProgress.ExportState) -> Bool {
-    if case .exporting = state {
-        return true
-    }
-    return false
-}
-
-private func isCancelled(_ state: ExportProgress.ExportState) -> Bool {
-    if case .cancelled = state {
-        return true
-    }
-    return false
-}

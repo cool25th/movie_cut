@@ -88,7 +88,7 @@ public struct MoveClipCommand: EditorCommand {
         self.destinationClipIndex = nil
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = if let sourceTrackId {
             try project.clipLocation(for: clipId, in: sourceTrackId)
         } else {
@@ -148,62 +148,5 @@ public struct MoveClipCommand: EditorCommand {
             }
             try project.normalizeClipZIndexes(in: destinationTrackId)
         }
-
-        var undoValues: [String: CommandResultValue] = [
-            "sourceTrackId": .uuid(currentTrackId),
-            "sourceClipIndex": .int(location.clipIndex),
-            "timelineRange": .timeRange(originalClip.timelineRange),
-            RestoreTrackClipsCommand.snapshotKey(for: currentTrackId): .clips(sourceTrackClipsBefore)
-        ]
-        if destinationTrackId != currentTrackId {
-            undoValues[RestoreTrackClipsCommand.snapshotKey(for: destinationTrackId)] = .clips(destinationTrackClipsBefore)
-        }
-
-        var affectedClipIds = Set(sourceTrackClipsBefore.map(\.id))
-        if destinationTrackId != currentTrackId {
-            affectedClipIds.formUnion(destinationTrackClipsBefore.map(\.id))
-        }
-        affectedClipIds.insert(clipId)
-
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Moved clip \(clipId)",
-            undoValues: undoValues
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
-        if !snapshots.isEmpty {
-            return RestoreTrackClipsCommand(
-                snapshots: snapshots,
-                description: "Restored moved clip \(clipId)"
-            )
-        }
-
-        if
-            case .uuid(let originalTrackId)? = result.undoValues["sourceTrackId"],
-            case .int(let originalClipIndex)? = result.undoValues["sourceClipIndex"],
-            case .timeRange(let originalRange)? = result.undoValues["timelineRange"]
-        {
-            return MoveClipCommand(
-                clipId: clipId,
-                sourceTrackId: targetTrackId,
-                targetTrackId: originalTrackId,
-                newTimelineRange: originalRange,
-                destinationClipIndex: originalClipIndex
-            )
-        }
-
-        guard let previousTimelineRange else {
-            return NoOpCommand(description: "Missing previous clip position for inverse")
-        }
-
-        return MoveClipCommand(
-            clipId: clipId,
-            sourceTrackId: targetTrackId,
-            targetTrackId: previousTrackId,
-            newTimelineRange: previousTimelineRange
-        )
     }
 }

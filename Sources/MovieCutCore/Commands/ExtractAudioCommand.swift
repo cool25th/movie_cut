@@ -11,7 +11,7 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
         self.extractedClipId = extractedClipId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         let sourceClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         guard sourceClip.kind == .video else {
@@ -54,16 +54,6 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
             try project.insertClip(audioClip, into: targetTrackId, at: insertionIndex)
             try project.normalizeClipZIndexes(in: targetTrackId)
             project.normalizeTrackZIndexes()
-
-            return CommandResult(
-                affectedClipIds: Set(previousClips.map(\.id)).union([clipId, audioClip.id]),
-                description: "Extracted audio from clip \(clipId)",
-                undoValues: [
-                    "audioClipId": .uuid(audioClip.id),
-                    "trackId": .uuid(targetTrackId),
-                    RestoreTrackClipsCommand.snapshotKey(for: targetTrackId): .clips(previousClips)
-                ]
-            )
         }
 
         let audioTrack = Track(
@@ -74,44 +64,9 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
         )
         project.timeline.tracks.append(audioTrack)
         project.normalizeTrackZIndexes()
-
-        return CommandResult(
-            affectedClipIds: [clipId, audioClip.id],
-            description: "Extracted audio from clip \(clipId)",
-            undoValues: [
-                "audioClipId": .uuid(audioClip.id),
-                "trackId": .uuid(audioTrack.id),
-                "createdTrackId": .uuid(audioTrack.id)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        let snapshots = RestoreTrackClipsCommand.snapshots(from: result.undoValues)
-        if !snapshots.isEmpty {
-            return RestoreTrackClipsCommand(
-                snapshots: snapshots,
-                description: "Removed extracted audio clip \(extractedClipId)"
-            )
-        }
-
-        if case .uuid(let audioClipId)? = result.undoValues["audioClipId"] {
-            let createdTrackId: UUID?
-            if case .uuid(let trackId)? = result.undoValues["createdTrackId"] {
-                createdTrackId = trackId
-            } else {
-                createdTrackId = nil
-            }
-            return RemoveExtractedAudioClipCommand(
-                clipId: audioClipId,
-                createdTrackId: createdTrackId
-            )
-        }
-
-        return NoOpCommand(description: "Missing extracted audio clip identifier for inverse")
-    }
-
-    private func firstAvailableAudioTrackIndex(for range: TimeRange, in project: Project) -> Int? {
+        private func firstAvailableAudioTrackIndex(for range: TimeRange, in project: Project) -> Int? {
         for index in project.timeline.tracks.indices {
             let track = project.timeline.tracks[index]
             guard track.kind == .audio, !track.isLocked else { continue }
@@ -143,14 +98,13 @@ private struct RemoveExtractedAudioClipCommand: EditorCommand {
         self.createdTrackId = createdTrackId
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
         let trackId = project.timeline.tracks[location.trackIndex].id
         let previousClips = project.timeline.tracks[location.trackIndex].clips
         let removedClip = project.timeline.tracks[location.trackIndex].clips.remove(at: location.clipIndex)
-        var affectedClipIds = Set(previousClips.map(\.id))
 
         if createdTrackId == trackId, project.timeline.tracks[location.trackIndex].clips.isEmpty {
             project.timeline.tracks.remove(at: location.trackIndex)
@@ -158,16 +112,6 @@ private struct RemoveExtractedAudioClipCommand: EditorCommand {
         } else {
             try project.normalizeClipZIndexes(in: trackId)
         }
-
-        affectedClipIds.insert(removedClip.id)
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Removed extracted audio clip \(clipId)"
-        )
-    }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        NoOpCommand(description: "Missing extracted audio clip snapshot for inverse")
     }
 }
 

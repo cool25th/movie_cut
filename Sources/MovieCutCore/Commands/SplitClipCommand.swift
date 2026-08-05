@@ -32,7 +32,7 @@ public struct SplitClipCommand: EditorCommand {
         self.newClipId = newClipId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = if let trackId {
             try project.clipLocation(for: clipId, in: trackId)
         } else {
@@ -140,44 +140,9 @@ public struct SplitClipCommand: EditorCommand {
 
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex] = firstClip
         project.timeline.tracks[location.trackIndex].clips.insert(secondClip, at: location.clipIndex + 1)
-
-        return CommandResult(
-            affectedClipIds: [clipId, newClipId],
-            description: "Split clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(project.timeline.tracks[location.trackIndex].id),
-                "clipIndex": .int(location.clipIndex),
-                "clip": .clip(clip)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .int(let clipIndex)? = result.undoValues["clipIndex"],
-            case .clip(let clip)? = result.undoValues["clip"]
-        {
-            return MergeSplitClipCommand(
-                originalClipId: clipId,
-                splitClipId: newClipId,
-                trackId: trackId,
-                originalClipIndex: clipIndex,
-                originalClip: clip,
-                splitTime: splitTime
-            )
-        }
-
-        return MergeSplitClipCommand(
-            originalClipId: clipId,
-            splitClipId: newClipId,
-            trackId: trackId,
-            originalClipIndex: nil,
-            originalClip: nil,
-            splitTime: splitTime
-        )
     }
-}
 
 struct MergeSplitClipCommand: EditorCommand {
     let id: UUID
@@ -206,7 +171,7 @@ struct MergeSplitClipCommand: EditorCommand {
         self.splitTime = splitTime
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let originalLocation = if let trackId {
             try project.clipLocation(for: originalClipId, in: trackId)
         } else {
@@ -241,14 +206,6 @@ struct MergeSplitClipCommand: EditorCommand {
                 duration: mergedTimelineEnd - mergedTimelineStart
             )
         }
-
-        return CommandResult(
-            affectedClipIds: [originalClipId, splitClipId],
-            description: "Merged split clip \(splitClipId)"
-        )
     }
 
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        SplitClipCommand(clipId: originalClipId, trackId: trackId, splitTime: splitTime, newClipId: splitClipId)
     }
-}

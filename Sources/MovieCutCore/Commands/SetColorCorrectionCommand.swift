@@ -19,23 +19,11 @@ public struct SetColorCorrectionCommand: EditorCommand, Sendable, Codable {
         self.previousColorCorrection = previousColorCorrection
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
         let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].colorCorrection = colorCorrection
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Set color correction for clip \(clipId)",
-            undoValues: ["clip": .clip(previousClip)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .clip(let clip)? = result.undoValues["clip"] {
-            return SetColorCorrectionCommand(clipId: clipId, colorCorrection: clip.colorCorrection)
-        }
-        return SetColorCorrectionCommand(clipId: clipId, colorCorrection: previousColorCorrection)
     }
-}

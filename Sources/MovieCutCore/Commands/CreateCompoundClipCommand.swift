@@ -55,7 +55,7 @@ public struct CreateCompoundClipCommand: EditorCommand {
         self.compoundName = compoundName
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard clipIds.count >= 2 else {
             throw EditorCommandError.invalidCommand(
                 "A compound clip requires at least two clips."
@@ -136,43 +136,7 @@ public struct CreateCompoundClipCommand: EditorCommand {
         )
         project.compounds.append(definition)
 
-        var undoValues: [String: CommandResultValue] = [
-            Self.trackKey: .clips(previousTrackClips),
-            Self.trackIdKey: .uuid(trackId),
-            Self.compoundsKey: .compounds(previousCompounds)
-        ]
-
-        return CommandResult(
-            affectedClipIds: Set(clipIds).union([containerClipId]),
-            description: "Created compound clip from \(clipIds.count) clips",
-            undoValues: undoValues
-        )
     }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .clips(let previousTrackClips)? = result.undoValues[Self.trackKey] else {
-            return NoOpCommand(description: "Missing track snapshot for compound create inverse")
-        }
-        let previousCompounds: [CompoundDefinition]
-        if case .compounds(let prior)? = result.undoValues[Self.compoundsKey] {
-            previousCompounds = prior
-        } else {
-            previousCompounds = []
-        }
-        return ReleaseCompoundClipCommand(
-            trackId: trackId,
-            containerClipId: containerClipId,
-            compoundId: compoundId,
-            restoreTrackClips: previousTrackClips,
-            restoreCompounds: previousCompounds
-        )
-    }
-
-    // MARK: - Undo value keys
-
-    static let trackKey = "compoundCreate.trackClips"
-    static let compoundsKey = "compoundCreate.compounds"
-    static let trackIdKey = "compoundCreate.trackId"
 }
 
 /// Releases a compound clip back into its original constituent clips (Task 5.9,
@@ -222,7 +186,7 @@ public struct ReleaseCompoundClipCommand: EditorCommand {
         self.restoreCompounds = restoreCompounds
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let trackIndex = try project.trackIndex(for: trackId)
         try project.ensureTrackIsEditable(at: trackIndex)
 
@@ -273,45 +237,7 @@ public struct ReleaseCompoundClipCommand: EditorCommand {
         } else {
             project.compounds.removeAll { $0.id == compoundId }
         }
-
-        var undoValues: [String: CommandResultValue] = [
-            Self.trackKey: .clips(previousTrackClips),
-            Self.containerKey: .clip(container),
-            Self.trackIdKey: .uuid(trackId),
-            Self.compoundsKey: .compounds(previousCompounds)
-        ]
-        return CommandResult(
-            affectedClipIds: Set(previousTrackClips.map(\.id)).union([containerClipId]),
-            description: "Released compound clip \(compoundId)",
-            undoValues: undoValues
-        )
     }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        // Inverse of release restores the captured pre-release track + compounds
-        // state, which puts the container back where it was. We replay the exact
-        // snapshots rather than re-deriving the compound (the release command
-        // no longer carries the original clip ids).
-        guard case .clips(let previousTrackClips)? = result.undoValues[Self.trackKey] else {
-            return NoOpCommand(description: "Missing snapshots for compound release inverse")
-        }
-        let previousCompounds: [CompoundDefinition]
-        if case .compounds(let prior)? = result.undoValues[Self.compoundsKey] {
-            previousCompounds = prior
-        } else {
-            previousCompounds = []
-        }
-        return RestoreCompoundContainerCommand(
-            trackId: trackId,
-            restoreTrackClips: previousTrackClips,
-            restoreCompounds: previousCompounds
-        )
-    }
-
-    static let trackKey = "compoundRelease.trackClips"
-    static let containerKey = "compoundRelease.container"
-    static let compoundsKey = "compoundRelease.compounds"
-    static let trackIdKey = "compoundRelease.trackId"
 }
 
 /// Internal byte-exact restore used as the inverse of `ReleaseCompoundClipCommand`.
@@ -324,42 +250,10 @@ struct RestoreCompoundContainerCommand: EditorCommand {
     let restoreTrackClips: [Clip]
     let restoreCompounds: [CompoundDefinition]
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let trackIndex = try project.trackIndex(for: trackId)
         try project.ensureTrackIsEditable(at: trackIndex)
-        let previousTrackClips = project.timeline.tracks[trackIndex].clips
-        let previousCompounds = project.compounds
         project.timeline.tracks[trackIndex].clips = restoreTrackClips
         project.compounds = restoreCompounds
-        return CommandResult(
-            affectedClipIds: Set(previousTrackClips.map(\.id)).union(restoreTrackClips.map(\.id)),
-            description: "Restored compound container",
-            undoValues: [
-                Self.trackKey: .clips(previousTrackClips),
-                Self.trackIdKey: .uuid(trackId),
-                Self.compoundsKey: .compounds(previousCompounds)
-            ]
-        )
     }
-
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .clips(let previousTrackClips)? = result.undoValues[Self.trackKey] else {
-            return NoOpCommand(description: "Missing snapshots for compound restore inverse")
-        }
-        let previousCompounds: [CompoundDefinition]
-        if case .compounds(let prior)? = result.undoValues[Self.compoundsKey] {
-            previousCompounds = prior
-        } else {
-            previousCompounds = []
-        }
-        return RestoreCompoundContainerCommand(
-            trackId: trackId,
-            restoreTrackClips: previousTrackClips,
-            restoreCompounds: previousCompounds
-        )
-    }
-
-    static let trackKey = "compoundRestore.trackClips"
-    static let compoundsKey = "compoundRestore.compounds"
-    static let trackIdKey = "compoundRestore.trackId"
 }

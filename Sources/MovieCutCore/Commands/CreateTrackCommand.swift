@@ -14,18 +14,13 @@ public struct CreateTrackCommand: EditorCommand {
         self.track = track
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         if project.timeline.tracks.contains(where: { $0.id == track.id }) {
             throw EditorCommandError.invalidCommand("Track already exists: \(track.id)")
         }
-        project.timeline.tracks.append(track)
-        return CommandResult(description: "Created track \(track.name)")
-    }
+        project.timeline.tracks.append(track)    }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        RemoveTrackCommand(track: track)
     }
-}
 
 struct RemoveTrackCommand: EditorCommand {
     let id: UUID
@@ -36,14 +31,9 @@ struct RemoveTrackCommand: EditorCommand {
         self.track = track
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let index = try project.trackIndex(for: track.id)
         let removedTrack = project.timeline.tracks.remove(at: index)
-        let affectedClipIds = Set(removedTrack.clips.map(\.id))
-        return CommandResult(affectedClipIds: affectedClipIds, description: "Removed track \(removedTrack.name)")
-    }
+        let affectedClipIds = Set(removedTrack.clips.map(\.id))    }
 
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        CreateTrackCommand(track: track)
     }
-}

@@ -25,7 +25,7 @@ public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
         self.oldValue = oldValue
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let index = try project.trackIndex(for: trackId)
         let previous: TrackProperty
 
@@ -43,33 +43,6 @@ public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
             previous = .zIndex(project.timeline.tracks[index].zIndex)
             project.timeline.tracks[index].zIndex = zIndex
         }
-
-        return CommandResult(
-            description: "Set track property for \(trackId)",
-            undoValues: ["oldValue": .trackProperty(previous)]
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .trackProperty(let oldValue)? = result.undoValues["oldValue"] {
-            return SetTrackPropertyCommand(trackId: trackId, property: oldValue)
-        }
-
-        if case .int(let value)? = result.undoValues["oldValue"] {
-            return SetTrackPropertyCommand(trackId: trackId, property: property.replacingValue(with: value != 0))
-        }
-
-        guard let oldValue else {
-            return NoOpCommand(description: "Missing previous track property for inverse")
-        }
-        return SetTrackPropertyCommand(trackId: trackId, property: oldValue)
-    }
-
-    public func invert() -> any EditorCommand {
-        guard let oldValue else {
-            return NoOpCommand(description: "Missing previous track property for inverse")
-        }
-        return SetTrackPropertyCommand(trackId: trackId, property: oldValue)
     }
 }
 

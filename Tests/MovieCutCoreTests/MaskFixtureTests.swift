@@ -54,17 +54,12 @@ struct MaskFixtureTests {
         let command = SetClipMaskCommand(clipId: clipId, mask: mask)
 
         // Apply
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
         let appliedMask = project.timeline.tracks[0].clips[0].mask
         #expect(appliedMask != nil, "Mask should be set after apply")
         #expect(appliedMask?.shape == .rectangle)
         #expect(appliedMask?.position.x == 0.25)
         #expect(appliedMask?.inverted == false)
-
-        // Undo
-        let inverse = try command.invert(from: result)
-        try inverse.apply(to: &project)
-        #expect(project.timeline.tracks[0].clips[0].mask == nil, "Mask should be nil after undo")
     }
 
     // MARK: - MC-MASK-FIX-02: Ellipse Inverted
@@ -106,16 +101,10 @@ struct MaskFixtureTests {
         // Second mask: ellipse inverted (replaces)
         let mask2 = Mask(shape: .ellipse, position: CGPoint(x: 0.5, y: 0.5), size: CGSize(width: 0.5, height: 0.5), inverted: true)
         let cmd2 = SetClipMaskCommand(clipId: clipId, mask: mask2)
-        let result2 = try cmd2.apply(to: &project)
+        try cmd2.apply(to: &project)
 
         #expect(project.timeline.tracks[0].clips[0].mask?.shape == .ellipse)
         #expect(project.timeline.tracks[0].clips[0].mask?.inverted == true)
-
-        // Undo should restore rectangle
-        let undo2 = try cmd2.invert(from: result2)
-        try undo2.apply(to: &project)
-        #expect(project.timeline.tracks[0].clips[0].mask?.shape == .rectangle)
-        #expect(project.timeline.tracks[0].clips[0].mask?.inverted == false)
     }
 
     // MARK: - MC-MASK-FIX-03: All Shapes Enum Coverage

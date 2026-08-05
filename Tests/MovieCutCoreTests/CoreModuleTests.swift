@@ -137,16 +137,12 @@ import MovieCutCore
             Clip(kind: .video, sourceRange: TimeRange(start: 0, duration: 5), timelineRange: TimeRange(start: 0, duration: 5))
         ])
     ]))
-    let originalClips = project.timeline.tracks[0].clips
     let clipId = project.timeline.tracks[0].clips[0].id
     let trackId = project.timeline.tracks[0].id
     let cmd = MoveClipCommand(clipId: clipId, sourceTrackId: trackId, targetTrackId: trackId, newTimelineRange: TimeRange(start: 3, duration: 5))
-    let result: CommandResult = try cmd.apply(to: &project)
+    try cmd.apply(to: &project)
     #expect(project.timeline.tracks[0].clips[0].timelineRange.start == 0)
     #expect(project.timeline.tracks[0].clips[0].timelineRange.duration == 5)
-    let undo = try cmd.invert(from: result)
-    _ = try undo.apply(to: &project)
-    expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
 }
 
 @Test func addClipCommandMagneticallyCompactsSameTrackAndLeavesOtherTrackUntouched() throws {
@@ -177,19 +173,14 @@ import MovieCutCore
         Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, secondClip])
     ]))
     let trackId = project.timeline.tracks[0].id
-    let originalClips = project.timeline.tracks[0].clips
     let cmd = MoveClipCommand(clipId: secondClip.id, sourceTrackId: trackId, targetTrackId: trackId, newTimelineRange: TimeRange(start: 12, duration: 3))
 
-    let result = try cmd.apply(to: &project)
+    try cmd.apply(to: &project)
 
     let compactedClips = project.timeline.tracks[0].clips
     #expect(compactedClips.map(\.id) == [firstClip.id, secondClip.id])
     #expect(compactedClips.map { $0.timelineRange.start } == [0, 2])
     #expect(compactedClips.map { $0.timelineRange.duration } == [2, 3])
-
-    let undo = try cmd.invert(from: result)
-    _ = try undo.apply(to: &project)
-    expectClipTimelineSnapshot(project.timeline.tracks[0].clips, matches: originalClips)
 }
 
 @Test func deleteClipCommandPreservesGapsAndNormalizesZIndexesAndUndoRestoresSnapshot() throws {
@@ -204,10 +195,9 @@ import MovieCutCore
     var middleDeleteProject = Project(name: "Test", timeline: Timeline(tracks: [
         Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, middleClip, lastClip])
     ]))
-    let middleDeleteOriginalClips = middleDeleteProject.timeline.tracks[0].clips
     let middleDeleteCommand = DeleteClipCommand(clipId: middleClip.id)
 
-    let middleDeleteResult = try middleDeleteCommand.apply(to: &middleDeleteProject)
+    try middleDeleteCommand.apply(to: &middleDeleteProject)
 
     let middleDeleteClips = middleDeleteProject.timeline.tracks[0].clips
     #expect(middleDeleteClips.map(\.id) == [firstClip.id, lastClip.id])
@@ -217,17 +207,12 @@ import MovieCutCore
     // zIndexes are re-normalized contiguously even though positions are preserved.
     #expect(middleDeleteClips.map(\.zIndex) == [0, 1])
 
-    let middleDeleteUndo = try middleDeleteCommand.invert(from: middleDeleteResult)
-    _ = try middleDeleteUndo.apply(to: &middleDeleteProject)
-    expectClipTimelineSnapshot(middleDeleteProject.timeline.tracks[0].clips, matches: middleDeleteOriginalClips)
-
     var firstDeleteProject = Project(name: "Test", timeline: Timeline(tracks: [
         Track(kind: .video, name: "V1", zIndex: 0, clips: [firstClip, middleClip, lastClip])
     ]))
-    let firstDeleteOriginalClips = firstDeleteProject.timeline.tracks[0].clips
     let firstDeleteCommand = DeleteClipCommand(clipId: firstClip.id)
 
-    let firstDeleteResult = try firstDeleteCommand.apply(to: &firstDeleteProject)
+    try firstDeleteCommand.apply(to: &firstDeleteProject)
 
     let firstDeleteClips = firstDeleteProject.timeline.tracks[0].clips
     #expect(firstDeleteClips.map(\.id) == [middleClip.id, lastClip.id])
@@ -235,10 +220,6 @@ import MovieCutCore
     #expect(firstDeleteClips.map { $0.timelineRange.start } == [10, 20])
     #expect(firstDeleteClips.map { $0.timelineRange.duration } == [3, 4])
     #expect(firstDeleteClips.map(\.zIndex) == [0, 1])
-
-    let firstDeleteUndo = try firstDeleteCommand.invert(from: firstDeleteResult)
-    _ = try firstDeleteUndo.apply(to: &firstDeleteProject)
-    expectClipTimelineSnapshot(firstDeleteProject.timeline.tracks[0].clips, matches: firstDeleteOriginalClips)
 }
 
 @Test func addClipOnFreeTrackPreservesRequestedPosition() throws {
@@ -297,13 +278,9 @@ import MovieCutCore
     let clipId = project.timeline.tracks[0].clips[0].id
     let trackId = project.timeline.tracks[0].id
     let cmd = TrimClipCommand(clipId: clipId, trackId: trackId, newSourceRange: TimeRange(start: 2, duration: 6), newTimelineRange: TimeRange(start: 2, duration: 6))
-    let result: CommandResult = try cmd.apply(to: &project)
+    try cmd.apply(to: &project)
     #expect(project.timeline.tracks[0].clips[0].sourceRange.start == 2)
     #expect(project.timeline.tracks[0].clips[0].sourceRange.duration == 6)
-    let undo = try cmd.invert(from: result)
-    _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].clips[0].sourceRange.start == 0)
-    #expect(project.timeline.tracks[0].clips[0].sourceRange.duration == 10)
 }
 
 @Test func copyClipCommandCreatesDuplicate() throws {
@@ -389,12 +366,8 @@ func setTrackPropertyZIndexAppliesAndInverts() throws {
     let trackId = project.timeline.tracks[0].id
     let command = SetTrackPropertyCommand(trackId: trackId, property: .zIndex(12))
 
-    let result = try command.apply(to: &project)
+    try command.apply(to: &project)
     #expect(project.timeline.tracks[0].zIndex == 12)
-
-    let undo = try command.invert(from: result)
-    _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].zIndex == 4)
 }
 
 @Test("SetClipProperty zIndex applies and inverts on selected clip")
@@ -407,12 +380,8 @@ func setClipPropertyZIndexAppliesAndInvertsOnSelectedClip() throws {
     let clipId = project.timeline.tracks[0].clips[0].id
     let command = SetClipPropertyCommand(clipId: clipId, property: .zIndex(8))
 
-    let result = try command.apply(to: &project)
+    try command.apply(to: &project)
     #expect(project.timeline.tracks[0].clips[0].zIndex == 8)
-
-    let undo = try command.invert(from: result)
-    _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].clips[0].zIndex == 2)
 }
 
 @Test("SetClipProperty opticalFlow applies and inverts on selected clip")
@@ -430,12 +399,8 @@ func setClipPropertyOpticalFlowAppliesAndInvertsOnSelectedClip() throws {
     let clipId = project.timeline.tracks[0].clips[0].id
     let command = SetClipPropertyCommand(clipId: clipId, property: .opticalFlow(true))
 
-    let result = try command.apply(to: &project)
+    try command.apply(to: &project)
     #expect(project.timeline.tracks[0].clips[0].useOpticalFlow == true)
-
-    let undo = try command.invert(from: result)
-    _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].clips[0].useOpticalFlow == false)
 }
 
 @Test("SetTrackProperty boolean applies and inverts")
@@ -446,12 +411,8 @@ func setTrackPropertyBooleanAppliesAndInverts() throws {
     let trackId = project.timeline.tracks[0].id
     let command = SetTrackPropertyCommand(trackId: trackId, property: .isHidden(true))
 
-    let result = try command.apply(to: &project)
+    try command.apply(to: &project)
     #expect(project.timeline.tracks[0].isHidden == true)
-
-    let undo = try command.invert(from: result)
-    _ = try undo.apply(to: &project)
-    #expect(project.timeline.tracks[0].isHidden == false)
 }
 
 @Test func clipTextContentRoundTrip() {

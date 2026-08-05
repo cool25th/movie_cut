@@ -16,7 +16,7 @@ public struct PasteClipsCommand: EditorCommand {
         self.anchorTime = anchorTime
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard anchorTime.isFinite else {
             throw EditorCommandError.invalidCommand("Paste anchor time must be finite.")
         }
@@ -94,22 +94,9 @@ public struct PasteClipsCommand: EditorCommand {
             tracks[index].zIndex = index
         }
         project.timeline.tracks = tracks
-
-        return CommandResult(
-            affectedClipIds: pastedIds,
-            description: "Pasted \(pastedIds.count) clips",
-            undoValues: ["timelineTracks": .tracks(previousTracks)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .tracks(let tracks)? = result.undoValues["timelineTracks"] else {
-            return NoOpCommand(description: "Missing pre-paste timeline snapshot for inverse")
-        }
-        return RestoreTimelineTracksCommand(tracks: tracks, description: "Removed pasted clips")
-    }
-
-    private static func canPlace(_ clips: [Clip], on track: Track) -> Bool {
+        private static func canPlace(_ clips: [Clip], on track: Track) -> Bool {
         guard !track.isLocked,
               clips.allSatisfy({ isCompatible($0.kind, with: track.kind) }) else {
             return false

@@ -48,7 +48,7 @@ public struct SlipClipCommand: EditorCommand {
         self.previousSourceRange = previousSourceRange
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = if let trackId {
             try project.clipLocation(for: clipId, in: trackId)
         } else {
@@ -64,36 +64,6 @@ public struct SlipClipCommand: EditorCommand {
 
         let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].sourceRange = newSourceRange
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Slipped clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(project.timeline.tracks[location.trackIndex].id),
-                "sourceRange": .timeRange(previousClip.sourceRange)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .timeRange(let sourceRange)? = result.undoValues["sourceRange"]
-        {
-            return SlipClipCommand(
-                clipId: clipId,
-                trackId: trackId,
-                newSourceRange: sourceRange
-            )
-        }
-
-        guard let previousSourceRange else {
-            return NoOpCommand(description: "Missing previous slip source range for inverse")
-        }
-        return SlipClipCommand(
-            clipId: clipId,
-            trackId: trackId,
-            newSourceRange: previousSourceRange
-        )
     }
-}

@@ -14,7 +14,7 @@ public struct RippleDeleteCommand: EditorCommand {
         self.clipId = clipId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
@@ -27,34 +27,10 @@ public struct RippleDeleteCommand: EditorCommand {
 
         project.timeline.tracks[location.trackIndex].clips.remove(at: location.clipIndex)
 
-        var affectedClipIds: Set<UUID> = [deletedClip.id]
         let clipCount = project.timeline.tracks[location.trackIndex].clips.count
         for index in location.clipIndex..<clipCount {
             project.timeline.tracks[location.trackIndex].clips[index].timelineRange.start -= duration
-            affectedClipIds.insert(project.timeline.tracks[location.trackIndex].clips[index].id)
         }
-
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Ripple deleted clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(trackId),
-                "clipIndex": .int(location.clipIndex),
-                "clip": .clip(deletedClip)
-            ]
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .int(let clipIndex)? = result.undoValues["clipIndex"],
-            case .clip(let clip)? = result.undoValues["clip"]
-        {
-            return RestoreRippleDeleteCommand(trackId: trackId, clip: clip, insertionIndex: clipIndex)
-        }
-
-        return NoOpCommand(description: "Missing ripple delete snapshot for inverse")
     }
 }
 
@@ -71,7 +47,7 @@ struct RestoreRippleDeleteCommand: EditorCommand {
         self.insertionIndex = insertionIndex
     }
 
-    func apply(to project: inout Project) throws -> CommandResult {
+    func apply(to project: inout Project) throws {
         let trackIndex = try project.trackIndex(for: trackId)
         try project.ensureTrackIsEditable(at: trackIndex)
         guard insertionIndex >= 0, insertionIndex <= project.timeline.tracks[trackIndex].clips.count else {
@@ -79,20 +55,10 @@ struct RestoreRippleDeleteCommand: EditorCommand {
         }
 
         let duration = clip.timelineRange.duration
-        var affectedClipIds: Set<UUID> = [clip.id]
         for index in insertionIndex..<project.timeline.tracks[trackIndex].clips.count {
             project.timeline.tracks[trackIndex].clips[index].timelineRange.start += duration
-            affectedClipIds.insert(project.timeline.tracks[trackIndex].clips[index].id)
         }
         project.timeline.tracks[trackIndex].clips.insert(clip, at: insertionIndex)
-
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Restored ripple deleted clip \(clip.id)"
-        )
     }
 
-    func invert(from result: CommandResult) throws -> any EditorCommand {
-        RippleDeleteCommand(clipId: clip.id)
     }
-}

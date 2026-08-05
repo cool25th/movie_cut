@@ -15,7 +15,7 @@ public struct AutoCutCommand: EditorCommand {
         self.removableRanges = removableRanges
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let ranges = removableRanges.filter { $0.duration > 0 }
         guard !ranges.isEmpty else {
             throw EditorCommandError.invalidCommand("No removable ranges supplied for auto cut.")
@@ -25,16 +25,6 @@ public struct AutoCutCommand: EditorCommand {
             suggestions: [.silenceRemoval(ranges: ranges)],
             to: &project
         )
-
-        return CommandResult(
-            description: "Auto cut removed \(ranges.count) ranges",
-            undoValues: [:]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        // EditorSession restores a full project snapshot on undo, so a no-op
-        // inverse is sufficient and avoids duplicating timeline reconstruction.
-        NoOpCommand(description: "Auto cut is undone via session snapshot")
     }
-}

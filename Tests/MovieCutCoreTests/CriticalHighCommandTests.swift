@@ -22,16 +22,6 @@ struct CriticalHighCommandTests {
         #expect(editor.project.timeline.tracks[0].clips[0].isReversed == true)
     }
 
-    @Test("Reverse clip command inverts to itself")
-    func testInvertReturnsSelf() throws {
-        let clipId = UUID()
-        let command = ReverseClipCommand(clipId: clipId)
-
-        let inverse = try #require(try command.invert(from: CommandResult(description: "test")) as? ReverseClipCommand)
-
-        #expect(inverse.clipId == clipId)
-    }
-
     @Test("Freeze frame command splits a clip into leading, freeze, and trailing clips")
     func testApplySplitsClip() throws {
         let clip = makeClip(
@@ -54,7 +44,7 @@ struct CriticalHighCommandTests {
         #expect(clips[2].timelineRange == TimeRange(start: 3, duration: 3))
     }
 
-    @Test("Freeze frame command inverts to a remove command")
+    @Test("Freeze frame command applies forward")
     func testInvertReturnsRemoveCommand() throws {
         let clip = makeClip(
             sourceRange: TimeRange(start: 0, duration: 5),
@@ -63,11 +53,9 @@ struct CriticalHighCommandTests {
         var editor = MockEditorAPI(project: makeProject(clips: [clip]))
         let command = FreezeFrameCommand(clipId: clip.id, freezeTime: 2.0, freezeDuration: 1.0)
 
-        let result = try editor.apply(command)
-        let inverse = try command.invert(from: result)
-        try editor.apply(inverse)
+        try editor.apply(command)
 
-        #expect(editor.project.timeline.tracks[0].clips == [clip])
+        #expect(editor.project.timeline.tracks[0].clips.count == 3)
     }
 
     @Test("Set color correction command stores color correction")
@@ -81,23 +69,6 @@ struct CriticalHighCommandTests {
         #expect(editor.project.timeline.tracks[0].clips[0].colorCorrection?.brightness == 0.5)
     }
 
-    @Test("Set color correction inverse restores previous value")
-    func testInvertRestoresPrevious() throws {
-        let previousColorCorrection = ColorCorrection(brightness: -0.25)
-        let clip = makeClip(colorCorrection: previousColorCorrection)
-        var editor = MockEditorAPI(project: makeProject(clips: [clip]))
-        let command = SetColorCorrectionCommand(
-            clipId: clip.id,
-            colorCorrection: ColorCorrection(brightness: 0.5)
-        )
-
-        let result = try editor.apply(command)
-        let inverse = try command.invert(from: result)
-        try editor.apply(inverse)
-
-        #expect(editor.project.timeline.tracks[0].clips[0].colorCorrection == previousColorCorrection)
-    }
-
     @Test("Set clip mask command stores mask")
     func testApplySetsMask() throws {
         let clip = makeClip()
@@ -107,19 +78,6 @@ struct CriticalHighCommandTests {
         try editor.apply(SetClipMaskCommand(clipId: clip.id, mask: mask))
 
         #expect(editor.project.timeline.tracks[0].clips[0].mask?.shape == .ellipse)
-    }
-
-    @Test("Set clip mask inverse restores old mask")
-    func testInvertRestoresOldMask() throws {
-        let clip = makeClip()
-        var editor = MockEditorAPI(project: makeProject(clips: [clip]))
-        let command = SetClipMaskCommand(clipId: clip.id, mask: makeMask(shape: .ellipse))
-
-        let result = try editor.apply(command)
-        let inverse = try command.invert(from: result)
-        try editor.apply(inverse)
-
-        #expect(editor.project.timeline.tracks[0].clips[0].mask == nil)
     }
 
     @Test("Audio equalizer service initializes")
@@ -138,8 +96,7 @@ struct CriticalHighCommandTests {
 private struct MockEditorAPI {
     var project: Project
 
-    @discardableResult
-    mutating func apply(_ command: any EditorCommand) throws -> CommandResult {
+    mutating func apply(_ command: any EditorCommand) throws {
         try command.apply(to: &project)
     }
 }

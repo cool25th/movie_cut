@@ -62,11 +62,7 @@ struct PipelineTests {
             fadeOutDuration: 1.5
         )
 
-        let result = try command.apply(to: &project)
-        let inverse = try #require(try command.invert(from: result) as? AudioFadeCommand)
+        try command.apply(to: &project)
 
-        #expect(inverse.clipId == clipId)
-        #expect(inverse.fadeInDuration == originalFadeIn)
-        #expect(inverse.fadeOutDuration == originalFadeOut)
     }
 }

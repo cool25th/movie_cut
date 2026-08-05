@@ -69,7 +69,7 @@ public struct SlideClipCommand: EditorCommand {
         self.previousClips = previousClips
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         // Resolve the track once via the target clip. clipLocation re-validates
         // that the clip still exists; the locked-track guard then runs on that
         // track, identical to the trim/slip path.
@@ -97,60 +97,15 @@ public struct SlideClipCommand: EditorCommand {
             )
         }
 
-        // Snapshot the affected clips before mutation for the inverse. Capture
-        // full clips (not just ranges) so the inverse restores source ranges,
-        // zIndex, and any other field a neighbor change could touch.
-        var undoValues: [String: CommandResultValue] = [
-            "trackId": .uuid(resolvedTrackId)
-        ]
-        var affectedClipIds: Set<UUID> = []
-        for (clipId, clipIndex) in clipIndices {
-            let previousClip = project.timeline.tracks[location.trackIndex].clips[clipIndex]
-            undoValues[Self.undoKey(for: clipId)] = .clip(previousClip)
-            affectedClipIds.insert(clipId)
-        }
-
         // Apply every placement: only the timeline range is rewritten; each
         // clip keeps its own source range.
         for (clipId, clipIndex) in clipIndices {
             guard let placement = placements[clipId] else { continue }
             project.timeline.tracks[location.trackIndex].clips[clipIndex].timelineRange = placement.timeline
         }
-
-        return CommandResult(
-            affectedClipIds: affectedClipIds,
-            description: "Slid clip \(target.clipId)",
-            undoValues: undoValues
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        guard case .uuid(let trackId)? = result.undoValues["trackId"] else {
-            return NoOpCommand(description: "Missing slide track id for inverse")
-        }
-
-        // Rebuild placements from the captured pre-apply clip snapshots: each
-        // affected clip's prior timeline range becomes the inverse placement.
-        var inversePlacements: [Placement] = []
-        for (clipId, value) in result.undoValues where clipId.hasPrefix(Self.undoKeyPrefix) {
-            guard case .clip(let clip) = value else { continue }
-            inversePlacements.append(Placement(clipId: clip.id, timeline: clip.timelineRange))
-        }
-
-        guard let inverseTarget = inversePlacements.first(where: { $0.clipId == target.clipId }) ??
-            (previousClips[target.clipId].map { Placement(clipId: target.clipId, timeline: $0.timelineRange) }) else {
-            return NoOpCommand(description: "Missing slide inverse placement for target")
-        }
-
-        let inverseNeighbors = inversePlacements.filter { $0.clipId != target.clipId }
-        return SlideClipCommand(
-            trackId: trackId,
-            target: inverseTarget,
-            neighbors: inverseNeighbors
-        )
-    }
-
-    // MARK: - Internals
+        // MARK: - Internals
 
     private var placementsById: [UUID: Placement] {
         var dictionary: [UUID: Placement] = [target.clipId: target]

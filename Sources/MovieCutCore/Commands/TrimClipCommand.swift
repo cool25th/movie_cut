@@ -74,7 +74,7 @@ public struct TrimClipCommand: EditorCommand {
         )
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = if let trackId {
             try project.clipLocation(for: clipId, in: trackId)
         } else {
@@ -89,40 +89,6 @@ public struct TrimClipCommand: EditorCommand {
         let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].sourceRange = newSourceRange
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].timelineRange = newTimelineRange
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Trimmed clip \(clipId)",
-            undoValues: [
-                "trackId": .uuid(project.timeline.tracks[location.trackIndex].id),
-                "sourceRange": .timeRange(previousClip.sourceRange),
-                "timelineRange": .timeRange(previousClip.timelineRange)
-            ]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if
-            case .uuid(let trackId)? = result.undoValues["trackId"],
-            case .timeRange(let sourceRange)? = result.undoValues["sourceRange"],
-            case .timeRange(let timelineRange)? = result.undoValues["timelineRange"]
-        {
-            return TrimClipCommand(
-                clipId: clipId,
-                trackId: trackId,
-                newSourceRange: sourceRange,
-                newTimelineRange: timelineRange
-            )
-        }
-
-        guard let previousSourceRange, let previousTimelineRange else {
-            return NoOpCommand(description: "Missing previous trim ranges for inverse")
-        }
-        return TrimClipCommand(
-            clipId: clipId,
-            trackId: trackId,
-            newSourceRange: previousSourceRange,
-            newTimelineRange: previousTimelineRange
-        )
     }
-}

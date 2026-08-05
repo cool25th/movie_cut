@@ -11,7 +11,7 @@ public struct AddMarkersCommand: EditorCommand, Sendable, Codable {
         self.markers = markers
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard !markers.isEmpty else {
             throw EditorCommandError.invalidCommand("No markers to add.")
         }
@@ -25,20 +25,9 @@ public struct AddMarkersCommand: EditorCommand, Sendable, Codable {
         project.markers.append(contentsOf: newMarkers)
         let timelineIds = Set(project.timeline.markers.map(\.id))
         project.timeline.markers.append(contentsOf: newMarkers.filter { !timelineIds.contains($0.id) })
-
-        return CommandResult(
-            description: "Added \(newMarkers.count) markers",
-            undoValues: ["markers": .markers(newMarkers)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .markers(let added)? = result.undoValues["markers"] {
-            return RemoveMarkersCommand(markerIds: added.map(\.id))
-        }
-        return RemoveMarkersCommand(markerIds: markers.map(\.id))
     }
-}
 
 /// Removes markers in one dispatch, either by explicit ids or by kind
 /// (e.g. clearing every generated beat marker).
@@ -61,7 +50,7 @@ public struct RemoveMarkersCommand: EditorCommand, Sendable, Codable {
         self.kind = kind
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let removed: [Marker]
         if let markerIds {
             let ids = Set(markerIds)
@@ -79,17 +68,6 @@ public struct RemoveMarkersCommand: EditorCommand, Sendable, Codable {
         let removedIds = Set(removed.map(\.id))
         project.markers.removeAll { removedIds.contains($0.id) }
         project.timeline.markers.removeAll { removedIds.contains($0.id) }
-
-        return CommandResult(
-            description: "Removed \(removed.count) markers",
-            undoValues: ["markers": .markers(removed)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .markers(let removed)? = result.undoValues["markers"] {
-            return AddMarkersCommand(markers: removed)
-        }
-        return NoOpCommand(description: "Missing removed markers for inverse")
     }
-}

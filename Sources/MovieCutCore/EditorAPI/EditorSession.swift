@@ -16,7 +16,7 @@ public actor EditorSession {
     /// Applies a command and records an undo snapshot.
     public func dispatch(_ command: any EditorCommand) async throws {
         let previousProject = project
-        _ = try command.apply(to: &project)
+        try command.apply(to: &project)
         project.updatedAt = Date()
         undoStack.append(previousProject)
         redoStack.removeAll()

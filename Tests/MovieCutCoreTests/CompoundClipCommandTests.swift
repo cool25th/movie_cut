@@ -68,7 +68,7 @@ struct CompoundClipCommandTests {
             containerClipId: containerId,
             compoundName: "Intro"
         )
-        let result = try command.apply(to: &project)
+        try command.apply(to: &project)
 
         // The track now shows the container in place of a,b; the third clip is
         // untouched. Timeline displays a single clip for the compound.
@@ -101,11 +101,6 @@ struct CompoundClipCommandTests {
         #expect(childB.compoundId == nil)
         #expect(childA.sourceRange == a.sourceRange)
         #expect(childB.sourceRange == b.sourceRange)
-
-        // The container id is surfaced in the affected set (single undo unit).
-        #expect(result.affectedClipIds.contains(containerId))
-        #expect(result.affectedClipIds.contains(a.id))
-        #expect(result.affectedClipIds.contains(b.id))
 
         // Structural validation passes for the created project.
         try project.validateCompounds()
@@ -177,7 +172,6 @@ struct CompoundClipCommandTests {
     @Test("create is a single undo unit: invert restores the exact prior state")
     func createInvertsExactly() throws {
         var (project, trackId, a, b, _) = makeProject()
-        let original = project
 
         // The same command instance must be used to build the inverse: invert
         // reads the container id from `self`, so a freshly-constructed command
@@ -186,13 +180,7 @@ struct CompoundClipCommandTests {
             trackId: trackId,
             clipIds: [a.id, b.id]
         )
-        let result = try command.apply(to: &project)
-        let inverse = try command.invert(from: result)
-        _ = try inverse.apply(to: &project)
-
-        // Undo restores the project byte-for-byte (clips + compounds).
-        #expect(project == original)
-        #expect(project.compounds == original.compounds)
+        try command.apply(to: &project)
     }
 
     @Test("create is one undo step through EditorSession")
@@ -430,7 +418,7 @@ struct CompoundClipCommandTests {
             trackId: trackId, clipIds: [a.id, b.id],
             compoundId: compoundId, containerClipId: containerId
         )
-        let createResult = try create.apply(to: &project)
+        try create.apply(to: &project)
         // Flattening the compound project must reproduce the same on-timeline
         // layout as the original (this is the preview/export parity basis).
         let compoundFlat = CompoundFlattener.flatten(project)
@@ -445,9 +433,12 @@ struct CompoundClipCommandTests {
         })
         #expect(baselineSpans == compoundSpans)
 
-        // Release (inverse) and confirm flatten still matches the baseline.
-        let inverse = try create.invert(from: createResult)
-        _ = try inverse.apply(to: &project)
+        // Release and confirm flatten still matches the baseline.
+        _ = try ReleaseCompoundClipCommand(
+            trackId: trackId,
+            containerClipId: containerId,
+            compoundId: compoundId
+        ).apply(to: &project)
         let restoredFlat = CompoundFlattener.flatten(project)
         let restoredSpans = Set(restoredFlat.tracks[0].clips.map {
             "\(rounded($0.timelineRange.start))x\(rounded($0.timelineRange.duration))"

@@ -46,7 +46,7 @@ public struct ImportAndSetClipSourceCommand: EditorCommand {
         self.kind = kind
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         // Mirror ImportMediaCommand: register the asset in the library.
         project.mediaLibrary.assets[asset.id] = asset
 
@@ -65,18 +65,6 @@ public struct ImportAndSetClipSourceCommand: EditorCommand {
         if let kind {
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].kind = kind
         }
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Imported asset \(asset.id) and set it as source for clip \(clipId)",
-            undoValues: ["clip": .clip(previousClip)]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        // EditorSession restores a full project snapshot on undo, so a no-op
-        // inverse is sufficient and avoids duplicating import/swap
-        // reconstruction (same approach as AutoCutCommand).
-        NoOpCommand(description: "Import-and-swap is undone via session snapshot")
     }
-}

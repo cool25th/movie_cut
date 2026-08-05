@@ -23,7 +23,7 @@ public struct GroupClipsCommand: EditorCommand {
         self.groupId = groupId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         guard !clipIds.isEmpty else {
             throw EditorCommandError.invalidCommand("Group command requires at least one clip.")
         }
@@ -31,53 +31,13 @@ public struct GroupClipsCommand: EditorCommand {
             throw EditorCommandError.invalidCommand("Grouping requires at least two clips.")
         }
 
-        var previousGroups: [String: CommandResultValue] = [:]
         for clipId in clipIds {
             let location = try project.clipLocation(for: clipId)
             try project.ensureTrackIsEditable(at: location.trackIndex)
 
-            let previousGroupId = project.timeline.tracks[location.trackIndex]
-                .clips[location.clipIndex].groupId
-            if let previousGroupId {
-                previousGroups[Self.previousGroupKey(for: clipId)] = .uuid(previousGroupId)
-            }
             project.timeline.tracks[location.trackIndex]
                 .clips[location.clipIndex].groupId = groupId
         }
-
-        let action = groupId == nil ? "Ungrouped" : "Grouped"
-        return CommandResult(
-            affectedClipIds: Set(clipIds),
-            description: "\(action) \(clipIds.count) clips",
-            undoValues: previousGroups
-        )
-    }
-
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        // Group membership before this command may differ per clip; restore in
-        // per-previous-group batches so undo is exact.
-        var clipsByPreviousGroup: [UUID?: [UUID]] = [:]
-        for clipId in clipIds {
-            let previous: UUID?
-            if case .uuid(let value)? = result.undoValues[Self.previousGroupKey(for: clipId)] {
-                previous = value
-            } else {
-                previous = nil
-            }
-            clipsByPreviousGroup[previous, default: []].append(clipId)
-        }
-
-        let restoreCommands = clipsByPreviousGroup.map { previousGroup, ids in
-            GroupClipsCommand(clipIds: ids, groupId: previousGroup)
-        }
-        if restoreCommands.count == 1, let only = restoreCommands.first {
-            return only
-        }
-        return RestoreClipGroupsCommand(commands: restoreCommands)
-    }
-
-    static func previousGroupKey(for clipId: UUID) -> String {
-        "previousGroup.\(clipId.uuidString)"
     }
 }
 
@@ -95,7 +55,7 @@ public struct RestoreClipGroupsCommand: EditorCommand {
         self.commands = commands
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         var affected = Set<UUID>()
         for command in commands {
             // Restoring may legitimately re-group a single clip, so apply
@@ -108,15 +68,6 @@ public struct RestoreClipGroupsCommand: EditorCommand {
                 affected.insert(clipId)
             }
         }
-
-        return CommandResult(
-            affectedClipIds: affected,
-            description: "Restored clip group membership",
-            undoValues: [:]
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        NoOpCommand(description: "Clip group restore is not directly invertible")
     }
-}

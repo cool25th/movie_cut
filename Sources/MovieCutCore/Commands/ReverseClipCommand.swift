@@ -10,18 +10,10 @@ public struct ReverseClipCommand: EditorCommand, Sendable, Codable {
         self.clipId = clipId
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isReversed.toggle()
-
-        return CommandResult(
-            affectedClipIds: [clipId],
-            description: "Toggled reverse playback for clip \(clipId)"
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        ReverseClipCommand(clipId: clipId)
     }
-}

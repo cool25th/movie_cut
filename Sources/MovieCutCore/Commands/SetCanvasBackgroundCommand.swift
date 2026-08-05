@@ -22,31 +22,10 @@ public struct SetCanvasBackgroundCommand: EditorCommand {
         self.previousBackground = previousBackground
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         let previous = project.canvasBackground
         project.canvasBackground = background
 
-        var undoValues: [String: CommandResultValue] = [:]
-        if let previous {
-            undoValues["previousCanvasBackground"] = .canvasBackground(previous)
-        }
-
-        return CommandResult(
-            affectedClipIds: [],
-            description: "Set canvas background",
-            undoValues: undoValues
-        )
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .canvasBackground(let previous)? = result.undoValues["previousCanvasBackground"] {
-            return SetCanvasBackgroundCommand(background: previous)
-        }
-
-        if let previousBackground {
-            return SetCanvasBackgroundCommand(background: previousBackground)
-        }
-
-        return SetCanvasBackgroundCommand(background: nil)
     }
-}

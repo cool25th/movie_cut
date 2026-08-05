@@ -27,7 +27,7 @@ public struct SetVolumeCommand: EditorCommand {
         self.previousVolume = previousVolume
     }
 
-    public func apply(to project: inout Project) throws -> CommandResult {
+    public func apply(to project: inout Project) throws {
         try SetClipPropertyCommand(
             id: id,
             clipId: clipId,
@@ -37,14 +37,4 @@ public struct SetVolumeCommand: EditorCommand {
         .apply(to: &project)
     }
 
-    public func invert(from result: CommandResult) throws -> any EditorCommand {
-        if case .clipProperty(.volume(let volume))? = result.undoValues["property"] {
-            return SetVolumeCommand(clipId: clipId, volume: volume)
-        }
-
-        guard let previousVolume else {
-            return NoOpCommand(description: "Missing previous clip volume for inverse")
-        }
-        return SetVolumeCommand(clipId: clipId, volume: previousVolume)
     }
-}

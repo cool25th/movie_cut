@@ -9,6 +9,26 @@ public enum AnimatableProperty: String, Codable, Sendable, Equatable, Hashable, 
     case rotation
     case opacity
     case volume
+
+    /// User-visible display name, shared by the Mac and iOS keyframe editors.
+    public var displayName: String {
+        switch self {
+        case .positionX:
+            return "Position X"
+        case .positionY:
+            return "Position Y"
+        case .scaleX:
+            return "Scale X"
+        case .scaleY:
+            return "Scale Y"
+        case .rotation:
+            return "Rotation"
+        case .opacity:
+            return "Opacity"
+        case .volume:
+            return "Volume"
+        }
+    }
 }
 
 /// Interpolation modes used between adjacent keyframes.
@@ -18,6 +38,22 @@ public enum InterpolationMode: String, Codable, Sendable, Equatable, Hashable, C
     case easeOut
     case easeInOut
     case hold
+
+    /// User-visible display name, shared by the Mac and iOS keyframe editors.
+    public var displayName: String {
+        switch self {
+        case .linear:
+            return "Linear"
+        case .easeIn:
+            return "Ease In"
+        case .easeOut:
+            return "Ease Out"
+        case .easeInOut:
+            return "Ease In Out"
+        case .hold:
+            return "Hold"
+        }
+    }
 }
 
 /// A value for an animatable clip property at a source-relative time.
@@ -82,5 +118,15 @@ public struct Keyframe: Codable, Sendable, Equatable, Identifiable {
         }
 
         return from + ((to - from) * easedProgress)
+    }
+
+    /// Sorts keyframes by property (rawValue) then time, matching the Mac and iOS editors.
+    public static func sortedByPropertyThenTime(_ keyframes: [Keyframe]) -> [Keyframe] {
+        keyframes.sorted {
+            if $0.property.rawValue == $1.property.rawValue {
+                return $0.time < $1.time
+            }
+            return $0.property.rawValue < $1.property.rawValue
+        }
     }
 }

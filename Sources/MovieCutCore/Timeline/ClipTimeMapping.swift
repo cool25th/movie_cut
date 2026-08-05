@@ -280,4 +280,38 @@ public extension Clip {
             kind: kind
         )
     }
+
+    /// The source-relative time at the current timeline playhead, accounting for
+    /// speed ramps and playback rate. Shared by the Mac and iOS keyframe editors.
+    func keyframeSourceTime(at playheadTime: TimeInterval) -> TimeInterval {
+        if let mapping = makeTimeMapping() {
+            let absolute = mapping.sourceTime(forTimelineTime: playheadTime)
+            let local = absolute - sourceRange.start
+            return min(max(0, local), sourceRange.duration)
+        }
+        let timelineOffset = max(0, playheadTime - timelineRange.start)
+        let sourceOffset = timelineOffset * max(playbackRate, 0.25)
+        return min(max(0, sourceOffset), sourceRange.duration)
+    }
+
+    /// The current value of an animatable property from this clip's transform/state.
+    /// Shared by the Mac and iOS keyframe editors.
+    func currentValue(for property: AnimatableProperty) -> Double {
+        switch property {
+        case .positionX:
+            return Double(transform.position.x)
+        case .positionY:
+            return Double(transform.position.y)
+        case .scaleX:
+            return Double(transform.scale.width)
+        case .scaleY:
+            return Double(transform.scale.height)
+        case .rotation:
+            return transform.rotation
+        case .opacity:
+            return opacity
+        case .volume:
+            return volume
+        }
+    }
 }

@@ -192,12 +192,7 @@ struct IOSKeyframeEditorView: View {
     }
 
     private var sortedKeyframes: [Keyframe] {
-        clip.keyframes.sorted {
-            if $0.property.rawValue == $1.property.rawValue {
-                return $0.time < $1.time
-            }
-            return $0.property.rawValue < $1.property.rawValue
-        }
+        Keyframe.sortedByPropertyThenTime(clip.keyframes)
     }
 
     private var selectedKeyframe: Keyframe? {
@@ -210,16 +205,7 @@ struct IOSKeyframeEditorView: View {
     }
 
     private var currentSourceTime: TimeInterval {
-        // Route through the canonical ClipTimeMapping so the keyframe playhead
-        // reports the correct source offset at any rate or speed ramp (Step 7).
-        if let mapping = clip.makeTimeMapping() {
-            let absolute = mapping.sourceTime(forTimelineTime: playheadTime)
-            let local = absolute - clip.sourceRange.start
-            return min(max(0, local), sourceDuration)
-        }
-        let timelineOffset = max(0, playheadTime - clip.timelineRange.start)
-        let sourceOffset = timelineOffset * max(clip.playbackRate, 0.25)
-        return min(max(0, sourceOffset), sourceDuration)
+        min(clip.keyframeSourceTime(at: playheadTime), sourceDuration)
     }
 
     private func addKeyframe() {
@@ -272,22 +258,7 @@ struct IOSKeyframeEditorView: View {
     }
 
     private func currentValue(for property: AnimatableProperty) -> Double {
-        switch property {
-        case .positionX:
-            return Double(clip.transform.position.x)
-        case .positionY:
-            return Double(clip.transform.position.y)
-        case .scaleX:
-            return Double(clip.transform.scale.width)
-        case .scaleY:
-            return Double(clip.transform.scale.height)
-        case .rotation:
-            return clip.transform.rotation
-        case .opacity:
-            return clip.opacity
-        case .volume:
-            return clip.volume
-        }
+        clip.currentValue(for: property)
     }
 
     private func timeBinding(for id: UUID) -> Binding<Double> {
@@ -552,24 +523,7 @@ private struct IOSKeyframeListView: View {
 }
 
 private extension AnimatableProperty {
-    var iosKeyframeDisplayName: String {
-        switch self {
-        case .positionX:
-            return "Position X"
-        case .positionY:
-            return "Position Y"
-        case .scaleX:
-            return "Scale X"
-        case .scaleY:
-            return "Scale Y"
-        case .rotation:
-            return "Rotation"
-        case .opacity:
-            return "Opacity"
-        case .volume:
-            return "Volume"
-        }
-    }
+    var iosKeyframeDisplayName: String { displayName }
 
     var iosKeyframeColor: Color {
         switch self {
@@ -588,19 +542,6 @@ private extension AnimatableProperty {
 }
 
 private extension InterpolationMode {
-    var iosKeyframeDisplayName: String {
-        switch self {
-        case .linear:
-            return "Linear"
-        case .easeIn:
-            return "Ease In"
-        case .easeOut:
-            return "Ease Out"
-        case .easeInOut:
-            return "Ease In Out"
-        case .hold:
-            return "Hold"
-        }
-    }
+    var iosKeyframeDisplayName: String { displayName }
 }
 #endif

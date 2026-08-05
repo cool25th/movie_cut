@@ -80,25 +80,11 @@ struct KeyframeEditorView: View {
     }
 
     private var sortedKeyframes: [Keyframe] {
-        clip.keyframes.sorted {
-            if $0.property.rawValue == $1.property.rawValue {
-                return $0.time < $1.time
-            }
-            return $0.property.rawValue < $1.property.rawValue
-        }
+        Keyframe.sortedByPropertyThenTime(clip.keyframes)
     }
 
     private var currentSourceTime: TimeInterval {
-        // Route through the canonical mapping so the keyframe playhead reports
-        // the correct source offset at any rate or speed ramp (Step 3).
-        if let mapping = clip.makeTimeMapping() {
-            let absolute = mapping.sourceTime(forTimelineTime: playheadTime)
-            let local = absolute - clip.sourceRange.start
-            return min(max(0, local), clip.sourceRange.duration)
-        }
-        let timelineOffset = max(0, playheadTime - clip.timelineRange.start)
-        let sourceOffset = timelineOffset * max(clip.playbackRate, 0.25)
-        return min(max(0, sourceOffset), clip.sourceRange.duration)
+        clip.keyframeSourceTime(at: playheadTime)
     }
 
     private func addKeyframe() {
@@ -141,21 +127,6 @@ struct KeyframeEditorView: View {
     }
 
     private func currentValue(for property: AnimatableProperty) -> Double {
-        switch property {
-        case .positionX:
-            return Double(clip.transform.position.x)
-        case .positionY:
-            return Double(clip.transform.position.y)
-        case .scaleX:
-            return Double(clip.transform.scale.width)
-        case .scaleY:
-            return Double(clip.transform.scale.height)
-        case .rotation:
-            return clip.transform.rotation
-        case .opacity:
-            return clip.opacity
-        case .volume:
-            return clip.volume
-        }
+        clip.currentValue(for: property)
     }
 }

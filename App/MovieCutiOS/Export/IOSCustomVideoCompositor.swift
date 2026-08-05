@@ -338,7 +338,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 }
 
                 if let chromaKeyColor {
-                    image = self.applyChromaKey(to: image, keyColor: chromaKeyColor, threshold: chromaKeyThreshold)
+                    image = ChromaKeyPixelProcessor.apply(
+                        keyColor: chromaKeyColor,
+                        threshold: chromaKeyThreshold,
+                        to: image
+                    )
                 }
 
                 if let mask {
@@ -931,53 +935,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
     }
 
-    private func applyChromaKey(to image: CIImage, keyColor: SIMD3<Float>, threshold: Float) -> CIImage {
-        let cubeDimension = 32
-        let clampedThreshold = min(max(threshold, 0), 1)
-        let softness = max(clampedThreshold * 0.5, 0.001)
-        let normalizedKeyColor = SIMD3<Float>(
-            min(max(keyColor.x, 0), 1),
-            min(max(keyColor.y, 0), 1),
-            min(max(keyColor.z, 0), 1)
-        )
-
-        var cubeData = [Float](repeating: 0, count: cubeDimension * cubeDimension * cubeDimension * 4)
-        var offset = 0
-
-        for blueIndex in 0..<cubeDimension {
-            for greenIndex in 0..<cubeDimension {
-                for redIndex in 0..<cubeDimension {
-                    let red = Float(redIndex) / Float(cubeDimension - 1)
-                    let green = Float(greenIndex) / Float(cubeDimension - 1)
-                    let blue = Float(blueIndex) / Float(cubeDimension - 1)
-                    let redDistance = red - normalizedKeyColor.x
-                    let greenDistance = green - normalizedKeyColor.y
-                    let blueDistance = blue - normalizedKeyColor.z
-                    let distance = sqrt(
-                        redDistance * redDistance +
-                        greenDistance * greenDistance +
-                        blueDistance * blueDistance
-                    )
-                    let alpha = smoothstep(edge0: clampedThreshold, edge1: clampedThreshold + softness, value: distance)
-
-                    cubeData[offset] = red
-                    cubeData[offset + 1] = green
-                    cubeData[offset + 2] = blue
-                    cubeData[offset + 3] = alpha
-                    offset += 4
-                }
-            }
-        }
-
-        let cubeDataBuffer = cubeData.withUnsafeBufferPointer { Data(buffer: $0) }
-        let chromaFilter = CIFilter(name: "CIColorCube")
-        chromaFilter?.setValue(cubeDimension, forKey: "inputCubeDimension")
-        chromaFilter?.setValue(cubeDataBuffer, forKey: "inputCubeData")
-        chromaFilter?.setValue(image.applyingFilter("CIUnpremultiplyAlpha"), forKey: kCIInputImageKey)
-
-        return chromaFilter?.outputImage?.applyingFilter("CIPremultiplyAlpha") ?? image
-    }
-
     private func apply(
         animationState: CustomCompositionAnimationState,
         to image: CIImage,
@@ -1037,15 +994,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             && abs(transform.scale.width - 1) <= 1.0e-9
             && abs(transform.scale.height - 1) <= 1.0e-9
             && abs(transform.rotation) <= 1.0e-9
-    }
-
-    private func smoothstep(edge0: Float, edge1: Float, value: Float) -> Float {
-        guard edge1 > edge0 else {
-            return value < edge0 ? 0 : 1
-        }
-
-        let x = min(max((value - edge0) / (edge1 - edge0), 0), 1)
-        return x * x * (3 - 2 * x)
     }
 }
 

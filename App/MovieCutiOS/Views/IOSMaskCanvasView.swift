@@ -555,62 +555,9 @@ private struct IOSMaskMetrics {
     }
 }
 
-private enum MaskCorner: CaseIterable {
-    case topLeft
-    case topRight
-    case bottomRight
-    case bottomLeft
-
-    var xSign: CGFloat {
-        switch self {
-        case .topLeft, .bottomLeft:
-            return -1
-        case .topRight, .bottomRight:
-            return 1
-        }
-    }
-
-    var ySign: CGFloat {
-        switch self {
-        case .topLeft, .topRight:
-            return 1
-        case .bottomRight, .bottomLeft:
-            return -1
-        }
-    }
-
-    var accessibilityLabel: String {
-        switch self {
-        case .topLeft:
-            return "Top left resize handle"
-        case .topRight:
-            return "Top right resize handle"
-        case .bottomRight:
-            return "Bottom right resize handle"
-        case .bottomLeft:
-            return "Bottom left resize handle"
-        }
-    }
-}
+// MaskCorner and MaskShape.systemImage live in MovieCutCore (Models/Mask.swift).
 
 private extension MaskShape {
-    var systemImage: String {
-        switch self {
-        case .rectangle:
-            return "rectangle"
-        case .ellipse:
-            return "circle"
-        case .triangle:
-            return "triangle"
-        case .diamond:
-            return "diamond"
-        case .linear:
-            return "line.diagonal"
-        case .brush:
-            return "paintbrush"
-        }
-    }
-
     var accessibilityLabel: String {
         switch self {
         case .rectangle:

@@ -319,9 +319,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 let clipEffects = effect?.effects ?? []
                 let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
 
-                // Apply CIFilter-based effects (blur, grayscale, sepia, temperature, exposure, style transfer)
+                // Apply CIFilter-based effects via the shared core processor (matches Mac).
                 if !clipEffects.isEmpty {
-                    image = self.applyEffects(clipEffects, to: image)
+                    image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
                 }
 
                 // Apply background removal
@@ -389,54 +389,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     
     func cancelAllPendingVideoCompositionRequests() {}
 
-    // MARK: - Effects Rendering
-
-    private func applyEffects(_ effects: [Effect], to image: CIImage) -> CIImage {
-        var result = image
-        for effect in effects {
-            switch effect.type {
-            case .blur:
-                let radius = effect.parameters["radius"] ?? 5.0
-                result = result.applyingFilter(
-                    "CIGaussianBlur",
-                    parameters: [kCIInputRadiusKey: radius]
-                )
-            case .grayscale:
-                result = result.applyingFilter("CIPhotoEffectMono", parameters: [:])
-            case .sepia:
-                result = result.applyingFilter("CIPhotoEffectSepia", parameters: [:])
-            case .temperature:
-                let neutral = CGPoint(
-                    x: effect.parameters["neutralX"] ?? 6500,
-                    y: effect.parameters["neutralY"] ?? 6500
-                )
-                let target = CGPoint(
-                    x: effect.parameters["targetX"] ?? 6500,
-                    y: effect.parameters["targetY"] ?? 6500
-                )
-                result = result.applyingFilter(
-                    "CITemperatureAndTint",
-                    parameters: [
-                        "inputNeutral": CIVector(cgPoint: neutral),
-                        "inputTargetNeutral": CIVector(cgPoint: target)
-                    ]
-                )
-            case .exposure:
-                let ev = effect.parameters["ev"] ?? effect.parameters["amount"] ?? 0.5
-                result = result.applyingFilter(
-                    "CIExposureAdjust",
-                    parameters: [kCIInputEVKey: ev]
-                )
-            case .styleTransfer:
-                result = applyStyleTransfer(effect, to: result)
-            case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT:
-                result = VisualEffectPixelProcessor.apply([effect], to: result)
-            default:
-                break
-            }
-        }
-        return result
-    }
+    // MARK: - Text & Sticker Rendering
 
     private func renderTextOverlay(
         instruction: CustomCompositionInstruction,
@@ -653,144 +606,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     private func isZeroPoint(_ point: CGPoint) -> Bool {
         abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
-    }
-
-    private func applyStyleTransfer(_ effect: Effect, to image: CIImage) -> CIImage {
-        let intensity = min(max(effect.parameters["intensity"] ?? 0.75, 0), 1)
-        guard intensity > 0 else { return image }
-
-        let styleIndex = Int((effect.parameters["styleIndex"] ?? 1).rounded())
-        guard let gradientImage = gradientMapImage(for: styleIndex) else {
-            return image
-        }
-
-        let colorMapFilter = CIFilter(name: "CIColorMap")
-        colorMapFilter?.setValue(image, forKey: kCIInputImageKey)
-        colorMapFilter?.setValue(gradientImage, forKey: "inputGradientImage")
-        guard let mappedImage = colorMapFilter?.outputImage?.cropped(to: image.extent) else {
-            return image
-        }
-
-        let blendFilterName = styleIndex == 2 ? "CIMultiplyBlendMode" : "CISoftLightBlendMode"
-        let blendFilter = CIFilter(name: blendFilterName)
-        blendFilter?.setValue(mappedImage, forKey: kCIInputImageKey)
-        blendFilter?.setValue(image, forKey: kCIInputBackgroundImageKey)
-        let blendedImage = blendFilter?.outputImage?.cropped(to: image.extent) ?? mappedImage
-
-        let dissolveFilter = CIFilter(name: "CIDissolveTransition")
-        dissolveFilter?.setValue(image, forKey: kCIInputImageKey)
-        dissolveFilter?.setValue(blendedImage, forKey: kCIInputTargetImageKey)
-        dissolveFilter?.setValue(intensity, forKey: kCIInputTimeKey)
-
-        return dissolveFilter?.outputImage?.cropped(to: image.extent) ?? blendedImage
-    }
-
-    private func gradientMapImage(for styleIndex: Int) -> CIImage? {
-        let width = 256
-        let height = 1
-        let stops = gradientStops(for: styleIndex)
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-
-        for index in 0..<width {
-            let t = CGFloat(index) / CGFloat(width - 1)
-            let color = interpolatedColor(at: t, stops: stops)
-            let offset = index * 4
-            pixels[offset] = UInt8(min(max(color.red * 255, 0), 255).rounded())
-            pixels[offset + 1] = UInt8(min(max(color.green * 255, 0), 255).rounded())
-            pixels[offset + 2] = UInt8(min(max(color.blue * 255, 0), 255).rounded())
-            pixels[offset + 3] = 255
-        }
-
-        let data = Data(pixels)
-        guard let provider = CGDataProvider(data: data as CFData) else {
-            return nil
-        }
-
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        guard let cgImage = CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: width * 4,
-            space: colorSpace,
-            bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: true,
-            intent: .defaultIntent
-        ) else {
-            return nil
-        }
-
-        return CIImage(cgImage: cgImage)
-    }
-
-    private func gradientStops(
-        for styleIndex: Int
-    ) -> [(position: CGFloat, red: CGFloat, green: CGFloat, blue: CGFloat)] {
-        switch styleIndex {
-        case 2:
-            return [
-                (0, 0.02, 0.02, 0.02),
-                (0.5, 0.45, 0.45, 0.45),
-                (1, 0.96, 0.96, 0.92)
-            ]
-        case 3:
-            return [
-                (0, 0.12, 0.07, 0.03),
-                (0.45, 0.68, 0.43, 0.23),
-                (1, 1.0, 0.87, 0.58)
-            ]
-        case 4:
-            return [
-                (0, 0.03, 0.0, 0.12),
-                (0.45, 0.0, 0.72, 0.95),
-                (1, 1.0, 0.08, 0.58)
-            ]
-        case 5:
-            return [
-                (0, 0.16, 0.22, 0.30),
-                (0.5, 0.53, 0.72, 0.78),
-                (1, 0.96, 0.92, 0.82)
-            ]
-        default:
-            return [
-                (0, 0.04, 0.04, 0.05),
-                (0.5, 0.88, 0.22, 0.12),
-                (1, 1.0, 0.92, 0.18)
-            ]
-        }
-    }
-
-    private func interpolatedColor(
-        at value: CGFloat,
-        stops: [(position: CGFloat, red: CGFloat, green: CGFloat, blue: CGFloat)]
-    ) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
-        guard let first = stops.first else {
-            return (value, value, value)
-        }
-
-        guard value > first.position else {
-            return (first.red, first.green, first.blue)
-        }
-
-        for index in 0..<(stops.count - 1) {
-            let start = stops[index]
-            let end = stops[index + 1]
-            guard value <= end.position else { continue }
-
-            let span = max(end.position - start.position, 1.0e-6)
-            let progress = min(max((value - start.position) / span, 0), 1)
-            return (
-                start.red + (end.red - start.red) * progress,
-                start.green + (end.green - start.green) * progress,
-                start.blue + (end.blue - start.blue) * progress
-            )
-        }
-
-        let last = stops[stops.count - 1]
-        return (last.red, last.green, last.blue)
     }
 
     // MARK: - Background Removal

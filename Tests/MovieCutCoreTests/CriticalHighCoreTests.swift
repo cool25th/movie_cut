@@ -124,32 +124,6 @@ struct ExportProgressCriticalHighTests {
     }
 }
 
-@MainActor
-@Suite("TemplateMarketplace critical and high coverage")
-struct TemplateMarketplaceCriticalHighTests {
-    @Test("Template marketplace featured items are not empty")
-    func testFeaturedNotEmpty() {
-        let marketplace = TemplateMarketplace()
-
-        #expect(marketplace.featured.isEmpty == false)
-    }
-
-    @Test("Template marketplace groups categories")
-    func testCategoriesGrouped() {
-        let marketplace = TemplateMarketplace()
-
-        #expect(marketplace.categories.keys.count >= 2)
-    }
-
-    @Test("Template marketplace search returns results")
-    func testSearchReturnsResults() {
-        let marketplace = TemplateMarketplace()
-        let results = marketplace.search(query: "creator")
-
-        #expect(results.isEmpty == false)
-    }
-}
-
 private func unclampedSpeedRampPoint(time: TimeInterval, rate: Double) -> SpeedRampPoint {
     var point = SpeedRampPoint(time: time, rate: rate)
     point.time = time

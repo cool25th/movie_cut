@@ -534,75 +534,23 @@ struct MaskCanvasView: View {
     }
 
     private func rectanglePoints(for currentMask: Mask) -> [CGPoint] {
-        let halfWidth = max(currentMask.size.width * 0.5, 1)
-        let halfHeight = max(currentMask.size.height * 0.5, 1)
-        let localPoints = [
-            CGPoint(x: -halfWidth, y: halfHeight),
-            CGPoint(x: halfWidth, y: halfHeight),
-            CGPoint(x: halfWidth, y: -halfHeight),
-            CGPoint(x: -halfWidth, y: -halfHeight)
-        ]
-        return transformed(localPoints, for: currentMask)
+        MaskShapeGeometry.rectanglePoints(for: currentMask)
     }
 
     private func ellipsePoints(for currentMask: Mask) -> [CGPoint] {
-        let halfWidth = max(currentMask.size.width * 0.5, 1)
-        let halfHeight = max(currentMask.size.height * 0.5, 1)
-        let sampleCount = 72
-
-        let localPoints = (0 ..< sampleCount).map { index in
-            let angle = (CGFloat(index) / CGFloat(sampleCount)) * 2 * CGFloat.pi
-            return CGPoint(x: cos(angle) * halfWidth, y: sin(angle) * halfHeight)
-        }
-        return transformed(localPoints, for: currentMask)
+        MaskShapeGeometry.ellipsePoints(for: currentMask)
     }
 
     private func trianglePoints(for currentMask: Mask) -> [CGPoint] {
-        let halfWidth = max(currentMask.size.width * 0.5, 1)
-        let halfHeight = max(currentMask.size.height * 0.5, 1)
-        let localPoints = [
-            CGPoint(x: 0, y: halfHeight),
-            CGPoint(x: -halfWidth, y: -halfHeight),
-            CGPoint(x: halfWidth, y: -halfHeight)
-        ]
-        return transformed(localPoints, for: currentMask)
+        MaskShapeGeometry.trianglePoints(for: currentMask)
     }
 
     private func diamondPoints(for currentMask: Mask) -> [CGPoint] {
-        let halfWidth = max(currentMask.size.width * 0.5, 1)
-        let halfHeight = max(currentMask.size.height * 0.5, 1)
-        let localPoints = [
-            CGPoint(x: 0, y: halfHeight),
-            CGPoint(x: halfWidth, y: 0),
-            CGPoint(x: 0, y: -halfHeight),
-            CGPoint(x: -halfWidth, y: 0)
-        ]
-        return transformed(localPoints, for: currentMask)
+        MaskShapeGeometry.diamondPoints(for: currentMask)
     }
 
     private func brushPoints(for currentMask: Mask) -> [CGPoint] {
-        if currentMask.brushPoints.count > 1 {
-            return currentMask.brushPoints
-        }
-        return defaultBrushPoints(for: currentMask)
-    }
-
-    private func defaultBrushPoints(for currentMask: Mask) -> [CGPoint] {
-        let halfWidth = max(currentMask.size.width * 0.5, 1)
-        return [
-            CGPoint(x: currentMask.position.x - halfWidth, y: currentMask.position.y),
-            CGPoint(x: currentMask.position.x + halfWidth, y: currentMask.position.y)
-        ]
-    }
-
-    private func transformed(_ localPoints: [CGPoint], for currentMask: Mask) -> [CGPoint] {
-        localPoints.map { point in
-            let rotated = rotate(CGVector(dx: point.x, dy: point.y), degrees: currentMask.rotation)
-            return CGPoint(
-                x: currentMask.position.x + rotated.dx,
-                y: currentMask.position.y + rotated.dy
-            )
-        }
+        MaskShapeGeometry.brushPoints(for: currentMask)
     }
 
     private func cornerPoint(
@@ -614,7 +562,7 @@ struct MaskCanvasView: View {
             dx: corner.xSign * currentMask.size.width * 0.5,
             dy: corner.ySign * currentMask.size.height * 0.5
         )
-        let rotated = rotate(local, degrees: currentMask.rotation)
+        let rotated = MaskShapeGeometry.rotate(local, degrees: currentMask.rotation)
         return metrics.viewPoint(for: CGPoint(
             x: currentMask.position.x + rotated.dx,
             y: currentMask.position.y + rotated.dy
@@ -623,7 +571,7 @@ struct MaskCanvasView: View {
 
     private func topCenterPoint(for currentMask: Mask, metrics: MaskCanvasMetrics) -> CGPoint {
         let local = CGVector(dx: 0, dy: currentMask.size.height * 0.5)
-        let rotated = rotate(local, degrees: currentMask.rotation)
+        let rotated = MaskShapeGeometry.rotate(local, degrees: currentMask.rotation)
         return metrics.viewPoint(for: CGPoint(
             x: currentMask.position.x + rotated.dx,
             y: currentMask.position.y + rotated.dy
@@ -655,64 +603,7 @@ struct MaskCanvasView: View {
         guard dx.isFinite, dy.isFinite, hypot(dx, dy) > 0.001 else {
             return 0
         }
-        return normalizedDegrees(Double(atan2(-dx, dy) * 180 / CGFloat.pi))
-    }
-
-    private func rotate(_ vector: CGVector, degrees: Double) -> CGVector {
-        let angle = CGFloat(degrees) * CGFloat.pi / 180
-        let cosine = cos(angle)
-        let sine = sin(angle)
-        return CGVector(
-            dx: vector.dx * cosine - vector.dy * sine,
-            dy: vector.dx * sine + vector.dy * cosine
-        )
-    }
-
-    private func inverseRotate(_ vector: CGVector, degrees: Double) -> CGVector {
-        rotate(vector, degrees: -degrees)
-    }
-
-    private func rotate(_ points: [CGPoint], degrees: Double, around center: CGPoint) -> [CGPoint] {
-        points.map { point in
-            let rotated = rotate(
-                CGVector(dx: point.x - center.x, dy: point.y - center.y),
-                degrees: degrees
-            )
-            return CGPoint(x: center.x + rotated.dx, y: center.y + rotated.dy)
-        }
-    }
-
-    private func offset(_ points: [CGPoint], by delta: CGVector) -> [CGPoint] {
-        points.map { point in
-            CGPoint(x: point.x + delta.dx, y: point.y + delta.dy)
-        }
-    }
-
-    private func scaleBrushPoints(
-        _ points: [CGPoint],
-        around center: CGPoint,
-        from oldSize: CGSize,
-        to newSize: CGSize
-    ) -> [CGPoint] {
-        let scaleX = newSize.width / max(oldSize.width, 1)
-        let scaleY = newSize.height / max(oldSize.height, 1)
-
-        return points.map { point in
-            CGPoint(
-                x: center.x + ((point.x - center.x) * scaleX),
-                y: center.y + ((point.y - center.y) * scaleY)
-            )
-        }
-    }
-
-    private func normalizedDegrees(_ degrees: Double) -> Double {
-        var value = degrees.truncatingRemainder(dividingBy: 360)
-        if value > 180 {
-            value -= 360
-        } else if value < -180 {
-            value += 360
-        }
-        return value
+        return MaskShapeGeometry.normalizedDegrees(Double(atan2(-dx, dy) * 180 / CGFloat.pi))
     }
 
     private var isShiftPressed: Bool {

@@ -26,7 +26,7 @@ command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 echo "Building MovieCutMac (Debug)…"
 # Use a dedicated DerivedData location so an open Xcode workspace cannot lock
 # the CLI parity build database.
-PARITY_DERIVED_DATA="${MOVIECUT_PARITY_DERIVED_DATA:-/tmp/MovieCutParityDerivedData}"
+PARITY_DERIVED_DATA="/tmp/MovieCutParityDerivedData"
 # Xcode 26 may emit a tiny Debug Dylib launcher stub that exits immediately
 # when invoked outside Xcode. The parity harness launches through
 # LaunchServices below, but a self-contained binary also makes watchdog
@@ -67,11 +67,6 @@ FIXTURES="$ROOT/Tests/Fixtures"
 run_scenario() {
   local name="$1"; local times="$2"; local tolerance="$3"; shift 3
   local extra_env=("$@")
-
-  if [ -n "${MOVIECUT_PARITY_SCENARIO:-}" ] && [ "$MOVIECUT_PARITY_SCENARIO" != "$name" ]; then
-    echo "  ↷ $name (filtered)"
-    return 0
-  fi
 
   local work; work="$(mktemp -d "$APP_CONTAINER_TMP/$name.XXXXXX")"
   local result="$work/result.txt"

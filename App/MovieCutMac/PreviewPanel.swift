@@ -785,15 +785,11 @@ struct PreviewPanel: View {
 
 private extension Color {
     init(hex: String) {
-        let cleanHex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        let value = UInt64(cleanHex, radix: 16) ?? 0xFFFFFF
-        self.init(
-            .sRGB,
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255,
-            opacity: 1
-        )
+        if let rgb = HexColorMath.rgb(fromHex: hex) {
+            self.init(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue, opacity: 1)
+        } else {
+            self.init(.sRGB, red: 1, green: 1, blue: 1, opacity: 1)
+        }
     }
 }
 

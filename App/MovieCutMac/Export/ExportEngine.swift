@@ -1186,15 +1186,10 @@ final class ExportEngine: FlattenedTimelineConsumer {
     }
 
     private func cgColor(hexRGB: String) -> CGColor {
-        let hex = hexRGB.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
             return NSColor.white.cgColor
         }
-
-        let red = CGFloat((value >> 16) & 0xFF) / 255.0
-        let green = CGFloat((value >> 8) & 0xFF) / 255.0
-        let blue = CGFloat(value & 0xFF) / 255.0
-        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1).cgColor
+        return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1).cgColor
     }
 
     private func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {

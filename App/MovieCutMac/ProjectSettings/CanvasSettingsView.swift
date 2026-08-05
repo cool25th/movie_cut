@@ -305,12 +305,7 @@ private extension ExportFrameRate {
 
 private extension Color {
     init(hex: String) {
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        let value = UInt64(clean, radix: 16) ?? 0
-        self.init(
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255
-        )
+        let rgb = HexColorMath.rgb(fromHex: hex) ?? (red: 0, green: 0, blue: 0)
+        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 }

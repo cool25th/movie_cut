@@ -955,19 +955,12 @@ private struct AnalysisResultHistoryRow: View {
 
 private extension Color {
     static func markerHex(_ hex: String?) -> Color? {
-        guard let hex else { return nil }
-        let clean = hex
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6, let value = UInt64(clean, radix: 16) else {
-            return nil
-        }
-
+        guard let hex, let rgb = HexColorMath.rgb(fromHex: hex) else { return nil }
         return Color(
             nsColor: NSColor(
-                red: CGFloat((value >> 16) & 0xFF) / 255,
-                green: CGFloat((value >> 8) & 0xFF) / 255,
-                blue: CGFloat(value & 0xFF) / 255,
+                red: CGFloat(rgb.red),
+                green: CGFloat(rgb.green),
+                blue: CGFloat(rgb.blue),
                 alpha: 1
             )
         )

@@ -1732,34 +1732,20 @@ struct InspectorBasicSection: View {
     }
 
     private func colorFromHex(_ hex: String) -> Color {
-        guard let normalized = normalizedHexRGB(hex) else {
+        guard let rgb = HexColorMath.rgb(fromHex: hex) else {
             return .white
         }
-        let clean = String(normalized.dropFirst())
-        guard let value = UInt64(clean, radix: 16) else { return .white }
-        let r = Double((value >> 16) & 0xFF) / 255.0
-        let g = Double((value >> 8) & 0xFF) / 255.0
-        let b = Double(value & 0xFF) / 255.0
-        return Color(red: r, green: g, blue: b)
-    }
-
-    private func normalizedHexRGB(_ hex: String?) -> String? {
-        guard let hex else { return nil }
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count >= 6 else { return nil }
-
-        let rgb = String(clean.prefix(6)).uppercased()
-        guard UInt64(rgb, radix: 16) != nil else { return nil }
-        return "#\(rgb)"
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     private func hexFromColor(_ color: Color) -> String {
         let nsColor = NSColor(color)
         guard let rgb = nsColor.usingColorSpace(.sRGB) else { return "#FFFFFF" }
-        let r = Int((rgb.redComponent * 255).rounded())
-        let g = Int((rgb.greenComponent * 255).rounded())
-        let b = Int((rgb.blueComponent * 255).rounded())
-        return String(format: "#%02X%02X%02X", r, g, b)
+        return HexColorMath.hexRGB(
+            red: Double(rgb.redComponent),
+            green: Double(rgb.greenComponent),
+            blue: Double(rgb.blueComponent)
+        )
     }
 
     private func speedPresetLabel(_ rate: Double) -> String {
@@ -1908,17 +1894,8 @@ private struct InspectorTextTemplateThumbnail: View {
     }
 
     private static func color(from hex: String) -> Color {
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count >= 6 else { return .white }
-
-        let rgb = String(clean.prefix(6))
-        guard let value = UInt64(rgb, radix: 16) else { return .white }
-
-        return Color(
-            red: Double((value >> 16) & 0xFF) / 255.0,
-            green: Double((value >> 8) & 0xFF) / 255.0,
-            blue: Double(value & 0xFF) / 255.0
-        )
+        guard let rgb = HexColorMath.rgb(fromHex: hex) else { return .white }
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 }
 

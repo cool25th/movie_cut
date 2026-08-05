@@ -1206,65 +1206,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
 
     private func maskContainsForeground(_ maskImage: CIImage, extent: CGRect) -> Bool {
-        guard let maximumImage = CIFilter(
-            name: "CIAreaMaximum",
-            parameters: [
-                kCIInputImageKey: maskImage,
-                kCIInputExtentKey: CIVector(cgRect: extent)
-            ]
-        )?.outputImage else {
-            return true
-        }
-
-        var maximumPixel = [UInt8](repeating: 0, count: 4)
-        maximumPixel.withUnsafeMutableBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { return }
-            ciContext.render(
-                maximumImage,
-                toBitmap: baseAddress,
-                rowBytes: 4,
-                bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-                format: .RGBA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
-            )
-        }
-
-        return maximumPixel[0] > 8 || maximumPixel[1] > 8 || maximumPixel[2] > 8
+        PersonSegmentationCompositor.maskContainsForeground(maskImage, extent: extent, in: ciContext)
     }
 
     private func applyBackgroundRemoval(to image: CIImage) -> CIImage {
-        let size = image.extent.size
-        guard size.width > 0, size.height > 0 else { return image }
-
-        // Create a simple center-biased elliptical mask to approximate foreground.
-        let maskImage = CIImage(color: .white).cropped(to: image.extent)
-
-        // Generate a vignette-based mask: brighter in center, darker at edges.
-        // This serves as a fallback when Vision cannot produce a person mask.
-        let vignetteRadius = min(size.width, size.height) * 0.4
-
-        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: image.extent)
-
-        // Create a simple radial gradient mask for the center region.
-        let gradientMask = CIFilter(
-            name: "CIRadialGradient",
-            parameters: [
-                "inputCenter": CIVector(x: size.width / 2, y: size.height / 2),
-                "inputRadius0": NSNumber(value: Float(vignetteRadius)),
-                "inputRadius1": NSNumber(value: Float(max(size.width, size.height) * 0.7)),
-                "inputColor0": CIColor(red: 1, green: 1, blue: 1, alpha: 1),
-                "inputColor1": CIColor(red: 0, green: 0, blue: 0, alpha: 0)
-            ]
-        )?.outputImage?.cropped(to: image.extent) ?? maskImage
-
-        return image.applyingFilter(
-            "CIBlendWithMask",
-            parameters: [
-                kCIInputMaskImageKey: gradientMask,
-                kCIInputBackgroundImageKey: backgroundColor
-            ]
-        )
+        PersonSegmentationCompositor.applyBackgroundRemoval(to: image)
     }
 
     // MARK: - Source Frame Helpers

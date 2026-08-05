@@ -62,8 +62,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
   MOVIECUT_UITEST_FILMSTRIP=1 MOVIECUT_UITEST_RESULT="$FILMSTRIP_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 FP=$!
-for _ in $(seq 1 120); do [ -s "$FILMSTRIP_RESULT" ] && break; sleep 0.25; done
-wait "$FP" 2>/dev/null || true
+wait_for_result "$FP" 120 0.25 "$FILMSTRIP_RESULT"
 FILMSTRIP_STATUS="$(cat "$FILMSTRIP_RESULT" 2>/dev/null || echo MISSING)"
 case "$FILMSTRIP_STATUS" in
   *"error=none"*"filmstrip_frames=4"*"requested=0.250,0.750,1.250,1.750"*"max_height="*"zoom_buckets=0,1,2,3"*"cache_hit=1"*"cache_miss=2"*"cache_inserts=1"*"cache_limit=134217728"*"cache_invalidate=1"*) ;;
@@ -92,8 +91,7 @@ env MOVIECUT_UITEST=1 \
   MOVIECUT_UITEST_RESULT="$TIMELINE_FILMSTRIP_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 TFP=$!
-for _ in $(seq 1 160); do [ -s "$TIMELINE_FILMSTRIP_RESULT" ] && break; sleep 0.25; done
-wait "$TFP" 2>/dev/null || true
+wait_for_result "$TFP" 160 0.25 "$TIMELINE_FILMSTRIP_RESULT"
 TIMELINE_FILMSTRIP_STATUS="$(cat "$TIMELINE_FILMSTRIP_RESULT" 2>/dev/null || echo MISSING)"
 case "$TIMELINE_FILMSTRIP_STATUS" in
   *"error=none"*"timeline_filmstrip_frames="*"offscreen_skipped=1"*"cancelled=1"*"stale_rejected=1"*"fallback_before_ready=1"*"fallback_after_cancel=1"*"hover_visible=1"*"hover_width=120"*"hover_height=68"*"hover_label=1"*"hover_digest_cached=1"*"hover_exit_hidden=1"*"hover_cache_miss_hidden=1"*"hover_unsupported_hidden=1"*"hover_request_delta=0"*"hover_generation_delta=0"*) ;;
@@ -179,8 +177,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
   MOVIECUT_UITEST_SCRUB=1.25 MOVIECUT_UITEST_RESULT="$SCRUB_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 SP=$!
-for _ in $(seq 1 120); do [ -s "$SCRUB_RESULT" ] && break; sleep 0.25; done
-wait "$SP" 2>/dev/null || true
+wait_for_result "$SP" 120 0.25 "$SCRUB_RESULT"
 SCRUB_STATUS="$(cat "$SCRUB_RESULT" 2>/dev/null || echo MISSING)"
 case "$SCRUB_STATUS" in
   *"error=none"*"scrub_requested=1.250"*) ;;
@@ -250,8 +247,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
   MOVIECUT_UITEST_EXPORT="$IMAGE_OUT" MOVIECUT_UITEST_RESULT="$IMAGE_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 IP=$!
-for _ in $(seq 1 180); do [ -s "$IMAGE_OUT" ] && [ -s "$IMAGE_RESULT" ] && break; sleep 0.5; done
-wait "$IP" 2>/dev/null || true
+wait_for_result "$IP" 180 0.5 "$IMAGE_OUT" "$IMAGE_RESULT"
 IMAGE_STATUS="$(cat "$IMAGE_RESULT" 2>/dev/null || echo MISSING)"
 [ -s "$IMAGE_OUT" ] || { echo "FAIL: G-15 image export missing (status: $IMAGE_STATUS)" >&2; rm -rf "$IMAGE_TMPDIR"; exit 1; }
 case "$IMAGE_STATUS" in
@@ -295,8 +291,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" \
   MOVIECUT_UITEST_EXPORT="$MIXED_OUT" MOVIECUT_UITEST_RESULT="$MIXED_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 MP=$!
-for _ in $(seq 1 180); do [ -s "$MIXED_OUT" ] && [ -s "$MIXED_RESULT" ] && break; sleep 0.5; done
-wait "$MP" 2>/dev/null || true
+wait_for_result "$MP" 180 0.5 "$MIXED_OUT" "$MIXED_RESULT"
 MIXED_STATUS="$(cat "$MIXED_RESULT" 2>/dev/null || echo MISSING)"
 [ -s "$MIXED_OUT" ] || { echo "FAIL: G-15 mixed export missing (status: $MIXED_STATUS)" >&2; rm -rf "$MIXED_TMPDIR"; exit 1; }
 case "$MIXED_STATUS" in
@@ -349,8 +344,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$IMAGE_FIXTURE" MOVIECUT_UITEST_GR
   MOVIECUT_UITEST_EXPORT="$IMAGE_GRADE_OUT" MOVIECUT_UITEST_RESULT="$IMAGE_GRADE_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 IGP=$!
-for _ in $(seq 1 180); do [ -s "$IMAGE_GRADE_OUT" ] && [ -s "$IMAGE_GRADE_RESULT" ] && break; sleep 0.5; done
-wait "$IGP" 2>/dev/null || true
+wait_for_result "$IGP" 180 0.5 "$IMAGE_GRADE_OUT" "$IMAGE_GRADE_RESULT"
 IMAGE_GRADE_STATUS="$(cat "$IMAGE_GRADE_RESULT" 2>/dev/null || echo MISSING)"
 [ -s "$IMAGE_GRADE_OUT" ] || { echo "FAIL: G-15 warm-graded image export missing (status: $IMAGE_GRADE_STATUS)" >&2; rm -rf "$IMAGE_GRADE_TMPDIR"; exit 1; }
 case "$IMAGE_GRADE_STATUS" in
@@ -432,8 +426,7 @@ FREEZE_OUT="$(mktemp -d)/freeze.mp4"
 MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_FREEZE=1 \
   MOVIECUT_UITEST_EXPORT="$FREEZE_OUT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 FP=$!
-for _ in $(seq 1 120); do [ -s "$FREEZE_OUT" ] && break; sleep 0.5; done
-wait "$FP" 2>/dev/null || true
+wait_for_result "$FP" 120 0.5 "$FREEZE_OUT"
 FREEZE_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$FREEZE_OUT" 2>/dev/null || echo 0)"
 echo "PASS: freeze export duration ${FREEZE_DURATION}s (baseline ${DURATION}s)"
 awk -v base="$DURATION" -v frz="$FREEZE_DURATION" 'BEGIN { d = frz - base; exit !(d > 1.7 && d < 2.3) }' \
@@ -449,8 +442,7 @@ OF_OUT="$(mktemp -d)/optical_flow.mp4"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$OF_FIXTURE" MOVIECUT_UITEST_PLAYBACK_RATE=0.25 \
   MOVIECUT_UITEST_OPTICAL_FLOW=1 MOVIECUT_UITEST_EXPORT="$OF_OUT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 OFP=$!
-for _ in $(seq 1 240); do [ -s "$OF_OUT" ] && break; sleep 0.5; done
-wait "$OFP" 2>/dev/null || true
+wait_for_result "$OFP" 240 0.5 "$OF_OUT"
 [ -s "$OF_OUT" ] || { echo "FAIL: optical-flow export missing" >&2; exit 1; }
 OF_DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$OF_OUT" 2>/dev/null || echo 0)"
 OF_FPS="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$OF_OUT" 2>/dev/null || echo 0)"
@@ -510,8 +502,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$TEXT_ANIMATION_SOURCE" MOVIECUT_U
   MOVIECUT_UITEST_EXPORT="$TEXT_ANIMATION_BASELINE_OUT" MOVIECUT_UITEST_RESULT="$TEXT_ANIMATION_BASELINE_RESULT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 TBP=$!
-for _ in $(seq 1 180); do [ -s "$TEXT_ANIMATION_BASELINE_OUT" ] && [ -s "$TEXT_ANIMATION_BASELINE_RESULT" ] && break; sleep 0.5; done
-wait "$TBP" 2>/dev/null || true
+wait_for_result "$TBP" 180 0.5 "$TEXT_ANIMATION_BASELINE_OUT" "$TEXT_ANIMATION_BASELINE_RESULT"
 TEXT_ANIMATION_BASELINE_STATUS="$(cat "$TEXT_ANIMATION_BASELINE_RESULT" 2>/dev/null || echo MISSING)"
 if [ ! -s "$TEXT_ANIMATION_BASELINE_OUT" ]; then
   echo "FAIL: text animation none baseline export missing (status: $TEXT_ANIMATION_BASELINE_STATUS)" >&2
@@ -532,8 +523,7 @@ for preset in "${TEXT_ANIMATION_PRESETS[@]}"; do
     MOVIECUT_UITEST_EXPORT="$TEXT_OUT" MOVIECUT_UITEST_RESULT="$TEXT_RESULT" MOVIECUT_UITEST_QUIT=1 \
     "$APP_BIN" >/dev/null 2>&1 &
   TAP=$!
-  for _ in $(seq 1 180); do [ -s "$TEXT_OUT" ] && [ -s "$TEXT_RESULT" ] && break; sleep 0.5; done
-  wait "$TAP" 2>/dev/null || true
+  wait_for_result "$TAP" 180 0.5 "$TEXT_OUT" "$TEXT_RESULT"
 
   TEXT_STATUS="$(cat "$TEXT_RESULT" 2>/dev/null || echo MISSING)"
   if [ ! -s "$TEXT_OUT" ]; then
@@ -613,8 +603,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" \
   MOVIECUT_UITEST_EXPORT="$TITLE_TEMPLATE_BASELINE_OUT" MOVIECUT_UITEST_QUIT=1 \
   "$APP_BIN" >/dev/null 2>&1 &
 TTBP=$!
-for _ in $(seq 1 120); do [ -s "$TITLE_TEMPLATE_BASELINE_OUT" ] && break; sleep 0.5; done
-wait "$TTBP" 2>/dev/null || true
+wait_for_result "$TTBP" 120 0.5 "$TITLE_TEMPLATE_BASELINE_OUT"
 [ -s "$TITLE_TEMPLATE_BASELINE_OUT" ] || { echo "FAIL: title template baseline export missing" >&2; rm -rf "$TITLE_TEMPLATE_BASELINE_DIR"; exit 1; }
 TITLE_TEMPLATE_METRICS=()
 for template_name in "${TITLE_TEMPLATE_NAMES[@]}"; do
@@ -627,8 +616,7 @@ for template_name in "${TITLE_TEMPLATE_NAMES[@]}"; do
     MOVIECUT_UITEST_EXPORT="$TITLE_OUT" MOVIECUT_UITEST_RESULT="$TITLE_RESULT" MOVIECUT_UITEST_QUIT=1 \
     "$APP_BIN" >/dev/null 2>&1 &
   TTP=$!
-  for _ in $(seq 1 180); do [ -s "$TITLE_OUT" ] && [ -s "$TITLE_RESULT" ] && break; sleep 0.5; done
-  wait "$TTP" 2>/dev/null || true
+  wait_for_result "$TTP" 180 0.5 "$TITLE_OUT" "$TITLE_RESULT"
 
   TITLE_STATUS="$(cat "$TITLE_RESULT" 2>/dev/null || echo MISSING)"
   if [ ! -s "$TITLE_OUT" ]; then
@@ -692,8 +680,7 @@ NR_RESULT="$(mktemp -d)/nr.txt"
 MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$TONE" MOVIECUT_UITEST_DENOISE=1 \
   MOVIECUT_UITEST_RESULT="$NR_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 NP=$!
-for _ in $(seq 1 120); do [ -s "$NR_RESULT" ] && break; sleep 0.5; done
-wait "$NP" 2>/dev/null || true
+wait_for_result "$NP" 120 0.5 "$NR_RESULT"
 NR_STATUS="$(cat "$NR_RESULT" 2>/dev/null || echo MISSING)"
 rm -rf "$(dirname "$NR_RESULT")"
 case "$NR_STATUS" in
@@ -884,8 +871,7 @@ CHAPTER_RESULT="$CHAPTER_TMPDIR/chapters.txt"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_CHAPTER_MARKERS=1 MOVIECUT_UITEST_BEAT_CHAPTERS=1 \
   MOVIECUT_UITEST_EXPORT="$CHAPTER_OUT" MOVIECUT_UITEST_RESULT="$CHAPTER_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 CP=$!
-for _ in $(seq 1 180); do [ -s "$CHAPTER_OUT" ] && [ -s "$CHAPTER_RESULT" ] && break; sleep 0.5; done
-wait "$CP" 2>/dev/null || true
+wait_for_result "$CP" 180 0.5 "$CHAPTER_OUT" "$CHAPTER_RESULT"
 CHAPTER_STATUS="$(cat "$CHAPTER_RESULT" 2>/dev/null || echo MISSING)"
 [ -s "$CHAPTER_OUT" ] || { echo "FAIL: chapter marker export missing (status: $CHAPTER_STATUS)" >&2; rm -rf "$CHAPTER_TMPDIR"; exit 1; }
 case "$CHAPTER_STATUS" in
@@ -985,6 +971,20 @@ echo "PASS: ducking lowered BGM under voice ($DUCK_METRICS)"
 # average color (red up, blue down) vs an ungraded export of the same clip.
 BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
 
+# wait_for_result <pid> <iters> <sleep_secs> <file1> [file2]
+# Polls for the result file(s) up to <iters> times, sleeping <sleep_secs>
+# between checks, then waits for the background <pid>. Collapses the
+# repeated "for _ in $(seq …); do [ -s … ] && break; sleep …; done; wait" idiom.
+wait_for_result() {
+  local pid="$1" iters="$2" sleep_secs="$3" file1="$4" file2="${5:-}"
+  if [ -n "$file2" ]; then
+    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && [ -s "$file2" ] && break; sleep "$sleep_secs"; done
+  else
+    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && break; sleep "$sleep_secs"; done
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+
 platform_export_check() {
   local raw="$1"
   local label="$2"
@@ -1001,8 +1001,7 @@ platform_export_check() {
   env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_PLATFORM_PRESET="$raw" \
     MOVIECUT_UITEST_EXPORT="$out" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
   local pp=$!
-  for _ in $(seq 1 240); do [ -s "$out" ] && break; sleep 0.5; done
-  wait "$pp" 2>/dev/null || true
+  wait_for_result "$pp" 240 0.5 "$out"
 
   if [ ! -s "$out" ]; then
     echo "FAIL: ${label} platform preset export missing" >&2
@@ -1232,8 +1231,7 @@ env MOVIECUT_UITEST=1 MOVIECUT_UITEST_CARD_EDITOR=1 \
   MOVIECUT_UITEST_CARD_EDITOR_RELOAD="$CARD_RELOAD" \
   MOVIECUT_UITEST_RESULT="$CARD_RESULT" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 CAP=$!
-for _ in $(seq 1 120); do [ -s "$CARD_RESULT" ] && break; sleep 0.5; done
-wait "$CAP" 2>/dev/null || true
+wait_for_result "$CAP" 120 0.5 "$CARD_RESULT"
 CARD_STATUS="$(cat "$CARD_RESULT" 2>/dev/null || echo MISSING)"
 # Fail closed unless every required field is present and correct.
 CARD_COMPLETE="$(printf '%s' "$CARD_STATUS" | python3 -c 'import json,sys

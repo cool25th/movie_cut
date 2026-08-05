@@ -1070,16 +1070,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
     }
 
     private func stickerEmoji(from textContent: TextClipContent) -> String? {
-        guard textContent.isSticker || isLegacyStickerContent(textContent) else {
-            return nil
-        }
-
-        let trimmedText = textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isSingleEmoji(trimmedText) else {
-            return nil
-        }
-
-        return trimmedText
+        StickerDetection.stickerEmoji(from: textContent)
     }
 
     private func stickerImageURL(from textContent: TextClipContent) -> URL? {
@@ -1088,28 +1079,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
         }
 
         return textContent.stickerImageURL
-    }
-
-    private func isLegacyStickerContent(_ textContent: TextClipContent) -> Bool {
-        textContent.fontFamily == "Apple Color Emoji"
-    }
-
-    private func isSingleEmoji(_ text: String) -> Bool {
-        guard !text.isEmpty else { return false }
-
-        let variationSelector = "\u{FE0F}"
-        let zeroWidthJoiner = "\u{200D}"
-        let emojiAtom = "(?:\\p{Emoji_Presentation}|\\p{Extended_Pictographic}\(variationSelector)?)(?:\\p{Emoji_Modifier})?"
-        let pattern = "^(?:(?:\\p{Regional_Indicator}{2})|\(emojiAtom))(?:\(zeroWidthJoiner)\(emojiAtom))*$"
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return text.count == 1 && text.unicodeScalars.contains { scalar in
-                scalar.properties.isEmojiPresentation
-            }
-        }
-
-        return regex.firstMatch(in: text, range: range)?.range == range
     }
 
     // MARK: - Export Preset Helpers

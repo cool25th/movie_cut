@@ -1,6 +1,6 @@
 # MovieCut E2E 샌드박스 ON 베이스라인
 
-> 측정일: 2026-08-02 / 재현: `bash scripts/run_e2e_export_sandbox.sh` / 빌드: **Debug + ENABLE_APP_SANDBOX=YES + MOVIECUT_HARNESS**
+> 측정일: 2026-08-02 / 재현: `SANDBOX=1 bash scripts/run_e2e_export.sh` / 빌드: **Debug + ENABLE_APP_SANDBOX=YES + MOVIECUT_HARNESS**
 > 목적: 기존 `run_e2e_export.sh`(27개 섹션, 수십 기능 G-ID)을 **출하 구성(샌드박스 ON)에서 처음으로 돌려**, 샌드박스가 켜진 출하 빌드에서 전 기능이 동작하는지 확인한다. 종전 이 스크립트는 샌드박스 OFF에서만 돌았다.
 
 ## 결과
@@ -13,9 +13,11 @@
 
 ## 측정 방법
 
-`scripts/run_e2e_export_sandbox.sh`는 `run_e2e_export.sh`를 복제해:
+> (측정 시점 2026-08-02에는 별도 파일 `run_e2e_export_sandbox.sh`로 운영됐으나, 89% 중복으로 인해 단일 스크립트로 병합됨. 현재는 위 재현 명령(`SANDBOX=1 bash scripts/run_e2e_export.sh`)을 쓴다.)
+
+`run_e2e_export.sh`의 sandbox 모드(`SANDBOX=1`)는:
 1. 빌드를 `ENABLE_APP_SANDBOX=YES`(출하 기본값) + `MOVIECUT_HARNESS`로 명시 (2026-08-01 추가한 harness 게이트 확장 덕분).
-2. 37개 harness 호출부에 전부 `MOVIECUT_UITEST_CONTAINERIZE=1` 추가 — fixture를 샌드박스 컨테이너 `tmp/`(grant 불필요)로 복사하고, export/result도 컨테이너 내부에 스테이징.
+2. harness 호출 전부에 `MOVIECUT_UITEST_CONTAINERIZE=1` 환경변수를 export — fixture를 샌드박스 컨테이너 `tmp/`(grant 불필요)로 복사하고, export/result도 컨테이너 내부에 스테이징.
 3. 산출물 검증 시 requested 경로에 파일이 없으면 `container_artifacts=` 상태 필드에서 컨테이너 스테이징 경로를 폴백으로 찾음 (2026-08-02 추가한 harness 보고).
 
 ## 통과한 33개 섹션 (기능별)

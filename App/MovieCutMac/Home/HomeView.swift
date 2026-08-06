@@ -23,6 +23,16 @@ struct HomeView: View {
     @State private var missingEntries: [RecentProject] = []
     @State private var errorMessage: String?
 
+    @State private var isTemplatePickerPresented = false
+    @State private var isPhotoPickerPresented = false
+
+    /// Slideshow options chosen in the "Photo to Video" configuration sheet
+    /// before the multi-image picker opens.
+    @State private var isSlideshowOptionsPresented = false
+    @State private var slideshowPace: PhotoSlideshowPace = .normal
+    @State private var slideshowTransition: PhotoSlideshowTransition = .crossDissolve
+    @State private var slideshowKenBurnsEnabled = true
+
     private let columns = [
         GridItem(.adaptive(minimum: 220, maximum: 260), spacing: MovieCutSpacing.large)
     ]
@@ -31,6 +41,8 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MovieCutSpacing.large) {
                 header
+
+                quickStartSection
 
                 if entries.isEmpty && missingEntries.isEmpty {
                     emptyState
@@ -68,6 +80,194 @@ struct HomeView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .sheet(isPresented: $isTemplatePickerPresented) {
+            TemplatePickerView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isSlideshowOptionsPresented) {
+            slideshowOptionsSheet
+        }
+        .fileImporter(
+            isPresented: $isPhotoPickerPresented,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                let scoped = urls.map { $0.startAccessingSecurityScopedResource() ? $0 : $0 }
+                let pace = slideshowPace
+                let transitionStyle = slideshowTransition
+                let kenBurnsEnabled = slideshowKenBurnsEnabled
+                Task {
+                    await router.requestCreatePhotoSlideshow(
+                        fromPhotoURLs: scoped,
+                        pace: pace,
+                        transitionStyle: transitionStyle,
+                        kenBurnsEnabled: kenBurnsEnabled
+                    )
+                    scoped.forEach { $0.stopAccessingSecurityScopedResource() }
+                }
+            case .failure:
+                errorMessage = "Couldn’t load the selected photos."
+            }
+        }
+    }
+
+    // MARK: - Slideshow options sheet
+
+    /// Configuration sheet shown when the user taps "Photo to Video": pick a
+    /// pace and a transition style, then open the multi-image picker. This is
+    /// the difference between a watchable slideshow and a hard-cut sequence.
+    private var slideshowOptionsSheet: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.large) {
+            HStack {
+                Text("Photo to Video")
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                Button("Cancel") { isSlideshowOptionsPresented = false }
+            }
+
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                Text("Pace")
+                    .font(.headline)
+                Picker("Pace", selection: $slideshowPace) {
+                    ForEach(PhotoSlideshowPace.allCases) { pace in
+                        Text("\(pace.displayName) (\(String(format: "%.1f", pace.clipDuration))s per photo)")
+                            .tag(pace)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("home.slideshow.pace")
+            }
+
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                Text("Transition")
+                    .font(.headline)
+                Picker("Transition", selection: $slideshowTransition) {
+                    ForEach(PhotoSlideshowTransition.allCases) { transition in
+                        Text(transition.displayName).tag(transition)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("home.slideshow.transition")
+            }
+
+            Toggle(isOn: $slideshowKenBurnsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Motion (Ken Burns)")
+                        .font(.headline)
+                    Text("Add a slow zoom to each photo.")
+                        .font(MovieCutTypography.metadata)
+                        .foregroundStyle(MovieCutTheme.mutedText)
+                }
+            }
+            .accessibilityIdentifier("home.slideshow.kenBurns")
+
+            Text("\(slideshowTransition == .none ? "Hard cuts" : slideshowTransition.displayName) between photos at \(String(format: "%.1f", slideshowPace.clipDuration))s each\(slideshowKenBurnsEnabled ? ", with motion" : "").")
+                .font(MovieCutTypography.metadata)
+                .foregroundStyle(MovieCutTheme.mutedText)
+
+            Spacer()
+
+            HStack {
+                Spacer()
+                Button {
+                    isSlideshowOptionsPresented = false
+                    // Open the photo picker after the options sheet dismisses.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        isPhotoPickerPresented = true
+                    }
+                } label: {
+                    Label("Choose Photos", systemImage: "photo.on.rectangle.angled")
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("home.slideshow.choosePhotos")
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 420)
+    }
+
+    // MARK: - Quick Start
+
+    /// CapCut-style entry points surfaced on the home screen: a blank project,
+    /// a template gallery, and a one-click "Photo to Video" slideshow builder.
+    /// These sit above the recent-projects grid so a first-run user can start
+    /// creating without first opening a blank editor to hunt for actions.
+    private var quickStartSection: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+            Text("Start something new")
+                .font(.headline)
+                .foregroundStyle(MovieCutTheme.mutedText)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: MovieCutSpacing.medium) {
+                quickStartCard(
+                    title: "New Project",
+                    icon: "rectangle.stack.badge.plus",
+                    description: "Start with a blank timeline.",
+                    identifier: "home.quickStart.newProject"
+                ) {
+                    Task { await router.requestNewProject() }
+                }
+
+                quickStartCard(
+                    title: "Templates",
+                    icon: "square.grid.2x2",
+                    description: "Begin with a ready-made layout.",
+                    identifier: "home.quickStart.templates"
+                ) {
+                    isTemplatePickerPresented = true
+                }
+
+                quickStartCard(
+                    title: "Photo to Video",
+                    icon: "photo.stack",
+                    description: "Turn your photos into a 9:16 short.",
+                    identifier: "home.quickStart.photoToVideo"
+                ) {
+                    isSlideshowOptionsPresented = true
+                }
+            }
+        }
+    }
+
+    private func quickStartCard(
+        title: String,
+        icon: String,
+        description: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundStyle(MovieCutTheme.accentCyan)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(MovieCutTypography.cardTitle)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(description)
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(MovieCutSpacing.medium)
+            .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
+            .background(MovieCutTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.large))
+            .overlay(
+                RoundedRectangle(cornerRadius: MovieCutRadius.large)
+                    .stroke(MovieCutTheme.border.opacity(0.4), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
     }
 
     // MARK: - Header

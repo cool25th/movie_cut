@@ -5780,6 +5780,103 @@ final class EditorViewModel {
         await createProject(from: bundle)
     }
 
+    /// One-click "Photo to Video" workflow (home onboarding card 3 / G-21
+    /// partial): creates a 9:16 photo-slideshow project from the chosen image
+    /// URLs and drops them sequentially on the first video track. The built-in
+    /// `photoSlideshowTemplate` seeds the canvas, music track, and title so the
+    /// user only needs to pick photos, then export. Any image placeholder clips
+    /// the template created are replaced by the imported photos.
+    ///
+    /// Adjacent photos receive the requested transition (cross-dissolve by
+    /// default) so the slideshow is immediately watchable — not a sequence of
+    /// hard cuts. The empty Music track is preserved as a ready BGM slot.
+    ///
+    /// After success, the editor stage is shown with the first photo selected
+    /// and the playhead at the start, so the user lands ready to edit/export.
+    func createPhotoSlideshow(
+        fromPhotoURLs urls: [URL],
+        pace: PhotoSlideshowPace = .normal,
+        transitionStyle: PhotoSlideshowTransition = .crossDissolve,
+        kenBurnsEnabled: Bool = true
+    ) async {
+        let imageURLs = urls.filter { url in
+            MediaImporter.probe(url: url).kind == .image
+        }
+        guard !imageURLs.isEmpty else {
+            lastErrorMessage = "Please choose at least one image to create a photo video."
+            return
+        }
+
+        guard let slideshowTemplate = templateStore.bundles.first(where: {
+            $0.identifier == "com.moviecut.template.photo-slideshow"
+        }) ?? templateStore.bundles.first else {
+            // Fallback: no slideshow template registered — start a blank project.
+            guard await newProject() else { return }
+            await importMediaAndAddToTimeline(imageURLs, startTime: 0)
+            return
+        }
+
+        // Seed the project from the template (canvas, music track, title).
+        await createProject(from: slideshowTemplate)
+
+        // Replace the template's image placeholder clips with the user's photos,
+        // laid out sequentially on the first video track.
+        do {
+            let snapshot = await session.snapshot()
+            guard let videoTrack = snapshot.timeline.tracks.first(where: { $0.kind == .video }) else {
+                await importMediaAndAddToTimeline(imageURLs, preferredTrackId: nil, startTime: 0)
+                return
+            }
+
+            // Remove placeholder image clips the template generated, keeping the
+            // track but emptying it so the imported photos are the only clips.
+            for placeholder in snapshot.timeline.tracks.first(where: { $0.id == videoTrack.id })?.clips ?? []
+                where placeholder.kind == .image {
+                try await session.dispatch(DeleteClipCommand(clipId: placeholder.id))
+            }
+
+            // Resolve the transition applied between adjacent photos. The first
+            // photo has no preceding boundary, so it stays a hard cut.
+            let boundaryTransition: Transition? = transitionStyle.transitionType.map {
+                Transition(type: $0, duration: min(PhotoSlideshowDefaults.transitionDuration, pace.clipDuration / 2))
+            }
+
+            var insertionStart: TimeInterval = 0
+            for (index, url) in imageURLs.enumerated() {
+                let asset = await mediaAssetWithAppProbe(for: url)
+                try await session.dispatch(ImportMediaCommand(asset: asset))
+
+                let duration = max(0.1, pace.clipDuration)
+                // Apply the chosen transition to every photo after the first.
+                let clipTransition = index == 0 ? nil : boundaryTransition
+                // A subtle slow zoom-in (1.0x → 1.12x) brings still photos to
+                // life. Disabled when the user opts out of motion in the
+                // slideshow options sheet.
+                let clipKenBurns = kenBurnsEnabled ? KenBurnsEffect.defaultZoomIn() : nil
+                let clip = Clip(
+                    assetId: asset.id,
+                    kind: .image,
+                    sourceRange: TimeRange(start: 0, duration: duration),
+                    timelineRange: TimeRange(start: insertionStart, duration: duration),
+                    transition: clipTransition,
+                    kenBurnsEffect: clipKenBurns
+                )
+                try await session.dispatch(AddClipCommand(trackId: videoTrack.id, clip: clip))
+                insertionStart += duration
+                selectedAssetId = asset.id
+                selectedClipId = clip.id
+            }
+
+            playheadTime = 0
+            try await refreshFromSession()
+            reportTimelineFileDropSuccess(count: imageURLs.count)
+            lastStatusMessage = "Photo video ready — add music or export when you're happy."
+        } catch {
+            try? await refreshFromSession()
+            setDropError(error.localizedDescription)
+        }
+    }
+
     private static func defaultProject() -> Project {
         ensureDefaultTracks(in: Project(name: "Untitled"))
     }

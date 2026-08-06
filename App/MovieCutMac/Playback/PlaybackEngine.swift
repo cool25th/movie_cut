@@ -349,7 +349,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
     private static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext(options: [.useSoftwareRenderer: false])
+        let context = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
         return context.createCGImage(ciImage, from: ciImage.extent)
     }
 
@@ -665,32 +665,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             }
         }
 
-        func affineTransform(
-            for transform: ClipTransform,
-            sourceSize: CGSize,
-            preferredTransform: CGAffineTransform
-        ) -> CGAffineTransform {
-            let anchorPoint = CGPoint(
-                x: sourceSize.width * transform.anchorPoint.x,
-                y: sourceSize.height * transform.anchorPoint.y
-            )
-            let radians = CGFloat(transform.rotation * .pi / 180)
-
-            var affineTransform = preferredTransform
-            affineTransform = affineTransform.translatedBy(
-                x: transform.position.x + transform.offset.x,
-                y: transform.position.y + transform.offset.y
-            )
-            affineTransform = affineTransform.translatedBy(x: anchorPoint.x, y: anchorPoint.y)
-            affineTransform = affineTransform.rotated(by: radians)
-            affineTransform = affineTransform.scaledBy(
-                x: transform.scale.width,
-                y: transform.scale.height
-            )
-            affineTransform = affineTransform.translatedBy(x: -anchorPoint.x, y: -anchorPoint.y)
-            return affineTransform
-        }
-
         func makeCompositionTrack(
             in composition: AVMutableComposition,
             mediaType: AVMediaType
@@ -707,30 +681,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             }
 
             return compositionTrack
-        }
-
-        func cgColor(hexRGB: String) -> CGColor {
-            guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
-                return NSColor.white.cgColor
-            }
-            return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1).cgColor
-        }
-
-        func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
-            switch alignment {
-            case .leading:
-                return .left
-            case .center:
-                return .center
-            case .trailing:
-                return .right
-            case .justified:
-                return .justified
-            }
-        }
-
-        func isZeroPoint(_ point: CGPoint) -> Bool {
-            point.x == 0 && point.y == 0
         }
 
         /// Picks the playback URL for a media asset. When proxy playback is on and
@@ -787,7 +737,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             imageURL: mediaAsset.originalURL,
                             duration: renderDuration,
                             renderSize: project.timeline.canvasSize,
-                            outputURL: imageVideoURL
+                            outputURL: imageVideoURL,
+                            kenBurnsEffect: clip.kenBurnsEffect
                         )
                         temporaryReverseRenderURLs.append(imageVideoURL)
                         sourceAsset = AVURLAsset(url: imageVideoURL)
@@ -895,10 +846,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             timelineTrackID: track.id,
                             trackID: videoCompositionTrack.trackID,
                             timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
-                            transform: affineTransform(
-                                for: clip.transform,
-                                sourceSize: sourceSize,
-                                preferredTransform: preferredTransform
+                            transform: clip.transform.affineTransform(
+                                for: .sourceFrame(preferredTransform: preferredTransform, size: sourceSize)
                             ),
                             opacity: Float(min(max(clip.opacity, 0), 1)),
                             transition: clip.transition,
@@ -1067,10 +1016,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     let fontSize = CGFloat(textContent.fontSize)
                     let canvasSize = project.timeline.canvasSize
                     let fallbackPosition = CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
+                    // Note: previously preview used exact `== 0` while export
+                    // used an epsilon; the two disagreed at the boundary, which
+                    // was a subtle preview↔export drift source. Both now use
+                    // the epsilon comparison for parity.
                     let position: CGPoint
-                    if !isZeroPoint(textContent.position) {
+                    if abs(textContent.position.x) > 1.0e-9 || abs(textContent.position.y) > 1.0e-9 {
                         position = textContent.position
-                    } else if !isZeroPoint(clip.transform.position) {
+                    } else if abs(clip.transform.position.x) > 1.0e-9 || abs(clip.transform.position.y) > 1.0e-9 {
                         position = clip.transform.position
                     } else {
                         position = fallbackPosition
@@ -1157,8 +1110,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     textLayer.string = textContent.text
                     textLayer.font = font
                     textLayer.fontSize = fontSize
-                    textLayer.foregroundColor = cgColor(hexRGB: textContent.fontColor)
-                    textLayer.alignmentMode = textAlignmentMode(for: textContent.alignment)
+                    textLayer.foregroundColor = CompositionRenderHelpers.cgColor(hexRGB: textContent.fontColor)
+                    textLayer.alignmentMode = CompositionRenderHelpers.textAlignmentMode(for: textContent.alignment)
                     textLayer.contentsScale = 2.0
                     textLayer.opacity = Float(min(max(clip.opacity, 0), 1))
                     textLayer.frame = CGRect(
@@ -1567,9 +1520,11 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
     }
 
-    /// Alignment mapping duplicated at class scope because the build-composition
-    /// helper that the uniform-color path uses is a local function. Kept in sync
-    /// with the local `textAlignmentMode(for:)`.
+    /// Alignment mapping for the karaoke text path. Mirrors
+    /// `CompositionRenderHelpers.textAlignmentMode(for:)`; kept at class scope
+    /// (static) because the build-composition helper that the uniform-color
+    /// path uses is a nested local function, which cannot reach the shared
+    /// helper directly.
     private static func karaokeAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
         switch alignment {
         case .leading:

@@ -84,11 +84,11 @@ run_scenario() {
      || [ "${comp_err:-none}" != "none" ] || [ "${dumped:-0}" -lt 1 ]; then
     printf "%-14s status=FAIL detail=harness comp_err=%s exp_err=%s dumped=%s\n" \
       "$name" "${comp_err:-missing}" "${exp_err:-missing}" "${dumped:-0}"
-    return
+    return 1
   fi
   if [ ! -s "$export_mp4" ]; then
     printf "%-14s status=FAIL detail=no_export_mp4\n" "$name"
-    return
+    return 1
   fi
 
   # Pixel + duration parity via the shared comparator.
@@ -100,9 +100,11 @@ run_scenario() {
   if [ "${cmp_rc:-0}" -eq 0 ] && echo "$cmp_out" | grep -q "RESULT: PASS"; then
     printf "%-14s status=PASS detail=%s\n" "$name" \
       "$(echo "$cmp_out" | grep -oE 'overall_MAD=[0-9.]+' | tail -1)"
+    return 0
   else
     printf "%-14s status=FAIL detail=pixel_or_duration\n" "$name"
     echo "$cmp_out" | grep -E "RESULT:|FAIL|Duration" | sed "s/^/      $name> /" || true
+    return 1
   fi
 }
 
@@ -110,19 +112,31 @@ echo "" && echo "=== parity sweep (preview vs export, 13 scenarios) ==="
 echo ""
 # Default samples land inside a 2s timeline. Scenarios that shorten the
 # timeline (trim to 1s, 2x speed to 1s, speed ramp to ~1.4s) use 0.3,0.7.
-run_scenario passthrough "$PARITY_TIMES"
-run_scenario color         "$PARITY_TIMES" MOVIECUT_UITEST_COLOR=1
-run_scenario grade         "$PARITY_TIMES" MOVIECUT_UITEST_GRADE=1
-run_scenario hsl_curves    "$PARITY_TIMES" MOVIECUT_UITEST_HSL_CURVES=1
-run_scenario freeze        "$PARITY_TIMES" MOVIECUT_UITEST_FREEZE=1
-run_scenario reverse       "$PARITY_TIMES" MOVIECUT_UITEST_REVERSE=1
-run_scenario optical_flow  "$PARITY_TIMES" MOVIECUT_UITEST_OPTICAL_FLOW=1 MOVIECUT_UITEST_SPEED_RATE=0.5
-run_scenario trim          "0.3,0.7"        MOVIECUT_UITEST_TRIM_AT=1.0
-run_scenario move          "$PARITY_TIMES" MOVIECUT_UITEST_MOVE_TO=1.0
-run_scenario mask          "$PARITY_TIMES" MOVIECUT_UITEST_MASK=1
-run_scenario text          "$PARITY_TIMES" MOVIECUT_UITEST_TEXT_AT=0.5
-run_scenario speed_rate    "0.3,0.7"        MOVIECUT_UITEST_SPEED_RATE=2.0
-run_scenario speed_ramp    "0.3,0.7"        MOVIECUT_UITEST_SPEED_RAMP=1
+#
+# Each scenario returns nonzero on FAIL; we aggregate instead of aborting on
+# the first failure so a full picture is visible. The final exit propagates the
+# aggregate so CI (nightly) blocks on any drift, instead of silently passing
+# (the historical behavior that let a partial failure look green).
+SWEEP_FAIL=0
+run_scenario passthrough "$PARITY_TIMES"                                       || SWEEP_FAIL=1
+run_scenario color         "$PARITY_TIMES" MOVIECUT_UITEST_COLOR=1             || SWEEP_FAIL=1
+run_scenario grade         "$PARITY_TIMES" MOVIECUT_UITEST_GRADE=1             || SWEEP_FAIL=1
+run_scenario hsl_curves    "$PARITY_TIMES" MOVIECUT_UITEST_HSL_CURVES=1        || SWEEP_FAIL=1
+run_scenario freeze        "$PARITY_TIMES" MOVIECUT_UITEST_FREEZE=1            || SWEEP_FAIL=1
+run_scenario reverse       "$PARITY_TIMES" MOVIECUT_UITEST_REVERSE=1           || SWEEP_FAIL=1
+run_scenario optical_flow  "$PARITY_TIMES" MOVIECUT_UITEST_OPTICAL_FLOW=1 MOVIECUT_UITEST_SPEED_RATE=0.5 || SWEEP_FAIL=1
+run_scenario trim          "0.3,0.7"        MOVIECUT_UITEST_TRIM_AT=1.0        || SWEEP_FAIL=1
+run_scenario move          "$PARITY_TIMES" MOVIECUT_UITEST_MOVE_TO=1.0         || SWEEP_FAIL=1
+run_scenario mask          "$PARITY_TIMES" MOVIECUT_UITEST_MASK=1              || SWEEP_FAIL=1
+run_scenario text          "$PARITY_TIMES" MOVIECUT_UITEST_TEXT_AT=0.5         || SWEEP_FAIL=1
+run_scenario speed_rate    "0.3,0.7"        MOVIECUT_UITEST_SPEED_RATE=2.0     || SWEEP_FAIL=1
+run_scenario speed_ramp    "0.3,0.7"        MOVIECUT_UITEST_SPEED_RAMP=1       || SWEEP_FAIL=1
 
 echo ""
-echo "=== parity sweep complete ==="
+if [ "$SWEEP_FAIL" -eq 0 ]; then
+  echo "=== parity sweep complete: ALL PASS ==="
+  exit 0
+else
+  echo "=== parity sweep complete: ONE OR MORE SCENARIOS FAILED ===" >&2
+  exit 1
+fi

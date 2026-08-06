@@ -6,7 +6,7 @@ final class ChromaKeyCompositor: NSObject, AVVideoCompositing {
     let sourcePixelBufferAttributes: [String: any Sendable]? = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     var chromaKeySettingsByTrackID: [CMPersistentTrackID: ChromaKeySettings] = [:]
-    private let context = CIContext()
+    private let context = CIContext(options: RenderColorConfiguration.contextOptions)
 
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {}
     func cancelAllPendingVideoCompositionRequests() {}

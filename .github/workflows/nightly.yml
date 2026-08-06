@@ -1,0 +1,78 @@
+name: Nightly
+on:
+  schedule:
+    # 07:00 UTC daily — off-hours full behavioral/pixel/perf gate.
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  behavioral-gate:
+    # The slow gate: everything the PR-time CI defers because it needs a real
+    # app + GPU compositor or takes minutes to run. Unlike the parity/e2e shell
+    # scripts when run by hand, here exit codes BLOCK — the scripts' historical
+    # `|| true` swallowing (which let a segfaulted partial artifact pass) is
+    # overridden by `set -e` below. A failure here is a real signal.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: Build Mac app (Debug, sandbox-on)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            ENABLE_APP_SANDBOX=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # The parity sweep is the headline preview↔export pixel gate (MAD ≤ 12).
+      # It builds the harness app and drives 13 effect scenarios. Failing here
+      # means preview and export have drifted visually.
+      - name: Preview↔Export parity sweep
+        run: scripts/run_parity_sweep.sh
+
+      # Core editing parity: 12 scenarios at a tighter MAD ≤ 2. Skips the
+      # cross-dissolve transition case (headless GPU compositor caveat noted
+      # in the script); the rest must pass.
+      - name: Core editing parity
+        run: scripts/run_core_editing_parity.sh
+
+      # End-to-end export across ~33 feature sections, asserting real movie
+      # files are produced with correct duration/fps/codec/audio.
+      - name: E2E export suite
+        run: scripts/run_e2e_export.sh
+
+      # Stability fuzz: 55 scenarios, crash == hard fail.
+      - name: Stability fuzz
+        run: scripts/run_fuzz_stability.sh
+
+      # Recovery gate: unsaved-work recover/discard flow.
+      - name: Recovery gate
+        run: scripts/run_recovery_gate.sh
+
+  performance-gate:
+    # Separate job so a perf regression does not block the behavioral read, and
+    # vice versa. Reports numbers; the 4 GB memory ceiling is the only hard
+    # gate today (wall-clock SLOs land in a later phase).
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: Build Mac app (Debug)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: 4K export performance (memory ceiling)
+        run: scripts/perf_4k.sh

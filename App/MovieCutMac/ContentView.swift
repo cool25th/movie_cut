@@ -279,8 +279,10 @@ struct ContentView: View {
                 Button("ProRes Master…") {
                     Task { await viewModel.exportProResMaster() }
                 }
-                Button("HDR Master (HEVC 10-bit, HLG)…") {
-                    Task { await viewModel.exportHDRMaster() }
+                if FeatureFlag.hdrMaster {
+                    Button("HDR Master (HEVC 10-bit, HLG)…") {
+                        Task { await viewModel.exportHDRMaster() }
+                    }
                 }
                 Divider()
                 Button("Audio Only (M4A)…") {

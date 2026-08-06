@@ -7,9 +7,12 @@
 # Writes a short status line to stdout for the runner to parse.
 set -uo pipefail
 
-cd /Users/cool-mini4/MyDev/automation/movie_cut
+# Resolve the repo root from the script location so this gate runs on any
+# developer machine, not just the original author's home path.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
 
-LOG=/Users/cool-mini4/MyDev/automation/movie_cut/.build-check/last_gate.log
+LOG="$REPO_ROOT/.build-check/last_gate.log"
 : > "$LOG"
 
 pass=true

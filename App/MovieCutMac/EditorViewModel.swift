@@ -1287,6 +1287,10 @@ final class EditorViewModel {
     /// Exports a 10-bit HDR master (HEVC Main 10, Rec. 2020 + HLG). CapCut has no
     /// HDR delivery; this is a Pro mastering output.
     func exportHDRMaster() async {
+        guard FeatureFlag.hdrMaster else {
+            lastErrorMessage = "HDR mastering is not available in this build."
+            return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
         panel.canCreateDirectories = true
@@ -1298,6 +1302,14 @@ final class EditorViewModel {
     /// Exports an HDR master to an explicit URL (no save panel). Used by
     /// automation and the harness.
     func exportHDRMaster(to url: URL) async {
+        // Belt-and-suspenders: even if a harness or internal caller invokes
+        // this directly (bypassing the menu), refuse when the flag is off. The
+        // v1 render pipeline is 8-bit SDR, so an HDR export would re-tag
+        // 8-bit pixels as HDR — the output would lie about its own depth.
+        guard FeatureFlag.hdrMaster else {
+            lastErrorMessage = "HDR mastering is not available in this build."
+            return
+        }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {
@@ -3275,7 +3287,7 @@ final class EditorViewModel {
     var scopeWaveform: [[Int]]?
     var scopeVectorscope: ScopeAnalyzer.Vectorscope?
 
-    @ObservationIgnored private let scopeContext = CIContext(options: [.useSoftwareRenderer: false])
+    @ObservationIgnored private let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
 
     private func clearScopes() {
         scopeHistogram = nil

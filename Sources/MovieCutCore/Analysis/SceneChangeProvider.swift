@@ -11,7 +11,7 @@ private struct SceneChangeConfiguration: Sendable {
 /// Detects scene changes in a video asset by comparing consecutive frames.
 public final class SceneChangeProvider: AnalysisProvider {
     private let configuration: OSAllocatedUnfairLock<SceneChangeConfiguration>
-    private let context = CIContext()
+    private let context = CIContext(options: RenderColorConfiguration.contextOptions)
 
     /// User-visible provider name used consistently in provider lists and analysis results.
     public let providerName = "SceneChange"

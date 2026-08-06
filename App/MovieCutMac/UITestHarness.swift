@@ -101,7 +101,7 @@ extension EditorViewModel {
     /// context the app actually uses — the factor that bounds preview fps. A
     /// frame budget of 16.6ms sustains 60fps; 33.3ms sustains 30fps.
     private func benchmarkColorRenderMsPerFrame(frames: Int) -> Double {
-        let context = CIContext()
+        let context = CIContext(options: RenderColorConfiguration.contextOptions)
         let extent = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         let base = CIImage(color: CIColor(red: 0.4, green: 0.5, blue: 0.6)).cropped(to: extent)
         let correction = ColorCorrection(brightness: 0.1, contrast: 1.2, saturation: 1.3, warmth: 0.4, tint: 0.1)

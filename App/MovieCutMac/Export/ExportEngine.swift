@@ -399,7 +399,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         imageURL: mediaAsset.originalURL,
                         duration: renderDuration,
                         renderSize: renderSize(for: project.exportSettings.resolution, canvas: project.canvas),
-                        outputURL: imageVideoURL
+                        outputURL: imageVideoURL,
+                        kenBurnsEffect: clip.kenBurnsEffect
                     )
                     temporaryImageRenderURLs.append(imageVideoURL)
                     sourceAsset = AVURLAsset(url: imageVideoURL)
@@ -697,9 +698,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
             layerInstruction.setOpacity(Float(min(max(clip.opacity, 0), 1)), at: clip.timeRange.start)
             layerInstruction.setOpacity(0, at: clipEnd)
 
-            if !isIdentityTransform(clip.transform) {
+            if !clip.transform.isIdentity {
                 layerInstruction.setTransform(
-                    affineTransform(for: clip.transform, canvasSize: resolvedSize),
+                    clip.transform.affineTransform(for: .canvas(size: resolvedSize)),
                     at: clip.timeRange.start
                 )
                 layerInstruction.setTransform(.identity, at: clipEnd)
@@ -914,9 +915,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
             textLayer.string = textContent.text
             textLayer.font = font
             textLayer.fontSize = fontSize
-            textLayer.foregroundColor = cgColor(hexRGB: textContent.fontColor)
-            textLayer.backgroundColor = textContent.backgroundColor.map(cgColor(hexRGB:))
-            textLayer.alignmentMode = textAlignmentMode(for: textContent.alignment)
+            textLayer.foregroundColor = CompositionRenderHelpers.cgColor(hexRGB: textContent.fontColor)
+            textLayer.backgroundColor = textContent.backgroundColor.map(CompositionRenderHelpers.cgColor(hexRGB:))
+            textLayer.alignmentMode = CompositionRenderHelpers.textAlignmentMode(for: textContent.alignment)
             textLayer.contentsScale = 2.0
             textLayer.opacity = Float(min(max(clipMeta.opacity, 0), 1))
             textLayer.frame = CGRect(
@@ -1135,74 +1136,20 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
     // MARK: - Transform Helpers
 
-    private func isIdentityTransform(_ transform: ClipTransform) -> Bool {
-        isZeroPoint(transform.position)
-            && isZeroPoint(transform.offset)
-            && abs(transform.scale.width - 1) <= 1.0e-9
-            && abs(transform.scale.height - 1) <= 1.0e-9
-            && abs(transform.rotation) <= 1.0e-9
-    }
-
-    private func affineTransform(for transform: ClipTransform, canvasSize: CGSize) -> CGAffineTransform {
-        let anchorPoint = CGPoint(
-            x: canvasSize.width * transform.anchorPoint.x,
-            y: canvasSize.height * transform.anchorPoint.y
-        )
-        let radians = CGFloat(transform.rotation * .pi / 180)
-
-        var affineTransform = CGAffineTransform.identity
-        affineTransform = affineTransform.translatedBy(
-            x: transform.position.x + transform.offset.x,
-            y: transform.position.y + transform.offset.y
-        )
-        affineTransform = affineTransform.translatedBy(x: anchorPoint.x, y: anchorPoint.y)
-        affineTransform = affineTransform.rotated(by: radians)
-        affineTransform = affineTransform.scaledBy(
-            x: transform.scale.width,
-            y: transform.scale.height
-        )
-        affineTransform = affineTransform.translatedBy(x: -anchorPoint.x, y: -anchorPoint.y)
-        return affineTransform
-    }
-
     private func textPosition(
         for clipMeta: ExportClipInstructionMetadata,
         textContent: TextClipContent,
         canvasSize: CGSize
     ) -> CGPoint {
-        if !isZeroPoint(textContent.position) {
+        if abs(textContent.position.x) > 1.0e-9 || abs(textContent.position.y) > 1.0e-9 {
             return textContent.position
         }
 
-        if !isZeroPoint(clipMeta.transform.position) {
+        if abs(clipMeta.transform.position.x) > 1.0e-9 || abs(clipMeta.transform.position.y) > 1.0e-9 {
             return clipMeta.transform.position
         }
 
         return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
-    }
-
-    private func isZeroPoint(_ point: CGPoint) -> Bool {
-        abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
-    }
-
-    private func cgColor(hexRGB: String) -> CGColor {
-        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
-            return NSColor.white.cgColor
-        }
-        return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1).cgColor
-    }
-
-    private func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
-        switch alignment {
-        case .leading:
-            return .left
-        case .center:
-            return .center
-        case .trailing:
-            return .right
-        case .justified:
-            return .justified
-        }
     }
 
     private func makeAudioMix(parameters: [AVMutableAudioMixInputParameters]) -> AVMutableAudioMix? {

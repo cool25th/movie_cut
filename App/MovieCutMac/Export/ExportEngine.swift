@@ -112,10 +112,16 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            // A cancelled or failed export can leave a truncated file at the
+            // destination the user picked. Remove it so the user never sees a
+            // broken, partial movie — and classify the error into an actionable
+            // message instead of surfacing a raw Foundation string.
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1271,10 +1277,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1402,10 +1410,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1586,10 +1596,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1701,6 +1713,17 @@ final class ExportEngine: FlattenedTimelineConsumer {
         progressTask = nil
         activeExportSession = nil
         isExporting = false
+    }
+
+    /// Removes a partial output file left behind by a cancelled or failed
+    /// export. AVFoundation stops writing mid-file on cancel/error, leaving a
+    /// truncated, unplayable movie at the destination the user chose. Cleaning
+    /// it up means the user never sees a broken artifact and can re-export to
+    /// the same path without a leftover confusing the encoder. Failures here
+    /// are swallowed: cleanup is best-effort and must not mask the original
+    /// export error.
+    private func removePartialOutput(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 }
 

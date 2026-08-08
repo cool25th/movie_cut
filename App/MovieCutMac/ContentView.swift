@@ -399,7 +399,21 @@ struct ContentView: View {
         #endif
 
         guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else { return }
-        guard let recovered = await viewModel.recoverableProject() else { return }
+        let recovered = await viewModel.recoverableProject()
+
+        // If a recovery file existed but was corrupt, the store has already
+        // removed it; tell the user rather than silently offering nothing.
+        // Previously this case was invisible (try? swallow).
+        if let failure = await viewModel.autosaveLoadFailure() {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't restore your last session"
+            alert.informativeText = failure.userMessage
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        guard let recovered else { return }
 
         let alert = NSAlert()
         alert.messageText = "Recover unsaved work?"

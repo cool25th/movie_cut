@@ -82,4 +82,47 @@ struct AutosaveRecoveryTests {
         #expect(await session2.hasAutosave() == false)
         #expect(await session2.loadAutosaveIfAvailable() == nil)
     }
+
+    @Test("a corrupt recovery file is reported and removed, not silently swallowed")
+    func corruptRecoveryIsReportedAndRemoved() async throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ProjectStore(autosaveDirectory: dir)
+
+        // Hand-write a malformed recovery file at the exact autosave path.
+        let autosaveURL = dir.appendingPathComponent("recovery.moviecut")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("this is not valid moviecut JSON {{{{".utf8).write(to: autosaveURL)
+
+        #expect(await store.hasAutosave() == true)
+        // Previously this returned nil via `try?` with NO record of the failure
+        // and left the corrupt file on disk forever. Now it records the failure
+        // and removes the file.
+        #expect(await store.loadAutosaveIfAvailable() == nil)
+        let failure = await store.lastAutosaveLoadFailure
+        #expect(failure != nil, "a corrupt autosave must record a failure, not return nil silently")
+        #expect(failure == .corrupt, "expected .corrupt classification, got \(String(describing: failure))")
+        // The corrupt file is gone so it can't trap the user every launch.
+        #expect(FileManager.default.fileExists(atPath: autosaveURL.path) == false)
+    }
+
+    @Test("a successful load after a corrupt file clears the recorded failure")
+    func successfulLoadClearsFailure() async throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ProjectStore(autosaveDirectory: dir)
+
+        // First: corrupt file → records failure.
+        let autosaveURL = dir.appendingPathComponent("recovery.moviecut")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("garbage".utf8).write(to: autosaveURL)
+        _ = await store.loadAutosaveIfAvailable()
+        #expect(await store.lastAutosaveLoadFailure != nil)
+
+        // Then: a valid autosave is written (simulating the next edit session).
+        try await store.saveAutosave(makeProject(name: "Good"))
+        let recovered = await store.loadAutosaveIfAvailable()
+        #expect(recovered != nil)
+        #expect(await store.lastAutosaveLoadFailure == nil, "a successful load must clear the recorded failure")
+    }
 }

@@ -205,6 +205,14 @@ final class EditorViewModel {
         await projectStore.loadAutosaveIfAvailable()
     }
 
+    /// The reason a recovery file existed but could not be loaded (corrupt),
+    /// if the last `recoverableProject()` call hit that case. The launch flow
+    /// surfaces this so the user is told their recovery file was damaged
+    /// instead of the previous silent `try?` swallow.
+    func autosaveLoadFailure() async -> FileOperationError? {
+        await projectStore.lastAutosaveLoadFailure
+    }
+
     /// Removes the crash-recovery autosave (clean quit or after a manual save).
     func clearRecoveryAutosave() async {
         await projectStore.clearAutosave()
@@ -844,19 +852,103 @@ final class EditorViewModel {
         }
     }
 
-    /// Scans the project's assets for ones that no longer resolve and tells the
-    /// user how many need re-importing. Re-import is the existing
-    /// `importMedia(_:)` path, so this only sets a status message. (S2)
+    /// Scans the project's assets for ones that no longer resolve and reports
+    /// how many need re-linking. Unlike the previous behavior (which only told
+    /// the user to re-import, creating a new asset UUID and breaking clip
+    /// references), the missing assets are now also surfaced via
+    /// ``missingMediaAssets`` so the UI can offer a re-link action that
+    /// preserves the asset UUID (see ``relinkMedia(_:to:)``).
     private func reportMediaNeedingRelocation(in project: Project) {
+        evaluateMissingMedia(in: project)
+        if !missingMediaAssets.isEmpty {
+            lastStatusMessage = """
+            \(missingMediaAssets.count) media file(s) can’t be found. \
+            Use “Re-link Missing Media” to locate them.
+            """
+        }
+    }
+
+    /// Recomputes ``missingMediaAssets`` from a project snapshot. Public so the
+    /// re-link regression test can drive the same detection the launch path
+    /// uses, without a full project-load round-trip.
+    func evaluateMissingMedia(in project: Project) {
         let unreachable = project.mediaLibrary.assets.values.filter { asset in
             SecurityScopedAccess.needsRelocation(asset)
                 || !FileManager.default.fileExists(atPath: asset.originalURL.path)
         }
-        if !unreachable.isEmpty {
-            lastStatusMessage = """
-            \(unreachable.count) media file(s) can’t be found. \
-            Re-import them with File ▸ Import Media.
-            """
+        missingMediaAssets = unreachable.sorted { $0.id.uuidString < $1.id.uuidString }
+    }
+
+    /// Assets in the current project whose source files can't be found. Drives
+    /// the re-link UI; populated by `reportMediaNeedingRelocation`.
+    @ObservationIgnored private(set) var missingMediaAssets: [MediaAsset] = []
+
+    /// Re-links a missing media asset to a new file location, preserving the
+    /// asset's UUID so existing clips keep their references.
+    ///
+    /// The previous workaround was "re-import," which created a brand-new asset
+    /// (new UUID) and silently orphaned every clip still pointing at the old
+    /// asset. This instead re-probes the new URL for fresh metadata + a fresh
+    /// security-scoped bookmark, then updates the asset in place via
+    /// `UpdateMediaAssetCommand` so undo works and the asset id is stable.
+    @discardableResult
+    func relinkMedia(_ asset: MediaAsset, to newURL: URL) async -> Bool {
+        do {
+            // Re-probe the new location for current metadata + bookmark, but
+            // KEEP the original asset's UUID and id so clip references survive.
+            var relocated = MediaImporter.probe(url: newURL)
+            relocated.id = asset.id
+            relocated.originalBookmark = SecurityScopedAccess.makeBookmark(for: newURL)
+            let probe = await Self.appMetadataProbe(
+                for: newURL,
+                kind: relocated.kind,
+                baseMetadata: relocated.metadata
+            )
+            relocated.duration = probe.duration ?? relocated.duration
+            relocated.metadata = probe.metadata
+            try await session.dispatch(UpdateMediaAssetCommand(asset: relocated))
+            try await refreshFromSession()
+            // Re-evaluate missing media now that one asset is reachable again.
+            let snapshot = await session.snapshot()
+            reportMediaNeedingRelocation(in: snapshot)
+            if missingMediaAssets.isEmpty {
+                lastStatusMessage = "All media files are linked."
+            }
+            lastErrorMessage = nil
+            return true
+        } catch {
+            lastErrorMessage = FileOperationError.classify(error).userMessage
+            return false
+        }
+    }
+
+    /// Presents an `NSOpenPanel` for each missing media asset so the user can
+    /// relocate it in place. Walks the current `missingMediaAssets` list; the
+    /// user can cancel any single file (it stays missing) or cancel the whole
+    /// pass (remaining files stay missing). Each successful pick preserves the
+    /// asset UUID via ``relinkMedia(_:to:)``.
+    @MainActor
+    func presentRelinkMissingMedia() async {
+        // Snapshot the list: relinkMedia re-evaluates missingMediaAssets after
+        // each success, so iterate over a stable copy.
+        let toRelink = missingMediaAssets
+        guard !toRelink.isEmpty else { return }
+
+        for asset in toRelink {
+            let panel = NSOpenPanel()
+            panel.title = "Locate “\(asset.originalURL.lastPathComponent)”"
+            panel.message = "MovieCut can’t find this media file. Choose its new location."
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.movie, .video, .audio, .image]
+            panel.nameFieldStringValue = asset.originalURL.lastPathComponent
+            // Cancel ends the whole pass; the user opted out of re-linking.
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let linked = await relinkMedia(asset, to: url)
+            if !linked {
+                // relinkMedia already set lastErrorMessage with the cause.
+                return
+            }
         }
     }
 
@@ -877,7 +969,9 @@ final class EditorViewModel {
                 await recordCurrentProjectToRecent(recentProjectsStore, savedTo: url)
             }
         } catch {
-            lastErrorMessage = error.localizedDescription
+            // Classify the failure so the user gets an actionable message
+            // (e.g. "disk is out of space") instead of a raw Foundation string.
+            lastErrorMessage = FileOperationError.classify(error).userMessage
         }
     }
 
@@ -1103,6 +1197,18 @@ final class EditorViewModel {
         return lastErrorMessage == nil
     }
 
+    // MARK: - Periodic project autosave (named-file durability)
+    //
+    // This 30s timer writes the current project to a NAMED file
+    // (Application Support/MovieCut/Autosave/<name>-<uuid>.moviecut) every 30s
+    // so a long unsaved session is durable on disk. It is DISTINCT from the
+    // crash-recovery path in ProjectStore (recovery.moviecut, written on every
+    // edit via scheduleAutosave): that one is a single rolling recovery
+    // snapshot offered on next launch; this one is a per-project durable copy.
+    // Both paths go through ProjectStore.save, so both now surface classified
+    // FileOperationError messages (e.g. disk-full) instead of raw strings.
+    // The harness calls stopAutoSave() to make export/reload deterministic.
+
     func startAutoSave() {
         guard !isAutoSaveRunning else { return }
 
@@ -1131,7 +1237,7 @@ final class EditorViewModel {
                 lastAutoSaveDate = Date()
                 lastErrorMessage = nil
             } catch {
-                lastErrorMessage = error.localizedDescription
+                lastErrorMessage = FileOperationError.classify(error).userMessage
             }
         }
     }

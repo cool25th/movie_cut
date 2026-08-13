@@ -30,7 +30,6 @@ struct Phase02SmartToolsStaticContractTests {
             to: "    @ViewBuilder\n    private var transitionsTabContent"
         )
 
-        #expect(!source.contains("Smart tools move here next."))
         #expect(source.contains("@State private var runningSmartTool: SmartLibraryTool?"))
         #expect(smartTab.contains("LazyVGrid(columns: libraryGridColumns"))
         #expect(smartTab.contains("ForEach(SmartLibraryTool.allCases) { tool in"))

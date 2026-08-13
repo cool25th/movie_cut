@@ -192,6 +192,9 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         compositionBuildTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
+            let signposter = AppLog.Signpost.playback
+            let signpostState = signposter.beginInterval("playback.buildComposition")
+
             do {
                 let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project, audioProcessing: audioProcessing)
 
@@ -212,6 +215,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 cleanupTemporaryReverseRenderURLs()
                 self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
+                signposter.endInterval("playback.buildComposition", signpostState)
             } catch {
                 // Stale guard applies to the failure path too.
                 guard requestedGeneration == compositionGeneration else { return }
@@ -232,6 +236,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 playerItem = nil
                 currentTime = 0
                 duration = 0
+                signposter.endInterval("playback.buildComposition", signpostState, "failed")
             }
         }
     }

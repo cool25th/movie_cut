@@ -112,4 +112,30 @@ struct ThermalProxyDowngradeTests {
         #expect(project.schemaVersion == currentSchemaVersion)
         #expect(project.playbackSettings.autoProxyOnThermalPressure == true)
     }
+
+    // MARK: - Export thermal gate (ExportEngine refuses under critical heat)
+
+    @Test("only critical thermal state blocks export")
+    func onlyCriticalBlocksExport() {
+        // Export is refused ONLY at .critical — a thermal shutdown mid-write
+        // would corrupt the output. .serious proceeds (throttled but safe);
+        // .nominal/.fair are unrestricted.
+        #expect(ThermalState.nominal.shouldBlockExport == false)
+        #expect(ThermalState.fair.shouldBlockExport == false)
+        #expect(ThermalState.serious.shouldBlockExport == false)
+        #expect(ThermalState.critical.shouldBlockExport == true)
+    }
+
+    @Test("export blocking is more conservative than proxy downgrade")
+    func exportMoreConservativeThanProxyDowngrade() {
+        // Proxy downgrade (preview) is aggressive (.serious+): a dropped frame
+        // is cheap. Export blocking is conservative (.critical only): refusing
+        // a user's export is high-friction and a throttled export still
+        // completes safely. These two policies are deliberately different — pin
+        // the divergence so a future change can't silently collapse them.
+        #expect(ThermalState.serious.shouldDowngradeToProxy == true)
+        #expect(ThermalState.serious.shouldBlockExport == false)
+        #expect(ThermalState.critical.shouldDowngradeToProxy == true)
+        #expect(ThermalState.critical.shouldBlockExport == true)
+    }
 }

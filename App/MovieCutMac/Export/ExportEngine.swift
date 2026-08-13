@@ -67,6 +67,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
     @discardableResult
     func export(project: Project, to url: URL, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> URL {
+        try preflightThermalGate()
         if shouldWriteChapterMetadata(for: project) {
             return try await exportVideoWithExplicitBitrate(project: project, to: url, audioProcessing: audioProcessing)
         }
@@ -75,6 +76,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
         exportProgress = 0
         exportError = nil
         lastExportURL = nil
+
+        let signposter = AppLog.Signpost.export
+        let signpostState = signposter.beginInterval("export.preset")
 
         do {
             beginSecurityScopes(for: project)
@@ -109,6 +113,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
             try await exportSession.export(to: url, as: fileType)
             exportProgress = 1
             lastExportURL = url
+            signposter.endInterval("export.preset", signpostState)
             finishExport()
             return url
         } catch {
@@ -120,6 +125,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
             exportError = classified.userMessage
+            signposter.endInterval("export.preset", signpostState, "\(classified.userMessage, privacy: .public)")
             finishExport()
             throw classified
         }
@@ -1432,6 +1438,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
         profileOverride: VideoCompressionProfile? = nil,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
     ) async throws -> URL {
+        try preflightThermalGate()
         isExporting = true
         exportProgress = 0
         exportError = nil
@@ -1724,6 +1731,22 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// export error.
     private func removePartialOutput(at url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Refuses an export when the Mac is under critical thermal pressure. A
+    /// thermal shutdown mid-write would truncate or corrupt the output file at
+    /// the path the user picked — far worse than asking them to wait. `.serious`
+    /// is logged but allowed to proceed (throttled, but a full export is still
+    /// safe to complete). Called at the top of every video export entry point.
+    private func preflightThermalGate() throws {
+        let state = ThermalState.current
+        if state.shouldBlockExport {
+            AppLog.export.error("export refused: critical thermal state (risk of shutdown corrupting output)")
+            throw ExportEngineError.thermalCritical
+        }
+        if state == .serious {
+            AppLog.export.info("export proceeding under serious thermal state (system throttling; export will be slower)")
+        }
     }
 }
 
@@ -2357,6 +2380,7 @@ private enum ExportEngineError: LocalizedError {
     case compositionTrackCreationFailed
     case exportSessionCreationFailed
     case noExportableMedia
+    case thermalCritical
 
     var errorDescription: String? {
         switch self {
@@ -2366,6 +2390,8 @@ private enum ExportEngineError: LocalizedError {
             return "Could not create an AVAsset export session."
         case .noExportableMedia:
             return "The project does not contain exportable media."
+        case .thermalCritical:
+            return "The Mac is too hot to export safely. Let it cool down and try again — exporting now risks a thermal shutdown that would corrupt the output file."
         }
     }
 }

@@ -131,8 +131,41 @@ done
 
 echo ""
 echo "peak RSS across all configs/paths: $(python3 -c "print(round($peak_overall/1048576,0))") MB"
+gate_fail=0
 if [ "$peak_overall" -le "$MEM_LIMIT_BYTES" ]; then
   echo "=> 4 GB memory budget: WITHIN (peak $((peak_overall / 1048576)) MB <= 4096 MB)"
 else
   echo "=> 4 GB memory budget: EXCEEDED (peak $((peak_overall / 1048576)) MB > 4096 MB)"
+  gate_fail=1
 fi
+
+# Realtime-multiplier gate. Release is the shipping build, so it gets the
+# tighter SLO (docs/PERFORMANCE_SLO.md). Debug is the conservative reference
+# and only reported, not gated, here.
+REALTIME_LIMIT_RELEASE="1.2"
+REALTIME_LIMIT_DEBUG="1.5"
+echo ""
+echo "=== realtime-multiplier gate ==="
+for config in Debug Release; do
+  for path in passthrough color heavy; do
+    label="${config}_${path}"
+    real="$(cat "$WORK/${label}.real")"
+    mult="$(python3 -c "print(round($real/$DURATION_S,2))")"
+    if [ "$config" = "Release" ]; then limit="$REALTIME_LIMIT_RELEASE"; else limit="$REALTIME_LIMIT_DEBUG"; fi
+    over="$(python3 -c "print(1 if $mult > $limit else 0)")"
+    if [ "$over" -eq 0 ]; then
+      printf "  %-8s %-12s %5.2fx  WITHIN (<= %sx)\n" "$config" "$path" "$mult" "$limit"
+    else
+      printf "  %-8s %-12s %5.2fx  EXCEEDED (> %sx) — export pipeline regression\n" "$config" "$path" "$mult" "$limit"
+      gate_fail=1
+    fi
+  done
+done
+
+if [ "$gate_fail" -ne 0 ]; then
+  echo ""
+  echo "=> PERF GATE FAILED (see EXCEEDED rows above)" >&2
+  exit 1
+fi
+echo ""
+echo "=> PERF GATE PASSED"

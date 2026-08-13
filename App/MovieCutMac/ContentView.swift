@@ -187,7 +187,7 @@ struct ContentView: View {
                         .frame(minWidth: 400)
 
                     InspectorPanel(viewModel: viewModel)
-                        .frame(minWidth: 240, maxWidth: 320)
+                        .frame(minWidth: 288, maxWidth: 360)
                 }
                 .background(MovieCutTheme.editorBackground)
 

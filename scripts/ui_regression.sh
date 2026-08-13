@@ -55,6 +55,12 @@ done
 
 mkdir -p "$OUT_DIR" "$GOLDEN_DIR"
 
+# Clear stale captures from a prior run so only the states captured THIS run
+# are considered goldens/comparisons. Without this, a removed state's old raw
+# lingered in artifacts/ui/ and --update-golden re-committed it, or it got
+# compared against nothing and confusingly SKIPped.
+rm -f "$OUT_DIR"/moviecut_*_raw.png "$OUT_DIR"/moviecut_*_normalized.png
+
 # Capture the requested state(s). --state all (default) produces one raw per state.
 CAPTURE_ARGS=(--out-dir "$OUT_DIR")
 if [[ -n "$STATE_ARG" ]]; then

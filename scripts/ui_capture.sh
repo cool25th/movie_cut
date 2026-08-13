@@ -95,12 +95,20 @@ build_app() {
   APP_PATH="$derived_data/Build/Products/Debug/MovieCutMac.app"
   if [[ "$NO_BUILD" != "1" ]]; then
     echo "Building MovieCutMac for UI capture..."
+    # ENABLE_APP_SANDBOX=NO: the shipping build is sandboxed (project.yml),
+    # but the sandbox blocks the headless harness from reaching files passed
+    # via MOVIECUT_UITEST_IMPORT (no security-scoped grant at launch), which
+    # surfaces as NSCocoaErrorDomain:257 "permission denied" on import. The
+    # sandbox is a security boundary, not a rendering cost, so disabling it
+    # here doesn't change what the screenshot measures. Same approach as the
+    # perf scripts (perf_4k.sh).
     xcodebuild \
       -project "$REPO_DIR/MovieCut.xcodeproj" \
       -scheme MovieCutMac \
       -configuration Debug \
       -destination 'platform=macOS' \
       -derivedDataPath "$derived_data" \
+      ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO \
       build >"$LOG_DIR/xcodebuild-ui-capture.log" 2>&1
   fi
 }

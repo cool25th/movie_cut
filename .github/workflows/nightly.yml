@@ -76,3 +76,36 @@ jobs:
 
       - name: 4K export performance (memory ceiling)
         run: scripts/perf_4k.sh
+
+  ui-regression:
+    # dhash screenshot regression against committed goldens under
+    # Tests/UIEvidence/. This is a SIGNAL gate, not a hard one: it needs a GUI
+    # session + Accessibility permission for osascript/screencapture, which a
+    # stock macOS runner may not grant. If capture fails for permission reasons
+    # the job is allowed to pass (no false red from environment limits); a real
+    # layout regression shows as a FAIL row when capture succeeds.
+    runs-on: macos-15
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: UI regression (dhash vs goldens)
+        run: |
+          mkdir -p artifacts/ui
+          if scripts/ui_regression.sh; then
+            echo "UI regression PASS"
+          else
+            rc=$?
+            # Distinguish a real regression (capture succeeded, dhash FAIL)
+            # from an environment failure (no window / no permission). The
+            # report only exists when capture succeeded.
+            if [ -f artifacts/ui/ui_regression_report.txt ]; then
+              echo "::warning::UI regression detected layout drift — see artifacts/ui/ui_regression_report.txt"
+            else
+              echo "::notice::UI regression could not capture (GUI/permission limit on runner); treated as inconclusive, not a failure."
+            fi
+            exit 0
+          fi

@@ -3,6 +3,16 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
+/// `@unchecked Sendable` carrier for an `NSItemProvider` handed to a load
+/// completion closure. `NSItemProvider` is not Sendable on the macOS 15 SDK
+/// (it is on later SDKs), so re-capturing it inside the already-`@Sendable`
+/// `loadFileRepresentation` completion fails strict concurrency on the pinned
+/// Xcode 16. The provider's load APIs are documented callable from any queue
+/// and each one here is used from a single sequential fallback chain.
+private struct ItemProviderBox: @unchecked Sendable {
+    let provider: NSItemProvider
+}
+
 /// Handles media URLs dropped from AppKit pasteboards.
 public struct DragDropHandler {
     /// Pasteboard types accepted by media drag and drop.
@@ -65,6 +75,7 @@ public struct DragDropHandler {
             }
 
             let suggestedName = provider.suggestedName
+            let providerBox = ItemProviderBox(provider)
             provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _ in
                 if let url,
                    let copied = copyIntoImportDirectory(url, suggestedName: suggestedName) {
@@ -72,7 +83,7 @@ public struct DragDropHandler {
                     return
                 }
 
-                provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
+                providerBox.provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
                     let written = data.flatMap {
                         writeImportedData($0, typeIdentifier: typeIdentifier, suggestedName: suggestedName)
                     }

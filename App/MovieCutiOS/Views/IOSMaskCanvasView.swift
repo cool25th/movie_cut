@@ -131,7 +131,9 @@ struct IOSMaskCanvasView: View {
     ) -> some View {
         let point = cornerPoint(for: corner, mask: currentMask, metrics: metrics)
 
-        return Circle()
+        // Split binding (see the Mac twin): the full chain exceeds older
+        // toolchains' type-check budget.
+        let handle = Circle()
             .fill(Color.white)
             .frame(width: 16, height: 16)
             .overlay {
@@ -141,6 +143,8 @@ struct IOSMaskCanvasView: View {
             .shadow(color: .black.opacity(0.35), radius: 2)
             .position(point)
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
+
+        return handle
             .accessibilityLabel(corner.accessibilityLabel)
             .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
             .accessibilityHint("Drag to resize the mask, or use VoiceOver actions to adjust width and height one percent at a time")

@@ -101,6 +101,11 @@ final class EditorViewModel {
     var exportAudioCodec: MovieCutCore.AudioCodec = .aac
     var isMaskEditorActive: Bool = false
     var selectedAssetId: UUID?
+    /// Which clip-scoped section tab the inspector shows. Owned by the view
+    /// model (not view @State) so the UI test harness can drive it via
+    /// `MOVIECUT_UITEST_INSPECTOR_TAB` — each tab renders a different section,
+    /// which lets the dhash goldens capture them as distinct editor states.
+    var selectedInspectorSubtab: InspectorSubtab = .basic
     var playbackEngine: PlaybackEngine
     /// When true, refreshFromSession skips the per-dispatch composition rebuild.
     /// Used by the parity harness to batch a single rebuild after applying all

@@ -2,7 +2,11 @@ import AppKit
 import SwiftUI
 import MovieCutCore
 
-private enum InspectorSubtab: String, CaseIterable, Identifiable {
+/// The inspector's clip-scoped section tabs. Lives at file scope (not private
+/// to InspectorPanel) because the selection is owned by `EditorViewModel` —
+/// the UI test harness drives it via `MOVIECUT_UITEST_INSPECTOR_TAB` so the
+/// dhash goldens can capture each tab as a visually distinct editor state.
+enum InspectorSubtab: String, CaseIterable, Identifiable {
     case basic = "Basic"
     case speed = "Speed"
     case animation = "Animation"
@@ -15,7 +19,6 @@ private enum InspectorSubtab: String, CaseIterable, Identifiable {
 struct InspectorPanel: View {
     @Bindable var viewModel: EditorViewModel
     @State private var projectToolsExpanded = false
-    @State private var selectedInspectorSubtab: InspectorSubtab = .basic
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -77,7 +80,7 @@ struct InspectorPanel: View {
         .frame(minWidth: 240)
         .movieCutPanelBackground()
         .onChange(of: viewModel.selectedClipId) { _, _ in
-            selectedInspectorSubtab = .basic
+            viewModel.selectedInspectorSubtab = .basic
         }
     }
 
@@ -101,7 +104,7 @@ struct InspectorPanel: View {
     /// visual/effects/mask/animation control at once.
     @ViewBuilder
     private func visualClipInspectorSections(for clip: Clip) -> some View {
-        Picker("Inspector section", selection: $selectedInspectorSubtab) {
+        Picker("Inspector section", selection: $viewModel.selectedInspectorSubtab) {
             ForEach(InspectorSubtab.allCases) { subtab in
                 Text(subtab.rawValue).tag(subtab)
             }
@@ -121,7 +124,7 @@ struct InspectorPanel: View {
         .accessibilityLabel("Inspector section")
         .accessibilityHint("Switches between clip inspector sections.")
 
-        switch selectedInspectorSubtab {
+        switch viewModel.selectedInspectorSubtab {
         case .basic:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)
                 .movieCutInspectorSelectedFlatRow()

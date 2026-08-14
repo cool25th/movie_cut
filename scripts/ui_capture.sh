@@ -67,19 +67,20 @@ mkdir -p "$LOG_DIR"
 # --- Named editor states → harness env-var sets ---------------------------
 # Each state is a set of EXTRA harness vars applied on top of MOVIECUT_UITEST=1
 # + MOVIECUT_UITEST_IMPORT. Only states that produce a VISUALLY DISTINCT editor
-# are useful for the dhash gate — the harness must drive the UI far enough that
-# a screenshot differs. As of this commit, only the import baseline and the
-# text-applied state are visually distinct; grade/mask change pixels too
-# subtly (or only inside an inspector sheet that the harness doesn't open), so
-# dhash sees no change. Re-add with_text_extra/with_color_grade/with_mask once
-# the harness opens the relevant inspector panel for them.
+# are useful for the dhash gate. The inspector states rely on
+# MOVIECUT_UITEST_INSPECTOR_TAB, which the harness applies AFTER all
+# selection-changing gates (the inspector resets the tab on selection change),
+# so opening the Adjustment / Mask sections is what makes these states visibly
+# different from the import baseline.
 # Implemented with case statements (not associative arrays) for bash-3.2.
-ALL_STATES="import_only populated_editor"
+ALL_STATES="import_only populated_editor with_color_grade with_mask"
 
 state_extra_env() {
   case "$1" in
     import_only) printf '' ;;
     populated_editor) printf 'MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=Title' ;;
+    with_color_grade) printf 'MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_INSPECTOR_TAB=Adjustment' ;;
+    with_mask) printf 'MOVIECUT_UITEST_MASK=1 MOVIECUT_UITEST_INSPECTOR_TAB=Mask' ;;
     *) return 1 ;;
   esac
 }

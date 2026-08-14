@@ -1,0 +1,31 @@
+name: Release
+on:
+  workflow_dispatch: {}
+
+jobs:
+  app-store-archive:
+    # S5: manual release pipeline. Fails LOUD when credentials are absent —
+    # per the review, a release job must never silently skip or pass without
+    # a real signed archive. Trigger this only from a release tag/commit after
+    # nightly gates are green.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      # Secrets come from the repo's Actions secrets once configured.
+      # Missing team id → the script exits 1 with instructions (fail-loud).
+      - name: Archive + export (Mac App Store)
+        env:
+          MOVIECUT_TEAM_ID: ${{ secrets.MOVIECUT_TEAM_ID }}
+        run: bash scripts/release.sh
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MovieCut-appstore-export
+          path: build/release/export/
+          retention-days: 7

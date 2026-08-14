@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- S5: Mac App Store export options (App Store 단독 배포 결정 기준).
+	     teamID is substituted at release time by scripts/release.sh from
+	     MOVIECUT_TEAM_ID (never commit a real team id). -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>__TEAM_ID_PLACEHOLDER__</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>

@@ -31,8 +31,15 @@ if [ "$SANDBOX" = "1" ]; then
   AWK_STRIP_CR='sub(/\r/,"",$2);'
 else
   DESTINATION='platform=macOS'
-  BUILD_FLAGS=()
-  BUILD_LABEL="Debug"
+  # The project.yml default is ENABLE_APP_SANDBOX=YES (S3 shipping config),
+  # but a sandboxed harness build cannot read files passed via env vars
+  # without the containerize routing — the import dies with
+  # NSCocoaErrorDomain:257 and every section reports MISSING. Build the
+  # DEFAULT mode sandbox-OFF (same rationale as perf_4k.sh / ui_capture.sh:
+  # the sandbox is a security boundary, not a rendering cost). The SANDBOX=1
+  # mode above covers the sandboxed configuration.
+  BUILD_FLAGS=(ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO)
+  BUILD_LABEL="Debug, sandbox OFF"
   AWK_STRIP_CR=''
 fi
 

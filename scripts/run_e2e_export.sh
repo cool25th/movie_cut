@@ -54,6 +54,21 @@ PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -conf
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
+# wait_for_result <pid> <iters> <sleep_secs> <file1> [file2]
+# Polls for the result file(s) up to <iters> times, sleeping <sleep_secs>
+# between checks, then waits for the background <pid>. Collapses the
+# repeated "for _ in $(seq …); do [ -s … ] && break; sleep …; done; wait" idiom.
+wait_for_result() {
+  local pid="$1" iters="$2" sleep_secs="$3" file1="$4" file2="${5:-}"
+  if [ -n "$file2" ]; then
+    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && [ -s "$file2" ] && break; sleep "$sleep_secs"; done
+  else
+    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && break; sleep "$sleep_secs"; done
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+
+
 # G-04 Inc 1-2: generate real time-varying frames through
 # AVAssetImageGenerator, then exercise the zoom-keyed 128MB cache in the actual
 # app process. The status records decoder timestamps and cache transitions.
@@ -973,20 +988,6 @@ echo "PASS: ducking lowered BGM under voice ($DUCK_METRICS)"
 # 3-way color grade must be reflected in export: a warm grade shifts the exported
 # average color (red up, blue down) vs an ungraded export of the same clip.
 BARS="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
-
-# wait_for_result <pid> <iters> <sleep_secs> <file1> [file2]
-# Polls for the result file(s) up to <iters> times, sleeping <sleep_secs>
-# between checks, then waits for the background <pid>. Collapses the
-# repeated "for _ in $(seq …); do [ -s … ] && break; sleep …; done; wait" idiom.
-wait_for_result() {
-  local pid="$1" iters="$2" sleep_secs="$3" file1="$4" file2="${5:-}"
-  if [ -n "$file2" ]; then
-    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && [ -s "$file2" ] && break; sleep "$sleep_secs"; done
-  else
-    for _ in $(seq 1 "$iters"); do [ -s "$file1" ] && break; sleep "$sleep_secs"; done
-  fi
-  wait "$pid" 2>/dev/null || true
-}
 
 platform_export_check() {
   local raw="$1"

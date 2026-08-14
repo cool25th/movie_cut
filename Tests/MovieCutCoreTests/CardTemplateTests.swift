@@ -130,9 +130,14 @@ struct CardTemplateTests {
         try await session.dispatch(SetCardMasterStyleCommand(masterStyle: changed))
         let applied = await session.snapshot()
         let coverOverride = try #require(template.pages[0].masterOverride)
-        let coverText = try #require(applied.cardDocument?.pages[0].elements.first(where: { $0.kind == .text })?.text)
-        let bodyText = try #require(applied.cardDocument?.pages[1].elements.first(where: { $0.kind == .text })?.text)
-        let closingLogo = try #require(applied.cardDocument?.pages[4].elements.first(where: { $0.kind == .logo }))
+        // Unwrap the document BEFORE the element lookups: the older
+        // swift-testing macro bundled with Xcode 16 fails to type-unwrap
+        // optionals chained through array subscripts (#require over
+        // `doc?.pages[n].elements.first(...)`).
+        let appliedDocument = try #require(applied.cardDocument)
+        let coverText = try #require(appliedDocument.pages[0].elements.first(where: { $0.kind == .text })?.text)
+        let bodyText = try #require(appliedDocument.pages[1].elements.first(where: { $0.kind == .text })?.text)
+        let closingLogo = try #require(appliedDocument.pages[4].elements.first(where: { $0.kind == .logo }))
 
         #expect(applied.cardDocument?.masterStyle == changed)
         #expect(coverText.fontFamily == coverOverride.fontFamily)

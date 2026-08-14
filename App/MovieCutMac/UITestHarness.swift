@@ -138,6 +138,9 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_OPTICAL_FLOW=1` — enables optical-flow slow motion on the selected clip.
     /// - `MOVIECUT_UITEST_EXTRACT_AUDIO=1` — extracts audio from the selected video clip.
     /// - `MOVIECUT_UITEST_PLATFORM_PRESET=<rawValue>` — applies a real platform preset before export.
+    /// - `MOVIECUT_UITEST_INSPECTOR_TAB=<rawValue>` — selects the inspector's clip subtab
+    ///   (`Basic` / `Speed` / `Animation` / `Adjustment` / `Mask`) so the dhash golden states
+    ///   can capture each inspector section as a distinct editor state.
     /// - `MOVIECUT_UITEST_EXPORT_RESOLUTION=<rawValue>` — sets `ExportSettings.resolution` before export
     ///   (e.g. `p4K`), independent of any platform preset. Used by the 4K perf baseline (S6).
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
@@ -505,6 +508,36 @@ extension EditorViewModel {
             let standardCount = currentProject.markers.filter { $0.kind == .standard }.count
             let beatCount = currentProject.markers.filter { $0.kind == .beat }.count
             chapterSuffix = " chapters=\(standardCount) beat_chapters=\(beatCount) include_beats=\(includeBeatChapters ? 1 : 0)"
+        }
+
+        // Mask on the selected clip (generic dispatch). Previously MASK was a
+        // parity-path-only gate, so screenshot states couldn't apply a mask —
+        // and opening the Mask inspector tab alone produced a screenshot whose
+        // dhash was ~identical to the import baseline (inspector content is
+        // invisible at 9x8; only the masked PREVIEW pixels move the hash).
+        // Same rectangle as the parity gate: canvas-pixel coords on the default
+        // 320×240 canvas.
+        if env["MOVIECUT_UITEST_MASK"] == "1", selectedClipId != nil {
+            await updateSelectedMask(Mask(
+                shape: .rectangle,
+                position: CGPoint(x: 160, y: 120),
+                size: CGSize(width: 192, height: 144)
+            ))
+        }
+
+        // Selects the inspector's clip-scoped subtab (rawValue: Basic / Speed /
+        // Animation / Adjustment / Mask). Deliberately AFTER every
+        // selection-changing gate above (text template / extract audio / etc.)
+        // — InspectorPanel resets the tab to .basic whenever the clip selection
+        // changes, so setting it earlier would be undone. Used by the dhash
+        // golden states (with_color_grade / with_mask) so each inspector
+        // section is captured as a visually distinct editor state.
+        if let rawInspectorTab = env["MOVIECUT_UITEST_INSPECTOR_TAB"], !rawInspectorTab.isEmpty {
+            if let tab = InspectorSubtab(rawValue: rawInspectorTab) {
+                selectedInspectorSubtab = tab
+            } else {
+                lastErrorMessage = "unknown inspector tab: \(rawInspectorTab)"
+            }
         }
 
         if lastErrorMessage == nil,

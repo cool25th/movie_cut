@@ -97,7 +97,7 @@ struct P1PreviewInspectorPolishStaticContractTests {
         #expect(inspector.contains("case .text:"))
         #expect(inspector.contains("mode: InspectorBasicMode.text"))
         #expect(inspector.contains("case .video, .image:"))
-        #expect(inspector.contains("Picker(\"Inspector section\", selection: $selectedInspectorSubtab)"))
+        #expect(inspector.contains("Picker(\"Inspector section\", selection: $viewModel.selectedInspectorSubtab)"))
         #expect(inspector.contains(".pickerStyle(.segmented)"))
         #expect(inspector.contains(".tint(MovieCutTheme.accentCyan)"))
         #expect(shared.contains("func movieCutInspectorSelectedHeader() -> some View"))

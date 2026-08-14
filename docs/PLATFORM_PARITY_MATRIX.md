@@ -7,8 +7,9 @@
 ## 1. 재감사 요약
 
 - 빌드 상태: 2026-07-04 콜드 스타트에서 `swift build`, `swift test --filter 'StaticContract|Golden'`, Mac `xcodebuild`, `scripts/run_e2e_export.sh` PASS. Inc 2 종료 검증에는 iOS generic build도 포함한다.
-- iOS shared 렌더 경로가 확인된 항목: 색보정, warmth/tint, 3-way color grade, LUT/필터 일부, mask, text burn-in, canvas background.
-- 주요 iOS defer 범위: 크로마키 shared processor 위임, two-source transitions, shared background-removal compositor, freeze frame export/preview, speed ramp, reverse playback/export, destructive noise reduction apply, autosave/crash recovery UI/lifecycle, ProRes/GIF/still export, 일부 marker/quick-tools UX.
+- iOS 빌드 게이트: 2026-08-14부터 CI iOS 빌드가 **차단**(continue-on-error 제거) + `verify_gate.sh` 4단계(iOS generic) 추가 — iOS 스킴이 2주간(cd1458f 수리 전) 못 빌드되는 동안 아무 게이트가 이를 못 잡았던 사고의 재발 방지 (W4/kiro 9.3).
+- iOS shared 렌더 경로가 확인된 항목: 색보정, warmth/tint, 3-way color grade, LUT/필터 일부, mask, text burn-in, canvas background, 크로마키 export(full settings, build-verified), 배경제거 export(shared compositor, build-verified).
+- 주요 iOS defer 범위: two-source transitions, iOS preview의 크로마/전환 렌더링, iOS 행동 검증 인프라 전반(kiro 9.2 — 이것이 크로마/배경제거 행동 검증의 선행 조건), freeze frame export/preview, speed ramp, reverse playback/export, destructive noise reduction apply, autosave/crash recovery UI/lifecycle, ProRes/GIF/still export, 일부 marker/quick-tools UX.
 - G-09 AC2 판정: Mac-only 셀은 0건이 아니므로 각 항목을 명시적 defer로 유지한다. 해소는 G-09 Inc 3 이후 순서대로 진행한다.
 
 ## 2. 기능별 파리티 매트릭스
@@ -74,8 +75,8 @@
   - Mac UI: ✅ `ChromaKeyView` + eyedropper
   - iOS UI: 🟡 `IOSChromaKeyView` exists
   - Mac preview/export: ✅ `ChromaKeyPixelProcessor.apply`
-  - iOS preview/export: 🟡 inline `applyChromaKey` path, shared processor 미위임
-  - 상태: 🟡 iOS defer — 사유: iOS UI는 있으나 `IOSCustomVideoCompositor`가 `ChromaKeyPixelProcessor`로 통일되지 않아 edgeShrink/softness parity를 보장하지 못함
+  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export가 full `ChromaKeySettings`(softness/spill/edgeShrink)를 `ChromaKeyPixelProcessor`로 위임 — Mac과 동일 분기. **행동 검증은 iOS 테스트 인프라(kiro 9.2) 대기중.** iOS preview(`PreviewView`)는 여전히 크로마 미표시 — 별도 항목.
+  - 상태: 🟡 iOS export만 shared processor 위임 완료. iOS preview 크로마 렌더링과 행동 검증은 9.2 이후.
 
 - 전환 two-source
   - Core: ✅ `TransitionPixelProcessor`
@@ -83,15 +84,15 @@
   - iOS UI: ❌ 동등 transition editing surface 미확인
   - Mac preview/export: ✅ two-source compositor path
   - iOS preview/export: ❌ `TransitionPixelProcessor.apply` 미배선
-  - 상태: 🟡 iOS defer — 사유: iOS compositor/export에 two-source instruction path가 없어 current frame 단일 소스 합성만 수행
+  - 상태: 🟡 iOS defer — 사유: iOS compositor/export에 two-source instruction path가 없어 current frame 단일 소스 합성만 수행. **의도적 보류**: iOS 행동 검증 인프라(9.2) 없이 배선하면 빌드만 통과하는 미검증 코드가 됨(판정 규율 §6 rule 1).
 
 - 배경제거 Vision
   - Core: ✅ `BackgroundRemovalProvider`, `PersonSegmentationCompositor`
   - Mac UI: ✅ Remove Background toggle
   - iOS UI: 🟡 flag metadata 소비 가능
   - Mac preview/export: ✅ `PersonSegmentationCompositor`
-  - iOS preview/export: 🟡 inline `applyPersonSegmentation`, `PersonSegmentationCompositor` 미사용
-  - 상태: 🟡 iOS defer — 사유: shared matte/refine helper 미사용으로 Mac과 edge/refinement parity가 깨질 수 있음
+  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export 컴포지터가 `PersonSegmentationCompositor.align`/`removeBackground` 사용, `needsCustomCompositor`가 `isBackgroundRemoved` 포함(이전엔 조용한 no-op), Vision 실패 시 프레임 유지(Mac F-08 AC④와 정렬). **행동 검증은 9.2 대기중.**
+  - 상태: 🟡 iOS export 경로 shared compositor 위임 + no-op 버그 수정 완료. 행동 검증은 9.2 이후.
 
 - 정지프레임
   - Core: ✅ `FreezeFrameCommand`

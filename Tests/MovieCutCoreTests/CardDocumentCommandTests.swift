@@ -285,7 +285,10 @@ struct CardDocumentCommandTests {
             asset: replacement
         ))
         let applied = await session.snapshot()
-        let appliedElement = try #require(applied.cardDocument?.pages[1].elements[1])
+        // (Document unwrapped separately — Xcode 16's older #require macro
+        // can't unwrap chains through optional subscripts.)
+        let appliedDocument = try #require(applied.cardDocument)
+        let appliedElement = try #require(appliedDocument.pages[1].elements[1])
         #expect(appliedElement.id == original.id)
         #expect(appliedElement.normalizedFrame == original.normalizedFrame)
         #expect(appliedElement.mediaAssetID == replacement.id)

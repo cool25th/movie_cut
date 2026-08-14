@@ -52,7 +52,7 @@ final class IOSExportEngine {
             activeExportSession = exportSession
             startProgressPolling()
 
-            try await exportSession.export(to: outputURL, as: .mov)
+            try await AVExportCompatibility.export(.init(exportSession), to: outputURL, as: .mov)
             exportProgress = 1
             lastExportURL = outputURL
             finishExport()
@@ -90,7 +90,10 @@ final class IOSExportEngine {
         return composition
     }
 
-    private func needsCustomCompositor(for project: Project) -> Bool {
+    /// Internal (not private) so the app-hosted iOS unit tests can pin the
+    /// gate — the isBackgroundRemoved omission here was a silent no-op bug
+    /// until W5 caught it.
+    func needsCustomCompositor(for project: Project) -> Bool {
         project.timeline.tracks.contains { track in
             track.clips.contains { clip in
                 clip.colorCorrection != nil
@@ -99,6 +102,11 @@ final class IOSExportEngine {
                     || clip.mask != nil
                     || clip.chromaKey != nil
                     || clip.textContent != nil
+                    // Without this, a clip whose ONLY effect is background
+                    // removal never got the custom compositor attached — the
+                    // removal silently no-oped on export (the Mac gate at
+                    // ExportEngine.needsCustomCompositor includes it).
+                    || clip.isBackgroundRemoved
             }
         }
     }
@@ -175,6 +183,7 @@ final class IOSExportEngine {
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
                         colorGrade: clip.colorGrade,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,
@@ -209,6 +218,7 @@ final class IOSExportEngine {
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
                         colorGrade: clip.colorGrade,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,

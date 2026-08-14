@@ -24,7 +24,7 @@ struct R402InspectorSubtabStaticContractTests {
     @Test("InspectorPanel exposes visual subtabs as an accessible segmented picker")
     func inspectorPanelExposesVisualSubtabsAsSegmentedPicker() throws {
         let panel = try source("App/MovieCutMac/InspectorPanel.swift")
-        let subtabEnum = try section(in: panel, from: "private enum InspectorSubtab", to: "struct InspectorPanel")
+        let subtabEnum = try section(in: panel, from: "enum InspectorSubtab", to: "struct InspectorPanel")
 
         #expect(subtabEnum.contains("String, CaseIterable, Identifiable"))
         #expect(subtabEnum.contains("case basic = \"Basic\""))
@@ -32,8 +32,10 @@ struct R402InspectorSubtabStaticContractTests {
         #expect(subtabEnum.contains("case animation = \"Animation\""))
         #expect(subtabEnum.contains("case adjustment = \"Adjustment\""))
         #expect(subtabEnum.contains("case mask = \"Mask\""))
-        #expect(panel.contains("@State private var selectedInspectorSubtab: InspectorSubtab = .basic"))
-        #expect(panel.contains("Picker(\"Inspector section\", selection: $selectedInspectorSubtab)"))
+        // The tab selection moved from panel @State to EditorViewModel so the
+        // UI test harness can drive it (MOVIECUT_UITEST_INSPECTOR_TAB) — the
+        // panel now binds the view model's property.
+        #expect(panel.contains("Picker(\"Inspector section\", selection: $viewModel.selectedInspectorSubtab)"))
         #expect(panel.contains("ForEach(InspectorSubtab.allCases)"))
         #expect(panel.contains(".pickerStyle(.segmented)"))
         #expect(panel.contains(".accessibilityLabel(\"Inspector section\")"))
@@ -67,7 +69,7 @@ struct R402InspectorSubtabStaticContractTests {
             to: "    }\n\n    /// Project-wide tools"
         )
 
-        #expect(visualHelper.contains("switch selectedInspectorSubtab"))
+        #expect(visualHelper.contains("switch viewModel.selectedInspectorSubtab"))
         #expect(visualHelper.contains("case .basic:"))
         #expect(visualHelper.contains("InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.visual)"))
         #expect(visualHelper.contains("case .speed:"))

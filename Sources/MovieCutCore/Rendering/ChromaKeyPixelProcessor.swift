@@ -60,7 +60,10 @@ public enum ChromaKeyPixelProcessor {
         return SIMD3<Float>(Float(rgb.red), Float(rgb.green), Float(rgb.blue))
     }
 
-    private static let chromaKeyKernel = CIColorKernel(source: """
+    // A compiled, immutable kernel held in a `let` — safe to share across
+    // threads, but CIColorKernel is not Sendable on the macOS 15 SDK (it is on
+    // later SDKs), so strict-concurrency=complete needs the explicit opt-out.
+    nonisolated(unsafe) private static let chromaKeyKernel = CIColorKernel(source: """
         kernel vec4 chromaKey(__sample pixel, vec3 keyColor, float threshold, float softness, float spillSuppression) {
             float distanceFromKey = distance(pixel.rgb, keyColor);
             float matte = smoothstep(threshold, threshold + max(softness, 0.001), distanceFromKey);

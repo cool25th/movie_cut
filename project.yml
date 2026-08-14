@@ -108,6 +108,24 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
+  # kiro 9.2 first increment: iOS unit tests hosted in the app. No `info:`
+  # block anywhere (hand-maintained plists — see the MovieCutMac note).
+  MovieCutiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/MovieCutiOSTests
+    dependencies:
+      - target: MovieCutiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MovieCutiOS.app/MovieCutiOS"
 schemes:
   MovieCutMac:
     build:
@@ -120,3 +138,15 @@ schemes:
       targets:
         - MovieCutMacTests
         - MovieCutMacUITests
+  # Shared scheme so CI's iOS build step doesn't depend on xcodebuild's
+  # auto-created (unshared, machine-local) scheme resolution (W4 / kiro 9.3).
+  MovieCutiOS:
+    build:
+      targets:
+        MovieCutiOS: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MovieCutiOSTests

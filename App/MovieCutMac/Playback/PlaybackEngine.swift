@@ -349,7 +349,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         )
 
         exportSession.audioMix = playerItem.audioMix
-        try await exportSession.export(to: outputURL, as: .m4a)
+        try await AVExportCompatibility.export(.init(exportSession), to: outputURL, as: .m4a)
     }
 
     private static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {

@@ -11,7 +11,12 @@ private struct SceneChangeConfiguration: Sendable {
 /// Detects scene changes in a video asset by comparing consecutive frames.
 public final class SceneChangeProvider: AnalysisProvider {
     private let configuration: OSAllocatedUnfairLock<SceneChangeConfiguration>
-    private let context = CIContext(options: RenderColorConfiguration.contextOptions)
+    // CIContext is documented thread-safe but is not declared Sendable on the
+    // macOS 15 SDK (it is on later SDKs), which strict-concurrency=complete
+    // rejects for a stored property of a Sendable-conforming class. The same
+    // `nonisolated(unsafe)` annotation the test harness uses for its shared
+    // CIContext; the reference is immutable so this is sound.
+    nonisolated(unsafe) private let context = CIContext(options: RenderColorConfiguration.contextOptions)
 
     /// User-visible provider name used consistently in provider lists and analysis results.
     public let providerName = "SceneChange"

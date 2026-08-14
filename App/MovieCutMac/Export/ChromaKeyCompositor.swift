@@ -2,7 +2,11 @@ import AVFoundation
 import CoreImage
 import MovieCutCore
 
-final class ChromaKeyCompositor: NSObject, AVVideoCompositing {
+// @unchecked Sendable mirrors CustomVideoCompositor: the settings dictionary
+// is populated before composition requests begin and read-only afterwards,
+// but it is a `var`, which Xcode 16's stricter Sendable checking rejects in
+// an AVVideoCompositing (Sendable-conforming) class on mutable storage.
+final class ChromaKeyCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     let sourcePixelBufferAttributes: [String: any Sendable]? = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     var chromaKeySettingsByTrackID: [CMPersistentTrackID: ChromaKeySettings] = [:]

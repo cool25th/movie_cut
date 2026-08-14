@@ -362,7 +362,16 @@ struct ContentView: View {
     }
 
     private var platformPresetToolbarAccessibilityValue: String {
-        if let preset = PlatformExportPreset.allCases.first(where: isPlatformPresetApplied) {
+        // Explicit loop rather than first(where: <MainActor fn ref>): passing
+        // the main-actor function reference into the nonisolated rethrows
+        // predicate is rejected by Xcode 16's inference (Swift 6.3 accepts).
+        var applied: PlatformExportPreset?
+        for preset in PlatformExportPreset.allCases where applied == nil {
+            if isPlatformPresetApplied(preset) {
+                applied = preset
+            }
+        }
+        if let preset = applied {
             return "\(preset.name), \(preset.detail)"
         }
 
@@ -906,7 +915,15 @@ private struct PlatformExportPresetPopover: View {
     }
 
     private var activePreset: PlatformExportPreset? {
-        PlatformExportPreset.allCases.first(where: isApplied)
+        // Explicit loop (see platformPresetToolbarAccessibilityValue): Xcode
+        // 16 rejects the MainActor function reference in first(where:).
+        var applied: PlatformExportPreset?
+        for preset in PlatformExportPreset.allCases where applied == nil {
+            if isApplied(preset) {
+                applied = preset
+            }
+        }
+        return applied
     }
 
     private func isApplied(_ preset: PlatformExportPreset) -> Bool {

@@ -181,7 +181,7 @@ struct UIUXAccessibilityRegressionStaticContractTests {
             #"mode: InspectorBasicMode.audio"#,
             #"mode: InspectorBasicMode.text"#,
             #"visualClipInspectorSections(for: clip)"#,
-            #"Picker("Inspector section", selection: $selectedInspectorSubtab)"#,
+            #"Picker("Inspector section", selection: $viewModel.selectedInspectorSubtab)"#,
             #".accessibilityLabel("Inspector section")"#,
             #".accessibilityHint("Switches between clip inspector sections.")"#,
             #"InspectorAnalysisSection(viewModel: viewModel, clip: clip)"#,

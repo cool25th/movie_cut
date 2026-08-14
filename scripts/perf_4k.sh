@@ -35,7 +35,10 @@ MEM_LIMIT_BYTES=$((4 * 1024 * 1024 * 1024))   # 4 GB external-spec budget
 # Realtime multiplier gate (wall-clock / clip duration). Debug's conservative
 # upper bound per docs/PERFORMANCE_SLO.md. A path slower than realtime (>= 1.5x)
 # flags an export-pipeline regression. See PERF_BASELINE for current numbers.
-REALTIME_LIMIT_DEBUG="1.5"
+# Overridable because the SLO is calibrated for real Apple Silicon: a GPU-less
+# CI VM encodes 4K in software far slower (observed color 1.71x / heavy 3.0x),
+# so nightly runs a RELAXED limit there as a coarse regression signal only.
+REALTIME_LIMIT_DEBUG="${MOVIECUT_PERF_REALTIME_LIMIT_DEBUG:-1.5}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true' EXIT

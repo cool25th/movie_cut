@@ -89,7 +89,11 @@ struct ChromaKeyView: View {
         clip.chromaKey ?? .greenScreen()
     }
 
-    private func slider(title: String, value: Double, onChange: @escaping @Sendable (Double) -> Void) -> some View {
+    // @MainActor so the value-setting closures can call updateSettings: the
+    // bare @Sendable form compiles on Swift 6.3 (which infers the MainActor
+    // context) but Xcode 16 treats the closure as nonisolated and rejects the
+    // MainActor call. A @MainActor closure is Sendable by definition.
+    private func slider(title: String, value: Double, onChange: @escaping @MainActor (Double) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title)
@@ -102,7 +106,10 @@ struct ChromaKeyView: View {
             }
             Slider(value: Binding(
                 get: { value },
-                set: onChange
+                // Slider writes arrive on the main thread; assumeIsolated hops
+                // to the MainActor closure without a conversion the older
+                // compiler crashes on.
+                set: { newValue in MainActor.assumeIsolated { onChange(newValue) } }
             ), in: 0 ... 1)
         }
     }

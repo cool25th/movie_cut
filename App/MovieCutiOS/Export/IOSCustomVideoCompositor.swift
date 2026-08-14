@@ -87,7 +87,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
     
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+        // Boxed for the @Sendable render-queue closure: the request is not
+        // Sendable on the macOS 15 / iOS 18-era SDKs, so capturing it directly
+        // fails strict concurrency on Xcode 16. Each request is finished
+        // exactly once inside this closure.
+        let sendableRequest = RequestBox(request: request)
         renderQueue.async {
+            let request = sendableRequest.request
             guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request) else {
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
@@ -99,6 +105,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
                 let colorGrade = effect?.colorGrade ?? instruction.colorGrade
+                let chromaKey = effect?.chromaKey
                 let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
                 let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
                 let mask = effect?.mask ?? instruction.mask
@@ -124,7 +131,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     image = ColorGradePixelProcessor.apply(colorGrade, to: image)
                 }
 
-                if let chromaKeyColor {
+                // Full chroma-key settings first (softness / spill suppression /
+                // edge shrink), falling back to the legacy keyColor+threshold
+                // pair — the same branch order the Mac compositor uses. Before
+                // this, iOS dropped the three advanced parameters entirely.
+                if let chromaKey {
+                    image = ChromaKeyPixelProcessor.apply(chromaKey, to: image)
+                } else if let chromaKeyColor {
                     image = ChromaKeyPixelProcessor.apply(
                         keyColor: chromaKeyColor,
                         threshold: chromaKeyThreshold,
@@ -397,6 +410,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     // MARK: - Background Removal
 
+    /// Mirrors the Mac compositor: alignment and compositing go through the
+    /// shared `PersonSegmentationCompositor` (this file previously duplicated
+    /// that math inline), and — matching the Mac decision recorded as F-08
+    /// AC④ — a Vision failure leaves the frame UNCHANGED instead of falling
+    /// back to the center-vignette approximation. Parity over guesswork: an
+    /// untouched frame exports identically on both platforms; a vignetted one
+    /// only existed here.
     private func applyPersonSegmentation(
         to image: CIImage,
         request: AVAsynchronousVideoCompositionRequest
@@ -406,9 +426,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return image }
         guard let sourceImage = ciContext.createCGImage(image, from: extent) else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
+        // .accurate matches the Mac export path (Mac passes prefersFast=false
+        // for export; only its preview uses .fast).
         let segmentationRequest = VNGeneratePersonSegmentationRequest()
         segmentationRequest.qualityLevel = .accurate
         segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
@@ -416,48 +438,28 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         do {
             try personSegmentationHandler.perform([segmentationRequest], on: sourceImage)
         } catch {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
         guard let maskPixelBuffer = segmentationRequest.results?.first?.pixelBuffer else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
         let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
         guard !maskImage.extent.isEmpty else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
-        let scaleX = extent.width / maskImage.extent.width
-        let scaleY = extent.height / maskImage.extent.height
-        var scaledMask = maskImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-        scaledMask = scaledMask.transformed(by: CGAffineTransform(
-            translationX: extent.minX - scaledMask.extent.minX,
-            y: extent.minY - scaledMask.extent.minY
-        ))
-        let alignedMask = scaledMask.cropped(to: extent)
+        let alignedMask = PersonSegmentationCompositor.align(maskImage, to: extent)
         guard maskContainsForeground(alignedMask, extent: extent) else {
-            return applyBackgroundRemoval(to: image)
+            return image
         }
 
-        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: extent)
-
-        return image.applyingFilter(
-            "CIBlendWithMask",
-            parameters: [
-                kCIInputMaskImageKey: alignedMask,
-                kCIInputBackgroundImageKey: backgroundColor
-            ]
-        ).cropped(to: extent)
+        return PersonSegmentationCompositor.removeBackground(from: image, mask: alignedMask)
     }
 
     private func maskContainsForeground(_ maskImage: CIImage, extent: CGRect) -> Bool {
         PersonSegmentationCompositor.maskContainsForeground(maskImage, extent: extent, in: ciContext)
-    }
-
-    private func applyBackgroundRemoval(to image: CIImage) -> CIImage {
-        PersonSegmentationCompositor.applyBackgroundRemoval(to: image)
     }
 
     // MARK: - Source Frame Helpers
@@ -493,3 +495,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 }
 
 #endif
+
+/// `@unchecked Sendable` carrier for the render-queue request (see the boxing
+/// note in startRequest). iOS-side twin of the Mac CompositionRequestBox.
+private struct RequestBox: @unchecked Sendable {
+    let request: AVAsynchronousVideoCompositionRequest
+}

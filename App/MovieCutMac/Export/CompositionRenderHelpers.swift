@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CoreGraphics
 import MovieCutCore
 import QuartzCore
@@ -36,4 +37,16 @@ enum CompositionRenderHelpers {
         case .justified: return .justified
         }
     }
+}
+
+// MARK: - Compositor request carrying
+
+/// `@unchecked Sendable` carrier for an `AVAsynchronousVideoCompositionRequest`
+/// handed to a render queue. The request is not Sendable on the macOS 15 SDK
+/// (later SDKs relaxed this), so `renderQueue.async { ... request ... }` fails
+/// strict concurrency on the pinned Xcode 16. Each request is finished exactly
+/// once inside the queued closure by the code that boxed it — no cross-task
+/// sharing occurs.
+struct CompositionRequestBox: @unchecked Sendable {
+    let request: AVAsynchronousVideoCompositionRequest
 }

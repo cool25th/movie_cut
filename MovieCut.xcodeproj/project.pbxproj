@@ -35,6 +35,7 @@
 		20078AB1B8BCF7568A57A828 /* ProjectSchemaMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E86D9316DB23A4B9DC145A /* ProjectSchemaMigrationTests.swift */; };
 		210840EF21AB93A8FD516283 /* R305SafeZoneToggleStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9619F490FC3F7B5567897193 /* R305SafeZoneToggleStaticContractTests.swift */; };
 		22365771795F82112CFAAE6D /* ProjectModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A641EA50E67C3B3CA2C7F3DB /* ProjectModelTests.swift */; };
+		2335AB6C4CEE832B0BF980E6 /* IOSExportEngineGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC64A8345AB57273451DCE6E /* IOSExportEngineGateTests.swift */; };
 		248B46DEDC71F46D95501C0B /* CardEditorUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */; };
 		2503D56A9B64CF2E3B27BD0A /* KeyboardShortcutStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16947AA334227D5B01D6762 /* KeyboardShortcutStaticContractTests.swift */; };
 		264117F66CA3ED4E141B3A73 /* WaveformInvalidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04BC2FF152EAB929D8550A4E /* WaveformInvalidationTests.swift */; };
@@ -286,6 +287,13 @@
 			remoteGlobalIDString = 978964FFF1AF0DACA254EEE4;
 			remoteInfo = MovieCutMac;
 		};
+		D957B416C36E29645B96D101 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ADF96109EA2218B4B1AC07A4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D3D56E21C21A771B337B9D2;
+			remoteInfo = MovieCutiOS;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -435,6 +443,7 @@
 		95F94E4B9C01CB0116231131 /* IOSEffectsInspectorWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSEffectsInspectorWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		9619F490FC3F7B5567897193 /* R305SafeZoneToggleStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R305SafeZoneToggleStaticContractTests.swift; sourceTree = "<group>"; };
 		968454F92BCC814A62928EEF /* StickerPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickerPickerView.swift; sourceTree = "<group>"; };
+		97BE2311BAE0DCCC2512B24A /* MovieCutiOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MovieCutiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9A2CCAC3025D6CF11BDB7A66 /* AutosaveWiringStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutosaveWiringStaticContractTests.swift; sourceTree = "<group>"; };
 		9AA4A7B2158D2DD913E3CE23 /* R204LibraryHoverPreviewStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R204LibraryHoverPreviewStaticContractTests.swift; sourceTree = "<group>"; };
 		9B307B45D995C0B79FC72AFA /* InspectorBasicSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorBasicSection.swift; sourceTree = "<group>"; };
@@ -474,6 +483,7 @@
 		BA2241E4363D1A7F983CD2C7 /* AppStagePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStagePolicyTests.swift; sourceTree = "<group>"; };
 		BA89494E92192390C89B1023 /* CompoundDefinitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompoundDefinitionTests.swift; sourceTree = "<group>"; };
 		BAAE040E06864543306ABEE1 /* ScopeAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeAnalyzerTests.swift; sourceTree = "<group>"; };
+		BC64A8345AB57273451DCE6E /* IOSExportEngineGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSExportEngineGateTests.swift; sourceTree = "<group>"; };
 		BD7234313775A9C045C724CB /* EditorViewModel+AssistantProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+AssistantProvider.swift"; sourceTree = "<group>"; };
 		BDCA941B099070F6075A766D /* ClipTrimMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipTrimMathTests.swift; sourceTree = "<group>"; };
 		BFC0BB919197BDE4D9C135D1 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
@@ -776,6 +786,15 @@
 			path = Music;
 			sourceTree = "<group>";
 		};
+		12D8F7A30E21C092A098DC31 /* MovieCutiOSTests */ = {
+			isa = PBXGroup;
+			children = (
+				BC64A8345AB57273451DCE6E /* IOSExportEngineGateTests.swift */,
+			);
+			name = MovieCutiOSTests;
+			path = App/MovieCutiOSTests;
+			sourceTree = "<group>";
+		};
 		1EB65CE2A1197BA531B5CBE7 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
@@ -862,6 +881,7 @@
 			children = (
 				0A5748EDEDF94DD3680FB6F5 /* MovieCutCoreTests */,
 				21053D2C1236C40F526F9315 /* MovieCutiOS */,
+				12D8F7A30E21C092A098DC31 /* MovieCutiOSTests */,
 				2647A1351683BDC30977996D /* MovieCutMac */,
 				F4F3E1E09B33C448C6914847 /* MovieCutMacTests */,
 				741C312B5CF580D091A2CCF6 /* MovieCutMacUITests */,
@@ -968,6 +988,7 @@
 			children = (
 				48C56BBBADBE772D40AD9CF5 /* MovieCutCoreTests.xctest */,
 				6A0CC9B0198EF1A9689C868B /* MovieCutiOS.app */,
+				97BE2311BAE0DCCC2512B24A /* MovieCutiOSTests.xctest */,
 				4DB45FF6F6D577371FB4A06C /* MovieCutMac.app */,
 				5966AF2C7C9C4D63EB87311A /* MovieCutMacTests.xctest */,
 				1926A159C0AFF33612E44BCC /* MovieCutMacUITests.xctest */,
@@ -1068,7 +1089,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_A714ABD8-6ADC-48C0-9935-DC62821F9EA8" /* Resources */ = {
+		"TEMP_5FEEAE68-9350-4FFF-ADEA-DC1075A6E18A" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1155,6 +1176,24 @@
 			productReference = 4DB45FF6F6D577371FB4A06C /* MovieCutMac.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A6802B312A81511F0C036622 /* MovieCutiOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 59FC7B3F84B64FE8C4645CD1 /* Build configuration list for PBXNativeTarget "MovieCutiOSTests" */;
+			buildPhases = (
+				9FE0F89FDEF6533C28D1838B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6055DADE4A86E0B5DC365809 /* PBXTargetDependency */,
+			);
+			name = MovieCutiOSTests;
+			packageProductDependencies = (
+			);
+			productName = MovieCutiOSTests;
+			productReference = 97BE2311BAE0DCCC2512B24A /* MovieCutiOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		FF5ED0200D103702F71018E6 /* MovieCutMacTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 32459641EF88AF837D913296 /* Build configuration list for PBXNativeTarget "MovieCutMacTests" */;
@@ -1210,6 +1249,7 @@
 				FF5ED0200D103702F71018E6 /* MovieCutMacTests */,
 				1E7DE09CF9F9E9F641558AFB /* MovieCutMacUITests */,
 				4D3D56E21C21A771B337B9D2 /* MovieCutiOS */,
+				A6802B312A81511F0C036622 /* MovieCutiOSTests */,
 			);
 		};
 /* End PBXProject section */
@@ -1526,6 +1566,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9FE0F89FDEF6533C28D1838B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2335AB6C4CEE832B0BF980E6 /* IOSExportEngineGateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -1533,6 +1581,11 @@
 			isa = PBXTargetDependency;
 			target = 978964FFF1AF0DACA254EEE4 /* MovieCutMac */;
 			targetProxy = 54A9B4681BE090904577508D /* PBXContainerItemProxy */;
+		};
+		6055DADE4A86E0B5DC365809 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D3D56E21C21A771B337B9D2 /* MovieCutiOS */;
+			targetProxy = D957B416C36E29645B96D101 /* PBXContainerItemProxy */;
 		};
 		F54B080F5FD3707AA039608C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1720,6 +1773,46 @@
 			};
 			name = Release;
 		};
+		6355770260E12178724C7B64 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviecut.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MovieCutiOS.app/MovieCutiOS";
+			};
+			name = Release;
+		};
+		6D9058265B6369AE9B2B089D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviecut.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MovieCutiOS.app/MovieCutiOS";
+			};
+			name = Debug;
+		};
 		827CF2BC86F7873F49685186 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1900,6 +1993,15 @@
 			buildConfigurations = (
 				0D124C9C3718BD28243E784D /* Debug */,
 				827CF2BC86F7873F49685186 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		59FC7B3F84B64FE8C4645CD1 /* Build configuration list for PBXNativeTarget "MovieCutiOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6D9058265B6369AE9B2B089D /* Debug */,
+				6355770260E12178724C7B64 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -11,7 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        run: |
+          # Select the NEWEST Xcode installed on the runner. The historical pin
+          # to Xcode_16.app crashed its swift-frontend on this codebase (no
+          # diagnostics — batch compiler crash), and the dev/release toolchain
+          # is Xcode 26.5. CI should verify the toolchain we actually ship
+          # with; the macOS 14/iOS 17 minimums are enforced by availability
+          # gates in the code, not by compiling with an old compiler.
+          NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Available:"; ls -d /Applications/Xcode*.app
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST/Contents/Developer"
+          swift --version
 
       # Core (SwiftPM): build then run the full test suite. The timeout guards
       # against a regression of the cooperative-pool deadlock (Task A): if a
@@ -60,12 +71,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             test || true
 
-      # iOS app target (8.7k lines). The runtime/simulator platform may not be
-      # installed on every runner; if the generic build cannot find an iOS
-      # destination, report it but do not fail the workflow (continue-on-error).
-      # This is intentionally explicit rather than silently omitted.
-      - name: Build iOS app (generic, best-effort)
-        continue-on-error: true
+      # iOS app target (8.7k lines) — BLOCKING (kiro 9.3). The generic
+      # destination needs only the iOS SDK that ships with Xcode (no simulator
+      # runtime), and CODE_SIGNING_ALLOWED=NO matches the Mac step above. This
+      # gate is what would have caught the 7 IOSMaskCanvasView compile errors
+      # that hid behind the "iOS platform not installed" block from 2026-07-30
+      # to 2026-08-14 (fixed in cd1458f) — the iOS scheme was unbuildable for
+      # two weeks and no gate noticed.
+      - name: Build iOS app (generic, blocking)
         run: |
           xcodebuild -project MovieCut.xcodeproj \
             -scheme MovieCutiOS \
@@ -73,6 +86,36 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+  ios-tests:
+    # kiro 9.2 increment 1: the first iOS app-hosted unit tests, on a
+    # simulator. Kept in its own job so simulator boot/flakiness never blocks
+    # the fast build-and-test signal. The destination picks the first
+    # available iPhone at run time — runner images differ from local ones.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST/Contents/Developer"
+          swift --version
+      - name: Run iOS unit tests (simulator)
+        run: |
+          SIM="$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')"
+          if [ -z "$SIM" ]; then
+            echo "::error::no available iPhone simulator"
+            exit 1
+          fi
+          echo "Simulator: $SIM"
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -destination "platform=iOS Simulator,name=$SIM" \
+            -only-testing:MovieCutiOSTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
 
   # Lint is reported but never blocking: the codebase carries ~1,000 existing
   # findings, so gating on them would block every PR. This step surfaces
@@ -83,10 +126,26 @@ jobs:
     runs-on: macos-15
     if: always()
     needs: build-and-test
+    # Job-level continue-on-error: this job is a non-blocking report by design
+    # (the swiftlint step itself is `|| true`), and it has repeatedly failed
+    # with ZERO steps executed — a GitHub runner-assignment infra flake, not a
+    # lint finding. An infra flake must not paint the required checks red.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        run: |
+          # Select the NEWEST Xcode installed on the runner. The historical pin
+          # to Xcode_16.app crashed its swift-frontend on this codebase (no
+          # diagnostics — batch compiler crash), and the dev/release toolchain
+          # is Xcode 26.5. CI should verify the toolchain we actually ship
+          # with; the macOS 14/iOS 17 minimums are enforced by availability
+          # gates in the code, not by compiling with an old compiler.
+          NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Available:"; ls -d /Applications/Xcode*.app
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST/Contents/Developer"
+          swift --version
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Report SwiftLint findings (non-blocking)

@@ -170,7 +170,10 @@ struct MaskCanvasView: View {
     ) -> some View {
         let point = cornerPoint(for: corner, mask: currentMask, metrics: metrics)
 
-        return Circle()
+        // Split into two bindings: the single long modifier chain exceeded
+        // Xcode 26.3's type-check time budget (26.5 handles it; older CI
+        // toolchains must too).
+        let handle = Circle()
             .fill(Color.white)
             .frame(width: 12, height: 12)
             .overlay {
@@ -180,6 +183,8 @@ struct MaskCanvasView: View {
             .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
             .position(point)
             .gesture(resizeGesture(corner: corner, currentMask: currentMask, metrics: metrics))
+
+        return handle
             .accessibilityLabel(corner.accessibilityLabel)
             .accessibilityValue(sizeAccessibilityValue(for: currentMask.size))
             .accessibilityHint("Drag to resize the mask, hold Shift to preserve aspect ratio, or use VoiceOver actions to adjust width and height one percent at a time")

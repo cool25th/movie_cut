@@ -96,7 +96,7 @@
 | `Tests/MovieCutCoreTests/R205LibraryAddInteractionStaticContractTests.swift` | source-string positive wiring; needs hand review | 43 |
 | `Tests/MovieCutCoreTests/R301R302PreviewTransportZoomStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 39 |
 | `Tests/MovieCutCoreTests/R401InspectorContextStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 37 |
-| `Tests/MovieCutCoreTests/R402InspectorSubtabStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 49 |
+| `Tests/MovieCutCoreTests/R402InspectorSubtabStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 51 |
 | `Tests/MovieCutCoreTests/R501TimelineToolbarStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 38 |
 | `Tests/MovieCutCoreTests/R601VisualParityDarkShellStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 53 |
 | `Tests/MovieCutCoreTests/ReframeSmoothingTests.swift` | source-string positive wiring; needs hand review | 115 |
@@ -109,7 +109,7 @@
 | `Tests/MovieCutCoreTests/TextToSpeechTests.swift` | source-string positive wiring; needs hand review | 97 |
 | `Tests/MovieCutCoreTests/ThumbnailProxyStaticContractTests.swift` | source-string positive wiring; needs hand review | 101 |
 | `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift` | source-string positive wiring; needs hand review | 142 |
-| `Tests/MovieCutCoreTests/UIRegressionInfrastructureStaticContractTests.swift` | source-string positive wiring; needs hand review | 17 |
+| `Tests/MovieCutCoreTests/UIRegressionInfrastructureStaticContractTests.swift` | source-string positive wiring; needs hand review | 23 |
 | `Tests/MovieCutCoreTests/UIUXAccessibilityRegressionStaticContractTests.swift` | source-string positive wiring; needs hand review | 45 |
 | `Tests/MovieCutCoreTests/VoiceoverRecordingStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 71 |
 | `Tests/MovieCutCoreTests/WaveformTaskIdentityStaticContractTests.swift` | source-string negative; needs hand review (boundary vs defect) | 31 |

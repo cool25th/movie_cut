@@ -110,7 +110,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
 
             let fileType = outputFileType(for: url, settings: project.exportSettings, supportedFileTypes: exportSession.supportedFileTypes)
-            try await exportSession.export(to: url, as: fileType)
+            try await AVExportCompatibility.export(.init(exportSession), to: url, as: fileType)
             exportProgress = 1
             lastExportURL = url
             signposter.endInterval("export.preset", signpostState)
@@ -1277,7 +1277,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 try FileManager.default.removeItem(at: url)
             }
 
-            try await exportSession.export(to: url, as: .m4a)
+            try await AVExportCompatibility.export(.init(exportSession), to: url, as: .m4a)
             exportProgress = 1
             lastExportURL = url
             finishExport()

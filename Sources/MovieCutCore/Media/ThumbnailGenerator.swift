@@ -235,7 +235,7 @@ public enum ProxyGenerator {
         }
 
         do {
-            try await exportSession.export(to: plan.targetURL, as: .mp4)
+            try await AVExportCompatibility.export(.init(exportSession), to: plan.targetURL, as: .mp4)
         } catch {
             try? FileManager.default.removeItem(at: plan.targetURL)
             throw error

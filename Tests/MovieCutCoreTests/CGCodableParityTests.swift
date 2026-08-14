@@ -55,8 +55,12 @@ struct CGCodableParityTests {
         // Timeline.canvasSize CGSize field.
         #expect(project.timeline.canvasSize == CGSize(width: 1920, height: 1080))
 
-        // Card document element text CGPoint field.
-        let cardText = try #require(project.cardDocument?.pages.first?.elements.first?.text)
+        // Card document element text CGPoint field. (Document unwrapped
+        // separately — Xcode 16's older #require macro can't unwrap chains
+        // through optional subscripts.)
+        let cardDocument = try #require(project.cardDocument)
+        let firstPage = try #require(cardDocument.pages.first)
+        let cardText = try #require(firstPage.elements.first?.text)
         #expect(cardText.position == CGPoint(x: 0.3, y: 0.4))
     }
 

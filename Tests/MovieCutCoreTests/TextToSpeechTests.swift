@@ -49,9 +49,10 @@ struct TextToSpeechTests {
             _ = try await synthesizer.synthesize(text: "   \n  ", to: url)
             Issue.record("expected synthesize to throw for blank text")
         } catch let error as TextToSpeechError {
-            guard case .emptyText = error else {
+            if case .emptyText = error {
+                // expected
+            } else {
                 Issue.record("unexpected TextToSpeechError: \(error)")
-                break
             }
         } catch {
             Issue.record("unexpected error type: \(error)")

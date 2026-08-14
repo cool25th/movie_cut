@@ -87,6 +87,36 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+  ios-tests:
+    # kiro 9.2 increment 1: the first iOS app-hosted unit tests, on a
+    # simulator. Kept in its own job so simulator boot/flakiness never blocks
+    # the fast build-and-test signal. The destination picks the first
+    # available iPhone at run time — runner images differ from local ones.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST/Contents/Developer"
+          swift --version
+      - name: Run iOS unit tests (simulator)
+        run: |
+          SIM="$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')"
+          if [ -z "$SIM" ]; then
+            echo "::error::no available iPhone simulator"
+            exit 1
+          fi
+          echo "Simulator: $SIM"
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -destination "platform=iOS Simulator,name=$SIM" \
+            -only-testing:MovieCutiOSTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
   # Lint is reported but never blocking: the codebase carries ~1,000 existing
   # findings, so gating on them would block every PR. This step surfaces
   # violations in the log for visibility while a baseline/strict rollout is

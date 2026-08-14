@@ -90,7 +90,10 @@ final class IOSExportEngine {
         return composition
     }
 
-    private func needsCustomCompositor(for project: Project) -> Bool {
+    /// Internal (not private) so the app-hosted iOS unit tests can pin the
+    /// gate — the isBackgroundRemoved omission here was a silent no-op bug
+    /// until W5 caught it.
+    func needsCustomCompositor(for project: Project) -> Bool {
         project.timeline.tracks.contains { track in
             track.clips.contains { clip in
                 clip.colorCorrection != nil

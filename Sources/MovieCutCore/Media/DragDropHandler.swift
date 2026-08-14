@@ -75,7 +75,7 @@ public struct DragDropHandler {
             }
 
             let suggestedName = provider.suggestedName
-            let providerBox = ItemProviderBox(provider)
+            let providerBox = ItemProviderBox(provider: provider)
             provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _ in
                 if let url,
                    let copied = copyIntoImportDirectory(url, suggestedName: suggestedName) {

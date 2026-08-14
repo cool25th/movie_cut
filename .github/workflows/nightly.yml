@@ -17,7 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        run: |
+          # Select the NEWEST Xcode installed on the runner. The historical pin
+          # to Xcode_16.app crashed its swift-frontend on this codebase (no
+          # diagnostics — batch compiler crash), and the dev/release toolchain
+          # is Xcode 26.5. CI should verify the toolchain we actually ship
+          # with; the macOS 14/iOS 17 minimums are enforced by availability
+          # gates in the code, not by compiling with an old compiler.
+          NEWEST="20 20 12 61 79 80 81 701 33 98 100 204 250 395 398 399 400ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Available:"; ls -d /Applications/Xcode*.app
+          echo "Selecting: "
+          sudo xcode-select -s "/Contents/Developer"
+          swift --version
 
       - name: Build Mac app (Debug, sandbox-on)
         run: |
@@ -63,7 +74,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        run: |
+          # Select the NEWEST Xcode installed on the runner. The historical pin
+          # to Xcode_16.app crashed its swift-frontend on this codebase (no
+          # diagnostics — batch compiler crash), and the dev/release toolchain
+          # is Xcode 26.5. CI should verify the toolchain we actually ship
+          # with; the macOS 14/iOS 17 minimums are enforced by availability
+          # gates in the code, not by compiling with an old compiler.
+          NEWEST="20 20 12 61 79 80 81 701 33 98 100 204 250 395 398 399 400ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Available:"; ls -d /Applications/Xcode*.app
+          echo "Selecting: "
+          sudo xcode-select -s "/Contents/Developer"
+          swift --version
 
       - name: Build Mac app (Debug)
         run: |
@@ -90,7 +112,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        run: |
+          # Select the NEWEST Xcode installed on the runner. The historical pin
+          # to Xcode_16.app crashed its swift-frontend on this codebase (no
+          # diagnostics — batch compiler crash), and the dev/release toolchain
+          # is Xcode 26.5. CI should verify the toolchain we actually ship
+          # with; the macOS 14/iOS 17 minimums are enforced by availability
+          # gates in the code, not by compiling with an old compiler.
+          NEWEST="20 20 12 61 79 80 81 701 33 98 100 204 250 395 398 399 400ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Available:"; ls -d /Applications/Xcode*.app
+          echo "Selecting: "
+          sudo xcode-select -s "/Contents/Developer"
+          swift --version
 
       - name: UI regression (dhash vs goldens)
         run: |

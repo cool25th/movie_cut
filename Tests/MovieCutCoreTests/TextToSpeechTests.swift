@@ -42,8 +42,19 @@ struct TextToSpeechTests {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("tts-empty-\(UUID().uuidString).caf")
 
-        await #expect(throws: TextToSpeechError.emptyText) {
+        // do/catch instead of `await #expect(throws:)`: Xcode 16's older
+        // swift-testing macro sends the @MainActor closure into a nonisolated
+        // macro implementation, which strict concurrency rejects.
+        do {
             _ = try await synthesizer.synthesize(text: "   \n  ", to: url)
+            Issue.record("expected synthesize to throw for blank text")
+        } catch let error as TextToSpeechError {
+            guard case .emptyText = error else {
+                Issue.record("unexpected TextToSpeechError: \(error)")
+                break
+            }
+        } catch {
+            Issue.record("unexpected error type: \(error)")
         }
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }

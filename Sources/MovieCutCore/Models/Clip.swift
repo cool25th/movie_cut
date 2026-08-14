@@ -68,6 +68,11 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Optional transition applied at this clip boundary.
     public var transition: Transition?
 
+    /// Optional Ken Burns (pan-and-zoom) motion for image clips. When present,
+    /// the image-to-video rasterizer bakes a per-frame zoom/pan so the still
+    /// image moves like film instead of holding static.
+    public var kenBurnsEffect: KenBurnsEffect?
+
     /// Text payload for generated text clips.
     public var textContent: TextClipContent?
 
@@ -209,6 +214,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         useOpticalFlow: Bool = false,
         keyframes: [Keyframe] = [],
         transition: Transition? = nil,
+        kenBurnsEffect: KenBurnsEffect? = nil,
         textContent: TextClipContent? = nil,
         chromaKey: ChromaKeySettings? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
@@ -242,6 +248,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.useOpticalFlow = useOpticalFlow
         self.keyframes = keyframes
         self.transition = transition
+        self.kenBurnsEffect = kenBurnsEffect
         self.textContent = textContent
         if let chromaKey {
             self.chromaKey = chromaKey

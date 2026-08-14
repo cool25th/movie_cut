@@ -18,6 +18,9 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
 fi
 
 # bit-exact-ish flags + stripped metadata keep output reproducible run-to-run.
+# Color tags are added per-fixture where the test cares (see the color-matrix
+# block below); the default COMMON_V leaves color untagged so the original
+# tiny fixtures stay byte-identical to their committed forms.
 COMMON_V=(-pix_fmt yuv420p -c:v libx264 -preset ultrafast -map_metadata -1 -movflags +faststart -fflags +bitexact)
 
 echo "Generating fixtures into $OUT"
@@ -79,6 +82,35 @@ ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=1000:sample_rate=44100" \
 # 4) Solid blue still — image import, 64x64 PNG.
 ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=64x64" \
   -frames:v 1 -map_metadata -1 -fflags +bitexact "$OUT/swatch_blue_64x64.png"
+
+# 5) Color-space matrix — minimal 1080p clips for import-side resolution/parity
+# coverage. Deliberately SHORT (1s) and solid-color so they stay small, but real
+# 1080p/720p so the harness exercises a representative resolution.
+#
+# NOTE on color-tag verification: ffmpeg's libx264 ultrafast preset does NOT
+# reliably write the VUI color-primaries/transfer tags into these fixtures
+# (ffprobe shows primaries/transfer as None, matrix as bt709). So these clips
+# are valid IMPORT inputs but they are NOT a ground-truth for
+# verify_export_color_metadata.py. That script must be run against a file
+# produced by MovieCut's own AVAssetWriter path (which writes
+# AVVideoColorPropertiesKey explicitly per the v1 Rec.709 contract). The 4K
+# matrix + real camera-origin fixtures (rotation metadata, DisplayP3/HDR) are
+# deferred per the render-reliability plan.
+COLOR_V=(-pix_fmt yuv420p -c:v libx264 -preset ultrafast -map_metadata -1
+  -movflags +faststart -fflags +bitexact
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv)
+
+# 5a) 1080p 30fps Rec.709-tagged — the v1 contract baseline.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=0x804020:s=1920x1080:r=30" \
+  -t 1 "${COLOR_V[@]}" "$OUT/rec709_1080p_1s_30fps.mp4"
+
+# 5b) 1080p 24fps Rec.709-tagged — cinema frame-rate parity input.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=0x208040:s=1920x1080:r=24" \
+  -t 1 "${COLOR_V[@]}" "$OUT/rec709_1080p_1s_24fps.mp4"
+
+# 5c) 720p portrait Rec.709-tagged — 9:16 short-edge fixture.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=0x402080:s=720x1280:r=30" \
+  -t 1 "${COLOR_V[@]}" "$OUT/rec709_720p_portrait_1s_30fps.mp4"
 
 echo ""
 echo "Generated:"

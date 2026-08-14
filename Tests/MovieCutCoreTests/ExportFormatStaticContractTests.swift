@@ -116,8 +116,22 @@ struct ExportFormatStaticContractTests {
         #expect(source.contains(".accessibilityLabel(\"Custom bitrate value\")"))
         #expect(source.contains("Enter a value from 1 to 200 Mbps."))
 
+        // Check forbidden terms against CODE only (strip `//` line comments),
+        // so the file's own doc comment — which may mention a term to declare it
+        // is absent — can't trip the check. Same fix shape as AppLogTests.
+        let codeOnly = source.split(separator: "\n")
+            .map { line -> String in
+                // Drop everything after a `//` that isn't inside a string
+                // literal. A naive split is good enough here: these terms never
+                // appear inside a URL or a `//`-bearing string in this file.
+                if let range = line.range(of: "//") {
+                    return String(line[..<range.lowerBound])
+                }
+                return String(line)
+            }
+            .joined(separator: "\n")
         for forbiddenTerm in forbiddenUserFacingTerms {
-            #expect(source.range(of: forbiddenTerm, options: [.caseInsensitive]) == nil)
+            #expect(codeOnly.range(of: forbiddenTerm, options: [.caseInsensitive]) == nil)
         }
     }
 

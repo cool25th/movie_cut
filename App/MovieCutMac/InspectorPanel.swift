@@ -107,6 +107,7 @@ struct InspectorPanel: View {
             }
         }
         .pickerStyle(.segmented)
+        .controlSize(.small)
         .tint(MovieCutTheme.accentCyan)
         .padding(2)
         .background(

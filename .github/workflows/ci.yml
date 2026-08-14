@@ -17,6 +17,16 @@ jobs:
       # against a regression of the cooperative-pool deadlock (Task A): if a
       # blocking decode sneaks back onto the cooperative pool, the suite hangs
       # instead of failing fast. The timeout turns that hang into a red build.
+      #
+      # This is the PR-time gate for the render-reliability invariants:
+      #   - ColorSpaceParityTests: preview↔export pixel parity under the pinned
+      #     sRGB/Rec.709 working space (no implicit CIContext regressions).
+      #   - HDRProfileGatingTests: HDR export is downgraded under the v1 flag,
+      #     and SDR outputs are tagged Rec.709 (no mislabeled files).
+      #   - ClipTransformAnchorTests: the shared affine helper reproduces both
+      #     engines' math (no preview/export transform drift).
+      # Behavioral/export-pixel checks (parity MAD, e2e, fuzz, perf) need a
+      # running app + GPU compositor and run on the nightly track instead.
       - name: Build Core
         run: swift build
       - name: Run Core tests

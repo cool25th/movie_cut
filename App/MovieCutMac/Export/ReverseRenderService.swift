@@ -3,6 +3,7 @@ import CoreGraphics
 import CoreImage
 import CoreVideo
 import ImageIO
+import MovieCutCore
 
 final class ImageVideoRenderService {
     private static let frameRate: Int32 = 30
@@ -11,11 +12,18 @@ final class ImageVideoRenderService {
         imageURL: URL,
         duration: TimeInterval,
         renderSize: CGSize,
-        outputURL: URL
+        outputURL: URL,
+        kenBurnsEffect: KenBurnsEffect? = nil
     ) async throws -> URL {
         let duration = max(duration.isFinite ? duration : 0, 1.0 / Double(Self.frameRate))
         let outputSize = Self.evenPixelSize(renderSize)
-        let image = try Self.loadImage(at: imageURL, maxPixelSize: max(outputSize.width, outputSize.height))
+
+        // When a Ken Burns zoom is active, the rasterizer needs extra source
+        // pixels so the zoomed-in crop stays sharp. Load at the max zoom
+        // factor × the canvas's longer side.
+        let maxZoom = kenBurnsEffect.map { max($0.startScale, $0.endScale) } ?? 1.0
+        let maxPixelSize = max(outputSize.width, outputSize.height) * max(1.0, maxZoom)
+        let image = try Self.loadImage(at: imageURL, maxPixelSize: maxPixelSize)
 
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
@@ -80,7 +88,12 @@ final class ImageVideoRenderService {
             guard status == kCVReturnSuccess, let pixelBuffer else {
                 throw ImageVideoRenderServiceError.pixelBufferCreationFailed(status)
             }
-            try Self.draw(image, into: pixelBuffer, size: outputSize)
+            // Resolve the clip-local progress (0 at first frame, 1 at last) so a
+            // Ken Burns motion can be sampled at this frame's point in time.
+            let progress = totalFrames > 1
+                ? Double(frameIndex) / Double(totalFrames - 1)
+                : 0
+            try Self.draw(image, into: pixelBuffer, size: outputSize, kenBurnsEffect: kenBurnsEffect, progress: progress)
 
             let presentationTime = CMTime(value: CMTimeValue(frameIndex), timescale: Self.frameRate)
             guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
@@ -122,7 +135,18 @@ final class ImageVideoRenderService {
         return image
     }
 
-    private static func draw(_ image: CGImage, into pixelBuffer: CVPixelBuffer, size: CGSize) throws {
+    /// Draws the image into the pixel buffer. When a Ken Burns effect is
+    /// present, the image is drawn **aspect-fill** at the sampled zoom level
+    /// and panned to the sampled focus point so the canvas is always covered
+    /// (no letterbox, no exposed background). Without Ken Burns the original
+    /// centered aspect-fit behavior is preserved.
+    private static func draw(
+        _ image: CGImage,
+        into pixelBuffer: CVPixelBuffer,
+        size: CGSize,
+        kenBurnsEffect: KenBurnsEffect?,
+        progress: Double
+    ) throws {
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
 
@@ -147,18 +171,56 @@ final class ImageVideoRenderService {
 
         context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(origin: .zero, size: size))
+        context.interpolationQuality = .high
 
         let imageSize = CGSize(width: image.width, height: image.height)
-        let scale = min(size.width / imageSize.width, size.height / imageSize.height)
-        let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        let drawRect = CGRect(
-            x: (size.width - drawSize.width) / 2,
-            y: (size.height - drawSize.height) / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        ).integral
-        context.interpolationQuality = .high
-        context.draw(image, in: drawRect)
+
+        if let kenBurnsEffect {
+            // Aspect-fill at the sampled zoom, then pan so the sampled focus
+            // point lands at the canvas center. drawRect is sized to fully
+            // cover the canvas at the current zoom (always >= aspect-fill), so
+            // panning never reveals background.
+            let motion = kenBurnsEffect.transform(at: progress)
+            let zoom = max(motion.scale, 0.01)
+            let fillScale = max(size.width / imageSize.width, size.height / imageSize.height)
+            let effectiveScale = fillScale * zoom
+            let drawSize = CGSize(width: imageSize.width * effectiveScale, height: imageSize.height * effectiveScale)
+
+            // The focus point is in normalized image coordinates (0 = top-left
+            // of the source). Map it to a drawRect origin offset so that the
+            // focus sits at the canvas center, clamped so edges stay covered.
+            let focusX = min(max(motion.focus.x, 0), 1)
+            let focusY = min(max(motion.focus.y, 0), 1)
+            // Center of the drawn image if focus were 0.5,0.5:
+            let centeredX = (size.width - drawSize.width) / 2
+            let centeredY = (size.height - drawSize.height) / 2
+            // Shift so the requested focus point meets canvas center. Moving
+            // focus toward 1 (right/bottom in normalized image space) shifts the
+            // draw origin left/down to reveal that region.
+            let offsetX = (0.5 - focusX) * drawSize.width
+            let offsetY = (0.5 - focusY) * drawSize.height
+            // Clamp so the draw rect never leaves the canvas (no exposed bg).
+            let maxX = min(0, size.width - drawSize.width)
+            let maxY = min(0, size.height - drawSize.height)
+            let drawRect = CGRect(
+                x: min(max(centeredX + offsetX, maxX), 0),
+                y: min(max(centeredY + offsetY, maxY), 0),
+                width: drawSize.width,
+                height: drawSize.height
+            ).integral
+            context.draw(image, in: drawRect)
+        } else {
+            // Original centered aspect-fit draw (letterboxed), unchanged.
+            let scale = min(size.width / imageSize.width, size.height / imageSize.height)
+            let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+            let drawRect = CGRect(
+                x: (size.width - drawSize.width) / 2,
+                y: (size.height - drawSize.height) / 2,
+                width: drawSize.width,
+                height: drawSize.height
+            ).integral
+            context.draw(image, in: drawRect)
+        }
     }
 
     private static func evenPixelSize(_ size: CGSize) -> CGSize {

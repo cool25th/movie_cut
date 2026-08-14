@@ -59,6 +59,31 @@ final class AppStageRouter {
         stage = .editor
     }
 
+    /// User picked a template from the home Quick Start card. Creates a project
+    /// from the template and enters the editor.
+    func requestCreateFromTemplate(_ bundle: TemplateBundle) async {
+        await viewModel.createProjectFromTemplate(bundle)
+        stage = .editor
+    }
+
+    /// User picked photos for the "Photo to Video" Quick Start card. Creates a
+    /// 9:16 slideshow from the images with the chosen pace and transition and
+    /// enters the editor.
+    func requestCreatePhotoSlideshow(
+        fromPhotoURLs urls: [URL],
+        pace: PhotoSlideshowPace = .normal,
+        transitionStyle: PhotoSlideshowTransition = .crossDissolve,
+        kenBurnsEnabled: Bool = true
+    ) async {
+        await viewModel.createPhotoSlideshow(
+            fromPhotoURLs: urls,
+            pace: pace,
+            transitionStyle: transitionStyle,
+            kenBurnsEnabled: kenBurnsEnabled
+        )
+        stage = .editor
+    }
+
     /// Open a project file (from the home list's recent entry or an Open panel).
     /// Resolves the security-scoped bookmark, opens the project inside the
     /// scope, then flips to the editor. Records the opened project into the

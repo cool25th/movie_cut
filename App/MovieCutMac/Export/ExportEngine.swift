@@ -67,6 +67,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
     @discardableResult
     func export(project: Project, to url: URL, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) async throws -> URL {
+        try preflightThermalGate()
         if shouldWriteChapterMetadata(for: project) {
             return try await exportVideoWithExplicitBitrate(project: project, to: url, audioProcessing: audioProcessing)
         }
@@ -75,6 +76,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
         exportProgress = 0
         exportError = nil
         lastExportURL = nil
+
+        let signposter = AppLog.Signpost.export
+        let signpostState = signposter.beginInterval("export.preset")
 
         do {
             beginSecurityScopes(for: project)
@@ -109,13 +113,21 @@ final class ExportEngine: FlattenedTimelineConsumer {
             try await exportSession.export(to: url, as: fileType)
             exportProgress = 1
             lastExportURL = url
+            signposter.endInterval("export.preset", signpostState)
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            // A cancelled or failed export can leave a truncated file at the
+            // destination the user picked. Remove it so the user never sees a
+            // broken, partial movie — and classify the error into an actionable
+            // message instead of surfacing a raw Foundation string.
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
+            signposter.endInterval("export.preset", signpostState, "\(classified.userMessage, privacy: .public)")
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -399,7 +411,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         imageURL: mediaAsset.originalURL,
                         duration: renderDuration,
                         renderSize: renderSize(for: project.exportSettings.resolution, canvas: project.canvas),
-                        outputURL: imageVideoURL
+                        outputURL: imageVideoURL,
+                        kenBurnsEffect: clip.kenBurnsEffect
                     )
                     temporaryImageRenderURLs.append(imageVideoURL)
                     sourceAsset = AVURLAsset(url: imageVideoURL)
@@ -697,9 +710,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
             layerInstruction.setOpacity(Float(min(max(clip.opacity, 0), 1)), at: clip.timeRange.start)
             layerInstruction.setOpacity(0, at: clipEnd)
 
-            if !isIdentityTransform(clip.transform) {
+            if !clip.transform.isIdentity {
                 layerInstruction.setTransform(
-                    affineTransform(for: clip.transform, canvasSize: resolvedSize),
+                    clip.transform.affineTransform(for: .canvas(size: resolvedSize)),
                     at: clip.timeRange.start
                 )
                 layerInstruction.setTransform(.identity, at: clipEnd)
@@ -914,9 +927,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
             textLayer.string = textContent.text
             textLayer.font = font
             textLayer.fontSize = fontSize
-            textLayer.foregroundColor = cgColor(hexRGB: textContent.fontColor)
-            textLayer.backgroundColor = textContent.backgroundColor.map(cgColor(hexRGB:))
-            textLayer.alignmentMode = textAlignmentMode(for: textContent.alignment)
+            textLayer.foregroundColor = CompositionRenderHelpers.cgColor(hexRGB: textContent.fontColor)
+            textLayer.backgroundColor = textContent.backgroundColor.map(CompositionRenderHelpers.cgColor(hexRGB:))
+            textLayer.alignmentMode = CompositionRenderHelpers.textAlignmentMode(for: textContent.alignment)
             textLayer.contentsScale = 2.0
             textLayer.opacity = Float(min(max(clipMeta.opacity, 0), 1))
             textLayer.frame = CGRect(
@@ -1135,74 +1148,20 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
     // MARK: - Transform Helpers
 
-    private func isIdentityTransform(_ transform: ClipTransform) -> Bool {
-        isZeroPoint(transform.position)
-            && isZeroPoint(transform.offset)
-            && abs(transform.scale.width - 1) <= 1.0e-9
-            && abs(transform.scale.height - 1) <= 1.0e-9
-            && abs(transform.rotation) <= 1.0e-9
-    }
-
-    private func affineTransform(for transform: ClipTransform, canvasSize: CGSize) -> CGAffineTransform {
-        let anchorPoint = CGPoint(
-            x: canvasSize.width * transform.anchorPoint.x,
-            y: canvasSize.height * transform.anchorPoint.y
-        )
-        let radians = CGFloat(transform.rotation * .pi / 180)
-
-        var affineTransform = CGAffineTransform.identity
-        affineTransform = affineTransform.translatedBy(
-            x: transform.position.x + transform.offset.x,
-            y: transform.position.y + transform.offset.y
-        )
-        affineTransform = affineTransform.translatedBy(x: anchorPoint.x, y: anchorPoint.y)
-        affineTransform = affineTransform.rotated(by: radians)
-        affineTransform = affineTransform.scaledBy(
-            x: transform.scale.width,
-            y: transform.scale.height
-        )
-        affineTransform = affineTransform.translatedBy(x: -anchorPoint.x, y: -anchorPoint.y)
-        return affineTransform
-    }
-
     private func textPosition(
         for clipMeta: ExportClipInstructionMetadata,
         textContent: TextClipContent,
         canvasSize: CGSize
     ) -> CGPoint {
-        if !isZeroPoint(textContent.position) {
+        if abs(textContent.position.x) > 1.0e-9 || abs(textContent.position.y) > 1.0e-9 {
             return textContent.position
         }
 
-        if !isZeroPoint(clipMeta.transform.position) {
+        if abs(clipMeta.transform.position.x) > 1.0e-9 || abs(clipMeta.transform.position.y) > 1.0e-9 {
             return clipMeta.transform.position
         }
 
         return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
-    }
-
-    private func isZeroPoint(_ point: CGPoint) -> Bool {
-        abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
-    }
-
-    private func cgColor(hexRGB: String) -> CGColor {
-        guard let rgb = HexColorMath.rgb(fromHex: hexRGB) else {
-            return NSColor.white.cgColor
-        }
-        return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1).cgColor
-    }
-
-    private func textAlignmentMode(for alignment: TextAlignment) -> CATextLayerAlignmentMode {
-        switch alignment {
-        case .leading:
-            return .left
-        case .center:
-            return .center
-        case .trailing:
-            return .right
-        case .justified:
-            return .justified
-        }
     }
 
     private func makeAudioMix(parameters: [AVMutableAudioMixInputParameters]) -> AVMutableAudioMix? {
@@ -1324,10 +1283,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1455,10 +1416,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1475,6 +1438,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
         profileOverride: VideoCompressionProfile? = nil,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
     ) async throws -> URL {
+        try preflightThermalGate()
         isExporting = true
         exportProgress = 0
         exportError = nil
@@ -1639,10 +1603,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
             finishExport()
             return url
         } catch {
-            AppLog.export.error("export failed: \(error.localizedDescription, privacy: .public)")
-            exportError = error.localizedDescription
+            removePartialOutput(at: url)
+            let classified = FileOperationError.classify(error)
+            AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            exportError = classified.userMessage
             finishExport()
-            throw error
+            throw classified
         }
     }
 
@@ -1754,6 +1720,33 @@ final class ExportEngine: FlattenedTimelineConsumer {
         progressTask = nil
         activeExportSession = nil
         isExporting = false
+    }
+
+    /// Removes a partial output file left behind by a cancelled or failed
+    /// export. AVFoundation stops writing mid-file on cancel/error, leaving a
+    /// truncated, unplayable movie at the destination the user chose. Cleaning
+    /// it up means the user never sees a broken artifact and can re-export to
+    /// the same path without a leftover confusing the encoder. Failures here
+    /// are swallowed: cleanup is best-effort and must not mask the original
+    /// export error.
+    private func removePartialOutput(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Refuses an export when the Mac is under critical thermal pressure. A
+    /// thermal shutdown mid-write would truncate or corrupt the output file at
+    /// the path the user picked — far worse than asking them to wait. `.serious`
+    /// is logged but allowed to proceed (throttled, but a full export is still
+    /// safe to complete). Called at the top of every video export entry point.
+    private func preflightThermalGate() throws {
+        let state = ThermalState.current
+        if state.shouldBlockExport {
+            AppLog.export.error("export refused: critical thermal state (risk of shutdown corrupting output)")
+            throw ExportEngineError.thermalCritical
+        }
+        if state == .serious {
+            AppLog.export.info("export proceeding under serious thermal state (system throttling; export will be slower)")
+        }
     }
 }
 
@@ -2387,6 +2380,7 @@ private enum ExportEngineError: LocalizedError {
     case compositionTrackCreationFailed
     case exportSessionCreationFailed
     case noExportableMedia
+    case thermalCritical
 
     var errorDescription: String? {
         switch self {
@@ -2396,6 +2390,8 @@ private enum ExportEngineError: LocalizedError {
             return "Could not create an AVAsset export session."
         case .noExportableMedia:
             return "The project does not contain exportable media."
+        case .thermalCritical:
+            return "The Mac is too hot to export safely. Let it cool down and try again — exporting now risks a thermal shutdown that would corrupt the output file."
         }
     }
 }

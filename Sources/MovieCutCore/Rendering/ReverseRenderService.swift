@@ -130,7 +130,7 @@ public final class ReverseRenderService: Sendable {
 
             var nextPresentationTime = CMTime.zero
             let totalSamples = max(sampleBuffers.count, 1)
-            let imageContext = CIContext(options: [.useSoftwareRenderer: false])
+            let imageContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
 
             for (writeIndex, sampleBuffer) in sampleBuffers.reversed().enumerated() {
                 try Task.checkCancellation()

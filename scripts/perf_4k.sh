@@ -32,6 +32,10 @@ command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 
 DURATION_S=10
 MEM_LIMIT_BYTES=$((4 * 1024 * 1024 * 1024))   # 4 GB external-spec budget
+# Realtime multiplier gate (wall-clock / clip duration). Debug's conservative
+# upper bound per docs/PERFORMANCE_SLO.md. A path slower than realtime (>= 1.5x)
+# flags an export-pipeline regression. See PERF_BASELINE for current numbers.
+REALTIME_LIMIT_DEBUG="1.5"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true' EXIT
@@ -126,8 +130,33 @@ done
 
 echo ""
 echo "peak RSS across all paths: $(python3 -c "print(round($peak_overall/1048576,0))") MB"
+gate_fail=0
 if [ "$peak_overall" -le "$MEM_LIMIT_BYTES" ]; then
   echo "=> 4 GB memory budget: WITHIN (peak $((peak_overall / 1048576)) MB <= 4096 MB)"
 else
   echo "=> 4 GB memory budget: EXCEEDED (peak $((peak_overall / 1048576)) MB > 4096 MB)"
+  gate_fail=1
 fi
+
+echo ""
+echo "=== realtime-multiplier gate (Debug <= ${REALTIME_LIMIT_DEBUG}x) ==="
+for path in passthrough color heavy; do
+  label="Debug_${path}"
+  real="$(cat "$WORK/${label}.real")"
+  mult="$(python3 -c "print(round($real/$DURATION_S,2))")"
+  over="$(python3 -c "print(1 if $mult > $REALTIME_LIMIT_DEBUG else 0)")"
+  if [ "$over" -eq 0 ]; then
+    printf "  %-12s %5.2fx  WITHIN\n" "$path" "$mult"
+  else
+    printf "  %-12s %5.2fx  EXCEEDED (> %sx) — export pipeline regression\n" "$path" "$mult" "$REALTIME_LIMIT_DEBUG"
+    gate_fail=1
+  fi
+done
+
+if [ "$gate_fail" -ne 0 ]; then
+  echo ""
+  echo "=> PERF GATE FAILED (see EXCEEDED rows above)" >&2
+  exit 1
+fi
+echo ""
+echo "=> PERF GATE PASSED"

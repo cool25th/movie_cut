@@ -12,7 +12,7 @@ struct PreviewView: View {
     @State private var imageGenerator: AVAssetImageGenerator?
     @State private var timeObserverToken: Any?
     @State private var hasPlayableMedia = false
-    @State private var ciContext = CIContext()
+    @State private var ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     @State private var filteredFrame: UIImage?
     @State private var lastRenderedFrameTime: TimeInterval?
     @State private var frameRequestID = 0
@@ -92,7 +92,7 @@ struct PreviewView: View {
 
     private func configureCIContext() {
         if let device = MTLCreateSystemDefaultDevice() {
-            ciContext = CIContext(mtlDevice: device)
+            ciContext = CIContext(mtlDevice: device, options: RenderColorConfiguration.contextOptions)
         }
     }
 

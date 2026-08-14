@@ -369,7 +369,15 @@ public struct ExportPlanner: Sendable {
         canvas: CanvasPreset,
         options: ExportPlanOptions
     ) -> ResolvedExportPlan {
-        let profile = options.videoProfileOverride ?? VideoCompressionProfile.deliveryProfile(for: settings.codec)
+        var profile = options.videoProfileOverride ?? VideoCompressionProfile.deliveryProfile(for: settings.codec)
+        // HDR mastering is feature-gated for v1. The render pipeline is 8-bit
+        // SDR end to end (`RenderColorConfiguration`), so an HDR profile would
+        // tag 8-bit pixels as HDR — the output would lie about its depth. When
+        // the flag is off, downgrade any HDR profile to the SDR delivery
+        // profile for the same codec instead of producing a mislabeled file.
+        if profile.isHDR && !FeatureFlag.hdrMaster {
+            profile = VideoCompressionProfile.deliveryProfile(for: settings.codec)
+        }
         let size = renderSize(for: settings.resolution, canvas: canvas)
         let bitrate = profile.supportsAverageBitrate ? videoBitrateBitsPerSecond(for: settings) : nil
 
@@ -497,6 +505,17 @@ public struct ExportPlanner: Sendable {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
             ]
             compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel as String
+        } else {
+            // SDR outputs are tagged explicitly Rec.709 so the file's color
+            // primaries/transfer/matrix match the v1 render pipeline
+            // (`RenderColorConfiguration` is end-to-end sRGB/Rec.709). Without
+            // this, exported files were untagged and players had to guess,
+            // which is a source of preview↔export and cross-player drift.
+            settings[AVVideoColorPropertiesKey] = [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+            ]
         }
 
         if !compression.isEmpty {

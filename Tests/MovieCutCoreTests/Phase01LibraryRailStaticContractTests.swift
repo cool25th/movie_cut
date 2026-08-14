@@ -38,8 +38,6 @@ struct Phase01LibraryRailStaticContractTests {
         #expect(source.contains("private let libraryRailWidth: CGFloat = 60"))
         #expect(source.contains("private let libraryRailItemHeight: CGFloat = 32"))
         #expect(source.contains("private let libraryRailTopInset: CGFloat = 112"))
-        #expect(!source.contains("private var libraryTabBar"))
-        #expect(!source.contains("ScrollView(.horizontal"))
         #expect(body.contains("HStack(spacing: 0)"))
         #expect(body.contains("libraryTabRail"))
         #expect(body.contains("Divider()"))

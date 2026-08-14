@@ -131,22 +131,34 @@ struct ExportPlannerTests {
         #expect(VideoCompressionProfile.hevcHDR.supportsAverageBitrate)
     }
 
-    @Test("HDR override emits Rec.2020 + HLG color properties on HEVC")
-    func hdrVideoSettings() throws {
+    @Test("HDR override is downgraded to SDR while the v1 HDR flag is off")
+    func hdrOverrideIsDowngradedUnderV1Gate() throws {
+        // v1 policy: the HDR flag is off and the render pipeline is 8-bit SDR
+        // end to end, so an HDR override must NOT survive planning — otherwise
+        // the export would tag 8-bit pixels as HDR (a mislabeled file). When the
+        // flag is flipped back on, the HDR writer-settings branch is still
+        // covered by HDRProfileGatingTests.hdrOutputSettingsCarryRec2020WhenComputed.
+        #expect(FeatureFlag.hdrMaster == false,
+                "This test asserts the v1 default; re-evaluate the HDR gate before flipping the flag.")
+
         let options = ExportPlanOptions(videoProfileOverride: .hevcHDR)
         let plan = planner.plan(
             settings: ExportSettings(resolution: .p1080, quality: .high),
             canvas: CanvasPreset(aspectRatio: .landscape16x9),
             options: options
         )
-        #expect(plan.video?.profile == .hevcHDR)
+        // Downgraded to the SDR H.264 delivery profile (H.264 because the
+        // settings' default codec is .h264). The key point: it is NOT HDR.
+        #expect(plan.video?.profile == .h264)
+        #expect(plan.video?.profile.isHDR == false)
 
         let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
-        #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.hevc.rawValue)
+        #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.h264.rawValue)
+        // SDR outputs are tagged Rec.709 (the v1 render contract), NOT Rec.2020.
         let colorProperties = try #require(settings[AVVideoColorPropertiesKey] as? [String: Any])
-        #expect(colorProperties[AVVideoColorPrimariesKey] as? String == AVVideoColorPrimaries_ITU_R_2020)
-        #expect(colorProperties[AVVideoTransferFunctionKey] as? String == AVVideoTransferFunction_ITU_R_2100_HLG)
-        #expect(colorProperties[AVVideoYCbCrMatrixKey] as? String == AVVideoYCbCrMatrix_ITU_R_2020)
+        #expect(colorProperties[AVVideoColorPrimariesKey] as? String == AVVideoColorPrimaries_ITU_R_709_2)
+        #expect(colorProperties[AVVideoTransferFunctionKey] as? String == AVVideoTransferFunction_ITU_R_709_2)
+        #expect(colorProperties[AVVideoYCbCrMatrixKey] as? String == AVVideoYCbCrMatrix_ITU_R_709_2)
     }
 
     // MARK: - Audio-only / GIF / still plans

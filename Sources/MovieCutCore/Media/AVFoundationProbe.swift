@@ -304,5 +304,75 @@ public enum AVFoundationProbe {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return string?.isEmpty == false ? string : nil
     }
+
+    /// Probes a video URL's color characteristics against the v1 SDR Rec.709
+    /// render contract (`RenderColorConfiguration`).
+    ///
+    /// v1 supports SDR Rec.709 only. Source clips in a wider space (DisplayP3)
+    /// or HDR transfer (HLG/PQ) are renderable but would be silently
+    /// color-shifted by the v1 pipeline. This probe surfaces that so import can
+    /// show the user an explicit "color normalized to Rec.709" notice instead of
+    /// the previous quiet distortion. Returns `.supported` when AVFoundation is
+    /// unavailable or the track carries no color attachments (treated as
+    /// Rec.709 by convention).
+    public static func sourceColorCompatibility(for url: URL) async -> SourceColorCompatibility {
+        #if canImport(AVFoundation)
+        let avAsset = AVURLAsset(url: url)
+        guard let videoTrack = await firstTrack(in: avAsset, mediaType: .video),
+              let formatDescription = await firstFormatDescription(for: videoTrack) else {
+            return .supported
+        }
+
+        let extensions = CMFormatDescriptionGetExtensions(formatDescription) as? [CFString: Any]
+        let primaries = extensions?[kCMFormatDescriptionExtension_ColorPrimaries] as? String
+        let transfer = extensions?[kCMFormatDescriptionExtension_TransferFunction] as? String
+
+        // Rec.709 (and its untagged/CCIR-601 fallbacks) is the v1 contract.
+        let rec709Primaries: Set<String> = [
+            AVVideoColorPrimaries_ITU_R_709_2,
+            "ITU_R_709_2",
+            kCMFormatDescriptionColorPrimaries_SMPTE_C as String
+        ]
+        let rec709Transfer: Set<String> = [
+            AVVideoTransferFunction_ITU_R_709_2,
+            "ITU_R_709_2"
+        ]
+
+        let isHDRTransfer = transfer.map { t in
+            t == AVVideoTransferFunction_SMPTE_ST_2084_PQ || t == AVVideoTransferFunction_ITU_R_2100_HLG
+        } ?? false
+
+        let isWideGamut = primaries.map { p in
+            p == AVVideoColorPrimaries_P3_D65 || p == AVVideoColorPrimaries_ITU_R_2020
+        } ?? false
+
+        if isHDRTransfer {
+            return .hdrUnsupported(detectedTransfer: transfer)
+        }
+        if isWideGamut {
+            return .wideGamutUnsupported(detectedPrimaries: primaries)
+        }
+        // Untagged or Rec.709/601: supported as-is.
+        _ = (rec709Primaries, rec709Transfer)
+        return .supported
+        #else
+        return .supported
+        #endif
+    }
     #endif
+}
+
+/// The result of probing an imported clip's color characteristics against the
+/// v1 SDR Rec.709 render contract. See
+/// ``AVFoundationProbe/sourceColorCompatibility(for:)``.
+public enum SourceColorCompatibility: Sendable, Equatable {
+    /// The source is SDR Rec.709 (or untagged, treated as Rec.709) and renders
+    /// unchanged through the v1 pipeline.
+    case supported
+    /// The source uses a wider gamut (DisplayP3 / Rec.2020). v1 will normalize
+    /// it to Rec.709; callers should surface this so the user is not surprised.
+    case wideGamutUnsupported(detectedPrimaries: String?)
+    /// The source uses an HDR transfer function (HLG/PQ). v1 cannot represent
+    /// it; callers should surface this and HDR export is gated off.
+    case hdrUnsupported(detectedTransfer: String?)
 }

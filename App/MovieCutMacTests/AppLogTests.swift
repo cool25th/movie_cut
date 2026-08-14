@@ -57,17 +57,21 @@ struct AppLogTests {
         }
     }
 
-    @Test("AppLog catalog does not reference MetricKit or remote telemetry")
+    @Test("AppLog catalog does not import MetricKit or remote telemetry")
     func noMetricKitOrTelemetry() throws {
         // Privacy positioning: S10 is local diagnostic logging only. The
-        // catalog must not pull in MetricKit or any transport.
+        // catalog must not IMPORT MetricKit or any transport. We check import
+        // statements only — a plain `contains` would false-positive on the
+        // file's own doc comment, which mentions MetricKit by name to declare
+        // it is intentionally absent.
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("MovieCutMac/AppLog.swift")
         let source = try String(contentsOf: url, encoding: .utf8)
-        #expect(!source.contains("MetricKit"))
-        #expect(!source.contains("MXMetricManager"))
-        #expect(!source.contains("URLSession"))
+        let importLines = source.split(separator: "\n").filter { $0.hasPrefix("import ") }
+        #expect(!importLines.contains { $0.contains("MetricKit") })
+        #expect(!importLines.contains { $0.contains("MXMetricManager") })
+        #expect(!importLines.contains { $0.contains("URLSession") })
     }
 }

@@ -101,6 +101,14 @@ struct MovieCutMacApp: App {
                     }
                 }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
+                // Re-link missing media in place (preserves asset UUIDs so clip
+                // references survive). Only enabled when at least one asset's
+                // source file can't be found.
+                Button("Re-link Missing Media...") {
+                    Task { await viewModel.presentRelinkMissingMedia() }
+                }
+                .disabled(viewModel.missingMediaAssets.isEmpty)
+                .keyboardShortcut("l", modifiers: [.command, .shift])
                 Divider()
                 Button("Export...") {
                     Task { await viewModel.exportProject() }

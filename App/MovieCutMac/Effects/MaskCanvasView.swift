@@ -234,7 +234,7 @@ struct MaskCanvasView: View {
                     var updatedMask = currentMask
                     updatedMask.shape = shape
                     if shape == .brush, updatedMask.brushPoints.count < 2 {
-                        updatedMask.brushPoints = defaultBrushPoints(for: updatedMask)
+                        updatedMask.brushPoints = MaskShapeGeometry.brushPoints(for: updatedMask)
                     }
                     updateMask(updatedMask)
                 }
@@ -326,7 +326,7 @@ struct MaskCanvasView: View {
                 ))
 
                 if updatedMask.shape == .brush, startMask.brushPoints.count > 1 {
-                    updatedMask.brushPoints = offset(startMask.brushPoints, by: delta)
+                    updatedMask.brushPoints = MaskShapeGeometry.offset(startMask.brushPoints, by: delta)
                 }
 
                 updateMask(updatedMask)
@@ -347,7 +347,7 @@ struct MaskCanvasView: View {
                 guard let startMask = gestureStartMask else { return }
 
                 let canvasDelta = metrics.canvasVector(for: value.translation)
-                let localDelta = inverseRotate(canvasDelta, degrees: startMask.rotation)
+                let localDelta = MaskShapeGeometry.inverseRotate(canvasDelta, degrees: startMask.rotation)
                 let minimumSize = metrics.minimumMaskSize
                 let originalAspect = max(startMask.size.width / max(startMask.size.height, 1), 0.01)
 
@@ -375,7 +375,7 @@ struct MaskCanvasView: View {
                 updatedMask.size = CGSize(width: width, height: height)
 
                 if updatedMask.shape == .brush, startMask.brushPoints.count > 1 {
-                    updatedMask.brushPoints = scaleBrushPoints(
+                    updatedMask.brushPoints = MaskShapeGeometry.scaleBrushPoints(
                         startMask.brushPoints,
                         around: startMask.position,
                         from: startMask.size,
@@ -400,8 +400,8 @@ struct MaskCanvasView: View {
                 updatedMask.rotation = rotationDegrees(for: value.location, around: startMask.position, metrics: metrics)
 
                 if updatedMask.shape == .brush, startMask.brushPoints.count > 1 {
-                    let delta = normalizedDegrees(updatedMask.rotation - startMask.rotation)
-                    updatedMask.brushPoints = rotate(startMask.brushPoints, degrees: delta, around: startMask.position)
+                    let delta = MaskShapeGeometry.normalizedDegrees(updatedMask.rotation - startMask.rotation)
+                    updatedMask.brushPoints = MaskShapeGeometry.rotate(startMask.brushPoints, degrees: delta, around: startMask.position)
                 }
 
                 updateMask(updatedMask)
@@ -442,7 +442,7 @@ struct MaskCanvasView: View {
         updatedMask.position = newPosition
 
         if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
-            updatedMask.brushPoints = offset(currentMask.brushPoints, by: appliedDelta)
+            updatedMask.brushPoints = MaskShapeGeometry.offset(currentMask.brushPoints, by: appliedDelta)
         }
 
         updateMask(updatedMask)
@@ -456,7 +456,7 @@ struct MaskCanvasView: View {
         )
 
         if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
-            updatedMask.brushPoints = scaleBrushPoints(
+            updatedMask.brushPoints = MaskShapeGeometry.scaleBrushPoints(
                 currentMask.brushPoints,
                 around: currentMask.position,
                 from: currentMask.size,
@@ -469,10 +469,10 @@ struct MaskCanvasView: View {
 
     private func rotateMask(_ currentMask: Mask, by deltaDegrees: Double) {
         var updatedMask = currentMask
-        updatedMask.rotation = normalizedDegrees(currentMask.rotation + deltaDegrees)
+        updatedMask.rotation = MaskShapeGeometry.normalizedDegrees(currentMask.rotation + deltaDegrees)
 
         if updatedMask.shape == .brush, currentMask.brushPoints.count > 1 {
-            updatedMask.brushPoints = rotate(currentMask.brushPoints, degrees: deltaDegrees, around: currentMask.position)
+            updatedMask.brushPoints = MaskShapeGeometry.rotate(currentMask.brushPoints, degrees: deltaDegrees, around: currentMask.position)
         }
 
         updateMask(updatedMask)
@@ -495,8 +495,8 @@ struct MaskCanvasView: View {
 
     private func linearDirectionPath(for currentMask: Mask, metrics: MaskCanvasMetrics) -> Path {
         let halfHeight = max(currentMask.size.height * 0.5, 1)
-        let startVector = rotate(CGVector(dx: 0, dy: halfHeight), degrees: currentMask.rotation)
-        let endVector = rotate(CGVector(dx: 0, dy: -halfHeight), degrees: currentMask.rotation)
+        let startVector = MaskShapeGeometry.rotate(CGVector(dx: 0, dy: halfHeight), degrees: currentMask.rotation)
+        let endVector = MaskShapeGeometry.rotate(CGVector(dx: 0, dy: -halfHeight), degrees: currentMask.rotation)
         let start = metrics.viewPoint(for: CGPoint(
             x: currentMask.position.x + startVector.dx,
             y: currentMask.position.y + startVector.dy

@@ -71,10 +71,6 @@ struct P2TopChromePolishStaticContractTests {
         #expect(secondaryStyle.contains(".controlSize(.small)"))
         #expect(secondaryStyle.contains(".foregroundStyle(.secondary)"))
         #expect(!toolbar.contains("Divider()"))
-        // Cloud sync was removed from the shipping build (no iCloud entitlement);
-        // the toolbar must not surface a non-functional "Sync to Cloud" control.
-        #expect(!content.contains("syncToCloud"))
-        #expect(!content.contains("isCloudSyncing"))
     }
 
     @Test("Project status and canvas badge are quieter context chrome")

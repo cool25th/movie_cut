@@ -78,7 +78,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
     ]
     private let renderQueue = DispatchQueue(label: "com.moviecut.compositor")
-    private let ciContext = CIContext()
+    private let ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
     

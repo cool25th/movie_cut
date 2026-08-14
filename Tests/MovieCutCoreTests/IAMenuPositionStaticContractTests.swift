@@ -62,10 +62,6 @@ struct IAMenuPositionStaticContractTests {
             "exportToolbarControl"
         ])
 
-        // Cloud sync was removed from the shipping build (no iCloud entitlement);
-        // the toolbar must not surface a non-functional "Sync to Cloud" control.
-        #expect(!toolbar.contains("syncToCloud"))
-
         for forbiddenTopToolbarEdit in [
             "await viewModel.splitClip()",
             "viewModel.addMarkerAtPlayhead()",

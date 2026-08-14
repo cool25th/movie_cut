@@ -1641,7 +1641,14 @@ struct InspectorBasicSection: View {
     private func setTextBackgroundEnabled(_ isEnabled: Bool, for textContent: TextClipContent) {
         var updated = textContent
         if isEnabled {
-            updated.backgroundColor = normalizedHexRGB(textContent.backgroundColor) ?? "#000000"
+            // Reuse an existing valid background color, otherwise default to
+            // opaque black. HexColorMath is the single hex-parsing source.
+            if let background = textContent.backgroundColor,
+               HexColorMath.rgb(fromHex: background) != nil {
+                updated.backgroundColor = background
+            } else {
+                updated.backgroundColor = "#000000"
+            }
         } else {
             updated.backgroundColor = nil
         }

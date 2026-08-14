@@ -10,7 +10,7 @@ public struct ThumbnailGenerator: Sendable {
 
     public static func generate(for asset: MediaAsset, at time: TimeInterval, size: CGSize) -> Data? {
         #if canImport(AVFoundation)
-        let context = CIContext()
+        let context = CIContext(options: RenderColorConfiguration.contextOptions)
 
         if asset.kind == .image || isImageFile(asset.originalURL) {
             guard let image = CIImage(contentsOf: asset.originalURL) else {

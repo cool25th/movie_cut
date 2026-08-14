@@ -4,6 +4,13 @@ import Foundation
 public actor ProjectStore {
     private let autosaveDirectory: URL?
 
+    /// The most recent autosave-load failure, if the recovery file existed but
+    /// could not be decoded. Set by `loadAutosaveIfAvailable` when it detects a
+    /// corrupt recovery file; cleared on a successful load or `clearAutosave`.
+    /// The launch flow reads this to tell the user their recovery file was
+    /// damaged (previously this was silently swallowed via `try?`).
+    public private(set) var lastAutosaveLoadFailure: FileOperationError?
+
     /// Creates a project store using the default autosave location
     /// (Application Support/MovieCut).
     public init() {
@@ -34,11 +41,30 @@ public actor ProjectStore {
 
     /// Returns the autosaved project if a recovery file exists. Its presence on
     /// launch indicates the previous session did not exit cleanly.
+    ///
+    /// If the recovery file exists but is corrupt (decode fails), this records
+    /// the classified failure in `lastAutosaveLoadFailure` and removes the
+    /// damaged file so a broken recovery state can't trap the user on every
+    /// launch. Returns `nil` in that case — there is no project to recover —
+    /// but the caller can surface the failure reason. Previously this path used
+    /// `try?` and silently dropped the error, leaving the corrupt file on disk
+    /// indefinitely.
     public func loadAutosaveIfAvailable() async -> Project? {
         guard let url = autosaveURL, FileManager.default.fileExists(atPath: url.path) else {
             return nil
         }
-        return try? await load(from: url)
+        do {
+            let project = try await load(from: url)
+            lastAutosaveLoadFailure = nil
+            return project
+        } catch {
+            let classified = FileOperationError.classify(error)
+            lastAutosaveLoadFailure = classified
+            // Remove the corrupt recovery file so it doesn't resurface every
+            // launch; the user has been told (via lastAutosaveLoadFailure).
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
     }
 
     /// Whether a recovery autosave is present.
@@ -52,6 +78,7 @@ public actor ProjectStore {
     public func clearAutosave() {
         guard let url = autosaveURL else { return }
         try? FileManager.default.removeItem(at: url)
+        lastAutosaveLoadFailure = nil
     }
 
     /// Saves a project to a JSON file using a temp-file replacement flow.

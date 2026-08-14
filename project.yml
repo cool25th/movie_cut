@@ -120,3 +120,11 @@ schemes:
       targets:
         - MovieCutMacTests
         - MovieCutMacUITests
+  # Shared scheme so CI's iOS build step doesn't depend on xcodebuild's
+  # auto-created (unshared, machine-local) scheme resolution (W4 / kiro 9.3).
+  MovieCutiOS:
+    build:
+      targets:
+        MovieCutiOS: all
+    run:
+      config: Debug

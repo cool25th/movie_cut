@@ -30,6 +30,11 @@ jobs:
           sudo xcode-select -s "$NEWEST/Contents/Developer"
           swift --version
 
+      - name: Install ffmpeg (fixtures + probes)
+        # The macos-15 runner image does not bundle ffmpeg; every gate script
+        # below fail-louds without it (ffprobe/ffmpeg required).
+        run: brew install ffmpeg
+
       - name: Build Mac app (Debug, sandbox-on)
         run: |
           xcodebuild -project MovieCut.xcodeproj \
@@ -86,6 +91,11 @@ jobs:
           echo "Selecting: $NEWEST"
           sudo xcode-select -s "$NEWEST/Contents/Developer"
           swift --version
+
+      - name: Install ffmpeg (fixtures + probes)
+        # The macos-15 runner image does not bundle ffmpeg; every gate script
+        # below fail-louds without it (ffprobe/ffmpeg required).
+        run: brew install ffmpeg
 
       - name: Build Mac app (Debug)
         run: |

@@ -99,6 +99,11 @@ final class IOSExportEngine {
                     || clip.mask != nil
                     || clip.chromaKey != nil
                     || clip.textContent != nil
+                    // Without this, a clip whose ONLY effect is background
+                    // removal never got the custom compositor attached — the
+                    // removal silently no-oped on export (the Mac gate at
+                    // ExportEngine.needsCustomCompositor includes it).
+                    || clip.isBackgroundRemoved
             }
         }
     }
@@ -175,6 +180,7 @@ final class IOSExportEngine {
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
                         colorGrade: clip.colorGrade,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,
@@ -209,6 +215,7 @@ final class IOSExportEngine {
                         keyframes: clip.keyframes,
                         colorCorrection: clip.colorCorrection,
                         colorGrade: clip.colorGrade,
+                        chromaKey: clip.chromaKey,
                         chromaKeyColor: clip.chromaKeyColor,
                         chromaKeyThreshold: clip.chromaKeyThreshold,
                         mask: clip.mask,

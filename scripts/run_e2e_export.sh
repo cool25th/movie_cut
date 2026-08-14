@@ -42,11 +42,14 @@ FILMSTRIP_UNSUPPORTED_FIXTURE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
 [ -s "$FILMSTRIP_UNSUPPORTED_FIXTURE" ] || { echo "missing image fixture; run scripts/make_fixtures.sh" >&2; exit 1; }
 
 echo "Building MovieCutMac (${BUILD_LABEL})…"
+# `${BUILD_FLAGS[@]+"..."}` guard: expanding an empty array with [@] errors
+# under `set -u` on the macOS-default bash 3.2 (CI's shell) — BUILD_FLAGS is
+# empty in the default sandbox-OFF mode.
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination "$DESTINATION" "${BUILD_FLAGS[@]}" build >/dev/null
+  -destination "$DESTINATION" ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} build >/dev/null
 
 PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination "$DESTINATION" "${BUILD_FLAGS[@]}" -showBuildSettings 2>/dev/null \
+  -destination "$DESTINATION" ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} -showBuildSettings 2>/dev/null \
   | awk -F' = ' "/ BUILT_PRODUCTS_DIR /{${AWK_STRIP_CR} print \$2; exit}")"
 APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }

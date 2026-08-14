@@ -142,8 +142,8 @@ fi
 # Realtime-multiplier gate. Release is the shipping build, so it gets the
 # tighter SLO (docs/PERFORMANCE_SLO.md). Debug is the conservative reference
 # and only reported, not gated, here.
-REALTIME_LIMIT_RELEASE="1.2"
-REALTIME_LIMIT_DEBUG="1.5"
+REALTIME_LIMIT_RELEASE="${MOVIECUT_PERF_REALTIME_LIMIT_RELEASE:-1.2}"
+REALTIME_LIMIT_DEBUG="${MOVIECUT_PERF_REALTIME_LIMIT_DEBUG:-1.5}"
 echo ""
 echo "=== realtime-multiplier gate ==="
 for config in Debug Release; do

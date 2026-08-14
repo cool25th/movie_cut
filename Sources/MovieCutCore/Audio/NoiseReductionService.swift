@@ -65,7 +65,7 @@ public struct NoiseReductionService: Sendable {
             try FileManager.default.removeItem(at: outputURL)
         }
 
-        try await export.export(to: outputURL, as: .m4a)
+        try await AVExportCompatibility.export(.init(export), to: outputURL, as: .m4a)
         return outputURL
     }
 

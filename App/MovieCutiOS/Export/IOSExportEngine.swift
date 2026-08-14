@@ -52,7 +52,7 @@ final class IOSExportEngine {
             activeExportSession = exportSession
             startProgressPolling()
 
-            try await exportSession.export(to: outputURL, as: .mov)
+            try await AVExportCompatibility.export(.init(exportSession), to: outputURL, as: .mov)
             exportProgress = 1
             lastExportURL = outputURL
             finishExport()

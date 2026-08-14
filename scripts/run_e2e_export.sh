@@ -1151,17 +1151,28 @@ rm -rf "$(dirname "$PR_OUT")"
 [ "$PR_CODEC" = "prores" ] && echo "PASS: ProRes master exported (codec $PR_CODEC)" \
   || { echo "FAIL: ProRes export wrong codec ($PR_CODEC)" >&2; exit 1; }
 
-# HDR master must export as 10-bit HEVC with Rec.2020 + HLG tags.
+# v1 contract (Phase 1 render reliability): HDR mastering is feature-gated
+# OFF — the 8-bit SDR pipeline must never emit a file TAGGED as HDR. The old
+# assertion expected 10-bit/HLG/Rec.2020 output; with the flag off the export
+# is refused and no file appears, which used to kill ffprobe (and the whole
+# script) under set -e with no FAIL line. The honest assertion now checks the
+# false-label guarantee: no output at all, or an output with no HDR tags.
 HDR_OUT="$(mktemp -d)/hdr.mov"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT_HDR="$HDR_OUT" \
   MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 HP=$!; for _ in $(seq 1 180); do [ -s "$HDR_OUT" ] && break; sleep 0.5; done; wait "$HP" 2>/dev/null || true
-HDR_TAGS="$(ffprobe -v error -select_streams v -show_entries stream=pix_fmt,color_transfer,color_primaries -of csv=p=0 "$HDR_OUT" 2>/dev/null)"
-rm -rf "$(dirname "$HDR_OUT")"
-case "$HDR_TAGS" in
-  *yuv420p10le*arib-std-b67*bt2020*) echo "PASS: HDR master exported (10-bit HLG Rec.2020: $HDR_TAGS)" ;;
-  *) echo "FAIL: HDR export missing 10-bit/HLG/Rec.2020 tags ($HDR_TAGS)" >&2; exit 1 ;;
-esac
+if [ ! -s "$HDR_OUT" ]; then
+  rm -rf "$(dirname "$HDR_OUT")"
+  echo "PASS: HDR master refused under FeatureFlag.hdrMaster (no mislabeled output)"
+else
+  HDR_TAGS="$(ffprobe -v error -select_streams v -show_entries stream=pix_fmt,color_transfer,color_primaries -of csv=p=0 "$HDR_OUT" 2>/dev/null || true)"
+  rm -rf "$(dirname "$HDR_OUT")"
+  case "$HDR_TAGS" in
+    *arib-std-b67*|*smpte2084*|*bt2020*|*yuv420p10le*)
+      echo "FAIL: HDR-tagged output emitted from the SDR-only build ($HDR_TAGS)" >&2; exit 1 ;;
+    *) echo "PASS: HDR request produced an untagged SDR fallback (no false HDR labels: $HDR_TAGS)" ;;
+  esac
+fi
 
 # On-device auto white balance must produce a corrective per-channel gain.
 WB_RESULT="$(mktemp -d)/wb.txt"

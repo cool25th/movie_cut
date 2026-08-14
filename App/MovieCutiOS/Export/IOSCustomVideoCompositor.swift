@@ -87,7 +87,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
     
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+        // Boxed for the @Sendable render-queue closure: the request is not
+        // Sendable on the macOS 15 / iOS 18-era SDKs, so capturing it directly
+        // fails strict concurrency on Xcode 16. Each request is finished
+        // exactly once inside this closure.
+        let sendableRequest = RequestBox(request: request)
         renderQueue.async {
+            let request = sendableRequest.request
             guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request) else {
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
@@ -489,3 +495,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 }
 
 #endif
+
+/// `@unchecked Sendable` carrier for the render-queue request (see the boxing
+/// note in startRequest). iOS-side twin of the Mac CompositionRequestBox.
+private struct RequestBox: @unchecked Sendable {
+    let request: AVAsynchronousVideoCompositionRequest
+}

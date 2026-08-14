@@ -178,7 +178,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
     
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+        // Boxed for the @Sendable render-queue closure (the request is not
+        // Sendable on the macOS 15 SDK; see CompositionRequestBox).
+        let sendableRequest = CompositionRequestBox(request: request)
         renderQueue.async {
+            let request = sendableRequest.request
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
                let transition = instruction.activeTransition(at: request.compositionTime),
                let outgoingBuffer = request.sourceFrame(byTrackID: transition.outgoingTrackID),

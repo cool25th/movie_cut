@@ -81,6 +81,10 @@ state_extra_env() {
     populated_editor) printf 'MOVIECUT_UITEST_TEXT_TEMPLATE_NAME=Title' ;;
     with_color_grade) printf 'MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_INSPECTOR_TAB=Adjustment' ;;
     with_mask) printf 'MOVIECUT_UITEST_MASK=1 MOVIECUT_UITEST_INSPECTOR_TAB=Mask' ;;
+    # Manual-inspection states: captured on demand (--state basic_inspector)
+    # but excluded from ALL_STATES so the regression gate is unchanged until a
+    # golden is deliberately committed for them.
+    basic_inspector) printf 'MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_INSPECTOR_TAB=Basic' ;;
     *) return 1 ;;
   esac
 }

@@ -138,35 +138,3 @@ struct CubeLUTTests {
         #expect(output.extent == bounds)
     }
 }
-
-/// Wiring visibility for the LUT import UI (not a completion criterion by
-/// itself — see spec DoD §1.3).
-@Suite("Cube LUT Static Contract")
-struct CubeLUTStaticContractTests {
-    private func source(_ path: String) throws -> String {
-        try String(contentsOfFile: path, encoding: .utf8)
-    }
-
-    @Test("processor and model support external LUTs")
-    func processorSupportsExternalLUT() throws {
-        let processor = try source("Sources/MovieCutCore/Rendering/VisualEffectPixelProcessor.swift")
-        #expect(processor.contains("case .externalLUT"))
-        #expect(processor.contains("CIColorCube"))
-
-        let model = try source("Sources/MovieCutCore/Models/Effect.swift")
-        #expect(model.contains("case externalLUT"))
-        #expect(model.contains("var lutPath: String?"))
-    }
-
-    @Test("view model imports and validates LUTs")
-    func viewModelImports() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        #expect(viewModel.contains("func importExternalLUT"))
-        #expect(viewModel.contains("CubeLUTParser.parse(contentsOf: url)"))
-        #expect(viewModel.contains("MovieCut/LUTs"))
-
-        let inspector = try source("App/MovieCutMac/Inspector/InspectorEffectsSection.swift")
-        #expect(inspector.contains("Import LUT"))
-        #expect(inspector.contains("importExternalLUT"))
-    }
-}

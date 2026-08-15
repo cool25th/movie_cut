@@ -3,11 +3,11 @@ import Foundation
 import Testing
 @testable import MovieCutCore
 
-@Suite("Thumbnail Proxy Static Contract")
+/// Thumbnail/proxy persistence behavior (the former wiring checks moved out —
+/// the app-side thumbnail/fallback/proxy surfaces are covered by the G-04
+/// filmstrip e2e sections and the proxy preset e2e in run_e2e_export.sh).
+@Suite("Thumbnail Proxy")
 struct ThumbnailProxyStaticContractTests {
-    private func source(_ path: String) throws -> String {
-        try String(contentsOfFile: path, encoding: .utf8)
-    }
 
     @Test("MediaAsset decodes legacy JSON without thumbnail or proxy data")
     func mediaAssetDecodesLegacyJSONWithoutThumbnailOrProxy() throws {
@@ -92,53 +92,5 @@ struct ThumbnailProxyStaticContractTests {
         #expect(proxy.proxyURL == plan.targetURL)
         #expect(proxy.resolution == plan.resolution)
         #expect(ProxyGenerator.makeProxyPlan(for: MediaAsset(originalURL: URL(fileURLWithPath: "/tmp/audio.wav"), kind: .audio), in: directory) == nil)
-    }
-
-    @Test("MediaLibraryPanel renders thumbnails with icon fallback and proxy state")
-    func mediaLibraryPanelRendersThumbnailsAndProxyState() throws {
-        let source = try source("App/MovieCutMac/MediaLibraryPanel.swift")
-
-        #expect(source.contains("asset.thumbnailData"))
-        #expect(source.contains("Image(nsImage: image)"))
-        #expect(source.contains("iconForKind(asset.kind)"))
-        #expect(source.contains("Generate Proxy"))
-        #expect(source.contains("viewModel.generateProxy(for: asset.id)"))
-        #expect(source.contains("Proxy ready"))
-        #expect(source.contains("No proxy"))
-        #expect(source.contains("Thumbnail ready"))
-        #expect(source.contains("Thumbnail missing"))
-    }
-
-    @Test("TimelineView renders thumbnail strip for visual clips and waveform for audio")
-    func timelineViewRendersThumbnailStripAndKeepsWaveformPath() throws {
-        let source = try source("App/MovieCutMac/TimelineView.swift")
-
-        #expect(source.contains("thumbnailImage(for: clip)"))
-        #expect(source.contains("viewModel.thumbnailData(for: clip)"))
-        #expect(source.contains("clip.kind == .video || clip.kind == .image"))
-        #expect(source.contains("thumbnailStrip(image)"))
-        #expect(source.contains("shouldRenderWaveform(for: clip, trackKind: trackKind)"))
-        #expect(source.contains("clip.kind == .audio || clip.kind == .video"))
-        #expect(source.contains("viewModel.waveform(for: clip)"))
-    }
-
-    @Test("EditorViewModel enriches imported media with thumbnails and proxy command")
-    func editorViewModelImportEnrichesThumbnailsAndGeneratesProxy() throws {
-        // The thumbnail enrichment probe moved to Core's AVFoundationProbe
-        // (Sources/MovieCutCore/Media/AVFoundationProbe.swift); the call site
-        // and proxy commands remain in EditorViewModel.swift.
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        let probes = try source("Sources/MovieCutCore/Media/AVFoundationProbe.swift")
-
-        #expect(viewModel.contains("func thumbnailData(for clip: Clip) -> Data?"))
-        #expect(viewModel.contains("func generateProxyForSelectedAsset()"))
-        #expect(viewModel.contains("func generateProxy(for assetId: UUID)"))
-        #expect(viewModel.contains("ProxyGenerator.makeProxyPlan"))
-        #expect(viewModel.contains("ProxyGenerator.generateProxy"))
-        #expect(viewModel.contains("UpdateMediaAssetCommand(asset: asset)"))
-        #expect(probes.contains("func enrichAssetWithThumbnail"))
-        #expect(probes.contains("ThumbnailGenerator.generate(for: asset"))
-        #expect(viewModel.contains("return await Self.enrichAssetWithThumbnail(asset)"))
-        #expect(viewModel.contains("ImportMediaCommand(asset: asset)"))
     }
 }

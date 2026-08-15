@@ -141,31 +141,3 @@ struct ChromaKeyEyedropperTests {
         #expect(PixelSampler.color(in: image, atNormalizedPoint: CGPoint(x: 0.5, y: 1.5)) == nil)
     }
 }
-
-/// Wiring visibility for the eyedropper UI (not a completion criterion by
-/// itself — see spec DoD §1.3).
-@Suite("Chroma Key Eyedropper Static Contract")
-struct ChromaKeyEyedropperStaticContractTests {
-    private func source(_ path: String) throws -> String {
-        try String(contentsOfFile: path, encoding: .utf8)
-    }
-
-    @Test("view model samples a frame and sets the key color")
-    func viewModelSamples() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        #expect(viewModel.contains("func pickChromaKeyColor"))
-        #expect(viewModel.contains("PixelSampler.color"))
-        #expect(viewModel.contains("var isChromaKeyEyedropperActive"))
-    }
-
-    @Test("preview and inspector expose the eyedropper and edge shrink")
-    func uiExposesControls() throws {
-        let preview = try source("App/MovieCutMac/PreviewPanel.swift")
-        #expect(preview.contains("ChromaKeyEyedropperOverlay"))
-        #expect(preview.contains("pickChromaKeyColor"))
-
-        let chromaView = try source("App/MovieCutMac/Effects/ChromaKeyView.swift")
-        #expect(chromaView.contains("Edge Shrink"))
-        #expect(chromaView.contains("onPickColor"))
-    }
-}

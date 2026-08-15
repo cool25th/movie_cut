@@ -70,4 +70,18 @@ struct IOSExportEngineGateTests {
         text.textContent = TextClipContent(text: "hello")
         #expect(engine.needsCustomCompositor(for: project(with: [text])) == true)
     }
+
+    @Test("a color-grade-only clip requires the custom compositor")
+    func colorGradeAloneRequiresCompositor() {
+        // Promoted from IOSColorGradeParityStaticContractTests (source-string
+        // check). This closes a real hole: the gate previously asserted every
+        // other effect but never colorGrade alone.
+        var graded = videoClip()
+        graded.colorGrade = ColorGrade(
+            lift: ColorGrade.RGB(red: 0.1, green: 0, blue: -0.05),
+            gamma: 0.8,
+            gain: ColorGrade.RGB(red: 1.2, green: 1.0, blue: 0.8)
+        )
+        #expect(engine.needsCustomCompositor(for: project(with: [graded])) == true)
+    }
 }

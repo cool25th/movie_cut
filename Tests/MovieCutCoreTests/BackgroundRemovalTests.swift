@@ -126,32 +126,3 @@ struct BackgroundRemovalTests {
         return bytes[3]
     }
 }
-
-/// Wiring visibility for the background-removal preview/export paths (not a
-/// completion criterion by itself — see spec DoD §1.3).
-@Suite("Background Removal Static Contract")
-struct BackgroundRemovalStaticContractTests {
-    private func source(_ path: String) throws -> String {
-        try String(contentsOfFile: path, encoding: .utf8)
-    }
-
-    @Test("mac compositor uses the shared helper and leaves no-person frames unchanged")
-    func compositorUsesHelper() throws {
-        let compositor = try source("App/MovieCutMac/Export/CustomVideoCompositor.swift")
-        #expect(compositor.contains("PersonSegmentationCompositor.removeBackground"))
-        #expect(compositor.contains("prefersFast ? .fast : .accurate"))
-        // No-person path returns the image unchanged (AC④), not the vignette fallback.
-        #expect(compositor.contains("guard maskContainsForeground(alignedMask, extent: extent) else {\n            return image"))
-    }
-
-    @Test("preview and export thread the clip background-removal flag")
-    func enginesThreadFlag() throws {
-        let playback = try source("App/MovieCutMac/Playback/PlaybackEngine.swift")
-        #expect(playback.contains("isBackgroundRemoved: clip.isBackgroundRemoved"))
-        #expect(playback.contains("isBackgroundRemoved: clipInstruction.isBackgroundRemoved"))
-        #expect(playback.contains("prefersFastSegmentation: true"))
-
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        #expect(viewModel.contains(".isBackgroundRemoved(enabled)"))
-    }
-}

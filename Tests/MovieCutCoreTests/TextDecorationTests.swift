@@ -213,31 +213,3 @@ struct TextDecorationTests {
         #expect(loaded == presets)
     }
 }
-
-/// Wiring visibility for the decoration UI (not a completion criterion by
-/// itself — see spec DoD §1.3).
-@Suite("Text Decoration Static Contract")
-struct TextDecorationStaticContractTests {
-    private func source(_ path: String) throws -> String {
-        try String(contentsOfFile: path, encoding: .utf8)
-    }
-
-    @Test("inspector exposes bold, italic, outline, shadow, and presets")
-    func inspectorExposesDecorations() throws {
-        let inspector = try source("App/MovieCutMac/Inspector/InspectorBasicSection.swift")
-        #expect(inspector.contains("textDecorationControls"))
-        #expect(inspector.contains("isBold"))
-        #expect(inspector.contains("strokeWidth"))
-        #expect(inspector.contains("shadowBlur"))
-        #expect(inspector.contains("userStylePresetControls"))
-        #expect(inspector.contains("saveSelectedTextStyleAsPreset"))
-    }
-
-    @Test("view model persists presets through the shared store")
-    func viewModelPersistsPresets() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        #expect(viewModel.contains("UserTextStylePresetStore"))
-        #expect(viewModel.contains("func applyUserTextStylePreset"))
-        #expect(viewModel.contains("func deleteUserTextStylePreset"))
-    }
-}

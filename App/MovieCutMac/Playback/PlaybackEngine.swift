@@ -90,6 +90,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             AppLog.playback.info("thermal proxy downgrade: \(self.autoProxyDowngrade, privacy: .public)")
         }
     }
+    /// Runtime-only: the latest thermal state (S7 gradual degradation). Drives
+    /// the preview render-size clamp at `.fair` via
+    /// `ProxyDowngradePolicy.effectivePreviewQuality`; the proxy flip at
+    /// `.serious`+ stays on `autoProxyDowngrade`. Observed (not Ignored) so the
+    /// timeline's quality-degrade badge re-resolves when the clamp engages.
+    private(set) var currentThermalState: ThermalState = .nominal
     /// The last project + audio processing passed to `loadProject`, kept so a
     /// thermal transition can rebuild the composition at the new proxy state.
     @ObservationIgnored private var loadedProject: Project?
@@ -116,18 +122,34 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         thermalObserver.start()
     }
 
-    /// Reacts to a thermal transition by toggling `autoProxyDowngrade` and
-    /// rebuilding the composition so the proxy/original swap takes effect. (S7)
+    /// Reacts to a thermal transition by applying gradual degradation (S7):
+    /// at `.fair` the preview render size clamps to at most 1/2 (no rebuild
+    /// needed beyond the one triggered here); at `.serious`+ the proxy flips
+    /// (when the user allows it). Rebuilds whenever EITHER the proxy flag or
+    /// the effective preview quality changes so both rungs take effect.
     private func thermalStateChanged(to state: ThermalState) {
         guard let project = loadedProject else { return }
+        let previousQuality = ProxyDowngradePolicy.effectivePreviewQuality(
+            user: project.playbackSettings.previewQuality,
+            thermalState: currentThermalState
+        )
+        currentThermalState = state
         let shouldDowngrade = ProxyDowngradePolicy.shouldAutoDowngrade(
             thermalState: state,
             autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
         )
-        guard shouldDowngrade != autoProxyDowngrade else { return }
-        autoProxyDowngrade = shouldDowngrade
-        // Rebuild at the new proxy state. loadProject preserves playback state
-        // (it re-stamps the generation guard).
+        let nextQuality = ProxyDowngradePolicy.effectivePreviewQuality(
+            user: project.playbackSettings.previewQuality,
+            thermalState: state
+        )
+        guard shouldDowngrade != autoProxyDowngrade || previousQuality != nextQuality else { return }
+        if shouldDowngrade != autoProxyDowngrade {
+            autoProxyDowngrade = shouldDowngrade
+        } else {
+            AppLog.playback.info("thermal preview quality clamp: \(previousQuality.shortLabel, privacy: .public) -> \(nextQuality.shortLabel, privacy: .public)")
+        }
+        // Rebuild at the new proxy/quality state. loadProject preserves
+        // playback state (it re-stamps the generation guard).
         loadProject(project, audioProcessing: loadedAudioProcessing)
     }
 
@@ -419,6 +441,11 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     }
 
     func seek(to time: TimeInterval) {
+        // Signpost measures the seek REQUEST (AVPlayer.seek is fire-and-forget;
+        // render completion is not observable here) — the SLO doc's intended
+        // `playback.seek` probe for scrub-latency regression direction.
+        let signposter = AppLog.Signpost.playback
+        let state = signposter.beginInterval("playback.seek")
         let targetTime: TimeInterval
         if duration > 0 {
             targetTime = min(max(0, time), duration)
@@ -429,6 +456,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         currentTime = targetTime
         let cmTime = CMTime(seconds: targetTime, preferredTimescale: 600)
         player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        signposter.endInterval("playback.seek", state)
     }
 
     func startPlaybackTimer() {
@@ -1155,10 +1183,15 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             // picked a performance-priority quality. Export derives its size
             // from `project.canvas` + `ExportSettings.resolution` and never
             // reads this setting, so export output is unaffected. `.full` is a
-            // no-op here.
+            // no-op here. Thermal state also clamps the effective quality
+            // (S7 gradual degradation: .fair+ caps it at 1/2) — routed through
+            // the Core policy so the transition table is unit-testable.
             mutableVideoComposition.renderSize = PreviewRenderSize.resolve(
                 canvas: project.timeline.canvasSize,
-                quality: project.playbackSettings.previewQuality
+                quality: ProxyDowngradePolicy.effectivePreviewQuality(
+                    user: project.playbackSettings.previewQuality,
+                    thermalState: currentThermalState
+                )
             )
             mutableVideoComposition.frameDuration = CMTime(
                 seconds: 1 / max(project.timeline.frameRate.doubleValue, 1),

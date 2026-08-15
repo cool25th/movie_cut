@@ -47,12 +47,16 @@ enum AppLog {
     /// Times a synchronous or async closure under a named signpost interval.
     /// The interval is always ended — including on a thrown error — so failed
     /// runs still show up in Instruments rather than leaving an open interval.
+    /// MainActor-isolated: every caller is a view model/engine method, and a
+    /// @MainActor closure is Sendable — a plain closure crossing into this
+    /// nonisolated helper trips strict concurrency on the captured state.
     ///
     /// Example: `await AppLog.time(.export, "export.encode") { try await engine.export(...) }`
+    @MainActor
     static func time<T>(
         _ category: SignpostCategory,
         _ name: StaticString,
-        body: () async throws -> T
+        body: @MainActor () async throws -> T
     ) async rethrows -> T {
         let signposter = category.signposter
         let state = signposter.beginInterval(name)

@@ -824,32 +824,36 @@ final class EditorViewModel {
     func openProject(from url: URL) async {
         guard await confirmDiscardUnsavedChanges() else { return }
         do {
-            let loadedProject = try await projectStore.load(from: url)
-            let project = Self.ensureDefaultTracks(in: loadedProject)
-            session = EditorSession(project: project)
-            currentProject = project
-            await refreshFlattenedTimeline(for: project)
-            currentProjectURL = url
-            canvasSelection = project.canvas.aspectRatio
-            syncExportUI(from: project.exportSettings)
-            selectedClipId = nil
-            selectedAssetId = nil
-            isMaskEditorActive = false
-            playbackEngine.clear()
-            playheadTime = 0
-            clearGeneratedSubtitles()
-            clearClipProcessingState()
-            recentAnalysisResults = []
-            lastErrorMessage = nil
-            lastStatusMessage = nil
-            lastExportURL = nil
-            // The loaded file is the clean baseline.
-            lastSavedProject = project
-            isDirty = false
-            // Under App Sandbox, media imported before bookmarks existed (or
-            // whose files moved) can't be re-reached. Surface a relocate hint
-            // instead of failing silently on the next playback/export. (S2)
-            reportMediaNeedingRelocation(in: project)
+            // Signpost covers decode + migrate + validate + session swap — the
+            // SLO doc's "10-minute project opens in <=3s" probe direction.
+            try await AppLog.time(.importLog, "import.openProject") {
+                let loadedProject = try await projectStore.load(from: url)
+                let project = Self.ensureDefaultTracks(in: loadedProject)
+                session = EditorSession(project: project)
+                currentProject = project
+                await refreshFlattenedTimeline(for: project)
+                currentProjectURL = url
+                canvasSelection = project.canvas.aspectRatio
+                syncExportUI(from: project.exportSettings)
+                selectedClipId = nil
+                selectedAssetId = nil
+                isMaskEditorActive = false
+                playbackEngine.clear()
+                playheadTime = 0
+                clearGeneratedSubtitles()
+                clearClipProcessingState()
+                recentAnalysisResults = []
+                lastErrorMessage = nil
+                lastStatusMessage = nil
+                lastExportURL = nil
+                // The loaded file is the clean baseline.
+                lastSavedProject = project
+                isDirty = false
+                // Under App Sandbox, media imported before bookmarks existed (or
+                // whose files moved) can't be re-reached. Surface a relocate hint
+                // instead of failing silently on the next playback/export. (S2)
+                reportMediaNeedingRelocation(in: project)
+            }
         } catch {
             AppLog.importLog.error("project load failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
@@ -1676,11 +1680,17 @@ final class EditorViewModel {
         lastStatusMessage = "Generating \(resolution.shortLabel) proxy for \(asset.originalURL.lastPathComponent)..."
 
         do {
-            guard let proxyInfo = try await ProxyGenerator.generateProxy(
-                for: asset,
-                using: plan,
-                proxyResolution: resolution
-            ) else {
+            // The encode pass is the expensive part — time it under a signpost
+            // so Instruments can attribute proxy-generation cost separately
+            // from import.
+            let proxyInfo = try await AppLog.time(.importLog, "proxy.generate") {
+                try await ProxyGenerator.generateProxy(
+                    for: asset,
+                    using: plan,
+                    proxyResolution: resolution
+                )
+            }
+            guard let proxyInfo else {
                 lastErrorMessage = "Proxy generation failed. The source file may not support proxy export."
                 lastStatusMessage = nil
                 return

@@ -72,3 +72,13 @@ total=55  pass=53  crash=0  error=2  unexpected_clips=0
 3. **43개 랜덤 시나리오는 한 시드.** 다른 시드(`SEED=<n>`)로 더 넓은 조합을 돌릴 수 있으나, 경계값 12개가 조사가 식별한 전부의 "조용히 무시" 입력을 커버하므로 랜덤은 보강 역할이다.
 4. **B-U7(크래시 후 복구 제안)은 이 게이트 범위 밖.** 복구 NSAlert에 accessibility 식별자가 없고 `MOVIECUT_UITEST=1` 게이트가 alert를 스킵해 자동 검증이 현재 불가하다 — 별도 작업(UI 식별자 + 게이트 우회 + XCUITest)으로 진행 중.
 5. **단일 클립 fixture.** 다중 클립 타임라인에서의 극단 배치(겹치는 클립, 0-duration 클립)는 다음 fuzz 확장에서 다룬다.
+
+## 2026-08-14 nightly 러너 재확인 — REVIEW 2건의 정체
+
+CI 러너에서 nightly가 처음 완주한 시점에 동일한 2건(`boundary_01_empty_import`,
+`boundary_02_missing_file`)이 `status=ERROR_REPORTED`로 다시 관측됐다. 위 본문의
+결론 그대로다: 빈 IMPORT 목록과 존재하지 않는 경로(`/nope/missing.mp4`)는
+harness가 `error=` 필드로 **정확히 보고하는 의도된 실패 경로**이며, fuzz 게이트의
+REVIEW 분류는 "정상 에러 보고"로 해석된다. 재현 시드: `SEED=1722484800`.
+크래시 0건 · 클립 카운트 예상치 일치(빈 import=0, 단일 import=1). 이후 nightly에서
+이 2건이 ERROR_REPORTED로 나오면 정상, crash/exit≠0이 나오면 즉시 회귀다.

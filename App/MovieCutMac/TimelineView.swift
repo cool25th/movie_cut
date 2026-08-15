@@ -1158,11 +1158,18 @@ struct TimelineView: View {
         guard let asset = filmstripAsset(for: clip) else {
             return QualityDegradeDisplayState(primaryState: nil, activeCauses: [])
         }
+        let userQuality = viewModel.currentProject.playbackSettings.previewQuality
         return ProxyBadgeState.resolve(
             proxy: asset.proxy,
             useProxyPlayback: viewModel.currentProject.playbackSettings.useProxyPlayback,
             autoDowngraded: viewModel.playbackEngine.autoProxyDowngrade,
-            previewQuality: viewModel.currentProject.playbackSettings.previewQuality
+            previewQuality: userQuality,
+            // The thermal clamp only "degrades" when it actually lowered the
+            // user's choice (a user-picked 1/2 at .fair is their own doing).
+            thermalPreviewScale: ProxyDowngradePolicy.effectivePreviewQuality(
+                user: userQuality,
+                thermalState: viewModel.playbackEngine.currentThermalState
+            ) != userQuality
         )
     }
 
@@ -1214,6 +1221,8 @@ struct TimelineView: View {
             switch cause {
             case .thermalDowngrade:
                 return NSLocalizedString("thermal pressure is using the proxy", comment: "")
+            case .thermalPreviewScale:
+                return NSLocalizedString("thermal pressure reduced the preview resolution", comment: "")
             case .manualProxy:
                 return NSLocalizedString("proxy playback is on", comment: "")
             case .manualPreviewQuality:

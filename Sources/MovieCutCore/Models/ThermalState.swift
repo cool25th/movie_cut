@@ -67,4 +67,34 @@ public enum ProxyDowngradePolicy {
         guard autoProxyOnThermalPressure else { return false }
         return thermalState.shouldDowngradeToProxy
     }
+
+    /// The preview render quality actually in effect, combining the user's
+    /// performance-priority dial with the thermal state — the FIRST step of
+    /// gradual degradation (review §4: "심각해진 뒤 멈춤"이 아니라 단계적 강등).
+    ///
+    /// Ladder: `.nominal` honours the user's setting; at `.fair` the preview
+    /// quality is clamped to at most `.half` (a pure render-size change — no
+    /// encode pass, and the custom compositor is resolution-relative so nothing
+    /// else must know); `.serious`/`.critical` keep the clamp AND flip to the
+    /// proxy via ``shouldAutoDowngrade`` when the user allows it. Export is
+    /// refused only at `.critical` (``ThermalState.shouldBlockExport``).
+    ///
+    /// A user who already picked `.half`/`.quarter` is never *raised*: the
+    /// clamp only ever lowers.
+    public static func effectivePreviewQuality(
+        user: PreviewQuality,
+        thermalState: ThermalState
+    ) -> PreviewQuality {
+        switch thermalState {
+        case .nominal:
+            return user
+        case .fair, .serious, .critical:
+            switch user {
+            case .full:
+                return .half
+            case .half, .quarter:
+                return user
+            }
+        }
+    }
 }

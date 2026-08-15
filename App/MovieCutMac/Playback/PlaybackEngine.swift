@@ -441,6 +441,11 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     }
 
     func seek(to time: TimeInterval) {
+        // Signpost measures the seek REQUEST (AVPlayer.seek is fire-and-forget;
+        // render completion is not observable here) — the SLO doc's intended
+        // `playback.seek` probe for scrub-latency regression direction.
+        let signposter = AppLog.Signpost.playback
+        let state = signposter.beginInterval("playback.seek")
         let targetTime: TimeInterval
         if duration > 0 {
             targetTime = min(max(0, time), duration)
@@ -451,6 +456,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         currentTime = targetTime
         let cmTime = CMTime(seconds: targetTime, preferredTimescale: 600)
         player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        signposter.endInterval("playback.seek", state)
     }
 
     func startPlaybackTimer() {

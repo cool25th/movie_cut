@@ -1,4 +1,11 @@
 import Foundation
+import OSLog
+
+/// Core-side signposter for project storage work. Reuses AppLog's subsystem
+/// string so a single Instruments filter covers both App and Core intervals;
+/// Core cannot link the App-only AppLog, so this is its minimal counterpart
+/// (the first OSLog use in Core).
+private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", category: "storage")
 
 // MARK: - Schema version
 
@@ -142,6 +149,10 @@ public enum ProjectMigrationRunner {
     /// Internal overload that runs an explicit chain, so the stepping logic can
     /// be exercised in tests without depending on the production registry.
     internal static func migrate(_ project: inout Project, chain: [any ProjectMigration]) throws {
+        // Signpost the stepping loop (skipped entirely for current-version
+        // files) so Instruments can attribute migration cost on old projects.
+        let signpostState = storageSignposter.beginInterval("storage.migrate")
+        defer { storageSignposter.endInterval("storage.migrate", signpostState) }
         let found = project.schemaVersion
 
         // Future versions: refuse. We cannot know how to read keys a newer app

@@ -79,6 +79,11 @@ public enum QualityDegradeCause: String, Sendable, Equatable, CaseIterable {
     /// The engine auto-dropped to a proxy under serious/critical thermal
     /// pressure (S7). Highest priority: heat is involuntary and urgent.
     case thermalDowngrade
+    /// The engine clamped the preview render size (e.g. to 1/2) under thermal
+    /// pressure (.fair+) — the first, gentler rung of gradual degradation
+    /// before the proxy flip. Same glyph as a manual quality reduction, but
+    /// listed as its own cause so the tooltip explains WHY.
+    case thermalPreviewScale
     /// The user turned on proxy playback manually (B-I7).
     case manualProxy
     /// The user lowered the preview render quality manually (Requirement 5).
@@ -138,7 +143,8 @@ extension ProxyBadgeState {
         proxy: ProxyInfo?,
         useProxyPlayback: Bool,
         autoDowngraded: Bool,
-        previewQuality: PreviewQuality
+        previewQuality: PreviewQuality,
+        thermalPreviewScale: Bool = false
     ) -> QualityDegradeDisplayState {
         let hasProxy = proxy?.proxyURL != nil
         let reducedPreview = previewQuality != .full
@@ -148,10 +154,11 @@ extension ProxyBadgeState {
         // accessibility label report simultaneous causes.
         var causes: [QualityDegradeCause] = []
         if autoDowngraded { causes.append(.thermalDowngrade) }
+        if thermalPreviewScale { causes.append(.thermalPreviewScale) }
         if useProxyPlayback { causes.append(.manualProxy) }
         if reducedPreview { causes.append(.manualPreviewQuality) }
         // Keep the list in canonical priority order regardless of input order.
-        let priorityOrder: [QualityDegradeCause] = [.thermalDowngrade, .manualProxy, .manualPreviewQuality]
+        let priorityOrder: [QualityDegradeCause] = [.thermalDowngrade, .thermalPreviewScale, .manualProxy, .manualPreviewQuality]
         let orderedCauses = priorityOrder.filter { causes.contains($0) }
 
         // The badge draws exactly one state: the highest-priority cause, or a
@@ -179,6 +186,8 @@ extension ProxyBadgeState {
         switch cause {
         case .thermalDowngrade:
             return .thermalActive
+        case .thermalPreviewScale:
+            return .previewQualityReduced
         case .manualProxy:
             return .active
         case .manualPreviewQuality:

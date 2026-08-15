@@ -138,4 +138,71 @@ struct ThermalProxyDowngradeTests {
         #expect(ThermalState.critical.shouldDowngradeToProxy == true)
         #expect(ThermalState.critical.shouldBlockExport == true)
     }
+
+    // MARK: - Gradual degradation rung 1: .fair preview-quality clamp
+
+    @Test("nominal honors the user's preview quality unchanged")
+    func nominalKeepsUserQuality() {
+        #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .full, thermalState: .nominal) == .full)
+        #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .half, thermalState: .nominal) == .half)
+        #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .quarter, thermalState: .nominal) == .quarter)
+    }
+
+    @Test("fair and above clamp full preview quality to half — never raise a lower choice")
+    func fairClampsFullToHalf() {
+        // The first gradual rung: at .fair the preview render size halves (a
+        // pure render-size change, no encode pass). Users who already chose
+        // 1/2 or 1/4 are never raised.
+        for state in [ThermalState.fair, .serious, .critical] {
+            #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .full, thermalState: state) == .half,
+                    "\(state) should clamp .full to .half")
+            #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .half, thermalState: state) == .half,
+                    "\(state) must not raise .half")
+            #expect(ProxyDowngradePolicy.effectivePreviewQuality(user: .quarter, thermalState: state) == .quarter,
+                    "\(state) must not raise .quarter")
+        }
+    }
+
+    @Test("fair does NOT flip the proxy — the rungs stay distinct")
+    func fairDoesNotFlipProxy() {
+        // .fair is render-scale only; the proxy flip remains .serious+. Pin
+        // the ladder: fair=scale, serious=proxy, critical=export refused.
+        #expect(ProxyDowngradePolicy.shouldAutoDowngrade(thermalState: .fair, autoProxyOnThermalPressure: true) == false)
+        #expect(ThermalState.fair.shouldBlockExport == false)
+    }
+
+    @Test("the badge reports the thermal preview scale as its own cause")
+    func badgeReportsThermalPreviewScale() {
+        let state = ProxyBadgeState.resolve(
+            proxy: nil,
+            useProxyPlayback: false,
+            autoDowngraded: false,
+            previewQuality: .full,
+            thermalPreviewScale: true
+        )
+        #expect(state.activeCauses == [.thermalPreviewScale])
+        #expect(state.primaryState == .previewQualityReduced)
+
+        // The proxy rung still outranks the scale rung when both are active.
+        let both = ProxyBadgeState.resolve(
+            proxy: ProxyInfo(proxyURL: URL(fileURLWithPath: "/tmp/proxy.mov")),
+            useProxyPlayback: false,
+            autoDowngraded: true,
+            previewQuality: .full,
+            thermalPreviewScale: true
+        )
+        #expect(both.activeCauses.first == .thermalDowngrade)
+        #expect(both.primaryState == .thermalActive)
+
+        // A user who picked 1/2 themselves at nominal heat is a MANUAL cause,
+        // not the thermal one.
+        let manual = ProxyBadgeState.resolve(
+            proxy: nil,
+            useProxyPlayback: false,
+            autoDowngraded: false,
+            previewQuality: .half,
+            thermalPreviewScale: false
+        )
+        #expect(manual.activeCauses == [.manualPreviewQuality])
+    }
 }

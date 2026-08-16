@@ -55,4 +55,22 @@ public enum RenderColorConfiguration {
             .outputColorSpace: destinationColorSpace
         ]
     }
+
+    /// Creates the compositor input image for a decoded source frame, pinned to
+    /// the working color space.
+    ///
+    /// AVFoundation's two composition legs tag their decoded BGRA source
+    /// buffers differently: AVPlayer (preview) attaches an ICC color space —
+    /// "Composite NTSC" for untagged BT.601 SD, for example — while
+    /// AVAssetExportSession (export) leaves `kCVImageBufferCGColorSpaceKey`
+    /// unset. A bare `CIImage(cvPixelBuffer:)` therefore color-managed the
+    /// preview render from the decoder's ICC space into the pinned sRGB working
+    /// space but passed export values through, rotating hues on the preview leg
+    /// only (pure red (254,0,0) → (247,36,0), parity MAD 10.25 on the
+    /// crop-rect video scenario). Overriding the input color space here makes
+    /// both legs interpret source bytes identically — the "same project → same
+    /// pixels" contract this type exists to enforce.
+    public static func sourceImage(from pixelBuffer: CVPixelBuffer) -> CIImage {
+        CIImage(cvPixelBuffer: pixelBuffer, options: [.colorSpace: workingColorSpace])
+    }
 }

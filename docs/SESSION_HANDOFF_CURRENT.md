@@ -1,7 +1,38 @@
-# 세션 핸드오프 — 현재 (2026-08-16)
+# 세션 핸드오프 — 현재 (2026-08-17)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+
+## 2026-08-17 세션 (프리뷰 색공간 발산 수정 — G-29 전도부, 사용자 결정 A 이행)
+
+**게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,155 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). `run_core_editing_parity.sh` **14/14 시나리오 PASS**(신규 15번 `crop_rect_video` 포함, 시나리오 1 전환은 기존대로 스킵).
+
+### 완료 — 프리뷰 색공간 발산 결함 수정 (증분 1개)
+1. **원인 규명(실측)**: AVPlayer의 디코드 다리는 컴포지터 소스 BGRA에 ICC 색공간 태그를 붙이고(미태그 BT.601 SD → "Composite NTSC", SMPTE_C/601 계열) AVAssetExportSession의 디코드 다리는 `kCVImageBufferCGColorSpaceKey=nil`로 전달한다. 컴포지터의 `CIImage(cvPixelBuffer:)`가 프리뷰 다리에서만 핀된 sRGB 작업 공간으로 ICC 변환을 수행 — 순수 레드 (254,0,0)→(247,36,0), 파리티 MAD 10.25. 독립 Swift 실험(최소 컴포지터 재현)으로 각 단계 버퍼 태그·값을 직접 측정해 확정. 종전 가설(YUV↔RGB 매트릭스 불일치)은 부분 정확 — 실체는 "프리뷰만 ICC 색 관리 개입"이었다.
+2. **수정**: `RenderColorConfiguration.sourceImage(from:)` 신규(Core) — `CIImage(cvPixelBuffer:options:[.colorSpace: workingSpace])`로 컴포지터 소스 해석을 작업 공간에 고정(디코더 태그 무관). Mac `CustomVideoCompositor` 4개 지점(transition 2·primary·layering)·iOS `IOSCustomVideoCompositor` 4개 지점 교체. **양 다리가 정의상 동일 해석** — "same project → same pixels" 계약 강화.
+3. **실증(DoD 충족)**: 파리티 시나리오 `crop_rect_video`(스크립트 15번) 신설·상시화 — 비디오판 크롭(미태그 BT.601 SD 소스가 캔버스를 채움 → 색조 회전이 레터박스·마스킹·crush 뒤에 숨을 수 없는 구조). 수정 전 FAIL MAD 10.25(G=27.0) → 수정 후 **PASS MAD 0.50**(R=1.5 인코딩 반올림 수준). 기존 13개 시나리오 무회귀(전체 14/14).
+4. **테스트**: `ColorSpaceParityTests` +2 — `sourceImageIsPinnedToTheWorkingColorSpace`(해석 고정), `sourceImageIgnoresDecoderICCTag`(AdobeRGB ICC 태그 부착 버퍼에서도 값 불변 + 통과 패스스루 ±1).
+5. **문서**: VERIFICATION_STANDARD §2.2 시나리오 표 12→14(#13 crop_rect·#14 crop_rect_video + 스크립트 번호 차이 주석), 백로그 §0.5 G-29 전도부 이행 기록, REQUIREMENTS 변경 이력 1줄.
+
+### 발견·기록(범위 밖 — 후속 감사 대상)
+- **무컴포지터(plain) 경로의 절대 색상 회전**: plain 프로젝트는 양 다리가 같은 회전값(출력 (255,23,0))을 내므로 **파리티는 일관**(MAD 0.40)하나, 원본 소스 의도 색상 (254,0,0)과는 미세 차이. 이번 수정은 컴포지터 경로만 다룸(DoD 범위) — plain 경로 절대 색상은 G-29 본 증분(3단계 색관리 전면 감사)으로 이월. **파리티 게이트는 일관성이지 정답이 아님**의 두 번째 실측 사례.
+- **plain 경로의 자연 크기 렌더링 재확인**: plain 합성은 캔버스(1920×1080)에 소스를 좌상단 자연 크기(320×240)로 배치(CI 원점 기준 좌하단). 정규화 비교 격자에서 비디오가 차지하는 면적이 작아 색 편차가 희석됨 — 시나리오 통과의 숨은 요인.
+
+### 발견한 함정(다음 세션 참고)
+- **`open -n -W` 프로브 직접 실행 시 프리뷰 덤프가 검정 프레임이 될 수 있다**: 실제 파리티 스크립트 경로(시나리오 편집 → rebuild → wait → 스냅샷)에서는 재현 안 됨. 프로브용 축약 하니스보다 **스크립트의 run_scenario를 그대로 재사용**할 것(이번 세션 교훈: 재현은 스크립트 구조로).
+- **`open`에 앱 번들 경로 전달 필수**(`.app/Contents/MacOS/...` 내부 바이너리 아님 — LaunchServices가 무시하고 result만 MISSING).
+- `CGImage.colorSpace`·`CVBufferGetAttachment`로 디코드 버퍼의 실제 태그를 직접 확인 가능 — 색 문제 디버깅의 1차 도구.
+
+### 다음 세션 인계 (우선순위 순)
+1. **EXECUTION_PLAN §3 Inc 2 — EditorViewModel 분해 1호 경계(timeline editing)**: 색공간 수정 완료로 계획 원위치(LOOP_STATE 이전 기준). 순수 이동 리팩터링, 파리티 14·ui_regression으로 무회귀 확인.
+2. **G-02 Inc5 HSL 편집 UI** 착수(방향 문서 §3 순서).
+3. T1/T2/T3 스트레스 타임라인 fixture 확정 + PERFORMANCE_SLO.md p50/p95 기록.
+4. lint 신규 error 0 CI 반영.
+5. 장형(≥10분) fixture 제작 후 `run_latency_baseline.sh` 재측.
+
+### 사용자 결정 대기 사항
+- Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.
+- 신규 없음(색공간 우선순위는 결정 A로 해결됨).
 
 ## 2026-08-16 세션 2 (G-23 Inc 2 — 크롭 캔버스 에디터 + 파리티 시나리오 + **사전 존재 결함 2건 발견**)
 

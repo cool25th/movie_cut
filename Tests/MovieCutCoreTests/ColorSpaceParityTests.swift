@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import CoreVideo
 import Foundation
 import MovieCutCore
 import Testing
@@ -146,6 +147,51 @@ struct ColorSpaceParityTests {
                 "contextOptions must pin working + output color spaces; an empty dictionary restores the implicit-context parity bug.")
     }
 
+    // MARK: - Compositor source interpretation is decoder-tag independent
+    //
+    // The regression these pin (2026-08-17): AVPlayer's decode leg attaches an
+    // ICC color space to BGRA source buffers ("Composite NTSC" for untagged
+    // BT.601 SD) while AVAssetExportSession's leaves them untagged, so a bare
+    // CIImage(cvPixelBuffer:) color-managed only the preview leg into the
+    // pinned working space — a hue rotation (pure red → (247,36,0), parity MAD
+    // 10.25 on the crop-rect video scenario).
+
+    @Test
+    func sourceImageIsPinnedToTheWorkingColorSpace() {
+        let buffer = Self.makeSolidBuffer(Self.probeColor)
+        let image = RenderColorConfiguration.sourceImage(from: buffer)
+        #expect(image.colorSpace?.name == RenderColorConfiguration.workingColorSpace.name,
+                "sourceImage must interpret decoded bytes as the working space, got \(String(describing: image.colorSpace?.name))")
+    }
+
+    @Test
+    func sourceImageIgnoresDecoderICCTag() {
+        GoldenPixel.assertRendererFunctional()
+        let plain = Self.makeSolidBuffer(Self.probeColor)
+        let tagged = Self.makeSolidBuffer(Self.probeColor)
+        // Simulate AVPlayer's decode leg: an ICC attachment that differs from
+        // the working space. With a bare CIImage(cvPixelBuffer:) this tag
+        // drives a ColorSync conversion on render; the compositor input must
+        // not depend on it.
+        CVBufferSetAttachment(
+            tagged,
+            kCVImageBufferCGColorSpaceKey,
+            CGColorSpace(name: CGColorSpace.adobeRGB1998)!,
+            .shouldPropagate
+        )
+
+        let context = CIContext(options: RenderColorConfiguration.contextOptions)
+        let fromPlain = Self.renderPixel(RenderColorConfiguration.sourceImage(from: plain), in: context)
+        let fromTagged = Self.renderPixel(RenderColorConfiguration.sourceImage(from: tagged), in: context)
+
+        #expect(fromPlain == fromTagged,
+                "decoder ICC tag changed compositor input values: \(fromPlain) vs \(fromTagged)")
+        // Pass-through contract: interpreted as the working space and rendered
+        // into the same working/destination space, the bytes survive unchanged
+        // (±1 for 8-bit rounding).
+        Self.expectEqual(plain: fromPlain, expected: Self.probeColor)
+    }
+
     // MARK: - Helpers
 
     /// Renders a 1×1 image into the supplied context and reads back the pixel.
@@ -177,5 +223,61 @@ struct ColorSpaceParityTests {
             colorSpace: RenderColorConfiguration.workingColorSpace
         )
         return sample(image, in: context)
+    }
+
+    /// A 1×1 BGRA pixel buffer carrying the given color, mimicking a decoded
+    /// source frame (32BGRA per `renderedPixelFormat`).
+    private static func makeSolidBuffer(_ color: GoldenPixel.RGBA) -> CVPixelBuffer {
+        var maybeBuffer: CVPixelBuffer?
+        let attributes: [CFString: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: true
+        ]
+        CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            1,
+            1,
+            RenderColorConfiguration.renderedPixelFormat,
+            attributes as CFDictionary,
+            &maybeBuffer
+        )
+        guard let buffer = maybeBuffer else {
+            preconditionFailure("CVPixelBufferCreate failed")
+        }
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        let base = CVPixelBufferGetBaseAddress(buffer)!.assumingMemoryBound(to: UInt8.self)
+        // 32BGRA byte order: B, G, R, A.
+        base[0] = color.b
+        base[1] = color.g
+        base[2] = color.r
+        base[3] = color.a
+        return buffer
+    }
+
+    /// Renders a 1×1 compositor input image through a configured context and
+    /// reads back the RGBA pixel, mirroring `sample(_:in:)` for CVPixelBuffer
+    /// inputs.
+    private static func renderPixel(_ image: CIImage, in context: CIContext) -> GoldenPixel.RGBA {
+        let bounds = CGRect(x: 0, y: 0, width: 1, height: 1)
+        var bytes = [UInt8](repeating: 0, count: 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            context.render(
+                image.cropped(to: bounds),
+                toBitmap: buffer.baseAddress!,
+                rowBytes: 4,
+                bounds: bounds,
+                format: .RGBA8,
+                colorSpace: RenderColorConfiguration.workingColorSpace
+            )
+        }
+        return GoldenPixel.RGBA(bytes[0], bytes[1], bytes[2], bytes[3])
+    }
+
+    private static func expectEqual(plain actual: GoldenPixel.RGBA, expected: GoldenPixel.RGBA) {
+        #expect(abs(Int(actual.r) - Int(expected.r)) <= 1
+                && abs(Int(actual.g) - Int(expected.g)) <= 1
+                && abs(Int(actual.b) - Int(expected.b)) <= 1,
+                "source pass-through altered bytes: \(actual) vs \(expected)")
     }
 }

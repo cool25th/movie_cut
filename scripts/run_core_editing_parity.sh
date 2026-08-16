@@ -261,18 +261,20 @@ run_scenario "crop_rect" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$IMAGE" \
   "MOVIECUT_UITEST_CROP=1" || FAIL=1
 
-# NOTE (2026-08-16, G-23 Inc 2): a VIDEO variant of this scenario
-# (MOVIECUT_UITEST_IMPORT=$VIDEO_A + CROP=1) is intentionally NOT active. It
-# exposed a pre-existing preview↔export color divergence that is NOT
-# crop-specific: untagged BT.601 SD video scaled through the custom
-# compositor previews with a hue rotation (pure red → (247,36,0) preview vs
-# (254,0,0) export; overall MAD ≈ 10.25 vs tolerance 2.00). Existing green
-# scenarios hide it — every active custom-compositor scenario either crushes
-# the signal with color correction or limits the unmasked area to ~1% of the
-# frame. Cropped PNG sources pass at MAD ≤ 2, so the crop wiring itself is
-# parity-clean. Tracked as the preview color-space divergence defect in
-# docs/SESSION_HANDOFF_CURRENT.md; re-enable the video variant when the
-# decode color-space fix lands.
+echo "Scenario 15: crop rect, untagged BT.601 SD video source"
+# The VIDEO variant of the crop scenario, re-enabled 2026-08-17 after the
+# preview color-space divergence fix. Root cause (measured): AVPlayer's decode
+# leg attaches an ICC color space ("Composite NTSC") to untagged BT.601 SD
+# source buffers while AVAssetExportSession's leaves them untagged, so a bare
+# CIImage(cvPixelBuffer:) color-managed only the preview render into the
+# pinned sRGB working space — pure red (254,0,0) previewed as (247,36,0),
+# overall MAD 10.25. RenderColorConfiguration.sourceImage(from:) now pins the
+# compositor input interpretation on both legs; this scenario is the tripwire
+# for that contract (a video source that fills the canvas after crop, so the
+# hue rotation cannot hide behind letterboxing, masking, or color crush).
+run_scenario "crop_rect_video" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_CROP=1" || FAIL=1
 
 echo ""
 if [ "$FAIL" -eq 0 ]; then

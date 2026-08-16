@@ -196,13 +196,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     at: request.compositionTime
                 )
                 let outgoingImage = self.applyClipEffects(
-                    to: CIImage(cvPixelBuffer: outgoingBuffer),
+                    to: RenderColorConfiguration.sourceImage(from: outgoingBuffer),
                     effect: outgoingEffect,
                     instruction: instruction,
                     request: request
                 )
                 let incomingImage = self.applyClipEffects(
-                    to: CIImage(cvPixelBuffer: incomingBuffer),
+                    to: RenderColorConfiguration.sourceImage(from: incomingBuffer),
                     effect: incomingEffect,
                     instruction: instruction,
                     request: request
@@ -240,7 +240,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 return
             }
 
-            var image = CIImage(cvPixelBuffer: sourceBuffer)
+            var image = RenderColorConfiguration.sourceImage(from: sourceBuffer)
 
             if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
@@ -347,7 +347,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 continue
             }
 
-            var layerImage = CIImage(cvPixelBuffer: sourceBuffer)
+            var layerImage = RenderColorConfiguration.sourceImage(from: sourceBuffer)
             layerImage = applyClipEffects(
                 to: layerImage,
                 effect: effect,

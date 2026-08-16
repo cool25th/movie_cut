@@ -55,6 +55,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Replaces the clip compositing blend mode (Requirement 4.1).
     case blendMode(BlendMode)
+
+    /// Replaces the dedicated crop rect; nil clears the crop (G-23).
+    case cropRect(NormalizedRect?)
 }
 
 /// Sets one editable clip property.
@@ -144,6 +147,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .blendMode(let blendMode):
             previousProperty = .blendMode(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode = blendMode
+        case .cropRect(let cropRect):
+            previousProperty = .cropRect(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].cropRect)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].cropRect = cropRect
         }
     }
 

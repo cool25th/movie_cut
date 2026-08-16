@@ -108,6 +108,7 @@ final class IOSExportEngine {
                     // ExportEngine.needsCustomCompositor includes it).
                     || clip.isBackgroundRemoved
                     || clip.blendMode != .normal
+                    || clip.cropRect != nil
             }
         }
     }
@@ -190,7 +191,8 @@ final class IOSExportEngine {
                         mask: clip.mask,
                         effects: clip.effects,
                         textContent: clip.textContent,
-                        isBackgroundRemoved: clip.isBackgroundRemoved
+                        isBackgroundRemoved: clip.isBackgroundRemoved,
+                        cropRect: clip.cropRect
                     ) else {
                         continue
                     }

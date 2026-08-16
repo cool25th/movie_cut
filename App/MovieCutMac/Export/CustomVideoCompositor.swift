@@ -394,6 +394,17 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         request: AVAsynchronousVideoCompositionRequest
     ) -> CIImage {
         var image = image
+        // Crop runs first so every downstream processor (visual effects,
+        // color, chroma key, mask, transform) sees the cropped region — the
+        // order a user perceives in the inspector (G-23). Shared processor,
+        // so preview and export crop identically.
+        if let cropRect = effect?.cropRect {
+            image = CropPixelProcessor.apply(
+                cropRect,
+                to: image,
+                renderSize: request.renderContext.size
+            )
+        }
         let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
         let colorGrade = effect?.colorGrade ?? instruction.colorGrade
         let chromaKey = effect?.chromaKey ?? instruction.chromaKey

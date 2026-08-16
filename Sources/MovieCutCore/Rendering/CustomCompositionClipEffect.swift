@@ -27,6 +27,7 @@ public struct CustomCompositionClipEffect: Sendable {
     public let stickerFontSize: CGFloat?
     public let isBackgroundRemoved: Bool
     public let blendMode: BlendMode
+    public let cropRect: NormalizedRect?
 
     public init?(
         trackID: CMPersistentTrackID,
@@ -48,6 +49,7 @@ public struct CustomCompositionClipEffect: Sendable {
         stickerFontSize: CGFloat? = nil,
         isBackgroundRemoved: Bool = false,
         blendMode: BlendMode = .normal,
+        cropRect: NormalizedRect? = nil,
         includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -62,6 +64,7 @@ public struct CustomCompositionClipEffect: Sendable {
             || stickerImageURL != nil
             || isBackgroundRemoved
             || blendMode != .normal
+            || cropRect != nil
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
             || (includeIdentitySource && trackID != kCMPersistentTrackID_Invalid)
         else {
@@ -87,6 +90,7 @@ public struct CustomCompositionClipEffect: Sendable {
         self.stickerFontSize = stickerFontSize
         self.isBackgroundRemoved = isBackgroundRemoved
         self.blendMode = blendMode
+        self.cropRect = cropRect
     }
 
     public var hasStickerOverlay: Bool {

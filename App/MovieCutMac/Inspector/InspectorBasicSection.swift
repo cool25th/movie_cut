@@ -92,6 +92,9 @@ struct InspectorBasicSection: View {
         if isStickerClip {
             stickerTransformSection
         }
+        if clip.kind == .video || clip.kind == .image {
+            cropSection
+        }
         opacitySection
         blendModeSection
 
@@ -125,6 +128,9 @@ struct InspectorBasicSection: View {
         transformSection
         if isStickerClip {
             stickerTransformSection
+        }
+        if clip.kind == .video || clip.kind == .image {
+            cropSection
         }
         opacitySection
         blendModeSection
@@ -498,6 +504,71 @@ struct InspectorBasicSection: View {
     /// since both govern how the clip layers over the frame beneath. Applied
     /// through the existing `SetClipPropertyCommand` so it is a single undoable
     /// edit like every other basic property.
+    /// Dedicated crop UI (G-23). Ratio presets select the largest centered
+    /// region of that pixel aspect inside the source; "Original" clears the
+    /// crop. Free-form canvas handles arrive in a later increment.
+    private var cropSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Crop")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            HStack(spacing: MovieCutSpacing.small) {
+                ForEach(cropPresets, id: \.label) { preset in
+                    Button {
+                        Task {
+                            try? await viewModel.dispatchCommand(
+                                SetClipPropertyCommand(
+                                    clipId: clip.id,
+                                    property: .cropRect(preset.aspect.flatMap { aspect in
+                                        CropPixelProcessor.centeredCropRect(
+                                            sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
+                                            targetAspect: aspect
+                                        )
+                                    })
+                                )
+                            )
+                        }
+                    } label: {
+                        Text(preset.label)
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Crop \(preset.label)")
+                    .accessibilityHint("Crops the clip to the \(preset.label) ratio.")
+                }
+            }
+
+            if let cropRect = clip.cropRect {
+                Text(String(
+                    format: "Region %.0f%% × %.0f%% at (%.0f%%, %.0f%%)",
+                    cropRect.width * 100,
+                    cropRect.height * 100,
+                    cropRect.x * 100,
+                    cropRect.y * 100
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Current crop region")
+            }
+        }
+    }
+
+    private struct CropPreset {
+        var label: String
+        var aspect: Double?
+    }
+
+    private let cropPresets: [CropPreset] = [
+        CropPreset(label: "Original", aspect: nil),
+        CropPreset(label: "1:1", aspect: 1),
+        CropPreset(label: "4:3", aspect: 4.0 / 3.0),
+        CropPreset(label: "3:4", aspect: 3.0 / 4.0),
+        CropPreset(label: "16:9", aspect: 16.0 / 9.0),
+        CropPreset(label: "9:16", aspect: 9.0 / 16.0)
+    ]
+
     private var blendModeSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Blend")

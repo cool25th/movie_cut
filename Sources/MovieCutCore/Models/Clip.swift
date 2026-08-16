@@ -153,6 +153,14 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// (Requirements 4.4 / 4.7 — CapCut clip-blending parity.)
     public var blendMode: BlendMode
 
+    /// Dedicated crop rect (G-23): the normalized, top-leading sub-rect of the
+    /// source frame kept visible. Nil means no crop. The selected region is
+    /// scaled to fill the render canvas by the shared `CropPixelProcessor`, so
+    /// preview and export crop identically by construction. Decodes to nil for
+    /// legacy projects and is only persisted when set, keeping never-cropped
+    /// JSON byte-identical.
+    public var cropRect: NormalizedRect?
+
     /// When non-nil, this clip is a container for the referenced
     /// `CompoundDefinition` (Requirement 7). The flatten pass (task 5.8)
     /// replaces this clip in the rendered timeline with the definition's child
@@ -193,6 +201,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case duckingLevel
         case blendMode
         case compoundId
+        case cropRect
     }
 
     /// Creates a clip.
@@ -229,7 +238,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         duckingRanges: [TimeRange] = [],
         duckingLevel: Double? = nil,
         blendMode: BlendMode = .normal,
-        compoundId: UUID? = nil
+        compoundId: UUID? = nil,
+        cropRect: NormalizedRect? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -273,6 +283,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.duckingLevel = duckingLevel
         self.blendMode = blendMode
         self.compoundId = compoundId
+        self.cropRect = cropRect
     }
 
     public init(from decoder: any Decoder) throws {
@@ -312,6 +323,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // and the common case) loads with a nil reference. No-nesting and
         // broken-ref validation happens in `Project.validateCompounds` at load.
         compoundId = try container.decodeIfPresent(UUID.self, forKey: .compoundId) ?? nil
+        cropRect = try container.decodeIfPresent(NormalizedRect.self, forKey: .cropRect)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -354,6 +366,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // Persist the compound reference only when set, so a plain clip stays
         // byte-identical to its pre-feature JSON (Requirement 7.6).
         try container.encodeIfPresent(compoundId, forKey: .compoundId)
+        try container.encodeIfPresent(cropRect, forKey: .cropRect)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

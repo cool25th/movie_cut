@@ -379,7 +379,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         stickerFontSize: stickerFontSize,
                         keyframes: clip.keyframes,
                         isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id),
-                        blendMode: clip.blendMode
+                        blendMode: clip.blendMode,
+                        cropRect: clip.cropRect
                     ))
                 }
 
@@ -607,7 +608,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         isBackgroundRemoved: clip.isBackgroundRemoved || backgroundRemovedClipIds.contains(clip.id),
                         useOpticalFlow: clip.useOpticalFlow,
                         playbackRate: playbackRate,
-                        blendMode: clip.blendMode
+                        blendMode: clip.blendMode,
+                        cropRect: clip.cropRect
                     ))
                 }
 
@@ -681,6 +683,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 || !clip.effects.isEmpty
                 || clip.isBackgroundRemoved
                 || clip.blendMode != .normal
+                || clip.cropRect != nil
         } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -817,6 +820,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             stickerFontSize: clip.stickerFontSize,
                             isBackgroundRemoved: clip.isBackgroundRemoved,
                             blendMode: clip.blendMode,
+                            cropRect: clip.cropRect,
                             includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
@@ -2349,6 +2353,7 @@ private struct ExportClipInstructionMetadata {
     var useOpticalFlow: Bool = false
     var playbackRate: Double = 1.0
     var blendMode: BlendMode = .normal
+    var cropRect: NormalizedRect? = nil
 
     var usesOpticalFlowSlowMotion: Bool {
         opticalFlowSlowMotionRate != nil
@@ -2373,6 +2378,7 @@ private struct ExportClipInstructionMetadata {
             || isBackgroundRemoved
             || blendMode != .normal
             || !keyframes.isEmpty
+            || cropRect != nil
     }
 }
 

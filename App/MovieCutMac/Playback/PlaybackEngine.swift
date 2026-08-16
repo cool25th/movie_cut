@@ -882,6 +882,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             transform: clip.transform.affineTransform(
                                 for: .sourceFrame(preferredTransform: preferredTransform, size: sourceSize)
                             ),
+                            clipTransform: clip.transform,
+                            keyframes: clip.keyframes,
                             opacity: Float(min(max(clip.opacity, 0), 1)),
                             transition: clip.transition,
                             colorCorrection: clip.colorCorrection,
@@ -892,7 +894,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             mask: clip.mask,
                             effects: clip.effects,
                             isBackgroundRemoved: clip.isBackgroundRemoved,
-                            blendMode: clip.blendMode
+                            blendMode: clip.blendMode,
+                            cropRect: clip.cropRect
                         ))
                     }
 
@@ -1311,6 +1314,9 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             CustomCompositionClipEffect(
                                 trackID: clipInstruction.trackID,
                                 timeRange: clipInstruction.timeRange,
+                                transform: clipInstruction.clipTransform,
+                                opacity: Double(clipInstruction.opacity),
+                                keyframes: clipInstruction.keyframes,
                                 colorCorrection: clipInstruction.colorCorrection,
                                 colorGrade: clipInstruction.colorGrade,
                                 chromaKey: clipInstruction.chromaKey,
@@ -1319,7 +1325,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                                 mask: clipInstruction.mask,
                                 effects: clipInstruction.effects,
                                 isBackgroundRemoved: clipInstruction.isBackgroundRemoved,
-                                blendMode: clipInstruction.blendMode
+                                blendMode: clipInstruction.blendMode,
+                                cropRect: clipInstruction.cropRect
                             )
                         } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
@@ -1691,6 +1698,12 @@ private struct PlaybackClipInstructionMetadata {
     var trackID: CMPersistentTrackID
     var timeRange: CMTimeRange
     var transform: CGAffineTransform
+    // The ORIGINAL ClipTransform (not the resolved affine above), carried for
+    // the custom-compositor path, which applies transforms through
+    // ClipAnimationCompositor instead of layer instructions. The plain path
+    // keeps using `transform`; the custom path uses `clipTransform`.
+    var clipTransform: ClipTransform
+    var keyframes: [Keyframe]
     var opacity: Float
     var transition: Transition?
     var colorCorrection: ColorCorrection?
@@ -1702,6 +1715,7 @@ private struct PlaybackClipInstructionMetadata {
     var effects: [Effect]
     var isBackgroundRemoved: Bool
     var blendMode: BlendMode = .normal
+    var cropRect: NormalizedRect? = nil
 }
 
 private enum PlaybackEqualizerAudioTap {

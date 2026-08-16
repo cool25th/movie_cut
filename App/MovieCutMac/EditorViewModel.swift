@@ -438,6 +438,18 @@ final class EditorViewModel {
         return currentProject.mediaLibrary.assets[assetId]
     }
 
+    /// Pixel aspect (width/height) of the selected clip's source media, used
+    /// by the crop presets so a "9:16" preset selects a region that is 9:16 in
+    /// source pixels. Falls back to 16:9 when metadata is missing.
+    var selectedClipSourceAspect: Double? {
+        guard let width = selectedClipSourceAsset?.metadata.width,
+              let height = selectedClipSourceAsset?.metadata.height,
+              width > 0, height > 0 else {
+            return nil
+        }
+        return Double(width) / Double(height)
+    }
+
     var canRunAutoCutOnSelection: Bool {
         guard let clip = selectedClip, let asset = selectedClipSourceAsset else { return false }
         return (clip.kind == .audio || clip.kind == .video) && (asset.kind == .audio || asset.kind == .video)

@@ -127,9 +127,10 @@ final class EditorViewModel {
     private var subtitleAlignmentClipId: UUID?
     var playheadTime: TimeInterval = 0
     var timelineZoom: Double = 80
-    /// Active timeline tool (S9). `.select` by default; `.blade` turns clicks
-    /// into splits at the playhead.
+    /// Active timeline tool (S9). `.select` by default; `.blade`, `.slip`, `.slide` provide pro modes.
     var timelineTool: EditTool = .select
+    /// Timeline navigation context (Inc 2). `.root` for the main timeline or `.compound` when editing inside a compound clip.
+    var timelineContext: TimelineContext = .root
     /// J/K/L shuttle state (S9). Direction + repeated-tap count drive speed.
     var shuttleDirection: ShuttleDirection = .stopped
     var shuttleTapCount: Int = 0

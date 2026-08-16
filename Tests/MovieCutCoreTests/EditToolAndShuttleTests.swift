@@ -5,16 +5,27 @@ import Testing
 /// S9 — J/K/L shuttle and edit tool modes.
 ///
 /// Covers the pure Core pieces: the `EditTool` enum and the `ShuttleRate`
-/// speed-step math. The live keyboard/scroll behaviour needs a GUI run, so it
-/// is left as a user checklist; these pin the decision logic the UI relies on.
+/// speed-step math.
 @Suite("Edit tool and shuttle (S9)")
 struct EditToolAndShuttleTests {
 
-    @Test("EditTool has select and blade cases and select/blade rawValues")
+    @Test("EditTool has select, blade, slip, slide cases and valid properties")
     func editToolCases() {
-        #expect(EditTool.allCases == [.select, .blade])
+        #expect(EditTool.allCases == [.select, .blade, .slip, .slide])
         #expect(EditTool.select.rawValue == "select")
         #expect(EditTool.blade.rawValue == "blade")
+        #expect(EditTool.slip.rawValue == "slip")
+        #expect(EditTool.slide.rawValue == "slide")
+
+        #expect(EditTool.select.shortcutKey == "v")
+        #expect(EditTool.blade.shortcutKey == "c")
+        #expect(EditTool.slip.shortcutKey == "y")
+        #expect(EditTool.slide.shortcutKey == "u")
+
+        #expect(!EditTool.select.displayName.isEmpty)
+        #expect(!EditTool.blade.systemImage.isEmpty)
+        #expect(!EditTool.slip.systemImage.isEmpty)
+        #expect(!EditTool.slide.systemImage.isEmpty)
     }
 
     @Test("Shuttle forward speed steps up 1→2→4 and caps at 4")

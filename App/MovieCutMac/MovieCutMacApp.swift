@@ -267,8 +267,43 @@ struct MovieCutMacApp: App {
                         viewModel.timelineTool = .blade
                     }
                 }
-                .keyboardShortcut("b", modifiers: [])
+                .keyboardShortcut("c", modifiers: [])
                 .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Button("Slip Tool") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.timelineTool = .slip
+                    }
+                }
+                .keyboardShortcut("y", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Button("Slide Tool") {
+                    MovieCutShortcutGuard.performTextEntrySensitiveShortcut {
+                        viewModel.timelineTool = .slide
+                    }
+                }
+                .keyboardShortcut("u", modifiers: [])
+                .disabled(MovieCutShortcutGuard.isTextInputFirstResponder)
+
+                Divider()
+
+                Button("Create Compound Clip") {
+                    Task { await viewModel.createCompoundFromSelection() }
+                }
+                .keyboardShortcut("g", modifiers: [.command, .option])
+
+                Button("Release Compound Clip") {
+                    Task { await viewModel.releaseSelectedCompound() }
+                }
+                .keyboardShortcut("g", modifiers: [.command, .option, .shift])
+
+                if !viewModel.timelineContext.isRoot {
+                    Button("Exit to Parent Timeline") {
+                        viewModel.exitToParentTimeline()
+                    }
+                    .keyboardShortcut(.escape, modifiers: [])
+                }
 
                 Divider()
 

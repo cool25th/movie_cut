@@ -66,6 +66,7 @@ enum MovieCutTheme {
     static let divider: Color = rgb(0x35, 0x36, 0x3A, opacity: 0.46)
     static let border: Color = rgb(0x3D, 0x40, 0x46, opacity: 0.34)
     static let accentCyan: Color = rgb(0x36, 0xD7, 0xFF)
+    static let accent: Color = accentCyan
     static let selectedFill: Color = accentCyan.opacity(0.22)
     static let mutedText: Color = rgb(0x9A, 0xA0, 0xA6)
 

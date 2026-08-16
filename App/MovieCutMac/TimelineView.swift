@@ -79,6 +79,12 @@ struct TimelineView: View {
                     .frame(height: 22)
                     .overlay(MovieCutTheme.divider)
 
+                timelineToolControls
+
+                Divider()
+                    .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
+
                 selectedClipToolbar
 
                 Divider()
@@ -99,6 +105,10 @@ struct TimelineView: View {
             .padding(.vertical, MovieCutSpacing.xSmall)
             .background(MovieCutTheme.panelBackgroundRaised)
 
+            if !viewModel.timelineContext.isRoot {
+                timelineBreadcrumbBar
+            }
+
             Divider()
                 .overlay(MovieCutTheme.divider)
 
@@ -107,7 +117,7 @@ struct TimelineView: View {
                     VStack(spacing: 0) {
                         timeRuler
 
-                        ForEach(viewModel.currentProject.timeline.tracks) { track in
+                        ForEach(viewModel.displayedTimeline.tracks) { track in
                             trackLane(track)
                         }
                     }
@@ -246,6 +256,89 @@ struct TimelineView: View {
         .foregroundStyle(MovieCutTheme.mutedText)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityHidden(true)
+    }
+
+    private var timelineToolControls: some View {
+        HStack(spacing: 4) {
+            ForEach(EditTool.allCases, id: \.self) { tool in
+                let isSelected = viewModel.timelineTool == tool
+                Button {
+                    viewModel.timelineTool = tool
+                } label: {
+                    Image(systemName: tool.systemImage)
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(isSelected ? MovieCutTheme.accent : Color.primary)
+                        .background(
+                            RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                                .fill(isSelected ? MovieCutTheme.accent.opacity(0.18) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MovieCutRadius.small)
+                                .strokeBorder(isSelected ? MovieCutTheme.accent.opacity(0.6) : Color.clear, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("\(tool.displayName) [\(tool.shortcutKey.uppercased())]")
+                .accessibilityLabel(tool.displayName)
+                .accessibilityValue(isSelected ? "Selected" : "")
+            }
+        }
+    }
+
+    private var timelineBreadcrumbBar: some View {
+        HStack(spacing: MovieCutSpacing.xSmall) {
+            Button {
+                viewModel.exitToParentTimeline()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(MovieCutTypography.micro.weight(.bold))
+                    Text(NSLocalizedString("Back", comment: ""))
+                        .font(MovieCutTypography.micro.weight(.medium))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(MovieCutTheme.panelBackgroundRaised)
+                )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(MovieCutTheme.accent)
+            .help(NSLocalizedString("Return to parent timeline", comment: ""))
+
+            Divider()
+                .frame(height: 14)
+                .overlay(MovieCutTheme.divider)
+
+            ForEach(viewModel.timelineBreadcrumbs) { breadcrumb in
+                HStack(spacing: 4) {
+                    if !breadcrumb.context.isRoot {
+                        Image(systemName: "chevron.right")
+                            .font(MovieCutTypography.micro)
+                            .foregroundStyle(MovieCutTheme.mutedText)
+                    }
+
+                    Button {
+                        viewModel.navigateToBreadcrumb(breadcrumb)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: breadcrumb.context.isRoot ? "film" : "rectangle.stack")
+                                .font(MovieCutTypography.micro)
+                            Text(breadcrumb.title)
+                                .font(MovieCutTypography.micro.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(breadcrumb.context == viewModel.timelineContext ? Color.primary : MovieCutTheme.mutedText)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, MovieCutSpacing.medium)
+        .padding(.vertical, 4)
+        .background(MovieCutTheme.panelBackground)
     }
 
     private func timelineToolbarCluster<Content: View>(
@@ -891,29 +984,7 @@ struct TimelineView: View {
                         .padding(.leading, MovieCutSpacing.xSmall)
                 }
                 .overlay(alignment: .trailing) {
-                    HStack(spacing: 2) {
-                        if clip.compoundId != nil {
-                            Image(systemName: "rectangle.stack")
-                                .font(MovieCutTypography.metadata)
-                                .foregroundStyle(.white.opacity(0.9))
-                                .accessibilityLabel(NSLocalizedString("Compound clip", comment: ""))
-                        }
-                        if clip.groupId != nil {
-                            Image(systemName: "link")
-                                .font(MovieCutTypography.metadata)
-                                .foregroundStyle(.white.opacity(0.85))
-                        .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
-                        }
-                        if isStickerClip(clip) {
-                            Image(systemName: "face.smiling")
-                                .font(MovieCutTypography.metadata)
-                                .foregroundStyle(.white.opacity(0.85))
-                        }
-                        if let degrState = qualityDegradeState(for: clip).primaryState {
-                            clipProxyBadge(degrState, activeCauses: qualityDegradeState(for: clip).activeCauses)
-                        }
-                    }
-                    .padding(.trailing, MovieCutSpacing.xSmall)
+                    clipBadgesView(for: clip)
                 }
                 .overlay(alignment: .leading) {
                     Rectangle()
@@ -934,6 +1005,19 @@ struct TimelineView: View {
                 .shadow(color: isSelected ? clipAccent.opacity(0.26) : Color.clear, radius: isSelected ? 3 : 0, x: 0, y: 0)
                 .contentShape(Rectangle())
                 .gesture(moveGesture(for: clip))
+                .onTapGesture(count: 2) {
+                    if let compoundId = clip.compoundId {
+                        viewModel.enterCompound(id: compoundId)
+                    }
+                }
+                .onTapGesture(count: 1) {
+                    if viewModel.timelineTool == .blade {
+                        selectClip(clip.id, extendingSelection: false)
+                        Task { await viewModel.splitClip() }
+                    } else {
+                        selectClip(clip.id, extendingSelection: NSEvent.modifierFlags.contains(.shift))
+                    }
+                }
                 .accessibilityElement()
                 .accessibilityLabel(clipAccessibilityLabel(for: clip))
                 .accessibilityValue(
@@ -1069,6 +1153,33 @@ struct TimelineView: View {
                     Task { await viewModel.rippleDeleteClip(clipId: clip.id) }
                 }
             }
+    }
+
+    @ViewBuilder
+    private func clipBadgesView(for clip: Clip) -> some View {
+        HStack(spacing: 2) {
+            if clip.compoundId != nil {
+                Image(systemName: "rectangle.stack")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .accessibilityLabel(NSLocalizedString("Compound clip", comment: ""))
+            }
+            if clip.groupId != nil {
+                Image(systemName: "link")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .accessibilityLabel(NSLocalizedString("Linked clip", comment: ""))
+            }
+            if isStickerClip(clip) {
+                Image(systemName: "face.smiling")
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            if let degrState = qualityDegradeState(for: clip).primaryState {
+                clipProxyBadge(degrState, activeCauses: qualityDegradeState(for: clip).activeCauses)
+            }
+        }
+        .padding(.trailing, MovieCutSpacing.xSmall)
     }
 
     private func clipMediaTypeStripe(accent: Color, selected: Bool) -> some View {
@@ -1459,6 +1570,12 @@ struct TimelineView: View {
     }
 
     private func currentClipBodyDragMode() -> ClipBodyDragMode {
+        if viewModel.timelineTool == .slip {
+            return .slip
+        }
+        if viewModel.timelineTool == .slide {
+            return .slide
+        }
         let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers.contains(.option) {
             return .slip

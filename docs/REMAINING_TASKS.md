@@ -1,7 +1,7 @@
 # MovieCut 남은 작업 원장 (Remaining Tasks & Roadmap)
 
-> **버전:** 1.2 (2026-08-15)  
-> **기준 빌드:** 통합 게이트 `GATE_PASS` (1,134 Tests PASS, 12/12 Parity Scenarios PASS, Mac/iOS Xcodebuild PASS)  
+> **버전:** 1.3 (2026-08-16)  
+> **기준 빌드:** 통합 게이트 `GATE_PASS` (1,153 Tests PASS, 13/13 Parity Scenarios PASS, Mac/iOS Xcodebuild PASS)  
 > **목적:** MovieCut의 릴리스 및 차기 마일스톤 완성을 위한 단일 잔여 작업 원장입니다.  
 > **⚠️ 우선순위 상위 문서:** 2026-08-15 외부 검수 채택으로 향후 12개월 우선순위는 [`DEVELOPMENT_DIRECTION_20260815.md`](file:///Users/cool-mini4/MyDev/automation/movie_cut/docs/DEVELOPMENT_DIRECTION_20260815.md)가 최종 결정한다. Track 구조 전체를 4단계 로드맵에 맞춰 재작성하는 것은 해당 문서 §8 후속 작업. 특히 **C-2(화면/카메라 캡처)는 P2로 강등**되었고, 차기 개발 착수 순서는 새 문서 §9를 따른다.
 
@@ -85,17 +85,22 @@ graph TD
 
 ---
 
-## 3. 권장 차기 작업 (2026-08-16 세션 종료 시점 갱신)
+## 3. 권장 차기 작업 (2026-08-16 세션 2 종료 시점 갱신)
 
 > 상세 근거와 실행 순서는 [`DEVELOPMENT_DIRECTION_20260815.md`](file:///Users/cool-mini4/MyDev/automation/movie_cut/docs/DEVELOPMENT_DIRECTION_20260815.md) §9. 세션 로그는 [`SESSION_HANDOFF_CURRENT.md`](file:///Users/cool-mini4/MyDev/automation/movie_cut/docs/SESSION_HANDOFF_CURRENT.md).
 
-**2026-08-16 세션 완료 사항** (전 게이트 PASS, 테스트 1,143개):
+**2026-08-16 세션 2 완료 사항** (전 게이트 PASS, 테스트 1,153개, 코어 편집 파리티 13/13):
+- **G-23 Inc 2 완료**: Core `CropRectEditingMath`(핸들 수학, 테스트 10개) + Mac `CropCanvasView`(원본 백드롭 + 8핸들 + Shift 비율잠금, 드래그=단일 undo) + 하니스 `MOVIECUT_UITEST_CROP` 게이트 + 파리티 시나리오 14 `crop_rect` + iOS 인스펙터 크롭 섹션(프리셋 6종, 공유 픽셀 프로세서).
+- **사전 존재 결함 1건 수정**: `PlaybackEngine` 커스텀 컴포지터 트리거에 `cropRect` 누락(Inc 1 커밋 주장↔코드 불일치) — 크롭-only 프로젝트 프리뷰≠출력(R MAD 182)을 파리티 시나리오가 즉시 포착, 폐쇄.
+- **사전 존재 결함 1건 발견·추적(미수정)**: untagged BT.601 SD 비디오가 프리뷰 커스텀 컴포지터 경로에서 색조 회전(레드 (254,0,0)→프리뷰 (247,36,0), MAD ≈ 10.25). 크롭 무관·기존 시나리오의 색보정/마스크가 가려온 실결함. 마스크/크로마키/컬러보정 사용 시 프리뷰≠출력. → **차기 증분 1 후보(사용자 결정)**.
+
+**2026-08-16 세션 1 완료 사항** (전 게이트 PASS, 테스트 1,143개):
 - 프로토콜 0a: 적체 WIP 커밋 4건(문서 재편 / 컴파운드 Phase 2+프로 도구 / iOS 컴포지터 패리티 / 방향 문서 채택)
 - 프로토콜 0b: §8 후속 문서 전부 반영(백로그 G-23~G-29 등록, VERIFICATION §6, PERFORMANCE_SLO 확장, REQUIREMENTS §13.14)
 - 증분 1 — **G-23 전용 크롭 Inc 1 완료**: 공유 CropPixelProcessor(정규화 rect → 캔버스 aspect-fill), Clip.cropRect + ClipProperty 케이스, Mac/iOS 양쪽 엔진 배선, 인스펙터 비율 프리셋 6종, 골든 픽셀 4건 포함 테스트 9개. **+사전 존재 드리프트 수정**: 프리뷰 커스텀 컴포지터 경로가 transform/opacity/keyframes를 누락(출력만 적용)하던 것을 폐쇄
 - 증분 2 — **seek·프로젝트 열기 지연 측정 게이트 완성**: `scripts/run_latency_baseline.sh` + 하니스 모드, 첫 실측치 SLO 문서 기록(seek request p50 0.11ms/p95 0.17ms, 소형 fixture open 121.6ms)
 
-1. **[개발] 다음 증분**: G-23 Inc 2(캔버스 크롭 핸들 + 패리티 시나리오 #13) → **G-02 Inc5 HSL 편집 UI** 착수 → 3종 성능 스트레스 타임라인 fixture(T1/T2/T3) 확정 → G-25 AudioRenderGraphSpec 설계 문서
+1. **[개발] 다음 증분**: (선택 A·권장) 프리뷰 색공간 발산 결함 수정(untagged SD + 커스텀 컴포지터, 비디오판 크롭 파리티 재활성화가 DoD) → (선택 B) **G-02 Inc5 HSL 편집 UI** 착수 → 3종 성능 스트레스 타임라인 fixture(T1/T2/T3) 확정 → G-25 AudioRenderGraphSpec 설계 문서
 2. **[개발] lint 신규 error 0 정책 CI 반영 + EditorViewModel 경계 분해 착수** (부채 원칙: 마일스톤 공수 15–20% 고정).
 3. **[사용자 진행 추천] Track A (A-1, A-2, A-3)**: 아이콘·App Store Connect 등록은 기능 개발과 병렬 가능. **A-4 TestFlight 베타는 1단계(2026-10)의 "숨겨진 기능 제품화" 완료 후 권장** — 베타 체감 품질이 그때 크게 올라간다.
 4. **Track C (C-2) 캡처**: P2로 강등(5개 대표 작업 외. 재검토는 2단계 종료 시점).

@@ -49,14 +49,6 @@ final class EditorViewModel {
         }
     }
 
-    private struct TimelineNavigationPoint {
-        var time: TimeInterval
-        var clipId: UUID
-        var trackIndex: Int
-        var clipIndex: Int
-        var isEnd: Bool
-    }
-
     private static let minimumVoiceoverDuration: TimeInterval = 0.1
     /// Minimum allowed timeline clip duration. Internal so TimelineView's drag
     /// trim and this view model's keyboard trim share one constant (Step 5 of
@@ -72,23 +64,6 @@ final class EditorViewModel {
     var selectedClipIds: Set<UUID> = [] {
         didSet {
             loadSelectedClipProcessingState()
-        }
-    }
-    var selectedClipId: UUID? {
-        get {
-            for track in currentProject.timeline.tracks {
-                if let clipId = track.clips.first(where: { selectedClipIds.contains($0.id) })?.id {
-                    return clipId
-                }
-            }
-            return selectedClipIds.first
-        }
-        set {
-            if let newValue {
-                selectedClipIds = [newValue]
-            } else {
-                selectedClipIds = []
-            }
         }
     }
     var selectedEQPreset: String = "flat"
@@ -347,13 +322,6 @@ final class EditorViewModel {
         return currentProject.mediaLibrary.assets[selectedAssetId]
     }
 
-    var selectedClip: Clip? {
-        guard let selectedClipId else { return nil }
-        return currentProject.timeline.tracks
-            .flatMap(\.clips)
-            .first { $0.id == selectedClipId }
-    }
-
     var selectedCanvasOverlayClips: [Clip] {
         var clips: [Clip] = []
         for track in currentProject.timeline.tracks {
@@ -368,10 +336,6 @@ final class EditorViewModel {
 
     var hasMultipleSelectedCanvasOverlays: Bool {
         selectedCanvasOverlayClips.count > 1
-    }
-
-    var hasSelectedClips: Bool {
-        !selectedClipIds.isEmpty
     }
 
     var canCopySelectedClips: Bool {
@@ -395,11 +359,6 @@ final class EditorViewModel {
         return currentProject.timeline.tracks.allSatisfy { track in
             track.isLocked ? clipIds.isDisjoint(with: Set(track.clips.map(\.id))) : true
         }
-    }
-
-    var canSplitSelectedClip: Bool {
-        guard let selectedClip else { return false }
-        return selectedClip.timelineRange.contains(playheadTime)
     }
 
     var selectedClipIsSticker: Bool {
@@ -620,21 +579,6 @@ final class EditorViewModel {
 
         guard let selectedAsset else { return false }
         return Self.isTranscribable(selectedAsset)
-    }
-
-    var selectedClipTrack: Track? {
-        guard let selectedClipId else { return nil }
-        return currentProject.timeline.tracks.first { track in
-            track.clips.contains { $0.id == selectedClipId }
-        }
-    }
-
-    var selectedClipTrackId: UUID? {
-        selectedClipTrack?.id
-    }
-
-    var visibleTimelineDuration: TimeInterval {
-        max(10, currentProject.timeline.duration, playheadTime)
     }
 
     var isCardEditorMode: Bool {
@@ -2317,11 +2261,6 @@ final class EditorViewModel {
 
     // MARK: - Clip link groups (F-04)
 
-    /// True when the current selection can be linked into a group.
-    var canGroupSelectedClips: Bool {
-        selectedClipIds.count >= 2
-    }
-
     /// True when any selected clip belongs to a link group.
     var hasGroupedSelection: Bool {
         timelineClips(in: selectedClipIds).contains { $0.groupId != nil }
@@ -2496,16 +2435,6 @@ final class EditorViewModel {
         await rippleDeleteClip(clipId: selectedClipId)
     }
 
-    func snapPlayheadToSelectedClipStart() {
-        guard let selectedClip else { return }
-        scrubPlayhead(to: selectedClip.timelineRange.start)
-    }
-
-    func snapPlayheadToSelectedClipEnd() {
-        guard let selectedClip else { return }
-        scrubPlayhead(to: selectedClip.timelineRange.end)
-    }
-
     func deleteClips(_ clipIds: Set<UUID>) async {
         let orderedClipIds = timelineOrderedClipIds(from: clipIds)
         guard !orderedClipIds.isEmpty else { return }
@@ -2615,28 +2544,6 @@ final class EditorViewModel {
 
         let duration = max(0, currentProject.timeline.duration)
         playheadTime = min(max(0, playheadTime + seconds), duration)
-    }
-
-    func jumpToPreviousClipBoundary() {
-        guard let point = timelineNavigationPoints()
-            .last(where: { $0.time < playheadTime - 0.001 })
-        else {
-            return
-        }
-
-        selectedClipId = point.clipId
-        scrubPlayhead(to: point.time)
-    }
-
-    func jumpToNextClipBoundary() {
-        guard let point = timelineNavigationPoints()
-            .first(where: { $0.time > playheadTime + 0.001 })
-        else {
-            return
-        }
-
-        selectedClipId = point.clipId
-        scrubPlayhead(to: point.time)
     }
 
     func zoomTimelineIn() {
@@ -5519,46 +5426,6 @@ final class EditorViewModel {
             }
         }
         return orderedClipIds
-    }
-
-    private func timelineNavigationPoints() -> [TimelineNavigationPoint] {
-        var points: [TimelineNavigationPoint] = []
-
-        for (trackIndex, track) in currentProject.timeline.tracks.enumerated() {
-            for (clipIndex, clip) in track.clips.enumerated() {
-                points.append(
-                    TimelineNavigationPoint(
-                        time: clip.timelineRange.start,
-                        clipId: clip.id,
-                        trackIndex: trackIndex,
-                        clipIndex: clipIndex,
-                        isEnd: false
-                    )
-                )
-                points.append(
-                    TimelineNavigationPoint(
-                        time: clip.timelineRange.end,
-                        clipId: clip.id,
-                        trackIndex: trackIndex,
-                        clipIndex: clipIndex,
-                        isEnd: true
-                    )
-                )
-            }
-        }
-
-        return points.sorted {
-            if $0.time != $1.time {
-                return $0.time < $1.time
-            }
-            if $0.trackIndex != $1.trackIndex {
-                return $0.trackIndex < $1.trackIndex
-            }
-            if $0.clipIndex != $1.clipIndex {
-                return $0.clipIndex < $1.clipIndex
-            }
-            return !$0.isEnd && $1.isEnd
-        }
     }
 
     private func syncTimelinePlayhead(to playbackTime: TimeInterval) {

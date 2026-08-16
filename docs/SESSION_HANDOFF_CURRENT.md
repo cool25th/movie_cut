@@ -3,6 +3,40 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 2 (EditorViewModel 분해 1호 경계 — 최소 슬라이스 + 장벽 지도)
+
+**게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,155 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). `run_core_editing_parity.sh` **14/14 PASS**. `ui_regression.sh` PASS. 첫 게이트 실행 1회 실패 — `KeyboardShortcutStaticContractTests`(소스 문자열 회귀 잠금)가 메인 파일의 이동 함수 존재를 검사 → 경계 분해 반영해 두 파일을 읽도록 갱신 후 재통과(제품 회귀 아님).
+
+### 수반 수정(사전 존재 드리프트 아님 — 이동에 수반하는 잠금 갱신)
+- `KeyboardShortcutStaticContractTests.editorViewModelExposesCommandBackedF05Actions` — `EditorViewModel.swift` + `EditorViewModel+TimelineEditing.swift` 양쪽을 읽도록(이동 멤버 계약 유지). §7-5 원칙(StaticContract은 회귀 잠금)에 따른 잠금 위치 갱신.
+
+### 완료 — EXECUTION_PLAN §3 Inc 2 (부분, 스펙 리스크 조항에 따른 기록)
+1. **순수 이동**: `App/MovieCutMac/EditorViewModel+TimelineEditing.swift` 신규(141줄) — 선택 접근자(`selectedClipId` 계산 프로퍼티·`selectedClip`·`hasSelectedClips`·`canSplitSelectedClip`·`selectedClipTrack/Id`·`visibleTimelineDuration`·`canGroupSelectedClips`), 플레이헤드 스냅/경계 점프(`snapPlayheadToSelectedClip*`·`jumpToPrevious/NextClipBoundary`), 전용 private 헬퍼(`timelineNavigationPoints` + `TimelineNavigationPoint` 타입 — 사용처가 이동 멤버뿐이라 함께 이동, 접근 수준 유지). 본체 6,107→**5,982줄(−125)**. diff는 삭제+신규 파일 동일 내용(새 로직 0줄, DoD ④).
+2. **xcodegen 재생성** 신규 파일 타깃 포함(App 소스는 디렉터리 글로브).
+
+### 미달·보류 기록 (스펙 리스크 조항 이행 — "private 접근 → 기록하고 이동 보류")
+**DoD ① 목표(~5,200 이하) 미달.** 타임라인 편집 연산 대부분이 private **공유 인프라**에 묶여 extension 이동만으로는 해소 불가:
+- `@ObservationIgnored private var session` — `splitClip`·`bladeSplitAtPlayhead`·`group/ungroupSelectedClips`·`duplicateClips`·`cutClips`·`pasteClipsAtPlayhead`·`deleteClips` 등 디스패치 계열 전부.
+- `private func apply(_:)`/`refreshFromSession()` — `trimClip`·`moveClip`·`toggleTrack*`·`rippleDeleteClip`·`copyClip`.
+- private 저장 프로퍼티 — `clipClipboardPayload`(copy/canPaste), `pendingScrubTask/Time`(`scrubPlayhead` 본체), zoom 상수(`zoomTimelineIn/Out`).
+- private 헬퍼의 교차 사용 — `timelineClips(in:)`(`hasGroupedSelection`·`linkedClipIds`·`selectTimelineClip` 체인; `ungroupSelectedClips`가 잡고 있어 이동 불가), `currentClipIds`(`canCopy/CutClips`), `assetDuration(for:)`(`assetDuration(forClipID:)`).
+**다음 경계 패스를 위한 선택지(사용자 결정 아님, 기록)**: (a) 현행 유지 — 이후 경계(selection→transport→…)도 같은 제약 하에 슬라이스 반복, (b) `session`·`apply`·`refreshFromSession` 등 공유 인프라의 접근 수준 정규화(private→internal)를 별도 마이크로 증분으로 명시적으로 수행 — 접근 변경이 스펙 "접근 수준 유지"와 충돌하므로 계획서/사용자 승인 후에만.
+
+### 발견한 함정(다음 세션 참고)
+- xcodegen 재생성 후 첫 xcodebuild는 DerivedData 상태에 따라 지연 가능(기존 노트 재확인). 신규 파일 추가 시 반드시 xcodegen 먼저.
+- `private` 중첩 타입(`TimelineNavigationPoint`)은 같은 파일 extension에서만 접근 가능 — 타입 선언을 사용처와 함께 이동하는 것이 순수 이동 요건.
+
+### 다음 세션 인계 (우선순위 순)
+1. **G-02 Inc5 HSL 편집 UI** 착수(방향 문서 §3 순서 — Inc 2 최소 조건[시도 기록] 충족으로 진행 가능).
+2. T1/T2/T3 스트레스 타임라인 fixture 확정 + PERFORMANCE_SLO.md p50/p95 기록.
+3. lint 신규 error 0 CI 반영.
+4. EditorViewModel 차기 경계(selection) — 위 선택지 (a)/(b) 방향에 따라.
+5. 장형(≥10분) fixture 제작 후 `run_latency_baseline.sh` 재측.
+
+### 사용자 결정 대기 사항
+- 없음(Inc 2 부분 완료는 스펙 리스크 조항의 예상 결과; (b) 접근 정규화 착수 여부만 향후 결정 대상).
+- Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.
+
 ## 2026-08-17 세션 (프리뷰 색공간 발산 수정 — G-29 전도부, 사용자 결정 A 이행)
 
 **게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,155 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). `run_core_editing_parity.sh` **14/14 시나리오 PASS**(신규 15번 `crop_rect_video` 포함, 시나리오 1 전환은 기존대로 스킵).

@@ -1,5 +1,5 @@
 상태: RUN
-현재 증분: 완료 = **프리뷰 색공간 발산 수정**(G-29 전도부, 2026-08-17 세션) — AVPlayer 디코드 ICC 태그("Composite NTSC")로 컴포지터 프리뷰에만 색조 회전(레드 (254,0,0)→(247,36,0), MAD 10.25)이 발생하던 것을 `RenderColorConfiguration.sourceImage(from:)`로 양쪽 컴포지터(Mac·iOS)의 소스 해석을 작업 공간에 고정해 폐쇄. 실증: 파리티 `crop_rect_video` 신설 MAD **0.50 PASS** + 전체 14/14 무회귀 + verify_gate 1,155 tests PASS. 다음 = **EXECUTION_PLAN §3 Inc 2(EditorViewModel 분해 1호 경계 — timeline editing)**.
-이전 완료: 색공간 수정 직전 = G-23 Inc 2 전체(2026-08-16 세션 2, 커밋 b4de271·73f653f — 게이트 1,153 tests, 파리티 13/13, crop_rect MAD 0.70).
-마지막 커밋: c2c2341
-갱신: 2026-08-17 02:47
+현재 증분: 완료(부분, 스펙 리스크 조항) = **EditorViewModel 분해 1호 경계 — timeline editing**(2026-08-17 세션 2) — 선택 접근자·플레이헤드 스냅/경계 점프·전용 헬퍼를 `EditorViewModel+TimelineEditing.swift`(141줄)로 순수 이동, 본체 6,107→5,982줄. diff 이동만(DoD ④), 게이트·파리티 무회귀. **DoD ① 라인 목표(~5,200) 미달** — trim/move/split/clipboard/scrub 본체는 private 공유 인프라(`session`·`apply`·`refreshFromSession`·저장 프로퍼티)에 묶여 보류+장벽 지도 기록(핸드오프 세션 2 참조). 다음 = **G-02 Inc5 HSL 편집 UI**(Inc 2 최소 조건 충족).
+이전 완료: 프리뷰 색공간 발산 수정(G-29 전도부, 2026-08-17 세션 1, 커밋 df4440b — 파리티 crop_rect_video MAD 10.25→0.50, 14/14, 게이트 1,155 tests).
+마지막 커밋: 4fb77a8
+갱신: 2026-08-17 04:12

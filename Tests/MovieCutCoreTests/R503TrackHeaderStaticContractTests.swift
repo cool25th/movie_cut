@@ -74,7 +74,9 @@ struct R503TrackHeaderStaticContractTests {
 
     @Test("Track toggle ViewModel methods remain command backed")
     func trackToggleViewModelMethodsRemainCommandBacked() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        // The timeline-editing boundary extraction (EXECUTION_PLAN Inc 2) moved
+        // the toggle cluster into the boundary extension file.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel+TimelineEditing.swift")
         let methods = try section(
             in: viewModel,
             from: "func toggleTrackMute(_ track: Track) async",

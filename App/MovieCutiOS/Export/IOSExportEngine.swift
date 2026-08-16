@@ -107,6 +107,7 @@ final class IOSExportEngine {
                     // removal silently no-oped on export (the Mac gate at
                     // ExportEngine.needsCustomCompositor includes it).
                     || clip.isBackgroundRemoved
+                    || clip.blendMode != .normal
             }
         }
     }

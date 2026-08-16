@@ -6,6 +6,31 @@ import CoreText
 import MovieCutCore
 import Vision
 
+struct CustomCompositionTransitionEffect: Sendable {
+    let outgoingTrackID: CMPersistentTrackID
+    let incomingTrackID: CMPersistentTrackID
+    let timeRange: CMTimeRange
+    let type: TransitionType
+
+    func applies(at time: CMTime) -> Bool {
+        CMTimeRangeContainsTime(timeRange, time: time)
+    }
+
+    func progress(at time: CMTime) -> Double {
+        let durationSeconds = timeRange.duration.seconds
+        guard durationSeconds.isFinite, durationSeconds > 0 else {
+            return 1
+        }
+
+        let elapsedSeconds = CMTimeSubtract(time, timeRange.start).seconds
+        guard elapsedSeconds.isFinite else {
+            return 0
+        }
+
+        return min(max(elapsedSeconds / durationSeconds, 0), 1)
+    }
+}
+
 final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructionProtocol, @unchecked Sendable {
     let timeRange: CMTimeRange
     let enablePostProcessing: Bool = true
@@ -16,11 +41,14 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let colorGrade: ColorGrade?
     let textContent: TextClipContent?
     let stickerEmoji: String?
+    var chromaKey: ChromaKeySettings?
     var chromaKeyColor: SIMD3<Float>?
     var chromaKeyThreshold: Float = 0.3
     let mask: Mask?
     let clipEffects: [CustomCompositionClipEffect]
+    let transitionEffects: [CustomCompositionTransitionEffect]
     let canvasBackground: CanvasBackground?
+    let prefersFastSegmentation: Bool
 
     init(
         timeRange: CMTimeRange,
@@ -29,44 +57,104 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         colorGrade: ColorGrade? = nil,
         textContent: TextClipContent? = nil,
         stickerEmoji: String? = nil,
+        chromaKey: ChromaKeySettings? = nil,
         chromaKeyColor: SIMD3<Float>? = nil,
         chromaKeyThreshold: Float = 0.3,
         mask: Mask? = nil,
-        canvasBackground: CanvasBackground? = nil
+        transitionEffects: [CustomCompositionTransitionEffect] = [],
+        canvasBackground: CanvasBackground? = nil,
+        prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
-        self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
+        self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
+            trackIDs: trackIDs,
+            transitionEffects: transitionEffects
+        )
         self.colorCorrection = colorCorrection
         self.colorGrade = colorGrade
         self.textContent = textContent
         self.stickerEmoji = stickerEmoji
+        self.chromaKey = chromaKey
         self.chromaKeyColor = chromaKeyColor
         self.chromaKeyThreshold = min(max(chromaKeyThreshold, 0), 1)
         self.mask = mask
         self.clipEffects = []
+        self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.prefersFastSegmentation = prefersFastSegmentation
     }
 
     init(
         timeRange: CMTimeRange,
         trackIDs: [CMPersistentTrackID],
         clipEffects: [CustomCompositionClipEffect],
-        canvasBackground: CanvasBackground? = nil
+        transitionEffects: [CustomCompositionTransitionEffect] = [],
+        canvasBackground: CanvasBackground? = nil,
+        prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
-        self.requiredSourceTrackIDs = trackIDs.map { NSNumber(value: $0) }
+        self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
+            trackIDs: trackIDs,
+            transitionEffects: transitionEffects
+        )
         self.colorCorrection = nil
         self.colorGrade = nil
         self.textContent = nil
         self.stickerEmoji = nil
+        self.chromaKey = nil
         self.chromaKeyColor = nil
         self.mask = nil
         self.clipEffects = clipEffects
+        self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.prefersFastSegmentation = prefersFastSegmentation
     }
 
     func effect(for trackID: CMPersistentTrackID, at time: CMTime) -> CustomCompositionClipEffect? {
         clipEffects.first { $0.applies(to: trackID, at: time) }
+    }
+
+    func activeTransition(at time: CMTime) -> CustomCompositionTransitionEffect? {
+        transitionEffects.first { $0.applies(at: time) }
+    }
+
+    func activeSourceTrackIDs(at time: CMTime) -> [CMPersistentTrackID] {
+        clipEffects.reversed().compactMap { effect in
+            guard effect.trackID != kCMPersistentTrackID_Invalid,
+                  CMTimeRangeContainsTime(effect.timeRange, time: time)
+            else {
+                return nil
+            }
+
+            return effect.trackID
+        }
+    }
+
+    private static func requiredTrackIDValues(
+        trackIDs: [CMPersistentTrackID],
+        transitionEffects: [CustomCompositionTransitionEffect]
+    ) -> [NSValue] {
+        var seenTrackIDs = Set<CMPersistentTrackID>()
+        var requiredTrackIDs: [CMPersistentTrackID] = []
+
+        func append(_ trackID: CMPersistentTrackID) {
+            guard trackID != kCMPersistentTrackID_Invalid, seenTrackIDs.insert(trackID).inserted else {
+                return
+            }
+
+            requiredTrackIDs.append(trackID)
+        }
+
+        for trackID in trackIDs {
+            append(trackID)
+        }
+
+        for transitionEffect in transitionEffects {
+            append(transitionEffect.outgoingTrackID)
+            append(transitionEffect.incomingTrackID)
+        }
+
+        return requiredTrackIDs.map { NSNumber(value: $0) }
     }
 }
 
@@ -94,68 +182,85 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         let sendableRequest = RequestBox(request: request)
         renderQueue.async {
             let request = sendableRequest.request
-            guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request) else {
+
+            // Two-source transition branch: if an active transition applies,
+            // render outgoing and incoming frames and compose via TransitionPixelProcessor.
+            if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
+               let transition = instruction.activeTransition(at: request.compositionTime),
+               let outgoingBuffer = request.sourceFrame(byTrackID: transition.outgoingTrackID),
+               let incomingBuffer = request.sourceFrame(byTrackID: transition.incomingTrackID) {
+                let outgoingEffect = instruction.effect(
+                    for: transition.outgoingTrackID,
+                    at: request.compositionTime
+                )
+                let incomingEffect = instruction.effect(
+                    for: transition.incomingTrackID,
+                    at: request.compositionTime
+                )
+                let outgoingImage = self.applyClipEffects(
+                    to: CIImage(cvPixelBuffer: outgoingBuffer),
+                    effect: outgoingEffect,
+                    instruction: instruction,
+                    request: request
+                )
+                let incomingImage = self.applyClipEffects(
+                    to: CIImage(cvPixelBuffer: incomingBuffer),
+                    effect: incomingEffect,
+                    instruction: instruction,
+                    request: request
+                )
+
+                var transitionedImage = TransitionPixelProcessor.apply(
+                    type: transition.type,
+                    from: outgoingImage,
+                    to: incomingImage,
+                    progress: transition.progress(at: request.compositionTime)
+                )
+                transitionedImage = self.renderTextOverlay(
+                    instruction: instruction,
+                    onto: transitionedImage,
+                    at: request.compositionTime
+                )
+                transitionedImage = self.renderStickerOverlay(
+                    for: nil,
+                    instruction: instruction,
+                    onto: transitionedImage,
+                    at: request.compositionTime
+                )
+                transitionedImage = CanvasBackgroundPixelProcessor.compose(
+                    frame: transitionedImage,
+                    over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size
+                )
+                self.finishRequest(request, with: transitionedImage)
+                return
+            }
+
+            let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction
+            guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request, instruction: instruction) else {
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
             }
             
             var image = CIImage(cvPixelBuffer: sourceBuffer)
             
-            if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction {
+            if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
-                let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
-                let colorGrade = effect?.colorGrade ?? instruction.colorGrade
-                let chromaKey = effect?.chromaKey
-                let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
-                let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
-                let mask = effect?.mask ?? instruction.mask
-                let animationState = effect?.animationState(at: request.compositionTime)
-                let clipEffects = effect?.effects ?? []
-                let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
+                image = self.applyClipEffects(
+                    to: image,
+                    effect: effect,
+                    instruction: instruction,
+                    request: request
+                )
 
-                // Apply CIFilter-based effects via the shared core processor (matches Mac).
-                if !clipEffects.isEmpty {
-                    image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
-                }
-
-                // Apply background removal
-                if isBackgroundRemoved {
-                    image = self.applyPersonSegmentation(to: image, request: request)
-                }
-
-                if let colorCorrection {
-                    image = self.apply(colorCorrection: colorCorrection, to: image)
-                }
-
-                if let colorGrade {
-                    image = ColorGradePixelProcessor.apply(colorGrade, to: image)
-                }
-
-                // Full chroma-key settings first (softness / spill suppression /
-                // edge shrink), falling back to the legacy keyColor+threshold
-                // pair — the same branch order the Mac compositor uses. Before
-                // this, iOS dropped the three advanced parameters entirely.
-                if let chromaKey {
-                    image = ChromaKeyPixelProcessor.apply(chromaKey, to: image)
-                } else if let chromaKeyColor {
-                    image = ChromaKeyPixelProcessor.apply(
-                        keyColor: chromaKeyColor,
-                        threshold: chromaKeyThreshold,
-                        to: image
-                    )
-                }
-
-                if let mask {
-                    image = MaskPixelProcessor.apply(mask, to: image, at: request.compositionTime.seconds)
-                }
-
-                if let animationState {
-                    image = self.apply(
-                        animationState: animationState,
-                        to: image,
-                        renderSize: request.renderContext.size
-                    )
-                }
+                // Multi-track layering and blend mode composition (matches Mac)
+                image = self.layerActiveTracks(
+                    over: image,
+                    primaryEffect: effect,
+                    primaryTrackID: trackID,
+                    instruction: instruction,
+                    request: request
+                )
 
                 image = self.renderTextOverlay(
                     instruction: instruction,
@@ -177,17 +282,135 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 )
             }
             
-            guard let outputBuffer = request.renderContext.newPixelBuffer() else {
-                request.finish(with: NSError(domain: "MovieCut", code: -2, userInfo: nil))
-                return
-            }
-            
-            self.ciContext.render(image, to: outputBuffer)
-            request.finish(withComposedVideoFrame: outputBuffer)
+            self.finishRequest(request, with: image)
         }
     }
     
     func cancelAllPendingVideoCompositionRequests() {}
+
+    private func applyClipEffects(
+        to image: CIImage,
+        effect: CustomCompositionClipEffect?,
+        instruction: CustomCompositionInstruction,
+        request: AVAsynchronousVideoCompositionRequest
+    ) -> CIImage {
+        var image = image
+        let colorCorrection = effect?.colorCorrection ?? instruction.colorCorrection
+        let colorGrade = effect?.colorGrade ?? instruction.colorGrade
+        let chromaKey = effect?.chromaKey ?? instruction.chromaKey
+        let chromaKeyColor = effect?.chromaKeyColor ?? instruction.chromaKeyColor
+        let chromaKeyThreshold = effect?.chromaKeyThreshold ?? instruction.chromaKeyThreshold
+        let mask = effect?.mask ?? instruction.mask
+        let animationState = effect?.animationState(at: request.compositionTime)
+        let clipEffects = effect?.effects ?? []
+        let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
+
+        if !clipEffects.isEmpty {
+            image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
+        }
+
+        if isBackgroundRemoved {
+            image = self.applyPersonSegmentation(
+                to: image,
+                request: request,
+                prefersFast: instruction.prefersFastSegmentation
+            )
+        }
+
+        if let colorCorrection {
+            image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
+        }
+
+        if let colorGrade {
+            image = ColorGradePixelProcessor.apply(colorGrade, to: image)
+        }
+
+        if let chromaKey {
+            image = ChromaKeyPixelProcessor.apply(chromaKey, to: image)
+        } else if let chromaKeyColor {
+            image = ChromaKeyPixelProcessor.apply(
+                keyColor: chromaKeyColor,
+                threshold: chromaKeyThreshold,
+                to: image
+            )
+        }
+
+        if let mask {
+            image = MaskPixelProcessor.apply(mask, to: image, at: request.compositionTime.seconds)
+        }
+
+        if let animationState {
+            image = self.apply(
+                animationState: animationState,
+                to: image,
+                renderSize: request.renderContext.size
+            )
+        }
+
+        return image
+    }
+
+    private func layerActiveTracks(
+        over primaryImage: CIImage,
+        primaryEffect: CustomCompositionClipEffect?,
+        primaryTrackID: CMPersistentTrackID,
+        instruction: CustomCompositionInstruction,
+        request: AVAsynchronousVideoCompositionRequest
+    ) -> CIImage {
+        let activeEffects = instruction.clipEffects.filter { effect in
+            effect.trackID != kCMPersistentTrackID_Invalid
+                && effect.trackID != primaryTrackID
+                && CMTimeRangeContainsTime(effect.timeRange, time: request.compositionTime)
+        }
+
+        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
+        let needsBlending = primaryBlendMode != .normal
+            || activeEffects.contains { $0.blendMode != .normal }
+        guard needsBlending else {
+            return primaryImage
+        }
+
+        guard !activeEffects.isEmpty else {
+            return primaryImage
+        }
+
+        var backdrop = CIImage.empty()
+        for effect in activeEffects {
+            guard let sourceBuffer = request.sourceFrame(byTrackID: effect.trackID) else {
+                continue
+            }
+
+            var layerImage = CIImage(cvPixelBuffer: sourceBuffer)
+            layerImage = applyClipEffects(
+                to: layerImage,
+                effect: effect,
+                instruction: instruction,
+                request: request
+            )
+
+            if effect.blendMode == .normal {
+                backdrop = layerImage.composited(over: backdrop)
+            } else {
+                backdrop = BlendPixelProcessor.apply(layerImage, over: backdrop, mode: effect.blendMode)
+            }
+        }
+
+        if primaryBlendMode == .normal {
+            return primaryImage.composited(over: backdrop)
+        } else {
+            return BlendPixelProcessor.apply(primaryImage, over: backdrop, mode: primaryBlendMode)
+        }
+    }
+
+    private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {
+        guard let outputBuffer = request.renderContext.newPixelBuffer() else {
+            request.finish(with: NSError(domain: "MovieCut", code: -2, userInfo: nil))
+            return
+        }
+
+        ciContext.render(image, to: outputBuffer)
+        request.finish(withComposedVideoFrame: outputBuffer)
+    }
 
     // MARK: - Text & Sticker Rendering
 
@@ -410,16 +633,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
     // MARK: - Background Removal
 
-    /// Mirrors the Mac compositor: alignment and compositing go through the
-    /// shared `PersonSegmentationCompositor` (this file previously duplicated
-    /// that math inline), and — matching the Mac decision recorded as F-08
-    /// AC④ — a Vision failure leaves the frame UNCHANGED instead of falling
-    /// back to the center-vignette approximation. Parity over guesswork: an
-    /// untouched frame exports identically on both platforms; a vignetted one
-    /// only existed here.
     private func applyPersonSegmentation(
         to image: CIImage,
-        request: AVAsynchronousVideoCompositionRequest
+        request: AVAsynchronousVideoCompositionRequest,
+        prefersFast: Bool = false
     ) -> CIImage {
         _ = request
 
@@ -429,10 +646,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             return image
         }
 
-        // .accurate matches the Mac export path (Mac passes prefersFast=false
-        // for export; only its preview uses .fast).
         let segmentationRequest = VNGeneratePersonSegmentationRequest()
-        segmentationRequest.qualityLevel = .accurate
+        segmentationRequest.qualityLevel = prefersFast ? .fast : .accurate
         segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
 
         do {
@@ -465,8 +680,16 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     // MARK: - Source Frame Helpers
 
     private func firstSourceFrame(
-        in request: AVAsynchronousVideoCompositionRequest
+        in request: AVAsynchronousVideoCompositionRequest,
+        instruction: CustomCompositionInstruction?
     ) -> (CMPersistentTrackID, CVPixelBuffer)? {
+        let preferredTrackIDs = instruction?.activeSourceTrackIDs(at: request.compositionTime) ?? []
+        for trackID in preferredTrackIDs {
+            if let sourceBuffer = request.sourceFrame(byTrackID: trackID) {
+                return (trackID, sourceBuffer)
+            }
+        }
+
         for sourceTrackID in request.sourceTrackIDs {
             let trackID = sourceTrackID.int32Value
             if let sourceBuffer = request.sourceFrame(byTrackID: trackID) {
@@ -475,14 +698,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         return nil
-    }
-
-    private func apply(colorCorrection: ColorCorrection, to image: CIImage) -> CIImage {
-        // Delegate to the shared Core processor so iOS export matches Mac and the
-        // warmth/tint stage is applied consistently. Previously this applied only
-        // brightness/contrast/saturation here while warmth/tint diverged (with the
-        // opposite sign) in the preview path.
-        ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
     }
 
     private func apply(
@@ -496,8 +711,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
 #endif
 
-/// `@unchecked Sendable` carrier for the render-queue request (see the boxing
-/// note in startRequest). iOS-side twin of the Mac CompositionRequestBox.
 private struct RequestBox: @unchecked Sendable {
     let request: AVAsynchronousVideoCompositionRequest
 }

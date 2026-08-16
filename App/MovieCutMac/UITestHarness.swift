@@ -183,6 +183,13 @@ extension EditorViewModel {
             await runPreviewExportParityUITestScenario(environment: env)
             return
         }
+        if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
+            await runLatencyBaselineUITestScenario(
+                environment: env,
+                seekCount: Int(baseline) ?? 30
+            )
+            return
+        }
         if env["MOVIECUT_UITEST_RECOVERY"] == "1" {
             await runRecoveryUITestScenario(environment: env)
             return
@@ -2273,6 +2280,119 @@ extension EditorViewModel {
 
     /// Step 1 Preview↔Export pixel-parity harness. Builds the project,
     /// exports it to `MOVIECUT_UITEST_EXPORT`, and dumps the Preview frame at
+    /// Collects the first wall-clock p50/p95 baselines for timeline seek and
+    /// project open (PERFORMANCE_SLO: seek median ≤ 100 ms, project open ≤ 3 s —
+    /// both previously "signpost acquired, value not yet collected").
+    ///
+    /// Measures the exact code paths the SLO names:
+    /// - `playbackEngine.seek(to:)` — the `playback.seek` signpost semantics:
+    ///   the seek REQUEST (AVPlayer.seek is fire-and-forget), not render
+    ///   completion.
+    /// - `scrubPlayhead(to:)` — the full user scrub apply path.
+    /// - `openProject(from:)` — decode + migrate + validate + session swap
+    ///   (the `import.openProject` signpost interval).
+    ///
+    /// `MOVIECUT_UITEST_LATENCY_BASELINE=<seekCount>` runs the scenario after a
+    /// normal import; results are appended to `MOVIECUT_UITEST_RESULT` as
+    /// `latency_baseline ...` key=value lines the shell gate parses.
+    private func runLatencyBaselineUITestScenario(environment: [String: String], seekCount: Int) async {
+        func status(_ line: String) {
+            if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+                writeHarnessStatus(line + "\n", to: resultPath)
+            }
+        }
+        func elapsedMs(_ start: DispatchTime) -> Double {
+            Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
+        }
+        func percentile(_ samples: [Double], _ fraction: Double) -> Double {
+            guard !samples.isEmpty else { return -1 }
+            let sorted = samples.sorted()
+            let index = min(Int((fraction * Double(sorted.count - 1)).rounded()), sorted.count - 1)
+            return sorted[index]
+        }
+
+        status("latency_checkpoint stage=start")
+        do {
+            let importURLs = containerizeImportURLs(
+                (environment["MOVIECUT_UITEST_IMPORT"] ?? "")
+                    .split(separator: ",")
+                    .map { String($0) }
+                    .filter { !$0.isEmpty }
+                    .map(URL.init(fileURLWithPath:))
+            )
+            guard !importURLs.isEmpty else {
+                throw NSError(domain: "MovieCutUITest", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "MOVIECUT_UITEST_IMPORT not set"])
+            }
+
+            suppressCompositionRebuild = true
+            await importMediaAndAddToTimeline(importURLs, startTime: 0)
+            suppressCompositionRebuild = false
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(timeoutSeconds: 10)
+            status("latency_checkpoint stage=composition_ready")
+
+            let duration = max(playbackEngine.duration, currentProject.timeline.duration)
+            guard duration > 0 else {
+                throw NSError(domain: "MovieCutUITest", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "composition duration is zero"])
+            }
+
+            // Seeks spaced across the whole duration; a settle gap keeps
+            // AVPlayer's async seek queue from batching requests.
+            let effectiveCount = max(seekCount, 1)
+            var requestSamples: [Double] = []
+            var scrubSamples: [Double] = []
+            for index in 0..<effectiveCount {
+                let time = duration * (Double(index) + 0.5) / Double(effectiveCount)
+
+                let requestStart = DispatchTime.now()
+                playbackEngine.seek(to: time)
+                requestSamples.append(elapsedMs(requestStart))
+
+                let scrubStart = DispatchTime.now()
+                scrubPlayhead(to: time)
+                scrubSamples.append(elapsedMs(scrubStart))
+
+                try await Task.sleep(nanoseconds: 40_000_000)
+            }
+            status("latency_checkpoint stage=seeks_done count=\(effectiveCount)")
+
+            // Project open: save to a temp bundle, reopen through the real
+            // `openProject` path (isDirty is false after the save, so the
+            // unsaved-changes guard passes without any alert UI).
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("moviecut_latency_baseline_\(UUID().uuidString).moviecut")
+            await saveProject(to: tempURL)
+            let openStart = DispatchTime.now()
+            await openProject(from: tempURL)
+            let openMs = elapsedMs(openStart)
+            try? FileManager.default.removeItem(at: tempURL)
+            status("latency_checkpoint stage=open_done")
+
+            // writeHarnessStatus TRUNCATES on every call (only the final line
+            // survives), so the result line must be the last write and carries
+            // the done marker itself.
+            status(
+                "latency_baseline stage=done seek_count=\(effectiveCount)"
+                    + " duration_s=\(String(format: "%.3f", duration))"
+                    + " seek_request_p50_ms=\(String(format: "%.2f", percentile(requestSamples, 0.5)))"
+                    + " seek_request_p95_ms=\(String(format: "%.2f", percentile(requestSamples, 0.95)))"
+                    + " scrub_apply_p50_ms=\(String(format: "%.2f", percentile(scrubSamples, 0.5)))"
+                    + " scrub_apply_p95_ms=\(String(format: "%.2f", percentile(scrubSamples, 0.95)))"
+                    + " project_open_ms=\(String(format: "%.2f", openMs))"
+            )
+            if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+                NSApp.terminate(nil)
+            }
+        } catch {
+            status("latency_checkpoint stage=error error=\(error.localizedDescription)")
+            if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
     /// each timestamp listed in `MOVIECUT_UITEST_PARITY_TIMES` (comma-separated
     /// seconds) to `MOVIECUT_UITEST_PREVIEW_DUMP` (one PNG per timestamp with
     /// a `_t<seconds>.png` suffix). The shell script then extracts the same

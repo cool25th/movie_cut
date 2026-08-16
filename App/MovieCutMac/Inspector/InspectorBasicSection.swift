@@ -506,12 +506,27 @@ struct InspectorBasicSection: View {
     /// edit like every other basic property.
     /// Dedicated crop UI (G-23). Ratio presets select the largest centered
     /// region of that pixel aspect inside the source; "Original" clears the
-    /// crop. Free-form canvas handles arrive in a later increment.
+    /// crop. The canvas button opens the free-form crop handles overlay
+    /// (Inc 2).
     private var cropSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Crop")
-                .font(.subheadline)
-                .fontWeight(.semibold)
+            HStack {
+                Text("Crop")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button {
+                    viewModel.setCropEditorActive(!viewModel.isCropEditorActive)
+                } label: {
+                    Label(
+                        viewModel.isCropEditorActive ? "Done" : "Canvas",
+                        systemImage: viewModel.isCropEditorActive ? "checkmark" : "crop"
+                    )
+                }
+                .controlSize(.small)
+                .accessibilityLabel(viewModel.isCropEditorActive ? "Finish cropping" : "Edit crop on canvas")
+                .accessibilityHint("Shows the uncropped frame with crop handles over the preview canvas.")
+            }
 
             HStack(spacing: MovieCutSpacing.small) {
                 ForEach(cropPresets, id: \.label) { preset in

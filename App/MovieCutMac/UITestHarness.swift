@@ -532,6 +532,18 @@ extension EditorViewModel {
             ))
         }
 
+        // Crop on the selected clip (G-23) — screenshot/benchmark mirror of
+        // the parity gate: the centered 1:1 crop the inspector preset produces.
+        if env["MOVIECUT_UITEST_CROP"] == "1", selectedClipId != nil {
+            let sourceAspect = selectedClipSourceAspect ?? 4.0 / 3.0
+            await updateSelectedCropRect(
+                CropPixelProcessor.centeredCropRect(
+                    sourceAspect: sourceAspect,
+                    targetAspect: 1
+                )
+            )
+        }
+
         // Selects the inspector's clip-scoped subtab (rawValue: Basic / Speed /
         // Animation / Adjustment / Mask). Deliberately AFTER every
         // selection-changing gate above (text template / extract audio / etc.)
@@ -2588,6 +2600,21 @@ extension EditorViewModel {
                 size: CGSize(width: 192, height: 144)
             )
             await updateSelectedMask(mask)
+        }
+
+        // 7a. Crop on the selected clip (G-23) — covers the "crop rect" parity
+        //     scenario. Applies the same centered 1:1 crop the inspector's
+        //     preset would produce (largest square in the source, centered),
+        //     computed from the asset's real pixel aspect so the preview and
+        //     export compositors crop identical normalized regions. For the
+        //     320×240 fixture that is exactly x=0.125, y=0, w=0.75, h=1.
+        if environment["MOVIECUT_UITEST_CROP"] == "1", selectedClipId != nil {
+            let sourceAspect = selectedClipSourceAspect ?? 4.0 / 3.0
+            let cropRect = CropPixelProcessor.centeredCropRect(
+                sourceAspect: sourceAspect,
+                targetAspect: 1
+            )
+            await updateSelectedCropRect(cropRect)
         }
 
         // 8. Color correction / grade on the selected clip — covers "filter"

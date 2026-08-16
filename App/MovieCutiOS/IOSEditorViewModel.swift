@@ -257,6 +257,29 @@ final class IOSEditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
     }
 
+    /// Pixel aspect (width/height) of the selected clip's source media — the
+    /// input the crop presets need so a chosen ratio selects a region of that
+    /// PIXEL aspect. Mirrors the Mac EditorViewModel helper.
+    var selectedClipSourceAspect: Double? {
+        guard let assetId = selectedClip?.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId],
+              let width = asset.metadata.width,
+              let height = asset.metadata.height,
+              width > 0, height > 0 else {
+            return nil
+        }
+        return Double(width) / Double(height)
+    }
+
+    /// Commits a crop rect (G-23) as one undoable property edit. A full-frame
+    /// rect is stored as nil so never-cropped projects keep the byte-identical
+    /// JSON encoding (cropRect key omitted).
+    func updateSelectedCropRect(_ cropRect: NormalizedRect?) async {
+        guard let selectedClipId else { return }
+        let normalized = cropRect.flatMap { CropPixelProcessor.isFullFrame($0) ? nil : $0 }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .cropRect(normalized)))
+    }
+
     func setTransition(_ type: TransitionType) async {
         guard let selectedClipId else { return }
 

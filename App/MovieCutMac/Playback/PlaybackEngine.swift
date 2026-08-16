@@ -1210,6 +1210,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     || clipInstruction.mask != nil
                     || !clipInstruction.effects.isEmpty
                     || clipInstruction.blendMode != .normal
+                    || clipInstruction.cropRect != nil
             } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)

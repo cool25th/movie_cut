@@ -58,6 +58,10 @@ struct IOSInspectorSheet: View {
                             )
                         }
 
+                        if clip.kind == .video || clip.kind == .image {
+                            cropSection(for: clip)
+                        }
+
                         if clip.kind == .video {
                             Section("Color") {
                                 sliderRow(
@@ -170,6 +174,101 @@ struct IOSInspectorSheet: View {
     private func assetName(for clip: Clip) -> String? {
         guard let assetId = clip.assetId else { return nil }
         return viewModel.currentProject.mediaLibrary.assets[assetId]?.originalURL.lastPathComponent
+    }
+
+    // MARK: Crop (G-23)
+
+    private struct CropPreset {
+        var label: String
+        var aspect: Double?
+    }
+
+    private let cropPresets: [CropPreset] = [
+        CropPreset(label: "Original", aspect: nil),
+        CropPreset(label: "1:1", aspect: 1),
+        CropPreset(label: "4:3", aspect: 4.0 / 3.0),
+        CropPreset(label: "3:4", aspect: 3.0 / 4.0),
+        CropPreset(label: "16:9", aspect: 16.0 / 9.0),
+        CropPreset(label: "9:16", aspect: 9.0 / 16.0)
+    ]
+
+    /// Same ratio presets as the Mac inspector; each selects the largest
+    /// centered region of that pixel aspect inside the source through the
+    /// shared CropPixelProcessor, so iOS and Mac crop identical regions and
+    /// the export compositors render identical pixels.
+    private func cropSection(for clip: Clip) -> some View {
+        Section("Crop") {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(cropPresets, id: \.label) { preset in
+                        Button {
+                            let cropRect = preset.aspect.flatMap { aspect in
+                                CropPixelProcessor.centeredCropRect(
+                                    sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
+                                    targetAspect: aspect
+                                )
+                            }
+                            Task { await viewModel.updateSelectedCropRect(cropRect) }
+                        } label: {
+                            Text(preset.label)
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule().fill(
+                                        isActiveCropPreset(preset, for: clip)
+                                            ? Color.accentColor.opacity(0.22)
+                                            : Color(.secondarySystemBackground)
+                                    )
+                                )
+                                .overlay {
+                                    Capsule().stroke(
+                                        isActiveCropPreset(preset, for: clip)
+                                            ? Color.accentColor
+                                            : Color.clear,
+                                        lineWidth: 1
+                                    )
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Crop \(preset.label)")
+                        .accessibilityHint("Crops the clip to the \(preset.label) ratio.")
+                    }
+                }
+            }
+
+            if let cropRect = clip.cropRect {
+                LabeledContent(
+                    "Region",
+                    value: String(
+                        format: "%.0f%% × %.0f%% at (%.0f%%, %.0f%%)",
+                        cropRect.width * 100,
+                        cropRect.height * 100,
+                        cropRect.x * 100,
+                        cropRect.y * 100
+                    )
+                )
+                .font(.caption)
+            }
+        }
+    }
+
+    /// Whether `preset` matches the clip's current crop (same centered rect
+    /// the preset would produce), so the active ratio is visibly selected.
+    private func isActiveCropPreset(_ preset: CropPreset, for clip: Clip) -> Bool {
+        guard let cropRect = clip.cropRect else {
+            return preset.aspect == nil
+        }
+        guard let aspect = preset.aspect else { return false }
+        let expected = CropPixelProcessor.centeredCropRect(
+            sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
+            targetAspect: aspect
+        )
+        guard let expected else { return false }
+        return abs(cropRect.x - expected.x) < 1.0e-6
+            && abs(cropRect.y - expected.y) < 1.0e-6
+            && abs(cropRect.width - expected.width) < 1.0e-6
+            && abs(cropRect.height - expected.height) < 1.0e-6
     }
 
     private func percentText(_ value: Double) -> String {

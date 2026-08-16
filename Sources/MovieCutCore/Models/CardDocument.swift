@@ -62,6 +62,12 @@ public struct NormalizedRect: Codable, Sendable, Equatable {
         try container.encode(height, forKey: .height)
     }
 
+    /// Trailing horizontal edge (leading + width).
+    public var maxX: Double { x + width }
+
+    /// Bottom vertical edge (top + height).
+    public var maxY: Double { y + height }
+
     private static func isValid(x: Double, y: Double, width: Double, height: Double) -> Bool {
         x.isFinite && y.isFinite && width.isFinite && height.isFinite &&
             x >= 0 && y >= 0 && width >= 0 && height >= 0 &&

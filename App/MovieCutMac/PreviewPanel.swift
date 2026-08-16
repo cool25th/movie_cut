@@ -581,6 +581,22 @@ struct PreviewPanel: View {
                 )
             }
 
+            if viewModel.isCropEditorActive, clip.assetId != nil,
+               clip.kind == .video || clip.kind == .image {
+                CropCanvasView(
+                    cropRect: clip.cropRect,
+                    thumbnailData: viewModel.thumbnailData(for: clip),
+                    sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
+                    canvasSize: viewModel.currentProject.canvas.size,
+                    onCommit: { rect in
+                        Task { await viewModel.updateSelectedCropRect(rect) }
+                    },
+                    onDone: {
+                        viewModel.setCropEditorActive(false)
+                    }
+                )
+            }
+
             if viewModel.hasMultipleSelectedCanvasOverlays {
                 CanvasMultiSelectionOverlay(
                     clips: viewModel.selectedCanvasOverlayClips,

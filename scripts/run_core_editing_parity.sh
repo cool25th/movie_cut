@@ -252,6 +252,28 @@ run_scenario "freeze_frame" "0.5,3.0" 2.0 \
   "MOVIECUT_UITEST_FREEZE=1" \
   "MOVIECUT_UITEST_FREEZE_DURATION=2.0" || FAIL=1
 
+echo "Scenario 14: crop rect (G-23)"
+# Crop the image fixture (RGB source) to the centered 1:1 region via the real
+# command-backed crop path. Duration unchanged (5s image clip) -> sample
+# inside. Proves the crop pixel path (CropPixelProcessor through both
+# compositors) is identical in preview and export.
+run_scenario "crop_rect" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$IMAGE" \
+  "MOVIECUT_UITEST_CROP=1" || FAIL=1
+
+# NOTE (2026-08-16, G-23 Inc 2): a VIDEO variant of this scenario
+# (MOVIECUT_UITEST_IMPORT=$VIDEO_A + CROP=1) is intentionally NOT active. It
+# exposed a pre-existing preview↔export color divergence that is NOT
+# crop-specific: untagged BT.601 SD video scaled through the custom
+# compositor previews with a hue rotation (pure red → (247,36,0) preview vs
+# (254,0,0) export; overall MAD ≈ 10.25 vs tolerance 2.00). Existing green
+# scenarios hide it — every active custom-compositor scenario either crushes
+# the signal with color correction or limits the unmasked area to ~1% of the
+# frame. Cropped PNG sources pass at MAD ≤ 2, so the crop wiring itself is
+# parity-clean. Tracked as the preview color-space divergence defect in
+# docs/SESSION_HANDOFF_CURRENT.md; re-enable the video variant when the
+# decode color-space fix lands.
+
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"

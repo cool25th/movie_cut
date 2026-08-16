@@ -100,6 +100,10 @@ final class EditorViewModel {
     var exportCodec: ExportCodec = .h264
     var exportAudioCodec: MovieCutCore.AudioCodec = .aac
     var isMaskEditorActive: Bool = false
+    /// G-23 canvas crop editor: while true the preview shows the uncropped
+    /// source with a crop window (CropCanvasView) instead of the baked-in
+    /// cropped composition. Mutually exclusive with the mask editor.
+    var isCropEditorActive: Bool = false
     var selectedAssetId: UUID?
     /// Which clip-scoped section tab the inspector shows. Owned by the view
     /// model (not view @State) so the UI test harness can drive it via
@@ -820,6 +824,7 @@ final class EditorViewModel {
         selectedClipId = nil
         selectedAssetId = nil
         isMaskEditorActive = false
+        isCropEditorActive = false
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
@@ -851,6 +856,7 @@ final class EditorViewModel {
                 selectedClipId = nil
                 selectedAssetId = nil
                 isMaskEditorActive = false
+                isCropEditorActive = false
                 playbackEngine.clear()
                 playheadTime = 0
                 clearGeneratedSubtitles()
@@ -1009,6 +1015,7 @@ final class EditorViewModel {
         selectedClipId = nil
         selectedAssetId = nil
         isMaskEditorActive = false
+        isCropEditorActive = false
         playbackEngine.clear()
         playheadTime = 0
         clearGeneratedSubtitles()
@@ -4016,17 +4023,39 @@ final class EditorViewModel {
 
     func toggleMaskEditor() {
         isMaskEditorActive.toggle()
+        if isMaskEditorActive {
+            isCropEditorActive = false
+        }
+    }
+
+    /// G-23: enters/leaves the canvas crop editor. Entering closes the mask
+    /// editor — both are full-canvas overlays and would visually conflict.
+    func setCropEditorActive(_ active: Bool) {
+        isCropEditorActive = active
+        if active {
+            isMaskEditorActive = false
+        }
     }
 
     func addMask() async {
         guard let selectedClipId else { return }
         isMaskEditorActive = true
+        isCropEditorActive = false
         await apply(SetClipMaskCommand(clipId: selectedClipId, mask: defaultMask()))
     }
 
     func updateSelectedMask(_ mask: Mask?) async {
         guard let selectedClipId else { return }
         await apply(SetClipMaskCommand(clipId: selectedClipId, mask: mask))
+    }
+
+    /// Commits a canvas-edited crop rect as one undoable property edit. A
+    /// full-frame rect is stored as nil so never-cropped projects keep the
+    /// byte-identical JSON encoding (cropRect key omitted).
+    func updateSelectedCropRect(_ cropRect: NormalizedRect?) async {
+        guard let selectedClipId else { return }
+        let normalized = cropRect.flatMap { CropPixelProcessor.isFullFrame($0) ? nil : $0 }
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .cropRect(normalized)))
     }
 
     func updateSelectedReversePlayback(_ isReversed: Bool) async {

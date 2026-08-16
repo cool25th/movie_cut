@@ -1,5 +1,5 @@
 상태: RUN
-현재 증분: 완료(부분, 스펙 리스크 조항) = **EditorViewModel 분해 1호 경계 — timeline editing**(2026-08-17 세션 2) — 선택 접근자·플레이헤드 스냅/경계 점프·전용 헬퍼를 `EditorViewModel+TimelineEditing.swift`(141줄)로 순수 이동, 본체 6,107→5,982줄. diff 이동만(DoD ④), 게이트·파리티 무회귀. **DoD ① 라인 목표(~5,200) 미달** — trim/move/split/clipboard/scrub 본체는 private 공유 인프라(`session`·`apply`·`refreshFromSession`·저장 프로퍼티)에 묶여 보류+장벽 지도 기록(핸드오프 세션 2 참조). 다음 = **G-02 Inc5 HSL 편집 UI**(Inc 2 최소 조건 충족).
-이전 완료: 프리뷰 색공간 발산 수정(G-29 전도부, 2026-08-17 세션 1, 커밋 df4440b — 파리티 crop_rect_video MAD 10.25→0.50, 14/14, 게이트 1,155 tests).
-마지막 커밋: 4fb77a8
-갱신: 2026-08-17 04:12
+현재 증분: 완료 2건(사용자 지시) = ① **Inc 2 완결 — 타임라인 편집 클러스터 전체 이동**(사용자 승인 접근 정규화로 세션 2의 보류 장벽 해소, 커밋 6ff0bc6, 본체 6,107→5,535줄) ② **G-02 Inc5 — HSL 8밴드 편집 UI**(커밋 c142c62, ColorHSLBandsView + 파리티 `hsl_curves` MAD 0.50, 스키마 무변경). 게이트: swift test 1,156 / 파리티 15/15 / ui_regression / verify_gate 4단계 전부 PASS. 다음 = **EXECUTION_PLAN §3 Inc 4(G-01 Inc2 카라오케 활성 단어 렌더링)**.
+이전 완료: Inc 2 1차 슬라이스(d2066ce)·프리뷰 색공간 발산 수정(df4440b, 파리티 crop_rect_video 10.25→0.50).
+마지막 커밋: c142c62
+갱신: 2026-08-17 06:05

@@ -3,6 +3,35 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 3 (사용자 지시 2증분: Inc 2 완결 + G-02 Inc5 HSL 밴드 UI)
+
+**게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,156 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **15/15 시나리오 PASS**(신규 16번 `hsl_curves` 포함). `ui_regression.sh` PASS(Inc5 골든 의도 갱신 후 검증).
+
+### 완료 1 — Inc 2 완결: 타임라인 편집 클러스터 전체 이동 (커밋 6ff0bc6)
+- **사용자 승인(2026-08-17)으로 장벽 해소**: private 공유 인프라(`session`·`apply`·`refreshFromSession`·`clipClipboardPayload`·`pendingScrub*`·`currentClipIds`)를 internal로 정규화(본체 잔존, 새 추상화 0) — 세션 2에서 보류했던 선택지 (b).
+- 이동(420줄, 순수): split/blade/trim(±assetDuration 헬퍼)/move/toggleTrack 3종/rippleDelete/duplicate/링크 그룹 F-04 전체(hasGroupedSelection·linkedClipIds·selectTimelineClip·group/ungroup·timelineClips)/copy·cut·paste·copyClip/canCopy·Cut·Paste/delete 계열/scrubPlayhead+applyScrubTime/timelineOrderedClipIds. **본체 누적 6,107→5,535줄(−572)**.
+- transport(JKL 셔틀·seekByFrames/Seconds·zoom·syncTimelinePlayhead)은 경계 로드맵대로 다음 경계로 의도적 미이동.
+- 수반 잠금 갱신: R5-03 트랙 토글 StaticContract → 경계 파일 구간 읽기.
+
+### 완료 2 — G-02 Inc5: HSL 8밴드 편집 UI (커밋 c142c62)
+- `ColorHSLBandsView`(App/MovieCutMac/Inspector/): 8밴드 칩 + 밴드별 색조 시프트·채도·휘도 슬라이더, VoiceOver 라벨. Color Grade 섹션(컬러휠·감마 인접) 배치.
+- 커밋 규율: 드래그 종료 시 단일 커맨드(제스처당 undo 1-step), 전부 identity면 nil 커밋(JSON 바이트 안정). **스키마 무변경**(기존 `hslBands` 선택 필드 재사용).
+- 실증(DoD): ① 밴드 값 → 공유 `ColorGradePixelProcessor` 체인으로 프리뷰 반영 ② 파리티 16번 `hsl_curves` 신설 **MAD 0.50 PASS**(레드 밴드 탈포화+마스터 커브의 양 다리 동일성) ③ undo 단일 ④ `ColorGradeGoldenTests` +JSON 라운드트립·identity 정규화 nil ⑤ 스키마 v4 유지. UI 노출은 ui_regression 골든 4상태 갱신으로 고정.
+- 잔여(G-02): 커브 에디터 UI(Inc 6 — 톤커브), iOS 동등 UI(2단계 파리티 증분).
+
+### 발견한 함정(다음 세션 참고)
+- StaticContract 잠금은 "메인 파일 문자열"에 고정되는 경향 — 경계 이동마다 해당 테스트의 읽기 경로를 함께 갱신해야 함(이번 세션: F-05·R5-03 두 건). 이후 경계(selection→transport→…)에서도 예상.
+- 대규모 블록 이동은 스크립트로 "정확히 1회 일치 시에만 제거" 검증 후 실행 — 본문 재구성 오타($0/$1, 들여쓰기)를 사전에 잡음.
+
+### 다음 세션 인계 (우선순위 순)
+1. **EXECUTION_PLAN §3 Inc 4 — G-01 Inc2 카라오케 활성 단어 렌더링**(방향 문서 §3 순서; Inc 3 완료로 잠금 해제).
+2. EditorViewModel 차기 경계(transport: 셔틀·seek·zoom 클러스터 — 접근 정규화 선례로 이제 순수 이동 가능).
+3. T1/T2/T3 스트레스 타임라인 fixture 확정 + PERFORMANCE_SLO.md p50/p95 기록.
+4. lint 신규 error 0 CI 반영 + 장형 fixture `run_latency_baseline.sh` 재측.
+
+### 사용자 결정 대기 사항
+- 없음. Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.
+
 ## 2026-08-17 세션 2 (EditorViewModel 분해 1호 경계 — 최소 슬라이스 + 장벽 지도)
 
 **게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,155 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). `run_core_editing_parity.sh` **14/14 PASS**. `ui_regression.sh` PASS. 첫 게이트 실행 1회 실패 — `KeyboardShortcutStaticContractTests`(소스 문자열 회귀 잠금)가 메인 파일의 이동 함수 존재를 검사 → 경계 분해 반영해 두 파일을 읽도록 갱신 후 재통과(제품 회귀 아님).

@@ -126,4 +126,27 @@ struct ColorGradeGoldenTests {
         ))
         GoldenPixel.expectClose(graded(decoded, RGBA(128, 128, 128)), RGBA(139, 128, 116), "legacy-warm")
     }
+
+    @Test("HSL band grade round-trips through project JSON and drops identity bands")
+    func hslBandGradeRoundTripsThroughJSON() throws {
+        // G-02 Inc 5: the band editor commits nil when every band is identity,
+        // so an ungraded clip's JSON stays byte-stable. The model must also
+        // drop identity bands on construction and normalize to nil.
+        let grade = ColorGrade(hslBands: [
+            HSLBand(center: .red, hueShift: 12, saturation: -0.5, luminance: 0.25),
+            HSLBand(center: .blue), // identity — must not survive sanitization
+        ])
+
+        let data = try JSONEncoder().encode(grade)
+        let decoded = try JSONDecoder().decode(ColorGrade.self, from: data)
+
+        #expect(decoded == grade)
+        #expect(decoded.hslBands == [
+            HSLBand(center: .red, hueShift: 12, saturation: -0.5, luminance: 0.25)
+        ], "identity bands must be dropped at construction")
+
+        let allIdentity = ColorGrade(hslBands: [HSLBand(center: .green)])
+        #expect(allIdentity.hslBands == nil,
+                "an all-identity band list normalizes to nil (no hslBands key)")
+    }
 }

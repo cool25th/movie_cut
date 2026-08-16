@@ -212,6 +212,10 @@ struct InspectorEffectsSection: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2 ... 2.0, binding: colorGradeBinding(keyPath: \.gamma))
+
+            ColorHSLBandsView(bands: grade.hslBands) { bands in
+                updateColorGradeHSLBands(bands)
+            }
         }
         .task(id: clip.id) {
             viewModel.refreshScopes()
@@ -237,6 +241,21 @@ struct InspectorEffectsSection: View {
             gamma: grade.gamma,
             gain: .init(red: red, green: green, blue: blue),
             hslBands: grade.hslBands,
+            curves: grade.curves
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
+    }
+
+    /// G-02 Inc 5: commits the HSL band editor's full band array through the
+    /// same single command path as the wheels, preserving the 3-way values and
+    /// curves. Passing nil (every band identity) keeps ungraded JSON clean.
+    private func updateColorGradeHSLBands(_ bands: [HSLBand]?) {
+        let grade = clip.colorGrade ?? ColorGrade()
+        let updated = ColorGrade(
+            lift: grade.lift,
+            gamma: grade.gamma,
+            gain: grade.gain,
+            hslBands: bands,
             curves: grade.curves
         )
         Task { await viewModel.updateSelectedColorGrade(updated) }

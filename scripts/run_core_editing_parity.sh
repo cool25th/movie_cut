@@ -276,6 +276,16 @@ run_scenario "crop_rect_video" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_CROP=1" || FAIL=1
 
+echo "Scenario 16: HSL band + curve grade (G-02 Inc 5)"
+# Applies the harness's HSL_CURVES grade (red-band desaturation + luminance,
+# plus one master curve point) through the real command path. The red solid
+# fixture makes the band adjustment a large, unambiguous pixel change, proving
+# the HSL cube renderer (HSLCubeBuilder → ColorGradePixelProcessor) behaves
+# identically in preview and export once the band editor UI commits it.
+run_scenario "hsl_curves" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_HSL_CURVES=1" || FAIL=1
+
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"

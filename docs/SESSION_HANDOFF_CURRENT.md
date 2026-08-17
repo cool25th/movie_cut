@@ -3,6 +3,26 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 8 (사용자 지시: UI 캡처 무창 진단 프롬프트 실행 — P0 보강)
+
+**게이트**: verify_gate 4단계 PASS. ui_regression **3회 연속 4/4 PASS**(기존 골든 바이트 호환 — 갱신 없음, import_only distance 4→2→2).
+
+### 완료 — UI 캡처 하니스 P0 보강 (커밋 cb71be2)
+- **절차 문서**: `docs/UI_CAPTURE_DIAGNOSIS_PROMPT_20260817.md`(사용자 제공 진단 프롬프트, 커밋 포함) — §7.1 환경 스냅샷(macOS 26.5.2/25F84, 콘솔 사용자 일치, 디스플레이 1개 연결), 현재 호스트는 정상 상태(직접 실행에도 창 1개)로 실패 주문 재현 불가 확인.
+- **P0 구현**(§13): 실행 경로 `open -n --env` 전환(§12 최강 단서 — 무창 실패는 직접 실행 하니스에서만 간헐, open 경유 파리티/E2E는 동일 기간 정상), PID 차집합 추적(§7.2), 고정 sleep→bounded 폴링, PROCESS_MISSING/WINDOW_COUNT_0/조회 오류 구분 기록(osascript stderr 보존, §10), 콘솔 사용자 불일치 시 PREFLIGHT_FAIL 명시적 거부(§4-D 방어).
+- **골든 호환**: 캡처 메커니즘 불변 — 3회 연속 4/4, 갱신 불필요.
+- **근본 원인 규명은 미완(기록)**: 재현 불가 상태에서 §8 통제 실험(direct↔open 20회 교차)은 실행 불가 — 재발 시 신규 `moviecut-ui-<state>-window.txt` 로그가 상태 A/C/D 분류를 제공하며 그때 실험 실행. G-06 DoD ④(UI 회귀)는 이번 보강으로 **3회 연속 PASS로 실질 충족**(골든 갱신 없이).
+
+### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
+1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
+2. 모션 트래킹 하니스 게이트(T2-R1).
+3. EditorViewModel 인스펙터 경계·lint CI.
+
+### 사용자 결정 대기 사항
+- **G-25 설계 문서 승인**(docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md — LOOP_STATE USER_WAITING 유지).
+- ui_regression 무창 재발 시: 재부팅 없이 `bash scripts/ui_regression.sh` 재시도 → 재발하면 `artifacts/ui/logs/moviecut-ui-<state>-window.txt` 상태값을 알려달라(분류 즉시 가능).
+- Track A 계속 대기.
+
 ## 2026-08-17 세션 7 (사용자 지시: Inc 6 — G-06 그래프 + G-25 설계 문서)
 
 **게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,170 tests / 171 suites**(+7) / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**. ui_regression **불가(환경)** — 아래 캐비앗.

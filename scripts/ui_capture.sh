@@ -155,6 +155,23 @@ capture_one() {
     echo "PREFLIGHT_FAIL: console user is '${console_user}' but harness runs as '$(id -un)' (switched/locked session) — refusing state='${state}'" >&2
     return 1
   fi
+  # Locked-screen detection (root cause of the intermittent "windowless"
+  # failures, confirmed 2026-08-17: while the session is locked, WindowServer
+  # gives new apps no visible window, so the process stays alive but
+  # `count of windows` is 0 — indistinguishable from an app bug without this
+  # check. The reliable signal is the loginwindow process owning a window
+  # (measured 1 while locked). The "frontmost process" query is NOT usable
+  # here: while locked it returns the pre-lock frontmost app (stale value).
+  local lock_windows
+  lock_windows="$(osascript -e 'tell application "System Events" to tell (first process whose name is "loginwindow") to get count of windows' 2>/dev/null || true)"
+  if [[ -n "$lock_windows" && "$lock_windows" != "0" ]]; then
+    echo "PREFLIGHT_FAIL: SESSION_LOCKED — the screen is locked (loginwindow owns ${lock_windows} window(s)), GUI apps cannot create windows. Unlock the Mac before running UI capture (state='${state}')." >&2
+    return 1
+  fi
+  if pgrep -x ScreenSaverEngine >/dev/null 2>&1; then
+    echo "PREFLIGHT_FAIL: SCREENSAVER_ACTIVE — the screen saver is running; captures would record the saver, not the app (state='${state}')." >&2
+    return 1
+  fi
   local preexisting_pids
   preexisting_pids="$(pgrep -x MovieCutMac 2>/dev/null | tr '\n' ' ')"
 

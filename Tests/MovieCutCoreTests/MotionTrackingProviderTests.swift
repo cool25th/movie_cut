@@ -62,7 +62,7 @@ struct MotionTrackingProviderTests {
         #expect(provider.isAvailable)
 
         let sampleRate = 15.0
-        let initialRect = Self.expectedMovingSubjectRect(at: 0)
+        let initialRect = MotionTrackingGroundTruth.expectedMovingSubjectRect(at: 0)
         let results = try await provider.track(
             videoURL: MediaFixtures.movingSubjectVideo,
             initialRect: initialRect,
@@ -71,7 +71,10 @@ struct MotionTrackingProviderTests {
         )
 
         let ious = results.map { result in
-            Self.iou(result.rect, Self.expectedMovingSubjectRect(at: result.timestamp))
+            MotionTrackingGroundTruth.iou(
+                result.rect,
+                MotionTrackingGroundTruth.expectedMovingSubjectRect(at: result.timestamp)
+            )
         }
         let sampleCount = ious.count
         let meanIoU = ious.reduce(0, +) / Double(max(sampleCount, 1))
@@ -96,38 +99,4 @@ struct MotionTrackingProviderTests {
         #expect(!MotionTrackingProvider().isAvailable)
     }
     #endif
-
-    private static func expectedMovingSubjectRect(at timestamp: TimeInterval) -> CGRect {
-        let width = 320.0
-        let height = 240.0
-        let boxWidth = 72.0
-        let boxHeight = 64.0
-        let startX = 32.0
-        let y = 88.0
-        let pixelsPerSecond = 80.0
-        let clampedTimestamp = min(max(timestamp, 0), 2)
-        return CGRect(
-            x: (startX + pixelsPerSecond * clampedTimestamp) / width,
-            y: y / height,
-            width: boxWidth / width,
-            height: boxHeight / height
-        )
-    }
-
-    private static func iou(_ lhs: CGRect, _ rhs: CGRect) -> Double {
-        let intersection = lhs.intersection(rhs)
-        guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
-            return 0
-        }
-
-        let intersectionArea = Double(intersection.width * intersection.height)
-        let lhsArea = Double(lhs.width * lhs.height)
-        let rhsArea = Double(rhs.width * rhs.height)
-        let unionArea = lhsArea + rhsArea - intersectionArea
-        guard unionArea > 0 else {
-            return 0
-        }
-
-        return intersectionArea / unionArea
-    }
 }

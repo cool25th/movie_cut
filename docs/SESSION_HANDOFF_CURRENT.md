@@ -30,9 +30,16 @@
 - `PARITY_ONLY=<name>` 단일 시나리오 필터(run_scenario 내 3줄) — 반복·트리아지 속도 개선.
 - **전체 파리티 스위트 18/18 PASS**(기존 16 무회귀 + 신규 motion_tracking 최악 MAD 0.26), verify_gate 4단계 PASS.
 
+### 완료 6 — T2-M 모션 트래킹 분석 측정 (세션 13)
+- `MotionTrackingAnalysisProbe`(Core): 프레임별 상태·소요ms 기록(CompositorRenderProbe 패턴, 명시적 arm — 제품 코드 env 의존 0), provider 루프 4분기 계측.
+- `MotionTrackingAnalysisPerfTests`(`MOVIECUT_T2M=1` 옵트인·기본 skip): RTF·분위수(seed 웜업 제외)·IoU 통계·실패율·연속 실패·phys_footprint 피크(50ms 모니터). ground truth `Support/MotionTrackingGroundTruth.swift`로 단일화(기존 IoU 테스트 공유).
+- `scripts/run_t2m_motion_tracking.sh`: 환경 스냅샷+Release 실행+`artifacts/perf/` 아티팩트.
+- **첫 실측(5회)**: RTF 0.351±0.094·p50 19.75ms·p95 26.35ms·IoU mean 0.793(5회 동일=결정적)·실패율 0·피크 63.2MB(+51.3MB 웜업). 개발 중 모니터 태스크 데드록(cancel 시점) 1건 발견·수정.
+- 잔여: 가림 재획득 측정은 전용 픽스처 필요(후속 증분).
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
-2. 모션 트래킹 후속: 프리뷰↔출력 파리티(T2-R1) → T2-M 측정.
+2. 모션 트래킹 잔여: 가림 재획득 측정용 전용 픽스처. 이후 인스펙터 경계·lint CI.
 3. EditorViewModel 인스펙터 경계·lint CI.
 
 ### 사용자 결정 대기 사항

@@ -51,6 +51,8 @@ public enum MotionTrackingError: Error, LocalizedError, Sendable, Equatable {
 
 /// Tracks an initial normalized object box across video frames.
 public final class MotionTrackingProvider: AnalysisProvider {
+    /// Probe frame shorthand for the loop instrumentation in `track(...)`.
+    private typealias Frame = MotionTrackingAnalysisProbe.Frame
     /// Whether Vision-backed motion tracking can run on this platform.
     public var isAvailable: Bool {
         #if canImport(Vision)
@@ -130,9 +132,15 @@ public final class MotionTrackingProvider: AnalysisProvider {
         while time <= endTime + (frameDuration * 0.5) {
             try Task.checkCancellation()
 
+            let frameProbeStart = DispatchTime.now()
             var actualTime = CMTime.invalid
             let requestedTime = CMTime(seconds: time, preferredTimescale: 600)
             guard let image = try? generator.copyCGImage(at: requestedTime, actualTime: &actualTime) else {
+                MotionTrackingAnalysisProbe.record(Frame(
+                    timestamp: time,
+                    durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                    status: .decodeFailure
+                ))
                 time += frameDuration
                 continue
             }
@@ -142,6 +150,12 @@ public final class MotionTrackingProvider: AnalysisProvider {
             if !didSeedInitialObservation {
                 results.append(TrackingResult(timestamp: timestamp, rect: normalizedInitialRect, confidence: 1))
                 didSeedInitialObservation = true
+                MotionTrackingAnalysisProbe.record(Frame(
+                    timestamp: timestamp,
+                    durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                    status: .seed,
+                    confidence: 1
+                ))
                 time += frameDuration
                 continue
             }
@@ -157,6 +171,11 @@ public final class MotionTrackingProvider: AnalysisProvider {
                     Self.displayRect(fromVisionBoundingBox: observation.boundingBox)
                   )
             else {
+                MotionTrackingAnalysisProbe.record(Frame(
+                    timestamp: timestamp,
+                    durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                    status: .lostObservation
+                ))
                 time += frameDuration
                 continue
             }
@@ -165,6 +184,12 @@ public final class MotionTrackingProvider: AnalysisProvider {
             results.append(TrackingResult(
                 timestamp: timestamp,
                 rect: displayRect,
+                confidence: observation.confidence
+            ))
+            MotionTrackingAnalysisProbe.record(Frame(
+                timestamp: timestamp,
+                durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                status: .tracked,
                 confidence: observation.confidence
             ))
             time += frameDuration
@@ -176,6 +201,11 @@ public final class MotionTrackingProvider: AnalysisProvider {
         #else
         throw MotionTrackingError.visionUnavailable
         #endif
+    }
+
+    /// Probe helper: wall-clock milliseconds elapsed since `start`.
+    private static func probeElapsedMs(since start: DispatchTime) -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000.0
     }
 
     /// Clamps a normalized rectangle to the unit square. Returns nil for empty or non-finite boxes.

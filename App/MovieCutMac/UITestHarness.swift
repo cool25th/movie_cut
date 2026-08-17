@@ -2413,6 +2413,7 @@ extension EditorViewModel {
         var dumpedFrames = 0
         var previewDumpDir = "none"
         var compositionDuration = 0.0
+        var previewPerfSuffix = ""
         let projectFrameRate = currentProject.timeline.frameRate.doubleValue
         // Progressive status writer so a hang or crash still leaves evidence
         // about how far the harness got (the parity path is newer and has no
@@ -2498,6 +2499,30 @@ extension EditorViewModel {
             }
             checkpoint("dumped")
 
+            // Stress-preview measurement (T1/T2/T3, PERFORMANCE_SLO): arm the
+            // compositor render probe, sweep seeks across the composition, and
+            // report p50/p95/max per-frame composite cost in the result line.
+            // The probe only accumulates between arm() and takeAndReset().
+            if let perfSampleCountString = environment["MOVIECUT_UITEST_PREVIEW_PERF"],
+               let perfSampleCount = Int(perfSampleCountString), perfSampleCount > 0 {
+                CompositorRenderProbe.arm()
+                let referenceDuration2 = playbackEngine.duration > 0
+                    ? playbackEngine.duration
+                    : currentProject.timeline.duration
+                for index in 0..<perfSampleCount {
+                    let sampleTime = referenceDuration2 * (Double(index) + 0.5) / Double(perfSampleCount)
+                    _ = await playbackEngine.snapshotFrame(at: sampleTime)
+                }
+                if let stats = CompositorRenderProbe.takeAndReset() {
+                    previewPerfSuffix = String(
+                        format: " preview_render_n=%d preview_render_p50_ms=%.3f preview_render_p95_ms=%.3f preview_render_max_ms=%.3f",
+                        stats.count, stats.p50, stats.p95, stats.max
+                    )
+                } else {
+                    previewPerfSuffix = " preview_render_n=0"
+                }
+            }
+
             // Export the project so the parity script can sample the same
             // timestamps from the rendered mp4.
             if let exportPath = environment["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
@@ -2518,6 +2543,7 @@ extension EditorViewModel {
             String(format: " frame_rate=%.3f", projectFrameRate) +
             " composition_error=\(playbackEngine.lastCompositionError ?? "none")" +
             " error=\(lastErrorMessage ?? "none")" +
+            previewPerfSuffix +
             timelineSummarySuffix()
         lastStatusMessage = status
         if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
@@ -2673,6 +2699,13 @@ extension EditorViewModel {
         //     interpolation in preview+export.
         if environment["MOVIECUT_UITEST_OPTICAL_FLOW"] == "1", selectedClipId != nil {
             await updateSelectedOpticalFlow(true)
+        }
+
+        // 8a3. Background removal (Vision person segmentation) on the selected
+        //      clip — the T2 stress-timeline constituent (PERFORMANCE_SLO).
+        //      Pairs with OPTICAL_FLOW + SPEED_RATE for the AI-heavy mix.
+        if environment["MOVIECUT_UITEST_BACKGROUND_REMOVAL"] == "1", selectedClipId != nil {
+            await toggleBackgroundRemoval(true)
         }
 
         // 8b. Trim the selected clip's end to the playhead — covers the "trim"

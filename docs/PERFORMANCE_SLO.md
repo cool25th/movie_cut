@@ -74,6 +74,18 @@ v1 출시 검증을 위한 최소 두 등급. 절대값은 장비에 따라 조�
 
 잔여(측정 증분 범위): ① 위 조합을 `make_fixtures.sh --stress-timelines` 또는 하니스 시나리오로 고정(재현성 해시 출력), ② 프리뷰 프레임 렌더 p50/p95 프로브(signpost `playback.buildComposition` 확장 또는 하니스 프레임 덤프 타이밍), ③ 이 표에 실측치 기록, ④ 메모리 피크는 `perf_4k.sh` 패턴 재사용(T2).
 
+### 실측 (2026-08-17, `scripts/run_stress_preview.sh`, 컴포지터 렌더 프로브)
+
+측정 방법: 하니스 파리티 흐름으로 3종 구성 재현 → 컴포지터 렌더 큐 요청당 벽시계 시간 프로브(`CompositorRenderProbe`, `MOVIECUT_UITEST_PREVIEW_PERF=40`) → 시크 스윕 40프레임. 호스트: Mac mini (Apple Silicon, 이 호스트 실측 — 측정 등급 규칙에 따라 타 호스트 수치와 교환 비교 금지), macOS Debug 빌드.
+
+| 타임라인 | n | p50 | p95 | max | 판정 |
+|---|---|---|---|---|---|
+| T1 멀티레이어·자막 | 40 | **1.281 ms** | **2.192 ms** | 2.858 ms | 16.6ms 예산 대비 여유 |
+| T2 광학플로우·AI | 0 | — | — | — | **측정 불가**: 광학플로우·속도·배경제거는 `usesCustomVideoCompositor` 트리거 목록에 없어 프리뷰가 plain 컴포지션 경로를 통과함 — 프로브(커스텀 컴포지터 계측)가 요청 자체를 관측하지 못함. |
+| T3 컬러 체인 | 40 | **3.936 ms** | **4.266 ms** | 5.186 ms | 16.6ms 예산 대비 여유 |
+
+**T2 파생 발견(범위 밖 기록, 후속 검증 필요)**: 배경제거(`isBackgroundRemoved`)가 프리뷰 컴포지터 트리거에 없다는 것은 **프리뷰가 배경제거를 렌더하지 않을 가능성**(출력만 반영 — G-23 Inc 1의 크롭 트리거 누락과 동일 클래스)을 시사한다. 검증 증분에서 확인 후 트리거 4곳 배선 체크리스트(§7-3)로 닫을 것. 모션 트래킹도 하니스 게이트가 없어 T2 구성에서 제외됨(게이트 신설은 측정 후속).
+
 ## EffectCostProfile 메타데이터 (2026-08-15 신설, 설계 확정 pending)
 효과 등록 수는 성능을 결정하지 않는다(동시 활성 체인 깊이·중간 표면·픽셀 포맷이 결정). 모든 효과 정의에 다음 메타데이터를 둔다. 스키마 확정은 G-28 브라우저 착수 시:
 `spatial/temporal · expected passes · requires prev/next frames · proxy-compatible · HDR-safe · preview quality tiers · cacheable · estimated memory`

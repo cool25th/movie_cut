@@ -161,6 +161,49 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     }
 }
 
+/// Stress-preview measurement probe (T1/T2/T3, PERFORMANCE_SLO): accumulates
+/// per-request wall time of the compositor's render queue when armed, so the
+/// harness can report p50/p95/max frame-composite cost under the fixed stress
+/// timelines. Armed only via the harness env (`MOVIECUT_UITEST_PREVIEW_PERF`);
+/// when disarmed `record` is a no-op branch the render path never pays for.
+enum CompositorRenderProbe {
+    private static let lock = NSLock()
+    // Harness-only shared probe state; every access goes through `lock`
+    // (the same pattern as GoldenPixelHarness's shared context).
+    nonisolated(unsafe) private static var armed = false
+    nonisolated(unsafe) private static var samples: [Double] = []
+
+    static func arm() {
+        lock.lock()
+        armed = true
+        samples.removeAll()
+        lock.unlock()
+    }
+
+    static func record(_ duration: TimeInterval) {
+        lock.lock()
+        if armed { samples.append(duration * 1000) }
+        lock.unlock()
+    }
+
+    /// Returns (count, p50ms, p95ms, maxMs) in milliseconds and disarms.
+    static func takeAndReset() -> (count: Int, p50: Double, p95: Double, max: Double)? {
+        lock.lock()
+        defer {
+            armed = false
+            samples.removeAll()
+            lock.unlock()
+        }
+        guard armed, !samples.isEmpty else { return nil }
+        let sorted = samples.sorted()
+        func percentile(_ p: Double) -> Double {
+            let index = min(Int((p / 100) * Double(sorted.count - 1)), sorted.count - 1)
+            return sorted[index]
+        }
+        return (sorted.count, percentile(50), percentile(95), sorted.last ?? 0)
+    }
+}
+
 final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     let sourcePixelBufferAttributes: [String : any Sendable]? = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
@@ -172,16 +215,24 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     private let ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
-    
+    private let probeArmed = ProcessInfo.processInfo.environment["MOVIECUT_UITEST_PREVIEW_PERF"] != nil
+
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {
         renderContext = newRenderContext
     }
-    
+
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
         // Boxed for the @Sendable render-queue closure (the request is not
         // Sendable on the macOS 15 SDK; see CompositionRequestBox).
         let sendableRequest = CompositionRequestBox(request: request)
+        let probeStart = DispatchTime.now()
         renderQueue.async {
+            let probeEnd = {
+                if self.probeArmed {
+                    CompositorRenderProbe.record(Double(DispatchTime.now().uptimeNanoseconds - probeStart.uptimeNanoseconds) / 1_000_000_000)
+                }
+            }
+            defer { probeEnd() }
             let request = sendableRequest.request
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
                let transition = instruction.activeTransition(at: request.compositionTime),

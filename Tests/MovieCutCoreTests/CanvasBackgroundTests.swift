@@ -18,7 +18,7 @@ struct CanvasBackgroundTests {
         let project = Project(name: "Legacy")
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        var json = try JSONSerialization.jsonObject(with: encoder.encode(project)) as! [String: Any]
+        var json = try #require(JSONSerialization.jsonObject(with: encoder.encode(project)) as? [String: Any])
         json.removeValue(forKey: "canvasBackground")
         let data = try JSONSerialization.data(withJSONObject: json)
 

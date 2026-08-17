@@ -29,13 +29,13 @@ struct CurveEvaluatorTests {
     }
 
     @Test("duplicate x control points resolve deterministically with the last value")
-    func duplicateXUsesLastValue() {
+    func duplicateXUsesLastValue() throws {
         let points = CurveEvaluator.normalizedPoints([
             CurvePoint(x: 0.5, y: 0.2),
             CurvePoint(x: 0.5, y: 0.7)
         ])
 
-        let mid = try! #require(points.first { abs($0.x - 0.5) < 0.0001 })
+        let mid = try #require(points.first { abs($0.x - 0.5) < 0.0001 })
         #expect(abs(mid.y - 0.7) < 0.0001)
     }
 

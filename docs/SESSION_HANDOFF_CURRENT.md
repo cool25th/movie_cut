@@ -55,6 +55,11 @@
 - **보류 기록**: importMedia 계열(공유 private probe/insert 헬퍼 — 카드 교체·슬라이드쇼도 사용), relinkMedia(프로젝트 적재 경로 공유), evaluateMissingMedia(private(set) 대입), reportInvalid*Drop(private 타입). **importMedia 계열 이동은 접근 정규화(별도 승인)가 전제** — 향후 증분 후보.
 - StaticContract 영향 없음. 1,173 테스트 통과·verify_gate 4단계. 잔여 경계: effects→audio→export.
 
+### 완료 10 — lint 게이트 녹색 전환 + 5단계 게이트·CI 배선 (세션 17)
+- lint_gate.sh 허용목록(force_cast·force_try·shorthand_operator) 위반 24건 전량 수정(11개 파일): try! #require 정규화+throws화, as!→#require(as?), += 축약, PlayerLayerView guard 강등. disable 주석 미사용.
+- **verify_gate 5단계화**(5단계 lint — 이후 모든 커밋의 게이트 통과에 lint 포함), ci.yml lint 잡 차단 전환(전체 리포트 비차단 유지).
+- effects 경계 조사: 이펙트 계열(applyEQPreset·toggleBackgroundRemoval·applyStyleTransfer·importExternalLUT)은 전부 private 저장 상태 의존 — 접근 정규화 승인 전 이동 불가(기록).
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
 2. 모션 트래킹 재검출 시드(사용자 결정 후) 또는 EditorViewModel 인스펙터 경계·lint CI.

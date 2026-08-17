@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Verification gate for autonomous work. Run from repo root.
-# Exits 0 (PASS) only if all four checks succeed:
+# Exits 0 (PASS) only if all five checks succeed:
 #   1. swift build
 #   2. swift test (full, unfiltered)
 #   3. xcodebuild MovieCutMac Debug macOS
 #   4. xcodebuild MovieCutiOS Debug generic/iOS (W4 / kiro 9.3)
+#   5. high-signal lint gate (scripts/lint_gate.sh allow-list)
 # Writes a short status line to stdout for the runner to parse.
 set -uo pipefail
 
@@ -19,7 +20,7 @@ LOG="$REPO_ROOT/.build-check/last_gate.log"
 pass=true
 
 # --- step 1: swift build ---
-echo "[gate] step 1/4: swift build" | tee -a "$LOG"
+echo "[gate] step 1/5: swift build" | tee -a "$LOG"
 if swift build >>"$LOG" 2>&1; then
   echo "[gate] swift build: OK" | tee -a "$LOG"
 else
@@ -28,7 +29,7 @@ else
 fi
 
 # --- step 2: swift test ---
-echo "[gate] step 2/4: swift test (full)" | tee -a "$LOG"
+echo "[gate] step 2/5: swift test (full)" | tee -a "$LOG"
 TEST_OUT=$(swift test 2>&1)
 TEST_RC=$?
 echo "$TEST_OUT" >>"$LOG"
@@ -47,7 +48,7 @@ else
 fi
 
 # --- step 3: xcodebuild (Mac) ---
-echo "[gate] step 3/4: xcodebuild MovieCutMac" | tee -a "$LOG"
+echo "[gate] step 3/5: xcodebuild MovieCutMac" | tee -a "$LOG"
 if xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac \
   -configuration Debug -destination 'platform=macOS' \
   CODE_SIGNING_ALLOWED=NO build >>"$LOG" 2>&1; then
@@ -62,7 +63,7 @@ fi
 # errors that hid behind the "iOS platform not installed" block for two weeks
 # (fixed in cd1458f). The generic destination needs only the iOS SDK shipped
 # with Xcode; CODE_SIGNING_ALLOWED=NO avoids any signing requirement.
-echo "[gate] step 4/4: xcodebuild MovieCutiOS" | tee -a "$LOG"
+echo "[gate] step 4/5: xcodebuild MovieCutiOS" | tee -a "$LOG"
 if xcodebuild -project MovieCut.xcodeproj -scheme MovieCutiOS \
   -configuration Debug -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO build >>"$LOG" 2>&1; then
@@ -70,6 +71,21 @@ if xcodebuild -project MovieCut.xcodeproj -scheme MovieCutiOS \
 else
   echo "[gate] xcodebuild (iOS): FAIL" | tee -a "$LOG"
   pass=false
+fi
+
+if $pass; then
+  # --- step 5: high-signal lint gate (force_cast / force_try /
+  # shorthand_operator — correctness-risk allow-list; see lint_gate.sh).
+  # Runs LAST and only when the build/test stages passed, so a lint failure
+  # is never masked by a compile failure. Missing SwiftLint is a hard fail:
+  # the gate must not silently pass.
+  echo "[gate] step 5/5: lint gate" | tee -a "$LOG"
+  if bash "$REPO_ROOT/scripts/lint_gate.sh" >>"$LOG" 2>&1; then
+    echo "[gate] lint gate: OK" | tee -a "$LOG"
+  else
+    echo "[gate] lint gate: FAIL" | tee -a "$LOG"
+    pass=false
+  fi
 fi
 
 if $pass; then

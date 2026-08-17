@@ -96,19 +96,19 @@ struct ProjectSchemaMigrationTests {
             let version = 2
             func migrate(_ project: inout Project) throws {
                 // Simulate the S2 bookmark field: bump a marker we can observe.
-                project.name = project.name + " [migrated v1→v2]"
+                project.name += " [migrated v1→v2]"
             }
         }
         struct AddAnotherField: ProjectMigration {
             let version = 3
             func migrate(_ project: inout Project) throws {
-                project.name = project.name + " [migrated v2→v3]"
+                project.name += " [migrated v2→v3]"
             }
         }
         struct AddBatchedFields: ProjectMigration {
             let version = 4
             func migrate(_ project: inout Project) throws {
-                project.name = project.name + " [migrated v3→v4]"
+                project.name += " [migrated v3→v4]"
             }
         }
 
@@ -126,7 +126,7 @@ struct ProjectSchemaMigrationTests {
         struct AddFakeField: ProjectMigration {
             let version = 2
             func migrate(_ project: inout Project) throws {
-                project.name = project.name + " [should not run]"
+                project.name += " [should not run]"
             }
         }
 

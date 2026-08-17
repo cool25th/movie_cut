@@ -78,7 +78,7 @@ struct ChromaKeyEyedropperTests {
     @Test("legacy settings without edgeShrink decode as 0")
     func legacyDecodesZeroShrink() throws {
         let settings = ChromaKeySettings.greenScreen()
-        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as! [String: Any]
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
         json.removeValue(forKey: "edgeShrink")
         let decoded = try JSONDecoder().decode(
             ChromaKeySettings.self,
@@ -116,17 +116,17 @@ struct ChromaKeyEyedropperTests {
     }
 
     @Test("sampler reads the color under a normalized point")
-    func samplerReadsColor() {
+    func samplerReadsColor() throws {
         let image = solidImage(r: 0, g: 255, b: 0)
         let color = PixelSampler.color(in: image, atNormalizedPoint: CGPoint(x: 0.5, y: 0.5))
-        let c = try! #require(color)
+        let c = try #require(color)
         #expect(c.x < 0.1 && c.y > 0.9 && c.z < 0.1)
     }
 
     @Test("sampler hex output matches the chroma key color format")
-    func samplerHex() {
+    func samplerHex() throws {
         let image = solidImage(r: 18, g: 240, b: 60)
-        let color = try! #require(PixelSampler.color(in: image, atNormalizedPoint: CGPoint(x: 0.25, y: 0.75)))
+        let color = try #require(PixelSampler.color(in: image, atNormalizedPoint: CGPoint(x: 0.25, y: 0.75)))
         let hex = PixelSampler.hexString(from: color)
         #expect(hex.hasPrefix("#"))
         #expect(hex.count == 7)

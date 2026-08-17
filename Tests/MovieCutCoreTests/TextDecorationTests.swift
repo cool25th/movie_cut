@@ -132,7 +132,7 @@ struct TextDecorationTests {
     @Test("legacy text content decodes with no decorations")
     func legacyDecodesWithoutDecorations() throws {
         let content = baseContent()
-        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(content)) as! [String: Any]
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(content)) as? [String: Any])
         for key in ["strokeColor", "strokeWidth", "shadowColor", "shadowOffset", "shadowBlur", "isBold", "isItalic"] {
             json.removeValue(forKey: key)
         }

@@ -96,7 +96,7 @@ struct BeatDetectionTests {
     @Test("legacy marker JSON decodes as standard kind")
     func legacyMarkerDecodesStandard() throws {
         let marker = Marker(time: 3, name: "Legacy")
-        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(marker)) as! [String: Any]
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(marker)) as? [String: Any])
         json.removeValue(forKey: "kind")
         let decoded = try JSONDecoder().decode(Marker.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(decoded.kind == .standard)

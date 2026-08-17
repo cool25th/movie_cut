@@ -9,9 +9,9 @@ struct ClipGroupingTests {
     @Test("legacy clip JSON without groupId decodes as ungrouped")
     func legacyClipDecodesUngrouped() throws {
         let clip = makeClip()
-        var encoded = try JSONSerialization.jsonObject(
+        var encoded = try #require(JSONSerialization.jsonObject(
             with: JSONEncoder().encode(clip)
-        ) as! [String: Any]
+        ) as? [String: Any])
         encoded.removeValue(forKey: "groupId")
         let legacyData = try JSONSerialization.data(withJSONObject: encoded)
 

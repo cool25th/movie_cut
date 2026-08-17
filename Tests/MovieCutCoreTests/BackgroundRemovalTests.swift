@@ -18,7 +18,7 @@ struct BackgroundRemovalTests {
             sourceRange: TimeRange(start: 0, duration: 5),
             timelineRange: TimeRange(start: 0, duration: 5)
         )
-        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(clip)) as! [String: Any]
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(clip)) as? [String: Any])
         json.removeValue(forKey: "isBackgroundRemoved")
         let decoded = try JSONDecoder().decode(Clip.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(decoded.isBackgroundRemoved == false)

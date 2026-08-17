@@ -77,7 +77,7 @@ struct ExportPlannerTests {
     // MARK: - Video plan
 
     @Test("Default video plan resolves an MP4/H.264/AAC movie")
-    func defaultVideoPlan() {
+    func defaultVideoPlan() throws {
         let settings = ExportSettings()
         let plan = planner.plan(settings: settings, canvas: CanvasPreset(aspectRatio: .landscape16x9))
 
@@ -85,14 +85,14 @@ struct ExportPlannerTests {
         #expect(plan.fileExtension == "mp4")
         #expect(plan.contentTypeIdentifier == AVFileType.mp4.rawValue)
 
-        let video = try! #require(plan.video)
+        let video = try #require(plan.video)
         #expect(video.profile == .h264)
         #expect(video.width == 1920)
         #expect(video.height == 1080)
         #expect(video.frameRate == 30)
         #expect(video.averageBitrateBitsPerSecond == 20_000_000)
 
-        let audio = try! #require(plan.audio)
+        let audio = try #require(plan.audio)
         #expect(audio.formatID == kAudioFormatMPEG4AAC)
         #expect(audio.bitrateBitsPerSecond == 192_000)
     }
@@ -196,7 +196,7 @@ struct ExportPlannerTests {
     }
 
     @Test("Animated GIF plan scales the canvas aspect to the max edge with even dimensions")
-    func gifPlan() {
+    func gifPlan() throws {
         let plan = planner.plan(
             settings: ExportSettings(),
             canvas: CanvasPreset(aspectRatio: .portrait9x16),
@@ -210,7 +210,7 @@ struct ExportPlannerTests {
         #expect(plan.video == nil)
         #expect(plan.audio == nil)
 
-        let gif = try! #require(plan.gif)
+        let gif = try #require(plan.gif)
         #expect(gif.frameRate == 15)
         #expect(gif.height == 480)
         // 9:16 aspect => width 270 (even), height 480.
@@ -238,41 +238,41 @@ struct ExportPlannerTests {
     // MARK: - AVAssetWriter output settings
 
     @Test("Video writer settings carry explicit average bitrate for H.264")
-    func videoWriterSettingsH264() {
+    func videoWriterSettingsH264() throws {
         let plan = planner.plan(settings: ExportSettings(resolution: .p1080, quality: .high), canvas: CanvasPreset(aspectRatio: .landscape16x9))
-        let settings = try! #require(planner.assetWriterVideoOutputSettings(for: plan))
+        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
 
         #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.h264.rawValue)
         #expect(settings[AVVideoWidthKey] as? Int == 1920)
         #expect(settings[AVVideoHeightKey] as? Int == 1080)
 
-        let compression = try! #require(settings[AVVideoCompressionPropertiesKey] as? [String: Any])
+        let compression = try #require(settings[AVVideoCompressionPropertiesKey] as? [String: Any])
         #expect(compression[AVVideoAverageBitRateKey] as? Int == 20_000_000)
         #expect(compression[AVVideoMaxKeyFrameIntervalKey] as? Int == 60)
     }
 
     @Test("ProRes video writer settings omit the average bitrate constraint")
-    func videoWriterSettingsProRes() {
+    func videoWriterSettingsProRes() throws {
         let plan = planner.plan(
             settings: ExportSettings(),
             canvas: CanvasPreset(aspectRatio: .landscape16x9),
             options: ExportPlanOptions(videoProfileOverride: .proRes4444)
         )
-        let settings = try! #require(planner.assetWriterVideoOutputSettings(for: plan))
+        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
 
         #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.proRes4444.rawValue)
         #expect(settings[AVVideoCompressionPropertiesKey] == nil)
     }
 
     @Test("Audio writer settings encode AAC bitrate and PCM bit depth")
-    func audioWriterSettings() {
+    func audioWriterSettings() throws {
         let aacPlan = planner.plan(settings: ExportSettings(audioCodec: .aac), canvas: CanvasPreset(aspectRatio: .landscape16x9), mediaKind: .audioOnly)
-        let aacSettings = try! #require(planner.assetWriterAudioOutputSettings(for: aacPlan))
+        let aacSettings = try #require(planner.assetWriterAudioOutputSettings(for: aacPlan))
         #expect(aacSettings[AVFormatIDKey] as? AudioFormatID == kAudioFormatMPEG4AAC)
         #expect(aacSettings[AVEncoderBitRateKey] as? Int == 192_000)
 
         let pcmPlan = planner.plan(settings: ExportSettings(audioCodec: .pcm), canvas: CanvasPreset(aspectRatio: .landscape16x9), mediaKind: .audioOnly)
-        let pcmSettings = try! #require(planner.assetWriterAudioOutputSettings(for: pcmPlan))
+        let pcmSettings = try #require(planner.assetWriterAudioOutputSettings(for: pcmPlan))
         #expect(pcmSettings[AVFormatIDKey] as? AudioFormatID == kAudioFormatLinearPCM)
         #expect(pcmSettings[AVLinearPCMBitDepthKey] as? Int == 16)
     }

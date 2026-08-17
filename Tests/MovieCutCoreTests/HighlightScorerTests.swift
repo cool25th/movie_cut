@@ -49,7 +49,7 @@ struct HighlightScorerTests {
     }
 
     @Test("speech-dense windows outscore silent windows")
-    func speechBeatsSilence() {
+    func speechBeatsSilence() throws {
         let duration: TimeInterval = 120
         // Silence covers the first half only.
         let silence = [TimeRange(start: 0, duration: 60)]
@@ -62,7 +62,7 @@ struct HighlightScorerTests {
             configuration: .init(minWindow: 20, maxWindow: 20, windowStride: 10, candidateCount: 1)
         )
 
-        let best = try! #require(candidates.first)
+        let best = try #require(candidates.first)
         // The best window should sit in the speech half (second half).
         #expect(best.range.start >= 55)
         #expect(best.speechDensity > 0.9)

@@ -510,7 +510,13 @@ final class PlayerLayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
 
     var playerLayer: AVPlayerLayer {
-        layer as! AVPlayerLayer
+        guard let playerLayer = layer as? AVPlayerLayer else {
+            // layerClass is overridden to AVPlayerLayer above, so this is
+            // unreachable by construction; the guard documents that contract
+            // without a force cast.
+            fatalError("PlayerLayerView.layerClass must be AVPlayerLayer")
+        }
+        return playerLayer
     }
 
     override init(frame: CGRect) {

@@ -3,6 +3,30 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 5 (사용자 지시: T1/T2/T3 측정 마무리 + G-01 Inc3 자막 스타일 프리셋)
+
+**게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,163 tests / 170 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**. ui_regression **4/4 PASS**(with_mask 환경 이슈 회복 확인 — 재부팅/권한 조치 없이 자연 회복, 골든 무변환).
+
+### 완료 1 — T1/T2/T3 측정 증분 (커밋 7fc13fd, 타 세션 WIP 수습 포함)
+- 세션 시작 시 타 세션 WIP(컴포지터 프로브·게이트·스크립트 초안, 10:17 작성) 발견 → 프로토콜 0 감사·보강·검증 후 수습 커밋.
+- **실측(이 호스트, Debug)**: T1 멀티레이어·자막 p50 **1.281ms** / p95 **2.192ms** / max 2.858ms. T3 컬러 체인 p50 **3.936ms** / p95 **4.266ms** / max 5.186ms — 16.6ms 예산 여유. **T2 n=0(측정 불가)**: 광학플로우·속도·배경제거는 `usesCustomVideoCompositor` 트리거에 없어 프리뷰가 plain 경로 통과 — 근거 SLO 기록.
+- **범위 밖 발견(후속 검증 증분 과제)**: `isBackgroundRemoved` 프리뷰 트리거 누락 가능성 — 프리뷰가 배경제거를 렌더하지 않을 소지(출력만 반영, G-23 Inc1 크롭 트리거와 동일 계열). 모션 트래킹 하니스 게이트도 부재(T2 구성 제외).
+
+### 완료 2 — G-01 Inc3 자막 스타일 프리셋 (커밋 00c97cf, DoD 4항 충족)
+- `SubtitleStylePreset`(Core) 6종 내장 — UserTextStylePreset 계약 재사용 + 하이라이트 색·상대 위치 확장. 적용 = 단일 커맨드(undo 1-step, 프리뷰 즉시), karaokeEnabled 플래그 불변(토글과 책임 분리).
+- UI: AutoSubtitlesView 프리셋 행(텍스트 클립 선택 시 노출, 클릭 1회 적용 — 2클릭 이내 DoD ①).
+- 골든 6종: 픽셀 프로브(외곽선·배경박스 8배·글자색) + 계약(위치·하이라이트·플래그·텍스트 불변) — 1,163 tests(+6). 영속화는 기존 TextDecorationTests 재사용(DoD ④).
+- ui_regression: populated_editor 골든 의도 갱신(프리셋 행).
+
+### 다음 세션 인계 (우선순위 순)
+1. **배경제거 프리뷰 트리거 검증 증분**(T2 파생 발견 — 트리거 누락 확인 후 §7-3 체크리스트 4곳 배선 + 파리티 시나리오).
+2. **EXECUTION_PLAN §3 Inc 6 — G-06 베지어 그래프(+G-25 설계 문서 초안 착수, 주 내 승인 요청 에스컬레이션)**.
+3. 모션 트래킹 하니스 게이트 신설 후 T2 재측정.
+4. EditorViewModel 차기 경계(inspector)·lint CI·장형 fixture 재측.
+
+### 사용자 결정 대기 사항
+- 없음(필수). Track A(아이콘/App Store Connect) 계속 대기. with_mask 환경 이슈는 회복 확인됨(조치 불필요).
+
 ## 2026-08-17 세션 4 (사용자 지시 3건: G-01 Inc2 카라오케 + transport 경계 + T1/T2/T3 구성 확정)
 
 **게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,157 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 시나리오 PASS**(신규 17번 `karaoke_text` 포함). E2E **35 PASS** — 신규 G-01 섹션 포함. ui_regression 3/4(아래 환경 이슈).

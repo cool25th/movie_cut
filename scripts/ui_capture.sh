@@ -204,7 +204,14 @@ capture_one() {
     sleep 0.5
   done
   if [[ -z "$app_pid" ]]; then
-    echo "LAUNCH_FAIL: no new MovieCutMac process appeared within 15s for state='${state}'" >&2
+    # The `open` launch detaches the app from this shell, so its stdout can't
+    # be captured; the app log becomes a failure artifact instead (doc §14).
+    {
+      echo "reason=no_new_pid_within_15s"
+      echo "preexisting_pids=${preexisting_pids:-none}"
+      pgrep -fl MovieCutMac || true
+    } >"$app_log"
+    echo "LAUNCH_FAIL: no new MovieCutMac process appeared within 15s for state='${state}' (preexisting: ${preexisting_pids:-none})" >&2
     echo "App log: $app_log" >&2
     return 1
   fi
@@ -255,8 +262,18 @@ OSA
   printf 'status=%s pid=%s osa_err=%s\n' "$osa_status" "$app_pid" "$osa_err" \
     >"$LOG_DIR/moviecut-ui-${state}-window.txt"
   if [[ -z "$bounds" ]]; then
+    # Failure artifact for the windowless classes (doc §7.5/§14): process
+    # snapshot (alive-but-windowless vs exited) + the app's last unified-log
+    # lines (os_log/NSLog/system messages; plain print() stdout is not
+    # recoverable under a Launch Services launch).
+    {
+      echo "reason=${osa_status}"
+      echo "pid=${app_pid}"
+      ps -p "$app_pid" -o pid,stat,etime,%cpu,%mem,command || true
+      /usr/bin/log show --style compact --last 3m --predicate "processID == ${app_pid}" 2>/dev/null | tail -40 || true
+    } >"$app_log"
     echo "WINDOW_NOT_FOUND: state='${state}' status='${osa_status}' pid=${app_pid} (osascript stderr: ${osa_err:-none})" >&2
-    echo "App log: $app_log" >&2
+    echo "Diagnosis: $LOG_DIR/moviecut-ui-${state}-window.txt ; app log: $app_log" >&2
     cleanup
     return 1
   fi
@@ -267,6 +284,9 @@ OSA
     cleanup
     return 1
   fi
+
+  # Keep the meta file's app_log= reference truthful on success too.
+  ps -p "$app_pid" -o pid,stat,etime,%cpu,%mem,command >"$app_log" 2>/dev/null || true
 
   cat >"$meta_out" <<EOF
 state=$state

@@ -1,10 +1,10 @@
-상태: RUN(G-25 Inc 8 대기 — **Inc 7 완료, 설계 문서 승인됨 2026-08-18**)
-현재 증분: 완료 = **G-25 Inc 1(Core 모델) AudioRenderGraphSpec**(승인 직후 실행) — 승인된 설계 문서(docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md) §2·§3·§5 그대로: 소스(원본/파생·derivedFrom·algorithmVersion·nativeSampleRate 혼합레이트)·클립 스트립(채널매핑 mono/stereo/dualMono·게인/팬 자동화·페이드)·트랙 버스(입력 스트립·페이더·mute/solo·덕킹)·마스터 버스(페이더·리미터 latency 짝·목표 LUFS)·타임베이스(**자동화 좌표 전부 Int64 샘플 위치·초 저장 금지**, origin은 "num/den" 유리수 문자열, 기본 48k)·렌더 규칙(declaredLatencies — 글로벌 보상은 Inc 8)·노드 15종(**8종 1단계 지원 + 7종 자리만 — isStage1Supported로 분류, 미지원 만나면 엔진 거부**). Codable: 선택 노드 데이터 encodeIfPresent(빈 그래프 JSON 표준바이트 — ProjectStore와 동일한 sortedKeys 인코더 기준). 테스트 10종(전체 완주·빈그래프 바이트안정·1시간 샘플좌표·유리수 원점 왕복·변형 origin 거부·지원분류·노드/채널왕복).
-이전 완료: 세션 19(export 경계 c13bc5b — 분해 8/8 완결, 누적 −913줄)·세션 18(audio a21590c)·세션 17(lint b251205)·세션 14-16(가림 측정 a9c4121·인스펙터 ac7c61a·media 5a0e543)·그 이전(모션 트래킹 전계층·무창 근본원인·키프레임 트리거 결함 수정).
-다음 증분: **Inc 8** — AVAudioEngine(프리뷰)·출력 인코더 그래프 생성기 + Core latency 보상 순수 함수 + null test 자동화(±1 샘플, §4·§9). 이후 Inc 9(미터·mute/solo UI + AAC 사후 검사 §7·§8).
-대기 결정 사항(변경 없음): 접근 정규화 승인(sourceClipAndAsset 허브 등)·모션 트래킹 재검출 시드 착수.
-마지막 커밋: 011365a
-갱신: 2026-08-18 00:34
+상태: RUN(G-25 Inc 8 App 절반 대기 — **Inc 8 Core 절반 완료**)
+현재 증분: 완료 = **G-25 Inc 8 Core 절반 — 엔진 수학** — `AudioGraphRendering.swift`: ① `AudioGraphLatency.globalCompensation`(최대 lookAhead·최대 reported+lookAhead 단일 글로벌 쌍 — 합 아님, 양 엔진 공동 호출 지점, 1단계 그래프는 (0,0)) ② 타임베이스 Int64 정확 변환(역변환 timescale=sampleRate로 정수 레이트 완전 왕복 — 60분 172,800,000샘플 정확, drift 게이트 기반) ③ `AudioGraphOfflineRenderer` 순수 그래프 평가(채널매핑→게인/페이드→팬→버스 합산/페이더/mute/solo→마스터, 결정적 비트동일 출력·리미터 직렬화 시 명시적 거부 §5). 명세 침묵 부분 문서화: 자동화=선형 보간+범위 밖 홀드·팬=등전력(빈 팬 자동화=노드 우회 unity, 지점 있으면 중앙 −3dB)·페이드 linear/exponential(1−t)²·덕킹=순수 렌더에서 항등(사이드체인 배선은 엔진 소관). 타이밍(스트립 활성 구간)은 직렬화 스키마가 아닌 런타임 계획 데이터(AudioGraphStripActivation)로 전달 — 승인 스키마 무변경. 테스트 14종(보상 최댓값·60분 정확성·왕복 drift≤1·유니티 통과·−6dB·선형 페이드·좌/중앙 팬·mute·거부 2종·결정성·스테레오 매핑).
+이전 완료: Inc 7(Core 모델 c81cf25)·세션 19-14(경계 8/8 완결 −913줄·lint 게이트 녹색+5단계 게이트·가림 측정·모션 트래킹 전계층·무창 근본원인·키프레임 트리거).
+다음 증분: **Inc 8 App 절반** — 그래프→AVAudioEngine(프리뷰)·출력 인코더 배선 + E2E null test(±1 샘플 정렬·1 LSB, 실측 판정 E2E만 §9.5) + 혼합 rate 60분 drift 실측. 이후 Inc 9(미터·mute/solo UI + AAC 사후 검사 §7·§8).
+대기 결정 사항(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+마지막 커밋: c81cf25(이번 커밋 직전 기준)
+갱신: 2026-08-18 00:52
 추가 완료(세션 8, cb71be2): UI 캡처 하니스 P0 보강(open 실행+PID 조회+진단 분리, 3회 연속 4/4) — G-06 DoD ④ 실질 충족, 무창 재발 시 window.txt 로그로 분류.
 추가 완료(세션 9, 16:05 자동화 회차): **무창 재발 근본 원인 확정 = 세션 잠금(진단 문서 §4-D, TCC 가설 기각)** — 잠긴 세션에선 WindowServer가 신규 앱에 창을 부여하지 않아 프로세스 생존+창 0(WINDOW_COUNT_0)으로 나타남. 실증: 전체 화면 캡처=비밀번호 다이얼로그, loginwindow 창 수=1(잠금 중, 해제 시 0). ui_capture.sh 프리플라이트에 SESSION_LOCKED·SCREENSAVER_ACTIVE 감지 추가(loginwindow 창 수 기반 — frontmost 쿼리는 잠금 중 부실값 반환['ZCode'] 폐기). 잠금 상태 라이브 검증: 4/4 상태 즉시 거부·앱 미실행·exit 1. 캐비앗 정정: 이전 캐비앗의 "TCC 권한 회귀" 추정은 기각됨 — ui_regression은 **화면 잠금 해제 상태에서만** 실행할 것(잠금 시 즉시·명시적 실패).
 추가 완료(세션 9 후속, 18:09): 진단 프롬프트 반영 감사 기반 마이너 증분 — `open` 전환 이후 비어 있던 `App log:` 안내 수정: 실패 시 app log를 아티팩트로 채움(ps 스냅샷[생존·창 없음 vs 조기 종료 판별] + 앱 PID 통합 로그 꼬리 40줄, `/usr/bin/log` 절대 경로 — zsh `log` 내장 명령 그림자 현상 회피), LAUNCH_FAIL 경로 preexisting_pids 기록, 성공 시에도 메타의 app_log 참조 실재화. 진단 프롬프트 §7.5/§13-P0-6/§14 부분 반영.

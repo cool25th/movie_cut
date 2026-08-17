@@ -248,6 +248,7 @@
 		DEEF75211825C1AD349AB1FE /* IOSEffectsInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812011A4E3191F04FBECFF30 /* IOSEffectsInspectorView.swift */; };
 		E03214A9F37F9D23488D311C /* MusicLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A57739EC7F22BDC8D2FB785 /* MusicLibraryView.swift */; };
 		E05176857F0A779A2395162F /* AppStageRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC876E480A05CD1431AD0E60 /* AppStageRouter.swift */; };
+		E0AB64CE323FFBE5F870C55B /* AudioGraphRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015E55D130CB7D3656C84E5C /* AudioGraphRenderingTests.swift */; };
 		E10A7C824D3B7B6CD5181BF8 /* Phase04TimelineEditToolbarStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD557736F51426231073842B /* Phase04TimelineEditToolbarStaticContractTests.swift */; };
 		E154710F14EE37169D4A4B5F /* ColorGradeGoldenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069552FC6F46DE9AABF78957 /* ColorGradeGoldenTests.swift */; };
 		E1EEB65CD40B13017C739BEA /* IOSEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B96917052DBC7959584EAA /* IOSEditorViewModel.swift */; };
@@ -305,6 +306,7 @@
 
 /* Begin PBXFileReference section */
 		01066DCB6E8C6D49466B6FD6 /* FilmstripPlanningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmstripPlanningTests.swift; sourceTree = "<group>"; };
+		015E55D130CB7D3656C84E5C /* AudioGraphRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioGraphRenderingTests.swift; sourceTree = "<group>"; };
 		02A7F4067467C638498AEF18 /* RenderProcessorGoldenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderProcessorGoldenTests.swift; sourceTree = "<group>"; };
 		02AF6C7EEAABDAB34114C00D /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		03C5B913EC62718E6F6A12BE /* HSLCubeBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HSLCubeBuilderTests.swift; sourceTree = "<group>"; };
@@ -633,6 +635,7 @@
 				B4BB6ADA409AABFE8034B844 /* AudioDuckingTests.swift */,
 				EE67663CF085B8BB7796E082 /* AudioEqualizerDSPTests.swift */,
 				9DE8988E8EB02192473925FA /* AudioFadeInspectorStaticContractTests.swift */,
+				015E55D130CB7D3656C84E5C /* AudioGraphRenderingTests.swift */,
 				36B11798BDDFB4781510738F /* AudioRenderGraphSpecTests.swift */,
 				1A61A5F1188DAEF562AFE785 /* AutoColorAnalyzerTests.swift */,
 				FD51A635F974878B2AF6E52B /* AutoCutPlannerTests.swift */,
@@ -1110,7 +1113,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_D10BC2AB-4045-48EE-9307-5E39FD285893" /* Resources */ = {
+		"TEMP_E648740A-8524-4418-A057-2395D932FE53" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1311,6 +1314,7 @@
 				2976DF50151A11BD8486C1AE /* AudioDuckingTests.swift in Sources */,
 				54A6F9BA711554484A580BF7 /* AudioEqualizerDSPTests.swift in Sources */,
 				1760757E18D28782FED07E34 /* AudioFadeInspectorStaticContractTests.swift in Sources */,
+				E0AB64CE323FFBE5F870C55B /* AudioGraphRenderingTests.swift in Sources */,
 				51E71963AD14D8F94D7D0893 /* AudioRenderGraphSpecTests.swift in Sources */,
 				818407C33DD37CFCF7F0357C /* AutoColorAnalyzerTests.swift in Sources */,
 				2B61D0285D37AAD91D35ADD6 /* AutoCutPlannerTests.swift in Sources */,

@@ -2891,6 +2891,29 @@ extension EditorViewModel {
             await updateSelectedCropRect(cropRect)
         }
 
+        // 7b. Motion tracking (T2-R1 prerequisite) — runs the REAL tracking
+        //     command path on the selected clip with the moving-subject
+        //     fixture's ground-truth initial rect, so both render paths
+        //     (preview + export) must apply the generated position keyframes
+        //     identically. Exercises the keyframe compositor trigger that the
+        //     motion_tracking parity scenario exists to prove.
+        if environment["MOVIECUT_UITEST_MOTION_TRACKING"] == "1", let clipId = selectedClipId {
+            let initialRect = CGRect(
+                x: 32.0 / 320.0,
+                y: 88.0 / 240.0,
+                width: 72.0 / 320.0,
+                height: 64.0 / 240.0
+            )
+            let keyframeCount = try await trackMotion(for: clipId, initialRect: initialRect)
+            guard keyframeCount > 0 else {
+                throw NSError(
+                    domain: "MovieCutUITest",
+                    code: 31,
+                    userInfo: [NSLocalizedDescriptionKey: "motion tracking generated no keyframes in parity scenario"]
+                )
+            }
+        }
+
         // 8. Color correction / grade on the selected clip — covers "filter"
         //    scenarios. Composes with MASK + TEXT_AT for the combined scenario.
         if environment["MOVIECUT_UITEST_COLOR"] == "1", selectedClipId != nil {

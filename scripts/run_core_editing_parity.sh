@@ -18,6 +18,7 @@ VIDEO_A="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
 VIDEO_B="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
 AUDIO="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
 IMAGE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
+MOVING_SUBJECT="$ROOT/Tests/Fixtures/moving_subject_320x240_2s_30fps.mp4"
 for f in "$VIDEO_A" "$VIDEO_B" "$AUDIO" "$IMAGE"; do
   [ -s "$f" ] || { echo "missing fixture $f; run scripts/make_fixtures.sh" >&2; exit 1; }
 done
@@ -53,10 +54,12 @@ cp "$VIDEO_A" "$STAGED_FIXTURES/video-a.mp4"
 cp "$VIDEO_B" "$STAGED_FIXTURES/video-b.mp4"
 cp "$AUDIO" "$STAGED_FIXTURES/audio.wav"
 cp "$IMAGE" "$STAGED_FIXTURES/image.png"
+cp "$MOVING_SUBJECT" "$STAGED_FIXTURES/moving-subject.mp4"
 VIDEO_A="$STAGED_FIXTURES/video-a.mp4"
 VIDEO_B="$STAGED_FIXTURES/video-b.mp4"
 AUDIO="$STAGED_FIXTURES/audio.wav"
 IMAGE="$STAGED_FIXTURES/image.png"
+MOVING_SUBJECT="$STAGED_FIXTURES/moving-subject.mp4"
 trap 'rm -rf "$STAGED_FIXTURES"' EXIT
 
 FIXTURES="$ROOT/Tests/Fixtures"
@@ -66,6 +69,12 @@ FIXTURES="$ROOT/Tests/Fixtures"
 # failure (last checkpoint, preview frames, export) for inspection.
 run_scenario() {
   local name="$1"; local times="$2"; local tolerance="$3"; shift 3
+  # PARITY_ONLY=<name> runs a single scenario (iteration speed / triage);
+  # default runs the full suite.
+  if [ -n "${PARITY_ONLY:-}" ] && [ "$name" != "$PARITY_ONLY" ]; then
+    echo "  → $name (skipped: PARITY_ONLY=$PARITY_ONLY)"
+    return 0
+  fi
   local extra_env=("$@")
 
   local work; work="$(mktemp -d "$APP_CONTAINER_TMP/$name.XXXXXX")"
@@ -296,6 +305,15 @@ run_scenario "karaoke_text" "0.6,1.45" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_TEXT_AT=0.5" \
   "MOVIECUT_UITEST_KARAOKE=1" || FAIL=1
+
+# Scenario 18 — motion tracking keyframes (T2-R1 prerequisite). Runs the real
+# tracking command path on the moving-subject fixture (ground-truth rect), so
+# preview and export must both apply the generated position keyframes. This is
+# the scenario that proves the preview-side keyframe compositor trigger
+# (without it the preview ignores keyframe-only clips and MAD explodes).
+run_scenario "motion_tracking" "0.3,1.7" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$MOVING_SUBJECT" \
+  "MOVIECUT_UITEST_MOTION_TRACKING=1" || FAIL=1
 
 echo ""
 if [ "$FAIL" -eq 0 ]; then

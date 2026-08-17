@@ -1219,6 +1219,13 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     || clipInstruction.blendMode != .normal
                     || clipInstruction.cropRect != nil
                     || clipInstruction.isBackgroundRemoved
+                    // Keyframed animation (motion tracking, manual keyframes)
+                    // only renders through the custom compositor — the same
+                    // trigger-gap class as cropRect / isBackgroundRemoved:
+                    // ExportEngine's trigger includes keyframes, so without
+                    // this the preview silently ignored keyframe-only clips
+                    // (proved by the motion_tracking parity scenario).
+                    || !clipInstruction.keyframes.isEmpty
             } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)

@@ -65,6 +65,11 @@
 - 보류: autoDuckOtherAudio·extractAudio(from:)·detectBeats·extractAudioFromSelectedClip·addVoiceoverAudio·buildAudioProcessingOptions — **sourceClipAndAsset이 잔여 경계 전반을 묶는 최대 private 허브**(접근 정규화 승인 시 해금).
 - StaticContract 1건 갱신(AudioDuckingTests 메인+경계 결합). GATE_PASS 5/5. 잔여 경계: export 1개.
 
+### 완료 12 — EditorViewModel export 경계 분해, 로드맵 8경계 완결 (세션 19)
+- `EditorViewModel+Export.swift`(79줄): 4개 이동(cancelExport·exportProjectPackage·updateExportSettings·applyPlatformExportPreset). 본체 5,223→5,165줄(분해 누적 −913줄).
+- 보류: export 진입 패밀리(private backgroundRemovedClipIds+reconciledExportSettingsFromLegacyUI 이중 의존)·applyExportPreset. StaticContract 1건(ProjectPackageTests) 갱신. GATE_PASS 5/5.
+- **분해 로드맵 8경계 전 완수.** 남은 이동 전부가 접근 정규화 승인으로 수렴(단일 결정 사항).
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
 2. 모션 트래킹 재검출 시드(사용자 결정 후) 또는 EditorViewModel 인스펙터 경계·lint CI.

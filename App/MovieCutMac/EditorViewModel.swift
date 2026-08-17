@@ -913,26 +913,6 @@ final class EditorViewModel {
 
     // MARK: - Project package (F-23)
 
-    /// Exports the current project and its media as a `.mctemplate` package.
-    func exportProjectPackage() async {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(currentProject.name).\(ProjectPackage.fileExtension)"
-        if let type = UTType(filenameExtension: ProjectPackage.fileExtension) {
-            panel.allowedContentTypes = [type]
-        }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            let snapshot = await session.snapshot()
-            try ProjectPackage.export(snapshot, to: url)
-            lastErrorMessage = nil
-            lastStatusMessage = "Exported project package to \(url.lastPathComponent)."
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = "Could not export package: \(error.localizedDescription)"
-        }
-    }
 
     /// Imports a `.mctemplate` package as the current project, resolving its
     /// bundled media. The user can then replace media via normal import.
@@ -1422,9 +1402,6 @@ final class EditorViewModel {
         }
     }
 
-    func cancelExport() {
-        exportEngine.cancelExport()
-    }
 
     func importMedia(_ urls: [URL]) async {
         guard !urls.isEmpty else {
@@ -2379,33 +2356,6 @@ final class EditorViewModel {
         await apply(SetCanvasBackgroundCommand(background: background))
     }
 
-    func updateExportSettings(
-        resolution: ExportResolution? = nil,
-        frameRate: ExportFrameRate? = nil,
-        codec: ExportCodec? = nil,
-        audioCodec: MovieCutCore.AudioCodec? = nil,
-        containerFormat: ExportContainerFormat? = nil,
-        quality: ExportQuality? = nil,
-        videoBitrateMbps: Int? = nil
-    ) async {
-        var settings = currentProject.exportSettings
-        settings.resolution = resolution ?? settings.resolution
-        settings.frameRate = frameRate ?? settings.frameRate
-        settings.codec = codec ?? settings.codec
-        settings.audioCodec = audioCodec ?? settings.audioCodec
-        settings.containerFormat = containerFormat ?? settings.containerFormat
-        if let quality {
-            settings.quality = quality
-            if quality != .custom {
-                settings.videoBitrateMbps = nil
-            }
-        }
-        if let videoBitrateMbps {
-            settings.videoBitrateMbps = min(max(videoBitrateMbps, 1), 200)
-        }
-
-        await apply(SetProjectExportSettingsCommand(exportSettings: settings))
-    }
 
     /// Updates the project's playback (preview) settings. Toggling proxy
     /// playback requires reloading the preview composition so the proxy (or
@@ -2441,14 +2391,6 @@ final class EditorViewModel {
         guard lastErrorMessage == nil else { return }
 
         reportQuickToolSuccess("Applied \(name) export preset.")
-    }
-
-    func applyPlatformExportPreset(_ preset: PlatformExportPreset) async {
-        await applyExportPreset(
-            named: preset.name,
-            canvas: preset.canvas,
-            exportSettings: preset.exportSettings
-        )
     }
 
 

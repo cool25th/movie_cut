@@ -163,7 +163,10 @@ struct ProjectPackageStaticContractTests {
 
     @Test("view model exports and imports packages")
     func viewModelWires() throws {
+        // exportProjectPackage moved to the export boundary file;
+        // importProjectPackage stayed in the main file.
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+            + source("App/MovieCutMac/EditorViewModel+Export.swift")
         #expect(viewModel.contains("func exportProjectPackage"))
         #expect(viewModel.contains("func importProjectPackage"))
         #expect(viewModel.contains("ProjectPackage.export"))

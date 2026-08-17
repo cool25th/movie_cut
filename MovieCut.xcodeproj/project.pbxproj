@@ -237,6 +237,7 @@
 		D850E613398D175D96428F8F /* BlendModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC700DBA777766FCA0CA5589 /* BlendModeTests.swift */; };
 		DA7E1097327F241C8A124004 /* AppLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F79816EE575F4C3E699B82 /* AppLogTests.swift */; };
 		DB3C817D098CD385F17946D9 /* InspectorBasicSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B307B45D995C0B79FC72AFA /* InspectorBasicSection.swift */; };
+		DBDC259B314953A9DECDE38E /* EditorViewModel+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464BCF6516C7E61CAC5AE018 /* EditorViewModel+Audio.swift */; };
 		DBF22AEB05458958C0EB1AEB /* EditorViewModel+Transport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0CD2AAEF17FCF022A7BED3D /* EditorViewModel+Transport.swift */; };
 		DCE620A4B2D34F59A1DA8BA9 /* iOSContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B50D9EEAF04DF595EC954F8 /* iOSContentView.swift */; };
 		DD3BCB1840CF858528DE00D0 /* MotionTrackingProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C97C9E2A6CCF7EEEC4D3FA /* MotionTrackingProviderTests.swift */; };
@@ -372,6 +373,7 @@
 		4230BF3E0B1059DE69D11670 /* InspectorVocalSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorVocalSection.swift; sourceTree = "<group>"; };
 		4258C2155DCC57FF06BF0687 /* InspectorAnalysisSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorAnalysisSection.swift; sourceTree = "<group>"; };
 		4528A5B6B37026AD16E3F331 /* EditorViewModel+CanvasGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+CanvasGeometry.swift"; sourceTree = "<group>"; };
+		464BCF6516C7E61CAC5AE018 /* EditorViewModel+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+Audio.swift"; sourceTree = "<group>"; };
 		48C56BBBADBE772D40AD9CF5 /* MovieCutCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MovieCutCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4ABB45D6B556CA3AB8DE0475 /* CoreModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreModuleTests.swift; sourceTree = "<group>"; };
 		4CDA63BF362EF9B45337A7B6 /* RecentProjectsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentProjectsStoreTests.swift; sourceTree = "<group>"; };
@@ -846,6 +848,7 @@
 				2036514ED46A6D01113D4220 /* ContentView.swift */,
 				2E13E81D689C5E73E0D5B0A9 /* EditorViewModel.swift */,
 				BD7234313775A9C045C724CB /* EditorViewModel+AssistantProvider.swift */,
+				464BCF6516C7E61CAC5AE018 /* EditorViewModel+Audio.swift */,
 				4528A5B6B37026AD16E3F331 /* EditorViewModel+CanvasGeometry.swift */,
 				91967F0CD3036FAEBF3629AB /* EditorViewModel+Compound.swift */,
 				FFCE4F47F26BABCF0A21BFCA /* EditorViewModel+Inspector.swift */,
@@ -1101,7 +1104,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_933E9DE4-0DF9-47D6-A398-9BA71C5F0DA0" /* Resources */ = {
+		"TEMP_8B2E6904-0764-4416-800A-75F1F3ACB7A9" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -1488,6 +1491,7 @@
 				68D903FA8AEFDE1C469A687A /* CropCanvasView.swift in Sources */,
 				2AA3028206F779F33E91E8DA /* CustomVideoCompositor.swift in Sources */,
 				F165B4A2B478B72FADF2F8E8 /* EditorViewModel+AssistantProvider.swift in Sources */,
+				DBDC259B314953A9DECDE38E /* EditorViewModel+Audio.swift in Sources */,
 				55051CC3289D6C31FE18B3EF /* EditorViewModel+CanvasGeometry.swift in Sources */,
 				3CFE075F24B519D76EEF819D /* EditorViewModel+Compound.swift in Sources */,
 				61B099D9C732AA273D8AF075 /* EditorViewModel+HomeRouting.swift in Sources */,

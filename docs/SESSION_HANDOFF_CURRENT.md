@@ -60,6 +60,11 @@
 - **verify_gate 5단계화**(5단계 lint — 이후 모든 커밋의 게이트 통과에 lint 포함), ci.yml lint 잡 차단 전환(전체 리포트 비차단 유지).
 - effects 경계 조사: 이펙트 계열(applyEQPreset·toggleBackgroundRemoval·applyStyleTransfer·importExternalLUT)은 전부 private 저장 상태 의존 — 접근 정규화 승인 전 이동 불가(기록).
 
+### 완료 11 — EditorViewModel audio 경계 분해 (세션 18)
+- `EditorViewModel+Audio.swift`(83줄): 4개 메서드 순수 이동(applyDucking·configureDuckingHarness·clearDuckingOnSelectedClip·extractAudioFromSelection). 본체 5,286→5,223줄.
+- 보류: autoDuckOtherAudio·extractAudio(from:)·detectBeats·extractAudioFromSelectedClip·addVoiceoverAudio·buildAudioProcessingOptions — **sourceClipAndAsset이 잔여 경계 전반을 묶는 최대 private 허브**(접근 정규화 승인 시 해금).
+- StaticContract 1건 갱신(AudioDuckingTests 메인+경계 결합). GATE_PASS 5/5. 잔여 경계: export 1개.
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
 2. 모션 트래킹 재검출 시드(사용자 결정 후) 또는 EditorViewModel 인스펙터 경계·lint CI.

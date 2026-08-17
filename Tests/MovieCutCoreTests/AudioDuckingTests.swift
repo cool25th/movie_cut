@@ -218,7 +218,11 @@ struct AudioDuckingStaticContractTests {
 
     @Test("view model orchestrates silence analysis into ducking command")
     func viewModelOrchestratesDucking() throws {
+        // autoDuckOtherAudio stayed in the main file (private
+        // sourceClipAndAsset dependency); clearDuckingOnSelectedClip moved to
+        // the audio boundary file — load both.
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+            + source("App/MovieCutMac/EditorViewModel+Audio.swift")
         #expect(viewModel.contains("func autoDuckOtherAudio"))
         #expect(viewModel.contains("AudioDuckingPlanner.voiceIntervals"))
         #expect(viewModel.contains("AudioDuckingPlanner.duckingRanges"))

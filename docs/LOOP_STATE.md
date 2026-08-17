@@ -1,5 +1,5 @@
-상태: RUN
-현재 증분: 완료 = **배경제거 프리뷰 트리거 결함 폐쇄 + T2-R0 측정 해소**(9ad85ce, 2026-08-17 세션 6 — 검증 프롬프트 문서 절차 준수: 대조군으로 결함 실증[배경제거 단독 n=0 재현] → PlaybackEngine 트리거 1조건 패치 → 패치 후 n=13·T2-R0 첫 실측 p50 9.189/p95 12.404ms[Vision 지배, 예산 내·p95 여유 좁음]. 프로브 웜업 제외·first_ms 보강. 4분면: Mac-프리뷰 ✓·Mac-출력 ✓·iOS-출력 ✓·iOS-프리뷰 N/A). 게이트: 1,163 tests / 파리티 16/16 / verify_gate PASS. 다음 = **EXECUTION_PLAN §3 Inc 6(G-06 그래프 + G-25 설계 문서 초안)** 또는 모션 트래킹 게이트(T2-R1).
-이전 완료: 세션 5(T1/T2/T3 측정 7fc13fd·G-01 Inc3 00c97cf)·세션 4(카라오케 aefbfa5·transport 3c1c2f2)·세션 1-3(색공간 df4440b·경계 d2066ce/6ff0bc6·G-02 Inc5 c142c62).
-마지막 커밋: 9ad85ce
-갱신: 2026-08-17 15:40
+상태: USER_WAITING(G-25 설계 문서 승인 대기)
+현재 증분: 완료 = **G-06 키프레임 값-시간 그래프 + G-25 설계 문서 초안**(aa1ba11, 2026-08-17 세션 7 — KeyframeGraphMath[곡선 평가=렌더러 수학·모드별 폴리라인] + KeyframeGraphView[추가/이동/삭제·제스처당 undo 1-step·리스트와 동일 커맨드] + 그래프 수학 테스트 7종. G-25 문서 docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md — 샘플 타임베이스·글로벌 latency 보상·미지원 노드 거부·AAC 사후 검사·null test 절차). 게이트: 1,170 tests / 파리티 16/16 / verify_gate PASS. **대기 사유: G-25 AudioRenderGraphSpec 설계 문서 승인 필요(Inc 7 착수 전제)** — 사용자는 문서 검토 후 승인 또는 수정 지시. 승인 대기 중 진행 가능 증분: 모션 트래킹 게이트(T2-R1)·G-01 Inc4 카라오케 후속·인스펙터 경계. 캐비앗: ui_regression 전 상태 캡처 실패 = 호스트 접근성(TCC) 권한 회귀(코드 무관) — 사용자 재부팅/시스템 설정>개인정보 보호>접근성에서 터미널 권한 재확인 후 `bash scripts/ui_regression.sh` 재검증 필요(DoD ④[G-06 UI 회귀] 미실시 기록).
+이전 완료: 세션 6(배경제거 트리거 9ad85ce)·세션 5(T1/T2/T3 7fc13fd·G-01 Inc3 00c97cf)·세션 4(카라오케 aefbfa5·transport 3c1c2f2)·세션 1-3(색공간·경계·G-02 Inc5).
+마지막 커밋: aa1ba11
+갱신: 2026-08-17 18:20

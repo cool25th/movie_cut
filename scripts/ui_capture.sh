@@ -143,23 +143,54 @@ capture_one() {
   local app_log="$LOG_DIR/moviecut-ui-${state}.log"
   local wait_seconds="${MOVIECUT_UI_WAIT_SECONDS:-5}"
 
-  osascript -e 'tell application "MovieCutMac" to quit' >/dev/null 2>&1 || true
+  # Preflight (diagnosis doc §7.1/§13-P0): hard-clear stale instances and
+  # verify the GUI console session belongs to the current user — an app
+  # launched into a non-interactive/switched session can come up windowless
+  # and every downstream step would conflate that with a permission failure.
+  pkill -9 -x MovieCutMac >/dev/null 2>&1 || true
   sleep 1
+  local console_user
+  console_user="$(stat -f '%Su' /dev/console 2>/dev/null || true)"
+  if [[ -n "$console_user" && "$console_user" != "$(id -un)" ]]; then
+    echo "PREFLIGHT_FAIL: console user is '${console_user}' but harness runs as '$(id -un)' (switched/locked session) — refusing state='${state}'" >&2
+    return 1
+  fi
+  local preexisting_pids
+  preexisting_pids="$(pgrep -x MovieCutMac 2>/dev/null | tr '\n' ' ')"
 
   echo "Launching MovieCutMac harness state='${state}'..."
-  set +m
-  (
-    cd "$REPO_DIR"
-    export MOVIECUT_UITEST=1
-    export MOVIECUT_UITEST_IMPORT="$import_fixture"
-    # Apply the state's extra KEY=VAL vars.
-    if [[ -n "$extra" ]]; then
-      for kv in $extra; do export "$kv"; done
-    fi
-    "$app_bin"
-  ) >"$app_log" 2>&1 &
-  local app_pid=$!
-  disown "$app_pid" 2>/dev/null || true
+  # Launch through Launch Services (`open`), not a bare executable: the
+  # parity/E2E harnesses that launch this way never showed the windowless
+  # failure the direct-exec path did intermittently (diagnosis doc §12 —
+  # strongest single clue). `open` hands the app a proper GUI bootstrap
+  # context; env vars ride the documented --env flags.
+  local -a open_env=(--env "MOVIECUT_UITEST=1" --env "MOVIECUT_UITEST_IMPORT=$import_fixture")
+  if [[ -n "$extra" ]]; then
+    local kv
+    for kv in $extra; do open_env+=(--env "$kv"); done
+  fi
+  open -n "${open_env[@]}" "$APP_PATH" >/dev/null 2>&1 &
+  local open_pid=$!
+  disown "$open_pid" 2>/dev/null || true
+
+  # Resolve the NEW app PID (not name-based: multiple/stale instances must
+  # never be confused for ours — diagnosis doc §7.2).
+  local app_pid=""
+  for _ in $(seq 1 30); do
+    local candidate found=0
+    for candidate in $(pgrep -x MovieCutMac 2>/dev/null); do
+      if [[ " $preexisting_pids " != *" $candidate "* ]]; then
+        app_pid="$candidate"; found=1; break
+      fi
+    done
+    [[ "$found" == 1 ]] && break
+    sleep 0.5
+  done
+  if [[ -z "$app_pid" ]]; then
+    echo "LAUNCH_FAIL: no new MovieCutMac process appeared within 15s for state='${state}'" >&2
+    echo "App log: $app_log" >&2
+    return 1
+  fi
 
   cleanup() {
     if kill -0 "$app_pid" >/dev/null 2>&1; then
@@ -169,23 +200,45 @@ capture_one() {
     fi
   }
 
-  sleep "$wait_seconds"
-
-  local bounds; bounds="$(osascript <<'OSA' 2>/dev/null || true
-tell application "System Events"
-  if not (exists process "MovieCutMac") then return ""
-  tell process "MovieCutMac"
-    if (count of windows) is 0 then return ""
-    set frontmost to true
-    set p to position of window 1
-    set s to size of window 1
-    return ((item 1 of p) as string) & "," & ((item 2 of p) as string) & "," & ((item 1 of s) as string) & "," & ((item 2 of s) as string)
+  # Bounded polling for the window (replaces the fixed sleep): distinguishes
+  # the failure classes the old script collapsed into "window not found" —
+  # process missing / window count 0 / query error — and records the
+  # osascript stderr verbatim for later diagnosis (doc §10).
+  local bounds="" osa_status="WINDOW_NOT_FOUND" osa_err=""
+  for _ in $(seq 1 40); do
+    local osa_out
+    osa_out="$(osascript - "$app_pid" 2>/tmp/moviecut-ui-osa.err <<'OSA'
+on run (argv)
+  set targetPID to (item 1 of argv) as integer
+  tell application "System Events"
+    set procList to (every process whose unix id is targetPID)
+    if (count of procList) is 0 then return "PROCESS_MISSING"
+    tell item 1 of procList
+      if (count of windows) is 0 then return "WINDOW_COUNT_0"
+      set frontmost to true
+      delay 0.2
+      set p to position of window 1
+      set s to size of window 1
+      return ((item 1 of p) as string) & "," & ((item 2 of p) as string) & "," & ((item 1 of s) as string) & "," & ((item 2 of s) as string)
+    end tell
   end tell
-end tell
+end run
 OSA
-)"
+)" || true
+    if [[ "$osa_out" =~ ^[0-9]+,[0-9]+,[0-9]+,[0-9]+$ ]]; then
+      bounds="$osa_out"; osa_status="WINDOW_FOUND"; break
+    fi
+    if [[ -n "$osa_out" ]]; then osa_status="$osa_out"; fi
+    osa_err="$(cat /tmp/moviecut-ui-osa.err 2>/dev/null)"
+    # Process gone or query error will not heal by waiting.
+    if [[ "$osa_status" == "PROCESS_MISSING" || -n "$osa_err" ]]; then break; fi
+    sleep 0.5
+  done
+  # Persist the structured diagnosis next to the state log.
+  printf 'status=%s pid=%s osa_err=%s\n' "$osa_status" "$app_pid" "$osa_err" \
+    >"$LOG_DIR/moviecut-ui-${state}-window.txt"
   if [[ -z "$bounds" ]]; then
-    echo "MovieCutMac window not found for state='${state}'. Accessibility permission may be required for terminal/osascript." >&2
+    echo "WINDOW_NOT_FOUND: state='${state}' status='${osa_status}' pid=${app_pid} (osascript stderr: ${osa_err:-none})" >&2
     echo "App log: $app_log" >&2
     cleanup
     return 1

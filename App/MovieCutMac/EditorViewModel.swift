@@ -102,6 +102,12 @@ final class EditorViewModel {
     var sfxURLResolver: [String: URL]
     var generatedSubtitleSegments: [TranscriptionSegment] = []
     var pendingSubtitleClips: [Clip] = []
+    /// Karaoke highlight for generated subtitle clips (G-01 Inc 2): when on,
+    /// applied text clips carry `karaokeEnabled` plus the highlight color, and
+    /// the shared TextOverlayPixelProcessor progressively recolors words as
+    /// playback crosses each word's start time.
+    var isKaraokeSubtitlesEnabled = false
+    var karaokeHighlightColorHex = "#FFD60A"
     /// Timeline clip the generated/imported subtitles are aligned to (F-13).
     private var subtitleAlignmentClipId: UUID?
     var playheadTime: TimeInterval = 0
@@ -3748,7 +3754,7 @@ final class EditorViewModel {
     }
 
     func applyGeneratedSubtitles() async {
-        let clips = pendingSubtitleClips
+        let clips = applyingKaraokeSettings(to: pendingSubtitleClips)
         guard !clips.isEmpty else { return }
 
         do {
@@ -3764,6 +3770,22 @@ final class EditorViewModel {
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Stamps the karaoke flag and highlight color onto generated subtitle
+    /// clips when the AutoSubtitles karaoke toggle is on. Applied once, at
+    /// "Apply to Timeline" — the AddClipCommand already carries the karaoke
+    /// content, so undoing the apply reverts the whole setting.
+    private func applyingKaraokeSettings(to clips: [Clip]) -> [Clip] {
+        guard isKaraokeSubtitlesEnabled else { return clips }
+        return clips.map { clip in
+            guard var textContent = clip.textContent else { return clip }
+            textContent.karaokeEnabled = true
+            textContent.highlightFontColor = karaokeHighlightColorHex
+            var updated = clip
+            updated.textContent = textContent
+            return updated
         }
     }
 
@@ -4914,15 +4936,44 @@ final class EditorViewModel {
                 return nil
             }
 
+            var textContent = TextClipContent(
+                text: segment.text,
+                fontFamily: "SFPro-Medium",
+                fontSize: 18
+            )
+            // Word timings must be relative to the generated clip's timeline
+            // start — the karaoke renderer's local time — so each word maps
+            // through the same speed-aware mapping as its segment. Without
+            // this the aligned path dropped words and karaoke silently fell
+            // back to the uniform render (G-01 Inc 2).
+            if let words = segment.words, !words.isEmpty {
+                let relativeWords = words.compactMap { word -> WordTiming? in
+                    let wordRange = TimeRange(
+                        start: word.startTime,
+                        duration: max(0, word.endTime - word.startTime)
+                    )
+                    guard let wordMapping = timelineMapping(for: wordRange, in: clip) else {
+                        return nil
+                    }
+                    let localStart = wordMapping.timelineRange.start - mapping.timelineRange.start
+                    guard localStart.isFinite, localStart >= 0 else { return nil }
+                    return WordTiming(
+                        text: word.text,
+                        startTime: localStart,
+                        endTime: localStart + wordMapping.timelineRange.duration,
+                        confidence: word.confidence
+                    )
+                }
+                if relativeWords.count == TextOverlayPixelProcessor.karaokeWordRanges(in: segment.text).count {
+                    textContent.wordTimings = relativeWords
+                }
+            }
+
             return Clip(
                 kind: .text,
                 sourceRange: mapping.sourceRange,
                 timelineRange: mapping.timelineRange,
-                textContent: TextClipContent(
-                    text: segment.text,
-                    fontFamily: "SFPro-Medium",
-                    fontSize: 18
-                )
+                textContent: textContent
             )
         }
     }

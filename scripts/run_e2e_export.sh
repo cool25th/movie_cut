@@ -1128,6 +1128,61 @@ PY
 rm -rf "$(dirname "$G02_BASE")" "$(dirname "$G02_GRADE")"
 echo "PASS: G-02 HSL/curve grade reflected in export ($G02_METRICS)"
 
+# G-01 Inc 2: karaoke active-word highlighting must be reflected in the real
+# export. Two exports of the same text overlay (karaoke OFF baseline, karaoke
+# ON with deterministic word timings) driven through the PARITY harness flow —
+# that is where the TEXT_AT/KARAOKE gates live. The OFF export's text is
+# static, so frames 0.85s apart are pixel-identical (noise floor); the ON
+# export's glyphs progressively turn yellow (base white #FFFFFF -> highlight
+# #FFD60A), so the same two frames differ on a measurable glyph-area pixel
+# count. Text clip starts at 0.5s; word i starts 0.1+0.4i seconds into the
+# clip, so t=0.6 has one word highlighted and t=1.45 has all three.
+K01_OFF="$(mktemp -d)/k01_karaoke_off.mp4"; K01_ON="$(mktemp -d)/k01_karaoke_on.mp4"
+K01_ENV=(MOVIECUT_UITEST=1 MOVIECUT_UITEST_PARITY=1 MOVIECUT_UITEST_PARITY_TIMES=0.6
+  MOVIECUT_UITEST_IMPORT="$FIXTURE" MOVIECUT_UITEST_TEXT_AT=0.5
+  MOVIECUT_UITEST_PREVIEW_DUMP="$(dirname "$K01_OFF")/preview" MOVIECUT_UITEST_QUIT=1)
+env "${K01_ENV[@]}" MOVIECUT_UITEST_EXPORT="$K01_OFF" "$APP_BIN" >/dev/null 2>&1 &
+K1P=$!; for _ in $(seq 1 120); do [ -s "$K01_OFF" ] && break; sleep 0.5; done; wait "$K1P" 2>/dev/null || true
+env "${K01_ENV[@]}" MOVIECUT_UITEST_EXPORT="$K01_ON" MOVIECUT_UITEST_KARAOKE=1 "$APP_BIN" >/dev/null 2>&1 &
+K1P=$!; for _ in $(seq 1 120); do [ -s "$K01_ON" ] && break; sleep 0.5; done; wait "$K1P" 2>/dev/null || true
+[ -s "$K01_OFF" ] || { echo "FAIL: G-01 karaoke baseline export missing" >&2; exit 1; }
+[ -s "$K01_ON" ] || { echo "FAIL: G-01 karaoke export missing" >&2; exit 1; }
+K01_METRICS="$(python3 - "$K01_OFF" "$K01_ON" <<'PY'
+import subprocess
+import sys
+
+off_path, on_path = sys.argv[1:3]
+
+def frame(path, t):
+    return subprocess.check_output([
+        "ffmpeg", "-v", "error", "-ss", str(t), "-i", path,
+        "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+    ])
+
+def changed_pixels(a, b, threshold=40):
+    if len(a) != len(b):
+        raise SystemExit(f"frame size mismatch {len(a)} vs {len(b)}")
+    return sum(1 for i in range(0, len(a), 3)
+               if abs(a[i] - b[i]) > threshold
+               or abs(a[i + 1] - b[i + 1]) > threshold
+               or abs(a[i + 2] - b[i + 2]) > threshold)
+
+off_early, off_late = frame(off_path, 0.6), frame(off_path, 1.45)
+on_early, on_late = frame(on_path, 0.6), frame(on_path, 1.45)
+off_changed = changed_pixels(off_early, off_late)
+on_changed = changed_pixels(on_early, on_late)
+print(f"off_changed={off_changed} on_changed={on_changed}")
+# Karaoke ON must recolor a real glyph area between the two phases (two more
+# words highlighted: "text overlay"); the OFF baseline text is static. The
+# floor tolerates codec noise; the cap rules out a full-frame change (which
+# would mean something other than glyph recoloring moved).
+if not (on_changed > 150 and on_changed - off_changed > 100 and on_changed < len(on_early) // 30):
+    raise SystemExit(2)
+PY
+)" || { echo "FAIL: G-01 karaoke highlight not reflected in export (${K01_METRICS:-no metrics})" >&2; rm -rf "$(dirname "$K01_OFF")" "$(dirname "$K01_ON")"; exit 1; }
+rm -rf "$(dirname "$K01_OFF")" "$(dirname "$K01_ON")"
+echo "PASS: G-01 karaoke active-word highlight reflected in export ($K01_METRICS)"
+
 # Color scope must produce real histogram data from the graded thumbnail.
 SC_RESULT="$(mktemp -d)/sc.txt"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_SCOPE=1 \

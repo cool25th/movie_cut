@@ -61,6 +61,35 @@ struct AutoSubtitlesView: View {
                 ProgressView(value: viewModel.transcriptionService.progress)
             }
 
+            // G-01 Inc 2: karaoke highlight toggle — when on, "Apply to
+            // Timeline" stamps generated subtitle clips with the flag and
+            // highlight color; the shared text renderer progressively recolors
+            // each word as playback crosses its start time (preview = export).
+            HStack(spacing: 6) {
+                Toggle(isOn: Binding(
+                    get: { viewModel.isKaraokeSubtitlesEnabled },
+                    set: { viewModel.isKaraokeSubtitlesEnabled = $0 }
+                )) {
+                    Text("Karaoke highlight")
+                }
+                .controlSize(.small)
+                .help(NSLocalizedString("Progressively highlight subtitle words during playback.", comment: ""))
+
+                if viewModel.isKaraokeSubtitlesEnabled {
+                    ColorPicker(
+                        "",
+                        selection: Binding(
+                            get: { Self.color(fromHex: viewModel.karaokeHighlightColorHex) },
+                            set: { viewModel.karaokeHighlightColorHex = Self.hex(from: $0) }
+                        ),
+                        supportsOpacity: false
+                    )
+                    .controlSize(.mini)
+                    .labelsHidden()
+                    .accessibilityLabel(NSLocalizedString("Karaoke highlight color", comment: ""))
+                }
+            }
+
             if !viewModel.generatedSubtitleSegments.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -78,6 +107,23 @@ struct AutoSubtitlesView: View {
                 .disabled(viewModel.pendingSubtitleClips.isEmpty)
             }
         }
+    }
+
+    /// #rrggbb ↔ SwiftUI Color for the karaoke highlight picker. Routes
+    /// through HexColorMath so the parse rule matches the renderers'.
+    private static func color(fromHex hex: String) -> Color {
+        guard let rgb = HexColorMath.rgb(fromHex: hex) else { return .yellow }
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    private static func hex(from color: Color) -> String {
+        let nsColor = NSColor(color).usingColorSpace(.sRGB) ?? .yellow
+        return String(
+            format: "#%02X%02X%02X",
+            Int(round(nsColor.redComponent * 255)),
+            Int(round(nsColor.greenComponent * 255)),
+            Int(round(nsColor.blueComponent * 255))
+        )
     }
 
     private func importSRT() {

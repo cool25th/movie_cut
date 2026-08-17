@@ -286,6 +286,17 @@ run_scenario "hsl_curves" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_HSL_CURVES=1" || FAIL=1
 
+echo "Scenario 17: karaoke text highlight (G-01 Inc 2)"
+# Text overlay with karaokeEnabled + deterministic word timings (word i starts
+# 0.1+0.4i seconds into the clip, which starts at 0.5s). t=0.6 samples the
+# first-word-highlighted state, t=1.45 the all-words-highlighted state — both
+# through the shared TextOverlayPixelProcessor karaoke path, so preview and
+# export must match at either highlight phase.
+run_scenario "karaoke_text" "0.6,1.45" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_TEXT_AT=0.5" \
+  "MOVIECUT_UITEST_KARAOKE=1" || FAIL=1
+
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"

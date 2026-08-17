@@ -2573,6 +2573,30 @@ extension EditorViewModel {
             await addTextClip(text: "Parity text overlay")
         }
 
+        // 4a. Karaoke highlight on the selected text clip (G-01 Inc 2) —
+        // stamps the karaoke flag, a distinct highlight color, and
+        // deterministic word timings (0.4s per word starting 0.1s in) so the
+        // progressive word highlighting is exercised through the real command
+        // path in both preview and export.
+        if environment["MOVIECUT_UITEST_KARAOKE"] == "1",
+           selectedClipId != nil,
+           let textContent = selectedClip?.textContent {
+            var karaokeContent = textContent
+            karaokeContent.karaokeEnabled = true
+            karaokeContent.highlightFontColor = "#FFD60A"
+            let words = karaokeContent.text.split(whereSeparator: \.isWhitespace).map(String.init)
+            karaokeContent.wordTimings = words.enumerated().map { index, word in
+                let start = 0.1 + 0.4 * Double(index)
+                return WordTiming(
+                    text: word,
+                    startTime: start,
+                    endTime: start + 0.3,
+                    confidence: 1
+                )
+            }
+            await updateSelectedTextContent(karaokeContent)
+        }
+
         // 6. BGM at a timeline position — covers "BGM at 7.5s". Requires an
         //    audio file path; if absent, the scenario is skipped (the shell
         //    script supplies a fixture .wav).

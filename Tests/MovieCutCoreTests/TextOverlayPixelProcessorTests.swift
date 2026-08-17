@@ -306,6 +306,40 @@ struct TextOverlayPixelProcessorTests {
         #expect(totalGreen(in: processed) > 200_000)
     }
 
+    @Test("karaoke highlight flips exactly at the word start boundary within one frame")
+    func karaokeHighlightFlipsAtWordStartBoundary() {
+        // G-01 Inc 2 timing accuracy: the active word must be un-highlighted
+        // one frame before its start time and highlighted at it. White
+        // #FFFFFF vs yellow #FFD60A differ most in the blue channel
+        // (255 vs 10), so the blue-channel sum is the probe: high before the
+        // boundary, low at it.
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        let content = TextClipContent(
+            text: "WORD",
+            fontFamily: "Helvetica Neue",
+            fontSize: 42,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40),
+            wordTimings: [
+                WordTiming(text: "WORD", startTime: 1.0, endTime: 1.5, confidence: 1)
+            ],
+            karaokeEnabled: true,
+            highlightFontColor: "#FFD60A"
+        )
+
+        let oneFrame = 1.0 / 30.0
+        let before = TextOverlayPixelProcessor.apply(content, to: image, at: 1.0 - oneFrame)
+        let atStart = TextOverlayPixelProcessor.apply(content, to: image, at: 1.0)
+
+        let beforeBlue = totalBlue(in: before)
+        let startBlue = totalBlue(in: atStart)
+        #expect(beforeBlue > startBlue + 50,
+                "highlight must flip within one frame of the word start (before=\(beforeBlue), at=\(startBlue))")
+    }
+
     private func coreImageRenderingAvailable() -> Bool {
         GoldenPixel.assertRendererFunctional()
         return true
@@ -381,6 +415,24 @@ struct TextOverlayPixelProcessorTests {
         }
 
         return stride(from: 1, to: bytes.count, by: 4).reduce(0) { total, offset in
+            total + Int(bytes[offset])
+        }
+    }
+
+    private func totalBlue(in image: CIImage) -> Int {
+        var bytes = [UInt8](repeating: 0, count: Int(imageBounds.width * imageBounds.height) * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            GoldenPixel.context.render(
+                image.cropped(to: imageBounds),
+                toBitmap: buffer.baseAddress!,
+                rowBytes: Int(imageBounds.width) * 4,
+                bounds: imageBounds,
+                format: .RGBA8,
+                colorSpace: colorSpace
+            )
+        }
+
+        return stride(from: 2, to: bytes.count, by: 4).reduce(0) { total, offset in
             total + Int(bytes[offset])
         }
     }

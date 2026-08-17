@@ -207,6 +207,7 @@ extension EditorViewModel {
         var timelineFilmstripSuffix = ""
         var filmstripPerformanceSuffix = ""
         var motionTrackingSuffix = ""
+        var motionTrackingReopenSuffix = ""
         let filmstripPerformanceScenario = env["MOVIECUT_UITEST_FILMSTRIP_PERF"]
 
         if filmstripPerformanceScenario != nil {
@@ -330,11 +331,25 @@ extension EditorViewModel {
             do {
                 motionTrackingSuffix = try await runMotionTrackingUITestScenario(
                     clipId: clipId,
-                    dumpPath: env["MOVIECUT_UITEST_MOTION_TRACKING_DUMP"]
+                    dumpPath: env["MOVIECUT_UITEST_MOTION_TRACKING_DUMP"],
+                    savePath: env["MOVIECUT_UITEST_MOTION_TRACKING_SAVE"]
                 )
             } catch {
                 lastErrorMessage = "motion tracking harness failed: \(error.localizedDescription)"
-                motionTrackingSuffix = " motion_tracking=error samples=0 keyframes=0 roundtrip=0"
+                motionTrackingSuffix = " motion_tracking=error samples=0 keyframes=0 roundtrip=0 saved=0"
+            }
+        }
+
+        // Second process phase of the motion-tracking gate: the project is
+        // loaded through the real launch path (MOVIECUT_BOOTSTRAP_PROJECT →
+        // openProject) and this gate verifies the tracked position keyframes
+        // survived the save → reopen boundary.
+        if env["MOVIECUT_UITEST_MOTION_TRACKING_REOPEN"] == "1" {
+            do {
+                motionTrackingReopenSuffix = try await runMotionTrackingReopenUITestScenario()
+            } catch {
+                lastErrorMessage = "motion tracking reopen harness failed: \(error.localizedDescription)"
+                motionTrackingReopenSuffix = " motion_tracking_reopen=error keyframes=0 posX=0 posY=0"
             }
         }
 
@@ -662,7 +677,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -700,7 +715,7 @@ extension EditorViewModel {
         var elapsedSeconds: Double
     }
 
-    private func runMotionTrackingUITestScenario(clipId: UUID, dumpPath: String?) async throws -> String {
+    private func runMotionTrackingUITestScenario(clipId: UUID, dumpPath: String?, savePath: String?) async throws -> String {
         func gateError(_ code: Int, _ message: String) -> NSError {
             NSError(
                 domain: "MovieCutUITest",
@@ -809,14 +824,62 @@ extension EditorViewModel {
             try writeUITestDump(dump, to: URL(filePath: dumpPath))
         }
 
+        // Optional manual-save phase: persists the tracked project through the
+        // REAL manual save path (the same call the Save panel makes), so a
+        // second process can reopen it via MOVIECUT_BOOTSTRAP_PROJECT.
+        var savedSuffix = "saved=0"
+        if let savePath, !savePath.isEmpty {
+            let saveURL = URL(filePath: savePath)
+            await saveProject(to: saveURL)
+            guard !isDirty, FileManager.default.fileExists(atPath: savePath) else {
+                throw gateError(28, "manual save to harness path failed: \(savePath)")
+            }
+            savedSuffix = "saved=1"
+        }
+
         return String(
-            format: " motion_tracking=ok samples=%d keyframes=%d roundtrip=%d elapsed=%.2f midx_delta=%.3f",
+            format: " motion_tracking=ok samples=%d keyframes=%d roundtrip=%d %@ elapsed=%.2f midx_delta=%.3f",
             sampleCount,
             generatedCount,
             roundTripCount,
+            savedSuffix,
             elapsed,
             midXDelta
         )
+    }
+
+    /// Reopen phase of the motion-tracking gate: with the project loaded via
+    /// the real launch path (MOVIECUT_BOOTSTRAP_PROJECT → openProject), the
+    /// first video clip must still carry the tracked positionX/Y keyframes.
+    /// Polls briefly for the timeline because the bootstrap load and this
+    /// harness task race at launch.
+    private func runMotionTrackingReopenUITestScenario() async throws -> String {
+        func gateError(_ code: Int, _ message: String) -> NSError {
+            NSError(
+                domain: "MovieCutUITest",
+                code: code,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
+        let deadline = Date().addingTimeInterval(10)
+        var videoClip: Clip?
+        while true {
+            videoClip = currentProject.timeline.tracks
+                .flatMap(\.clips)
+                .first { $0.kind == .video }
+            if videoClip != nil || Date() >= deadline { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard let clip = videoClip else {
+            throw gateError(29, "no video clip present within 10s of launch (bootstrap load failed?)")
+        }
+        let posX = clip.keyframes.filter { $0.property == .positionX }.count
+        let posY = clip.keyframes.filter { $0.property == .positionY }.count
+        guard posX > 0, posY > 0, posX == posY else {
+            throw gateError(30, "tracked keyframes lost across reopen: posX=\(posX) posY=\(posY)")
+        }
+        return " motion_tracking_reopen=ok keyframes=\(posX + posY) posX=\(posX) posY=\(posY)"
     }
 
     /// R5 / benchmark B-I7 hook. Generates a proxy for the first video asset in

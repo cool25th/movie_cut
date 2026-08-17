@@ -19,9 +19,14 @@
 - `scripts/run_motion_tracking_gate.sh`: 픽스처 SHA-256 검증(b7a9cb2e…)·sandbox OFF 자체 빌드·`open -n -W`·180s 와치독·단언. **2회 연속 PASS + 동일 행동 데이터(samples=61 keyframes=122 roundtrip=122 midx_delta=0.478)** — 결정성 실증.
 - 설계: 검증 문서 §4.4 C1+C2 하이브리드(기존 하니스 패턴). C3 provider 계층은 기존 IoU 테스트(MotionTrackingProviderTests)가 담당.
 
+### 완료 4 — 모션 트래킹 신규 프로세스 재오픈 검증 (세션 11)
+- 하니스: `MOVIECUT_UITEST_MOTION_TRACKING_SAVE`(saveProject(to:) 실제 수동 저장 경로)·`MOVIECUT_UITEST_MOTION_TRACKING_REOPEN=1`(BOOTSTRAP_PROJECT→openProject 실제 재오픈, 10s 타임라인 폴링으로 런치 경합 흡수, 첫 비디오 클립 posX/Y 유지 검증).
+- 스크립트 2단계화(run_harness 공용 헬퍼): 1단계 추적·적용·라운드트립·저장 → 2단계 재오픈·키프레임 수 일치 단언.
+- **실행: 1단계 keyframes=122·saved=1 → 2단계 keyframes=122(posX=61/posY=61) 전량 보존 PASS** — 프로세스 경계 결정성 실증, §4.3 저장·재오픈 요건 충족.
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
-2. 모션 트래킹 후속: 신규 프로세스 재오픈(BOOTSTRAP_PROJECT) → 프리뷰↔출력 파리티(T2-R1) → T2-M 측정.
+2. 모션 트래킹 후속: 프리뷰↔출력 파리티(T2-R1) → T2-M 측정.
 3. EditorViewModel 인스펙터 경계·lint CI.
 
 ### 사용자 결정 대기 사항

@@ -542,18 +542,6 @@ final class EditorViewModel {
         }
     }
 
-    func thumbnailData(for clip: Clip) -> Data? {
-        guard
-            clip.kind == .video || clip.kind == .image,
-            let assetId = clip.assetId,
-            let asset = currentProject.mediaLibrary.assets[assetId],
-            asset.kind == .video || asset.kind == .image
-        else {
-            return nil
-        }
-
-        return asset.thumbnailData
-    }
 
     var canGenerateSubtitles: Bool {
         if selectedClipId != nil {
@@ -823,16 +811,6 @@ final class EditorViewModel {
         }
     }
 
-    /// Recomputes ``missingMediaAssets`` from a project snapshot. Public so the
-    /// re-link regression test can drive the same detection the launch path
-    /// uses, without a full project-load round-trip.
-    func evaluateMissingMedia(in project: Project) {
-        let unreachable = project.mediaLibrary.assets.values.filter { asset in
-            SecurityScopedAccess.needsRelocation(asset)
-                || !FileManager.default.fileExists(atPath: asset.originalURL.path)
-        }
-        missingMediaAssets = unreachable.sorted { $0.id.uuidString < $1.id.uuidString }
-    }
 
     /// Assets in the current project whose source files can't be found. Drives
     /// the re-link UI; populated by `reportMediaNeedingRelocation`.
@@ -883,29 +861,6 @@ final class EditorViewModel {
     /// pass (remaining files stay missing). Each successful pick preserves the
     /// asset UUID via ``relinkMedia(_:to:)``.
     @MainActor
-    func presentRelinkMissingMedia() async {
-        // Snapshot the list: relinkMedia re-evaluates missingMediaAssets after
-        // each success, so iterate over a stable copy.
-        let toRelink = missingMediaAssets
-        guard !toRelink.isEmpty else { return }
-
-        for asset in toRelink {
-            let panel = NSOpenPanel()
-            panel.title = "Locate “\(asset.originalURL.lastPathComponent)”"
-            panel.message = "MovieCut can’t find this media file. Choose its new location."
-            panel.canChooseDirectories = false
-            panel.allowsMultipleSelection = false
-            panel.allowedContentTypes = [.movie, .video, .audio, .image]
-            panel.nameFieldStringValue = asset.originalURL.lastPathComponent
-            // Cancel ends the whole pass; the user opted out of re-linking.
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            let linked = await relinkMedia(asset, to: url)
-            if !linked {
-                // relinkMedia already set lastErrorMessage with the cause.
-                return
-            }
-        }
-    }
 
     func saveProject(to url: URL) async {
         do {
@@ -1490,10 +1445,6 @@ final class EditorViewModel {
         }
     }
 
-    func addClipToTimeline() async {
-        guard let selectedAsset else { return }
-        await addClipToTimeline(selectedAsset)
-    }
 
     func addClipToTimeline(_ asset: MediaAsset) async {
         await addMediaAssetToTimeline(asset, preferredTrackId: nil, startTime: currentProject.timeline.duration)
@@ -1587,98 +1538,11 @@ final class EditorViewModel {
         await addImportedAssetsToTimeline([assetId], preferredTrackId: preferredTrackId, startTime: startTime)
     }
 
-    func generateProxyForSelectedAsset() async {
-        guard let selectedAssetId else {
-            lastErrorMessage = "Select a video asset to generate a proxy."
-            lastStatusMessage = nil
-            return
-        }
-
-        await generateProxy(for: selectedAssetId)
-    }
-
-    func generateProxy(for assetId: UUID) async {
-        let snapshot = await session.snapshot()
-        guard var asset = snapshot.mediaLibrary.assets[assetId] else {
-            lastErrorMessage = "Selected asset is no longer available."
-            lastStatusMessage = nil
-            return
-        }
-
-        guard asset.kind == .video else {
-            lastErrorMessage = "Proxy generation is only available for video assets."
-            lastStatusMessage = nil
-            return
-        }
-
-        let directory = Self.proxyDirectory(for: snapshot.id)
-        let resolution = snapshot.playbackSettings.proxyResolution
-        guard let plan = ProxyGenerator.makeProxyPlan(
-            for: asset,
-            in: directory,
-            proxyResolution: resolution
-        ) else {
-            lastErrorMessage = "Could not create a proxy generation plan."
-            lastStatusMessage = nil
-            return
-        }
-
-        lastErrorMessage = nil
-        lastStatusMessage = "Generating \(resolution.shortLabel) proxy for \(asset.originalURL.lastPathComponent)..."
-
-        do {
-            // The encode pass is the expensive part — time it under a signpost
-            // so Instruments can attribute proxy-generation cost separately
-            // from import.
-            let proxyInfo = try await AppLog.time(.importLog, "proxy.generate") {
-                try await ProxyGenerator.generateProxy(
-                    for: asset,
-                    using: plan,
-                    proxyResolution: resolution
-                )
-            }
-            guard let proxyInfo else {
-                lastErrorMessage = "Proxy generation failed. The source file may not support proxy export."
-                lastStatusMessage = nil
-                return
-            }
-
-            asset.proxy = proxyInfo
-            try await session.dispatch(UpdateMediaAssetCommand(asset: asset))
-            try await refreshFromSession()
-            lastErrorMessage = nil
-            lastStatusMessage = "Proxy ready for \(asset.originalURL.lastPathComponent)."
-        } catch {
-            lastErrorMessage = "Proxy generation failed: \(error.localizedDescription)"
-            lastStatusMessage = nil
-        }
-    }
-
-    func setDropStatus(_ message: String) {
-        lastErrorMessage = nil
-        lastStatusMessage = message
-    }
-
-    func setDropError(_ message: String) {
-        lastStatusMessage = nil
-        lastErrorMessage = message
-    }
-
-    func reportInvalidTimelineFileDrop() {
-        setDropError(Self.DropFeedbackMessage.invalidTimelineFilePayload)
-    }
-
-    func reportInvalidTimelineLibraryAssetDrop() {
-        setDropError(Self.DropFeedbackMessage.invalidTimelineLibraryAssetPayload)
-    }
 
     func reportUnsupportedTimelineDrop() {
         setDropError(Self.DropFeedbackMessage.unsupportedTimelinePayload)
     }
 
-    func reportInvalidMediaLibraryDrop() {
-        setDropError(Self.DropFeedbackMessage.invalidMediaLibraryPayload)
-    }
 
     private func reportMediaLibraryDropSuccess(count: Int) {
         setDropStatus(Self.DropFeedbackMessage.importedMediaFiles(count))
@@ -5387,6 +5251,36 @@ final class EditorViewModel {
             lastStatusMessage = nil
             lastErrorMessage = "Could not import LUT: \(lutErrorDescription(error))"
         }
+    }
+
+    // MARK: - Media methods kept in the main file
+    // evaluateMissingMedia assigns the private(set) missingMediaAssets;
+    // the reportInvalid*Drop trio uses the private DropFeedbackMessage type;
+    // relinkMedia and the importMedia family share private helpers with
+    // non-media features (see EditorViewModel+Media.swift header). Pure-move
+    // boundary rule: no access promotions here.
+
+    /// Recomputes ``missingMediaAssets`` from a project snapshot. Public so the
+    /// re-link regression test can drive the same detection the launch path
+    /// uses, without a full project-load round-trip.
+    func evaluateMissingMedia(in project: Project) {
+        let unreachable = project.mediaLibrary.assets.values.filter { asset in
+            SecurityScopedAccess.needsRelocation(asset)
+                || !FileManager.default.fileExists(atPath: asset.originalURL.path)
+        }
+        missingMediaAssets = unreachable.sorted { $0.id.uuidString < $1.id.uuidString }
+    }
+
+    func reportInvalidTimelineFileDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidTimelineFilePayload)
+    }
+
+    func reportInvalidTimelineLibraryAssetDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidTimelineLibraryAssetPayload)
+    }
+
+    func reportInvalidMediaLibraryDrop() {
+        setDropError(Self.DropFeedbackMessage.invalidMediaLibraryPayload)
     }
 }
 

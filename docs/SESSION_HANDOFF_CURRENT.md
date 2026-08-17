@@ -50,6 +50,11 @@
 - StaticContract 3건 갱신: AudioFade·TextStyle은 +Inspector 직접 로드, Phase33은 메인+경계 결합(UI 마커 금지가 양쪽 파일 커버로 강화됨).
 - 1,173 테스트 통과·verify_gate 4단계. 잔여 경계: media→effects→audio(Inc 9 직전)→export.
 
+### 완료 9 — EditorViewModel media 경계 분해 (세션 16)
+- `EditorViewModel+Media.swift`(139줄): 7개 메서드 순수 이동(thumbnailData·presentRelinkMissingMedia·addClipToTimeline()·proxy 쌍·setDropStatus/Error). 본체 5,392→5,286줄.
+- **보류 기록**: importMedia 계열(공유 private probe/insert 헬퍼 — 카드 교체·슬라이드쇼도 사용), relinkMedia(프로젝트 적재 경로 공유), evaluateMissingMedia(private(set) 대입), reportInvalid*Drop(private 타입). **importMedia 계열 이동은 접근 정규화(별도 승인)가 전제** — 향후 증분 후보.
+- StaticContract 영향 없음. 1,173 테스트 통과·verify_gate 4단계. 잔여 경계: effects→audio→export.
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
 2. 모션 트래킹 재검출 시드(사용자 결정 후) 또는 EditorViewModel 인스펙터 경계·lint CI.

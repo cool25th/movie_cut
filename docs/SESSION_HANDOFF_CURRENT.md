@@ -3,6 +3,36 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 4 (사용자 지시 3건: G-01 Inc2 카라오케 + transport 경계 + T1/T2/T3 구성 확정)
+
+**게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,157 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 시나리오 PASS**(신규 17번 `karaoke_text` 포함). E2E **35 PASS** — 신규 G-01 섹션 포함. ui_regression 3/4(아래 환경 이슈).
+
+### 완료 1 — G-01 Inc2: 카라오케 활성 단어 (커밋 aefbfa5)
+- **감사 정정(§10 사례)**: 활성 단어 렌더(`karaokeAttributedText`)·폴백·골든 3종은 기존 구현(f82a48e~6cdcee6). 실행 계획의 "렌더 미구현" 기술은 낡았다. 잔여는 ①사용자 노출 ②정렬 경로 wordTimings 소실 ③실증이었다.
+- **UI**: AutoSubtitlesView "Karaoke highlight" 토글 + 색 피커(기본 #FFD60A). 적용 시점 스탬프 — AddClipCommand 단일 undo(DoD ④).
+- **수반 수정(사전 존재 결함)**: `subtitleClips(from:alignedTo:)`가 wordTimings를 버림 → 각 워드를 세그먼트와 동일 speed-aware 매핑으로 클립 상대 시각 변환 저장.
+- **실증(DoD)**: 골든 경계 ±1프레임 플립 신규(①), 파리티 `karaoke_text`(②) PASS, E2E G-01 섹션(②) **off_changed=96 vs on_changed=5127** 실측 PASS, `wordTimings` 없는 기존 렌더 골든 무회귀(③ 기존 3종 유지).
+
+### 완료 2 — transport 경계 순수 이동 (커밋 3c1c2f2)
+- `EditorViewModel+Transport.swift`(109줄): togglePlayPause·JKL 셔틀(ShuttleDirection 타입 포함)·seekByFrames/Seconds·zoomIn/Out·syncTimelinePlayhead. 본체 5,535→**5,489줄**(Inc 2 시작 대비 누적 **−618**). 줌 상수 3종 internal 정규화. F-05 StaticContract 3파일 읽기로 갱신.
+
+### 완료 3 — T1/T2/T3 구성 확정 (docs, PERFORMANCE_SLO.md)
+- 초안 → 확정: 하니스 게이트 조합(`TEXT_AT+MASK+BGM_AT` / `OPTICAL_FLOW+SPEED_RATE=0.5+트래킹+배경제거` / `GRADE+HSL_CURVES+COLOR` 3중 체인) + 기존 결정론 fixture만 사용 원칙 + 잔여(생성기 고정·p50/p95 프로브·실측 기록) 명시. **측정은 미실시** — 프로브 도구가 없어 측정 증분으로 이월(사유 기록).
+
+### 발견·환경 이슈 (제품 회귀 아님 — 입증 완료)
+- **ui_regression `with_mask` 상태 무창 실패**: 앱 프로세스는 생존하나 창 0개. **클린 트리(stash)에서도 재현** → Inc 4 변경과 무관한 호스트 환경 문제(접근성/TCC 의심 — 화면에 QuickTime 녹화 창이 떠 있는 비정상 세션 상태 관찰). 나머지 3 상태는 PASS. 재부팅/접근성 권한 재허용 후 `bash scripts/ui_capture.sh --state with_mask`로 재현 확인 권장. 회귀 게이트에는 영향 없음(골든 비교 전 캡처 단계 문제).
+- **하니스 흐름 이원 주의**: `applyParityScenarioEdits`(PARITY=1 흐름)와 일반 흐름은 게이트 세트가 다름 — 신규 게이트는 양쪽에 대칭 추가하거나(기존 패턴), E2E에서 파리티 흐름을 경유할 것(카라오케 E2E 교훈: 첫 판 FAIL off/on=0 → 파리티 흐름 경유로 수정).
+
+### 다음 세션 인계 (우선순위 순)
+1. **EXECUTION_PLAN §3 Inc 5 — G-01 Inc3 자막 스타일 프리셋**(방향 문서 §3 순서).
+2. **T1/T2/T3 측정 증분**: 구성 확정 완료 — 생성기 고정(재현성 해시) + 프리뷰 p50/p95 프로브 + SLO 실측 기록.
+3. with_mask 환경 이슈 후속(사용자 재부팅/권한 확인 후 재현 보고 요망).
+4. EditorViewModel 차기 경계(inspector).
+5. lint 신규 error 0 CI 반영 + 장형 fixture `run_latency_baseline.sh` 재측.
+
+### 사용자 결정 대기 사항
+- 없음(필수). 참고: with_mask 캡처 실패는 호스트 환경 문제로 판명(위) — 재부팅 또는 시스템 설정 > 개인정보 보호 > 접근성에서 터미널 권한 재확인 후 알려주시면 재검증. Track A(아이콘/App Store Connect) 계속 대기.
+
 ## 2026-08-17 세션 3 (사용자 지시 2증분: Inc 2 완결 + G-02 Inc5 HSL 밴드 UI)
 
 **게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,156 tests / 169 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **15/15 시나리오 PASS**(신규 16번 `hsl_curves` 포함). `ui_regression.sh` PASS(Inc5 골든 의도 갱신 후 검증).

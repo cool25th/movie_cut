@@ -64,6 +64,16 @@ v1 출시 검증을 위한 최소 두 등급. 절대값은 장비에 따라 조�
 | T2 | 광학플로우·AI 중심 | slow-mo(광학플로우) + 트래킹 + 배경제거 동시 구간 | 프리뷰 p95, 메모리 피크 |
 | T3 | 컬러·LUT·HDR 중심 | CDL+HSL 큐브+커브 체인 + LUT 2종 중첩 | 프리뷰 p50/p95, 4K export 배수 |
 
+### 구성 확정 (2026-08-17, 측정 증분 착수 전 확정)
+
+공통 원칙: 미디어는 기존 결정론적 fixture 생성기(`make_fixtures.sh`)만 사용 — 대형 blob 커밋 금지, 재생성 해시 동일이 DoD. 각 타임라인은 하니스 게이트 조합으로 구성해 프리뷰·출력 양 경로에서 동일하게 재현한다.
+
+- **T1 — 멀티레이어·자막**: `bars_320x240_3s` 업스케일 캔버스 1920×1080, 베이스 비디오 1 + 텍스트 오버레이 2(`TEXT_AT` 0.5·1.0, 카라오케 wordTimings 포함 — G-01 Inc2 이후 텍스트 렌더 실경로) + 마스크 1(`MASK=1`) + BGM 1. 하니스 조합: `IMPORT, TEXT_AT, MASK, BGM_AT`. 활성 컴포지션 레이어 5.
+- **T2 — 광학플로우·AI**: `moving_subject_320x240_2s` 기반. 광학플로우 slow-mo 0.5×(`OPTICAL_FLOW=1, SPEED_RATE=0.5`) + 모션 트래킹 활성 구간 + 배경제거(Vision 세그멘테이션) 동시 구간 2초. Vision 요청과 CI warp가 겹치는 유일한 구성.
+- **T3 — 컬러 체인**: `solid_red_320x240_2s`. CDL 3-way(`GRADE=1`) + HSL 밴드·커브(`HSL_CURVES=1`) + 컬러보정(`COLOR=1`) 3중 체인 동시 적용 — 큐브 2종(공유 `ColorGradePixelProcessor` 체인) + `ColorCorrectionPixelProcessor` 순차 합성.
+
+잔여(측정 증분 범위): ① 위 조합을 `make_fixtures.sh --stress-timelines` 또는 하니스 시나리오로 고정(재현성 해시 출력), ② 프리뷰 프레임 렌더 p50/p95 프로브(signpost `playback.buildComposition` 확장 또는 하니스 프레임 덤프 타이밍), ③ 이 표에 실측치 기록, ④ 메모리 피크는 `perf_4k.sh` 패턴 재사용(T2).
+
 ## EffectCostProfile 메타데이터 (2026-08-15 신설, 설계 확정 pending)
 효과 등록 수는 성능을 결정하지 않는다(동시 활성 체인 깊이·중간 표면·픽셀 포맷이 결정). 모든 효과 정의에 다음 메타데이터를 둔다. 스키마 확정은 G-28 브라우저 착수 시:
 `spatial/temporal · expected passes · requires prev/next frames · proxy-compatible · HDR-safe · preview quality tiers · cacheable · estimated memory`

@@ -567,6 +567,16 @@ struct InspectorEffectsSection: View {
     private var animationSection: some View {
         DisclosureGroup("Animation", isExpanded: $isAnimationExpanded) {
             VStack(alignment: .leading, spacing: 10) {
+                KeyframeGraphView(
+                    clip: clip,
+                    playheadTime: viewModel.playheadTime,
+                    selectedKeyframeId: selectedKeyframeId,
+                    onSelect: { selectedKeyframeId = $0 },
+                    onChange: { keyframes in
+                        Task { await viewModel.updateSelectedKeyframes(keyframes) }
+                    }
+                )
+
                 KeyframeEditorView(
                     clip: clip,
                     playheadTime: viewModel.playheadTime,

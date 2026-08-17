@@ -3703,6 +3703,20 @@ final class EditorViewModel {
         }
     }
 
+    /// G-01 Inc 3: applies a built-in subtitle style preset to the selected
+    /// text clip in one command (single undo, immediate preview via the
+    /// shared text renderer). Text, word timings, and the karaoke flag stay
+    /// with the clip — a preset never silently flips karaoke on/off.
+    func applySubtitleStylePreset(_ preset: SubtitleStylePreset) async {
+        guard let selectedClip, var textContent = selectedClip.textContent else {
+            lastErrorMessage = "Select a subtitle clip before applying a style preset."
+            return
+        }
+        let canvasSize = currentProject.canvas.size
+        textContent = preset.applying(to: textContent, canvasSize: canvasSize)
+        await updateSelectedTextContent(textContent)
+    }
+
     func generateSubtitles() async {
         await prepareSubtitles()
         await applyGeneratedSubtitles()

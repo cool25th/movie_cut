@@ -90,6 +90,30 @@ struct AutoSubtitlesView: View {
                 }
             }
 
+            // G-01 Inc 3: built-in subtitle style presets — one click applies
+            // the whole combination (font/border/background/position/active
+            // word color) to the selected subtitle clip through a single
+            // command, so preview updates immediately and undo reverts the
+            // whole style in one step.
+            if viewModel.selectedClip?.textContent != nil {
+                HStack(spacing: 6) {
+                    Text("Style:")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    ForEach(SubtitleStylePresets.builtins) { preset in
+                        Button(preset.name) {
+                            Task { await viewModel.applySubtitleStylePreset(preset) }
+                        }
+                        .controlSize(.mini)
+                        .buttonStyle(.borderless)
+                        .help(String(
+                            format: NSLocalizedString("Apply the %@ subtitle style to the selected clip.", comment: ""),
+                            preset.name
+                        ))
+                    }
+                }
+            }
+
             if !viewModel.generatedSubtitleSegments.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {

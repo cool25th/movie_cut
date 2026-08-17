@@ -3,6 +3,33 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 7 (사용자 지시: Inc 6 — G-06 그래프 + G-25 설계 문서)
+
+**게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,170 tests / 171 suites**(+7) / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**. ui_regression **불가(환경)** — 아래 캐비앗.
+
+### 완료 1 — G-06: 키프레임 값-시간 베지어 그래프 (커밋 aa1ba11)
+- `KeyframeGraphMath`(Core): 곡선 평가는 렌더러와 동일한 `Keyframe.interpolate` 조각 규칙(그린 곡선=실제 애니메이션), 모드별 폴리라인(hold 직각 스텝·eased 아크), y축 자동 피팅, 히트테스트/이동/추가/삭제 변환. 테스트 7종(경계·스텝 형상·정렬 규약·클램프).
+- `KeyframeGraphView`(Mac): 속성 피커+캔버스(그리드·플레이헤드 소스시간 라인·속성색 곡선·다이아몬드). 단일 DragGesture로 탭(빈 곳=추가/마커=선택)과 드래그(로컬 드래프트→종료 시 1회 커밋, 제스처당 undo 1-step) 처리. **커맨드 경로 = 리스트 편집기와 동일** `updateSelectedKeyframes`(DoD ①). 키프레임 렌더 골든 무회귀(기존 스위트 유지, DoD ②). iOS 2단계(DoD ③).
+- **DoD ④(UI 회귀) 미실시** — 아래 환경 이슈.
+
+### 완료 2 — G-25 설계 문서 초안 (같은 커밋): **사용자 승인 요청**
+- `docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md`: 방향 문서 §4.1 명세화 — 노드 그래프 구조·Codable 스키마·**샘플 시간 타임베이스(초 저장 금지)**·**글로벌 latency 보상**·미지원 노드 명시적 거부(조용한 강등 금지)·프리셋 알고리즘 버전·AAC 재디코드 사후 검사·null test 절차(±1 샘플)·Inc 7~9 매핑.
+- **승인 지점**: §3 타임베이스·§4 보상 정책·§5 거부 정책·§8 경고-차단 구분. 승인 시 Inc 7 착수.
+
+### 환경 이슈 (사용자 조치 필요)
+- **ui_regression 전 상태 캡처 실패**("window not found", 앱 프로세스는 생존·무창): 호스트 접근성(TCC) 권한 회귀로 판정(코드 무관 — 세션 4 클린 트리 재현 전례, 세션 5에서 자연 회복했다가 재발). **재부팅 또는 시스템 설정 > 개인정보 보호 > 접근성에서 터미널(ZCode) 권한 재확인 후 `bash scripts/ui_regression.sh` 재검증 요망.** G-06 UI 골든(DoD ④)은 이후 보완 과제로 기록.
+
+### 다음 세션 인계 (우선순위 순 — 승인 대기 중 진행 가능)
+1. **G-25 승인 확정 시 Inc 7(Core 모델)** — 미승인 시 아래부터.
+2. 모션 트래킹 하니스 게이트(검증 문서 §4 — T2-R1).
+3. G-06 UI 회귀 보완(환경 회복 후 골든 고정).
+4. 인스펙터 경계·lint CI.
+
+### 사용자 결정 대기 사항
+- **G-25 설계 문서 승인**(docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md — Inc 7 착수 전제, LOOP_STATE USER_WAITING).
+- ui_regression 접근성 권한 재확인(위).
+- Track A(아이콘/App Store Connect) 계속 대기.
+
 ## 2026-08-17 세션 6 (사용자 지시: 검증 프롬프트 문서 기반 측정 불가 해소)
 
 **게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,163 tests / 170 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**.

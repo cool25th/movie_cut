@@ -1,7 +1,22 @@
-# 세션 핸드오프 — 현재 (2026-08-17)
+# 세션 핸드오프 — 현재 (2026-08-18)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
-> 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+> 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+
+## 2026-08-18 세션 20 (사용자 결정: G-25 설계 문서 승인 → Inc 7 착수)
+
+**게이트**: verify_gate 5단계 — 커밋 시점 기준.
+
+### 완료 — G-25 Inc 1: AudioRenderGraphSpec Core 모델 (이번 세션 커밋)
+- **전제**: 사용자가 docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md 승인(2026-08-18) — LOOP_STATE USER_WAITING→RUN.
+- `Sources/MovieCutCore/Audio/AudioRenderGraphSpec.swift`: 승인 명세 §2·§3·§5의 순수 모델(렌더링 없음). 소스(원본/파생·derivedFrom·algorithmVersion·nativeSampleRate)·클립 스트립(채널매핑·게인/팬 자동화·페이드)·트랙 버스(·mute/solo·덕킹)·마스터(리미터 latency 짝·목표 LUFS)·타임베이스(**자동화 좌표 전부 Int64 샘플 위치**·origin "num/den" 유리수·기본 48k)·렌더 규칙(declaredLatencies)·노드 15종(8 지원+7 자리, isStage1Supported).
+- Codable 원칙: 선택 노드 데이터 encodeIfPresent — 빈 그래프 표준 바이트(ProjectStore와 동일한 [.prettyPrinted, .sortedKeys] 기준; JSONEncoder 기본 키 순서가 인코더 인스턴스마다 비결정적임을 실측 확인·테스트에 반영).
+- 테스트 10종: 전체 왕복·빈 그래프 바이트 안정·60분 샘플좌표 정밀도·유리수 원점 왕복/변형 거부·1단계 지원분류·노드/채널왕복.
+
+### 다음 세션 인계
+1. **Inc 8**: 그래프→AVAudioEngine(프리뷰)·출력 인코더 생성기 양쪽 + Core latency 보상 순수 함수(최대 lookAhead 단일 글로벌 보상) + null test 자동화(±1 샘플 정렬·1 LSB) + 60분 혼합 rate drift 측정(§4·§9).
+2. Inc 9: 미터·mute/solo·팬 UI + AAC 사후 검사 게이트(§7·§8).
+3. 대기 결정: 접근 정규화 승인·모션 트래킹 재검출 시드·Track A.
 
 ## 2026-08-17 세션 9-10 (16:05 자동화 + 사용자 지시: 무창 근본 원인 · app log 아티팩트 · 모션 트래킹 게이트)
 

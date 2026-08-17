@@ -206,6 +206,7 @@ extension EditorViewModel {
         var proxyBadgeSuffix = ""
         var timelineFilmstripSuffix = ""
         var filmstripPerformanceSuffix = ""
+        var motionTrackingSuffix = ""
         let filmstripPerformanceScenario = env["MOVIECUT_UITEST_FILMSTRIP_PERF"]
 
         if filmstripPerformanceScenario != nil {
@@ -317,6 +318,24 @@ extension EditorViewModel {
                 voiceURL: URL(filePath: voicePath),
                 applyDucking: env["MOVIECUT_UITEST_DUCKING_APPLY"] == "1"
             )
+        }
+
+        // Motion-tracking gate (T2-R1 prerequisite). Runs the REAL user path —
+        // trackMotion → MotionTrackingProvider → SetClipPropertyCommand(
+        // .keyframes) — on the imported fixture with a fixed initial rect, so
+        // scripts can prove tracked motion lands on the clip model and survives
+        // a ProjectStore round-trip. IoU-vs-ground-truth coverage lives in
+        // MotionTrackingProviderTests; this gate proves the command path.
+        if env["MOVIECUT_UITEST_MOTION_TRACKING"] == "1", let clipId = selectedClipId {
+            do {
+                motionTrackingSuffix = try await runMotionTrackingUITestScenario(
+                    clipId: clipId,
+                    dumpPath: env["MOVIECUT_UITEST_MOTION_TRACKING_DUMP"]
+                )
+            } catch {
+                lastErrorMessage = "motion tracking harness failed: \(error.localizedDescription)"
+                motionTrackingSuffix = " motion_tracking=error samples=0 keyframes=0 roundtrip=0"
+            }
         }
 
         // Optional freeze-frame step: holds a single frame for 2s mid-clip, so an
@@ -643,7 +662,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -656,6 +675,148 @@ extension EditorViewModel {
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    /// Motion-tracking harness scenario (T2-R1 prerequisite). Arms the real
+    /// tracking path on the imported clip with a FIXED initial rect (the
+    /// analytic ground-truth box of moving_subject_320x240_2s_30fps.mp4:
+    /// white 72x64 box starting at x=32,y=88, moving +80px/s), then asserts
+    /// the generated position keyframes landed on the clip model, reflect the
+    /// tracked motion, and survive a ProjectStore save/load round-trip.
+    /// Emits a JSON behavior dump for golden comparison.
+    private struct MotionTrackingUITestDump: Codable {
+        var initialRect: [Double]
+        var sampleCount: Int
+        var generatedKeyframes: Int
+        var positionXKeyframes: Int
+        var positionYKeyframes: Int
+        var firstResultMidX: Double?
+        var lastResultMidX: Double?
+        var firstPosX: Double?
+        var lastPosX: Double?
+        var firstKeyframeTime: Double?
+        var lastKeyframeTime: Double?
+        var roundTripKeyframeCount: Int
+        var elapsedSeconds: Double
+    }
+
+    private func runMotionTrackingUITestScenario(clipId: UUID, dumpPath: String?) async throws -> String {
+        func gateError(_ code: Int, _ message: String) -> NSError {
+            NSError(
+                domain: "MovieCutUITest",
+                code: code,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
+        let initialRect = CGRect(
+            x: 32.0 / 320.0,
+            y: 88.0 / 240.0,
+            width: 72.0 / 320.0,
+            height: 64.0 / 240.0
+        )
+
+        let startedAt = Date()
+        let generatedCount = try await trackMotion(for: clipId, initialRect: initialRect)
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        let results = motionTrackingResults
+        let sampleCount = results.count
+        // The provider samples at the track's nominal 30fps over the 2s
+        // fixture (~60 frames). Require a meaningful floor instead of exact
+        // counts: Vision output is host-stable, but the gate must not break
+        // on minor sampling differences across OS builds.
+        guard sampleCount >= 25 else {
+            throw gateError(20, "motion tracking produced too few samples: \(sampleCount)")
+        }
+        guard generatedCount == sampleCount * 2 else {
+            throw gateError(21, "keyframe count mismatch: samples=\(sampleCount) keyframes=\(generatedCount)")
+        }
+
+        guard let clip = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == clipId })
+        else {
+            throw gateError(22, "tracked clip missing from timeline")
+        }
+        let posXKeyframes = clip.keyframes.filter { $0.property == .positionX }
+        let posYKeyframes = clip.keyframes.filter { $0.property == .positionY }
+        guard posXKeyframes.count == sampleCount, posYKeyframes.count == sampleCount else {
+            throw gateError(
+                23,
+                "clip keyframes do not match tracking output: posX=\(posXKeyframes.count) posY=\(posYKeyframes.count) samples=\(sampleCount)"
+            )
+        }
+
+        // The fixture's box moves +80px/s across the full 2s (ground truth:
+        // midX 0.2125 → 0.7125 normalized). If the last sample is not far
+        // right of the first, tracking failed to follow the subject even
+        // though it produced samples.
+        guard let firstResult = results.first, let lastResult = results.last else {
+            throw gateError(24, "tracking results unexpectedly empty after count check")
+        }
+        let midXDelta = lastResult.rect.midX - firstResult.rect.midX
+        guard midXDelta > 0.35 else {
+            throw gateError(25, "tracked midX delta too small to be real motion: \(midXDelta)")
+        }
+        // Canvas-space keyframes must express the same motion (≥80px on a
+        // 320px canvas; the ground-truth move is 160px).
+        guard let firstPosX = posXKeyframes.first?.value,
+              let lastPosX = posXKeyframes.last?.value,
+              abs(lastPosX - firstPosX) > 80 else {
+            throw gateError(26, "positionX keyframes do not reflect tracked motion: first=\(posXKeyframes.first?.value ?? 0) last=\(posXKeyframes.last?.value ?? 0)")
+        }
+
+        // Persistence layer check: keyframes must survive ProjectStore
+        // save/load (the serialization path manual save and autosave share).
+        // Reopen in a fresh process (MOVIECUT_BOOTSTRAP_PROJECT) is a
+        // follow-up increment.
+        let store = ProjectStore()
+        let roundTripURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("moviecut-motion-tracking-\(ProcessInfo.processInfo.processIdentifier).moviecut")
+        defer { try? FileManager.default.removeItem(at: roundTripURL) }
+        try await store.save(currentProject, to: roundTripURL)
+        let reloaded = try await store.load(from: roundTripURL)
+        let roundTripCount = reloaded.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == clipId })?
+            .keyframes
+            .filter { $0.property == .positionX || $0.property == .positionY }
+            .count ?? 0
+        guard roundTripCount == generatedCount else {
+            throw gateError(
+                27,
+                "keyframes lost in save/load round-trip: expected=\(generatedCount) reloaded=\(roundTripCount)"
+            )
+        }
+
+        if let dumpPath, !dumpPath.isEmpty {
+            let dump = MotionTrackingUITestDump(
+                initialRect: [initialRect.minX, initialRect.minY, initialRect.width, initialRect.height],
+                sampleCount: sampleCount,
+                generatedKeyframes: generatedCount,
+                positionXKeyframes: posXKeyframes.count,
+                positionYKeyframes: posYKeyframes.count,
+                firstResultMidX: firstResult.rect.midX,
+                lastResultMidX: lastResult.rect.midX,
+                firstPosX: firstPosX,
+                lastPosX: lastPosX,
+                firstKeyframeTime: posXKeyframes.first?.time,
+                lastKeyframeTime: posXKeyframes.last?.time,
+                roundTripKeyframeCount: roundTripCount,
+                elapsedSeconds: elapsed
+            )
+            try writeUITestDump(dump, to: URL(filePath: dumpPath))
+        }
+
+        return String(
+            format: " motion_tracking=ok samples=%d keyframes=%d roundtrip=%d elapsed=%.2f midx_delta=%.3f",
+            sampleCount,
+            generatedCount,
+            roundTripCount,
+            elapsed,
+            midXDelta
+        )
     }
 
     /// R5 / benchmark B-I7 hook. Generates a proxy for the first video asset in

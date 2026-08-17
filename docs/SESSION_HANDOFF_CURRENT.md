@@ -3,6 +3,31 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 9-10 (16:05 자동화 + 사용자 지시: 무창 근본 원인 · app log 아티팩트 · 모션 트래킹 게이트)
+
+**게이트**: 각 증분 verify_gate 4단계 PASS (swift test 1,170 tests / 171 suites).
+
+### 완료 1 — 무창 실패 근본 원인 확정 + SESSION_LOCKED 프리플라이트 (커밋 fa80b78)
+- **원인 = 세션 잠금(진단 문서 §4-D, 이전 TCC 추정 기각)**: 잠긴 세션에선 WindowServer가 신규 앱에 창을 부여하지 않아 프로세스 생존+창 0(WINDOW_COUNT_0). 실증: 전체 화면 캡처=비밀번호 다이얼로그, loginwindow 창 수=1(잠금 중·해제 시 0). `frontmost` 쿼리는 잠금 중 부실값("ZCode") 반환 — 신호로 부적합(폐기).
+- ui_capture.sh 프리플라이트에 SESSION_LOCKED·SCREENSAVER_ACTIVE 즉시 거부 추가. 잠금 상태 라이브 검증 4/4 상태 즉시 거부·앱 미실행. **교훈: ui_regression은 화면 잠금 해제 상태에서만 실행.** 파리티/E2E가 잠겨도 동작한 이유 = 프레임 덤프 방식(창 불필요) — §12 "open 정상" 미지표 해명.
+
+### 완료 2 — app log 실패 아티팩트화 (커밋 94e225a)
+- `open` 전환 이후 0바이트가 된 `App log:` 안내 수정: 실패 시 ps 스냅샷+앱 PID 통합 로그 꼬리(`/usr/bin/log` 절대 경로 — zsh `log` 내장 명령이 이진파일을 가림), LAUNCH_FAIL 경로 preexisting_pids 기록, 성공 시에도 메타 참조 실재화.
+
+### 완료 3 — 모션 트래킹 하니스 게이트 T2-R1 전제 (이번 세션 커밋)
+- `MOVIECUT_UITEST_MOTION_TRACKING=1`(UITestHarness): 실제 trackMotion 경로(provider→SetClipPropertyCommand(.keyframes))·고정 초기 rect(ground truth x=32/320,y=88/240,72×64,+80px/s)·검증(샘플≥25·키프레임=샘플×2·midX 이동>0.35·posX 이동>80px·ProjectStore 저장/적재 라운드트립 전량 보존)·JSON 행동 덤프.
+- `scripts/run_motion_tracking_gate.sh`: 픽스처 SHA-256 검증(b7a9cb2e…)·sandbox OFF 자체 빌드·`open -n -W`·180s 와치독·단언. **2회 연속 PASS + 동일 행동 데이터(samples=61 keyframes=122 roundtrip=122 midx_delta=0.478)** — 결정성 실증.
+- 설계: 검증 문서 §4.4 C1+C2 하이브리드(기존 하니스 패턴). C3 provider 계층은 기존 IoU 테스트(MotionTrackingProviderTests)가 담당.
+
+### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
+1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
+2. 모션 트래킹 후속: 신규 프로세스 재오픈(BOOTSTRAP_PROJECT) → 프리뷰↔출력 파리티(T2-R1) → T2-M 측정.
+3. EditorViewModel 인스펙터 경계·lint CI.
+
+### 사용자 결정 대기 사항
+- **G-25 설계 문서 승인**(docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md — LOOP_STATE USER_WAITING 유지).
+- Track A(아이콘/App Store Connect) 계속 대기.
+
 ## 2026-08-17 세션 8 (사용자 지시: UI 캡처 무창 진단 프롬프트 실행 — P0 보강)
 
 **게이트**: verify_gate 4단계 PASS. ui_regression **3회 연속 4/4 PASS**(기존 골든 바이트 호환 — 갱신 없음, import_only distance 4→2→2).

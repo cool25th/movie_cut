@@ -3,6 +3,26 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록한다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-17 세션 6 (사용자 지시: 검증 프롬프트 문서 기반 측정 불가 해소)
+
+**게이트**: `verify_gate.sh` 4단계 PASS (swift build / swift test **1,163 tests / 170 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**.
+
+### 완료 — 배경제거 프리뷰 트리거 결함 폐쇄 + T2-R0 측정 해소 (커밋 9ad85ce)
+- **절차**: `docs/MovieCut_Compositor_Validation_Prompt.md`(외부 자문 프롬프트 문서, 커밋 포함)의 §2.3 대조군 설계·§3.4 프로브 의미 보강·§6.6 실행 순서를 그대로 준수.
+- **결함 실증(대조군)**: 무효과 n=0(음성)·컬러 n≥1(양성)·배경제거 단독 **n=0(재현)** — 프리뷰가 배경제거를 커스텀 컴포지터로 라우팅하지 않음. 코드 판정: Mac-출력 트리거 2곳(인라인+`requiresCustomVideoCompositorMetadata`)은 포함, Mac-프리뷰만 누락 — "출력만 반영" 결함 확정(G-23 Inc1 크롭 트리거와 동일 계열).
+- **최소 패치(옵션 A1)**: `PlaybackEngine` 트리거에 `isBackgroundRemoved` 1조건. 패치 후 대조군 n=13. 4분면: Mac-프리뷰 ✓(수정)·Mac-출력 ✓·iOS-출력 ✓·iOS-프리뷰 N/A(컴포지터 미사용 아키텍처 — 2단계 파리티 범위).
+- **프로브 보강**: 웜업 첫 표본 백분위 제외 + `first_ms` 별도 보고 + 측정 경계 문서화. 교훈: 12표본 짧은 스윕에서 Vision 모델 적재 잔여가 p95를 733ms까지 왜곡 — 표본 수·웜업 제외 필수.
+- **T2-R0 첫 실측**(40표본): p50 **9.189ms** / p95 **12.404ms** — Vision 세그멘테이션이 지배 비용, 16.6ms 예산 내지만 p95 여유 좁음(SLO 기록). T1/T3 재측정(웜업 제외 기준으로 수치 일관화). 캐비앳: `moving_subject` fixture는 실 사람이 없어 미검출 경로 측정(추론 비용은 지불).
+
+### 다음 세션 인계 (우선순위 순)
+1. **EXECUTION_PLAN §3 Inc 6 — G-06 베지어 그래프 + G-25 설계 문서 초안**(완성 시 승인 요청 에스컬레이션).
+2. **모션 트래킹 하니스 게이트**(검증 문서 §4 설계안 — C1/C2/C3 옵션 비교 후) → T2-R1 측정(트래킹 키프레임 포함) + 실 인물 fixture에서의 T2 재측.
+3. **A2 공유 render-route resolver**(검증 문서 §2.4 — 트리거 4분면 단일화, 재발 방지. A1 패치로 결함은 이미 폐쇄됨).
+4. T2 p95 여유 개선 검토(Vision fast 등급·마스크 캐시 — EffectCostProfile 연계).
+
+### 사용자 결정 대기 사항
+- 없음(필수). Track A(아이콘/App Store Connect) 계속 대기.
+
 ## 2026-08-17 세션 5 (사용자 지시: T1/T2/T3 측정 마무리 + G-01 Inc3 자막 스타일 프리셋)
 
 **게이트**: 증분별 `verify_gate.sh` 4단계 PASS (swift test **1,163 tests / 170 suites** / xcodebuild Mac / xcodebuild iOS). 파리티 **16/16 PASS**. ui_regression **4/4 PASS**(with_mask 환경 이슈 회복 확인 — 재부팅/권한 조치 없이 자연 회복, 골든 무변환).

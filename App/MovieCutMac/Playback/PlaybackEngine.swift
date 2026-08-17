@@ -1202,6 +1202,13 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             )
 
             let transitionEffects = makeTransitionEffects(from: videoClipInstructions)
+            // `isBackgroundRemoved` must route through the custom compositor:
+            // the person-segmentation render only exists there, and the export
+            // engine's trigger already includes it — leaving it out here made
+            // preview silently ignore background removal while export applied
+            // it (the same trigger-gap class as the G-23 Inc 1 cropRect bug;
+            // reproduced 2026-08-17 with the compositor probe: bg-removal-only
+            // project → preview_render_n=0 pre-fix).
             let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
                 clipInstruction.colorCorrection != nil
                     || clipInstruction.colorGrade != nil
@@ -1211,6 +1218,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     || !clipInstruction.effects.isEmpty
                     || clipInstruction.blendMode != .normal
                     || clipInstruction.cropRect != nil
+                    || clipInstruction.isBackgroundRemoved
             } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)

@@ -2515,8 +2515,8 @@ extension EditorViewModel {
                 }
                 if let stats = CompositorRenderProbe.takeAndReset() {
                     previewPerfSuffix = String(
-                        format: " preview_render_n=%d preview_render_p50_ms=%.3f preview_render_p95_ms=%.3f preview_render_max_ms=%.3f",
-                        stats.count, stats.p50, stats.p95, stats.max
+                        format: " preview_render_n=%d preview_render_p50_ms=%.3f preview_render_p95_ms=%.3f preview_render_max_ms=%.3f preview_render_first_ms=%.3f",
+                        stats.count, stats.p50, stats.p95, stats.max, stats.first
                     )
                 } else {
                     previewPerfSuffix = " preview_render_n=0"

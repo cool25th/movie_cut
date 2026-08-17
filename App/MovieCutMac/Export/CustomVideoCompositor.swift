@@ -166,6 +166,15 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
 /// harness can report p50/p95/max frame-composite cost under the fixed stress
 /// timelines. Armed only via the harness env (`MOVIECUT_UITEST_PREVIEW_PERF`);
 /// when disarmed `record` is a no-op branch the render path never pays for.
+///
+/// Measurement boundary (docs/MovieCut_Compositor_Validation_Prompt.md §3.4):
+/// each sample spans `startRequest(_:)` entry through request completion — it
+/// includes render-queue wait, source frame fetch, Vision person segmentation
+/// when active, and the synchronous `CIContext.render` commit (GPU completion
+/// for the shared context). It does NOT include decode (upstream) or display.
+/// The first sample is excluded from percentiles and reported separately as
+/// `first_ms` — the warm-up frame pays shader/GPU-state initialization and
+/// would skew p95 on short sweeps.
 enum CompositorRenderProbe {
     private static let lock = NSLock()
     // Harness-only shared probe state; every access goes through `lock`
@@ -186,8 +195,10 @@ enum CompositorRenderProbe {
         lock.unlock()
     }
 
-    /// Returns (count, p50ms, p95ms, maxMs) in milliseconds and disarms.
-    static func takeAndReset() -> (count: Int, p50: Double, p95: Double, max: Double)? {
+    /// Returns (count, p50ms, p95ms, maxMs, firstMs) in milliseconds and
+    /// disarms. `count` excludes the warm-up sample when one exists; the
+    /// percentiles are computed over the same post-warm-up set.
+    static func takeAndReset() -> (count: Int, p50: Double, p95: Double, max: Double, first: Double)? {
         lock.lock()
         defer {
             armed = false
@@ -195,12 +206,17 @@ enum CompositorRenderProbe {
             lock.unlock()
         }
         guard armed, !samples.isEmpty else { return nil }
-        let sorted = samples.sorted()
+        let first = samples[0]
+        let measured = samples.dropFirst()
+        guard !measured.isEmpty else {
+            return (0, 0, 0, 0, first)
+        }
+        let sorted = measured.sorted()
         func percentile(_ p: Double) -> Double {
             let index = min(Int((p / 100) * Double(sorted.count - 1)), sorted.count - 1)
             return sorted[index]
         }
-        return (sorted.count, percentile(50), percentile(95), sorted.last ?? 0)
+        return (sorted.count, percentile(50), percentile(95), sorted.last ?? 0, first)
     }
 }
 

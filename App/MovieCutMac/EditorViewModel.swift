@@ -2088,10 +2088,6 @@ final class EditorViewModel {
         }
     }
 
-    func updateSelectedTransform(_ transform: ClipTransform) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transform(transform)))
-    }
 
     func updateSelectedStickerTransform(_ transform: ClipTransform) async {
         guard let selectedClipId, let selectedClip, isStickerClip(selectedClip) else { return }
@@ -2246,114 +2242,6 @@ final class EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .zIndex(zIndex)))
     }
 
-    func updateSelectedOpacity(_ opacity: Double) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .opacity(opacity)))
-    }
-
-    func updateSelectedVolume(_ volume: Double) async {
-        guard let selectedClipId else { return }
-        await apply(SetVolumeCommand(clipId: selectedClipId, volume: volume))
-    }
-
-    func updateSelectedAudioFade(fadeInDuration: TimeInterval? = nil, fadeOutDuration: TimeInterval? = nil) async {
-        guard let selectedClipId, let selectedClip else { return }
-        await apply(AudioFadeCommand(
-            clipId: selectedClipId,
-            fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
-            fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
-        ))
-    }
-
-    func applyEQPreset(_ preset: String) async {
-        guard let clipId = selectedClipId, let clip = selectedClip else { return }
-
-        let presetID = EqualizerPresetID(rawValue: preset) ?? .flat
-        selectedEQPreset = presetID.rawValue
-
-        let settings: ClipEqualizerSettings?
-        switch presetID {
-        case .flat:
-            settings = nil
-            clipEQPresets.removeValue(forKey: clipId)
-        case .custom:
-            settings = .custom(bands: clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
-            clipEQPresets[clipId] = presetID.rawValue
-        case .voiceEnhance, .bassBoost, .trebleBoost:
-            settings = .settings(for: presetID)
-            clipEQPresets[clipId] = presetID.rawValue
-        }
-
-        await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
-    }
-
-    func updateSelectedEQBandGain(frequency: Float, gain: Float) async {
-        guard let clipId = selectedClipId, let clip = selectedClip else { return }
-
-        let targetFrequencies = EqualizerPreset.bandFrequencies
-        var bands = ClipEqualizerSettings.normalizedBands(clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
-        guard let index = targetFrequencies.firstIndex(where: { abs($0 - frequency) < 0.5 }) else { return }
-
-        bands[index] = EQBand(frequency: targetFrequencies[index], gain: gain)
-        selectedEQPreset = EqualizerPresetID.custom.rawValue
-        clipEQPresets[clipId] = EqualizerPresetID.custom.rawValue
-        await apply(SetClipPropertyCommand(
-            clipId: clipId,
-            property: .equalizer(.custom(bands: bands))
-        ))
-    }
-
-    func toggleBackgroundRemoval(_ enabled: Bool) async {
-        guard let clipId = selectedClipId, let clip = selectedClip else { return }
-
-        isBackgroundRemoved = enabled
-        if enabled {
-            backgroundRemovedClipIds.insert(clipId)
-        } else {
-            backgroundRemovedClipIds.remove(clipId)
-        }
-
-        // Persist on the clip so preview and export both reflect it (F-08).
-        guard clip.kind == .video else {
-            lastErrorMessage = "Background removal applies to video clips."
-            return
-        }
-        await apply(SetClipPropertyCommand(clipId: clipId, property: .isBackgroundRemoved(enabled)))
-        lastStatusMessage = enabled
-            ? "Background removal on. Frames without a detected person are left unchanged."
-            : "Background removal off."
-    }
-
-    func applyStyleTransfer(_ style: String) async {
-        guard let clipId = selectedClipId else { return }
-
-        selectedStyle = style
-        if style == "none" {
-            clipStyles.removeValue(forKey: clipId)
-        } else {
-            clipStyles[clipId] = style
-        }
-
-        guard let clip = currentProject.timeline.tracks
-            .flatMap(\.clips)
-            .first(where: { $0.id == clipId })
-        else {
-            return
-        }
-
-        var effects = clip.effects.filter { $0.type != .styleTransfer }
-        if let styleIndex = styleTransferIndex(for: style) {
-            effects.append(Effect(
-                type: .styleTransfer,
-                parameters: [
-                    "styleIndex": styleIndex,
-                    "intensity": 0.75
-                ]
-            ))
-        }
-
-        await apply(SetClipPropertyCommand(clipId: clipId, property: .effects(effects)))
-    }
 
     func applyDucking(to clipId: UUID, duckLevel: Double = 0.3) async {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
@@ -2677,29 +2565,6 @@ final class EditorViewModel {
         }
     }
 
-    func updateSelectedPlaybackRate(_ rate: Double) async {
-        guard let selectedClipId else { return }
-        // Route through SetClipSpeedCommand so the rendered timeline duration,
-        // main-track ripple, and stale-field clamp happen atomically with the
-        // rate change (Step 4 of the core-editing repair).
-        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
-        playbackEngine.setRate(Float(rate))
-    }
-
-    func updateSelectedSpeedRampPoints(_ points: [SpeedRampPoint]) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .rampPoints(points)))
-    }
-
-    func updateSelectedOpticalFlow(_ enabled: Bool) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .opticalFlow(enabled)))
-    }
-
-    func updateSelectedKeyframes(_ keyframes: [Keyframe]) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .keyframes(keyframes)))
-    }
 
     func updateCanvas(_ canvas: CanvasPreset) async {
         await apply(SetProjectCanvasCommand(canvas: canvas))
@@ -2782,20 +2647,6 @@ final class EditorViewModel {
         )
     }
 
-    func updateSelectedTransition(_ transition: Transition?) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
-    }
-
-    func updateSelectedTextContent(_ textContent: TextClipContent?) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
-    }
-
-    func updateSelectedChromaKey(_ chromaKey: ChromaKeySettings?) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .chromaKey(chromaKey)))
-    }
 
     // MARK: - Chroma key eyedropper (F-10)
 
@@ -2849,16 +2700,6 @@ final class EditorViewModel {
         }
     }
 
-    func updateSelectedColorCorrection(_ colorCorrection: ColorCorrection?) async {
-        guard let selectedClipId else { return }
-        await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: colorCorrection))
-    }
-
-    /// Sets the 3-way color grade on the selected clip (Phase 2A Pro grading).
-    func updateSelectedColorGrade(_ colorGrade: ColorGrade?) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
-    }
 
     // MARK: - Color scopes (Phase 2A)
 
@@ -2877,57 +2718,6 @@ final class EditorViewModel {
         scopeVectorscope = nil
     }
 
-    /// On-device auto white balance: analyzes the selected clip's source
-    /// thumbnail (gray-world) and sets a corrective grade. No cloud round-trip.
-    func autoColorSelectedClip() async {
-        guard let rgba = selectedClipThumbnailRGBA() else { return }
-        await updateSelectedColorGrade(AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: rgba))
-    }
-
-    /// On-device auto levels: stretches the selected clip's luma range for
-    /// optimal contrast. No cloud round-trip.
-    func autoLevelsSelectedClip() async {
-        guard let rgba = selectedClipThumbnailRGBA() else { return }
-        await updateSelectedColorGrade(AutoColorAnalyzer.autoLevelsGrade(rgba: rgba))
-    }
-
-    /// On-device one-tap auto enhance: white balance + contrast in one grade.
-    func autoEnhanceSelectedClip() async {
-        guard let rgba = selectedClipThumbnailRGBA() else { return }
-        await updateSelectedColorGrade(AutoColorAnalyzer.autoEnhanceGrade(rgba: rgba))
-    }
-
-    /// Renders the selected clip's source thumbnail to a small RGBA buffer for
-    /// on-device analysis (auto color, scopes).
-    private func selectedClipThumbnailRGBA(width: Int = 96, height: Int = 54) -> [UInt8]? {
-        guard let clip = selectedClip,
-              let assetId = clip.assetId,
-              let asset = currentProject.mediaLibrary.assets[assetId],
-              let thumbnailData = asset.thumbnailData,
-              let source = CIImage(data: thumbnailData) else {
-            return nil
-        }
-
-        let extent = source.extent
-        guard extent.width > 0, extent.height > 0 else { return nil }
-        let scaled = source.transformed(by: CGAffineTransform(
-            scaleX: CGFloat(width) / extent.width,
-            y: CGFloat(height) / extent.height
-        ))
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        bytes.withUnsafeMutableBytes { buffer in
-            guard let base = buffer.baseAddress else { return }
-            scopeContext.render(
-                scaled,
-                toBitmap: base,
-                rowBytes: width * 4,
-                bounds: CGRect(x: 0, y: 0, width: width, height: height),
-                format: .RGBA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
-            )
-        }
-        return bytes
-    }
 
     /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
     func refreshScopes() {
@@ -2975,10 +2765,6 @@ final class EditorViewModel {
         scopeVectorscope = ScopeAnalyzer.vectorscope(rgba: bytes, size: 48)
     }
 
-    func autoEnhance() async {
-        guard let clipId = selectedClipId else { return }
-        try? await autoColorCorrect(for: clipId)
-    }
 
     func suggestCuts() async throws {
         guard let clipId = selectedClipId else { return }
@@ -2986,30 +2772,6 @@ final class EditorViewModel {
         _ = try? await detectAndSplitScenes(for: clipId)
     }
 
-    func autoColorCorrect() async {
-        guard let clipId = selectedClipId else { return }
-        try? await autoColorCorrect(for: clipId)
-    }
-
-    func autoColorCorrect(for clipId: UUID) async throws {
-        let snapshot = await session.snapshot()
-        var found: Clip?
-        outer: for track in snapshot.timeline.tracks {
-            for c in track.clips {
-                if c.id == clipId { found = c; break outer }
-            }
-        }
-        guard let clip = found else {
-            throw EditorCommandError.invalidCommand("Clip not found")
-        }
-        var colorCorrection = clip.colorCorrection ?? ColorCorrection()
-        colorCorrection.brightness = 0.05
-        colorCorrection.contrast = 1.1
-        colorCorrection.saturation = 1.1
-
-        try await session.dispatch(SetColorCorrectionCommand(clipId: clipId, colorCorrection: colorCorrection))
-        try await refreshFromSession()
-    }
 
     func applyNoiseReduction(for clipId: UUID) async throws {
         let snapshot = await session.snapshot()
@@ -3485,24 +3247,6 @@ final class EditorViewModel {
         await apply(SetClipMaskCommand(clipId: selectedClipId, mask: defaultMask()))
     }
 
-    func updateSelectedMask(_ mask: Mask?) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipMaskCommand(clipId: selectedClipId, mask: mask))
-    }
-
-    /// Commits a canvas-edited crop rect as one undoable property edit. A
-    /// full-frame rect is stored as nil so never-cropped projects keep the
-    /// byte-identical JSON encoding (cropRect key omitted).
-    func updateSelectedCropRect(_ cropRect: NormalizedRect?) async {
-        guard let selectedClipId else { return }
-        let normalized = cropRect.flatMap { CropPixelProcessor.isFullFrame($0) ? nil : $0 }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .cropRect(normalized)))
-    }
-
-    func updateSelectedReversePlayback(_ isReversed: Bool) async {
-        guard let selectedClipId, let selectedClip, selectedClip.isReversed != isReversed else { return }
-        await apply(ReverseClipCommand(clipId: selectedClipId))
-    }
 
     func freezeSelectedFrame(freezeDuration: TimeInterval = 2.0) async {
         guard let selectedClipId, let selectedClip else { return }
@@ -3516,50 +3260,6 @@ final class EditorViewModel {
         await apply(FreezeFrameCommand(clipId: selectedClipId, freezeTime: freezeTime, freezeDuration: freezeDuration))
     }
 
-    func updateSelectedEffects(_ effects: [Effect]) async {
-        guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
-    }
-
-    /// Imports an external `.cube` LUT, validates it, copies it into Application
-    /// Support, and appends an `.externalLUT` effect to the selected clip (F-09).
-    func importExternalLUT(from url: URL) async {
-        guard let selectedClipId, let clip = selectedClip else {
-            lastErrorMessage = "Select a clip to apply the LUT to."
-            return
-        }
-
-        do {
-            // Validate by parsing before copying so bad files report clearly.
-            let lut = try CubeLUTParser.parse(contentsOf: url)
-
-            let directory = FileManager.default
-                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("MovieCut/LUTs", isDirectory: true)
-                ?? FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutLUTs", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-            let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: url, to: destination)
-
-            var effects = clip.effects
-            effects.append(Effect(
-                type: .externalLUT,
-                parameters: ["intensity": 1.0],
-                lutPath: destination.path
-            ))
-            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
-            try await refreshFromSession()
-            lastErrorMessage = nil
-            lastStatusMessage = "Imported \(url.lastPathComponent) (\(lut.dimension)-size LUT)."
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = "Could not import LUT: \(lutErrorDescription(error))"
-        }
-    }
 
     private func lutErrorDescription(_ error: Error) -> String {
         guard let parseError = error as? CubeLUTParser.ParseError else {
@@ -5500,4 +5200,193 @@ final class EditorViewModel {
         }
         return project
     }
+
+    // MARK: - Inspector methods kept in the main file
+    // These depend on private stored state of the main file (clipEQPresets,
+    // backgroundRemovedClipIds, clipStyles/styleTransferIndex, scopeContext,
+    // lutErrorDescription), so they deliberately did not move to
+    // EditorViewModel+Inspector.swift (pure-move boundary rule).
+
+    func applyEQPreset(_ preset: String) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+
+        let presetID = EqualizerPresetID(rawValue: preset) ?? .flat
+        selectedEQPreset = presetID.rawValue
+
+        let settings: ClipEqualizerSettings?
+        switch presetID {
+        case .flat:
+            settings = nil
+            clipEQPresets.removeValue(forKey: clipId)
+        case .custom:
+            settings = .custom(bands: clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+            clipEQPresets[clipId] = presetID.rawValue
+        case .voiceEnhance, .bassBoost, .trebleBoost:
+            settings = .settings(for: presetID)
+            clipEQPresets[clipId] = presetID.rawValue
+        }
+
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
+    }
+
+    func updateSelectedEQBandGain(frequency: Float, gain: Float) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+
+        let targetFrequencies = EqualizerPreset.bandFrequencies
+        var bands = ClipEqualizerSettings.normalizedBands(clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+        guard let index = targetFrequencies.firstIndex(where: { abs($0 - frequency) < 0.5 }) else { return }
+
+        bands[index] = EQBand(frequency: targetFrequencies[index], gain: gain)
+        selectedEQPreset = EqualizerPresetID.custom.rawValue
+        clipEQPresets[clipId] = EqualizerPresetID.custom.rawValue
+        await apply(SetClipPropertyCommand(
+            clipId: clipId,
+            property: .equalizer(.custom(bands: bands))
+        ))
+    }
+
+    func toggleBackgroundRemoval(_ enabled: Bool) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+
+        isBackgroundRemoved = enabled
+        if enabled {
+            backgroundRemovedClipIds.insert(clipId)
+        } else {
+            backgroundRemovedClipIds.remove(clipId)
+        }
+
+        // Persist on the clip so preview and export both reflect it (F-08).
+        guard clip.kind == .video else {
+            lastErrorMessage = "Background removal applies to video clips."
+            return
+        }
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .isBackgroundRemoved(enabled)))
+        lastStatusMessage = enabled
+            ? "Background removal on. Frames without a detected person are left unchanged."
+            : "Background removal off."
+    }
+
+    func applyStyleTransfer(_ style: String) async {
+        guard let clipId = selectedClipId else { return }
+
+        selectedStyle = style
+        if style == "none" {
+            clipStyles.removeValue(forKey: clipId)
+        } else {
+            clipStyles[clipId] = style
+        }
+
+        guard let clip = currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first(where: { $0.id == clipId })
+        else {
+            return
+        }
+
+        var effects = clip.effects.filter { $0.type != .styleTransfer }
+        if let styleIndex = styleTransferIndex(for: style) {
+            effects.append(Effect(
+                type: .styleTransfer,
+                parameters: [
+                    "styleIndex": styleIndex,
+                    "intensity": 0.75
+                ]
+            ))
+        }
+
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .effects(effects)))
+    }
+
+    /// On-device auto white balance: analyzes the selected clip's source
+    /// thumbnail (gray-world) and sets a corrective grade. No cloud round-trip.
+    func autoColorSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoWhiteBalanceGrade(rgba: rgba))
+    }
+
+    /// On-device auto levels: stretches the selected clip's luma range for
+    /// optimal contrast. No cloud round-trip.
+    func autoLevelsSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoLevelsGrade(rgba: rgba))
+    }
+
+    /// On-device one-tap auto enhance: white balance + contrast in one grade.
+    func autoEnhanceSelectedClip() async {
+        guard let rgba = selectedClipThumbnailRGBA() else { return }
+        await updateSelectedColorGrade(AutoColorAnalyzer.autoEnhanceGrade(rgba: rgba))
+    }
+
+    /// Renders the selected clip's source thumbnail to a small RGBA buffer for
+    /// on-device analysis (auto color, scopes).
+    private func selectedClipThumbnailRGBA(width: Int = 96, height: Int = 54) -> [UInt8]? {
+        guard let clip = selectedClip,
+              let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId],
+              let thumbnailData = asset.thumbnailData,
+              let source = CIImage(data: thumbnailData) else {
+            return nil
+        }
+
+        let extent = source.extent
+        guard extent.width > 0, extent.height > 0 else { return nil }
+        let scaled = source.transformed(by: CGAffineTransform(
+            scaleX: CGFloat(width) / extent.width,
+            y: CGFloat(height) / extent.height
+        ))
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            guard let base = buffer.baseAddress else { return }
+            scopeContext.render(
+                scaled,
+                toBitmap: base,
+                rowBytes: width * 4,
+                bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                format: .RGBA8,
+                colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+        }
+        return bytes
+    }
+
+    /// Imports an external `.cube` LUT, validates it, copies it into Application
+    /// Support, and appends an `.externalLUT` effect to the selected clip (F-09).
+    func importExternalLUT(from url: URL) async {
+        guard let selectedClipId, let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to apply the LUT to."
+            return
+        }
+
+        do {
+            // Validate by parsing before copying so bad files report clearly.
+            let lut = try CubeLUTParser.parse(contentsOf: url)
+
+            let directory = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/LUTs", isDirectory: true)
+                ?? FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutLUTs", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+            let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: url, to: destination)
+
+            var effects = clip.effects
+            effects.append(Effect(
+                type: .externalLUT,
+                parameters: ["intensity": 1.0],
+                lutPath: destination.path
+            ))
+            try await session.dispatch(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Imported \(url.lastPathComponent) (\(lut.dimension)-size LUT)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not import LUT: \(lutErrorDescription(error))"
+        }
+    }
 }
+

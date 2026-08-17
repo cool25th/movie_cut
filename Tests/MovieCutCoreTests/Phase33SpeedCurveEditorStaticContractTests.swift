@@ -160,7 +160,10 @@ struct Phase33SpeedCurveEditorStaticContractTests {
             }
         }
 
+        // Main file + inspector boundary (updateSelectedSpeedRampPoints moved
+        // there in the decomposition); the UI-marker ban covers both parts.
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+            + source("App/MovieCutMac/EditorViewModel+Inspector.swift")
         #expect(viewModel.contains("func updateSelectedSpeedRampPoints(_ points: [SpeedRampPoint]) async"))
         for uiMarker in [
             "speedCurveEditor",

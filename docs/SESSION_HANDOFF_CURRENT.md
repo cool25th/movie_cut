@@ -44,6 +44,12 @@
 - 하니스 버그 2건 수정: 스위트 병렬 실행 시 전역 프로브 상호 도용(`.serialized`), swift-testing 트레잇 순서(이름 뒤).
 - 최종: RTF 0.344±0.084·p50 19.73ms·p95 25.54ms·IoU 0.793 결정적·fail_rate 0. **검증 문서 모션 트래킹 요건(§3.2 T2-M·§4) 전 항목 닫힘.**
 
+### 완료 8 — EditorViewModel 인스펙터 경계 분해 (세션 15)
+- `EditorViewModel+Inspector.swift`(150줄): 인스펙터 표면 20개 메서드 순수 이동(updateSelected* 17종 + autoEnhance·autoColorCorrect·autoColorCorrect(for:)). 본체 −111줄(보류분 환입 포함).
+- **보류 기록(강제 추출 금지 규칙)**: private 저장 의존 9개 메서드 본체 유지(clipEQPresets·backgroundRemovedClipIds·clipStyles/styleTransferIndex·scopeContext·lutErrorDescription 각각) + updateSelectedStickerTransform(isStickerClip)·refreshScopes(scopeContext) — 본체 말미 MARK 섹션에 사유 명시.
+- StaticContract 3건 갱신: AudioFade·TextStyle은 +Inspector 직접 로드, Phase33은 메인+경계 결합(UI 마커 금지가 양쪽 파일 커버로 강화됨).
+- 1,173 테스트 통과·verify_gate 4단계. 잔여 경계: media→effects→audio(Inc 9 직전)→export.
+
 ### 다음 세션 인계 (우선순위 순 — G-25 승인 여부와 무관 진행 가능)
 1. **G-25 승인 확정 시 Inc 7**(Core 모델) — 미승인 시 아래부터.
 2. 모션 트래킹 재검출 시드(사용자 결정 후) 또는 EditorViewModel 인스펙터 경계·lint CI.

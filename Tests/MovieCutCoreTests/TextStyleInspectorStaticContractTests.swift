@@ -65,7 +65,9 @@ struct TextStyleInspectorStaticContractTests {
     @Test("Inspector text edits use updateSelectedTextContent while preserving sticker metadata UI")
     func inspectorUsesTextContentCommandPathAndKeepsStickerMetadata() throws {
         let inspector = try source("App/MovieCutMac/Inspector/InspectorBasicSection.swift")
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        // updateSelectedTextContent moved to the inspector boundary file
+        // (decomposition roadmap); the command-path section lives there now.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel+Inspector.swift")
 
         let textSection = try section(
             in: inspector,

@@ -128,11 +128,13 @@ struct AudioFadeInspectorStaticContractTests {
 
     @Test("EditorViewModel routes selected audio fade edits to AudioFadeCommand")
     func editorViewModelRoutesSelectedAudioFadeEditsToAudioFadeCommand() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        // Moved to the inspector boundary file (decomposition roadmap); the
+        // next member there is updateSelectedPlaybackRate.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel+Inspector.swift")
         let update = try section(
             in: viewModel,
             from: "func updateSelectedAudioFade",
-            to: "func applyEQPreset"
+            to: "func updateSelectedPlaybackRate"
         )
         let command = try source("Sources/MovieCutCore/Commands/AudioFadeCommand.swift")
 

@@ -17,8 +17,9 @@ enum MediaFixtures {
     static let solidRedVideo = url("solid_red_320x240_2s_30fps.mp4")
     static let colorBarsVideo = url("bars_320x240_3s_30fps.mp4")
     static let movingSubjectVideo = url("moving_subject_320x240_2s_30fps.mp4")
+    static let movingSubjectOccludedVideo = url("moving_subject_occluded_320x240_3s_30fps.mp4")
     static let toneAudio = url("tone_440hz_2s_mono.wav")
     static let blueSwatchImage = url("swatch_blue_64x64.png")
 
-    static let all: [URL] = [solidRedVideo, colorBarsVideo, movingSubjectVideo, toneAudio, blueSwatchImage]
+    static let all: [URL] = [solidRedVideo, colorBarsVideo, movingSubjectVideo, movingSubjectOccludedVideo, toneAudio, blueSwatchImage]
 }

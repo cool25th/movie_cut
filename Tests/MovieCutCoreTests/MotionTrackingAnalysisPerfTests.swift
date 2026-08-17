@@ -20,7 +20,10 @@ import Testing
 ///
 /// Occlusion-reacquisition is N/A on this fixture (the subject is never
 /// occluded); it needs a dedicated fixture (follow-up).
-@Suite("Motion Tracking Analysis Perf (T2-M)")
+/// Serialized: both tests arm the process-global MotionTrackingAnalysisProbe;
+/// parallel execution would let one test's arm()/takeAndReset() steal the
+/// other's session (observed as frames=0 runs during bring-up).
+@Suite("Motion Tracking Analysis Perf (T2-M)", .serialized)
 struct MotionTrackingAnalysisPerfTests {
     @Test(.enabled(
         if: ProcessInfo.processInfo.environment["MOVIECUT_T2M"] == "1",
@@ -175,6 +178,84 @@ struct MotionTrackingAnalysisPerfTests {
         #expect(runs.allSatisfy { $0.rtf < 1.0 }, "analysis slower than real time")
         #expect(runs.allSatisfy { $0.samples >= 25 }, "too few samples for the fixture")
         #expect(runs.allSatisfy { $0.iouMean >= 0.75 }, "mean IoU below the integration-test floor")
+    }
+
+    /// T2-M occlusion phase — measures tracking loss and reacquisition on the
+    /// occluded fixture (wall at x=120..216: contact t=0.2, fully occluded
+    /// t=[1.1, 1.4], fully emerged from t=2.3).
+    ///
+    /// Asserted (behavioral): pre-occlusion IoU is high, and the occlusion
+    /// window actually degrades tracking (IoU dip or lost observations) — a
+    /// fixture/tracker that coasts through the wall would make this
+    /// measurement vacuous. Reported (quality, not asserted — Vision
+    /// reacquisition capability is measured, not guaranteed): dip metrics,
+    /// lost-observation counts, and reacquisition time to IoU ≥ 0.6 after
+    /// occlusion exit.
+    @Test(.enabled(
+        if: ProcessInfo.processInfo.environment["MOVIECUT_T2M"] == "1",
+        "opt-in: MOVIECUT_T2M=1 via scripts/run_t2m_motion_tracking.sh"
+    ))
+    func occlusionReacquisitionMetrics() async throws {
+        let mediaDuration = 3.0
+        let sampleRate = 15.0
+
+        MotionTrackingAnalysisProbe.arm()
+        let start = ContinuousClock.now
+        let provider = MotionTrackingProvider()
+        let results = try await provider.track(
+            videoURL: MediaFixtures.movingSubjectOccludedVideo,
+            initialRect: MotionTrackingGroundTruth.expectedMovingSubjectRect(at: 0, duration: mediaDuration),
+            timeRange: TimeRange(start: 0, duration: mediaDuration),
+            frameRate: sampleRate
+        )
+        let elapsedMs = Double(start.duration(to: .now).components.seconds) * 1000
+            + Double(start.duration(to: .now).components.attoseconds) / 1e15
+        let frames = MotionTrackingAnalysisProbe.takeAndReset() ?? []
+
+        let ious: [(t: Double, iou: Double)] = results.map { result in
+            (
+                result.timestamp,
+                MotionTrackingGroundTruth.iou(
+                    result.rect,
+                    MotionTrackingGroundTruth.expectedMovingSubjectRect(at: result.timestamp, duration: mediaDuration)
+                )
+            )
+        }
+
+        // Phases by ground-truth occlusion coverage.
+        let before = ious.filter { MotionTrackingGroundTruth.occlusionCoverageFraction(at: $0.t) == 0 && $0.t < 1.1 }
+        let occluded = ious.filter { MotionTrackingGroundTruth.occlusionCoverageFraction(at: $0.t) >= 0.99 }
+        let emerged = ious.filter { $0.t >= 2.3 }
+        let occludedTimestamps = Set(occluded.map { ($0.t * 1000).rounded() })
+        let lostInWindow = frames.filter {
+            $0.status == .lostObservation && occludedTimestamps.contains(($0.timestamp * 1000).rounded())
+        }.count
+        let dipMinIoU = occluded.map(\.iou).min() ?? 1
+
+        // Reacquisition: first sample at/after the full-occlusion exit (t=1.4)
+        // whose IoU recovers to ≥ 0.6; null when tracking never recovers.
+        let afterExit = ious.filter { $0.t >= 1.4 }.sorted { $0.t < $1.t }
+        let reacquireAt = afterExit.first { $0.iou >= 0.6 }?.t
+        let reacquireLatency = reacquireAt.map { $0 - 1.4 }
+        let emergedMeanIoU = emerged.isEmpty ? 0 : emerged.map(\.iou).reduce(0, +) / Double(emerged.count)
+
+        let beforeMeanIoU = before.isEmpty ? 0 : before.map(\.iou).reduce(0, +) / Double(before.count)
+
+        print(String(
+            format: "T2M_OCC total_ms=%.1f samples=%d before_n=%d before_iou_mean=%.4f occluded_n=%d occluded_iou_min=%.4f lost_in_window=%d emerged_n=%d emerged_iou_mean=%.4f reacquire_at=%@ reacquire_latency_s=%@",
+            elapsedMs, results.count, before.count, beforeMeanIoU, occluded.count, dipMinIoU,
+            lostInWindow, emerged.count, emergedMeanIoU,
+            reacquireAt.map { String(format: "%.3f", $0) } ?? "none",
+            reacquireLatency.map { String(format: "%.3f", $0) } ?? "none"
+        ))
+
+        // Behavioral floors.
+        #expect(!before.isEmpty, "no pre-occlusion samples")
+        #expect(beforeMeanIoU >= 0.75, "pre-occlusion mean IoU \(beforeMeanIoU) below 0.75")
+        #expect(!occluded.isEmpty, "no samples inside the full-occlusion window")
+        #expect(dipMinIoU < 0.5 || lostInWindow > 0,
+                "occlusion did not degrade tracking (min IoU \(dipMinIoU), lost \(lostInWindow)) — vacuous fixture")
+        #expect(results.count >= 35, "too few samples for the 3s fixture")
     }
 
     /// Physical footprint of this process in bytes (task_vm_info), the same

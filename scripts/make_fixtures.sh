@@ -49,6 +49,18 @@ ffmpeg -y -loglevel error \
   -filter_complex "[1:v]drawbox=x=8:y=8:w=56:h=48:color=black@1:t=4,drawbox=x=30:y=0:w=12:h=64:color=black@1:t=fill,drawbox=x=0:y=24:w=72:h=8:color=black@1:t=fill,drawbox=x=4:y=4:w=12:h=12:color=white@1:t=fill,drawbox=x=56:y=48:w=12:h=12:color=white@1:t=fill[obj];[0:v][obj]overlay=x='32+80*t':y=88:eval=frame" \
   -t 2 "${COMMON_V[@]}" "$OUT/moving_subject_320x240_2s_30fps.mp4"
 
+# 2c) Moving subject behind an occluding wall — same textured box and
+# trajectory, 3s clip, with a mid-gray full-height wall at x=120..216 drawn ON
+# TOP. Box path [32+80t, 104+80t]: first touches the wall at t=0.2, fully
+# occluded t=[1.1, 1.4], fully emerged again from t=2.3 — the window the T2-M
+# occlusion-reacquisition measurement uses (dip + recovery).
+ffmpeg -y -loglevel error \
+  -f lavfi -i "color=c=black:s=320x240:r=30:d=3" \
+  -f lavfi -i "color=c=white:s=72x64:r=30:d=3" \
+  -f lavfi -i "color=c=0x808080:s=96x240:r=30:d=3" \
+  -filter_complex "[1:v]drawbox=x=8:y=8:w=56:h=48:color=black@1:t=4,drawbox=x=30:y=0:w=12:h=64:color=black@1:t=fill,drawbox=x=0:y=24:w=72:h=8:color=black@1:t=fill,drawbox=x=4:y=4:w=12:h=12:color=white@1:t=fill,drawbox=x=56:y=48:w=12:h=12:color=white@1:t=fill[obj];[0:v][obj]overlay=x='32+80*t':y=88:eval=frame[boxed];[boxed][2:v]overlay=x=120:y=0" \
+  -t 3 "${COMMON_V[@]}" "$OUT/moving_subject_occluded_320x240_3s_30fps.mp4"
+
 # 3) Sine tone — audio import, 2.0s, 44100Hz mono.
 ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=440:sample_rate=44100" \
   -t 2 -ac 1 -map_metadata -1 -fflags +bitexact "$OUT/tone_440hz_2s_mono.wav"

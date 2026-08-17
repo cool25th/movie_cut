@@ -15,6 +15,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Deterministic input bytes (validation doc §4.5): hash-verify both fixtures.
+FIXTURE_PLAIN="$ROOT/Tests/Fixtures/moving_subject_320x240_2s_30fps.mp4"
+FIXTURE_OCCLUDED="$ROOT/Tests/Fixtures/moving_subject_occluded_320x240_3s_30fps.mp4"
+EXPECTED_PLAIN_SHA="b7a9cb2e4209256ad43b3fbe7e704af447bdc6ca9e5224d988b4a0ce28fc2a63"
+EXPECTED_OCCLUDED_SHA="2c697b489943ac549253d5d7c79293e8fb1306cb4d5faf7c29ca75426a6c1379"
+for pair in "$FIXTURE_PLAIN:$EXPECTED_PLAIN_SHA" "$FIXTURE_OCCLUDED:$EXPECTED_OCCLUDED_SHA"; do
+  f="${pair%%:*}"; want="${pair##*:}"
+  if [[ ! -s "$f" ]]; then
+    echo "missing fixture $f; run scripts/make_fixtures.sh" >&2
+    exit 1
+  fi
+  got="$(shasum -a 256 "$f" | awk '{print $1}')"
+  if [[ "$got" != "$want" ]]; then
+    echo "fixture hash mismatch: $f expected=$want actual=$got" >&2
+    exit 1
+  fi
+done
+
 OUT_DIR="$ROOT/artifacts/perf"
 mkdir -p "$OUT_DIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -46,6 +64,10 @@ if ! grep -q "T2M_AGG" "$OUT"; then
   echo "T2M_FAIL: no T2M_AGG aggregate line (artifact: $OUT)" >&2
   exit 1
 fi
+if ! grep -q "T2M_OCC" "$OUT"; then
+  echo "T2M_FAIL: no T2M_OCC occlusion line (artifact: $OUT)" >&2
+  exit 1
+fi
 
-grep -E "T2M_RUN|T2M_AGG" "$OUT"
+grep -E "T2M_RUN|T2M_AGG|T2M_OCC" "$OUT"
 echo "T2M_PASS (artifact: $OUT)"

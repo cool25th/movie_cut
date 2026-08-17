@@ -100,10 +100,12 @@ struct KeyboardShortcutStaticContractTests {
     @Test("EditorViewModel exposes command-backed F-05 actions")
     func editorViewModelExposesCommandBackedF05Actions() throws {
         // The timeline-editing boundary extraction (EXECUTION_PLAN Inc 2) moved
-        // the selection/cursor slice into EditorViewModel+TimelineEditing.swift,
-        // so the contract reads the view model across both boundary files.
+        // the selection/cursor slice into EditorViewModel+TimelineEditing.swift
+        // and the transport slice (seek/zoom) into EditorViewModel+Transport.swift,
+        // so the contract reads the view model across all boundary files.
         let source = try source("App/MovieCutMac/EditorViewModel.swift")
             + source("App/MovieCutMac/EditorViewModel+TimelineEditing.swift")
+            + source("App/MovieCutMac/EditorViewModel+Transport.swift")
 
         #expect(source.contains("func trimSelectedClipStartToPlayhead() async"))
         #expect(source.contains("func trimSelectedClipEndToPlayhead() async"))

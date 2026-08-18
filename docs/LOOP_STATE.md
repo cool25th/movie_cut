@@ -4,7 +4,7 @@
 다음 증분: **G-25 §11①~⑤ 종합 완료 판정 보고 + DONE_PHASE1 평가** — ①null test ±1(3그래프 maxDev=0·offset 0)②동일 PCM③60분 drift(172,800,000 정확·offset 0)④LUFS/TP 미터 실측(−22.94 LUFS·TP −15.74)⑤무회귀(NR 5.15dB·EQ 2.31/0.49·덕킹 12.04dB — 매 증분 실측) — 전 항목 측정 증거 확보 상태. EXECUTION_PLAN §4 게이트 조건 대조 후 DONE_PHASE1 전환 판정(1단계 게이트 잔여 항목이 있으면 그것부터).
 **기존 결함 기록 갱신**: **tap-in-export 폐쇄(2-C-2 실측)** — M런 RMS 게이트 재활성 후 PASS로 증명. **AVAssetExportSession 교찰 계열**("비디오 임포트+덕킹+출력"·"ProRes+무음 AAC") — 무음=오디오 없음 의미론으로 회피(루트 Apple측). 속도 램프 오디오 갭 폐쇄(2-C-4).
 대기 결정 사항(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
-마지막 커밋: (이번 커밋)
+마지막 커밋: fa98175
 갱신: 2026-08-19 08:20
 추가 완료(세션 20 계속): **G-25 §9 null test 판정 함수** — `AudioGraphNullTest`(Core): compare(±1 샘플 정렬 탐색→정렬 구간 최대 절대 편차 ≤ 16비트 1 LSB 판정·길이 불일치 안전 실패) + mixedRateRoundTripIsExact(60분 그래프 위치의 44.1k↔48k 왕복이 Int64 수학에서 정확 — §9.4 기반; 조작된 고장 레이트는 왕복에서 대수적으로 상쇄되어 순수 시뮬레이션이 무의미함을 실측으로 확인·실측 drift 판정은 E2E 유지 §9.5). 테스트 6종. Inc 8 잔여: App 배선(AVAudioEngine 프리뷰·인코더 입력) + E2E null test.
 추가 완료(세션 8, cb71be2): UI 캡처 하니스 P0 보강(open 실행+PID 조회+진단 분리, 3회 연속 4/4) — G-06 DoD ④ 실질 충족, 무창 재발 시 window.txt 로그로 분류.

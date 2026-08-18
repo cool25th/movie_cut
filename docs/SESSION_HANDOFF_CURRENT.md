@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 PASS(**M런 RMS 게이트 재활성 포함** — tap 결함 폐쇄 증명) + run_g25_nulltest.sh 무회귀 PASS.
 
-### 완료 — 전환 2-C-2: 프리뷰 EQ의 파생 미디어 전환 (이번 세션 커밋)
+### 완료 — 전환 2-C-2: 프리뷰 EQ의 파생 미디어 전환 (커밋 456a278)
 - **`AudioEqualizerService` 통일** (Core): 디코드를 §3.1 어댑터로 전환 — 비디오 컨테이너 임베디드 오디오도 EQ 파생 가능(기존 AVAudioFile 한정 — 그래프·출력 경로의 EQ 비디오 클립 잠복 실패 갭 해소). DSP 단일 구현으로 프리뷰·출력·그래프 동일(기존 tap은 5밴드 AVAudioUnitEQ·파일 렌더는 3밴드 원폴로 **서로 다른 DSP였음** — 이원 경로 해소).
 - **프리뷰 tap 폐지** (PlaybackEngine): MTAudioProcessingTap 기계(~250줄)·ClipEqualizerTimelineSegment 제거. EQ 클립(오디오 트랙+비디오 임베디드 양쪽)은 파생 미디어 소스 스왑 — 프리셋 캐시로 재빌드 무관 재사용(리버스 선례), clear/loadProject 정리.
 - **조사 확정**: NR 실시간 필터는 실재하지 않았음(주석만 — NR은 편집 시점 파괴적 변환으로 이미 통일, 주석 정정). 프리뷰 볼륨/페이드/덕킹 audioMix 램프는 유지(AVPlayer 네이티브·tap 무관).

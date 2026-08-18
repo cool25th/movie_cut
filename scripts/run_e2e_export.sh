@@ -1599,10 +1599,8 @@ if abs(m["rmsDifferenceDb"]) > 1.0:
     fail(f"run M RMS difference beyond 1 dB: {m['rmsDifferenceDb']}")
 if m["clippingRunCount"] != 0:
     fail(f"run M clipped output: {m}")
-# G-25 2C-2: the preview-mix reference RMS gate is RE-ENABLED — the
-# MTAudioProcessingTap is retired and preview EQ consumes derived media,
-# so an EQ'd project's reference is valid again (the tap-in-export defect
-# this gate caught is closed).
+# G-25 2C-2/2C-3: M's reference is now the graph PCM (like A/B), so this
+# RMS gate measures codec fidelity of the EQ'd graph mix end to end.
 
 print("meter: graph=%.2f LU export=%.2f LU Δ=%.2f tp=%.2f eq=1" % (
     meter_lufs, m["decodedLufs"], delta, meter["truePeakDbTp"]))

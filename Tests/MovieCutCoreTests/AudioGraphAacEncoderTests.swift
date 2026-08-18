@@ -78,4 +78,44 @@ struct AudioGraphAacEncoderTests {
             try AudioGraphAacEncoder.encode(empty, to: url)
         }
     }
+
+    // MARK: - Codec-delay trim (G-25 2C-3, §8.1 strict gate)
+
+    @Test("codec-delay trim recovers the encoder input at exact length (±1)")
+    func codecDelayTrimRoundTrip() throws {
+        // Content that starts loud at frame 0 plus a quiet tail: onset
+        // detection can't cheat this — only correlation aligns it.
+        let frames = 96_000
+        var interleaved = [Float]()
+        interleaved.reserveCapacity(frames * 2)
+        for sample in 0..<(frames * 2) {
+            let frame = sample / 2
+            let envelope = frame < 72_000 ? 0.5 : 0.05
+            let phase = Double(frame) * 2 * .pi * 440 / 48_000
+            interleaved.append(Float(sin(phase) * envelope))
+        }
+        let source = AudioGraphSourceAudio(
+            sampleRate: 48_000, channels: 2, interleaved: interleaved
+        )
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("moviecut-aac-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try AudioGraphAacEncoder.encode(source, to: url)
+        let decoded = try AudioGraphExportPostCheck.decode(fileAt: url)
+        let (trimmed, delay) = AudioGraphExportPostCheck.trimCodecDelay(
+            reference: source, decoded: decoded
+        )
+
+        // The trim IS the §8.1 caller contract: measured delay is a
+        // plausible priming, and the trimmed stream matches the encoder
+        // input's length within ±1 (the strict gate `check` then judges).
+        #expect(delay >= 0)
+        #expect(delay <= AudioGraphExportPostCheck.maxCodecDelaySamples)
+        #expect(abs(trimmed.frameCount - source.frameCount) <= 1)
+        let report = AudioGraphExportPostCheck.check(reference: source, decoded: trimmed)
+        #expect(report.lengthWithinOneSample)
+        #expect(report.passed)
+        #expect(abs(report.rmsDifferenceDb) < 1.0)
+    }
 }

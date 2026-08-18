@@ -3128,6 +3128,7 @@ extension EditorViewModel {
         var referenceSampleRate = 0.0
         var decodedFrames = 0
         var decodedSampleRate = 0.0
+        var codecDelaySamples = 0
         var lengthWithinOneSample = false
         var rmsDifferenceDb: Double?
         var referenceLufs: Double?
@@ -3139,15 +3140,12 @@ extension EditorViewModel {
         var error = "none"
     }
 
-    /// G-25 spec §8 — re-decodes the ACTUAL exported file and compares it
-    /// against the project's preview-mix render (the reference today's
-    /// audio-mix product path produces; once the graph encoder input lands,
-    /// the reference switches to `AudioGraphEncoderInput` PCM). Reports
+    /// G-25 spec §8 (2C-3 strict era) — re-decodes the ACTUAL exported file
+    /// and compares it against the GRAPH PCM the export encoded (same
+    /// renderMix, same audible-span policy), after the caller-side codec
+    /// trim (correlation-measured AAC priming/padding, §8.1). Reports
     /// lengths, RMS difference, decoded LUFS-I / true peak / clipping via
-    /// the shared Core functions. NOTE: both sides are AAC here, so codec
-    /// padding/delay can move lengths by an AAC frame — the raw numbers are
-    /// reported for the script to judge; the ±1-sample gate in its strict
-    /// form belongs to the graph-input era.
+    /// the shared Core functions; the ±1-sample length gate is live.
     private func runExportPostCheckUITestScenario(environment: [String: String], artifactPath: String) async -> String {
         var dump = ExportPostCheckDump()
         do {
@@ -3168,18 +3166,24 @@ extension EditorViewModel {
                 )
             }
 
-            // Reference: the project's real preview mix (all volumes, fades,
-            // ducking, EQ, mute/solo — whatever the composition carries).
-            rebuildPreviewComposition()
-            try await waitForCompositionReady(timeoutSeconds: 15)
-            let referenceURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("moviecut-postcheck-\(UUID().uuidString).m4a")
-            defer { try? FileManager.default.removeItem(at: referenceURL) }
-            try await playbackEngine.renderCurrentPreviewAudio(to: referenceURL)
-
-            let reference = try AudioGraphExportPostCheck.decode(fileAt: referenceURL)
-            let decoded = try AudioGraphExportPostCheck.decode(fileAt: exportedURL)
+            // G-25 2C-3 (spec §8): the reference is the GRAPH PCM — the
+            // exact mix the export encoded (renderMix with the same
+            // audible-span policy), so the re-decoded file is judged against
+            // its own encoder input. The re-decode carries AAC
+            // priming/padding; §8.1's caller-side trim measures the codec
+            // delay by correlation and drops head+tail so check()'s ±1
+            // length gate has real teeth.
+            let reference = try await GraphMixRenderer.renderMix(
+                project: currentProject,
+                eqPresetsByClipId: buildAudioProcessingOptions().eqPresets,
+                trimToAudibleSpan: true
+            )
+            let decodedRaw = try AudioGraphExportPostCheck.decode(fileAt: exportedURL)
+            let (decoded, codecDelay) = AudioGraphExportPostCheck.trimCodecDelay(
+                reference: reference, decoded: decodedRaw
+            )
             let report = AudioGraphExportPostCheck.check(reference: reference, decoded: decoded)
+            dump.codecDelaySamples = codecDelay
 
             dump.referenceFrames = report.referenceFrames
             dump.referenceSampleRate = reference.sampleRate

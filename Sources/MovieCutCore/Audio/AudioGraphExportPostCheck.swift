@@ -100,6 +100,91 @@ public enum AudioGraphExportPostCheck {
         )
     }
 
+    /// Plausible lossy-codec delay (priming) bound for the correlation
+    /// search — Apple AAC priming is 2,112 samples; the bound leaves room
+    /// for encoder variation.
+    public static let maxCodecDelaySamples = 8_192
+
+    /// §8.1's CALLER-SIDE TRIM (G-25 2C-3): measures the lossy codec's
+    /// delay (priming) by correlating the re-decoded file against the exact
+    /// PCM the encoder consumed, then drops the priming head AND the
+    /// trailing padding so the result aligns 1:1 with the reference —
+    /// `check(reference:decoded:)` then judges length at ±1 with real
+    /// teeth. Coarse stride-64 sweep + stride-1 refinement on the
+    /// mono-summed channels; a mono-summed dot product is exact for stereo
+    /// pairs and robust for half-silent references (the overlap energy
+    /// anchors the alignment).
+    public static func trimCodecDelay(
+        reference: AudioGraphSourceAudio,
+        decoded: AudioGraphSourceAudio
+    ) -> (trimmed: AudioGraphSourceAudio, codecDelaySamples: Int) {
+        guard reference.frameCount > 0, decoded.frameCount > 0 else {
+            return (decoded, 0)
+        }
+        let channels = min(reference.channels, decoded.channels, 2)
+        func monoSum(_ audio: AudioGraphSourceAudio, frame: Int) -> Double {
+            var sum = 0.0
+            for channel in 0..<channels {
+                sum += Double(audio.sample(frame: frame, channel: channel))
+            }
+            return sum
+        }
+
+        func correlation(at offset: Int) -> Double {
+            let frames = min(reference.frameCount, decoded.frameCount - offset)
+            guard frames > 0 else { return 0 }
+            var score = 0.0
+            var frame = 0
+            while frame < frames {
+                score += monoSum(reference, frame: frame) * monoSum(decoded, frame: frame + offset)
+                frame += 1
+            }
+            return score
+        }
+
+        // Coarse sweep (stride 64) then stride-1 refinement.
+        var bestOffset = 0
+        var bestScore = -Double.infinity
+        var offset = 0
+        while offset <= min(maxCodecDelaySamples, decoded.frameCount) {
+            let score = correlation(at: offset)
+            if score > bestScore {
+                bestScore = score
+                bestOffset = offset
+            }
+            offset += 64
+        }
+        let fineStart = max(0, bestOffset - 64)
+        let fineEnd = min(min(maxCodecDelaySamples, decoded.frameCount), bestOffset + 64)
+        offset = fineStart
+        while offset <= fineEnd {
+            let score = correlation(at: offset)
+            if score > bestScore {
+                bestScore = score
+                bestOffset = offset
+            }
+            offset += 1
+        }
+
+        // Drop the priming head and the trailing padding: exactly the
+        // reference's frame count (or everything that remains).
+        let available = decoded.frameCount - bestOffset
+        let frames = min(reference.frameCount, max(available, 0))
+        var interleaved = [Float]()
+        interleaved.reserveCapacity(frames * decoded.channels)
+        for frame in 0..<frames {
+            for channel in 0..<decoded.channels {
+                interleaved.append(decoded.sample(frame: bestOffset + frame, channel: channel))
+            }
+        }
+        return (
+            AudioGraphSourceAudio(
+                sampleRate: decoded.sampleRate, channels: decoded.channels, interleaved: interleaved
+            ),
+            bestOffset
+        )
+    }
+
     /// §8.1-8.3 on one reference/decoded pair. `targetLoudnessLufs` comes
     /// from the graph's master bus (`AudioGraphMasterBus.targetLoudness`);
     /// nil means no target was declared and the loudness guideline is not

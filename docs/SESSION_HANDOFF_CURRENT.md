@@ -3,11 +3,26 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-18 세션 23 (G-25 전환 2단계-B: 미터 그래프 전환 — M 런이 레거시 tap 결함 첫 포획)
+
+**게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_e2e_export.sh 전체 PASS — §8 A/B 무회귀(0.043dB·solo Δ −3.04 LU) + **미터 런 M: 그래프 −22.94 ↔ 실출력 −22.94 LU(Δ=−0.00, 1회차 0.003)**.
+
+### 완료 — 전환 2단계-B: GraphMixRenderer + 미터 그래프 전환 (커밋 dbe3d61)
+- **`GraphMixRenderer.swift` (App)**: 측정 경로 공용 그래프 믹스 렌더러 — EQ 클립 유효 미디어 파생(`AudioEqualizerService` 오프라인 — 출력 경로와 동일 5밴드 DSP, §0)→빌더→§3.1 어댑터 디코드(`sourceAssetIds`·`derivedClipIds`·`speedAdjustedSources` 전부 소비)→`AudioGraphEncoderInput` 렌더. NR 미적용(기존 프리뷰 audioMix도 미적용 — 동등, 2-C에서 출력 NR 조사 후 결정).
+- **`measureMasterLoudness` 전환**: 프리뷰 컴포지션 대기 루프·m4a 렌더·재디코드 전부 제거 — 프로젝트 상태→그래프 PCM→LUFS. 미터 경로의 교찰 조건(AVAssetExportSession)·tap 의존 구조적 제거.
+- **E2E**: 하니스 `MOVIECUT_UITEST_MASTER_METER`(+`EQ=1` — BGM에 bassBoost 실제 명령 적용, §0 파생 종단 검증) + §8 스크립트에 미터 런 M(미터↔실출력 ±1.5 LU·클리핑 0 단언).
+- **M 런이 포획한 레고시 결함(tap-in-export, LOOP_STATE 기록)**: EQ 적용 시 `renderCurrentPreviewAudio`의 tap(MTAudioProcessingTap) 트랙이 AVAssetExportSession에서 ~무음 렌더(참조 −29.14 ≈ BGM 억제 믹스 −28.71 — tap은 AVPlayer·AVAssetReader용 설계). **Inc 9 미터가 이 경로를 썼으므로 EQ 프로젝트의 기존 미터 측정은 깨져 있었음(잠복)** — 그래프 미터가 이미 해소. 게이트 처리(사용자 결정): M 런은 미터↔출력 일치만 단언, 프리뷰 참조 RMS는 결함 기록으로 분리(2-C tap 폐지로 소멸).
+
+### 다음 회차 인계(루프 자동화 — 4시간 간격 회차가 순차 소화)
+1. **2-C(출력 경로 배선)**: ① 출력 오디오 인코딩 그래프 PCM 전환(PCM→AAC→비디오 먹싱) ② 프리뷰 tap·AVAudioEngine NR 실시간 필터 폐지(§0 v1.1) ③ §8 기준 그래프 PCM 전환 + AAC 프라이밍 트림(±1샘플 엄격 게이트) ④ 속도 램프 사전 렌더 미디어 공급 ⑤ 출력 NR 처리 조사 후 그래프 편입 결정. 게이트 = §11⑤(EQ Goertzel·덕킹 RMS·NR SNR 무회귀).
+2. 2-C 완료 후: §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가(EXECUTION_PLAN §4).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
 ## 2026-08-18 세션 22 (G-25 제품 경로 전환 2단계-A: §3.1 소스 어댑터)
 
 **게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**(3 그래프·project 192,000프레임 maxDev=0.00e+00·패리티 −0.02 LU·drift 0).
 
-### 완료 — 전환 2단계-A: AudioGraphSourceAdapter(§3.1) + 빌더 속도 매핑 + 하니스 정규화 (이번 세션 커밋)
+### 완료 — 전환 2단계-A: AudioGraphSourceAdapter(§3.1) + 빌더 속도 매핑 + 하니스 정규화 (커밋 d391d50)
 - **`AudioGraphSourceAdapter.swift` (Core)**: §3.1 엔진 어댑터 — ① 디코드: 오디오 전용 컨테이너(AVAudioFile) + **비디오 컨테이너 임베디드 오디오(AVAssetReader)**, 오디오 없는 영상 = 명시적 무음 소스(실제 기여), 읽기 불가 = throw(조용한 품질 강등 금지) ② 리샘플: AVAudioConverter 고품질, 입력 핸들러가 endOfStream 신호로 필터 꼬리 플러시 ③ **속도 사전 렌더**: AVAudioUnitTimePitch 오프라인 수동 렌더링(scaleTimeRange와 동일 계열), 모노는 dual-mono 스테레오로(엔진 모노 경로 −3dB 감쇠 실측 회피), 꼬리 무음 트림. **범위 외 명시**: 리버스는 제품이 이미 사전 렌더 미디어로 구체화(§0 유효 미디어로 공급), 속도 램프는 단일 rate 재현 불가 — 둘 다 배선 증분.
 - **빌더 속도 매핑**: 속도 ≠ 1 클립 = **클립 단위 소스**(스트레치 소스는 동일 자산 속도-1 클립과 공유 불가) + 활성화 수식(오프셋 a/speed·타임라인 지속 sourceRange.duration/speed — scaleTimeRange 의미론, N(τ)=S(τ·speed) 유도) + `Plan.speedAdjustedSources` 사전 렌더 요청 목록.
 - **하니스 null test §3.1 전환**: 실제 프로젝트 디코드를 어댑터 정규화 경로로(그래프 레이트 정규화·무음 폴백 제거 — 실제 실패는 명시적 throw).

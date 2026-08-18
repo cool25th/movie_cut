@@ -1535,6 +1535,80 @@ print(
 PY
 )" || { echo "$G25_POSTCHECK_SUMMARY" >&2; echo "G-25 §8 post-check FAIL (artifacts: $G25_POSTCHECK_TMPDIR)" >&2; exit 1; }
 echo "PASS: G-25 §8 export post-check + solo ($G25_POSTCHECK_SUMMARY)"
+
+# --- G-25 switchover 2B: master meter through the GRAPH (run M) ---------------
+# Same ducking-harness project, plus bass-boost EQ on the BGM clip (real
+# command path) so the §0 effective-media derivation is exercised: the meter
+# measures the graph mix (builder + derived EQ + §3.1 adapter), the export
+# still mixes via audioMix (derived EQ offline) — the two must agree within
+# tolerance while both paths are alive.
+G25_POSTCHECK_M_RESULT="$G25_POSTCHECK_TMPDIR/m.txt"
+G25_POSTCHECK_M_JSON="$G25_POSTCHECK_TMPDIR/m.json"
+G25_POSTCHECK_M_METER="$G25_POSTCHECK_TMPDIR/meter.json"
+G25_EXPORT_M="$G25_POSTCHECK_TMPDIR/export-m.m4a"
+sleep 1
+echo "Running G-25 §8 meter run (M: graph master meter + EQ on BGM)"
+open -n -W \
+  --env MOVIECUT_UITEST=1 \
+  --env MOVIECUT_UITEST_DUCKING_BGM="$G25_BGM" \
+  --env MOVIECUT_UITEST_DUCKING_VOICE="$G25_VOICE" \
+  --env MOVIECUT_UITEST_MASTER_METER="$G25_POSTCHECK_M_METER" \
+  --env MOVIECUT_UITEST_MASTER_METER_EQ=1 \
+  --env MOVIECUT_UITEST_EXPORT_AUDIO="$G25_EXPORT_M" \
+  --env MOVIECUT_UITEST_EXPORT_POSTCHECK="$G25_POSTCHECK_M_JSON" \
+  --env MOVIECUT_UITEST_RESULT="$G25_POSTCHECK_M_RESULT" \
+  --env MOVIECUT_UITEST_QUIT=1 \
+  "$G25_APP" >/dev/null 2>&1 &
+G25M=$!
+wait_for_result "$G25M" 120 0.5 "$G25_POSTCHECK_M_RESULT"
+G25_M_STATUS="$(cat "$G25_POSTCHECK_M_RESULT" 2>/dev/null || echo MISSING)"
+G25_METER_SUMMARY="$(python3 - "$G25_POSTCHECK_M_JSON" "$G25_POSTCHECK_M_METER" "$G25_M_STATUS" <<'PY'
+import json, re, sys
+
+m_json, meter_json, m_status = sys.argv[1:4]
+
+def fail(message):
+    raise SystemExit(f"FAIL: {message}")
+
+if "error=none" not in m_status:
+    fail(f"run M reported an error: {m_status}")
+for needed in ("master_meter=1", "meter_eq=1", "export_postcheck=ok"):
+    if needed not in m_status:
+        fail(f"run M missing {needed}: {m_status}")
+meter_lufs_match = re.search(r"(?:^| )meter_lufs=(-?[0-9.]+)", m_status)
+if not meter_lufs_match:
+    fail(f"run M meter LUFS missing/silent: {m_status}")
+meter_lufs = float(meter_lufs_match.group(1))
+
+m = json.load(open(m_json))
+meter = json.load(open(meter_json))
+if m["error"] != "none" or meter["error"] != "none":
+    fail(f"run M artifact error: {m['error']} / {meter['error']}")
+if meter["lufs"] is None:
+    fail(f"run M meter produced no integrated loudness: {meter}")
+if m["decodedLufs"] is None:
+    fail(f"run M export produced no loudness: {m}")
+
+# The graph meter and the actually-encoded export must agree: tolerance
+# spans the measured path delta (~0.003 LU first measurement) plus
+# tap-vs-offline EQ DSP and AAC encoding.
+delta = meter_lufs - m["decodedLufs"]
+if abs(delta) > 1.5:
+    fail(f"graph meter vs encoded export disagree: Δ={delta:.3f} LU")
+if m["clippingRunCount"] != 0:
+    fail(f"run M clipped output: {m}")
+# NOTE: run M deliberately does NOT gate on the preview-mix reference RMS.
+# With EQ applied, the preview reference rides the legacy MTAudioProcessingTap
+# inside AVAssetExportSession, where the tapped track renders ~silent
+# (measured: reference −29.14 LUFS ≈ the BGM-suppressed mix, while meter and
+# export agree at −22.94). Recorded as a known defect in LOOP_STATE; it
+# disappears when 2-C retires the tap path (spec §0 v1.1).
+
+print("meter: graph=%.2f LU export=%.2f LU Δ=%.2f tp=%.2f eq=1" % (
+    meter_lufs, m["decodedLufs"], delta, meter["truePeakDbTp"]))
+PY
+)" || { echo "$G25_METER_SUMMARY" >&2; echo "G-25 §8 meter run FAIL (artifacts: $G25_POSTCHECK_TMPDIR)" >&2; exit 1; }
+echo "PASS: G-25 §8 graph master meter ($G25_METER_SUMMARY)"
 rm -rf "$G25_POSTCHECK_TMPDIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style + G-25 §8 post-check/solo)"
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style + G-25 §8 post-check/solo + graph master meter)"

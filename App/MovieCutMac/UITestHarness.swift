@@ -341,6 +341,18 @@ extension EditorViewModel {
             )
         }
 
+        // G-25 switchover 2B: the master-loudness meter measured through the
+        // REAL graph path on the current (ducking-harness) project state —
+        // optionally with EQ applied to the BGM clip so the §0 effective-
+        // media derivation is exercised end to end.
+        var masterMeterSuffix = ""
+        if let meterPath = env["MOVIECUT_UITEST_MASTER_METER"], !meterPath.isEmpty {
+            masterMeterSuffix = await runMasterMeterUITestScenario(
+                environment: env,
+                artifactPath: meterPath
+            )
+        }
+
         // Motion-tracking gate (T2-R1 prerequisite). Runs the REAL user path —
         // trackMotion → MotionTrackingProvider → SetClipPropertyCommand(
         // .keyframes) — on the imported fixture with a fixed initial rect, so
@@ -722,7 +734,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -3046,6 +3058,67 @@ extension EditorViewModel {
     }
 
     // MARK: - G-25 §8 export post-check (Inc 9 App half)
+
+    // MARK: - G-25 master meter (switchover 2B)
+
+    /// JSON artifact for `MOVIECUT_UITEST_MASTER_METER`.
+    private struct MasterMeterDump: Codable {
+        var eqApplied = false
+        var lufs: Double?
+        var truePeakDbTp: Double?
+        var samplePeakDbFs: Double?
+        var error = "none"
+    }
+
+    /// Measures the current project through the REAL meter path
+    /// (`measureMasterLoudness` → `GraphMixRenderer` — the graph mix with
+    /// derived EQ effective media, spec §0/§3.1) and dumps the measured
+    /// values. With `MOVIECUT_UITEST_MASTER_METER_EQ=1` a bass-boost
+    /// preset is applied to the FIRST audio clip through the real command
+    /// path first, so the effective-media derivation is exercised end to
+    /// end alongside the meter.
+    private func runMasterMeterUITestScenario(environment: [String: String], artifactPath: String) async -> String {
+        var dump = MasterMeterDump()
+        if environment["MOVIECUT_UITEST_MASTER_METER_EQ"] == "1" {
+            let audioClips = currentProject.timeline.tracks
+                .filter { $0.kind == .audio }
+                .flatMap(\.clips)
+            if let bgm = audioClips.first {
+                await apply(SetClipPropertyCommand(
+                    clipId: bgm.id,
+                    property: .equalizer(ClipEqualizerSettings.settings(for: .bassBoost))
+                ))
+                dump.eqApplied = true
+            }
+        }
+        await measureMasterLoudness()
+        if let measurement = masterLoudness {
+            dump.lufs = measurement.integratedLufs
+            dump.truePeakDbTp = measurement.truePeakDbTp
+            dump.samplePeakDbFs = measurement.samplePeakDbFs
+        } else {
+            dump.error = masterLoudnessError ?? "measurement nil"
+        }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "master meter artifact write failed: \(error.localizedDescription)"
+        }
+        var suffix = " master_meter=\(dump.error == "none" ? 1 : 0)" +
+            " meter_eq=\(dump.eqApplied ? 1 : 0)"
+        if let lufs = dump.lufs {
+            suffix += String(format: " meter_lufs=%.2f", lufs)
+        } else {
+            suffix += " meter_lufs=silence"
+        }
+        suffix += String(format: " meter_tp=%.2f", dump.truePeakDbTp ?? 0)
+        if dump.error != "none" {
+            suffix += " meter_error=1"
+        }
+        return suffix
+    }
 
     /// JSON artifact for `MOVIECUT_UITEST_EXPORT_POSTCHECK`.
     private struct ExportPostCheckDump: Codable {

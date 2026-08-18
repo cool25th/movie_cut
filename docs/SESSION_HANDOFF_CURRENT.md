@@ -3,6 +3,22 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-18 세션 21 (사용자 결정: 명세 v1.1 승인 → 제품 경로 전환 1단계)
+
+**게이트**: verify_gate 5단계 PASS + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**.
+
+### 완료 — G-25 제품 경로 전환 1단계: 명세 v1.1 + Project→그래프 빌더 + 실제 프로젝트 null test (이번 세션 커밋)
+- **명세 v1.1 (사용자 승인)**: 제품 경로 전환 작성 중 발견된 설계-구현 불일치 3건 반영 — ① §1.1 신설: 1단계 덕킹 = 플래너 산출물의 **스트립 게인 자동화 구체화**(버스 사이드체인·`AudioGraphDucking`은 G-26 슬롯), 램프는 range 내부(어택/릴리즈 타이밍 현행 계승)·dB-선형·페이드 클램핑 미재현. ② §0: EQ/NR은 프리뷰(실시간 tap)·출력(파생 미디어) **이중 경로**였음을 인정하고 그래프 소스 = 클립의 **유효 오디오 미디어**(적용 클립은 `.derived`)로 규칙화, 프리뷰 tap 폐지 예고. ③ §3.1 신설: 소스 정규화(비디오 컨테이너 `AVAssetReader`·`AVAudioConverter` 리샘플·속도/리버스 사전 렌더)는 엔진 어댑터 소유, 렌더러 nearest-frame 비율 판독은 더미 폴백. §8 과도기 기준·§11⑤ 무회귀 판정 기준(측정 임계 내·그래프 의미론 기준) 명시. **스키마 불변(version 1)**.
+- **`AudioGraphProjectBuilder.swift` (Core)**: v1.1 의미론 구현 — 덕킹 **절대 리베이스**(클립 로컬 range → 클립 시작+range의 절대 샘플; 전 세션 발견 좌표계 버그 수정)·내부 램프 4포인트(attack [start, start+0.12]·release [end−0.25, end])·짧은 range(<attack+release)·level≥1 가드(현행 동작 계승) / EQ·NR 유효 미디어(`effectiveMediaFor` 클로저 → 클립 단위 `.derived` 소스[설정이 클립 단위이므로 자산 공유 시 별 소스]·`Plan.derivedClipIds`) / §3.1 디코드 계약(`decodedSampleRateFor` — 소스 id 기준, 어댑터 정규화 시 nil). 테스트 9종(신규 3: 절대 리베이스 회귀·엣지 케이스·파생 매핑).
+- **null test §9.1 실제 프로젝트 단계 (App)**: 하니스가 메인 플로우(덕킹 하니스 후)에서 `AudioGraphProjectBuilder`로 실제 프로젝트(=BGM 220Hz 0-4s + Voice 1kHz 1-2s, 플래너 덕킹 적용 상태)를 그래프로 빌드→양 엔진 렌더→§9 비교 + 그래프 믹스↔프리뷰 audioMix 렌더 LUFS 패리티(전환 증거; 임계 ±1.0 LU). 스크립트 게이트: project_graph 실행·엔진 null·패리티 3단계 단언 + JSON 교차검사.
+- **실측(2회 연속 동일)**: 3 그래프 전부 통과, project 192,000프레임 **양 엔진 maxDev=0.00e+00·offset=0**, **패리티 −0.02 LU** — dB-선형 덕킹 램프·클램핑 미재현이 측정상 무의미함을 실증(§11⑤ 근거).
+- **게이트가 잡은 결함 3건(전부 수정)**: ① 하니스 `try? decode() ?? 폴백` 우선순위(`??`가 try? 안쪽에 묶여 디코드 실패 시 nil → missingInput) ② 비디오 임포트+덕킹+`renderCurrentPreviewAudio` 조합 = LOOP_STATE 기존 교찰 결함 재현 → 게이트에서 비디오 임포트 제외(오디오 없는 픽스처라 그래프 기여 0, 이유 주석화) ③ 패리티 +2.99 LU = 모노 m4a↔dual-mono 스테레오의 BS.1770 +3.01 LU 표시 차이 → 측정 전 채널 레이아웃 정규화(`dualMonoStereo`).
+
+### 다음 세션 인계
+1. **제품 경로 전환 2단계(엔진 배선)**: 프리뷰(audioMix→그래프 렌더)·출력(인코더 입력→그래프) 배선 + EQ/NR 유효 미디어 어댑터(렌더 시점 파생, §0) + §3.1 정규화 어댑터(AVAssetReader·AVAudioConverter·속도/리버스 사전 렌더) + §8 기준 그래프 PCM 전환(±1샘플 엄격 게이트). 게이트 = §11⑤ 기존 오디오 E2E 무회귀(EQ Goertzel·덕킹 RMS).
+2. 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 필터 경로는 이 증분에서 폐지(§0 v1.1).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
 ## 2026-08-18 세션 20 (사용자 결정: G-25 설계 문서 승인 → Inc 7 착수)
 
 **게이트**: verify_gate 5단계 — 커밋 시점 기준.

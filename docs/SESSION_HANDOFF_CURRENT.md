@@ -3,11 +3,26 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-18 세션 22 (G-25 제품 경로 전환 2단계-A: §3.1 소스 어댑터)
+
+**게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**(3 그래프·project 192,000프레임 maxDev=0.00e+00·패리티 −0.02 LU·drift 0).
+
+### 완료 — 전환 2단계-A: AudioGraphSourceAdapter(§3.1) + 빌더 속도 매핑 + 하니스 정규화 (이번 세션 커밋)
+- **`AudioGraphSourceAdapter.swift` (Core)**: §3.1 엔진 어댑터 — ① 디코드: 오디오 전용 컨테이너(AVAudioFile) + **비디오 컨테이너 임베디드 오디오(AVAssetReader)**, 오디오 없는 영상 = 명시적 무음 소스(실제 기여), 읽기 불가 = throw(조용한 품질 강등 금지) ② 리샘플: AVAudioConverter 고품질, 입력 핸들러가 endOfStream 신호로 필터 꼬리 플러시 ③ **속도 사전 렌더**: AVAudioUnitTimePitch 오프라인 수동 렌더링(scaleTimeRange와 동일 계열), 모노는 dual-mono 스테레오로(엔진 모노 경로 −3dB 감쇠 실측 회피), 꼬리 무음 트림. **범위 외 명시**: 리버스는 제품이 이미 사전 렌더 미디어로 구체화(§0 유효 미디어로 공급), 속도 램프는 단일 rate 재현 불가 — 둘 다 배선 증분.
+- **빌더 속도 매핑**: 속도 ≠ 1 클립 = **클립 단위 소스**(스트레치 소스는 동일 자산 속도-1 클립과 공유 불가) + 활성화 수식(오프셋 a/speed·타임라인 지속 sourceRange.duration/speed — scaleTimeRange 의미론, N(τ)=S(τ·speed) 유도) + `Plan.speedAdjustedSources` 사전 렌더 요청 목록.
+- **하니스 null test §3.1 전환**: 실제 프로젝트 디코드를 어댑터 정규화 경로로(그래프 레이트 정규화·무음 폴백 제거 — 실제 실패는 명시적 throw).
+- 테스트 +9(어댑터 7종 — 실미디어: 44.1k→48k 리샘플 길이 정확·mp4 임베디드 톤·무음 mp4·2× 스트레치 피치 보존·풀 파이프라인 / 빌더 속도 2종). 전체 1,248.
+
+### 다음 세션 인계
+1. **전환 2단계-B(측정·출력 경로 배선)**: measureMasterLoudness를 그래프 렌더로(빌더+어댑터+AudioGraphEncoderInput → LUFS — AVAssetExportSession 의존 제거로 **미터 경로의 교찰 조건 구조적 제거**) + EQ/NR 유효 미디어 어댑터(`AudioEqualizerService().apply` 재사용, 빌더 `effectiveMediaFor` 공급, `resolvedEqualizerPreset` 통일 확인) + §8 기준 그래프 PCM 전환 + 출력 인코더 입력 그래프 PCM 전환(±1샘플 엄격 게이트). 게이트 = §11⑤ 기존 오디오 E2E 무회귀(EQ Goertzel·덕킹 RMS).
+2. 속도 램프 클립의 사전 렌더 미디어 공급(빌더 요청 `speedAdjustedSources` 소비자 배선 시).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
 ## 2026-08-18 세션 21 (사용자 결정: 명세 v1.1 승인 → 제품 경로 전환 1단계)
 
 **게이트**: verify_gate 5단계 PASS + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**.
 
-### 완료 — G-25 제품 경로 전환 1단계: 명세 v1.1 + Project→그래프 빌더 + 실제 프로젝트 null test (이번 세션 커밋)
+### 완료 — G-25 제품 경로 전환 1단계: 명세 v1.1 + Project→그래프 빌더 + 실제 프로젝트 null test (커밋 5f43d7b)
 - **명세 v1.1 (사용자 승인)**: 제품 경로 전환 작성 중 발견된 설계-구현 불일치 3건 반영 — ① §1.1 신설: 1단계 덕킹 = 플래너 산출물의 **스트립 게인 자동화 구체화**(버스 사이드체인·`AudioGraphDucking`은 G-26 슬롯), 램프는 range 내부(어택/릴리즈 타이밍 현행 계승)·dB-선형·페이드 클램핑 미재현. ② §0: EQ/NR은 프리뷰(실시간 tap)·출력(파생 미디어) **이중 경로**였음을 인정하고 그래프 소스 = 클립의 **유효 오디오 미디어**(적용 클립은 `.derived`)로 규칙화, 프리뷰 tap 폐지 예고. ③ §3.1 신설: 소스 정규화(비디오 컨테이너 `AVAssetReader`·`AVAudioConverter` 리샘플·속도/리버스 사전 렌더)는 엔진 어댑터 소유, 렌더러 nearest-frame 비율 판독은 더미 폴백. §8 과도기 기준·§11⑤ 무회귀 판정 기준(측정 임계 내·그래프 의미론 기준) 명시. **스키마 불변(version 1)**.
 - **`AudioGraphProjectBuilder.swift` (Core)**: v1.1 의미론 구현 — 덕킹 **절대 리베이스**(클립 로컬 range → 클립 시작+range의 절대 샘플; 전 세션 발견 좌표계 버그 수정)·내부 램프 4포인트(attack [start, start+0.12]·release [end−0.25, end])·짧은 range(<attack+release)·level≥1 가드(현행 동작 계승) / EQ·NR 유효 미디어(`effectiveMediaFor` 클로저 → 클립 단위 `.derived` 소스[설정이 클립 단위이므로 자산 공유 시 별 소스]·`Plan.derivedClipIds`) / §3.1 디코드 계약(`decodedSampleRateFor` — 소스 id 기준, 어댑터 정규화 시 nil). 테스트 9종(신규 3: 절대 리베이스 회귀·엣지 케이스·파생 매핑).
 - **null test §9.1 실제 프로젝트 단계 (App)**: 하니스가 메인 플로우(덕킹 하니스 후)에서 `AudioGraphProjectBuilder`로 실제 프로젝트(=BGM 220Hz 0-4s + Voice 1kHz 1-2s, 플래너 덕킹 적용 상태)를 그래프로 빌드→양 엔진 렌더→§9 비교 + 그래프 믹스↔프리뷰 audioMix 렌더 LUFS 패리티(전환 증거; 임계 ±1.0 LU). 스크립트 게이트: project_graph 실행·엔진 null·패리티 3단계 단언 + JSON 교차검사.

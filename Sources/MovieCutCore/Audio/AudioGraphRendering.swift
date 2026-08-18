@@ -27,6 +27,21 @@ public enum AudioGraphLatency {
         let totalDelay = declaredLatencies.map { $0.reportedLatencySamples + $0.lookAheadSamples }.max() ?? 0
         return (lookAhead, totalDelay)
     }
+
+    /// The absolute pipeline window both engines must render for a request of
+    /// `frameCount` timeline frames starting at timeline sample 0: the final
+    /// output for timeline frame f is pipeline frame f + outputDelaySamples
+    /// (the maximum total delay). The two engine generators derive their
+    /// window from THIS function — never from their own math — so preview and
+    /// export compensate identically (spec rule ②). Stage-1 graphs yield
+    /// 0..<frameCount (identity).
+    public static func outputWindow(
+        forFrameCount frameCount: Int,
+        declaredLatencies: [AudioGraphNodeLatency]?
+    ) -> Range<Int64> {
+        let delay = globalCompensation(declaredLatencies).outputDelaySamples
+        return delay ..< delay + Int64(frameCount)
+    }
 }
 
 extension AudioGraphTimebase {
@@ -124,11 +139,16 @@ public enum AudioGraphRenderError: Error, Equatable, Sendable {
 ///   input data in a pure render and is therefore identity here — the node
 ///   stays in the graph for the engines, which own the sidechain wiring.
 public enum AudioGraphOfflineRenderer {
+    /// - Parameter frameRange: absolute graph-sample range to evaluate into
+    ///   the returned buffer (buffer frame 0 = `frameRange.lowerBound`).
+    ///   nil = `0..<frameCount`. The ENGINE GENERATORS pass the latency
+    ///   output window here; direct callers get the uncompensated origin.
     public static func render(
         spec: AudioRenderGraphSpec,
         activations: [UUID: AudioGraphStripActivation],
         sourceAudio: (UUID) -> AudioGraphSourceAudio?,
-        frameCount: Int
+        frameCount: Int,
+        frameRange: Range<Int64>? = nil
     ) throws -> AudioGraphSourceAudio {
         // Spec §5: a stage-1 engine must reject graphs that use nodes it
         // cannot implement. The limiter is the only placeholder node with a
@@ -137,6 +157,7 @@ public enum AudioGraphOfflineRenderer {
             throw AudioGraphRenderError.unsupportedNodeKind(limiter.nodeKind)
         }
 
+        let absoluteRange = frameRange ?? 0 ..< Int64(frameCount)
         var out = [Float](repeating: 0, count: frameCount * 2)
         let soloedBuses = spec.trackBuses.contains { $0.solo }
 
@@ -156,39 +177,23 @@ public enum AudioGraphOfflineRenderer {
                     throw AudioGraphRenderError.missingInput(what: "sourceAudio", id: source.id)
                 }
 
-                let start = max(0, activation.sampleRange.lowerBound)
-                let end = min(Int64(frameCount), activation.sampleRange.upperBound)
+                let start = max(absoluteRange.lowerBound, activation.sampleRange.lowerBound)
+                let end = min(absoluteRange.upperBound, activation.sampleRange.upperBound)
                 guard end > start else { continue }
 
                 for frame in start..<end {
-                    let offset = frame - activation.sampleRange.lowerBound
-                    let sourceFrame = Int((Double(offset) * activation.playbackRate).rounded(.down))
-                        + Int(activation.sourceFrameOffset)
-                    let (left, right) = mappedChannels(strip: strip, audio: audio, frame: sourceFrame)
-
-                    let gain = linearGain(
-                        value: automationValue(strip.gain, at: frame),
-                        fallbackDb: 0
+                    let (left, right) = stripFrame(
+                        strip: strip,
+                        bus: bus,
+                        anyBusSoloed: soloedBuses,
+                        masterFader: spec.masterBus.fader,
+                        audio: audio,
+                        activation: activation,
+                        at: frame
                     )
-                    let fade = fadeFactor(strip.fades, at: frame)
-                    // No pan points → the pan node is bypassed (unity).
-                    // With points, the held/evaluated value maps through the
-                    // equal-power law (0 = center = -3 dB on both).
-                    let (panL, panR) = strip.pan.isEmpty
-                        ? (1.0, 1.0)
-                        : panGains(automationValue(strip.pan, at: frame))
-                    let busGain = linearGain(
-                        value: automationValue(bus.fader, at: frame),
-                        fallbackDb: 0
-                    )
-                    let masterGain = linearGain(
-                        value: automationValue(spec.masterBus.fader, at: frame),
-                        fallbackDb: 0
-                    )
-                    let total = Float(gain * fade * busGain * masterGain)
-                    let l = Int(frame) * 2
-                    out[l] += left * total * Float(panL)
-                    out[l + 1] += right * total * Float(panR)
+                    let l = Int(frame - absoluteRange.lowerBound) * 2
+                    out[l] += left
+                    out[l + 1] += right
                 }
             }
         }
@@ -197,6 +202,55 @@ public enum AudioGraphOfflineRenderer {
     }
 
     // MARK: - Evaluation math (pure, shared semantics)
+
+    /// ONE strip's stereo contribution to the master mix at an absolute graph
+    /// sample position — the full per-strip chain (channel mapping →
+    /// gain/fades → pan → bus fader/mute/solo → master fader) with the exact
+    /// multiplication order both engine generators must reproduce. The
+    /// offline renderer accumulates it directly; the AVAudioEngine generator
+    /// precomputes each strip's window from it and lets the ENGINE own
+    /// scheduling and summing — shared math is what makes the preview↔export
+    /// null test (spec §9) a plumbing check rather than a semantics check.
+    static func stripFrame(
+        strip: AudioGraphClipStrip,
+        bus: AudioGraphTrackBus,
+        anyBusSoloed: Bool,
+        masterFader: [AudioGraphAutomationPoint],
+        audio: AudioGraphSourceAudio,
+        activation: AudioGraphStripActivation,
+        at frame: Int64
+    ) -> (left: Float, right: Float) {
+        if bus.mute || (anyBusSoloed && !bus.solo) { return (0, 0) }
+        guard frame >= activation.sampleRange.lowerBound,
+              frame < activation.sampleRange.upperBound else { return (0, 0) }
+
+        let offset = frame - activation.sampleRange.lowerBound
+        let sourceFrame = Int((Double(offset) * activation.playbackRate).rounded(.down))
+            + Int(activation.sourceFrameOffset)
+        let (left, right) = mappedChannels(strip: strip, audio: audio, frame: sourceFrame)
+
+        let gain = linearGain(
+            value: automationValue(strip.gain, at: frame),
+            fallbackDb: 0
+        )
+        let fade = fadeFactor(strip.fades, at: frame)
+        // No pan points → the pan node is bypassed (unity).
+        // With points, the held/evaluated value maps through the
+        // equal-power law (0 = center = -3 dB on both).
+        let (panL, panR) = strip.pan.isEmpty
+            ? (1.0, 1.0)
+            : panGains(automationValue(strip.pan, at: frame))
+        let busGain = linearGain(
+            value: automationValue(bus.fader, at: frame),
+            fallbackDb: 0
+        )
+        let masterGain = linearGain(
+            value: automationValue(masterFader, at: frame),
+            fallbackDb: 0
+        )
+        let total = Float(gain * fade * busGain * masterGain)
+        return (left * total * Float(panL), right * total * Float(panR))
+    }
 
     /// Piecewise-linear automation evaluation in dB (or pan) at an exact
     /// sample position; constant outside the point range.

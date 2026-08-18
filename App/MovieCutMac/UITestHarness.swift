@@ -156,7 +156,11 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     /// - `MOVIECUT_UITEST_VOCAL_SEPARATION=<removeVocals|isolateCenter>` — applies real offline separation to the selected audio clip.
-    /// - `MOVIECUT_UITEST_PREVIEW_AUDIO=<path>` — renders Preview's installed composition/audio mix for PCM verification.
+        /// - `MOVIECUT_UITEST_PREVIEW_AUDIO=<path>` — renders Preview's installed composition/audio mix for PCM verification.
+        /// - `MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST=<path>` — G-25 §9 measured null test: renders the same
+        ///   audio graph through BOTH engine generators (real AVAudioEngine preview + encoder input),
+        ///   null-compares at ±1 sample / 1 LSB, measures the 60-minute mixed-rate tail drift, and writes a
+        ///   JSON artifact to <path> (the swift-test-level checks live in AudioGraphEngineNullTests).
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -181,6 +185,10 @@ extension EditorViewModel {
         }
         if env["MOVIECUT_UITEST_PARITY"] == "1" {
             await runPreviewExportParityUITestScenario(environment: env)
+            return
+        }
+        if let nullTestPath = env["MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST"], !nullTestPath.isEmpty {
+            await runAudioGraphNullTestUITestScenario(environment: env, artifactPath: nullTestPath)
             return
         }
         if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
@@ -2633,6 +2641,264 @@ extension EditorViewModel {
     /// seconds) to `MOVIECUT_UITEST_PREVIEW_DUMP` (one PNG per timestamp with
     /// a `_t<seconds>.png` suffix). The shell script then extracts the same
     /// timestamps from the exported mp4 and compares them pixel-by-pixel.
+    // MARK: - G-25 §9 audio graph null test (Inc 8 App half)
+
+    /// JSON artifact for `MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST`: per-graph
+    /// comparator results plus the §9.4 drift measurement.
+    private struct AudioGraphNullTestDump: Codable {
+        struct GraphResult: Codable {
+            var name: String
+            var frames: Int
+            var bestOffsetSamples: Int
+            var maxAbsoluteDeviation: Double
+            var lsb16: Double
+            var passed: Bool
+        }
+
+        var schemaVersion = 1
+        var scenario = "G-25-audio-graph-null-test"
+        var graphs: [GraphResult] = []
+        var driftTimelineEndSamples: Int64 = 0
+        var driftTailFrames: Int = 0
+        var driftBestOffsetSamples: Int = 0
+        var driftRoundTripExact = false
+        var driftPassed = false
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// G-25 spec §9 — the MEASURED preview↔export null test in the real app
+    /// process (실측 판정은 E2E만, §9.5). The SAME graph is rendered by BOTH
+    /// engine generators — the preview side through a real AVAudioEngine
+    /// (offline manual rendering: source nodes → bus mixers → main mixer) and
+    /// the export side as encoder input — then judged by the shared Core
+    /// comparator at ±1 sample / 1 LSB. The §9.4 drift measurement renders
+    /// the 60-minute mixed-rate TAIL in both engines with the same explicit
+    /// window: any timebase drift would misalign the tail content, so the
+    /// measured alignment offset IS the end-point drift. Sources are
+    /// deterministic synthetic sines (the spec's "더미" project — no media
+    /// decode, byte-reproducible numbers); the project→graph builder lands
+    /// with the product migration, after Inc 9.
+    private func runAudioGraphNullTestUITestScenario(environment: [String: String], artifactPath: String) async {
+        let started = Date()
+        var dump = AudioGraphNullTestDump()
+
+        func deterministicSine(frames: Int, channels: Int, sampleRate: Double, seed: Double) -> AudioGraphSourceAudio {
+            var samples = [Float]()
+            samples.reserveCapacity(frames * channels)
+            for frame in 0..<frames {
+                for channel in 0..<channels {
+                    let frequency = seed + Double(channel) * 110
+                    samples.append(Float(sin(Double(frame) * frequency * 2 * .pi / sampleRate) * 0.8))
+                }
+            }
+            return AudioGraphSourceAudio(sampleRate: sampleRate, channels: channels, interleaved: samples)
+        }
+
+        func nullCompareGraph(
+            name: String,
+            spec: AudioRenderGraphSpec,
+            activations: [UUID: AudioGraphStripActivation],
+            sources: [UUID: AudioGraphSourceAudio],
+            frameCount: Int
+        ) throws -> AudioGraphNullTestDump.GraphResult {
+            let preview = try AudioGraphAVAudioEngineRenderer.render(
+                spec: spec, activations: activations,
+                sourceAudio: { sources[$0] }, frameCount: frameCount
+            )
+            let export = try AudioGraphEncoderInput.render(
+                spec: spec, activations: activations,
+                sourceAudio: { sources[$0] }, frameCount: frameCount
+            )
+            let result = AudioGraphNullTest.compare(
+                reference: export.interleaved, candidate: preview.interleaved
+            )
+            return AudioGraphNullTestDump.GraphResult(
+                name: name,
+                frames: frameCount,
+                bestOffsetSamples: result.bestOffsetSamples,
+                maxAbsoluteDeviation: Double(result.maxAbsoluteDeviation),
+                lsb16: Double(result.lsb16),
+                passed: result.passed
+            )
+        }
+
+        do {
+            // --- §9.1-9.3: null test on the stage-1 feature mix ------------
+            // Graph 1 — every stage-1 node: mono strip (gain ramp, linear
+            // fade, pan automation) on a bus with a ramped fader, stereo
+            // strip on a second (muted) bus.
+            let frames = 4_800
+            let sourceA = UUID(), stripA = UUID(), sourceB = UUID(), stripB = UUID()
+            var busA = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripA])
+            busA.fader = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -6),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames), value: 0)
+            ]
+            var stripAm = AudioGraphClipStrip(clipId: stripA, sourceId: sourceA, channelMapping: .mono)
+            stripAm.gain = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -3),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames / 2), value: 1)
+            ]
+            stripAm.fades = [AudioGraphFade(startSample: 0, endSample: Int64(frames / 2), curve: .linear)]
+            stripAm.pan = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -1),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames), value: 1)
+            ]
+            var busB = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripB])
+            busB.mute = true
+            let stripBm = AudioGraphClipStrip(clipId: stripB, sourceId: sourceB, channelMapping: .stereo)
+            let mixSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(id: sourceA, kind: .original, url: URL(filePath: "/tmp/g25-mix-a.wav")),
+                    AudioGraphSource(id: sourceB, kind: .original, url: URL(filePath: "/tmp/g25-mix-b.wav"))
+                ],
+                clipStrips: [stripAm, stripBm],
+                trackBuses: [busA, busB]
+            )
+            dump.graphs.append(try nullCompareGraph(
+                name: "stage1-mix",
+                spec: mixSpec,
+                activations: [
+                    stripA: AudioGraphStripActivation(sampleRange: 0..<Int64(frames)),
+                    stripB: AudioGraphStripActivation(sampleRange: 0..<Int64(frames))
+                ],
+                sources: [
+                    sourceA: deterministicSine(frames: frames, channels: 1, sampleRate: 48_000, seed: 220),
+                    sourceB: deterministicSine(frames: frames, channels: 2, sampleRate: 48_000, seed: 330)
+                ],
+                frameCount: frames
+            ))
+
+            // Graph 2 — mixed sample rates (§9.4 precondition): a 44.1 kHz
+            // native source read at the 44100/48000 frame ratio next to a
+            // 48 kHz source on another bus.
+            let sourceC = UUID(), stripC = UUID()
+            let stripCm = AudioGraphClipStrip(clipId: stripC, sourceId: sourceC, channelMapping: .stereo)
+            let busC = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripC])
+            let mixedSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(id: sourceA, kind: .original, url: URL(filePath: "/tmp/g25-mix-a.wav")),
+                    AudioGraphSource(
+                        id: sourceC, kind: .original,
+                        url: URL(filePath: "/tmp/g25-mixed-c.wav"), nativeSampleRate: 44_100
+                    )
+                ],
+                clipStrips: [stripAm, stripCm],
+                trackBuses: [busA, busC]
+            )
+            dump.graphs.append(try nullCompareGraph(
+                name: "mixed-rate",
+                spec: mixedSpec,
+                activations: [
+                    stripA: AudioGraphStripActivation(sampleRange: 0..<Int64(frames)),
+                    stripC: AudioGraphStripActivation(
+                        sampleRange: 0..<Int64(frames), playbackRate: 44_100.0 / 48_000.0
+                    )
+                ],
+                sources: [
+                    sourceA: deterministicSine(frames: frames, channels: 1, sampleRate: 48_000, seed: 220),
+                    sourceC: deterministicSine(frames: 4_410, channels: 2, sampleRate: 44_100, seed: 550)
+                ],
+                frameCount: frames
+            ))
+
+            // --- §9.4: 60-minute mixed-rate end-point drift 실측 ------------
+            // The 60-minute timeline end is computed through the EXACT
+            // Int64 timebase math both engines schedule from; the tail is
+            // then RENDERED by both engines over the same absolute window.
+            let timebase = AudioGraphTimebase(sampleRate: 48_000)
+            let timelineEnd = timebase.samplePosition(at: CMTime(value: 3_600, timescale: 1))
+            let tailFrames = 4_800
+            let tailStart = timelineEnd - Int64(tailFrames)
+
+            let driftSource = UUID(), driftStrip = UUID()
+            // The drifting strip is the 44.1 kHz source placed at the tail:
+            // its read positions are the ones a seconds-based timebase would
+            // misalign over 60 minutes.
+            let driftStripModel = AudioGraphClipStrip(
+                clipId: driftStrip, sourceId: driftSource, channelMapping: .stereo
+            )
+            let driftBus = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [driftStrip])
+            let driftSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(
+                        id: driftSource, kind: .original,
+                        url: URL(filePath: "/tmp/g25-drift.wav"), nativeSampleRate: 44_100
+                    )
+                ],
+                clipStrips: [driftStripModel],
+                trackBuses: [driftBus],
+                timebase: timebase
+            )
+            let driftWindow = tailStart..<timelineEnd
+            let driftActivation = AudioGraphStripActivation(
+                sampleRange: driftWindow, playbackRate: 44_100.0 / 48_000.0
+            )
+            let driftSources: [UUID: AudioGraphSourceAudio] = [
+                driftSource: deterministicSine(frames: 4_410, channels: 2, sampleRate: 44_100, seed: 770)
+            ]
+            let driftPreview = try AudioGraphAVAudioEngineRenderer.render(
+                spec: driftSpec, activations: [driftStrip: driftActivation],
+                sourceAudio: { driftSources[$0] },
+                frameCount: tailFrames, frameRange: driftWindow
+            )
+            let driftExport = try AudioGraphEncoderInput.render(
+                spec: driftSpec, activations: [driftStrip: driftActivation],
+                sourceAudio: { driftSources[$0] },
+                frameCount: tailFrames, frameRange: driftWindow
+            )
+            let driftCompare = AudioGraphNullTest.compare(
+                reference: driftExport.interleaved, candidate: driftPreview.interleaved
+            )
+
+            dump.driftTimelineEndSamples = timelineEnd
+            dump.driftTailFrames = tailFrames
+            dump.driftBestOffsetSamples = driftCompare.bestOffsetSamples
+            dump.driftRoundTripExact = AudioGraphNullTest.mixedRateRoundTripIsExact(
+                timelineEnd: timelineEnd, graphRate: 48_000, otherRate: 44_100
+            )
+            // Gate: the tail renders null-match (offset within ±1, deviation
+            // within one 16-bit LSB) and the position math round-trips —
+            // far stronger than the ≤1 video frame drift budget.
+            dump.driftPassed = driftCompare.passed && abs(driftCompare.bestOffsetSamples) <= 1 && dump.driftRoundTripExact
+        } catch {
+            lastErrorMessage = "audio graph null test failed: \(error.localizedDescription)"
+            dump.error = error.localizedDescription
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "audio graph null test artifact write failed: \(error.localizedDescription)"
+        }
+
+        let passedCount = dump.graphs.filter(\.passed).count
+        let maxDeviation = dump.graphs.map(\.maxAbsoluteDeviation).max() ?? 0
+        let status = "audio_graph_nulltest_done" +
+            " graphs=\(dump.graphs.count)" +
+            " passed=\(passedCount)" +
+            String(format: " max_dev=%.2e", maxDeviation) +
+            " drift_timeline_end=\(dump.driftTimelineEndSamples)" +
+            " drift_tail_frames=\(dump.driftTailFrames)" +
+            " drift_offset=\(dump.driftBestOffsetSamples)" +
+            " drift_roundtrip=\(dump.driftRoundTripExact ? 1 : 0)" +
+            " drift_passed=\(dump.driftPassed ? 1 : 0)" +
+            String(format: " elapsed=%.2f", dump.elapsedSeconds) +
+            " error=\(lastErrorMessage ?? "none")"
+        lastStatusMessage = status
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            writeHarnessStatus(status, to: resultPath)
+        }
+        await flushAutosave()
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
     private func runPreviewExportParityUITestScenario(environment: [String: String]) async {
         var dumpedFrames = 0
         var previewDumpDir = "none"

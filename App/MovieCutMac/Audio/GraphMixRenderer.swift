@@ -26,6 +26,8 @@ enum GraphMixRenderer {
     enum RenderError: Error, Equatable {
         /// The plan references an asset the project no longer carries.
         case assetMissing(UUID)
+        /// The plan references a clip the project no longer carries.
+        case clipMissing(UUID)
         /// The project has no audio to render — no audio-carrying strips,
         /// or a mix that is pure digital silence (every sample exactly
         /// zero). Silence IS "no audio": a silent project exports without
@@ -111,6 +113,29 @@ enum GraphMixRenderer {
                 ?? project.mediaLibrary.assets[request.assetId]?.originalURL
             guard let url else { throw RenderError.assetMissing(request.assetId) }
             try await decode(request.clipId, from: url, speed: request.speed)
+        }
+        for request in plan.rampAdjustedSources {
+            // A ramped clip pre-renders its source window warped by the
+            // curve (§3.1) — derived media first when EQ applies, exactly
+            // like the constant-speed branch.
+            let url = derivedByClip[request.clipId]
+                ?? project.mediaLibrary.assets[request.assetId]?.originalURL
+            guard let url else { throw RenderError.assetMissing(request.assetId) }
+            guard let clip = project.timeline.tracks.flatMap(\.clips)
+                .first(where: { $0.id == request.clipId }) else {
+                throw RenderError.clipMissing(request.clipId)
+            }
+            let audio = try await AudioGraphSourceAdapter.normalizedAudio(
+                fileAt: url, graphSampleRate: graphSampleRate
+            )
+            let segments = AudioGraphSourceAdapter.rampSegments(
+                curve: SpeedRampCurve(points: request.points),
+                sourceStart: clip.sourceRange.start,
+                sourceDuration: clip.sourceRange.duration
+            )
+            decoded[request.clipId] = try AudioGraphSourceAdapter.timeStretchedRamped(
+                audio, segments: segments
+            )
         }
         for clipId in plan.derivedClipIds where decoded[clipId] == nil {
             guard let url = derivedByClip[clipId] else { continue }

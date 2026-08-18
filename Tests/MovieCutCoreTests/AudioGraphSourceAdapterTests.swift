@@ -115,4 +115,71 @@ struct AudioGraphSourceAdapterTests {
         #expect(abs(normalized.frameCount - 192_000) < 128)
         #expect(dominantFrequencyHz(normalized) > 212 && dominantFrequencyHz(normalized) < 228)
     }
+
+    // MARK: - Speed-ramp pre-render (G-25 2C-4)
+
+    @Test("rampSegments ports the legacy applySpeedRamp boundary math")
+    func rampSegmentsMath() {
+        // Linear rate 1→2 over [0,1]: timeMapping(1) = ln 2 → ONE segment
+        // spanning the whole window at the harmonic rate 1/ln 2.
+        let curve = SpeedRampCurve(points: [
+            SpeedRampPoint(time: 0, rate: 1),
+            SpeedRampPoint(time: 1, rate: 2),
+        ])
+        let segments = AudioGraphSourceAdapter.rampSegments(
+            curve: curve, sourceStart: 10, sourceDuration: 2
+        )
+        #expect(segments.count == 1)
+        #expect(abs(segments[0].sourceStartSeconds - 10) < 1.0e-9)
+        #expect(abs(segments[0].sourceEndSeconds - 12) < 1.0e-9)
+        #expect(abs(segments[0].outputDurationSeconds - 2 * log(2.0)) < 1.0e-9)
+        #expect(abs(segments[0].rate - 1 / log(2.0)) < 1.0e-9)
+
+        // Mid point at 0.5 with rate 1: first segment is identity, the
+        // second maps [0.5, 1] through ∫1/rate = ln 3 / 4 (source time).
+        let twoPiece = SpeedRampCurve(points: [
+            SpeedRampPoint(time: 0, rate: 1),
+            SpeedRampPoint(time: 0.5, rate: 1),
+            SpeedRampPoint(time: 1, rate: 3),
+        ])
+        let pieces = AudioGraphSourceAdapter.rampSegments(
+            curve: twoPiece, sourceStart: 0, sourceDuration: 4
+        )
+        #expect(pieces.count == 2)
+        #expect(abs(pieces[0].outputDurationSeconds - 2) < 1.0e-9)
+        #expect(abs(pieces[0].rate - 1) < 1.0e-9)
+        #expect(abs(pieces[1].outputDurationSeconds - log(3.0)) < 1.0e-9)
+        #expect(abs(pieces[1].rate - 2 / log(3.0)) < 1.0e-9)
+
+        // Degenerate inputs never produce segments.
+        #expect(AudioGraphSourceAdapter.rampSegments(
+            curve: curve, sourceStart: 0, sourceDuration: 0
+        ).isEmpty)
+    }
+
+    @Test("timeStretchedRamped cuts to the exact mapped length and keeps content")
+    func rampRenderLength() throws {
+        let frames = 48_000
+        var interleaved = [Float]()
+        interleaved.reserveCapacity(frames * 2)
+        for sample in 0..<(frames * 2) {
+            let phase = Double(sample / 2) * 2 * Double.pi * 440 / 48_000
+            interleaved.append(Float(sin(phase) * 0.5))
+        }
+        let source = AudioGraphSourceAudio(
+            sampleRate: 48_000, channels: 2, interleaved: interleaved
+        )
+        // Identity ramp: exact same frame count.
+        let identity = try AudioGraphSourceAdapter.timeStretchedRamped(source, segments: [
+            .init(sourceStartSeconds: 0, sourceEndSeconds: 0.5, outputDurationSeconds: 0.5, rate: 1),
+            .init(sourceStartSeconds: 0.5, sourceEndSeconds: 1.0, outputDurationSeconds: 0.5, rate: 1),
+        ])
+        #expect(identity.frameCount == frames)
+        // 2× over the whole window: exactly half the frames, still audible.
+        let doubled = try AudioGraphSourceAdapter.timeStretchedRamped(source, segments: [
+            .init(sourceStartSeconds: 0, sourceEndSeconds: 1.0, outputDurationSeconds: 0.5, rate: 2),
+        ])
+        #expect(doubled.frameCount == 24_000)
+        #expect(doubled.interleaved.contains { abs($0) > 0.1 })
+    }
 }

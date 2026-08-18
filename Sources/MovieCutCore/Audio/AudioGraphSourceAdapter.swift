@@ -207,7 +207,8 @@ public enum AudioGraphSourceAdapter {
     /// identical to a stretched mono source.
     public static func timeStretched(
         _ audio: AudioGraphSourceAudio,
-        speed: Double
+        speed: Double,
+        trimTail: Bool = true
     ) throws -> AudioGraphSourceAudio {
         guard speed != 1, speed > 0, audio.frameCount > 0, audio.sampleRate > 0 else {
             return audio
@@ -277,19 +278,136 @@ public enum AudioGraphSourceAdapter {
                 }
             }
         }
-        while interleaved.count >= renderChannels {
-            let frameStart = interleaved.count - renderChannels
-            let frameIsSilent = (0..<renderChannels).allSatisfy { interleaved[frameStart + $0] == 0 }
-            if frameIsSilent {
-                interleaved.removeLast(renderChannels)
-            } else {
-                break
+        if trimTail {
+            while interleaved.count >= renderChannels {
+                let frameStart = interleaved.count - renderChannels
+                let frameIsSilent = (0..<renderChannels).allSatisfy { interleaved[frameStart + $0] == 0 }
+                if frameIsSilent {
+                    interleaved.removeLast(renderChannels)
+                } else {
+                    break
+                }
             }
         }
         return AudioGraphSourceAudio(
             sampleRate: audio.sampleRate,
             channels: renderChannels,
             interleaved: interleaved
+        )
+    }
+
+    // MARK: - Speed-ramp pre-render (spec §3.1)
+
+    /// One piecewise-constant-rate slice of a speed ramp: source seconds
+    /// are ABSOLUTE in the file; the segment stretches to
+    /// `outputDurationSeconds` at `rate` = src/out.
+    public struct RampSegment: Sendable, Equatable {
+        public var sourceStartSeconds: Double
+        public var sourceEndSeconds: Double
+        public var outputDurationSeconds: Double
+        public var rate: Double
+
+        public init(
+            sourceStartSeconds: Double,
+            sourceEndSeconds: Double,
+            outputDurationSeconds: Double,
+            rate: Double
+        ) {
+            self.sourceStartSeconds = sourceStartSeconds
+            self.sourceEndSeconds = sourceEndSeconds
+            self.outputDurationSeconds = outputDurationSeconds
+            self.rate = rate
+        }
+    }
+
+    /// Boundary math PORTED from the export path's `applySpeedRamp` (one
+    /// source of semantics): boundaries = [0, 1] + curve points clamped to
+    /// 0…1, deduped; each source segment [bᵢ, bᵢ₊₁] maps to
+    /// timeMapping(bᵢ₊₁) − timeMapping(bᵢ) of output time — i.e. the
+    /// linear-rate curve rendered as piecewise-CONSTANT rates, exactly what
+    /// the legacy composition's per-segment `scaleTimeRange` produced.
+    public static func rampSegments(
+        curve: SpeedRampCurve,
+        sourceStart: TimeInterval,
+        sourceDuration: TimeInterval
+    ) -> [RampSegment] {
+        guard sourceDuration.isFinite, sourceDuration > 0 else { return [] }
+        let boundaries = ([0.0, 1.0] + curve.points.map { min(max($0.time, 0), 1) })
+            .sorted()
+            .reduce(into: [Double]()) { result, value in
+                if result.last.map({ abs($0 - value) > 1.0e-9 }) ?? true {
+                    result.append(value)
+                }
+            }
+        guard boundaries.count > 1 else { return [] }
+
+        var segments: [RampSegment] = []
+        for (lower, upper) in zip(boundaries, boundaries.dropFirst()) {
+            let sourceSeconds = (upper - lower) * sourceDuration
+            guard sourceSeconds > 0 else { continue }
+            let outputSeconds = max(
+                (curve.timeMapping(sourceTime: upper) - curve.timeMapping(sourceTime: lower)) * sourceDuration,
+                1.0 / 600.0
+            )
+            segments.append(RampSegment(
+                sourceStartSeconds: sourceStart + lower * sourceDuration,
+                sourceEndSeconds: sourceStart + upper * sourceDuration,
+                outputDurationSeconds: outputSeconds,
+                rate: sourceSeconds / outputSeconds
+            ))
+        }
+        return segments
+    }
+
+    /// Renders the ramp: slices the decoded source per segment, stretches
+    /// each with the (pitch-preserving) constant-rate stretcher, concats,
+    /// and cuts every segment to its EXACT expected frame count so the
+    /// output length equals Σ outputDurationSeconds (the legacy
+    /// composition's ramped duration) regardless of stretcher tail margin.
+    public static func timeStretchedRamped(
+        _ audio: AudioGraphSourceAudio,
+        segments: [RampSegment]
+    ) throws -> AudioGraphSourceAudio {
+        guard !segments.isEmpty, audio.frameCount > 0, audio.sampleRate > 0 else {
+            return audio
+        }
+        var interleaved = [Float]()
+        for segment in segments {
+            let firstFrame = Int((segment.sourceStartSeconds * audio.sampleRate).rounded(.down))
+            let lastFrame = min(
+                audio.frameCount,
+                Int((segment.sourceEndSeconds * audio.sampleRate).rounded(.up))
+            )
+            guard lastFrame > firstFrame else { continue }
+            let channels = audio.channels
+            var slice = [Float]()
+            slice.reserveCapacity((lastFrame - firstFrame) * channels)
+            for frame in firstFrame..<lastFrame {
+                for channel in 0..<channels {
+                    slice.append(audio.sample(frame: frame, channel: channel))
+                }
+            }
+            let stretched = try timeStretched(
+                AudioGraphSourceAudio(
+                    sampleRate: audio.sampleRate, channels: channels, interleaved: slice
+                ),
+                speed: segment.rate,
+                trimTail: false
+            )
+            let expectedFrames = Int((segment.outputDurationSeconds * audio.sampleRate).rounded())
+            let available = stretched.interleaved
+            for frame in 0..<expectedFrames {
+                for channel in 0..<channels {
+                    interleaved.append(
+                        frame * channels + channel < available.count
+                            ? available[frame * channels + channel]
+                            : 0
+                    )
+                }
+            }
+        }
+        return AudioGraphSourceAudio(
+            sampleRate: audio.sampleRate, channels: audio.channels, interleaved: interleaved
         )
     }
 

@@ -250,6 +250,34 @@ struct AudioGraphProjectBuilderTests {
         #expect(plan.spec.sources.count == 1)
         #expect(plan.sourceAssetIds == [asset.id])
         #expect(plan.speedAdjustedSources.isEmpty)
+        #expect(plan.rampAdjustedSources.isEmpty)
+    }
+
+    @Test("ramped clips get a per-clip source, a ramp request, and an offset-0 rate-1 activation (§3.1)")
+    func rampAdjustedMapping() {
+        var ramped = clip(timelineStart: 0.5, duration: 3)
+        ramped.speedRampPoints = [
+            SpeedRampPoint(time: 0, rate: 1),
+            SpeedRampPoint(time: 1, rate: 2),
+        ]
+        // A ramp WINS over a constant playbackRate (legacy semantics).
+        ramped.playbackRate = 2
+        let plan = AudioGraphProjectBuilder.build(
+            project: project(clips: [(.audio, ramped)])
+        )
+        let strip = plan.spec.clipStrips[0]
+        #expect(strip.sourceId == ramped.id)
+        #expect(plan.rampAdjustedSources.map(\.clipId) == [ramped.id])
+        #expect(plan.rampAdjustedSources[0].points == ramped.speedRampPoints)
+        #expect(plan.speedAdjustedSources.isEmpty)
+        #expect(plan.sourceAssetIds.isEmpty)
+
+        // The pre-render IS the clip's warped source window — the
+        // activation reads offset 0 at rate 1 over the timeline span.
+        let activation = plan.activations[strip.clipId]!
+        #expect(activation.sampleRange == 24_000..<Int64(3.5 * 48_000))
+        #expect(activation.sourceFrameOffset == 0)
+        #expect(activation.playbackRate == 1)
     }
 
     // MARK: - Engine renderability (the plan must actually render)

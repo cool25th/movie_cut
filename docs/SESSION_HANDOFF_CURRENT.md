@@ -3,6 +3,22 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 27 (G-25 전환 2-C-2: 프리뷰 tap 폐지 — EQ 파생 미디어 통일)
+
+**게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 PASS(**M런 RMS 게이트 재활성 포함** — tap 결함 폐쇄 증명) + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-2: 프리뷰 EQ의 파생 미디어 전환 (이번 세션 커밋)
+- **`AudioEqualizerService` 통일** (Core): 디코드를 §3.1 어댑터로 전환 — 비디오 컨테이너 임베디드 오디오도 EQ 파생 가능(기존 AVAudioFile 한정 — 그래프·출력 경로의 EQ 비디오 클립 잠복 실패 갭 해소). DSP 단일 구현으로 프리뷰·출력·그래프 동일(기존 tap은 5밴드 AVAudioUnitEQ·파일 렌더는 3밴드 원폴로 **서로 다른 DSP였음** — 이원 경로 해소).
+- **프리뷰 tap 폐지** (PlaybackEngine): MTAudioProcessingTap 기계(~250줄)·ClipEqualizerTimelineSegment 제거. EQ 클립(오디오 트랙+비디오 임베디드 양쪽)은 파생 미디어 소스 스왑 — 프리셋 캐시로 재빌드 무관 재사용(리버스 선례), clear/loadProject 정리.
+- **조사 확정**: NR 실시간 필터는 실재하지 않았음(주석만 — NR은 편집 시점 파괴적 변환으로 이미 통일, 주석 정정). 프리뷰 볼륨/페이드/덕킹 audioMix 램프는 유지(AVPlayer 네이티브·tap 무관).
+- **M런 RMS 게이트 재활성**: tap-in-export 결함으로 분리 기록했던 프리뷰 참조 RMS 단언(≤1dB) 복원 — 실측 PASS로 결함 폐쇄 증명. 계약 갱신(AudioEqualizerDSP — 프리뷰 파생 배선+tap 심볼 부재 단언).
+- **실측**: 그래프 미터↔출력 Δ0.00·§8 RMS −0.001dB·NR 5.15dB·EQ 2.31/0.49·덕킹 12.04dB — 전 수치 동일 무회귀.
+
+### 다음 회차 인계(2-C 잔여 — 마지막 전환 증분)
+1. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(0.5s 관대 임계 교체). §8 하니스 참조를 renderCurrentPreviewAudio → GraphMixRenderer PCM으로, 재디코드 측 프라이밍 정렬 후 check() 경성 판정.
+2. 이후 §11①~⑤ 완료 판정 실측(§11⑤는 이미 매 증분 게이트로 실측 중 — ①②③④ 종합 보고) → DONE_PHASE1 평가(EXECUTION_PLAN §4).
+3. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-19 세션 26 (G-25 전환 2-C-4: 오디오 속도 램프 사전 렌더 — 갭 폐쇄)
 
 **게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 회귀 PASS(오디오 수치 완전 동일).

@@ -77,6 +77,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
     @ObservationIgnored private var compositionBuildTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
+    /// G-25 2C-2 (spec §0 v1.1): EQ clips' preview audio consumes DERIVED
+    /// effective media — the same `AudioEqualizerService` render the export
+    /// and graph paths use — instead of an MTAudioProcessingTap. One DSP
+    /// everywhere, and the tap's export-session defect class is structurally
+    /// gone. Cached per clip while the preset is unchanged (the
+    /// reverse-media precedent); cleaned on clear/loadProject.
+    @ObservationIgnored private var equalizedPreviewAudio: [UUID: (preset: EqualizerPreset, url: URL)] = [:]
+    @ObservationIgnored private var temporaryEqualizedPreviewURLs: [URL] = []
     /// Security scopes started for the assets in the currently loaded single
     /// asset or composition. Each entry pairs with a `stopAccessing` on clear
     /// or next load so the access pair never leaks across reloads. (S2)
@@ -176,6 +184,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         duration = asset.duration ?? 0
         player.replaceCurrentItem(with: item)
         cleanupTemporaryReverseRenderURLs()
+        cleanupTemporaryEqualizedPreviewURLs()
         observeStatus(for: item)
     }
 
@@ -391,6 +400,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         clearPreviewVideoOutput()
         player.replaceCurrentItem(with: nil)
         cleanupTemporaryReverseRenderURLs()
+        cleanupTemporaryEqualizedPreviewURLs()
         endActiveSecurityScopes()
         playerItem = nil
         currentTime = 0
@@ -736,7 +746,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
         var textOverlayClipEffects: [CustomCompositionClipEffect] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
-        var equalizerSegmentsByTrackID: [CMPersistentTrackID: [ClipEqualizerTimelineSegment]] = [:]
         // G-25 Inc 9 audio solo: any soloed audio-capable track silences
         // every non-solo track's AUDIO (video keeps rendering).
         let anyTrackSoloed = project.timeline.tracks.contains { $0.isSolo && $0.kind != .text }
@@ -902,9 +911,18 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         ))
                     }
 
-                    if !isFreezeFrame,
-                       let audioCompositionTrack,
-                       let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first {
+                    if !isFreezeFrame, let audioCompositionTrack {
+                        // G-25 2C-2 (spec §0 v1.1): an EQ'd clip's embedded
+                        // audio comes from DERIVED effective media (the same
+                        // AudioEqualizerService render export and the graph
+                        // use) — the audio tap is retired.
+                        var audioSourceAsset = sourceAsset
+                        if let equalizedURL = try await equalizedPreviewURL(
+                            for: clip, inputURL: playbackURL(for: mediaAsset), audioProcessing: audioProcessing
+                        ) {
+                            audioSourceAsset = AVURLAsset(url: equalizedURL)
+                        }
+                        guard let sourceTrack = try await audioSourceAsset.loadTracks(withMediaType: .audio).first else { continue }
                         guard sourceTimeRange.duration > .zero else { continue }
 
                         let targetDuration: CMTime
@@ -938,14 +956,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             destinationTime: destinationTime,
                             clipDuration: targetDuration
                         )
-                        if let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
-                            equalizerSegmentsByTrackID[audioCompositionTrack.trackID, default: []].append(
-                                ClipEqualizerTimelineSegment(
-                                    timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
-                                    preset: preset
-                                )
-                            )
-                        }
                     }
                 }
 
@@ -965,7 +975,16 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         continue
                     }
 
-                    let sourceAsset = AVURLAsset(url: playbackURL(for: mediaAsset))
+                    // G-25 2C-2 (spec §0 v1.1): an EQ'd clip consumes
+                    // DERIVED effective media — the same render export and
+                    // the graph use; the audio tap is retired.
+                    let playbackSourceURL = playbackURL(for: mediaAsset)
+                    var sourceAsset = AVURLAsset(url: playbackSourceURL)
+                    if let equalizedURL = try await equalizedPreviewURL(
+                        for: clip, inputURL: playbackSourceURL, audioProcessing: audioProcessing
+                    ) {
+                        sourceAsset = AVURLAsset(url: equalizedURL)
+                    }
                     guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first else {
                         continue
                     }
@@ -1005,14 +1024,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         destinationTime: destinationTime,
                         clipDuration: targetDuration
                     )
-                    if let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
-                        equalizerSegmentsByTrackID[audioCompositionTrack.trackID, default: []].append(
-                            ClipEqualizerTimelineSegment(
-                                timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
-                                preset: preset
-                            )
-                        )
-                    }
                 }
 
                 audioMixInputParameters.append(audioParameters)
@@ -1376,15 +1387,6 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             videoComposition = mutableVideoComposition
         }
 
-        for audioParameters in audioMixInputParameters {
-            guard let segments = equalizerSegmentsByTrackID[audioParameters.trackID],
-                  let audioTap = PlaybackEqualizerAudioTap.makeTap(segments: segments)
-            else {
-                continue
-            }
-            audioParameters.audioTapProcessor = audioTap
-        }
-
         let audioMix: AVMutableAudioMix?
         if audioMixInputParameters.isEmpty {
             audioMix = nil
@@ -1395,9 +1397,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
 
         // MARK: - Noise Reduction
-        // High-pass (80Hz) + low-pass (12kHz) filtering is applied at the AVAudioEngine level
-        // for real-time playback. For composition-based playback, clips marked for noise reduction
-        // are tracked in audioProcessing.noiseReductionClipIds for offline processing.
+        // G-25 2C-2: there is NO real-time NR filter in the preview
+        // composition path (the historical comment described one that never
+        // existed here). NR is an EDIT-TIME destructive transform
+        // (`applyNoiseReduction` produces denoised media), so preview,
+        // export, and the graph all consume the clip's derived media
+        // identically (spec §0 v1.1).
 
         // MARK: - Audio Ducking
         if audioProcessing.duckLevel > 0, !audioProcessing.voiceClipIds.isEmpty {
@@ -1529,6 +1534,41 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     private func cleanupTemporaryReverseRenderURLs() {
         removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)
         temporaryReverseRenderURLs = []
+    }
+
+    /// G-25 2C-2: the derived EQ media for a preview clip, rendered (and
+    /// cached while the preset is unchanged) from the clip's playback URL.
+    /// nil = no EQ applied. The temp files outlive composition rebuilds on
+    /// purpose — re-rendering on every unrelated edit would be prohibitive
+    /// — and are removed on clear/loadProject together with the cache.
+    private func equalizedPreviewURL(
+        for clip: Clip,
+        inputURL: URL,
+        audioProcessing: ClipAudioProcessingOptions
+    ) async throws -> URL? {
+        guard let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) else {
+            return nil
+        }
+        if let cached = equalizedPreviewAudio[clip.id], cached.preset == preset {
+            return cached.url
+        }
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutPreviewEQ-\(clip.id.uuidString)-\(UUID().uuidString).caf")
+        try await AudioEqualizerService().apply(
+            preset: preset, inputURL: inputURL, outputURL: outputURL
+        )
+        equalizedPreviewAudio[clip.id] = (preset, outputURL)
+        temporaryEqualizedPreviewURLs.append(outputURL)
+        return outputURL
+    }
+
+    private func cleanupTemporaryEqualizedPreviewURLs() {
+        let fileManager = FileManager.default
+        for url in temporaryEqualizedPreviewURLs where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
+        temporaryEqualizedPreviewURLs = []
+        equalizedPreviewAudio = [:]
     }
 
     private func removeTemporaryReverseRenderURLs(_ urls: [URL]) {
@@ -1736,255 +1776,6 @@ private struct PlaybackClipInstructionMetadata {
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
 }
-
-private enum PlaybackEqualizerAudioTap {
-    static func makeTap(segments: [ClipEqualizerTimelineSegment]) -> MTAudioProcessingTap? {
-        let activeSegments = segments.filter { !$0.preset.bands.allSatisfy { abs($0.gain) <= 0.0001 } }
-        guard !activeSegments.isEmpty else { return nil }
-
-        let contextPointer = Unmanaged.passRetained(
-            PlaybackEqualizerAudioTapContext(segments: activeSegments)
-        ).toOpaque()
-
-        var callbacks = MTAudioProcessingTapCallbacks(
-            version: kMTAudioProcessingTapCallbacksVersion_0,
-            clientInfo: contextPointer,
-            init: { _, clientInfo, tapStorageOut in
-                tapStorageOut.pointee = clientInfo
-            },
-            finalize: { tap in
-                let storage = MTAudioProcessingTapGetStorage(tap)
-                Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(storage).release()
-            },
-            prepare: { tap, maxFrames, processingFormat in
-                let context = PlaybackEqualizerAudioTap.context(from: tap)
-                context.prepare(maxFrames: maxFrames, processingFormat: processingFormat)
-            },
-            unprepare: { tap in
-                let context = PlaybackEqualizerAudioTap.context(from: tap)
-                context.unprepare()
-            },
-            process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in
-                let context = PlaybackEqualizerAudioTap.context(from: tap)
-                context.process(
-                    tap: tap,
-                    numberFrames: numberFrames,
-                    bufferListInOut: bufferListInOut,
-                    numberFramesOut: numberFramesOut,
-                    flagsOut: flagsOut
-                )
-            }
-        )
-
-        var tap: MTAudioProcessingTap?
-        let status = MTAudioProcessingTapCreate(
-            kCFAllocatorDefault,
-            &callbacks,
-            kMTAudioProcessingTapCreationFlag_PreEffects,
-            &tap
-        )
-
-        guard status == noErr else {
-            Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(contextPointer).release()
-            return nil
-        }
-
-        return tap
-    }
-
-    private static func context(from tap: MTAudioProcessingTap) -> PlaybackEqualizerAudioTapContext {
-        let storage = MTAudioProcessingTapGetStorage(tap)
-        return Unmanaged<PlaybackEqualizerAudioTapContext>.fromOpaque(storage).takeUnretainedValue()
-    }
-}
-
-private final class PlaybackEqualizerAudioTapContext {
-    private let segments: [ClipEqualizerTimelineSegment]
-    private let eqNode = AVAudioUnitEQ(numberOfBands: 5)
-    private var sourceBuffer: AVAudioPCMBuffer?
-    private var outputBuffer: AVAudioPCMBuffer?
-    private var activePreset: EqualizerPreset?
-    private var isPrepared = false
-
-    init(segments: [ClipEqualizerTimelineSegment]) {
-        self.segments = segments.sorted { lhs, rhs in
-            lhs.timeRange.start < rhs.timeRange.start
-        }
-    }
-
-    func prepare(maxFrames: CMItemCount, processingFormat: UnsafePointer<AudioStreamBasicDescription>) {
-        guard let format = AVAudioFormat(streamDescription: processingFormat) else { return }
-
-        sourceBuffer = AVAudioPCMBuffer(
-            pcmFormat: format,
-            frameCapacity: AVAudioFrameCount(maxFrames)
-        )
-        outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: format,
-            frameCapacity: AVAudioFrameCount(maxFrames)
-        )
-
-        do {
-            try eqNode.auAudioUnit.inputBusses[0].setFormat(format)
-            try eqNode.auAudioUnit.outputBusses[0].setFormat(format)
-            try eqNode.auAudioUnit.allocateRenderResources()
-            isPrepared = true
-        } catch {
-            isPrepared = false
-        }
-    }
-
-    func unprepare() {
-        eqNode.auAudioUnit.deallocateRenderResources()
-        sourceBuffer = nil
-        outputBuffer = nil
-        activePreset = nil
-        isPrepared = false
-    }
-
-    func process(
-        tap: MTAudioProcessingTap,
-        numberFrames: CMItemCount,
-        bufferListInOut: UnsafeMutablePointer<AudioBufferList>,
-        numberFramesOut: UnsafeMutablePointer<CMItemCount>,
-        flagsOut: UnsafeMutablePointer<MTAudioProcessingTapFlags>
-    ) {
-        var sourceFlags = MTAudioProcessingTapFlags()
-        var sourceTimeRange = CMTimeRange()
-        var sourceFrames = CMItemCount()
-
-        guard isPrepared,
-              let sourceBuffer,
-              let outputBuffer
-        else {
-            let status = MTAudioProcessingTapGetSourceAudio(
-                tap,
-                numberFrames,
-                bufferListInOut,
-                &sourceFlags,
-                &sourceTimeRange,
-                &sourceFrames
-            )
-            numberFramesOut.pointee = status == noErr ? sourceFrames : 0
-            flagsOut.pointee = sourceFlags
-            return
-        }
-
-        let sourceStatus = MTAudioProcessingTapGetSourceAudio(
-            tap,
-            numberFrames,
-            sourceBuffer.mutableAudioBufferList,
-            &sourceFlags,
-            &sourceTimeRange,
-            &sourceFrames
-        )
-        guard sourceStatus == noErr, sourceFrames > 0 else {
-            numberFramesOut.pointee = 0
-            flagsOut.pointee = sourceFlags
-            return
-        }
-
-        guard let bufferPreset = preset(for: sourceTimeRange) else {
-            copyAudioBufferListHeaders(from: sourceBuffer.mutableAudioBufferList, to: bufferListInOut)
-            numberFramesOut.pointee = sourceFrames
-            flagsOut.pointee = sourceFlags
-            return
-        }
-
-        configureEQIfNeeded(with: bufferPreset)
-        sourceBuffer.frameLength = AVAudioFrameCount(sourceFrames)
-        outputBuffer.frameLength = AVAudioFrameCount(sourceFrames)
-
-        var actionFlags = AudioUnitRenderActionFlags()
-        var timestamp = AudioTimeStamp()
-        let inputBlock: AURenderPullInputBlock = { _, _, _, _, inputData in
-            self.copyAudioBufferListHeaders(
-                from: sourceBuffer.mutableAudioBufferList,
-                to: inputData
-            )
-            return noErr
-        }
-
-        let renderStatus = eqNode.auAudioUnit.renderBlock(
-            &actionFlags,
-            &timestamp,
-            AUAudioFrameCount(sourceFrames),
-            0,
-            outputBuffer.mutableAudioBufferList,
-            inputBlock
-        )
-
-        if renderStatus == noErr {
-            copyAudioBufferListHeaders(from: outputBuffer.mutableAudioBufferList, to: bufferListInOut)
-        } else {
-            copyAudioBufferListHeaders(from: sourceBuffer.mutableAudioBufferList, to: bufferListInOut)
-        }
-        numberFramesOut.pointee = sourceFrames
-        flagsOut.pointee = sourceFlags
-    }
-
-    private func preset(for timeRange: CMTimeRange) -> EqualizerPreset? {
-        let start = timeRange.start.seconds
-        let duration = timeRange.duration.seconds
-        guard start.isFinite else { return nil }
-
-        let probeTime = start + max(duration.isFinite ? duration : 0, 0) * 0.5
-        return segments.first { segment in
-            let segmentStart = segment.timeRange.start.seconds
-            let segmentEnd = CMTimeAdd(segment.timeRange.start, segment.timeRange.duration).seconds
-            return segmentStart.isFinite
-                && segmentEnd.isFinite
-                && probeTime >= segmentStart
-                && probeTime < segmentEnd
-        }?.preset
-    }
-
-    private func configureEQIfNeeded(with preset: EqualizerPreset) {
-        guard activePreset != preset else { return }
-
-        for (index, band) in eqNode.bands.enumerated() {
-            guard index < preset.bands.count else {
-                band.bypass = true
-                continue
-            }
-
-            let presetBand = preset.bands[index]
-            band.filterType = filterType(forBandAt: index, bandCount: eqNode.bands.count)
-            band.frequency = presetBand.frequency
-            band.bandwidth = 1
-            band.gain = presetBand.gain
-            band.bypass = false
-        }
-
-        eqNode.globalGain = 0
-        eqNode.auAudioUnit.reset()
-        activePreset = preset
-    }
-
-    private func filterType(forBandAt index: Int, bandCount: Int) -> AVAudioUnitEQFilterType {
-        if index == 0 {
-            return .lowShelf
-        }
-        if index == bandCount - 1 {
-            return .highShelf
-        }
-        return .parametric
-    }
-
-    private func copyAudioBufferListHeaders(
-        from source: UnsafeMutablePointer<AudioBufferList>,
-        to destination: UnsafeMutablePointer<AudioBufferList>
-    ) {
-        let sourceBuffers = UnsafeMutableAudioBufferListPointer(source)
-        let destinationBuffers = UnsafeMutableAudioBufferListPointer(destination)
-        for index in 0..<min(sourceBuffers.count, destinationBuffers.count) {
-            destinationBuffers[index].mNumberChannels = sourceBuffers[index].mNumberChannels
-            destinationBuffers[index].mDataByteSize = sourceBuffers[index].mDataByteSize
-            destinationBuffers[index].mData = sourceBuffers[index].mData
-        }
-    }
-}
-
 
 private enum PlaybackPreviewAudioError: LocalizedError {
     case noPlayerItem

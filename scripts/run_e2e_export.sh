@@ -1595,14 +1595,14 @@ if m["decodedLufs"] is None:
 delta = meter_lufs - m["decodedLufs"]
 if abs(delta) > 1.5:
     fail(f"graph meter vs encoded export disagree: Δ={delta:.3f} LU")
+if abs(m["rmsDifferenceDb"]) > 1.0:
+    fail(f"run M RMS difference beyond 1 dB: {m['rmsDifferenceDb']}")
 if m["clippingRunCount"] != 0:
     fail(f"run M clipped output: {m}")
-# NOTE: run M deliberately does NOT gate on the preview-mix reference RMS.
-# With EQ applied, the preview reference rides the legacy MTAudioProcessingTap
-# inside AVAssetExportSession, where the tapped track renders ~silent
-# (measured: reference −29.14 LUFS ≈ the BGM-suppressed mix, while meter and
-# export agree at −22.94). Recorded as a known defect in LOOP_STATE; it
-# disappears when 2-C retires the tap path (spec §0 v1.1).
+# G-25 2C-2: the preview-mix reference RMS gate is RE-ENABLED — the
+# MTAudioProcessingTap is retired and preview EQ consumes derived media,
+# so an EQ'd project's reference is valid again (the tap-in-export defect
+# this gate caught is closed).
 
 print("meter: graph=%.2f LU export=%.2f LU Δ=%.2f tp=%.2f eq=1" % (
     meter_lufs, m["decodedLufs"], delta, meter["truePeakDbTp"]))

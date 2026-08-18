@@ -26,7 +26,13 @@ enum GraphMixRenderer {
     enum RenderError: Error, Equatable {
         /// The plan references an asset the project no longer carries.
         case assetMissing(UUID)
-        /// The project has no audio-carrying clips — nothing to measure.
+        /// The project has no audio to render — no audio-carrying strips,
+        /// or a mix that is pure digital silence (every sample exactly
+        /// zero). Silence IS "no audio": a silent project exports without
+        /// an audio track exactly as audio-less media always did, and the
+        /// meter reports nothing to measure. This also keeps all-silent
+        /// AAC out of export sessions — measured to deadlock Apple's
+        /// ProRes preset (G-25 2C-1b, LOOP_STATE).
         case noAudio
     }
 
@@ -128,7 +134,7 @@ enum GraphMixRenderer {
             activations: plan.activations,
             sourceAudio: { decoded[$0] },
             frameCount: frameCount
-        )
+        ).enforcingNonSilentMix()
     }
 
     /// The last sample position any UNSUPPRESSED strip reaches, in graph
@@ -144,5 +150,16 @@ enum GraphMixRenderer {
             }
         }
         return end
+    }
+}
+
+private extension AudioGraphSourceAudio {
+    /// Digital silence is "no audio" (see RenderError.noAudio) — one exact
+    /// zero-check pass over the rendered mix.
+    func enforcingNonSilentMix() throws -> AudioGraphSourceAudio {
+        if interleaved.contains(where: { $0 != 0 }) {
+            return self
+        }
+        throw GraphMixRenderer.RenderError.noAudio
     }
 }

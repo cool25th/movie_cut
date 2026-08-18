@@ -87,10 +87,15 @@ struct AudioEqualizerDSPTests {
         #expect(playback.contains("clip.resolvedEqualizerPreset"))
         #expect(!playback.contains("applyEQBands"))
 
-        #expect(export.contains("AudioEqualizerService().apply"))
-        #expect(export.contains("equalizedAudioAsset"))
+        // Export (G-25 2C-1b): EQ reaches the file through the graph mix —
+        // GraphMixRenderer derives the clip's effective media with the same
+        // AudioEqualizerService DSP the legacy export path used.
+        #expect(export.contains("GraphMixRenderer.renderMix"))
+        #expect(!export.contains("equalizedAudioAsset"))
+        let renderer = try source("App/MovieCutMac/Audio/GraphMixRenderer.swift")
+        #expect(renderer.contains("AudioEqualizerService().apply"))
+        #expect(renderer.contains("eqAlgorithmVersion"))
         #expect(export.contains("temporaryRenderURLs"))
-        #expect(export.contains("clip.resolvedEqualizerPreset"))
         #expect(!export.contains("eqVolumeMultiplier"))
         #expect(!export.contains("averageGain"))
 

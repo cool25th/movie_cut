@@ -52,9 +52,24 @@ RESULT="$WORK_DIR/result.txt"
 DUMP="$WORK_DIR/graph_nulltest.json"
 
 # --- 2. Run the in-app null test --------------------------------------------
-echo "Running G-25 §9 null test (AVAudioEngine preview ↔ encoder input)…"
+# The ducking-harness BGM/Voice project (two audio tracks with the real
+# planner ducking applied) feeds the §9.1 REAL-PROJECT phase:
+# AudioGraphProjectBuilder maps the actual mix to a graph, both engines
+# render it, and the graph mix's loudness is compared against the preview
+# audio-mix render (migration parity — LUFS tolerance, not a null gate).
+# NO video import here, deliberately: video import + ducking tracks +
+# AVAssetExportSession (the preview-mix render) is the KNOWN deadlock combo
+# on record (LOOP_STATE 기존 결함), and the audio-less solid_red fixture
+# contributes nothing to the graph — video-embedded-audio mapping stays
+# covered by builder unit tests until the graph switchover structurally
+# fixes that deadlock.
+BGM="$ROOT/Tests/Fixtures/duck_bgm_220hz_4s_mono.wav"
+VOICE="$ROOT/Tests/Fixtures/duck_voice_1000hz_1s_mono.wav"
+echo "Running G-25 §9 null test (AVAudioEngine preview ↔ encoder input + real project)…"
 open -n -W \
   --env MOVIECUT_UITEST=1 \
+  --env MOVIECUT_UITEST_DUCKING_BGM="$BGM" \
+  --env MOVIECUT_UITEST_DUCKING_VOICE="$VOICE" \
   --env MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST="$DUMP" \
   --env MOVIECUT_UITEST_RESULT="$RESULT" \
   --env MOVIECUT_UITEST_QUIT=1 \
@@ -85,6 +100,16 @@ PASSED="$(sed -n 's/.*graphs=[0-9]* passed=\([0-9]*\).*/\1/p' <<<"$STATUS")"
 if [[ -z "$GRAPHS" || "$GRAPHS" -lt 2 || "$PASSED" != "$GRAPHS" ]]; then
   echo "FAIL: expected all graphs to pass (graphs=$GRAPHS passed=$PASSED)" >&2
   fail=1
+fi
+grep -q "project_graph=1" <<<"$STATUS" || { echo "FAIL: real-project graph phase did not run" >&2; fail=1; }
+grep -q "project_graph_passed=1" <<<"$STATUS" || { echo "FAIL: real-project graph engines disagree" >&2; fail=1; }
+PARITY="$(sed -n 's/.*project_parity_lufs=\(-\{0,1\}[0-9.]*\).*/\1/p' <<<"$STATUS")"
+if [[ -z "$PARITY" ]]; then
+  echo "FAIL: project parity LUFS missing (silent mix?)" >&2; fail=1
+elif python3 -c "import sys; sys.exit(0 if abs(float('$PARITY')) <= 1.0 else 1)"; then
+  :
+else
+  echo "FAIL: graph↔preview-mix parity |ΔLUFS|=$PARITY exceeds 1.0 LU" >&2; fail=1
 fi
 grep -q "drift_passed=1" <<<"$STATUS" || { echo "FAIL: drift_passed=1 missing" >&2; fail=1; }
 grep -q "drift_roundtrip=1" <<<"$STATUS" || { echo "FAIL: exact 60-minute round trip missing" >&2; fail=1; }
@@ -118,8 +143,20 @@ print("drift: timeline_end=%d tail_frames=%d offset=%d roundtrip=%s passed=%s el
       % (dump["driftTimelineEndSamples"], dump["driftTailFrames"],
          dump["driftBestOffsetSamples"], dump["driftRoundTripExact"],
          dump["driftPassed"], dump["elapsedSeconds"]))
-if len(dump.get("graphs", [])) < 2:
-    problems.append("expected at least 2 graphs")
+if len(dump.get("graphs", [])) < 3:
+    problems.append("expected at least 3 graphs (incl. the real project)")
+if not dump.get("projectGraphRendered"):
+    problems.append("real-project graph phase did not run")
+elif not dump.get("projectGraphPassed"):
+    problems.append("real-project graph engines disagree")
+parity = dump.get("projectParityDeltaLufs")
+if parity is None:
+    problems.append("project parity LUFS missing")
+elif abs(parity) > 1.0:
+    problems.append("graph↔preview-mix parity %.2f LU exceeds 1.0" % parity)
+else:
+    print("project: frames=%d engines-null=%s parity=%.2f LU" % (
+        dump.get("projectGraphFrames", 0), dump.get("projectGraphPassed"), parity))
 if not dump["driftPassed"]:
     problems.append("drift measurement failed")
 if problems:
@@ -137,4 +174,4 @@ if [[ "$fail" -ne 0 ]]; then
 fi
 
 rm -rf "$WORK_DIR"
-echo "G-25 NULL TEST GATE PASS (graphs=$PASSED passed, drift offset=$DRIFT_OFFSET sample, 60min end exact)"
+echo "G-25 NULL TEST GATE PASS (graphs=$PASSED passed incl. real project, parity=$PARITY LU, drift offset=$DRIFT_OFFSET sample, 60min end exact)"

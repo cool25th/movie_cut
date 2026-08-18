@@ -193,10 +193,6 @@ extension EditorViewModel {
             await runPreviewExportParityUITestScenario(environment: env)
             return
         }
-        if let nullTestPath = env["MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST"], !nullTestPath.isEmpty {
-            await runAudioGraphNullTestUITestScenario(environment: env, artifactPath: nullTestPath)
-            return
-        }
         if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
             await runLatencyBaselineUITestScenario(
                 environment: env,
@@ -332,6 +328,16 @@ extension EditorViewModel {
                 bgmURL: URL(filePath: bgmPath),
                 voiceURL: URL(filePath: voicePath),
                 applyDucking: env["MOVIECUT_UITEST_DUCKING_APPLY"] == "1"
+            )
+        }
+
+        // G-25 §9 null test — runs in the MAIN flow (after imports/ducking)
+        // so the real-project phase sees the actual media and mix state.
+        var audioGraphNulltestSuffix = ""
+        if let nullTestPath = env["MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST"], !nullTestPath.isEmpty {
+            audioGraphNulltestSuffix = await runAudioGraphNullTestUITestScenario(
+                environment: env,
+                artifactPath: nullTestPath
             )
         }
 
@@ -716,7 +722,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -2674,8 +2680,23 @@ extension EditorViewModel {
     /// timestamps from the exported mp4 and compares them pixel-by-pixel.
     // MARK: - G-25 §9 audio graph null test (Inc 8 App half)
 
+    /// Duplicates a mono decode to dual-mono stereo so loudness parity
+    /// compares like channel layouts (mono vs dual-mono differs by +3.01 LU
+    /// in BS.1770 summing — a presentation artifact, not a mix difference).
+    private static func dualMonoStereo(_ audio: AudioGraphSourceAudio) -> AudioGraphSourceAudio {
+        guard audio.channels == 1 else { return audio }
+        var interleaved = [Float]()
+        interleaved.reserveCapacity(audio.interleaved.count * 2)
+        for sample in audio.interleaved {
+            interleaved.append(sample)
+            interleaved.append(sample)
+        }
+        return AudioGraphSourceAudio(sampleRate: audio.sampleRate, channels: 2, interleaved: interleaved)
+    }
+
     /// JSON artifact for `MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST`: per-graph
-    /// comparator results plus the §9.4 drift measurement.
+    /// comparator results plus the §9.4 drift measurement and the §9.1
+    /// real-project phase (product-path migration evidence).
     private struct AudioGraphNullTestDump: Codable {
         struct GraphResult: Codable {
             var name: String
@@ -2694,6 +2715,15 @@ extension EditorViewModel {
         var driftBestOffsetSamples: Int = 0
         var driftRoundTripExact = false
         var driftPassed = false
+        // §9.1 on the REAL imported project: the graph built by
+        // AudioGraphProjectBuilder renders through both engines, and the
+        // graph mix's loudness is compared against the preview audio-mix
+        // render (migration parity; AAC-vs-float, so LUFS-delta tolerance,
+        // not a null gate).
+        var projectGraphRendered = false
+        var projectGraphPassed = false
+        var projectGraphFrames = 0
+        var projectParityDeltaLufs: Double?
         var elapsedSeconds = 0.0
         var error = "none"
     }
@@ -2710,7 +2740,7 @@ extension EditorViewModel {
     /// deterministic synthetic sines (the spec's "더미" project — no media
     /// decode, byte-reproducible numbers); the project→graph builder lands
     /// with the product migration, after Inc 9.
-    private func runAudioGraphNullTestUITestScenario(environment: [String: String], artifactPath: String) async {
+    private func runAudioGraphNullTestUITestScenario(environment: [String: String], artifactPath: String) async -> String {
         let started = Date()
         var dump = AudioGraphNullTestDump()
 
@@ -2893,6 +2923,90 @@ extension EditorViewModel {
             // within one 16-bit LSB) and the position math round-trips —
             // far stronger than the ≤1 video frame drift budget.
             dump.driftPassed = driftCompare.passed && abs(driftCompare.bestOffsetSamples) <= 1 && dump.driftRoundTripExact
+
+            // --- §9.1 on the REAL imported project (migration evidence) ----
+            // Build the graph from the actual project (the builder maps
+            // volumes, fades, ducking, mute/solo), decode the referenced
+            // sources, and render BOTH engines. Also measure the graph mix
+            // against the preview audio-mix render (LUFS parity — the two
+            // paths still differ by AAC and ramp shape, so this is a
+            // reported tolerance, not a null gate).
+            let audioClipBearingTracks = currentProject.timeline.tracks.filter { track in
+                track.clips.contains { clip in
+                    clip.kind == .audio || clip.kind == .video
+                }
+            }
+            if !audioClipBearingTracks.isEmpty {
+                var decodedSources: [UUID: AudioGraphSourceAudio] = [:]
+                for track in audioClipBearingTracks {
+                    for clip in track.clips where clip.kind == .audio || clip.kind == .video {
+                        guard let assetId = clip.assetId,
+                              decodedSources[assetId] == nil,
+                              let asset = currentProject.mediaLibrary.assets[assetId] else { continue }
+                        // A video file with NO audio track fails AVAudioFile
+                        // decode — render it as a silent source (exactly what
+                        // it contributes to the mix). NOTE the parens: with
+                        // `try? f() ?? g()` the ?? binds INSIDE the try?, so
+                        // a decode failure would produce nil, not g().
+                        decodedSources[assetId] = (try? AudioGraphExportPostCheck.decode(fileAt: asset.originalURL))
+                            ?? AudioGraphSourceAudio(sampleRate: 48_000, channels: 2, interleaved: [0, 0])
+                    }
+                }
+                if !decodedSources.isEmpty {
+                    let plan = AudioGraphProjectBuilder.build(
+                        project: currentProject,
+                        decodedSampleRateFor: { decodedSources[$0]?.sampleRate },
+                        channelCountFor: { decodedSources[$0]?.channels }
+                    )
+                    let graphEnd = plan.spec.timebase.samplePosition(
+                        at: CMTime(seconds: currentProject.timeline.duration, preferredTimescale: 600)
+                    )
+                    let projectFrames = Int(min(max(graphEnd, 1), 480_000))
+                    let projectPreview = try AudioGraphAVAudioEngineRenderer.render(
+                        spec: plan.spec, activations: plan.activations,
+                        sourceAudio: { decodedSources[$0] }, frameCount: projectFrames
+                    )
+                    let projectExport = try AudioGraphEncoderInput.render(
+                        spec: plan.spec, activations: plan.activations,
+                        sourceAudio: { decodedSources[$0] }, frameCount: projectFrames
+                    )
+                    let projectCompare = AudioGraphNullTest.compare(
+                        reference: projectExport.interleaved, candidate: projectPreview.interleaved
+                    )
+                    dump.graphs.append(AudioGraphNullTestDump.GraphResult(
+                        name: "project",
+                        frames: projectFrames,
+                        bestOffsetSamples: projectCompare.bestOffsetSamples,
+                        maxAbsoluteDeviation: Double(projectCompare.maxAbsoluteDeviation),
+                        lsb16: Double(projectCompare.lsb16),
+                        passed: projectCompare.passed
+                    ))
+                    dump.projectGraphRendered = true
+                    dump.projectGraphFrames = projectFrames
+                    dump.projectGraphPassed = projectCompare.passed
+
+                    // Migration parity: graph mix vs the real preview mix.
+                    rebuildPreviewComposition()
+                    try await waitForCompositionReady(timeoutSeconds: 15)
+                    let previewURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("moviecut-nulltest-preview-\(UUID().uuidString).m4a")
+                    defer { try? FileManager.default.removeItem(at: previewURL) }
+                    try await playbackEngine.renderCurrentPreviewAudio(to: previewURL)
+                    // Channel-layout normalization before the LUFS parity
+                    // comparison: an all-mono project's preview m4a encodes
+                    // as MONO while the graph PCM is dual-mono stereo, and
+                    // the same signal measures +3.01 LU louder in dual-mono
+                    // — a presentation difference, not a mix difference.
+                    let previewDecoded = Self.dualMonoStereo(
+                        try AudioGraphExportPostCheck.decode(fileAt: previewURL)
+                    )
+                    let graphLufs = AudioGraphLoudness.measure(projectExport).integratedLufs
+                    let previewLufs = AudioGraphLoudness.measure(previewDecoded).integratedLufs
+                    if let graphLufs, let previewLufs {
+                        dump.projectParityDeltaLufs = graphLufs - previewLufs
+                    }
+                }
+            }
         } catch {
             lastErrorMessage = "audio graph null test failed: \(error.localizedDescription)"
             dump.error = error.localizedDescription
@@ -2909,7 +3023,7 @@ extension EditorViewModel {
 
         let passedCount = dump.graphs.filter(\.passed).count
         let maxDeviation = dump.graphs.map(\.maxAbsoluteDeviation).max() ?? 0
-        let status = "audio_graph_nulltest_done" +
+        var suffix = " audio_graph_nulltest_done" +
             " graphs=\(dump.graphs.count)" +
             " passed=\(passedCount)" +
             String(format: " max_dev=%.2e", maxDeviation) +
@@ -2918,16 +3032,14 @@ extension EditorViewModel {
             " drift_offset=\(dump.driftBestOffsetSamples)" +
             " drift_roundtrip=\(dump.driftRoundTripExact ? 1 : 0)" +
             " drift_passed=\(dump.driftPassed ? 1 : 0)" +
-            String(format: " elapsed=%.2f", dump.elapsedSeconds) +
-            " error=\(lastErrorMessage ?? "none")"
-        lastStatusMessage = status
-        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
-            writeHarnessStatus(status, to: resultPath)
+            " project_graph=\(dump.projectGraphRendered ? 1 : 0)" +
+            " project_graph_passed=\(dump.projectGraphPassed ? 1 : 0)" +
+            " project_parity_lufs=\(dump.projectParityDeltaLufs.map { String(format: "%.2f", $0) } ?? "none")" +
+            String(format: " elapsed=%.2f", dump.elapsedSeconds)
+        if dump.error != "none" {
+            suffix += " nulltest_error=1"
         }
-        await flushAutosave()
-        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
-        }
+        return suffix
     }
 
     // MARK: - G-25 §8 export post-check (Inc 9 App half)

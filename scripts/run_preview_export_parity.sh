@@ -26,7 +26,7 @@ command -v ffprobe >/dev/null || { echo "ffprobe required" >&2; exit 1; }
 
 echo "Building MovieCutMac (Debug)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination 'platform=macOS' build >/dev/null
+  -destination 'platform=macOS' ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO build >/dev/null
 
 PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
   -destination 'platform=macOS' -showBuildSettings 2>/dev/null \

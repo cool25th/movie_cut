@@ -30,7 +30,7 @@ FIXTURE="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
 
 echo "Building MovieCutMac (Debug)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build >/dev/null 2>&1 \
+  -destination 'platform=macOS' ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO build >/dev/null 2>&1 \
   || { echo "build failed" >&2; exit 1; }
 products="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
   -destination 'platform=macOS' -showBuildSettings 2>/dev/null \

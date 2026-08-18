@@ -29,7 +29,7 @@ FIXTURE="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
 
 echo "Building MovieCutMac (Debug)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
-  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build >/dev/null
+  -destination 'platform=macOS' ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO build >/dev/null
 
 PRODUCTS_DIR="$(xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -showBuildSettings 2>/dev/null \
@@ -95,8 +95,18 @@ RP=$!
 for _ in $(seq 1 480); do [ -s "$RECOVERY_RESULT" ] && break; sleep 0.5; done
 wait "$RP" 2>/dev/null || true
 RECOVERY_STATUS="$(cat "$RECOVERY_RESULT" 2>/dev/null || echo MISSING)"
-if echo "$RECOVERY_STATUS" | grep -q "status=PASS"; then
-  printf "  %-32s    —      PASS   recovery=%s\n" "4_autosave_save_reload" "recovered"
+# Assert the harness's recovery contract (the same one
+# run_recovery_gate.sh locks): the recovery_done line with an autosave
+# present, at least one recovered clip, and the adoption status. The old
+# `status=PASS` grep matched a string the harness never emits — scenario 4
+# could not pass as written.
+RECOVERY_AUTOSAVE="$(echo "$RECOVERY_STATUS" | grep -oE 'autosave_present=[01]' | cut -d= -f2)"
+RECOVERY_CLIPS="$(echo "$RECOVERY_STATUS" | grep -oE 'recovered_clips=[0-9]+' | cut -d= -f2)"
+if echo "$RECOVERY_STATUS" | grep -q "recovery_done" \
+   && [ "${RECOVERY_AUTOSAVE:-0}" = "1" ] \
+   && [ "${RECOVERY_CLIPS:-0}" -ge 1 ] \
+   && echo "$RECOVERY_STATUS" | grep -q "Recovered unsaved work"; then
+  printf "  %-32s    —      PASS   recovery=%s\n" "4_autosave_save_reload" "recovered_clips=${RECOVERY_CLIPS}"
 else
   printf "  %-32s    —      FAIL   recovery=%s\n" "4_autosave_save_reload" "$RECOVERY_STATUS"
   BETA_FAIL=1

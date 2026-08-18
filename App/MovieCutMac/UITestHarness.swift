@@ -2943,13 +2943,16 @@ extension EditorViewModel {
                         guard let assetId = clip.assetId,
                               decodedSources[assetId] == nil,
                               let asset = currentProject.mediaLibrary.assets[assetId] else { continue }
-                        // A video file with NO audio track fails AVAudioFile
-                        // decode — render it as a silent source (exactly what
-                        // it contributes to the mix). NOTE the parens: with
-                        // `try? f() ?? g()` the ?? binds INSIDE the try?, so
-                        // a decode failure would produce nil, not g().
-                        decodedSources[assetId] = (try? AudioGraphExportPostCheck.decode(fileAt: asset.originalURL))
-                            ?? AudioGraphSourceAudio(sampleRate: 48_000, channels: 2, interleaved: [0, 0])
+                        // §3.1 product policy: sources enter the graph at
+                        // the graph rate — the adapter decodes (video
+                        // containers' embedded audio via AVAssetReader,
+                        // audio-less video as explicit silence) and
+                        // resamples. A real decode failure throws; there is
+                        // deliberately NO silent fallback here.
+                        decodedSources[assetId] = try await AudioGraphSourceAdapter.normalizedAudio(
+                            fileAt: asset.originalURL,
+                            graphSampleRate: 48_000
+                        )
                     }
                 }
                 if !decodedSources.isEmpty {

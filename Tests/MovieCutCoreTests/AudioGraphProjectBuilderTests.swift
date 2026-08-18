@@ -216,6 +216,42 @@ struct AudioGraphProjectBuilderTests {
         #expect(plan.spec.sources[0].nativeSampleRate == 44_100)
     }
 
+    @Test("speed-adjusted clips get a per-clip source and stretched activation math (§3.1)")
+    func speedAdjustedMapping() {
+        var sped = clip(timelineStart: 0.5, duration: 1, sourceStart: 0.25)
+        // 2 s of source at 2× speed = 1 s on the timeline (scaleTimeRange).
+        sped.sourceRange = TimeRange(start: 0.25, duration: 2)
+        sped.playbackRate = 2
+        let plan = AudioGraphProjectBuilder.build(
+            project: project(clips: [(.audio, sped)])
+        )
+        // The stretched source is per-clip (id = clip id), never shared
+        // with speed-1 clips of the same asset.
+        #expect(plan.spec.sources.count == 1)
+        #expect(plan.spec.sources[0].id == sped.id)
+        #expect(plan.spec.clipStrips[0].sourceId == sped.id)
+        #expect(plan.sourceAssetIds.isEmpty)
+        #expect(plan.speedAdjustedSources == [
+            AudioGraphProjectBuilder.SpeedAdjustedSource(clipId: sped.id, assetId: asset.id, speed: 2)
+        ])
+        let activation = plan.activations[sped.id]!
+        // Timeline 0.5 s → 1.5 s (source 2 s ÷ 2). Source time 0.25 s sits
+        // at stretched offset 0.25/2 = 0.125 s; normalized rate → ratio 1.
+        #expect(activation.sampleRange == 24_000..<72_000)
+        #expect(activation.sourceFrameOffset == 6_000)
+        #expect(activation.playbackRate == 1)
+    }
+
+    @Test("speed-1 clips keep sharing the asset source")
+    func speedOneSharesAsset() {
+        let plan = AudioGraphProjectBuilder.build(
+            project: project(clips: [(.audio, clip()), (.audio, clip(timelineStart: 2))])
+        )
+        #expect(plan.spec.sources.count == 1)
+        #expect(plan.sourceAssetIds == [asset.id])
+        #expect(plan.speedAdjustedSources.isEmpty)
+    }
+
     // MARK: - Engine renderability (the plan must actually render)
 
     @Test("a built plan renders null-identically through BOTH engines")

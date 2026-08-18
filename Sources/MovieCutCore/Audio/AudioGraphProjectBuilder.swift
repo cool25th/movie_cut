@@ -24,6 +24,13 @@ import Foundation
 ///   for). Ranges shorter than attack+release duck nothing, as today.
 /// - `Track.isMuted`/`isSolo` → bus mute/solo (audio-capable tracks only),
 ///   the same semantics the AVFoundation path enforces since Inc 9.
+/// - `Clip.playbackRate` ≠ 1 → a PER-CLIP speed-adjusted source (§3.1):
+///   the adapter time-stretches the clip's media so the graph reads at
+///   speed 1. Activation math in stretched coordinates: source offset and
+///   seconds divide by the clamped speed, timeline duration =
+///   sourceRange.duration / speed — matching the engines' scaleTimeRange.
+///   Speed RAMPS cannot map to a single rate and need pre-rendered media
+///   (wiring increment).
 /// - Clips on audio-kind tracks AND video clips' embedded audio become
 ///   strips on their track's bus. A clip whose EFFECTIVE audio media is a
 ///   render-time derivation (EQ/NR, spec §0 v1.1) consumes a per-clip
@@ -47,6 +54,26 @@ public enum AudioGraphProjectBuilder {
         /// before decoding (spec §0 v1.1). Their graph source id IS the clip
         /// id; derivation input is the clip's asset.
         public var derivedClipIds: [UUID]
+        /// Clips with playback speed ≠ 1 the caller must pre-render at that
+        /// speed (spec §3.1 — `AudioGraphSourceAdapter.timeStretched`),
+        /// before or after derivation as applicable. Their graph source id
+        /// IS the clip id (a stretched source cannot be shared with
+        /// speed-1 clips of the same asset).
+        public var speedAdjustedSources: [SpeedAdjustedSource]
+    }
+
+    /// A per-clip speed normalization request (spec §3.1).
+    public struct SpeedAdjustedSource: Sendable, Equatable {
+        public var clipId: UUID
+        public var assetId: UUID
+        /// The product's clamped playback rate (0.25–4), ≠ 1.
+        public var speed: Double
+
+        public init(clipId: UUID, assetId: UUID, speed: Double) {
+            self.clipId = clipId
+            self.assetId = assetId
+            self.speed = speed
+        }
     }
 
     /// A clip's effective audio media when it is a render-time derivation
@@ -89,10 +116,12 @@ public enum AudioGraphProjectBuilder {
 
         var sources: [UUID: AudioGraphSource] = [:]
         var sourceOrder: [UUID] = []
+        var plainAssetIds: [UUID] = []
         var strips: [AudioGraphClipStrip] = []
         var activations: [UUID: AudioGraphStripActivation] = [:]
         var buses: [AudioGraphTrackBus] = []
         var derivedClipIds: [UUID] = []
+        var speedAdjustedSources: [SpeedAdjustedSource] = []
 
         func samplePosition(_ seconds: TimeInterval) -> Int64 {
             timebase.samplePosition(at: CMTime(seconds: seconds, preferredTimescale: 600))
@@ -111,7 +140,13 @@ public enum AudioGraphProjectBuilder {
 
                 // Effective media (spec §0 v1.1): an EQ/NR derivation is the
                 // clip's own source (per-clip, since EQ settings are
-                // per-clip even on a shared asset); otherwise the original.
+                // per-clip even on a shared asset). A speed-adjusted clip
+                // (spec §3.1) is also per-clip — a time-stretched source
+                // cannot be shared with speed-1 clips of the same asset
+                // (and a derived+sped clip stretches the derived media).
+                // Otherwise the shared original.
+                let clampedSpeed = min(max(clip.playbackRate, 0.25), 4.0)
+                let speedAdjusted = clampedSpeed != 1
                 let sourceId: UUID
                 if let effective = effectiveMediaFor(clip) {
                     sourceId = clip.id
@@ -129,6 +164,17 @@ public enum AudioGraphProjectBuilder {
                     if derivedClipIds.contains(clip.id) == false {
                         derivedClipIds.append(clip.id)
                     }
+                } else if speedAdjusted {
+                    sourceId = clip.id
+                    if sources[sourceId] == nil {
+                        sources[sourceId] = AudioGraphSource(
+                            id: sourceId,
+                            kind: .original,
+                            url: asset.originalURL,
+                            nativeSampleRate: decodedSampleRateFor(sourceId)
+                        )
+                        sourceOrder.append(sourceId)
+                    }
                 } else {
                     sourceId = asset.id
                     if sources[sourceId] == nil {
@@ -139,7 +185,15 @@ public enum AudioGraphProjectBuilder {
                             nativeSampleRate: decodedSampleRateFor(sourceId)
                         )
                         sourceOrder.append(sourceId)
+                        if plainAssetIds.contains(asset.id) == false {
+                            plainAssetIds.append(asset.id)
+                        }
                     }
+                }
+                if speedAdjusted, speedAdjustedSources.contains(where: { $0.clipId == clip.id }) == false {
+                    speedAdjustedSources.append(SpeedAdjustedSource(
+                        clipId: clip.id, assetId: asset.id, speed: clampedSpeed
+                    ))
                 }
                 let nativeRate = decodedSampleRateFor(sourceId) ?? graphSampleRate
                 let channels = channelCountFor(sourceId) ?? 2
@@ -160,11 +214,22 @@ public enum AudioGraphProjectBuilder {
                 ))
                 trackStripIds.append(stripId)
 
+                // Activation in the §3.1-normalized source's coordinates.
+                // The engines put a sped clip on the timeline for
+                // sourceRange.duration / speed seconds (scaleTimeRange), and
+                // the stretched source N satisfies N(τ) = S(τ·speed), so
+                // source time `a` begins at normalized offset a/speed.
                 let rangeStart = samplePosition(clip.timelineRange.start)
-                let rangeEnd = samplePosition(clip.timelineRange.start + clip.timelineRange.duration)
+                let timelineDuration = speedAdjusted
+                    ? clip.sourceRange.duration / clampedSpeed
+                    : clip.timelineRange.duration
+                let rangeEnd = samplePosition(clip.timelineRange.start + timelineDuration)
+                let offsetSeconds = speedAdjusted
+                    ? clip.sourceRange.start / clampedSpeed
+                    : clip.sourceRange.start
                 activations[stripId] = AudioGraphStripActivation(
                     sampleRange: rangeStart..<max(rangeStart + 1, rangeEnd),
-                    sourceFrameOffset: Int64((clip.sourceRange.start * nativeRate).rounded(.down)),
+                    sourceFrameOffset: Int64((offsetSeconds * nativeRate).rounded(.down)),
                     playbackRate: nativeRate / graphSampleRate
                 )
             }
@@ -187,8 +252,9 @@ public enum AudioGraphProjectBuilder {
         return Plan(
             spec: spec,
             activations: activations,
-            sourceAssetIds: sourceOrder.filter { sources[$0]?.kind == .original },
-            derivedClipIds: derivedClipIds
+            sourceAssetIds: plainAssetIds,
+            derivedClipIds: derivedClipIds,
+            speedAdjustedSources: speedAdjustedSources
         )
     }
 

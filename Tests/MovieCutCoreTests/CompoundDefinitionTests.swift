@@ -30,9 +30,11 @@ struct CompoundDefinitionTests {
     @Test("compound fields ship at the current schema version (task 6.1 bump)")
     func schemaVersionCarriesCompoundFields() {
         // Task 6.1 bumped `currentSchemaVersion` once for the batched additive
-        // fields (blendMode / previewQuality / compounds). The compound feature
-        // is part of that batch, so current must be 4 and the chain reaches it.
-        #expect(currentSchemaVersion == 4)
+        // fields (blendMode / previewQuality / compounds) — v4. Later bumps
+        // (v5: Track.isSolo, G-25 Inc 9) only ADD fields, so the invariant is
+        // "current is at least the compound batch's version, and the chain
+        // reaches current".
+        #expect(currentSchemaVersion >= 4)
         #expect(ProjectSchema.migrations.last?.version == currentSchemaVersion)
     }
 

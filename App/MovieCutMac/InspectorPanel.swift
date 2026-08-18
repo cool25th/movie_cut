@@ -151,6 +151,8 @@ struct InspectorPanel: View {
     private func projectToolsSections(carded: Bool) -> some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
             if carded {
+                MasterLoudnessSection(viewModel: viewModel)
+                    .movieCutCard()
                 MarkerManagementSection(viewModel: viewModel)
                     .movieCutCard()
                 AssistantSection(viewModel: viewModel)
@@ -160,12 +162,100 @@ struct InspectorPanel: View {
                 AnalysisResultsSection(viewModel: viewModel)
                     .movieCutCard()
             } else {
+                MasterLoudnessSection(viewModel: viewModel)
                 MarkerManagementSection(viewModel: viewModel)
                 AssistantSection(viewModel: viewModel)
                 HighlightsSection(viewModel: viewModel)
                 AnalysisResultsSection(viewModel: viewModel)
             }
         }
+    }
+}
+
+/// G-25 Inc 9 (spec §7·§11④): the master loudness meter card. Shows the
+/// MEASURED LUFS-I / true-peak dBTP of the project's real preview mix with
+/// the §7 SNS guideline bands — a display guideline, never auto-enforced.
+private struct MasterLoudnessSection: View {
+    var viewModel: EditorViewModel
+    @State private var isExpanded = true
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                if let measurement = viewModel.masterLoudness {
+                    meterRow(
+                        title: NSLocalizedString("Integrated Loudness", comment: ""),
+                        value: measurement.integratedLufs.map { String(format: "%.1f LUFS", $0) }
+                            ?? NSLocalizedString("Silence", comment: ""),
+                        within: measurement.integratedLufs.map {
+                            AudioGraphLoudness.snsGuidelineLufsRange.contains($0)
+                        }
+                    )
+                    meterRow(
+                        title: NSLocalizedString("True Peak", comment: ""),
+                        value: String(format: "%.2f dBTP", measurement.truePeakDbTp),
+                        within: measurement.truePeakDbTp <= AudioGraphLoudness.snsGuidelineTruePeakDbTp
+                    )
+                    Text("SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("No measurement yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = viewModel.masterLoudnessError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Button {
+                    Task { await viewModel.measureMasterLoudness() }
+                } label: {
+                    HStack(spacing: MovieCutSpacing.xSmall) {
+                        if viewModel.isMeasuringMasterLoudness {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isMeasuringMasterLoudness
+                             ? NSLocalizedString("Measuring…", comment: "")
+                             : NSLocalizedString("Measure", comment: ""))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isMeasuringMasterLoudness)
+            }
+            .padding(.top, MovieCutSpacing.small)
+        } label: {
+            HStack(spacing: MovieCutSpacing.small) {
+                Label("Audio Master", systemImage: "waveform")
+                Spacer()
+                if let lufs = viewModel.masterLoudness?.integratedLufs {
+                    Text(String(format: "%.1f LUFS", lufs))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private func meterRow(title: String, value: String, within: Bool?) -> some View {
+        HStack(spacing: MovieCutSpacing.small) {
+            Text(title)
+                .font(.caption)
+            Spacer()
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+            if let within {
+                Image(systemName: within ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(within ? Color.green : Color.orange)
+                    .font(.caption)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -20,6 +20,55 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    /// G-25 Inc 9 (spec §7·§11④): measures the project's REAL current mix
+    /// — rebuilds the preview composition (which carries every audio edit:
+    /// clip volumes, fades, ducking, EQ, track mute/solo), renders it to a
+    /// temporary m4a through the actual preview export path, re-decodes
+    /// the file, and runs the shared Core meter (BS.1770-4 LUFS-I + 4×
+    /// true peak). 실측값 — never an estimate of the source files.
+    func measureMasterLoudness() async {
+        guard !isMeasuringMasterLoudness else { return }
+        isMeasuringMasterLoudness = true
+        masterLoudnessError = nil
+        defer { isMeasuringMasterLoudness = false }
+        do {
+            rebuildPreviewComposition()
+            let expectedGeneration = playbackEngine.currentCompositionGeneration
+            let deadline = Date().addingTimeInterval(10)
+            while Date() < deadline {
+                if let compositionError = playbackEngine.lastCompositionError {
+                    throw NSError(
+                        domain: "MovieCut", code: 91,
+                        userInfo: [NSLocalizedDescriptionKey: compositionError]
+                    )
+                }
+                if playbackEngine.installedCompositionGeneration >= expectedGeneration,
+                   playbackEngine.playerItem != nil,
+                   playbackEngine.duration > 0 {
+                    break
+                }
+                try await Task.sleep(nanoseconds: 30_000_000)
+            }
+            guard playbackEngine.playerItem != nil else {
+                throw NSError(
+                    domain: "MovieCut", code: 90,
+                    userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                        "Preview is not ready yet — try again in a moment.", comment: ""
+                    )]
+                )
+            }
+
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("moviecut-master-loudness-\(UUID().uuidString).m4a")
+            defer { try? FileManager.default.removeItem(at: url) }
+            try await playbackEngine.renderCurrentPreviewAudio(to: url)
+            let decoded = try AudioGraphExportPostCheck.decode(fileAt: url)
+            masterLoudness = AudioGraphLoudness.measure(decoded)
+        } catch {
+            masterLoudnessError = error.localizedDescription
+        }
+    }
+
     #if DEBUG || MOVIECUT_HARNESS
     /// Deterministic two-track ducking fixture used by the headless E2E harness.
     /// It builds the same project state a user would create, then applies

@@ -344,7 +344,14 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
         }
 
-        for track in renderingTracks(for: project) where !track.isMuted {
+        // G-25 Inc 9 audio solo: any soloed audio-capable track silences
+        // every non-solo AUDIO track. Audio-kind tracks carry no visual
+        // content, so a solo-suppressed audio track is dropped entirely —
+        // the same semantics the render graph's bus solo applies
+        // (AudioGraphTrackBus.solo) and PlaybackEngine enforces.
+        let anyTrackSoloed = project.timeline.tracks.contains { $0.isSolo && $0.kind != .text }
+        for track in renderingTracks(for: project)
+        where !track.isMuted && !(anyTrackSoloed && track.kind == .audio && !track.isSolo) {
             if track.kind == .text {
                 for clip in track.clips {
                     guard let textContent = clip.textContent else {

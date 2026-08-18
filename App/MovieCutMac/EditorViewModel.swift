@@ -137,6 +137,11 @@ final class EditorViewModel {
     var motionTrackingResults: [TrackingResult] = []
     var motionTrackingClipId: UUID?
     var recentAnalysisResults: [AnalysisHistoryItem] = []
+    // G-25 Inc 9 master loudness meter (spec §7·§11④): MEASURED values from
+    // the project's real preview mix, refreshed by measureMasterLoudness().
+    var masterLoudness: AudioGraphLoudness.Measurement?
+    var isMeasuringMasterLoudness = false
+    var masterLoudnessError: String?
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 

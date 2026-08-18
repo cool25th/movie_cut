@@ -737,12 +737,15 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         var textOverlayClipEffects: [CustomCompositionClipEffect] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
         var equalizerSegmentsByTrackID: [CMPersistentTrackID: [ClipEqualizerTimelineSegment]] = [:]
+        // G-25 Inc 9 audio solo: any soloed audio-capable track silences
+        // every non-solo track's AUDIO (video keeps rendering).
+        let anyTrackSoloed = project.timeline.tracks.contains { $0.isSolo && $0.kind != .text }
 
         for track in renderingTracks(for: project).sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
             case .video:
                 var videoCompositionTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
-                let audioCompositionTrack = track.isMuted ? nil : try makeCompositionTrack(
+                let audioCompositionTrack = (track.isMuted || (anyTrackSoloed && !track.isSolo)) ? nil : try makeCompositionTrack(
                     in: composition,
                     mediaType: .audio
                 )
@@ -950,7 +953,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     audioMixInputParameters.append(audioParameters)
                 }
             case .audio:
-                guard !track.isMuted else { continue }
+                guard !track.isMuted, !(anyTrackSoloed && !track.isSolo) else { continue }
 
                 let audioCompositionTrack = try makeCompositionTrack(in: composition, mediaType: .audio)
                 let audioParameters = AVMutableAudioMixInputParameters()

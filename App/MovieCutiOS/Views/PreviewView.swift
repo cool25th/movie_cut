@@ -158,7 +158,8 @@ struct PreviewView: View {
             withMediaType: .video,
             preferredTrackID: kCMPersistentTrackID_Invalid
         )
-        let audioTrack = timelineTrack.isMuted ? nil : composition.addMutableTrack(
+        let audioTrack = (timelineTrack.isMuted
+            || audioSoloSuppresses(timelineTrack, in: project)) ? nil : composition.addMutableTrack(
             withMediaType: .audio,
             preferredTrackID: kCMPersistentTrackID_Invalid
         )
@@ -180,8 +181,17 @@ struct PreviewView: View {
         return inserted
     }
 
+    /// G-25 Inc 9 audio solo: true when some audio-capable track is soloed
+    /// and this track is not — silence this track's audio, keep its video.
+    private func audioSoloSuppresses(_ track: Track, in project: Project) -> Bool {
+        guard project.timeline.tracks.contains(where: { $0.isSolo && $0.kind != .text }) else {
+            return false
+        }
+        return !track.isSolo
+    }
+
     private func insertAudioTrack(_ timelineTrack: Track, from project: Project, into composition: AVMutableComposition) -> Bool {
-        guard !timelineTrack.isMuted else { return false }
+        guard !timelineTrack.isMuted, !audioSoloSuppresses(timelineTrack, in: project) else { return false }
         let clips = timelineTrack.clips
             .filter { $0.kind == .audio || $0.kind == .video }
             .sorted { $0.timelineRange.start < $1.timelineRange.start }

@@ -113,6 +113,16 @@ final class IOSExportEngine {
         }
     }
 
+    /// G-25 Inc 9 audio solo: true when some audio-capable track is soloed
+    /// and this track is not — the track's audio must be silenced (visuals
+    /// are unaffected). Mirrors AudioGraphTrackBus.solo semantics.
+    private func audioSoloSuppresses(_ track: Track, in project: Project) -> Bool {
+        guard project.timeline.tracks.contains(where: { $0.isSolo && $0.kind != .text }) else {
+            return false
+        }
+        return !track.isSolo
+    }
+
     private func makeVideoComposition(for project: Project) -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
         let canvasSize = project.canvas.size
@@ -142,7 +152,7 @@ final class IOSExportEngine {
                     videoTrackIDsByTrackID[timelineTrack.id] = videoTrack.trackID
                 }
 
-                if !timelineTrack.isMuted {
+                if !timelineTrack.isMuted, !audioSoloSuppresses(timelineTrack, in: project) {
                     trackIDComposition.addMutableTrack(
                         withMediaType: .audio,
                         preferredTrackID: kCMPersistentTrackID_Invalid
@@ -150,7 +160,8 @@ final class IOSExportEngine {
                 }
             case .audio:
                 let playableClips = timelineTrack.clips.filter { $0.kind == .audio || $0.kind == .video }
-                guard !timelineTrack.isMuted, !playableClips.isEmpty else { continue }
+                guard !timelineTrack.isMuted, !playableClips.isEmpty,
+                      !audioSoloSuppresses(timelineTrack, in: project) else { continue }
                 trackIDComposition.addMutableTrack(
                     withMediaType: .audio,
                     preferredTrackID: kCMPersistentTrackID_Invalid
@@ -320,7 +331,8 @@ final class IOSExportEngine {
             withMediaType: .video,
             preferredTrackID: kCMPersistentTrackID_Invalid
         )
-        let compositionAudioTrack = timelineTrack.isMuted ? nil : composition.addMutableTrack(
+        let compositionAudioTrack = (timelineTrack.isMuted
+            || audioSoloSuppresses(timelineTrack, in: project)) ? nil : composition.addMutableTrack(
             withMediaType: .audio,
             preferredTrackID: kCMPersistentTrackID_Invalid
         )
@@ -363,7 +375,7 @@ final class IOSExportEngine {
         from project: Project,
         into composition: AVMutableComposition
     ) async throws {
-        guard !timelineTrack.isMuted else { return }
+        guard !timelineTrack.isMuted, !audioSoloSuppresses(timelineTrack, in: project) else { return }
 
         let playableClips = timelineTrack.clips
             .filter { $0.kind == .audio || $0.kind == .video }

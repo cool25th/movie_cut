@@ -161,6 +161,12 @@ extension EditorViewModel {
         ///   audio graph through BOTH engine generators (real AVAudioEngine preview + encoder input),
         ///   null-compares at ±1 sample / 1 LSB, measures the 60-minute mixed-rate tail drift, and writes a
         ///   JSON artifact to <path> (the swift-test-level checks live in AudioGraphEngineNullTests).
+        /// - `MOVIECUT_UITEST_SOLO_LAST_AUDIO_TRACK=1` — solos the last audio track through the real
+        ///   SetTrackPropertyCommand path before export (G-25 Inc 9 solo E2E evidence).
+        /// - `MOVIECUT_UITEST_EXPORT_POSTCHECK=<path>` — G-25 §8 AAC post-check: after export, re-decodes
+        ///   the ACTUAL output file and the project's preview mix (the reference the audio-mix path
+        ///   produces today), compares lengths/RMS, and measures decoded LUFS-I/true-peak/clipping with
+        ///   the shared Core functions; writes a JSON artifact to <path>.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -601,6 +607,20 @@ extension EditorViewModel {
             }
         }
 
+        // G-25 Inc 9: solo the last audio track through the real command
+        // path so E2E can prove solo changes the exported mix.
+        var soloSuffix = ""
+        if env["MOVIECUT_UITEST_SOLO_LAST_AUDIO_TRACK"] == "1" {
+            if let lastAudioTrack = currentProject.timeline.tracks.last(where: { $0.kind == .audio }) {
+                await toggleTrackSolo(lastAudioTrack)
+                let applied = currentProject.timeline.tracks
+                    .first { $0.id == lastAudioTrack.id }?.isSolo ?? false
+                soloSuffix = " solo_applied=\(applied ? 1 : 0)"
+            } else {
+                soloSuffix = " solo_applied=0"
+            }
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             let dest = containerizedExportDestination(for: URL(filePath: exportPath))
@@ -627,6 +647,17 @@ extension EditorViewModel {
             let dest = containerizedExportDestination(for: URL(filePath: hdrPath))
             await exportHDRMaster(to: dest.write)
             finalizeContainerizedExport(from: dest.write, to: dest.requested)
+        }
+
+        // G-25 §8: post-check the ACTUAL exported file (audio-only export if
+        // requested, else the video export) against the project's preview mix.
+        var exportPostcheckSuffix = ""
+        if lastErrorMessage == nil,
+           let postcheckPath = env["MOVIECUT_UITEST_EXPORT_POSTCHECK"], !postcheckPath.isEmpty {
+            exportPostcheckSuffix = await runExportPostCheckUITestScenario(
+                environment: env,
+                artifactPath: postcheckPath
+            )
         }
 
         // Optional preview render benchmark: per-frame 1080p compositor cost on
@@ -685,7 +716,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -2897,6 +2928,112 @@ extension EditorViewModel {
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
         }
+    }
+
+    // MARK: - G-25 §8 export post-check (Inc 9 App half)
+
+    /// JSON artifact for `MOVIECUT_UITEST_EXPORT_POSTCHECK`.
+    private struct ExportPostCheckDump: Codable {
+        var schemaVersion = 1
+        var scenario = "G-25-export-post-check"
+        var referenceFrames = 0
+        var referenceSampleRate = 0.0
+        var decodedFrames = 0
+        var decodedSampleRate = 0.0
+        var lengthWithinOneSample = false
+        var rmsDifferenceDb: Double?
+        var referenceLufs: Double?
+        var decodedLufs: Double?
+        var decodedTruePeakDbTp: Double?
+        var clippingRunCount = 0
+        var warningCount = 0
+        var passed = false
+        var error = "none"
+    }
+
+    /// G-25 spec §8 — re-decodes the ACTUAL exported file and compares it
+    /// against the project's preview-mix render (the reference today's
+    /// audio-mix product path produces; once the graph encoder input lands,
+    /// the reference switches to `AudioGraphEncoderInput` PCM). Reports
+    /// lengths, RMS difference, decoded LUFS-I / true peak / clipping via
+    /// the shared Core functions. NOTE: both sides are AAC here, so codec
+    /// padding/delay can move lengths by an AAC frame — the raw numbers are
+    /// reported for the script to judge; the ±1-sample gate in its strict
+    /// form belongs to the graph-input era.
+    private func runExportPostCheckUITestScenario(environment: [String: String], artifactPath: String) async -> String {
+        var dump = ExportPostCheckDump()
+        do {
+            let exportedPath = [environment["MOVIECUT_UITEST_EXPORT_AUDIO"], environment["MOVIECUT_UITEST_EXPORT"]]
+                .compactMap { $0 }
+                .first { !$0.isEmpty }
+            guard let exportedPath else {
+                throw NSError(
+                    domain: "MovieCutUITest", code: 41,
+                    userInfo: [NSLocalizedDescriptionKey: "post-check requires MOVIECUT_UITEST_EXPORT or MOVIECUT_UITEST_EXPORT_AUDIO"]
+                )
+            }
+            let exportedURL = URL(filePath: exportedPath)
+            guard FileManager.default.fileExists(atPath: exportedURL.path) else {
+                throw NSError(
+                    domain: "MovieCutUITest", code: 42,
+                    userInfo: [NSLocalizedDescriptionKey: "exported file missing: \(exportedPath)"]
+                )
+            }
+
+            // Reference: the project's real preview mix (all volumes, fades,
+            // ducking, EQ, mute/solo — whatever the composition carries).
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(timeoutSeconds: 15)
+            let referenceURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("moviecut-postcheck-\(UUID().uuidString).m4a")
+            defer { try? FileManager.default.removeItem(at: referenceURL) }
+            try await playbackEngine.renderCurrentPreviewAudio(to: referenceURL)
+
+            let reference = try AudioGraphExportPostCheck.decode(fileAt: referenceURL)
+            let decoded = try AudioGraphExportPostCheck.decode(fileAt: exportedURL)
+            let report = AudioGraphExportPostCheck.check(reference: reference, decoded: decoded)
+
+            dump.referenceFrames = report.referenceFrames
+            dump.referenceSampleRate = reference.sampleRate
+            dump.decodedFrames = report.decodedFrames
+            dump.decodedSampleRate = decoded.sampleRate
+            dump.lengthWithinOneSample = report.lengthWithinOneSample
+            dump.rmsDifferenceDb = report.rmsDifferenceDb.isFinite ? report.rmsDifferenceDb : nil
+            dump.referenceLufs = report.referenceMeasurement.integratedLufs
+            dump.decodedLufs = report.decodedMeasurement.integratedLufs
+            dump.decodedTruePeakDbTp = report.decodedMeasurement.truePeakDbTp
+            dump.clippingRunCount = report.clippingRunCount
+            dump.warningCount = report.warnings.count
+            dump.passed = report.passed
+        } catch {
+            lastErrorMessage = "export post-check failed: \(error.localizedDescription)"
+            dump.error = error.localizedDescription
+        }
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "export post-check artifact write failed: \(error.localizedDescription)"
+        }
+
+        var suffix = " export_postcheck=ok" +
+            " postcheck_len_ref=\(dump.referenceFrames)" +
+            " postcheck_len_dec=\(dump.decodedFrames)" +
+            String(format: " postcheck_rms=%.3f", dump.rmsDifferenceDb ?? 999)
+        if let lufs = dump.decodedLufs {
+            suffix += String(format: " postcheck_lufs=%.2f", lufs)
+        } else {
+            suffix += " postcheck_lufs=silence"
+        }
+        suffix += String(format: " postcheck_tp=%.2f", dump.decodedTruePeakDbTp ?? 0) +
+            " postcheck_clip_runs=\(dump.clippingRunCount)" +
+            " postcheck_warnings=\(dump.warningCount)"
+        if dump.error != "none" {
+            suffix = " export_postcheck=error"
+        }
+        return suffix
     }
 
     private func runPreviewExportParityUITestScenario(environment: [String: String]) async {

@@ -918,6 +918,21 @@ struct TimelineView: View {
             .accessibilityValue(track.isMuted ? NSLocalizedString("Muted", comment: "") : NSLocalizedString("Audible", comment: ""))
             .accessibilityHint(NSLocalizedString("Toggles audio playback for this track.", comment: ""))
 
+            if track.kind != .text {
+                Button {
+                    Task { await viewModel.toggleTrackSolo(track) }
+                } label: {
+                    Image(systemName: "headphones")
+                        .foregroundStyle(track.isSolo ? AnyShapeStyle(MovieCutTheme.accentCyan) : AnyShapeStyle(.foreground))
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.borderless)
+                .help(track.isSolo ? "Unsolo Track" : "Solo Track")
+                .accessibilityLabel(NSLocalizedString("Solo track", comment: ""))
+                .accessibilityValue(track.isSolo ? NSLocalizedString("Soloed", comment: "") : NSLocalizedString("Not soloed", comment: ""))
+                .accessibilityHint(NSLocalizedString("Soloing silences every other track's audio.", comment: ""))
+            }
+
             Button {
                 Task { await viewModel.toggleTrackHidden(track) }
             } label: {

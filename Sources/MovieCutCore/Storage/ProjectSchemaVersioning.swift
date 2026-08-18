@@ -27,7 +27,9 @@ private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", cate
 ///   new field decodes to its default for v3 projects (`decodeIfPresent ??
 ///   default`), so no payload transform is needed — this migrator only bumps
 ///   the version so the chain reaches `currentSchemaVersion`.
-public let currentSchemaVersion: Int = 4
+/// - v4 → v5 (G-25 Inc 9): `Track.isSolo` added. The field decodes to false
+///   for v4 projects, so this migrator only bumps the version.
+public let currentSchemaVersion: Int = 5
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -37,8 +39,23 @@ public enum ProjectSchema {
     public static let migrations: [any ProjectMigration] = [
         AddSecurityScopedBookmarkMigration(),
         AddAutoProxyOnThermalPressureMigration(),
-        AddBlendPreviewQualityCompoundMigration()
+        AddBlendPreviewQualityCompoundMigration(),
+        AddTrackSoloMigration()
     ]
+}
+
+/// v4 → v5: introduces `Track.isSolo` (G-25 Inc 9 audio solo). The field is
+/// optional on decode and falls back to false for v4 projects, so no payload
+/// transform is needed — this migrator only bumps the schema version so the
+/// chain reaches `currentSchemaVersion`.
+public struct AddTrackSoloMigration: ProjectMigration {
+    public let version = 5
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: `Track.isSolo` decodes to its default (false).
+    }
 }
 
 /// v3 → v4: introduces `Clip.blendMode`, `PlaybackSettings.previewQuality`,

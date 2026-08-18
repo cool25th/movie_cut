@@ -3,6 +3,22 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 26 (G-25 전환 2-C-4: 오디오 속도 램프 사전 렌더 — 갭 폐쇄)
+
+**게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 회귀 PASS(오디오 수치 완전 동일).
+
+### 완료 — 전환 2-C-4: 속도 램프 오디오의 그래프 경로 (커밋 bc16f69)
+- **`AudioGraphSourceAdapter.rampSegments` (Core)**: 레거시 `applySpeedRamp` 경계 수학 이식 — 경계 [0,1]+포인트(클램프·중복 제거), 구간 출력 = `timeMapping` 차(선형 rate 커브의 구간별 정속 근사 = 레거시 구성 scaleTimeRange 의미론, 단일 소스).
+- **`timeStretchedRamped` (Core)**: 구간별 슬라이스→피치 보존 스트레치(trimTail 비활성 — 중간 무음 내용 보존)→접합→**구간당 정확한 기대 프레임 절단**(출력 길이 = 래거시 램프 지속과 일치).
+- **빌더**: 램프 클립(포인트 ≥2) = 클립 단위 소스 + `Plan.rampAdjustedSources`(원시 포인트) + 활성화 **offset 0·rate 1**(프리렌더 = 클립 소스 창의 워프 그 자체) — 램프가 정속 playbackRate에 우선(래거시 didApplySpeedRamp 동일).
+- **GraphMixRenderer**: 램프 디코드 분기(EQ 파생 미디어 우선 — 정속 분기와 동일 계층).
+- 테스트 +3: 세그먼트 수학 해석값 고정(ln2·2구간)·정확 길이(2×=정확히 절반)·빌더 매핑(램프 우선·offset 0). **E2E 미커버 갭이었던 속도 램프 오디오 폐쇄**.
+
+### 다음 회차 인계(2-C 잔여)
+1. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지(§0 v1.1) — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례). tap-in-export 결함 소멸. 게이트: 프리뷰 파리티 시나리오·전체 E2E 무회귀 + EQ/NR 프리뷰 가청성(단위/하니스 검증 방식 설계 필요).
+2. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(현 0.5s 관대 임계 교체).
+3. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-19 세션 25 (G-25 전환 2-C-1b: 전체 출력 오디오 그래프 전환 — ProRes 교찰 포획·해소)
 
 **게이트**: verify_gate 5단계 PASS(1,251 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.

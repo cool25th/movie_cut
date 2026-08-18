@@ -1,7 +1,23 @@
-# 세션 핸드오프 — 현재 (2026-08-18)
+# 세션 핸드오프 — 현재 (2026-08-19)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+
+## 2026-08-19 세션 25 (G-25 전환 2-C-1b: 전체 출력 오디오 그래프 전환 — ProRes 교찰 포획·해소)
+
+**게이트**: verify_gate 5단계 PASS(1,251 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-1b: makeExportPackage 오디오 경로 폐지 + 그래프 AAC 단일 트랙 (커밋 2f870e9)
+- **구조**: `export()`·`exportVideoWithExplicitBitrate`(챕터·AVAssetWriter)는 `renderGraphAudio`(GraphMixRenderer→AudioGraphAacEncoder)를 컴포지션의 **단일 오디오 트랙**으로 삽입, audioMix=nil — 클립 단위 오디오 삽입·볼륨/페이드/덕킹 램프·EQ 파생(equalizedAudioAsset)·makeAudioMix 전부 제거. 스틸/GIF는 영상 전용(그래프 오디오 미사용). **비디오 임베디드 오디오 미믹싱 결함 구조적 해소**(그래프가 포함 — 프리뷰와 동일).
+- **무음=오디오 없음 의미론**(RenderError.noAudio 확장): 순수 디지털 무음 믹스(전 샘플 0)→오디오 트랙 미삽입(레거시 무음 프로젝트 출력 형태와 동일)·audio-only는 noExportableMedia 회귀·미터는 안내. **근거=실측 교찰**: 게이트 1·2회차에서 E2E 정지(앱 0% CPU 파킹) — 프로브 이진 탐색으로 **"ProRes 프리셋+무음 AAC 트랙" 조합이 AVAssetExportSession 영구 파킹**임을 특정(실제 오디오+ProRes✓·무음+기본 프리셋✓·audio-only✓). 무음 스킵으로 교찰 클래스 소멸, ProRes E2E 회복.
+- **계약 갱신 2종**: 덕킹(출력 엔진=그래프 존재+램프 부재 단언·프리뷰 램프는 2-C-2까지 유지)·EQ(DSP 주체 GraphMixRenderer 이동 단언).
+- **실측(2회 동일)**: §11⑤ 전 녹색 — NR SNR 5.15dB·EQ bass/treble 비율 2.31/0.49·덕킹 감쇠 12.04dB·오디오 추출 aac·ProRes prores·§8 A RMS −0.001dB·solo Δ −3.04·M Δ0.00 LU·null test 패리티 −0.02 LU.
+
+### 다음 회차 인계(2-C 잔여)
+1. **2-C-4(우선순위 상향 — 이번 전환으로 열린 갭)**: 오디오 클립 **속도 램프** 사전 렌더 — 레거시는 applySpeedRamp가 오디오 컴포지션 트랙을 구간별 scaleTimeRange 처리했으나 그래프는 단일 rate만 지원. `SpeedRampCurve`(Core) 구간별 timeStretched 연결로 `speedAdjustedSources` 확장 + 빌더 활성화 수식(램프 출력 지속 = curve 적분). E2E 미커버 갭 — 신규 단위 테스트로 고정.
+2. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지 — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례). tap-in-export 결함 소멸.
+3. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트.
+4. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
 
 ## 2026-08-18 세션 24 (G-25 전환 2-C-1a: audio-only 출력 그래프 PCM→AAC)
 

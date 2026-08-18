@@ -3,6 +3,24 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-18 세션 24 (G-25 전환 2-C-1a: audio-only 출력 그래프 PCM→AAC)
+
+**게이트**: verify_gate 5단계 PASS(1,251 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-1a: AudioGraphAacEncoder + exportAudioOnly 그래프 전환 (커밋 8fd4178)
+- **`AudioGraphAacEncoder.swift` (Core)**: 그래프 PCM(인코더 입력 렌더)→m4a AAC(고품질 192k, 65,536프레임 청크 기록 — 전체 PCM 이중 복사 회피). 테스트 3종(실인코딩·재디코드: 길이 [원본, +8192] 패딩 경계·RMS/LUFS ≤1dB·빈 PCM 명시 실패).
+- **`exportAudioOnly` 전환**: GraphMixRenderer.renderMix(trimToAudibleSpan:)→AAC 인코딩. 컴포지션·audioMix·AVAssetExportSession 제거 — **audio-only 출력의 샘플은 이제 그래프에서만** (spec §1). NR 동등 실증: NR은 편집 시점 파괴적 변환이므로 ExportEngine(미적용)과 그래프(파생 미디어 소비)가 자동 동등.
+- **가청 스팬 길이 계약**: 레거시는 solo 억제 트랙을 컴포지션에서 제외해 파일이 생존 오디오 끝에서 종료(4s 프로젝트 solo 시 2s 파일) — `trimToAudibleSpan`(억제 안 된 스트립 최대 종료 샘플, 순수 플랜 수학)으로 재현. 게이트 1회 실패(B 런 duration 2s↔4s)로 발견·수정.
+- **StaticContract 갱신**: audio-only 계약을 그래프 배선으로(renderMix·encode 존재 + 해당 함수에 레거시 표현[AppleM4A 프리셋·audioMix] 부재 단언).
+- **실측(2회 동일)**: §8 A 그래프 출력↔프리뷰 참조 **RMS −0.001dB**·LUFS −25.67·solo Δ −3.04 LU·M 런 Δ0.00 LU·null test 패리티 −0.02 LU 무회귀.
+
+### 다음 회차 인계(2-C 잔여 — 4시간 루프가 순차 소화)
+1. **2-C-1b**: 전체 mp4 출력 오디오 전환 — 비디오-only 컴포지션 출력 + 그래프 AAC(`AudioGraphAacEncoder`) 패스스루 먹싱(AVMutableComposition+Passthrough). 챕터(exportVideoWithExplicitBitrate)·ProRes·명시적 비트레이트 경로 포함. **§11⑤ 게이트 = 덕킹 RMS·EQ 스펙트럼·NR SNR E2E**(전부 이 경로 사용) + §8·프리뷰 파리티 무회귀.
+2. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지 — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례 패턴). tap-in-export 결함 소멸.
+3. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(현 0.5s 관대 임계 교체).
+4. **2-C-4**: 속도 램프 사전 렌더 미디어 공급(`speedAdjustedSources` 소비자 보강 — 구간별 스트레치).
+5. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-18 세션 23 (G-25 전환 2단계-B: 미터 그래프 전환 — M 런이 레거시 tap 결함 첫 포획)
 
 **게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_e2e_export.sh 전체 PASS — §8 A/B 무회귀(0.043dB·solo Δ −3.04 LU) + **미터 런 M: 그래프 −22.94 ↔ 실출력 −22.94 LU(Δ=−0.00, 1회차 0.003)**.
@@ -53,7 +71,7 @@
 
 **게이트**: verify_gate 5단계 — 커밋 시점 기준.
 
-### 완료 — G-25 Inc 1: AudioRenderGraphSpec Core 모델 (이번 세션 커밋)
+### 완료 — G-25 Inc 1: AudioRenderGraphSpec Core 모델 (커밋 8fd4178)
 - **전제**: 사용자가 docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md 승인(2026-08-18) — LOOP_STATE USER_WAITING→RUN.
 - `Sources/MovieCutCore/Audio/AudioRenderGraphSpec.swift`: 승인 명세 §2·§3·§5의 순수 모델(렌더링 없음). 소스(원본/파생·derivedFrom·algorithmVersion·nativeSampleRate)·클립 스트립(채널매핑·게인/팬 자동화·페이드)·트랙 버스(·mute/solo·덕킹)·마스터(리미터 latency 짝·목표 LUFS)·타임베이스(**자동화 좌표 전부 Int64 샘플 위치**·origin "num/den" 유리수·기본 48k)·렌더 규칙(declaredLatencies)·노드 15종(8 지원+7 자리, isStage1Supported).
 - Codable 원칙: 선택 노드 데이터 encodeIfPresent — 빈 그래프 표준 바이트(ProjectStore와 동일한 [.prettyPrinted, .sortedKeys] 기준; JSONEncoder 기본 키 순서가 인코더 인스턴스마다 비결정적임을 실측 확인·테스트에 반영).
@@ -75,7 +93,7 @@
 ### 완료 2 — app log 실패 아티팩트화 (커밋 94e225a)
 - `open` 전환 이후 0바이트가 된 `App log:` 안내 수정: 실패 시 ps 스냅샷+앱 PID 통합 로그 꼬리(`/usr/bin/log` 절대 경로 — zsh `log` 내장 명령이 이진파일을 가림), LAUNCH_FAIL 경로 preexisting_pids 기록, 성공 시에도 메타 참조 실재화.
 
-### 완료 3 — 모션 트래킹 하니스 게이트 T2-R1 전제 (이번 세션 커밋)
+### 완료 3 — 모션 트래킹 하니스 게이트 T2-R1 전제 (커밋 8fd4178)
 - `MOVIECUT_UITEST_MOTION_TRACKING=1`(UITestHarness): 실제 trackMotion 경로(provider→SetClipPropertyCommand(.keyframes))·고정 초기 rect(ground truth x=32/320,y=88/240,72×64,+80px/s)·검증(샘플≥25·키프레임=샘플×2·midX 이동>0.35·posX 이동>80px·ProjectStore 저장/적재 라운드트립 전량 보존)·JSON 행동 덤프.
 - `scripts/run_motion_tracking_gate.sh`: 픽스처 SHA-256 검증(b7a9cb2e…)·sandbox OFF 자체 빌드·`open -n -W`·180s 와치독·단언. **2회 연속 PASS + 동일 행동 데이터(samples=61 keyframes=122 roundtrip=122 midx_delta=0.478)** — 결정성 실증.
 - 설계: 검증 문서 §4.4 C1+C2 하이브리드(기존 하니스 패턴). C3 provider 계층은 기존 IoU 테스트(MotionTrackingProviderTests)가 담당.

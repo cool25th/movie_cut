@@ -34,13 +34,20 @@ enum GraphMixRenderer {
     /// and the offline renderer (spec §6 — recorded on derived sources).
     static let eqAlgorithmVersion = "eq-five-band 1.0.0"
 
-    /// - Parameter eqPresetsByClipId: each clip's resolved EQ preset (the
-    ///   same resolution the preview/export paths use —
-    ///   `buildAudioProcessingOptions().eqPresets`); absent = no EQ.
+    /// - Parameters:
+    ///   - eqPresetsByClipId: each clip's resolved EQ preset (the same
+    ///     resolution the preview/export paths use —
+    ///     `buildAudioProcessingOptions().eqPresets`); absent = no EQ.
+    ///   - trimToAudibleSpan: render only through the last sample of any
+    ///     UNSUPPRESSED audio strip (mute/solo applied) instead of the full
+    ///     timeline — the legacy audio-only export's length semantics (the
+    ///     composition dropped soloed-out tracks, so its file ended with the
+    ///     surviving audio). The meter measures the full timeline.
     static func renderMix(
         project: Project,
         graphSampleRate: Double = 48_000,
-        eqPresetsByClipId: [UUID: EqualizerPreset]
+        eqPresetsByClipId: [UUID: EqualizerPreset],
+        trimToAudibleSpan: Bool = false
     ) async throws -> AudioGraphSourceAudio {
         // 1. Derive EQ media per clip — the clip's EFFECTIVE media (§0).
         var derivedByClip: [UUID: URL] = [:]
@@ -104,16 +111,38 @@ enum GraphMixRenderer {
             try await decode(clipId, from: url, speed: 1)
         }
 
-        // 4. Render the encoder-input PCM over the whole timeline.
+        // 4. Render the encoder-input PCM. The audible-span policy ends the
+        // file at the last UNSUPPRESSED strip (bus mute/solo applied) —
+        // the legacy composition's length semantics for audio-only files.
         let timebase = AudioGraphTimebase(sampleRate: graphSampleRate, origin: .zero)
-        let frameCount = max(1, Int(timebase.samplePosition(
-            at: CMTime(seconds: max(project.timeline.duration, 0), preferredTimescale: 600)
-        )))
+        let frameCount: Int
+        if trimToAudibleSpan, let audible = audibleSampleEnd(of: plan) {
+            frameCount = max(1, Int(audible))
+        } else {
+            frameCount = max(1, Int(timebase.samplePosition(
+                at: CMTime(seconds: max(project.timeline.duration, 0), preferredTimescale: 600)
+            )))
+        }
         return try AudioGraphEncoderInput.render(
             spec: plan.spec,
             activations: plan.activations,
             sourceAudio: { decoded[$0] },
             frameCount: frameCount
         )
+    }
+
+    /// The last sample position any UNSUPPRESSED strip reaches, in graph
+    /// samples (nil when every bus is suppressed). Pure plan math — no
+    /// signal sniffing.
+    private static func audibleSampleEnd(of plan: AudioGraphProjectBuilder.Plan) -> Int64? {
+        let anySolo = plan.spec.trackBuses.contains { $0.solo }
+        var end: Int64?
+        for bus in plan.spec.trackBuses where !(bus.mute || (anySolo && !bus.solo)) {
+            for stripId in bus.inputStripIds {
+                guard let activation = plan.activations[stripId] else { continue }
+                end = max(end ?? 0, activation.sampleRange.upperBound)
+            }
+        }
+        return end
     }
 }

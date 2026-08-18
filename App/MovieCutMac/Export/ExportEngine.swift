@@ -1255,6 +1255,13 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// Reuses the same composition/audio-mix builder as the video path so
     /// volume, fades, ducking, and EQ are preserved, then muxes audio only.
     @discardableResult
+    /// G-25 switchover 2C-1a (spec §1): the audio-only export's samples come
+    /// from the GRAPH — `GraphMixRenderer` builds the graph from project
+    /// state (volumes/fades/ducking/mute/solo, EQ as derived effective
+    /// media, §3.1-normalized sources) and `AudioGraphAacEncoder` writes the
+    /// encoder-input PCM as AAC. No composition build and no audioMix — the
+    /// legacy AVAssetExportSession mixing path is gone for audio-only
+    /// exports, and with it that path's deadlock exposure and EQ tap defect.
     func exportAudioOnly(
         project: Project,
         to url: URL,
@@ -1268,27 +1275,23 @@ final class ExportEngine: FlattenedTimelineConsumer {
         do {
             beginSecurityScopes(for: project)
             defer { endSecurityScopes() }
-            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
-            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
-            guard !exportPackage.composition.tracks(withMediaType: .audio).isEmpty else {
+
+            let mix: AudioGraphSourceAudio
+            do {
+                mix = try await GraphMixRenderer.renderMix(
+                    project: project,
+                    eqPresetsByClipId: audioProcessing.eqPresets,
+                    trimToAudibleSpan: true
+                )
+            } catch GraphMixRenderer.RenderError.noAudio {
                 throw ExportEngineError.noExportableMedia
             }
-            guard let exportSession = AVAssetExportSession(
-                asset: exportPackage.composition,
-                presetName: AVAssetExportPresetAppleM4A
-            ) else {
-                throw ExportEngineError.exportSessionCreationFailed
-            }
-
-            exportSession.audioMix = exportPackage.audioMix
-            activeExportSession = exportSession
-            startProgressPolling()
 
             if FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
             }
+            try AudioGraphAacEncoder.encode(mix, to: url)
 
-            try await AVExportCompatibility.export(.init(exportSession), to: url, as: .m4a)
             exportProgress = 1
             lastExportURL = url
             finishExport()

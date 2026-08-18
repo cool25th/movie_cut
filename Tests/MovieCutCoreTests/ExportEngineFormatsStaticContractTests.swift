@@ -18,12 +18,45 @@ struct ExportEngineFormatsStaticContractTests {
         #expect(source.contains("private let exportPlanner = ExportPlanner()"))
     }
 
-    @Test("Audio-only export produces an m4a through the shared composition path")
+    @Test("Audio-only export produces an m4a from the GRAPH mix (G-25 2C-1a)")
     func audioOnlyExportContract() throws {
         let source = try engineSource()
         #expect(source.contains("func exportAudioOnly("))
-        #expect(source.contains("AVAssetExportPresetAppleM4A"))
-        #expect(source.contains("as: .m4a"))
+        // G-25 switchover: samples originate from the graph (spec §1) —
+        // GraphMixRenderer builds the mix, AudioGraphAacEncoder writes the
+        // AAC. The legacy composition/audioMix path (AVAssetExportPresetAppleM4A
+        // + audioMix) is deliberately GONE from this function.
+        #expect(source.contains("GraphMixRenderer.renderMix("))
+        #expect(source.contains("AudioGraphAacEncoder.encode("))
+        let function = try functionBody(of: "func exportAudioOnly(", in: source)
+        #expect(function.contains("AVAssetExportPresetAppleM4A") == false)
+        #expect(function.contains(".audioMix") == false)
+    }
+
+    /// Extracts one function body (brace-balanced) from a source string so
+    /// contract assertions can scope to a single function.
+    private func functionBody(of declaration: String, in source: String) throws -> Substring {
+        guard let start = source.range(of: declaration)?.lowerBound else {
+            throw NSError(domain: "StaticContract", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "missing \(declaration)"])
+        }
+        guard let openBrace = source[start...].firstIndex(of: "{") else {
+            throw NSError(domain: "StaticContract", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "no body for \(declaration)"])
+        }
+        var depth = 0
+        var index = openBrace
+        while index < source.endIndex {
+            let character = source[index]
+            if character == "{" { depth += 1 }
+            if character == "}" {
+                depth -= 1
+                if depth == 0 { return source[openBrace...index] }
+            }
+            index = source.index(after: index)
+        }
+        throw NSError(domain: "StaticContract", code: 3,
+                      userInfo: [NSLocalizedDescriptionKey: "unbalanced braces for \(declaration)"])
     }
 
     @Test("Still-frame export renders a PNG through the video composition")

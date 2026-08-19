@@ -7,7 +7,7 @@
 
 **게이트**: run_g27_simulator_e2e.sh **2회 연속 동일 PASS**(iPhone 17 Pro 시뮬레이터) + verify_gate 5/5.
 
-### 완료 — G-27 ① 시뮬레이터 E2E (이번 세션 커밋)
+### 완료 — G-27 ① 시뮬레이터 E2E (커밋 e15a8c4)
 - **`IOSUITestHarness`**(iOS 앱, env 게이트): Mac 하니스 관례의 iOS 판 — 실제 앱 경로(임포트→프리뷰→출력→AVAudioSession 라우팅→ProjectStore 저장)를 구동하고 Documents/g27-result.txt에 구조화 라인 기록.
 - **`IOSPreviewCompositionBuilder` 추출**(PreviewView→공유): 하니스가 앱과 동일한 프리뷰 컴포지션을 구동(병행 구현 드리프트 방지).
 - **`run_g27_simulator_e2e.sh`**: 클린 설치(결정성)·픽스처 스테이징·2단계 런치(재오픈=프로세스 경계)·단언+ffprobe.

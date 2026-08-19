@@ -3,6 +3,21 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 39 (2단계 계획 수립 — USER_WAITING 전환)
+
+**산출**: `docs/EXECUTION_PLAN_PHASE2_20260819.md` — EXECUTION_PLAN §5의 개요를 상세 전개.
+
+### 완료 — 2단계 계획 문서 (이번 세션 커밋)
+- 고정 순서: 1단계✓ → **G-24 손떨림 v1**(방향 문서 "효과 볼륨 확대보다 우선") → G-28 브라우저 → G-26 오디오 B. N2는 등록 결정 전제.
+- **G-24 6증분**: 측정 인프라(순수 수학+결정적 픽스처+SHA)→장면 분할→Vision 등록→평활화+adaptive crop→CI warp 배선+fallback→E2E+DoD 실측. 함정 레지스터 5건.
+- G-28: EffectCostProfile 스키마 확정 선행(PERFORMANCE_SLO 신설). G-26: 그래프 자리 노드 스키마 불변·게이트 LUFS ±0.2LU.
+
+### 사용자가 할 일
+**`docs/EXECUTION_PLAN_PHASE2_20260819.md` 검토 후 승인 또는 수정 지시.** 승인 시 다음 회차가 P2-G24-1(스태빌 측정 인프라)을 착수. 실기기 3종도 언제든 병렬 재개 가능(가이드: `docs/G27_DEVICE_VERIFICATION_GUIDE.md`).
+
+### 다음 회차 인계 (승인 후)
+P2-G24-1 — StabilizationMetrics(잔류 변위 중앙값·크롭 비율·워블 지수·장면 전환 오류 카운트의 순수 수학) + 결정적 움블 픽스처(sine 움블+임계 구간+장면 전환 2회·SHA-256 게이트) + 해석값 단위 테스트.
+
 ## 2026-08-19 세션 38 (G-03 Inc 4 — E2E 거부 단언 · **G-03 완결**)
 
 **게이트**: 전체 E2E PASS(G-03 거부 검사 포함) + verify_gate 5/5(1,267).

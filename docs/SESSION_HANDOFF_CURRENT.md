@@ -3,6 +3,21 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 35 (G-03 Inc 1 — 조정 레이어 Core 절반)
+
+**게이트**: verify_gate 5/5(1,263 테스트 — 신규 4종 포함).
+
+### 완료 — G-03 Core: 모델·스키마·체인 (이번 세션 커밋)
+- **설계 노트**(AdjustmentLayerChain 문서): 클립 플래그 채택(Track.kind 아님 — 범위·undo·저장이 클립 기계 재사용)·렌더 순서 고정(클립 고유 체인 → 조정 체인, 하위 트랙 먼저)·범위 밖 무변경·조정 클립 무콘텐츠·v1 비디오 트랙 전용.
+- **스키마 v6**(`AddAdjustmentLayerMigration` 빈 마이그레이션·pre-v6 폴백) + 마이그레이션 체인 테스트 v6 확장.
+- **`AdjustmentLayerChain`**(Core/Rendering): activeAdjustments·visibleClips·isAdjustmentContent — 렌더 배선의 단일 소비 지점.
+- 게이트 수정: lint(force_cast 1건 정석 수정).
+
+### 다음 회차 인계 — G-03 Inc 2 (렌더 배선)
+1. Mac 프리뷰·출력 + iOS: FlattenedTimeline 소비 지점에서 조정 체인 적용(클립 고유 체인 후)·조정 클립 콘텐츠 렌더 제외.
+2. 인스펙터 UI(조정 클립 변환/설정) + 골든(아래만 효과·범위 밖 무변경)·패리티 시나리오 신규 + W4 완전판.
+3. 이후 2단계 계획(EXECUTION_PLAN §5 패턴). 실기기 3종=사용자 유보(러너·가이드 완비). 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-19 세션 34 (ProRes 교찰 수습 — W 100.0% · 실기기는 사용자 유보)
 
 **상태**: 사용자 결정으로 RUN 복귀(실기기 유보·코드 수습 우선). **게이트**: W 스위트 **2회 연속 동일 28/28=100.0%** + 전체 E2E 무회귀(챕터·ProRes·§8) + verify_gate 5/5.

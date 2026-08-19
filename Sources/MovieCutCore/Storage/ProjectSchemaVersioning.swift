@@ -29,7 +29,9 @@ private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", cate
 ///   the version so the chain reaches `currentSchemaVersion`.
 /// - v4 → v5 (G-25 Inc 9): `Track.isSolo` added. The field decodes to false
 ///   for v4 projects, so this migrator only bumps the version.
-public let currentSchemaVersion: Int = 5
+/// - v5 → v6 (G-03): `Clip.isAdjustmentLayer` added. The field decodes to
+///   false for v5 projects, so this migrator only bumps the version.
+public let currentSchemaVersion: Int = 6
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -40,7 +42,8 @@ public enum ProjectSchema {
         AddSecurityScopedBookmarkMigration(),
         AddAutoProxyOnThermalPressureMigration(),
         AddBlendPreviewQualityCompoundMigration(),
-        AddTrackSoloMigration()
+        AddTrackSoloMigration(),
+        AddAdjustmentLayerMigration()
     ]
 }
 
@@ -55,6 +58,20 @@ public struct AddTrackSoloMigration: ProjectMigration {
 
     public func migrate(_ project: inout Project) throws {
         // No payload change: `Track.isSolo` decodes to its default (false).
+    }
+}
+
+/// v5 → v6: introduces `Clip.isAdjustmentLayer` (G-03 adjustment layers).
+/// The field is optional on decode and falls back to false for v5 projects,
+/// so no payload transform is needed — this migrator only bumps the schema
+/// version so the chain reaches `currentSchemaVersion`.
+public struct AddAdjustmentLayerMigration: ProjectMigration {
+    public let version = 6
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: `Clip.isAdjustmentLayer` decodes to its default (false).
     }
 }
 

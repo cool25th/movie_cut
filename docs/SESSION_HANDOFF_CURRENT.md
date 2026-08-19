@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,285 테스트 — 신규 7종).
 
-### 완료 — P2-G24-3 (이번 세션 커밋)
+### 완료 — P2-G24-3 (커밋 841dd3e)
 - **`StabilizationRegistration`**(Core/Analysis): estimateTranslation(SAD 블록 정합 — 결정적·swift test 동작)+ smooth(이동 평균)+ correction(역변·15% 클램프). 소비자는 RegistrationResult만 읽음 — Vision 업그레이드 시 출력 불변.
 - **P2-G24-4의 수학도 통합** (smooth+correction이 같은 데이터 모델) — 계획의 4증분이 3+5로 병합.
 - 테스트 7종: 알려진 시프트 ±1px 회수·동일 이미지 제로·퇴화 안전·스파이크 평활화(50%+ 당겨짐·분산 감소)·평활화 경계·보정 수학·제로 보정.

@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,274 테스트 — 스태빌 7종 신규) + 픽스처 재생성 동일 해시.
 
-### 완료 — P2-G24-1 (이번 세션 커밋)
+### 완료 — P2-G24-1 (커밋 e91771d)
 - **`StabilizationMetrics`** (Core/Analysis): DoD 4지표 순수 수학(잔류 중앙값·감소비·심각 워블 비·장면 전환 에러·크롭 중앙값) + `meetsDoD()` + `adaptiveCrop`(15% 클램프). P2-G24-6 E2E가 같은 함수 재사용(자기 보고 아님).
 - **픽스처**: `stab_wobble_320x240_4s_30fps.mp4`(testsrc+smptebars concat = 장면 전환 1회·SHA 게이트 c274ef74…).
 - **테스트 7종**: 중앙값·완전 보정·50% 경계(DoD는 경계 포함)·워블/장면에러/크롭 각 실패·클램프.

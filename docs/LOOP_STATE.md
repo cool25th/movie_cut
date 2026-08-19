@@ -4,7 +4,7 @@
 다음 증분: **P2-G24-2 — 장면 분할**: SceneChangeProvider 재활용해 세그먼트별 등록 시드 결정 — 픽스처의 알려진 장면 전환(t=2.0s)을 ±2프레임 내 검출·경계 프레임에 isSceneCut 마킹(StabilizationMetrics.Frame에 공급). 게이트: 장면 경계 정확도 단위 테스트.
 **기존 결함 기록 갱신**: **tap-in-export 폐쇄(2-C-2 실측)** — M런 RMS 게이트 재활성 후 PASS로 증명. **AVAssetExportSession 교찰 계열**("비디오 임포트+덕킹+출력"·"ProRes+무음 AAC") — 무음=오디오 없음 의미론으로 회피(루트 Apple측). 속도 램프 오디오 갭 폐쇄(2-C-4).
 대기 결정 사항(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
-마지막 커밋: (이번 커밋)
+마지막 커밋: e91771d
 갱신: 2026-08-20 01:30
 추가 완료(세션 20 계속): **G-25 §9 null test 판정 함수** — `AudioGraphNullTest`(Core): compare(±1 샘플 정렬 탐색→정렬 구간 최대 절대 편차 ≤ 16비트 1 LSB 판정·길이 불일치 안전 실패) + mixedRateRoundTripIsExact(60분 그래프 위치의 44.1k↔48k 왕복이 Int64 수학에서 정확 — §9.4 기반; 조작된 고장 레이트는 왕복에서 대수적으로 상쇄되어 순수 시뮬레이션이 무의미함을 실측으로 확인·실측 drift 판정은 E2E 유지 §9.5). 테스트 6종. Inc 8 잔여: App 배선(AVAudioEngine 프리뷰·인코더 입력) + E2E null test.
 추가 완료(세션 8, cb71be2): UI 캡처 하니스 P0 보강(open 실행+PID 조회+진단 분리, 3회 연속 4/4) — G-06 DoD ④ 실질 충족, 무창 재발 시 window.txt 로그로 분류.

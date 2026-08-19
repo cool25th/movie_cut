@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,278 테스트 — 신규 4종).
 
-### 완료 — P2-G24-2 (이번 세션 커밋)
+### 완료 — P2-G24-2 (커밋 9352dbd)
 - **`StabilizationSegmentation`**(Core/Analysis): 프로바이더 검출 시각 → `Frame.isSceneCut` 브리지(±프레임 창·클램프·변위 융합). 순수 수학.
 - **환경 제한 발견·기록**: SceneChangeProvider의 AVAssetImageGenerator가 swift test 하에서 프레임을 생성하지 않음(NR DSP와 동일 계열 — 앱 컨텍스트 필요). 프로바이더 통합 검증은 P2-G24-6 E2E로 이관, 브리지 수학은 완전 단위 테스트.
 - 테스트 4종: ±2프레임 창·복수 변경·퇴화 안전·변위 융합.

@@ -3,6 +3,22 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 33 (G-27 ③ 실기기 준비 — USER_WAITING 전환)
+
+**상태**: 자율 수행 잔여 소집 → **USER_WAITING(실기기 3종 협력)**.
+
+### 완료 — 실기기 러너 + 가이드 (이번 세션 커밋)
+- **`run_g27_device_e2e.sh`**: devicectl 기반 실기기 E2E — 시뮬레이터 게이트와 동일 하니스·동일 7단언 (TEAM_ID 서명·픽스처 스테이징·env 런치·결과 풀링). 미연결 시 절차 안내 오류. **사용자 기기 연결 시 첫 검증 예정** (devicectl: 페어링 이력 iPhone 13 Pro = unavailable 상태).
+- **`docs/G27_DEVICE_VERIFICATION_GUIDE.md`**: 3종(최소/중간/최신)·사전 준비(팀 ID·개발자 모드·신뢰)·실행·결과 보고·문제 대응.
+
+### 사용자가 할 일
+`docs/G27_DEVICE_VERIFICATION_GUIDE.md` 참조: 기기 연결 후 `TEAM_ID=<팀ID> bash scripts/run_g27_device_e2e.sh` — 출력 전체를 알려주면 루프가 §4를 갱신하고 3종 PASS 시 DONE_PHASE1 선언으로 이어짐.
+
+### 다음 회차 인계 (결과 접수 후)
+1. 기기 결과 → §4 표 갱신·결함이면 수습 증분.
+2. 3종 PASS → DONE_PHASE1 선언 (EXECUTION_PLAN §4 전 조건 충족).
+3. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-19 세션 32 (W 대표 작업 시나리오 게이트 — §4 측정 창구 완성)
 
 **게이트**: run_w_scenarios.sh **2회 연속 동일 27/28=96.4% PASS**(≥90% 게이트) + verify_gate 5/5.

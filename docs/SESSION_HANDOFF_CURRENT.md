@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,263 테스트 — 신규 4종 포함).
 
-### 완료 — G-03 Core: 모델·스키마·체인 (이번 세션 커밋)
+### 완료 — G-03 Core: 모델·스키마·체인 (커밋 97bfde2)
 - **설계 노트**(AdjustmentLayerChain 문서): 클립 플래그 채택(Track.kind 아님 — 범위·undo·저장이 클립 기계 재사용)·렌더 순서 고정(클립 고유 체인 → 조정 체인, 하위 트랙 먼저)·범위 밖 무변경·조정 클립 무콘텐츠·v1 비디오 트랙 전용.
 - **스키마 v6**(`AddAdjustmentLayerMigration` 빈 마이그레이션·pre-v6 폴백) + 마이그레이션 체인 테스트 v6 확장.
 - **`AdjustmentLayerChain`**(Core/Rendering): activeAdjustments·visibleClips·isAdjustmentContent — 렌더 배선의 단일 소비 지점.

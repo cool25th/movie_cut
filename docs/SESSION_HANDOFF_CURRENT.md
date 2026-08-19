@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 40 (P2-G24-1 — 스태빌 측정 인프라 · 2단계 착수)
+
+**게이트**: verify_gate 5/5(1,274 테스트 — 스태빌 7종 신규) + 픽스처 재생성 동일 해시.
+
+### 완료 — P2-G24-1 (이번 세션 커밋)
+- **`StabilizationMetrics`** (Core/Analysis): DoD 4지표 순수 수학(잔류 중앙값·감소비·심각 워블 비·장면 전환 에러·크롭 중앙값) + `meetsDoD()` + `adaptiveCrop`(15% 클램프). P2-G24-6 E2E가 같은 함수 재사용(자기 보고 아님).
+- **픽스처**: `stab_wobble_320x240_4s_30fps.mp4`(testsrc+smptebars concat = 장면 전환 1회·SHA 게이트 c274ef74…).
+- **테스트 7종**: 중앙값·완전 보정·50% 경계(DoD는 경계 포함)·워블/장면에러/크롭 각 실패·클램프.
+
+### 다음 회차 인계 — P2-G24-2 (장면 분할)
+1. SceneChangeProvider 재활용: 세그먼트 검출 → 경계 프레임 ±2프레임 정확도(픽스처 t=2.0s) → `StabilizationMetrics.Frame.isSceneCut` 공급.
+2. 이후 P2-G24-3(Vision 등록)·4(평활화+crop)·5(CI warp 배선)·6(E2E DoD 실측).
+3. 실기기 3종=사용자 유보. 대기 결정(변경 없음).
+
 ## 2026-08-19 세션 39 (2단계 계획 수립 — USER_WAITING 전환)
 
 **산출**: `docs/EXECUTION_PLAN_PHASE2_20260819.md` — EXECUTION_PLAN §5의 개요를 상세 전개.

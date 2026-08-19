@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import Foundation
 
 /// G-03 adjustment layers — the DESIGN NOTE the plan's risk register asks
@@ -52,5 +53,25 @@ public enum AdjustmentLayerChain {
                     && time >= clip.timelineRange.start
                     && time < clip.timelineRange.start + clip.timelineRange.duration
             }
+    }
+}
+
+extension AdjustmentLayerChain {
+    /// Applies the adjustment chain's color correction/grade to an already-
+    /// rendered clip image — AFTER the clip's own chain (the locked order):
+    /// bottom-most adjustment first, each contributing its colorCorrection
+    /// then colorGrade. Runs on the shared Core Image context pair the
+    /// pixel processors use.
+    public static func applyAdjustments(_ adjustments: [Clip], to image: CIImage) -> CIImage {
+        var result = image
+        for adjustment in adjustments {
+            if let correction = adjustment.colorCorrection {
+                result = ColorCorrectionPixelProcessor.apply(correction, to: result)
+            }
+            if let grade = adjustment.colorGrade {
+                result = ColorGradePixelProcessor.apply(grade, to: result)
+            }
+        }
+        return result
     }
 }

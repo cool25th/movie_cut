@@ -35,6 +35,10 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let enablePostProcessing: Bool = true
     let containsTweening: Bool = true
     let requiredSourceTrackIDs: [NSValue]?
+    /// G-03: the adjustment clips active during this instruction's time
+    /// range (precomputed, ordered bottom-track-first). Applied AFTER each
+    /// visible clip's own chain. Defaulted so the legacy init is unchanged.
+    var adjustmentClips: [Clip]? = nil
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
     let colorGrade: ColorGrade?
@@ -92,7 +96,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
-        prefersFastSegmentation: Bool = false
+        prefersFastSegmentation: Bool = false,
+        adjustmentClips: [Clip]? = nil
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -101,6 +106,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         )
         self.colorCorrection = nil
         self.colorGrade = nil
+        self.adjustmentClips = adjustmentClips ?? []
         self.textContent = nil
         self.stickerEmoji = nil
         self.stickerImageURL = nil
@@ -522,6 +528,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 to: image,
                 renderSize: request.renderContext.size
             )
+        }
+
+        // G-03 adjustment layers: after the clip's OWN chain (the locked
+        // order), the active adjustments at this frame apply — every visible
+        // clip under the layer receives the chain (v1: color correction +
+        // grade; plan Inc 10). The chain is precomputed per-instruction.
+        if let adjustments = instruction.adjustmentClips, !adjustments.isEmpty {
+            image = AdjustmentLayerChain.applyAdjustments(adjustments, to: image)
         }
 
         return image

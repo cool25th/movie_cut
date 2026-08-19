@@ -125,6 +125,12 @@ final class IOSExportEngine {
 
     private func makeVideoComposition(for project: Project) -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
+        // G-03: the timeline's adjustment clips (bottom-track-first).
+        let adjustmentVideoTracks = project.timeline.tracks.filter { $0.kind == .video }
+        let adjustmentClips: [Clip] = adjustmentVideoTracks
+            .sorted { $0.zIndex < $1.zIndex }
+            .flatMap(\.clips)
+            .filter(\.isAdjustmentLayer)
         let canvasSize = project.canvas.size
         let renderSize = canvasSize.width > 0 && canvasSize.height > 0
             ? canvasSize
@@ -181,7 +187,7 @@ final class IOSExportEngine {
                 videoTrackIDs.append(trackID)
 
                 for clip in timelineTrack.clips
-                    .filter({ $0.kind == .video })
+                    .filter({ $0.kind == .video && $0.isAdjustmentLayer == false })
                     .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
                     let timeRange = CMTimeRange(
                         start: cmTime(clip.timelineRange.start),
@@ -293,7 +299,8 @@ final class IOSExportEngine {
                     timeRange: segmentRange,
                     trackIDs: videoTrackIDs,
                     clipEffects: activeClipEffects,
-                    canvasBackground: project.canvasBackground
+                    canvasBackground: project.canvasBackground,
+                    adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             )
         }
@@ -304,7 +311,8 @@ final class IOSExportEngine {
                     timeRange: CMTimeRange(start: .zero, duration: duration),
                     trackIDs: videoTrackIDs,
                     clipEffects: clipEffects,
-                    canvasBackground: project.canvasBackground
+                    canvasBackground: project.canvasBackground,
+                    adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             ]
             : instructions

@@ -334,6 +334,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
             let sortedClips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
 
             for (clipIndex, clip) in sortedClips.enumerated() {
+                // G-03: adjustment clips carry no content — render nothing.
+                guard clip.isAdjustmentLayer == false else { continue }
                 guard let assetId = clip.assetId,
                       let mediaAsset = project.mediaLibrary.assets[assetId] else {
                     continue
@@ -553,7 +555,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
             duration: composition.duration,
             canvas: project.canvas,
             exportSettings: project.exportSettings,
-            canvasBackground: project.canvasBackground
+            canvasBackground: project.canvasBackground,
+            project: project
         )
 
         return ExportPackage(
@@ -575,7 +578,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
         duration: CMTime,
         canvas: CanvasPreset,
         exportSettings: ExportSettings,
-        canvasBackground: CanvasBackground? = nil
+        canvasBackground: CanvasBackground? = nil,
+        project: Project
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
 
@@ -715,6 +719,18 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
         if usesCustomVideoCompositor {
             videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+            // G-03: one instruction spans the whole timeline today, so the
+            // adjustment chain is the full-timeline set, ordered bottom-first.
+            // (Range granularity arrives with per-range instructions.)
+            let videoTracks = project.timeline.tracks.filter { $0.kind == .video }
+            let adjustmentClips: [Clip] = AdjustmentLayerChain.activeAdjustments(
+                at: 0, in: videoTracks
+            ).isEmpty
+                ? []
+                : videoTracks
+                    .sorted { $0.zIndex < $1.zIndex }
+                    .flatMap(\.clips)
+                    .filter(\.isAdjustmentLayer)
             videoComposition.instructions = [
                 CustomCompositionInstruction(
                     timeRange: CMTimeRange(start: .zero, duration: duration),
@@ -745,7 +761,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         )
                     },
                     transitionEffects: transitionEffects,
-                    canvasBackground: canvasBackground
+                    canvasBackground: canvasBackground,
+                    adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             ]
         } else {

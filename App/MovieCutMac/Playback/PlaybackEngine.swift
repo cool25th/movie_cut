@@ -766,6 +766,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
                 let sortedClips = track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start })
                 for (clipIndex, clip) in sortedClips.enumerated() {
+                    // G-03: adjustment clips carry no content — render nothing.
+                    guard clip.isAdjustmentLayer == false else { continue }
                     guard let assetId = clip.assetId,
                           let mediaAsset = project.mediaLibrary.assets[assetId] else {
                         continue
@@ -1031,6 +1033,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 guard !track.isHidden else { continue }
 
                 for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+
+
                     guard let textContent = clip.textContent else { continue }
 
                     // Ordinary text uses the same shared Core Image processor as
@@ -1336,6 +1340,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
             if usesCustomVideoCompositor {
                 mutableVideoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+                // G-03: the timeline's adjustment clips (bottom-first,
+                // full-timeline instruction — same granularity note as
+                // the export side).
+                let adjustmentClips: [Clip] = project.timeline.tracks
+                    .filter { $0.kind == .video }
+                    .sorted { $0.zIndex < $1.zIndex }
+                    .flatMap(\.clips)
+                    .filter(\.isAdjustmentLayer)
                 mutableVideoComposition.instructions = [
                     CustomCompositionInstruction(
                         timeRange: CMTimeRange(start: .zero, duration: composition.duration),
@@ -1361,7 +1373,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
                         canvasBackground: project.canvasBackground,
-                        prefersFastSegmentation: true
+                        prefersFastSegmentation: true,
+                        adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                     )
                 ]
             } else {

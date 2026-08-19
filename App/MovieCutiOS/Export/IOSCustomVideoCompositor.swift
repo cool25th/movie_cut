@@ -36,6 +36,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let enablePostProcessing: Bool = true
     let containsTweening: Bool = true
     let requiredSourceTrackIDs: [NSValue]?
+    /// G-03: adjustment clips active during this instruction (bottom-first).
+    var adjustmentClips: [Clip]? = nil
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
     let colorGrade: ColorGrade?
@@ -90,8 +92,10 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
-        prefersFastSegmentation: Bool = false
+        prefersFastSegmentation: Bool = false,
+        adjustmentClips: [Clip]? = nil
     ) {
+        self.adjustmentClips = adjustmentClips
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
             trackIDs: trackIDs,
@@ -356,6 +360,11 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 to: image,
                 renderSize: request.renderContext.size
             )
+        }
+
+        // G-03: the adjustment chain applies AFTER the clip's own chain.
+        if let adjustments = instruction.adjustmentClips, !adjustments.isEmpty {
+            image = AdjustmentLayerChain.applyAdjustments(adjustments, to: image)
         }
 
         return image

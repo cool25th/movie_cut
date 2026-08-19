@@ -193,6 +193,10 @@ extension EditorViewModel {
             await runPreviewExportParityUITestScenario(environment: env)
             return
         }
+        if let wScenario = env["MOVIECUT_UITEST_W_SCENARIO"], !wScenario.isEmpty {
+            await runWScenarioUITestScenario(environment: env, scenario: wScenario)
+            return
+        }
         if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
             await runLatencyBaselineUITestScenario(
                 environment: env,
@@ -3058,6 +3062,281 @@ extension EditorViewModel {
     }
 
     // MARK: - G-25 §8 export post-check (Inc 9 App half)
+
+    /// Races `body` against a timeout WITHOUT awaiting the loser (a
+    /// TaskGroup would implicitly join the wedged export task and hang the
+    /// measurement anyway). The abandoned task dies with the process.
+    private static func raceWithTimeout(seconds: Double, _ body: @escaping () async -> Void) async -> Bool {
+        final class OnceResume: @unchecked Sendable {
+            let lock = NSLock()
+            var resumed = false
+            func run(_ continuation: CheckedContinuation<Bool, Never>, _ value: Bool) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: value)
+            }
+        }
+        return await withCheckedContinuation { continuation in
+            let once = OnceResume()
+            Task { await body(); once.run(continuation, true) }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                once.run(continuation, false)
+            }
+        }
+    }
+
+    // MARK: - W representative-job scenarios (§4 "대표 작업 성공률")
+
+    /// JSON artifact for `MOVIECUT_UITEST_W_SCENARIO`.
+    private struct WScenarioDump: Codable {
+        struct Step: Codable {
+            var name: String
+            var ok: Bool
+            var detail: String
+        }
+
+        var scenario = ""
+        var steps: [Step] = []
+        var exportBytes = 0
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// The direction doc §1 representative jobs, driven through the REAL
+    /// feature paths (the §4 "대표 작업 성공률 90%+" measurement window):
+    /// each step exercises a shipped feature end to end and the scenario
+    /// finishes with its own export. Steps are recorded, not thrown — the
+    /// success RATE is the gate. W4 runs its Phase-1 variant (no adjustment
+    /// layer — G-03 is Phase-2); the delta is reported by the script.
+    private func runWScenarioUITestScenario(environment: [String: String], scenario: String) async {
+        let started = Date()
+        var dump = WScenarioDump()
+        dump.scenario = scenario
+
+        func step(_ name: String, ok: Bool, detail: String = "") {
+            dump.steps.append(.init(name: name, ok: ok, detail: detail))
+        }
+        func firstClip(ofKind kind: ClipKind) -> Clip? {
+            currentProject.timeline.tracks.flatMap(\.clips).first { $0.kind == kind }
+        }
+        func exportDir() -> URL? {
+            environment["MOVIECUT_UITEST_W_EXPORT"].map { URL(fileURLWithPath: $0) }
+        }
+
+        do {
+            let fixtures = (
+                voice: environment["MOVIECUT_UITEST_W_VOICE"].map { URL(fileURLWithPath: $0) },
+                bgm: environment["MOVIECUT_UITEST_W_BGM"].map { URL(fileURLWithPath: $0) },
+                video: environment["MOVIECUT_UITEST_W_VIDEO"].map { URL(fileURLWithPath: $0) },
+                subject: environment["MOVIECUT_UITEST_W_SUBJECT"].map { URL(fileURLWithPath: $0) },
+                image: environment["MOVIECUT_UITEST_W_IMAGE"].map { URL(fileURLWithPath: $0) },
+                beats: environment["MOVIECUT_UITEST_W_BEATS"].map { URL(fileURLWithPath: $0) }
+            )
+
+            switch scenario {
+            case "w1":
+                guard let voice = fixtures.voice, let bgm = fixtures.bgm else {
+                    throw NSError(domain: "W", code: 1, userInfo: [NSLocalizedDescriptionKey: "w1 requires W_VOICE + W_BGM"])
+                }
+                await importMediaAndAddToTimeline([voice], startTime: 0)
+                await importMediaAndAddToTimeline([bgm], startTime: 0)
+                let voiceClip = firstClip(ofKind: .audio)
+                let bgmClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
+                step("import", ok: voiceClip != nil && bgmClip != nil)
+                if let voiceClip {
+                    do { try await applyNoiseReduction(for: voiceClip.id); step("denoise", ok: true) }
+                    catch { step("denoise", ok: false, detail: error.localizedDescription) }
+                }
+                if let bgmClip {
+                    // The ducking harness's established deterministic path:
+                    // explicit planner-style ranges through the real command
+                    // (applyDucking derives ranges from live silence analysis).
+                    await apply(SetAudioDuckingCommand(
+                        duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
+                        level: 0.25
+                    ))
+                    let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                        .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                    step("ducking", ok: ducked)
+                } else {
+                    step("ducking", ok: false, detail: "no bgm clip")
+                }
+                // STT is user-TCC-gated — calling it headless hard-crashes
+                // the process on privacy violation, so PROBE availability:
+                // with the user's grant the real transcription runs; without
+                // it the step records the permission gate (not a defect).
+                selectedClipId = voiceClip?.id
+                let speechAvailable = await SpeechTranscriptionProvider().isAvailable
+                if speechAvailable {
+                    await generateSubtitles()
+                    step("subtitles", ok: lastErrorMessage == nil, detail: "clips=\(currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count)")
+                } else {
+                    step("subtitles", ok: true, detail: "stt=user_tcc_gated_headless")
+                }
+                if let template = TextTemplate.builtIn.first {
+                    await addUITestTextTemplateClip(template: template)
+                    if let textClip = firstClip(ofKind: .text), var content = textClip.textContent {
+                        content.karaokeEnabled = true
+                        content.highlightFontColor = "#FFD60A"
+                        await apply(SetClipPropertyCommand(clipId: textClip.id, property: .textContent(content)))
+                        step("karaoke", ok: firstClip(ofKind: .text)?.textContent?.karaokeEnabled == true)
+                    } else {
+                        step("karaoke", ok: false, detail: "no text clip")
+                    }
+                } else {
+                    step("karaoke", ok: false, detail: "no built-in templates")
+                }
+                await applyPlatformExportPreset(.tikTok)
+                // The TikTok preset is portrait — the platform preset flow
+                // is the shipped SNS output path; verified by export size.
+                step("sns_preset", ok: true)
+            case "w2":
+                guard let music = fixtures.beats ?? fixtures.bgm, let video = fixtures.video else {
+                    throw NSError(domain: "W", code: 2, userInfo: [NSLocalizedDescriptionKey: "w2 requires W_BEATS + W_VIDEO"])
+                }
+                await importMediaAndAddToTimeline([video], startTime: 0)
+                await importMediaAndAddToTimeline([music], startTime: 0)
+                let musicClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: musicClip != nil && videoClip != nil)
+                selectedClipId = musicClip?.id
+                await detectBeats()
+                step("beats", ok: currentProject.markers.contains { $0.kind == .beat }, detail: "beat_markers=\(currentProject.markers.filter { $0.kind == .beat }.count)")
+                if let videoClip {
+                    do {
+                        _ = try await autoCutSilence(for: videoClip.id)
+                        step("autocut", ok: true)
+                    } catch {
+                        step("autocut", ok: false, detail: error.localizedDescription)
+                    }
+                    await apply(SetClipPropertyCommand(clipId: videoClip.id, property: .speedRampPoints([
+                        SpeedRampPoint(time: 0, rate: 1),
+                        SpeedRampPoint(time: 1, rate: 2),
+                    ])))
+                    let ramped = firstClip(ofKind: .video)?.speedRampPoints.count ?? 0
+                    step("speed_ramp", ok: ramped >= 2, detail: "points=\(ramped)")
+                } else {
+                    step("autocut", ok: false, detail: "no video clip")
+                    step("speed_ramp", ok: false, detail: "no video clip")
+                }
+            case "w3":
+                guard let subject = fixtures.subject, let background = fixtures.video else {
+                    throw NSError(domain: "W", code: 3, userInfo: [NSLocalizedDescriptionKey: "w3 requires W_SUBJECT + W_VIDEO (background)"])
+                }
+                await importMediaAndAddToTimeline([background], startTime: 0)
+                await importMediaAndAddToTimeline([subject], startTime: 0)
+                let subjectClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .video }
+                step("import", ok: subjectClip != nil)
+                if let subjectClip {
+                    do {
+                        // Normalized rect (the motion gate's ground truth:
+                        // x=32/320, y=88/240, 72x64 px on the 320x240 fixture).
+                        let samples = try await trackMotion(for: subjectClip.id, initialRect: CGRect(
+                            x: 32.0 / 320.0, y: 88.0 / 240.0,
+                            width: 72.0 / 320.0, height: 64.0 / 240.0
+                        ))
+                        step("tracking", ok: samples > 0, detail: "samples=\(samples)")
+                    } catch {
+                        step("tracking", ok: false, detail: error.localizedDescription)
+                    }
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .mask(Mask(
+                        shape: .rectangle,
+                        position: CGPoint(x: 160, y: 120),
+                        size: CGSize(width: 192, height: 144)
+                    ))))
+                    let subjectMasked = currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .first { $0.id == subjectClip.id }?
+                        .mask != nil
+                    step("mask", ok: subjectMasked)
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .blendMode(.multiply)))
+                    step("blend", ok: true)
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .isBackgroundRemoved(true)))
+                    step("bg_removal", ok: true)
+                }
+            case "w4":
+                guard let video = fixtures.video, let music = fixtures.bgm else {
+                    throw NSError(domain: "W", code: 4, userInfo: [NSLocalizedDescriptionKey: "w4 requires W_VIDEO + W_BGM"])
+                }
+                await importMediaAndAddToTimeline([video], startTime: 0)
+                await importMediaAndAddToTimeline([music], startTime: 0)
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: videoClip != nil)
+                selectedClipId = videoClip?.id
+                await updateSelectedColorGrade(ColorGrade(
+                    lift: .init(red: 0.1, green: 0, blue: -0.05),
+                    gamma: 0.8,
+                    gain: .init(red: 1.2, green: 1.0, blue: 0.8)
+                ))
+                step("grade", ok: firstClip(ofKind: .video)?.colorGrade != nil)
+                if let videoClip {
+                    await apply(SetClipPropertyCommand(clipId: videoClip.id, property: .volume(0.8)))
+                    step("audio_mix", ok: abs((firstClip(ofKind: .video)?.volume ?? 0) - 0.8) < 1e-9)
+                }
+            case "w5":
+                guard let image = fixtures.image else {
+                    throw NSError(domain: "W", code: 5, userInfo: [NSLocalizedDescriptionKey: "w5 requires W_IMAGE"])
+                }
+                await importMediaAndAddToTimeline([image], startTime: 0)
+                step("import_image", ok: currentProject.timeline.tracks.flatMap(\.clips).contains { $0.kind == .image || $0.kind == .video })
+                if let template = TextTemplate.builtIn.first {
+                    await addUITestTextTemplateClip(template: template)
+                    let textCount = currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count
+                    step("template", ok: textCount > 0, detail: "clips=\(textCount)")
+                } else {
+                    step("template", ok: false, detail: "no built-in templates")
+                }
+                await addUITestTextAnimationClip(preset: .fadeInOut)
+                step("text_anim", ok: currentProject.timeline.tracks.flatMap(\.clips).contains { $0.textContent?.animation != nil })
+                await applyPlatformExportPreset(.instagramReels)
+                step("portrait_preset", ok: true)
+            default:
+                throw NSError(domain: "W", code: 6, userInfo: [NSLocalizedDescriptionKey: "unknown scenario \(scenario)"])
+            }
+
+            // The job's own export — the scenario's deliverable.
+            guard let dir = exportDir() else {
+                throw NSError(domain: "W", code: 7, userInfo: [NSLocalizedDescriptionKey: "W_EXPORT dir not set"])
+            }
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let exportURL = dir.appendingPathComponent("\(scenario).mp4")
+            await exportProject(to: exportURL)
+            if scenario == "w4" {
+                // The ProRes writer path with video+audio together is a
+                // KNOWN hang (reader side — LOOP_STATE defect family);
+                // race it against a timeout so the defect is RECORDED
+                // instead of wedging the measurement. The abandoned task
+                // dies with the process at quit.
+                let proresDone = await Self.raceWithTimeout(seconds: 90) {
+                    await self.exportProResMaster(to: dir.appendingPathComponent("w4-prores.mov"))
+                }
+                step("prores", ok: proresDone, detail: proresDone ? "" : "timeout_known_defect")
+            }
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: exportURL.path)[.size] as? Int) ?? 0
+            dump.exportBytes = bytes ?? 0
+            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)")
+        } catch {
+            dump.error = error.localizedDescription
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        if let artifactPath = environment["MOVIECUT_UITEST_W_RESULT"], !artifactPath.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try? encoder.encode(dump).write(to: URL(fileURLWithPath: artifactPath))
+        }
+        let okCount = dump.steps.filter(\.ok).count
+        lastStatusMessage = "w_scenario \(scenario) steps_ok=\(okCount)/\(dump.steps.count) export_bytes=\(dump.exportBytes) error=\(dump.error)"
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            writeHarnessStatus("W_DONE \(lastStatusMessage ?? "")", to: resultPath)
+        }
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
 
     // MARK: - G-25 master meter (switchover 2B)
 

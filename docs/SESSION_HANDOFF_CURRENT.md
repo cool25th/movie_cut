@@ -7,7 +7,7 @@
 
 **게이트**: W 스위트 **2회 연속 29/29=100.0%**(신규 단계 포함) + verify_gate 5/5.
 
-### 완료 — G-03 제품화 (이번 세션 커밋)
+### 완료 — G-03 제품화 (커밋 e01d6e5)
 - **`SetClipPropertyCommand.isAdjustmentLayer`** (이전값 역추적 — undo 단일 트랜잭션).
 - **인스펙터 UI**: "Adjustment layer" 토글 — 기존 색 섹션 편집이 조정 체인으로 전환.
 - **W4 완전판**: `adjustment_layer` 단계(AddClipCommand + colorGrade) — 계획 원 문구 완성.

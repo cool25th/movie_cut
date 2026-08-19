@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,267 테스트 — 픽셀 4종 신규) + W 스위트 28/28=100.0% 무회귀.
 
-### 완료 — G-03 렌더 배선 (이번 세션 커밋)
+### 완료 — G-03 렌더 배선 (커밋 b9d0e58)
 - **Core**: `AdjustmentLayerChain.applyAdjustments`(잠긴 순서 — 클립 고유 체인 후·하위 트랙 먼저, 공유 픽셀 프로세서).
 - **Mac**: CustomVideoCompositor.applyClipEffects 말미 적용·양쪽(프리뷰·출력) Instruction에 조정 세트 전달·조정 클립 콘텐츠 렌더 제외.
 - **iOS**(DoD ③ — 공유 프로세서 경유): IOSCustomVideoCompositor 동일 적용·IOSExportEngine 전달·콘텐츠 제외.

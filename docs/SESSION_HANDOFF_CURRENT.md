@@ -7,7 +7,7 @@
 
 **산출**: `docs/EXECUTION_PLAN_PHASE2_20260819.md` — EXECUTION_PLAN §5의 개요를 상세 전개.
 
-### 완료 — 2단계 계획 문서 (이번 세션 커밋)
+### 완료 — 2단계 계획 문서 (커밋 276d7c9)
 - 고정 순서: 1단계✓ → **G-24 손떨림 v1**(방향 문서 "효과 볼륨 확대보다 우선") → G-28 브라우저 → G-26 오디오 B. N2는 등록 결정 전제.
 - **G-24 6증분**: 측정 인프라(순수 수학+결정적 픽스처+SHA)→장면 분할→Vision 등록→평활화+adaptive crop→CI warp 배선+fallback→E2E+DoD 실측. 함정 레지스터 5건.
 - G-28: EffectCostProfile 스키마 확정 선행(PERFORMANCE_SLO 신설). G-26: 그래프 자리 노드 스키마 불변·게이트 LUFS ±0.2LU.

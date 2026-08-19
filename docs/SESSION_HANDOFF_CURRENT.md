@@ -3,6 +3,23 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 30 (G-27 시뮬레이터 E2E 구축 — 필수 불가 잔여 소진)
+
+**게이트**: run_g27_simulator_e2e.sh **2회 연속 동일 PASS**(iPhone 17 Pro 시뮬레이터) + verify_gate 5/5.
+
+### 완료 — G-27 ① 시뮬레이터 E2E (이번 세션 커밋)
+- **`IOSUITestHarness`**(iOS 앱, env 게이트): Mac 하니스 관례의 iOS 판 — 실제 앱 경로(임포트→프리뷰→출력→AVAudioSession 라우팅→ProjectStore 저장)를 구동하고 Documents/g27-result.txt에 구조화 라인 기록.
+- **`IOSPreviewCompositionBuilder` 추출**(PreviewView→공유): 하니스가 앱과 동일한 프리뷰 컴포지션을 구동(병행 구현 드리프트 방지).
+- **`run_g27_simulator_e2e.sh`**: 클린 설치(결정성)·픽스처 스테이징·2단계 런치(재오픈=프로세스 경계)·단언+ffprobe.
+- **실측(2회 동일)**: imported 2클립·preview playable duration 10.000 frame=1·export h264 64,906B·category=Playback route=Speaker·재오픈 2클립 보존.
+- **설계 노트**: 계획 문구는 "XCUITest 타겕"이나 루프의 확립 E2E 관례(env 하니스+결과 파일+스크립트 단언 — 결정적·측정 중심)를 iOS에 이식하는 것으로 구현. UI 자동화(XCUITest)가 필요하면 이 기반 위에 추가.
+
+### 다음 회차 인계 — 1단계 게이트 잔여 정리
+1. **지연 기준선 --enforce 전환**: 실측(seek p50 0.12ms/p95 0.27ms·열기 125.6ms)이 목표(100ms/3000ms) 이내 — SLO 문서 기준선 기록 후 차단 모드 전환.
+2. **W1~W5 조합 시나리오**: 구축 여부 사용자 결정 후보(베타 스위트가 대체 창구).
+3. **실기기 3종**: 사용자 협력 필요 — 요청 시 USER_WAITING 전환.
+4. 잔여 소진 후 DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
 ## 2026-08-19 세션 29 (G-25 §11 종합 판정 + 1단계 게이트 점검 — 측정 인프라 결함 수습)
 
 **게이트**: verify_gate 5/5(1,255) + 최종 상태 측정 창구 전부 — 베타 프리플라이트 4/4·지연 기준선·파리티 스위트 ALL PASS.

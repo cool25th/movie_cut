@@ -22,14 +22,14 @@ v1 출시 검증을 위한 최소 두 등급. 절대값은 장비에 따라 조�
 | **4K export 실시간 배수** | Release ≤ 1.2× / Debug ≤ 1.5× | Release color 0.99× / Debug color 0.92× | `perf_release.sh`·`perf_4k.sh` `REALTIME_LIMIT` (신규) | 인코딩 파이프라인 회귀 (CoreImage 병목 의심 지점) |
 | **1080p 단일트랙 프리뷰** | 30 fps 유지 | 5.51 ms/frame → 182 fps (33% of 60fps 예산) | signpost `playback.buildComposition` + 수동 측정 | 프리뷰 렌더 회귀 |
 | **4K 프리뷰** | 자동 프록시 전환 또는 드롭률 < 5% | 단계 강등: `.fair` 프리뷰 1/2 클램프 → `.serious`+ 프록시 (`effectivePreviewQuality`) | `ThermalProxyDowngradeTests`(정책) + signpost | 열 부하 시 프리뷰 끊김 방어 회귀 |
-| **타임라인 seek 응답** | 중앙값 100 ms 이하 | **첫 실측 (2026-08-16, `run_latency_baseline.sh`, 2s/320×240 fixture, 30 seeks): seek request p50 0.11 ms / p95 0.17 ms, scrub apply p50 0.07 ms / p95 0.10 ms.** 소형 fixture 기준이며 길이/해상도가 큰 프로젝트에서 재측정 필요 | `scripts/run_latency_baseline.sh` (수집 게이트; `--enforce`로 위반 차단 전환) | seek 지연 회귀 |
-| **10분 프로젝트 열기** | 3초 이하 | **첫 실측 (2026-08-16, 동일 게이트): 소형 fixture(2s 클립 1개) 경로 오버헤드 121.6 ms (decode+migrate+session swap).** SLO 원 의미인 10분 프로젝트 실측은 장형 fixture 제작 후 재측정 | `scripts/run_latency_baseline.sh` (수집 게이트) | 프로젝트 로드/마이그레이션 회귀 |
+| **타임라인 seek 응답** | 중앙값 100 ms 이하 | **실측 (2026-08-19, 게이트 2회): 소형(2s) p50 0.05–0.06 ms / p95 0.06–0.17 ms·10분 fixture p50 0.05–0.06 ms / p95 0.08–0.10 ms — 목표의 ~0.1%.** 종전 "장형 재측정 필요" 주의 해소 | `scripts/run_latency_baseline.sh` (**위반 차단 강제 — 기본 enforce**, 진단 시 `--no-enforce`) | seek 지연 회귀 |
+| **10분 프로젝트 열기** | 3초 이하 | **실측 (2026-08-19, 게이트 2회): 결정적 생성 10분 fixture(320×240+220Hz, testsrc) 열기 143.9–145.9 ms (decode+migrate+session swap) — 목표의 ~4.8%.** 소형(2s) 101.6–105.1 ms. 종전 "장형 제작 후 재측정" 주의 해소 | `scripts/run_latency_baseline.sh` (**위반 차단 강제** — 2패스: 소형+10분) | 프로젝트 로드/마이그레이션 회귀 |
 | **자동 저장** | 편집 후 수초 내 | edit-driven `scheduleAutosave` 매 편집 (비동기) | `AutosaveRecoveryTests` | 복구 가능성 회귀 |
 | **강제 종료 복구** | 최근 자동 저장 시점까지 | `recovery.moviecut` 재로드 | `run_recovery_gate.sh` | 크래시 후 작업 유실 |
 | **export 실패** | 사용자에게 원인·재시도 안내 | `FileOperationError.classify` → userMessage | `FileOperationErrorTests` | 불투명 에러 회귀 |
 
 ## 게이트 상태 요약
-- **현재 강제 중(자동)**: 메모리 4GB (`perf_4k.sh`), autosave/복구(`AutosaveRecoveryTests`·`run_recovery_gate.sh`), export 에러 분류(`FileOperationErrorTests`), thermal 프록시 정책(`ThermalProxyDowngradeTests`).
+- **현재 강제 중(자동)**: 메모리 4GB (`perf_4k.sh`), autosave/복구(`AutosaveRecoveryTests`·`run_recovery_gate.sh`), export 에러 분류(`FileOperationErrorTests`), thermal 프록시 정책(`ThermalProxyDowngradeTests`), **seek/프로젝트 열기 지연(`run_latency_baseline.sh` — 2026-08-19 기본 enforce 전환, 소형+10분 2패스)**.
 - **이번 주 추가**: 4K export 실시간 배수 게이트(`REALTIME_LIMIT` in `perf_4k.sh`·`perf_release.sh`·`perf_baseline.sh`), thermal `.fair` 프리뷰 품질 클램프(`effectivePreviewQuality`, `ThermalProxyDowngradeTests`), **seek·프로젝트 열기 지연 수집 게이트(`run_latency_baseline.sh`, 2026-08-16 첫 실측 완료 — 장형 fixture 재측정 후 `--enforce` 전환)**.
 - **signpost 기반(수동 Instruments)**: `export.preset`, `playback.buildComposition`, `proxy.generate`, `storage.migrate`(Core), filmstrip. seek·open은 앱 내측 하니스로 이관되어 자동 수집됨.
 

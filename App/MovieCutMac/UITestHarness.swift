@@ -418,6 +418,18 @@ extension EditorViewModel {
 
         // Optional 3-way color grade step: applies a strong warm lift/gain grade so
         // an E2E check can confirm the grade is reflected in export.
+        // G-03 Inc 3: mark the selected clip as an adjustment layer carrying
+        // a strong grade — export must show the adjustment applied to the
+        // clips below (asserted by the script's pixel comparison).
+        var adjustmentLayerSuffix = ""
+        if env["MOVIECUT_UITEST_ADJUSTMENT_LAYER"] == "1", let clip = selectedClip {
+            await apply(SetClipPropertyCommand(clipId: clip.id, property: .isAdjustmentLayer(true)))
+            await apply(SetClipPropertyCommand(clipId: clip.id, property: .colorGrade(ColorGrade(gamma: 0.5))))
+            let marked = currentProject.timeline.tracks.flatMap(\.clips)
+                .contains { $0.id == clip.id && $0.isAdjustmentLayer }
+            adjustmentLayerSuffix = " adjustment_layer=\(marked ? 1 : 0)"
+        }
+
         if env["MOVIECUT_UITEST_GRADE"] == "1", selectedClipId != nil {
             await updateSelectedColorGrade(
                 ColorGrade(
@@ -738,7 +750,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(adjustmentLayerSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -3275,6 +3287,26 @@ extension EditorViewModel {
                 if let videoClip {
                     await apply(SetClipPropertyCommand(clipId: videoClip.id, property: .volume(0.8)))
                     step("audio_mix", ok: abs((firstClip(ofKind: .video)?.volume ?? 0) - 0.8) < 1e-9)
+                }
+                // G-03 Inc 3: the plan's W4 wording — an ADJUSTMENT clip
+                // carrying the grade over the visible clips (Inc 2 wiring).
+                if let videoClip {
+                    var adjustmentClip = Clip(
+                        assetId: videoClip.assetId ?? UUID(),
+                        kind: .video,
+                        sourceRange: TimeRange(start: 0, duration: 2),
+                        timelineRange: TimeRange(start: 0, duration: currentProject.timeline.duration)
+                    )
+                    adjustmentClip.isAdjustmentLayer = true
+                    adjustmentClip.colorGrade = ColorGrade(gamma: 0.8)
+                    await apply(AddClipCommand(
+                        trackId: currentProject.timeline.tracks.first { $0.kind == .video }?.id ?? UUID(),
+                        clip: adjustmentClip
+                    ))
+                    let hasAdjustment = currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .contains { $0.isAdjustmentLayer && $0.colorGrade != nil }
+                    step("adjustment_layer", ok: hasAdjustment)
                 }
             case "w5":
                 guard let image = fixtures.image else {

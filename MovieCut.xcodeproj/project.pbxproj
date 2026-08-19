@@ -1149,7 +1149,7 @@
 			path = Recording;
 			sourceTree = "<group>";
 		};
-		"TEMP_E237CC6F-2BE2-4F84-9AEA-379AC3375E35" /* Resources */ = {
+		"TEMP_811D7CE7-16F4-4522-8E0B-1E027F89EF97" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);

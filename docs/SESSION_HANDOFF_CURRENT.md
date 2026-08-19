@@ -3,6 +3,21 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-19 세션 37 (G-03 Inc 3 — 조정 레이어 제품화)
+
+**게이트**: W 스위트 **2회 연속 29/29=100.0%**(신규 단계 포함) + verify_gate 5/5.
+
+### 완료 — G-03 제품화 (이번 세션 커밋)
+- **`SetClipPropertyCommand.isAdjustmentLayer`** (이전값 역추적 — undo 단일 트랜잭션).
+- **인스펙터 UI**: "Adjustment layer" 토글 — 기존 색 섹션 편집이 조정 체인으로 전환.
+- **W4 완전판**: `adjustment_layer` 단계(AddClipCommand + colorGrade) — 계획 원 문구 완성.
+- **하니스 env**: `MOVIECUT_UITEST_ADJUSTMENT_LAYER=1`(마크+그레이드·상태 보고).
+- 검증: 가시 클립 없는 조정-only 프로젝트 = noExportableMedia(정확한 실패 — 미지원 케이스의 조용한 강등 아님).
+
+### 다음 회차 인계
+1. **E2E 골든/파리티 스크립트 단계**: run_e2e_export.sh에 ADJUSTMENT_LAYER 조합 섹션 추가(하니스 env는 이미 있음) → G-03 완결 선언.
+2. 이후 2단계 계획(EXECUTION_PLAN §5). 실기기 3종=사용자 유보. 대기 결정(변경 없음).
+
 ## 2026-08-19 세션 36 (G-03 Inc 2 — 조정 레이어 렌더 배선 + 픽셀 검증)
 
 **게이트**: verify_gate 5/5(1,267 테스트 — 픽셀 4종 신규) + W 스위트 28/28=100.0% 무회귀.

@@ -781,6 +781,22 @@ struct InspectorBasicSection: View {
                 Text("Frame interpolation is applied on export")
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
+
+                // G-03: mark this clip as an ADJUSTMENT LAYER — it stops
+                // rendering content and its color correction/grade apply to
+                // every visible clip below during its range.
+                Toggle("Adjustment layer", isOn: Binding(
+                    get: { clip.isAdjustmentLayer },
+                    set: { newValue in
+                        Task {
+                            await viewModel.apply(SetClipPropertyCommand(
+                                clipId: clip.id,
+                                property: .isAdjustmentLayer(newValue)
+                            ))
+                        }
+                    }
+                ))
+                .accessibilityHint("Applies this clip's color correction and grade to the clips below instead of rendering its own content.")
             }
 
             Divider()

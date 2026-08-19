@@ -3,6 +3,21 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 42 (P2-G24-3 — 등록 + 평활화 + 보정)
+
+**게이트**: verify_gate 5/5(1,285 테스트 — 신규 7종).
+
+### 완료 — P2-G24-3 (이번 세션 커밋)
+- **`StabilizationRegistration`**(Core/Analysis): estimateTranslation(SAD 블록 정합 — 결정적·swift test 동작)+ smooth(이동 평균)+ correction(역변·15% 클램프). 소비자는 RegistrationResult만 읽음 — Vision 업그레이드 시 출력 불변.
+- **P2-G24-4의 수학도 통합** (smooth+correction이 같은 데이터 모델) — 계획의 4증분이 3+5로 병합.
+- 테스트 7종: 알려진 시프트 ±1px 회수·동일 이미지 제로·퇴화 안전·스파이크 평활화(50%+ 당겨짐·분산 감소)·평활화 경계·보정 수학·제로 보정.
+
+### 다음 회차 인계 — P2-G24-5 (CI warp 배선)
+1. 등록·평활화·보정을 Mac 프리뷰/출력+iOS 컴포지터에 편입(CIPerspectiveCorrection·변위 적용).
+2. confidence fallback: 낮으면 바이패스(명시적 로그 — 조용한 강등 금지).
+3. 파리티 시나리오 신규(스태빌) + 이후 P2-G24-6 E2E(하니스 STABILIZE env + DoD 수치 실측).
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 41 (P2-G24-2 — 장면 분할 브리지)
 
 **게이트**: verify_gate 5/5(1,278 테스트 — 신규 4종).

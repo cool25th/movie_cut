@@ -264,7 +264,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
     private func makeExportPackage(
         for project: Project,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions(),
-        graphAudio: URL? = nil
+        graphAudio: URL? = nil,
+        includeAudioTrack: Bool = true
     ) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
@@ -530,8 +531,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
         // G-25 2C-1b: the graph's mix as the composition's SINGLE audio
         // track — inserted at zero spanning the AAC file's own range (the
         // audible span; a shorter audio track in a longer video matches the
-        // legacy composition's shape).
-        if let graphAudio {
+        // legacy composition's shape). The WRITER path skips the insertion
+        // (see ExportPackage.graphAudioURL) — its reader stays video-only.
+        if includeAudioTrack, let graphAudio {
             let audioAsset = AVURLAsset(url: graphAudio)
             if let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first {
                 let trackRange = try await audioTrack.load(.timeRange)
@@ -562,7 +564,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
             audioMix: nil,
             temporaryRenderURLs: (graphAudio.map { [$0] } ?? [])
                 + temporaryOpticalFlowURLs
-                + temporaryImageRenderURLs
+                + temporaryImageRenderURLs,
+            graphAudioURL: graphAudio
         )
     }
 
@@ -1340,7 +1343,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
             var graphAudioOwnedURLs = graphAudioURL.map { [$0] } ?? []
             defer { removeTemporaryRenderURLs(graphAudioOwnedURLs) }
             let exportPackage = try await makeExportPackage(
-                for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL
+                for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL,
+                includeAudioTrack: false
             )
             graphAudioOwnedURLs.removeAll()
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
@@ -1399,7 +1403,16 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 writerVideoInput = input
             }
 
-            let audioTracks = exportPackage.composition.tracks(withMediaType: .audio)
+            // W4 defect fix: read audio from the graph AAC FILE, not the
+            // composition — a reader over a composition mixing video with
+            // the graph AAC parks forever (measured); each side alone is
+            // clean. The graph already applied every audio edit, so no
+            // audioMix is needed here either.
+            var audioTracks: [AVAssetTrack] = []
+            if let graphAudioURL = exportPackage.graphAudioURL {
+                let graphAudioAsset = AVURLAsset(url: graphAudioURL)
+                audioTracks = (try? await graphAudioAsset.loadTracks(withMediaType: .audio)) ?? []
+            }
             var audioReaderOutput: AVAssetReaderAudioMixOutput?
             var writerAudioInput: AVAssetWriterInput?
             if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
@@ -1413,7 +1426,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         AVLinearPCMIsNonInterleaved: false
                     ]
                 )
-                readerOutput.audioMix = exportPackage.audioMix
                 if reader.canAdd(readerOutput) {
                     reader.add(readerOutput)
                     audioReaderOutput = readerOutput
@@ -1650,6 +1662,12 @@ private struct ExportPackage {
     var videoComposition: AVMutableVideoComposition?
     var audioMix: AVMutableAudioMix?
     var temporaryRenderURLs: [URL] = []
+    /// The graph-mix AAC the composition's audio track was inserted from
+    /// (when present). The WRITER path reads its audio directly from this
+    /// file — a reader over a composition mixing video tracks with the
+    /// graph AAC measurably parks forever (W4 defect), while each side
+    /// alone reads cleanly.
+    var graphAudioURL: URL?
 }
 
 /// Carries a non-`Sendable` value across a concurrency boundary when the caller

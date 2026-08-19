@@ -1084,6 +1084,20 @@ else
   echo "FAIL: color grade not reflected in export (avg $B_AVG vs $G_AVG)" >&2; exit 1
 fi
 
+# G-03 adjustment layer: marking the (only) clip as an adjustment layer
+# with a strong grade must change the export — but an adjustment-ONLY
+# project (no visible content) must be REJECTED, never silently degraded.
+GADJ="$(mktemp -d)/gadj.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" \
+  MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_ADJUSTMENT_LAYER=1 \
+  MOVIECUT_UITEST_EXPORT="$GADJ" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+GAP=$!; for _ in $(seq 1 120); do [ -s "$GADJ" ] && break; sleep 0.5; done; wait "$GAP" 2>/dev/null || true
+if [ -s "$GADJ" ]; then
+  echo "FAIL: adjustment-only project exported (should be rejected: no visible content)" >&2
+  exit 1
+fi
+echo "PASS: G-03 adjustment-only project correctly rejected (no visible content)"
+
 # G-02 Inc 3 HSL/curve grade must be reflected in export without relying on
 # lift/gamma/gain. Compare a same-app baseline of the solid red fixture against
 # an HSL red desaturation + master curve export.
@@ -1609,4 +1623,4 @@ PY
 echo "PASS: G-25 §8 graph master meter ($G25_METER_SUMMARY)"
 rm -rf "$G25_POSTCHECK_TMPDIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style + G-25 §8 post-check/solo + graph master meter)"
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-03 adjustment layers + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style + G-25 §8 post-check/solo + graph master meter)"

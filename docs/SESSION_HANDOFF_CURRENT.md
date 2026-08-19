@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 41 (P2-G24-2 — 장면 분할 브리지)
+
+**게이트**: verify_gate 5/5(1,278 테스트 — 신규 4종).
+
+### 완료 — P2-G24-2 (이번 세션 커밋)
+- **`StabilizationSegmentation`**(Core/Analysis): 프로바이더 검출 시각 → `Frame.isSceneCut` 브리지(±프레임 창·클램프·변위 융합). 순수 수학.
+- **환경 제한 발견·기록**: SceneChangeProvider의 AVAssetImageGenerator가 swift test 하에서 프레임을 생성하지 않음(NR DSP와 동일 계열 — 앱 컨텍스트 필요). 프로바이더 통합 검증은 P2-G24-6 E2E로 이관, 브리지 수학은 완전 단위 테스트.
+- 테스트 4종: ±2프레임 창·복수 변경·퇴화 안전·변위 융합.
+
+### 다음 회차 인계 — P2-G24-3 (Vision 등록)
+1. VNGenerateOpticalFlowRequest 또는 homography로 프레임별 변환 행렬 추정 + confidence.
+2. 합성 움블 픽스처의 ground truth(알려진 sine 움블)와 행렬 회수 ±10% 단위 테스트.
+3. 이후 P2-G24-4(평활화+crop)·5(CI warp)·6(E2E). 실기기 3종=유보.
+
 ## 2026-08-20 세션 40 (P2-G24-1 — 스태빌 측정 인프라 · 2단계 착수)
 
 **게이트**: verify_gate 5/5(1,274 테스트 — 스태빌 7종 신규) + 픽스처 재생성 동일 해시.

@@ -129,14 +129,20 @@ struct ProjectSchemaMigrationTests {
                 project.name += " [migrated v6→v7]"
             }
         }
+        struct AddMasterAudioProcessing: ProjectMigration {
+            let version = 8
+            func migrate(_ project: inout Project) throws {
+                project.name += " [migrated v7→v8]"
+            }
+        }
 
         var project = Project(name: "original", schemaVersion: 1)
         // A v1 project (below currentSchemaVersion) must be stepped forward by
         // the supplied chain all the way to current, with each step's effect
         // visible. The chain must reach currentSchemaVersion or the runner fails.
-        try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField(), AddAnotherField(), AddBatchedFields(), AddTrackSolo(), AddAdjustmentLayer(), AddStabilization()])
+        try ProjectMigrationRunner.migrate(&project, chain: [AddFakeField(), AddAnotherField(), AddBatchedFields(), AddTrackSolo(), AddAdjustmentLayer(), AddStabilization(), AddMasterAudioProcessing()])
         #expect(project.schemaVersion == currentSchemaVersion)
-        #expect(project.name == "original [migrated v1→v2] [migrated v2→v3] [migrated v3→v4] [migrated v4→v5] [migrated v5→v6] [migrated v6→v7]")
+        #expect(project.name == "original [migrated v1→v2] [migrated v2→v3] [migrated v3→v4] [migrated v4→v5] [migrated v5→v6] [migrated v6→v7] [migrated v7→v8]")
     }
 
     @Test("A current-version project is never run through migrators")

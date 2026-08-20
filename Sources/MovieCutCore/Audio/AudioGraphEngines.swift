@@ -152,13 +152,13 @@ public enum AudioGraphAVAudioEngineRenderer {
             rendered += chunk
         }
 
-        // G-26 code-review #8: the master chain applies AFTER the engine's
-        // summing — the same place the offline renderer applies it.
+        // G-26 §6 serialization: same policy as the offline renderer — the
+        // SPEC's serialized chain, applied after the engine's summing.
         let mixed = AudioGraphSourceAudio(
             sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out
         )
-        if spec.masterBus.limiter != nil {
-            return AudioGraphMasterChain.apply(mixed, chain: .sns)
+        if let chain = spec.masterBus.resolvedMasterChain() {
+            return AudioGraphMasterChain.apply(mixed, chain: chain)
         }
         return mixed
     }

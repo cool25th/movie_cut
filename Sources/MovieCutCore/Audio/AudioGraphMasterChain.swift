@@ -10,6 +10,13 @@ import Foundation
 /// (.compressor, .limiter) map to these implementations — the SCHEMA is
 /// unchanged (spec §5); only the consumption sites grow support.
 public enum AudioGraphMasterChain {
+    /// The §6 preset algorithm version of the SNS "좋은 소리" preset.
+    /// Recorded whenever the preset serializes into a graph save; a
+    /// reopen with a different version reuses derived media and surfaces
+    /// "rendered with the previous algorithm" (spec §6 — reproducibility
+    /// first, regeneration only on explicit user action).
+    public static let snsPresetAlgorithmVersion = "1.0.0"
+
     /// The processors to apply, in chain order.
     public struct Chain: Sendable, Equatable, Codable {
         public var compressor: AudioGraphCompressor.Parameters?
@@ -36,6 +43,18 @@ public enum AudioGraphMasterChain {
 
         /// No processing (bypass).
         public static let bypass = Chain()
+    }
+
+    /// The limiter's latency declaration for the graph's master bus (spec
+    /// §4: a graph containing a processor MUST declare its latency). The
+    /// look-ahead is the SNS limiter's 5ms at the graph's sample rate.
+    public static func snsLimiterLatency(sampleRate: Double) -> AudioGraphNodeLatency {
+        AudioGraphNodeLatency(
+            nodeKind: .limiter,
+            algorithmVersion: snsPresetAlgorithmVersion,
+            reportedLatencySamples: 0,
+            lookAheadSamples: Int64((0.005 * sampleRate).rounded())
+        )
     }
 
     /// Applies the chain in order: compressor → reverb → limiter.

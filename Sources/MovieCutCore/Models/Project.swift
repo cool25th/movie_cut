@@ -52,6 +52,14 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// the bump is deferred to task 6.
     public var compounds: [CompoundDefinition]
 
+    /// G-26: the project's master audio processing preset. The graph
+    /// builder expands this into the spec's master bus — the chain's FULL
+    /// parameters plus the §6 preset algorithm version — so the renderers
+    /// consume serialized values, never a hardcoded preset. Nil (the
+    /// default, and what legacy projects decode to) means no master
+    /// processing; persisted only when set.
+    public var masterAudioProcessing: MasterAudioProcessing?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -68,6 +76,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case cardDocument
         case playbackSettings
         case compounds
+        case masterAudioProcessing
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -86,7 +95,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         canvasBackground: CanvasBackground? = nil,
         cardDocument: CardDocument? = nil,
         playbackSettings: PlaybackSettings = PlaybackSettings(),
-        compounds: [CompoundDefinition] = []
+        compounds: [CompoundDefinition] = [],
+        masterAudioProcessing: MasterAudioProcessing? = nil
     ) {
         self.id = id
         self.name = name
@@ -103,6 +113,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.cardDocument = cardDocument
         self.playbackSettings = playbackSettings
         self.compounds = compounds
+        self.masterAudioProcessing = masterAudioProcessing
     }
 
     public init(from decoder: any Decoder) throws {
@@ -125,6 +136,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         // identical and partial payloads still load. The schema bump is
         // deferred to task 6.
         compounds = try container.decodeIfPresent([CompoundDefinition].self, forKey: .compounds) ?? []
+        masterAudioProcessing = try container.decodeIfPresent(MasterAudioProcessing.self, forKey: .masterAudioProcessing)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -148,5 +160,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         if !compounds.isEmpty {
             try container.encode(compounds, forKey: .compounds)
         }
+        try container.encodeIfPresent(masterAudioProcessing, forKey: .masterAudioProcessing)
     }
 }

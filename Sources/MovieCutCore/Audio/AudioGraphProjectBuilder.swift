@@ -283,10 +283,26 @@ public enum AudioGraphProjectBuilder {
             ))
         }
 
+        // G-26 §6 serialization: expand the project's master processing
+        // preset into the master bus — the chain's FULL parameters plus
+        // the preset algorithm version and the limiter's latency
+        // declaration (spec §4). The renderers consume these serialized
+        // values; nil preset = the default, no-processing bus.
+        var masterBus = AudioGraphMasterBus()
+        if let preset = project.masterAudioProcessing {
+            switch preset {
+            case .sns:
+                masterBus.masterChain = .sns
+                masterBus.presetAlgorithmVersion = AudioGraphMasterChain.snsPresetAlgorithmVersion
+                masterBus.limiter = AudioGraphMasterChain.snsLimiterLatency(sampleRate: graphSampleRate)
+            }
+        }
+
         let spec = AudioRenderGraphSpec(
             sources: sourceOrder.compactMap { sources[$0] },
             clipStrips: strips,
             trackBuses: buses,
+            masterBus: masterBus,
             timebase: timebase
         )
         return Plan(

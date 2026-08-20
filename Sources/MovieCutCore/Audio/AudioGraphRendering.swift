@@ -198,13 +198,13 @@ public enum AudioGraphOfflineRenderer {
             }
         }
 
-        // G-26 code-review #8: the master chain applies AFTER the bus
-        // sum — the limiter's presence in the spec's master bus means
-        // the SNS chain (compressor → reverb → limiter) processes the
-        // summed output before it reaches the encoder.
+        // G-26 §6 serialization: the chain comes from the SPEC — the saved
+        // parameters (SNS fallback only for legacy limiter-only graphs),
+        // applied AFTER the bus sum (code-review #8's placement holds:
+        // the limiter stays last, before the meter/encoder).
         let mixed = AudioGraphSourceAudio(sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out)
-        if spec.masterBus.limiter != nil {
-            return AudioGraphMasterChain.apply(mixed, chain: .sns)
+        if let chain = spec.masterBus.resolvedMasterChain() {
+            return AudioGraphMasterChain.apply(mixed, chain: chain)
         }
         return mixed
     }

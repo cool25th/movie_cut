@@ -33,7 +33,10 @@ private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", cate
 ///   false for v5 projects, so this migrator only bumps the version.
 /// - v6 → v7 (G-24 #9): `Clip.stabilization` added. The field decodes to
 ///   nil for v6 projects, so this migrator only bumps the version.
-public let currentSchemaVersion: Int = 7
+/// - v7 → v8 (G-26): `Project.masterAudioProcessing` added. The field
+///   decodes to nil for v7 projects, so this migrator only bumps the
+///   version.
+public let currentSchemaVersion: Int = 8
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -46,7 +49,8 @@ public enum ProjectSchema {
         AddBlendPreviewQualityCompoundMigration(),
         AddTrackSoloMigration(),
         AddAdjustmentLayerMigration(),
-        AddStabilizationMigration()
+        AddStabilizationMigration(),
+        AddMasterAudioProcessingMigration()
     ]
 }
 
@@ -89,6 +93,21 @@ public struct AddStabilizationMigration: ProjectMigration {
 
     public func migrate(_ project: inout Project) throws {
         // No payload change: `Clip.stabilization` decodes to its default (nil).
+    }
+}
+
+/// v7 → v8: introduces `Project.masterAudioProcessing` (G-26 master chain
+/// serialization). The field is optional on decode and falls back to nil for
+/// v7 projects (no master processing — the exact pre-feature behavior), so
+/// no payload transform is needed — this migrator only bumps the schema
+/// version so the chain reaches `currentSchemaVersion`.
+public struct AddMasterAudioProcessingMigration: ProjectMigration {
+    public let version = 8
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: `Project.masterAudioProcessing` decodes to its default (nil).
     }
 }
 

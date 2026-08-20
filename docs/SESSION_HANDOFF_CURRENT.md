@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,294 테스트 — 신규 5종).
 
-### 완료 — G-28 전제 (이번 세션 커밋)
+### 완료 — G-28 전제 (커밋 6d113bf)
 - **`EffectCostProfile`**: ms/frame(중앙값)·peakMemory·gpu/cpu·realTimeSafe(≤23ms)·costTier(instant/moderate/heavy)·measurementVersion — Codable. 브라우저의 검색/랭킹/배지 데이터 원천.
 - **`EffectCostProfiler`**: 참조 프레임(1080p gradient+stripes)에서 전 빌트인 이펙트의 실측 프로파일 생성 — 워밍업 후 중앙값. 전 유형 유한·비음수 단위 테스트.
 - PERFORMANCE_SLO 신설 행.

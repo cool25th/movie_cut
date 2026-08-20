@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,289 테스트 — 신규 4종).
 
-### 완료 — P2-G24-5 (이번 세션 커밋)
+### 완료 — P2-G24-5 (커밋 98c6b08)
 - **`StabilizationWarpProcessor`**(Core/Rendering): confidence fallback 포함 CI 워프. 확신 ≥ 0.15 → CGAffineTransform 평행 이동(extent 이동 검증). 제로 보정 → 비트 항등(CIImage equality). 확신 < 0.15 → 원본 통과(픽셀 동일)+bypassed 플래그(호출자 로그 — DoD fallback 지표).
 - **범위 조정**: 컴포지터 배선은 P2-G24-6 E2E와 함께 — 실제 등록 데이터(Vision)가 흐르는 종단 경로에서만 측정 가능(측정 증거 없는 배선 금지 원칙).
 

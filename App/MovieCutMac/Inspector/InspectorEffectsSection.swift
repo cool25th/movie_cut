@@ -18,6 +18,7 @@ struct InspectorEffectsSection: View {
     @State private var isTransitionExpanded = false
     @State private var isAnimationExpanded = false
     @State private var selectedKeyframeId: UUID?
+    @State private var isEffectBrowserPresented = false
 
     init(viewModel: EditorViewModel, clip: Clip, mode: InspectorEffectsMode = .full) {
         self.viewModel = viewModel
@@ -45,6 +46,23 @@ struct InspectorEffectsSection: View {
 
     @ViewBuilder
     private var fullSections: some View {
+        // G-28: the cost-aware effect browser entry point.
+        HStack {
+            Text("Effects")
+                .font(MovieCutTypography.panelTitle)
+            Spacer()
+            Button {
+                isEffectBrowserPresented = true
+            } label: {
+                Label("Browse", systemImage: "square.grid.2x2")
+                    .font(MovieCutTypography.toolbar)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Browse effects")
+        }
+        .sheet(isPresented: $isEffectBrowserPresented) {
+            EffectBrowserView(viewModel: viewModel, clip: clip)
+        }
         colorCorrectionSection
         colorGradeSection
         maskSection

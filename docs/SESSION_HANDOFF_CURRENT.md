@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 47 (G-28 Inc 2 — 효과 브라우저 UI)
+
+**게이트**: verify_gate 5/5(1,294 테스트).
+
+### 완료 — G-28 브라우저 UI (이번 세션 커밋)
+- **`EffectBrowserView`**(App/Inspector): 검색(이름+태그)·costTier 배지(EffectCostProfile 소비)·즐겨찾기(정렬 우선)·카드 탭 적용(실제 updateSelectedEffects). 태그 18종 exhaustive.
+- **인스펙터 통합**: Effects 섹션 헤더 "Browse" 버튼 + sheet.
+- 정렬: 즐겨찾기 우선→비용 오름차순.
+
+### 다음 회차 인계 — G-26 Inc 1 (오디오 컴프레서)
+1. 그래프 자리 노드(nodeKind .compressor — 스키마 불변)에 AVAudioUnitCompressor 구현.
+2. §8 게이트 확장: LUFS ±0.2LU(§8의 엄격 게이트 자연 확장).
+3. 이후 G-26 Inc 2(리미터+리버브)·Inc 3(프리셋·디-이서). 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 46 (G-28 Inc 1 — EffectCostProfile 스키마 + 측정 파이프라인)
 
 **게이트**: verify_gate 5/5(1,294 테스트 — 신규 5종).

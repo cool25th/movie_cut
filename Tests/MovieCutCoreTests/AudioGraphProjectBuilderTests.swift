@@ -82,7 +82,7 @@ struct AudioGraphProjectBuilderTests {
         let fades = plan.spec.clipStrips[0].fades
         #expect(fades.count == 2)
         #expect(fades[0] == AudioGraphFade(startSample: 0, endSample: 24_000, curve: .linear))
-        #expect(fades[1] == AudioGraphFade(startSample: 84_000, endSample: 96_000, curve: .linear))
+        #expect(fades[1] == AudioGraphFade(startSample: 84_000, endSample: 96_000, curve: .linear, direction: .fadeOut))
     }
 
     // MARK: - Ducking materialization (spec §1.1)

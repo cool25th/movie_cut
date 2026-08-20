@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 53 (코드 리뷰 결함 #1·#2 수정 — 페이드 방향 + 스테레오)
+
+**게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
+
+### 완료 — 치명적 결함 2건 수정 (이번 세션 커밋)
+- **#1 페이드 방향**: `AudioGraphFade.Direction`(.fadeIn/.fadeOut) + `fadeFactor` 방향별 램프 + 빌더 `.fadeOut` 발행. 수정 전 모든 페이드아웃이 반전.
+- **#2 스테레오 채널**: `mappedChannels` frame/channel 전치 수정. 수정 전 오른쪽 채널이 상수.
+- **회귀 테스트 7종** + 기존 2종 갱신(빌더 방향·드리프트 ±1).
+- **E2E 무회귀**: null test·W 스위트 녹색.
+
+### 다음 회차 — 코드 리뷰 결함 #3-#7
+#3(라이터 별도 Reader)·#4(모노 channelCountFor)·#5(컴파운드 tracks)·#6(G-03 트리거)·#7(G-03 범위). 이후 #8-#10.
+
 ## 2026-08-20 세션 52 (G-28 KPI 모델 + 2단계 회귀 확인)
 
 **게이트**: verify_gate 5/5(1,325) + null test·W 스위트 무회귀.

@@ -295,7 +295,8 @@ public enum AudioGraphOfflineRenderer {
         return (cos(theta), sin(theta))
     }
 
-    /// Product of every fade covering the position.
+    /// Product of every fade covering the position. A `.fadeIn` ramps
+    /// 0→1, a `.fadeOut` ramps 1→0 (the legacy setVolumeRamp semantics).
     static func fadeFactor(_ fades: [AudioGraphFade], at position: Int64) -> Double {
         var factor = 1.0
         for fade in fades {
@@ -303,12 +304,20 @@ public enum AudioGraphOfflineRenderer {
             let span = fade.endSample - fade.startSample
             guard span > 0 else { continue }
             let t = Double(position - fade.startSample) / Double(span)
-            switch fade.curve {
-            case .linear:
-                factor *= t
-            case .exponential:
-                factor *= (1 - t) * (1 - t)
+            // Fade-in: 0→1. Fade-out: 1→0. The exponential curve is the
+            // standard squared ramp in the ramp's own direction.
+            let gain: Double
+            switch (fade.curve, fade.direction) {
+            case (.linear, .fadeIn):
+                gain = t
+            case (.linear, .fadeOut):
+                gain = 1 - t
+            case (.exponential, .fadeIn):
+                gain = t * t
+            case (.exponential, .fadeOut):
+                gain = (1 - t) * (1 - t)
             }
+            factor *= gain
         }
         return factor
     }
@@ -326,7 +335,7 @@ public enum AudioGraphOfflineRenderer {
         case .stereo:
             return (
                 audio.sample(frame: frame, channel: 0),
-                audio.sample(frame: min(audio.channels - 1, 1), channel: 1)
+                audio.sample(frame: frame, channel: min(1, audio.channels - 1))
             )
         }
     }

@@ -298,14 +298,29 @@ public struct AudioGraphFade: Codable, Sendable, Equatable {
         case exponential
     }
 
+    /// Which direction the gain ramps inside the window:
+    /// `.fadeIn` = 0→1 (a fade-in), `.fadeOut` = 1→0 (a fade-out).
+    /// Without this the renderer can only express ascending ramps.
+    public enum Direction: String, Codable, Sendable {
+        case fadeIn
+        case fadeOut
+    }
+
     public var startSample: Int64
     public var endSample: Int64
     public var curve: Curve
+    public var direction: Direction
 
-    public init(startSample: Int64, endSample: Int64, curve: Curve = .linear) {
+    public init(
+        startSample: Int64,
+        endSample: Int64,
+        curve: Curve = .linear,
+        direction: Direction = .fadeIn
+    ) {
         self.startSample = startSample
         self.endSample = endSample
         self.curve = curve
+        self.direction = direction
     }
 }
 

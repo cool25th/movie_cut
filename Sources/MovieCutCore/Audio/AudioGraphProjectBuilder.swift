@@ -374,7 +374,8 @@ public enum AudioGraphProjectBuilder {
             fades.append(AudioGraphFade(
                 startSample: samplePosition(end - clip.fadeOutDuration),
                 endSample: samplePosition(end),
-                curve: .linear
+                curve: .linear,
+                direction: .fadeOut
             ))
         }
         return fades

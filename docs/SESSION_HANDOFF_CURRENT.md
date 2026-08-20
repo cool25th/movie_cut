@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
 
-### 완료 — 치명적 결함 2건 수정 (이번 세션 커밋)
+### 완료 — 치명적 결함 2건 수정 (커밋 ca0f36f)
 - **#1 페이드 방향**: `AudioGraphFade.Direction`(.fadeIn/.fadeOut) + `fadeFactor` 방향별 램프 + 빌더 `.fadeOut` 발행. 수정 전 모든 페이드아웃이 반전.
 - **#2 스테레오 채널**: `mappedChannels` frame/channel 전치 수정. 수정 전 오른쪽 채널이 상수.
 - **회귀 테스트 7종** + 기존 2종 갱신(빌더 방향·드리프트 ±1).

@@ -50,6 +50,10 @@ public enum AudioGraphReverb {
 
         // Wet: each tap adds a delayed, decayed copy.
         for (tapIndex, delayFrames) in reflectionDelays.enumerated() {
+            // Code-review fix: the delay can exceed the audio length
+            // (short test clips vs 1320+ frame delays) — a Range with
+            // lowerBound > upperBound is a Swift fatal error.
+            guard delayFrames < audio.frameCount else { continue }
             let tapGain = pow(parameters.decay, Double(tapIndex + 1)) * wetGain
             for frame in delayFrames..<audio.frameCount {
                 let sourceFrame = frame - delayFrames

@@ -19,7 +19,11 @@ public enum EffectCostProfiler {
         let stripes = CIImage(color: CIColor(red: 0.8, green: 0.6, blue: 0.4))
             .cropped(to: CGRect(x: 0, y: 0, width: width / 8, height: height))
             .transformed(by: CGAffineTransform(translationX: width / 4, y: 0))
-        return gradient.composited(over: stripes)
+        // Code-review fix: stripes on TOP of the gradient — the old order
+        // (gradient over stripes) completely hid the stripes behind the
+        // opaque full-canvas gradient, making the "textured" reference a
+        // flat color.
+        return stripes.composited(over: gradient)
     }
 
     /// Measures one effect's cost profile.
@@ -84,9 +88,23 @@ public enum EffectCostProfiler {
         iterations: Int = 10,
         canvas: EffectCostProfile.ReferenceCanvas = .hd1080
     ) -> [EffectCostProfile] {
-        // Use a representative parameter set for each type.
+        // Code-review fix: the correct parameter key per effect type —
+        // the old "intensity" key was ignored by brightness/contrast/
+        // saturation/exposure (which read "amount"/"ev"), profiling them
+        // as identity no-ops.
         let representativeEffects: [Effect] = EffectType.allCases.map { type in
-            Effect(type: type, parameters: ["intensity": 0.5])
+            let parameters: [String: Double]
+            switch type {
+            case .brightness, .contrast, .saturation, .temperature:
+                parameters = ["amount": 0.5]
+            case .exposure:
+                parameters = ["ev": 0.5]
+            case .blur:
+                parameters = ["radius": 5]
+            default:
+                parameters = ["intensity": 0.5]
+            }
+            return Effect(type: type, parameters: parameters)
         }
         return representativeEffects.map { effect in
             measure(effect: effect, iterations: iterations, canvas: canvas)

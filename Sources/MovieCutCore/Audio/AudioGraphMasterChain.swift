@@ -38,7 +38,10 @@ public enum AudioGraphMasterChain {
         public static let bypass = Chain()
     }
 
-    /// Applies the chain in order: compressor → limiter → reverb.
+    /// Applies the chain in order: compressor → reverb → limiter.
+    /// Code-review fix: the limiter MUST be last (spec §1's master bus
+    /// topology: `[limiter]* → meter → encoder`) — reverb after the
+    /// limiter adds energy that exceeds the ceiling.
     /// Each stage is a no-op when its parameters are nil.
     public static func apply(
         _ audio: AudioGraphSourceAudio,
@@ -48,11 +51,11 @@ public enum AudioGraphMasterChain {
         if let compressor = chain.compressor {
             result = AudioGraphCompressor.apply(result, parameters: compressor)
         }
-        if let limiter = chain.limiter {
-            result = AudioGraphLimiter.apply(result, parameters: limiter)
-        }
         if let reverb = chain.reverb {
             result = AudioGraphReverb.apply(result, parameters: reverb)
+        }
+        if let limiter = chain.limiter {
+            result = AudioGraphLimiter.apply(result, parameters: limiter)
         }
         return result
     }

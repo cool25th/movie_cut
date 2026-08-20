@@ -151,16 +151,11 @@ public enum AudioGraphOfflineRenderer {
         frameRange: Range<Int64>? = nil
     ) throws -> AudioGraphSourceAudio {
         // Spec §5: a stage-1 engine must reject graphs that use nodes it
-        // cannot implement. The limiter is the only placeholder node with a
-        // serialized slot; presence means the master chain needs one.
-        // G-26 (Phase 2): the master bus's limiter is now SUPPORTED —
-        // the graph's master chain applies it after the bus sum. The
-        // declared latency is honored (spec §4) via the shared output
-        // window already computed above.
-        // NOTE: the limiter's parameters arrive via the master bus's
-        // AudioGraphNodeLatency declaration; the chain parameters default
-        // to the SNS preset until the spec grows explicit parameter
-        // serialization (the spec's §6 preset version system covers this).
+        // cannot implement. G-26 (Phase 2): the limiter is now SUPPORTED —
+        // the master chain applies it after the bus sum (code-review #8:
+        // the DSP is actually invoked here, not just declared supported).
+        // Parameters default to the SNS preset until the spec grows
+        // explicit parameter serialization (§6 preset version system).
 
         let absoluteRange = frameRange ?? 0 ..< Int64(frameCount)
         var out = [Float](repeating: 0, count: frameCount * 2)
@@ -203,7 +198,15 @@ public enum AudioGraphOfflineRenderer {
             }
         }
 
-        return AudioGraphSourceAudio(sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out)
+        // G-26 code-review #8: the master chain applies AFTER the bus
+        // sum — the limiter's presence in the spec's master bus means
+        // the SNS chain (compressor → reverb → limiter) processes the
+        // summed output before it reaches the encoder.
+        let mixed = AudioGraphSourceAudio(sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out)
+        if spec.masterBus.limiter != nil {
+            return AudioGraphMasterChain.apply(mixed, chain: .sns)
+        }
+        return mixed
     }
 
     // MARK: - Evaluation math (pure, shared semantics)

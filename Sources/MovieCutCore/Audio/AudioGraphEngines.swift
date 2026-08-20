@@ -152,9 +152,15 @@ public enum AudioGraphAVAudioEngineRenderer {
             rendered += chunk
         }
 
-        return AudioGraphSourceAudio(
+        // G-26 code-review #8: the master chain applies AFTER the engine's
+        // summing — the same place the offline renderer applies it.
+        let mixed = AudioGraphSourceAudio(
             sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out
         )
+        if spec.masterBus.limiter != nil {
+            return AudioGraphMasterChain.apply(mixed, chain: .sns)
+        }
+        return mixed
     }
 
     // MARK: - Graph preparation

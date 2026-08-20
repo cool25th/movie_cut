@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
 
-### 완료 — 결함 5건 수정 (이번 세션 커밋)
+### 완료 — 결함 5건 수정 (커밋 1b7c102)
 - **#3 라이터 오디오**: 그래프 AAC에 별도 AVAssetReader(교차 자산 canAdd=false로 조용히 스킵되던 것 수정).
 - **#4 모노 채널**: GraphMixRenderer가 소스 포맷 프로브(AVAudioFile/AVAssetTrack 헤더) 후 channelCountFor 전달.
 - **#5 컴파운드**: renderMix가 tracks 파라미터 수신(플래트닝) — 컨테이너 클립의 오디오 복원.

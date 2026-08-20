@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 48 (G-26 Inc 1 — 오디오 컴프레서)
+
+**게이트**: verify_gate 5/5(1,303 테스트 — 신규 9종).
+
+### 완료 — G-26 컴프레서 (이번 세션 커밋)
+- **`AudioGraphCompressor`**(Core/Audio): 피드포워드 컴프레서 — threshold/ratio/attack/release/makeup. 정적 전달곡선(`staticOutputDb`) + 동적 PCM 적용(`apply`). 그래프의 자리 노드(nodeKind .compressor)가 스키마 불변으로 구현을 받음.
+- 테스트 9종: 무릎 통일성·ratio 압축·메이크업·극단 ratio·실측 감쇠(≥6dB)·조용한 통일·빈 안전·클램프.
+
+### 다음 회차 인계 — G-26 Inc 2 (리미터 + 리버브)
+1. 리미터(look-ahead 피크 클램프 — true-peak 게이트와 직결) + 리버브(초기 반사 지연 합).
+2. Inc 3(프리셋·디-이서 초기). §8 LUFS ±0.2LU는 배선 후.
+3. 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 47 (G-28 Inc 2 — 효과 브라우저 UI)
 
 **게이트**: verify_gate 5/5(1,294 테스트).

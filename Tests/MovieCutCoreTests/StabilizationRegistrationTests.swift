@@ -43,6 +43,38 @@ struct StabilizationRegistrationTests {
         #expect(result.confidence > 0.3, "textured shift must be confident: \(result.confidence)")
     }
 
+    @Test("a half-pixel bilinear shift is recovered within a third of a pixel")
+    func subPixelShiftRecovery() {
+        let width = 96
+        let height = 72
+        let base = syntheticImage(width: width, height: height)
+        // Bilinear-shift by (2.5, −1.5): the integer SAD minimum alone
+        // quantizes to ±1px; the parabolic refinement must land near the
+        // true offset (the #9 real-render gate exposed the noise floor).
+        let shiftedImage: [UInt8] = (0..<height).flatMap { y in
+            (0..<width).map { x in
+                let sy = Double(y) + 1.5
+                let sx = Double(x) - 2.5
+                let x0 = Int(sx.rounded(.down)), y0 = Int(sy.rounded(.down))
+                let fx = sx - Double(x0), fy = sy - Double(y0)
+                func sample(_ xx: Int, _ yy: Int) -> Double {
+                    guard xx >= 0, xx < width, yy >= 0, yy < height else { return 0 }
+                    return Double(base[yy * width + xx])
+                }
+                let value = sample(x0, y0) * (1 - fx) * (1 - fy)
+                    + sample(x0 + 1, y0) * fx * (1 - fy)
+                    + sample(x0, y0 + 1) * (1 - fx) * fy
+                    + sample(x0 + 1, y0 + 1) * fx * fy
+                return UInt8(clamping: Int(value.rounded()))
+            }
+        }
+        let result = StabilizationRegistration.estimateTranslation(
+            previous: base, current: shiftedImage, width: width, height: height
+        )
+        #expect(abs(result.dx - 2.5) <= 1.0 / 3, "dx: \(result.dx)")
+        #expect(abs(result.dy - (-1.5)) <= 1.0 / 3, "dy: \(result.dy)")
+    }
+
     @Test("identical images give zero displacement and zero confidence")
     func identicalImages() {
         let image = syntheticImage(width: 64, height: 48)

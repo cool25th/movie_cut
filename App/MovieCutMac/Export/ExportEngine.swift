@@ -529,7 +529,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         useOpticalFlow: clip.useOpticalFlow,
                         playbackRate: playbackRate,
                         blendMode: clip.blendMode,
-                        cropRect: clip.cropRect
+                        cropRect: clip.cropRect,
+                        stabilization: clip.stabilization
                     ))
                 }
             }
@@ -620,6 +621,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 || clip.isBackgroundRemoved
                 || clip.blendMode != .normal
                 || clip.cropRect != nil
+                // G-24 (#9): stabilization warps in the custom compositor —
+                // same trigger as the other custom-render features.
+                || clip.stabilization != nil
         } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -768,6 +772,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             isBackgroundRemoved: clip.isBackgroundRemoved,
                             blendMode: clip.blendMode,
                             cropRect: clip.cropRect,
+                            stabilization: clip.stabilization,
                             includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
@@ -2307,6 +2312,7 @@ private struct ExportClipInstructionMetadata {
     var playbackRate: Double = 1.0
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
+    var stabilization: StabilizationPlan? = nil
 
     var usesOpticalFlowSlowMotion: Bool {
         opticalFlowSlowMotionRate != nil
@@ -2332,6 +2338,7 @@ private struct ExportClipInstructionMetadata {
             || blendMode != .normal
             || !keyframes.isEmpty
             || cropRect != nil
+            || stabilization != nil
     }
 }
 

@@ -61,7 +61,7 @@ struct StabilizationWarpTests {
         let result = StabilizationWarpProcessor.apply(
             image,
             correction: (dx: -8, dy: 0, cropFraction: 0.1),
-            confidence: 0.1  // below the 0.15 threshold
+            confidence: 0.02  // below the 0.05 threshold (noise-only band)
         )
         #expect(result.bypassed == true)
         let context = CIContext(options: [.useSoftwareRenderer: true])
@@ -77,15 +77,54 @@ struct StabilizationWarpTests {
         let atThreshold = StabilizationWarpProcessor.apply(
             image,
             correction: (dx: 1, dy: 0, cropFraction: 0),
-            confidence: 0.15
+            confidence: 0.05
         )
         #expect(atThreshold.bypassed == false)
         // Just below: bypassed.
         let below = StabilizationWarpProcessor.apply(
             image,
             correction: (dx: 1, dy: 0, cropFraction: 0),
-            confidence: 0.149
+            confidence: 0.049
         )
         #expect(below.bypassed == true)
+    }
+
+    // MARK: - Cover scale (G-24 #9 render-chain wiring)
+
+    @Test("cover scale grows the extent about the center so the translation cannot expose edges")
+    func coverScaleGrowsExtent() {
+        let image = halfSplitImage(size: 64)
+        // Translation of 16px on a 64px frame needs coverScale ≥ 1.5 to
+        // keep every source pixel row covered.
+        let result = StabilizationWarpProcessor.apply(
+            image,
+            correction: (dx: 16, dy: 0, cropFraction: 0.12),
+            confidence: 1.0,
+            coverScale: 1.5
+        )
+        #expect(result.bypassed == false)
+        // Scaled about the center: the extent grows symmetrically
+        // (64 → 96 wide, origin −16) and then translates +16 — landing the
+        // left edge exactly at 0, i.e. the render extent stays covered.
+        #expect(abs(result.image.extent.width - 96) < 0.5)
+        #expect(abs(result.image.extent.minX - 0) < 0.5,
+                "scaled origin −16 plus translation +16 must cover minX=0; got \(result.image.extent.minX)")
+        #expect(abs(result.image.extent.maxX - 96) < 0.5)
+    }
+
+    @Test("cover scale applies even on a bypassed frame — zoom must never breathe")
+    func coverScaleAppliesOnBypass() {
+        let image = halfSplitImage()
+        let bypassed = StabilizationWarpProcessor.apply(
+            image,
+            correction: (dx: 8, dy: 0, cropFraction: 0.1),
+            confidence: 0.02,  // below threshold — translation bypassed
+            coverScale: 1.25
+        )
+        #expect(bypassed.bypassed == true)
+        // The zoom still applied: the extent grew (32 → 40), only the
+        // translation was skipped.
+        #expect(abs(bypassed.image.extent.width - 40) < 0.5)
+        #expect(abs(bypassed.image.extent.minX - (-4)) < 0.5)
     }
 }

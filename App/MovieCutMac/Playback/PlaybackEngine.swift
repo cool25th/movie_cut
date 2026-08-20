@@ -909,7 +909,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             effects: clip.effects,
                             isBackgroundRemoved: clip.isBackgroundRemoved,
                             blendMode: clip.blendMode,
-                            cropRect: clip.cropRect
+                            cropRect: clip.cropRect,
+                            stabilization: clip.stabilization
                         ))
                     }
 
@@ -1250,6 +1251,9 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     // this the preview silently ignored keyframe-only clips
                     // (proved by the motion_tracking parity scenario).
                     || !clipInstruction.keyframes.isEmpty
+                    // G-24 (#9): stabilization warps in the custom
+                    // compositor — same trigger-gap class as keyframes.
+                    || clipInstruction.stabilization != nil
             } || !transitionEffects.isEmpty || !textOverlayClipEffects.isEmpty
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
@@ -1374,7 +1378,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                                 effects: clipInstruction.effects,
                                 isBackgroundRemoved: clipInstruction.isBackgroundRemoved,
                                 blendMode: clipInstruction.blendMode,
-                                cropRect: clipInstruction.cropRect
+                                cropRect: clipInstruction.cropRect,
+                                stabilization: clipInstruction.stabilization
                             )
                         } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
@@ -1794,6 +1799,7 @@ private struct PlaybackClipInstructionMetadata {
     var isBackgroundRemoved: Bool
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
+    var stabilization: StabilizationPlan? = nil
 }
 
 private enum PlaybackPreviewAudioError: LocalizedError {

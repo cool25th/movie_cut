@@ -209,7 +209,8 @@ final class IOSExportEngine {
                         effects: clip.effects,
                         textContent: clip.textContent,
                         isBackgroundRemoved: clip.isBackgroundRemoved,
-                        cropRect: clip.cropRect
+                        cropRect: clip.cropRect,
+                        stabilization: clip.stabilization
                     ) else {
                         continue
                     }

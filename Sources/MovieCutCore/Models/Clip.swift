@@ -176,6 +176,15 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Decodes to nil for legacy projects. The schema bump is deferred to task 6.
     public var compoundId: UUID?
 
+    /// G-24 stabilization: the per-frame warp plan computed by the analysis
+    /// pipeline (registration → smoothing → correction). Nil means the clip
+    /// was never stabilized; an EMPTY plan means analyzed-but-nothing-to-
+    /// correct. Preview and export consume the same plan through
+    /// `CustomCompositionClipEffect`, so they warp identically by
+    /// construction. Decodes to nil for legacy projects and is only
+    /// persisted when set, keeping unstabilized JSON byte-identical.
+    public var stabilization: StabilizationPlan?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -209,6 +218,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case blendMode
         case compoundId
         case cropRect
+        case stabilization
     }
 
     /// Creates a clip.
@@ -247,7 +257,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         duckingLevel: Double? = nil,
         blendMode: BlendMode = .normal,
         compoundId: UUID? = nil,
-        cropRect: NormalizedRect? = nil
+        cropRect: NormalizedRect? = nil,
+        stabilization: StabilizationPlan? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -293,6 +304,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.blendMode = blendMode
         self.compoundId = compoundId
         self.cropRect = cropRect
+        self.stabilization = stabilization
     }
 
     public init(from decoder: any Decoder) throws {
@@ -334,6 +346,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // broken-ref validation happens in `Project.validateCompounds` at load.
         compoundId = try container.decodeIfPresent(UUID.self, forKey: .compoundId) ?? nil
         cropRect = try container.decodeIfPresent(NormalizedRect.self, forKey: .cropRect)
+        stabilization = try container.decodeIfPresent(StabilizationPlan.self, forKey: .stabilization)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -378,6 +391,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // byte-identical to its pre-feature JSON (Requirement 7.6).
         try container.encodeIfPresent(compoundId, forKey: .compoundId)
         try container.encodeIfPresent(cropRect, forKey: .cropRect)
+        // Persist the stabilization plan only when set — the analysis
+        // output is re-derivable and unstabilized clips stay byte-identical.
+        try container.encodeIfPresent(stabilization, forKey: .stabilization)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

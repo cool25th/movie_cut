@@ -132,22 +132,41 @@ for f in "$OUT"/*; do
   printf "  %-36s %6s bytes\n" "$(basename "$f")" "$size"
 done
 # --- G-24 P2-G24-6b: REAL wobble fixture ------------------------------------------
-# High-contrast scene cut: dark mandelbrot → bright testsrc2 with sine wobble.
-STAB="$OUT/stab_wobble_320x240_4s_30fps.mp4"
+# High-contrast scene cut over a STATIC blurred-noise texture with multi-
+# frequency handheld jitter. Four #9 real-render lessons baked in:
+# 1) A gentle 1Hz sway is NOT representative shake — its deviation from a
+#    window-7 smoothed path (~0.6px) sits below the registration noise
+#    floor. Two sine components per axis put the true jitter ~5px.
+# 2) The texture must be APERIODIC (testsrc2's periodic grid made SAD
+#    registration lock onto grid periods: 19.5px readback errors).
+# 3) The texture must be STATIC (mandelbrot is an animated zoom — its
+#    apparent radial motion biased registrations by up to ~5px per frame).
+# 4) The frame is 16:9 (640×360): the export path renders at preset
+#    resolutions (short edge ≥720) with the canvas aspect, and an
+#    identity-transform clip lands 1:1 in the corner. With a 16:9 source
+#    on the default 16:9 canvas, extracting at source-native size brings
+#    the content back to exactly 1:1 — the DoD measures the compositor's
+#    warp at native scale regardless of export preset. Scene cut: eq
+#    brightness −0.3 → +0.3 keeps the luminance jump detectable.
+STAB="$OUT/stab_wobble_640x360_4s_30fps.mp4"
 if [ ! -f "$STAB" ]; then
+  NOISE="$(mktemp -u /tmp/stab_noise.XXXXXX).png"
   SEG_A="$(mktemp -u /tmp/stab_a.XXXXXX).mp4"
   SEG_B="$(mktemp -u /tmp/stab_b.XXXXXX).mp4"
   ffmpeg -y -loglevel error \
-    -f lavfi -i "mandelbrot=size=400x300:rate=30" -t 2 \
-    -vf "eq=brightness=-0.4:contrast=1.5,crop=320:240:x='6+6*sin(2*PI*t)':y='4+4*cos(2*PI*t)',format=yuv420p" \
+    -f lavfi -i "color=c=black:s=800x450:d=1" -frames:v 1 \
+    -vf "geq=lum='random(1)*255':cb=128:cr=128,boxblur=4:1" "$NOISE"
+  ffmpeg -y -loglevel error \
+    -loop 1 -framerate 30 -t 2 -i "$NOISE" \
+    -vf "eq=brightness=-0.3:contrast=1.3,crop=640:360:x='30+8*sin(2*PI*2.2*t)+4*sin(2*PI*6.7*t+1.3)':y='20+6*sin(2*PI*1.7*t+0.5)+3*sin(2*PI*5.3*t+2.1)',format=yuv420p" \
     -c:v libx264 -preset veryfast -crf 18 "$SEG_A"
   ffmpeg -y -loglevel error \
-    -f lavfi -i "testsrc2=size=400x300:rate=30" -t 2 \
-    -vf "eq=brightness=0.4:contrast=1.5,crop=320:240:x='6+6*sin(2*PI*t)':y='4+4*cos(2*PI*t)',format=yuv420p" \
+    -loop 1 -framerate 30 -t 2 -i "$NOISE" \
+    -vf "eq=brightness=0.3:contrast=1.3,crop=640:360:x='30+8*sin(2*PI*2.2*t)+4*sin(2*PI*6.7*t+1.3)':y='20+6*sin(2*PI*1.7*t+0.5)+3*sin(2*PI*5.3*t+2.1)',format=yuv420p" \
     -c:v libx264 -preset veryfast -crf 18 "$SEG_B"
   ffmpeg -y -loglevel error -i "$SEG_A" -i "$SEG_B" \
     -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0[out]" \
     -map "[out]" -c:v libx264 -preset veryfast -crf 18 "$STAB"
-  rm -f "$SEG_A" "$SEG_B"
-  echo "generated: stab_wobble_320x240_4s_30fps.mp4 (dark→bright wobble)"
+  rm -f "$NOISE" "$SEG_A" "$SEG_B"
+  echo "generated: stab_wobble_640x360_4s_30fps.mp4 (dark→bright static-noise multi-frequency jitter)"
 fi

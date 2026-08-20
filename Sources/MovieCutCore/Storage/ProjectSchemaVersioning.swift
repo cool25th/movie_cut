@@ -31,7 +31,9 @@ private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", cate
 ///   for v4 projects, so this migrator only bumps the version.
 /// - v5 → v6 (G-03): `Clip.isAdjustmentLayer` added. The field decodes to
 ///   false for v5 projects, so this migrator only bumps the version.
-public let currentSchemaVersion: Int = 6
+/// - v6 → v7 (G-24 #9): `Clip.stabilization` added. The field decodes to
+///   nil for v6 projects, so this migrator only bumps the version.
+public let currentSchemaVersion: Int = 7
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -43,7 +45,8 @@ public enum ProjectSchema {
         AddAutoProxyOnThermalPressureMigration(),
         AddBlendPreviewQualityCompoundMigration(),
         AddTrackSoloMigration(),
-        AddAdjustmentLayerMigration()
+        AddAdjustmentLayerMigration(),
+        AddStabilizationMigration()
     ]
 }
 
@@ -72,6 +75,20 @@ public struct AddAdjustmentLayerMigration: ProjectMigration {
 
     public func migrate(_ project: inout Project) throws {
         // No payload change: `Clip.isAdjustmentLayer` decodes to its default (false).
+    }
+}
+
+/// v6 → v7: introduces `Clip.stabilization` (G-24 render-chain warp). The
+/// field is optional on decode and falls back to nil for v6 projects, so no
+/// payload transform is needed — this migrator only bumps the schema version
+/// so the chain reaches `currentSchemaVersion`.
+public struct AddStabilizationMigration: ProjectMigration {
+    public let version = 7
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: `Clip.stabilization` decodes to its default (nil).
     }
 }
 

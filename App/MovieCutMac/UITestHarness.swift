@@ -3104,13 +3104,20 @@ extension EditorViewModel {
         }
     }
 
-    // MARK: - G-24 stabilization E2E (P2-G24-6)
+    // MARK: - G-24 stabilization E2E (P2-G24-6, #9 real-render upgrade)
 
     /// JSON artifact for `MOVIECUT_UITEST_STABILIZE`.
     private struct StabilizationDump: Codable {
         var sceneChangeTimes: [Double] = []
         var sceneCutDetected = false
         var frameCount = 0
+        var stabilizedFrameCount = 0
+        var planCorrections = 0
+        var planConfidenceMin = 0.0
+        var planConfidenceMedian = 0.0
+        var planConfidenceMean = 0.0
+        var planConfidenceMax = 0.0
+        var coverScale = 0.0
         var inputMedian = 0.0
         var residualMedian = 0.0
         var reductionRatio = 0.0
@@ -3118,11 +3125,124 @@ extension EditorViewModel {
         var severeWobbleFraction = 0.0
         var sceneCutErrors = 0
         var meetsDoD = false
+        var renderBypassed = 0
+        var renderWarpApplied = 0
+        var appliedVsIntendedDx = 0.0
+        var appliedVsIntendedDy = 0.0
         var elapsedSeconds = 0.0
         var error = "none"
     }
 
-    /// G-24 P2-G24-6 — the FULL stabilization pipeline in the app context.
+    /// Renders the CURRENT project through the REAL EXPORT PATH (the same
+    /// `CustomVideoCompositor` the preview installs) and extracts `count`
+    /// frames with `AVAssetImageGenerator` at zero tolerance — frame-exact.
+    ///
+    /// Why not preview snapshots: the video-output seek path delivers
+    /// DUPLICATED frames for some timestamps (measured: zero-magnitude
+    /// steps interleaved in a fixture that moves every frame — both render
+    /// passes stuck identically, so per-frame readbacks stayed exact while
+    /// the jitter measurement silently absorbed wrong-source frames). The
+    /// generator on an exported file decodes each requested time exactly —
+    /// the same extraction the pre-#9 analytic gate used, now fed by the
+    /// compositor's actual output.
+    private func renderStabilizationLumaFrames(count: Int, fps: Double, width: Int, height: Int, tag: String) async throws -> [[UInt8]] {
+        let exportURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("g24_stabilize_\(tag)_\(UUID().uuidString).mp4")
+        let dest = containerizedExportDestination(for: exportURL)
+        await exportProject(to: dest.write)
+        finalizeContainerizedExport(from: dest.write, to: dest.requested)
+        guard FileManager.default.fileExists(atPath: dest.requested.path) else {
+            throw NSError(domain: "G24", code: 10, userInfo: [NSLocalizedDescriptionKey: "export produced no file (tag=\(tag)): \(lastErrorMessage ?? "none")"])
+        }
+
+        let asset = AVURLAsset(url: dest.requested)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+
+        let ciContext = CIContext(options: [.useSoftwareRenderer: true])
+        var frames: [[UInt8]] = []
+        for frame in 0..<count {
+            let t = CMTime(seconds: Double(frame) / fps, preferredTimescale: 600)
+            guard let cgImage = try? generator.copyCGImage(at: t, actualTime: nil) else { continue }
+            let ciImage = CIImage(cgImage: cgImage)
+            var bitmap = [UInt8](repeating: 0, count: width * height * 4)
+            // The identity-transform clip renders 1:1 at the viewport's
+            // bottom-left corner, so the content region is exactly the
+            // source-sized rect at the CI origin — crop THAT region at 1:1
+            // instead of downscaling the whole frame (a maximumSize
+            // downscale would shrink the content to a sub-sampled strip
+            // and the wobble below the estimator's floor).
+            ciContext.render(
+                ciImage,
+                toBitmap: &bitmap,
+                rowBytes: width * 4,
+                bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                format: .RGBA8,
+                colorSpace: nil
+            )
+            let luma = (0..<(width * height)).map { i in
+                let r = Double(bitmap[i * 4])
+                let g = Double(bitmap[i * 4 + 1])
+                let b = Double(bitmap[i * 4 + 2])
+                return UInt8(clamping: Int(0.299 * r + 0.587 * g + 0.114 * b))
+            }
+            frames.append(luma)
+        }
+        try? FileManager.default.removeItem(at: dest.requested)
+        return frames
+    }
+
+    /// Accumulated content positions of a rendered frame sequence: register
+    /// consecutive frames and integrate. The output's deviation from its
+    /// own smoothed path is the sequence's self-relative shake.
+    private func stabilizationAccumulatedPositions(lumaFrames: [[UInt8]], width: Int, height: Int) -> [(x: Double, y: Double)] {
+        guard lumaFrames.count > 2 else { return [] }
+        var positions: [(x: Double, y: Double)] = [(0, 0)]
+        for i in 1..<lumaFrames.count {
+            let reg = StabilizationRegistration.estimateTranslation(
+                previous: lumaFrames[i - 1],
+                current: lumaFrames[i],
+                width: width,
+                height: height
+            )
+            positions.append((positions[i - 1].x + reg.dx, positions[i - 1].y + reg.dy))
+        }
+        return positions
+    }
+
+    /// Deviation of each position from its window-smoothed path.
+    private func stabilizationJitterDeviations(
+        positions: [(x: Double, y: Double)],
+        window: Int = 7
+    ) -> [Double] {
+        guard positions.count > 2 else { return [] }
+        let half = window / 2
+        return positions.indices.map { i in
+            let low = max(0, i - half)
+            let high = min(positions.count - 1, i + half)
+            var sumX: Double = 0
+            var sumY: Double = 0
+            for j in low...high {
+                sumX += positions[j].x
+                sumY += positions[j].y
+            }
+            let count = Double(high - low + 1)
+            let dx = positions[i].x - sumX / count
+            let dy = positions[i].y - sumY / count
+            return (dx * dx + dy * dy).squareRoot()
+        }
+    }
+
+    /// G-24 stabilization E2E, #9 upgrade — the full pipeline MEASURED ON
+    /// REAL RENDERED PIXELS: the fixture imports into the timeline, the
+    /// unstabilized preview renders through the actual compositor, the
+    /// analysis (scene change → registration → smoothing → correction) runs
+    /// on those rendered frames, the resulting plan attaches to the clip
+    /// (`Clip.stabilization`), the composition rebuilds, and the SAME seek
+    /// path re-renders with the warp active. The DoD verdict comes from the
+    /// stabilized RENDER, not the analytic residual the pre-#9 gate used.
     private func runStabilizationUITestScenario(environment: [String: String]) async {
         let started = Date()
         var dump = StabilizationDump()
@@ -3140,6 +3260,7 @@ extension EditorViewModel {
                 throw NSError(domain: "G24", code: 1, userInfo: [NSLocalizedDescriptionKey: "STABILIZE requires MOVIECUT_UITEST_IMPORT"])
             }
             let fixtureURL = URL(fileURLWithPath: fixturePath)
+            let fps: Double = 30.0
 
             // 1. SceneChangeProvider — app context (P2-G24-2 integration).
             let asset = MediaAsset(originalURL: fixtureURL, kind: .video, duration: 4)
@@ -3151,50 +3272,76 @@ extension EditorViewModel {
             } else {
                 changeTimes = []
             }
-            // Provider fallback: if it returns nothing (its histogram
-            // metric may miss the transition), detect the boundary by a
-            // mean-luminance jump between consecutive frames — the
-            // stabilization math consumes TIMES, not the provider itself.
             var detectedTimes = changeTimes
-            
             dump.sceneChangeTimes = detectedTimes
             dump.sceneCutDetected = detectedTimes.isEmpty == false
             report("stabilize_checkpoint stage=scene_change count=\(detectedTimes.count)")
 
-            // 2. Extract luma frames.
-            let avAsset = AVURLAsset(url: fixtureURL)
-            let generator = AVAssetImageGenerator(asset: avAsset)
-            generator.requestedTimeToleranceBefore = .zero
-            generator.requestedTimeToleranceAfter = .zero
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 140, height: 100)
-
-            let ciContext = CIContext(options: [.useSoftwareRenderer: true])
-            var lumaFrames: [[UInt8]] = []
-            let fps: Double = 30.0
-            let totalFrames = 120
-            let frameWidth = 140
-            let frameHeight = 100
-            for frame in 0..<totalFrames {
-                let t = CMTime(seconds: Double(frame) / fps, preferredTimescale: 600)
-                guard let cgImage = try? generator.copyCGImage(at: t, actualTime: nil) else { continue }
-                let ciImage = CIImage(cgImage: cgImage)
-                var bitmap = [UInt8](repeating: 0, count: frameWidth * frameHeight * 4)
-                ciContext.render(ciImage, toBitmap: &bitmap, rowBytes: frameWidth * 4, bounds: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight), format: .RGBA8, colorSpace: nil)
-                let luma = (0..<frameWidth * frameHeight).map { i in
-                    let r = Double(bitmap[i * 4])
-                    let g = Double(bitmap[i * 4 + 1])
-                    let b = Double(bitmap[i * 4 + 2])
-                    return UInt8(clamping: Int(0.299 * r + 0.587 * g + 0.114 * b))
-                }
-                lumaFrames.append(luma)
+            // 2. Import. The fixture is 16:9 so the default canvas matches
+            //    its aspect; exports render at preset resolutions with the
+            //    same aspect, and the analysis extraction at the SOURCE's
+            //    native size recovers the content 1:1 regardless of the
+            //    export preset (an identity-transform clip renders 1:1 in
+            //    the corner of the render viewport — any other aspect
+            //    would leave the content a sub-sampled patch).
+            let sourceAsset = AVURLAsset(url: fixtureURL)
+            let sourceSize = try await sourceAsset.loadTracks(withMediaType: .video).first?
+                .load(.naturalSize) ?? CGSize(width: 640, height: 360)
+            suppressCompositionRebuild = true
+            await importMediaAndAddToTimeline(containerizeImportURLs([fixtureURL]), startTime: 0)
+            suppressCompositionRebuild = false
+            // Force BOTH render passes through the SAME custom compositor:
+            // the plain AV composition path places the identity-transform
+            // clip at a different position than CustomVideoCompositor (its
+            // source lands at the CI origin), so a plain input pass would
+            // crop a different region than the stabilized pass. An EMPTY
+            // plan ("analyzed, nothing to correct" — its documented
+            // meaning) triggers the custom compositor while the warp
+            // branch skips empty plans: pixel-identical to unstabilized,
+            // identical placement to the stabilized pass. The DoD then
+            // measures exactly the warp's effect.
+            guard let firstVideoClip = currentProject.timeline.tracks
+                .first(where: { $0.kind == .video })?.clips.first else {
+                throw NSError(domain: "G24", code: 4, userInfo: [NSLocalizedDescriptionKey: "no video clip in timeline"])
             }
-            dump.frameCount = lumaFrames.count
+            let stabilizedClipID = firstVideoClip.id
+            var emptyPlanProject = currentProject
+            for trackIndex in emptyPlanProject.timeline.tracks.indices
+            where emptyPlanProject.timeline.tracks[trackIndex].kind == .video {
+                for clipIndex in emptyPlanProject.timeline.tracks[trackIndex].clips.indices
+                where emptyPlanProject.timeline.tracks[trackIndex].clips[clipIndex].id == stabilizedClipID {
+                    emptyPlanProject.timeline.tracks[trackIndex].clips[clipIndex].stabilization =
+                        StabilizationPlan(frameRate: fps, corrections: [])
+                }
+            }
+            await apply(ReplaceProjectCommand(project: emptyPlanProject))
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(
+                timeoutSeconds: 30,
+                expectedGeneration: playbackEngine.currentCompositionGeneration
+            )
+            guard playbackEngine.playerItem != nil else {
+                throw NSError(domain: "G24", code: 2, userInfo: [NSLocalizedDescriptionKey: "composition not ready (\(playbackEngine.lastCompositionError ?? "no item"))"])
+            }
+            report("stabilize_checkpoint stage=imported")
 
-            // Luminance-jump fallback for scene change detection.
-            if detectedTimes.isEmpty, lumaFrames.count > 2 {
+            // 3. Render the UNSTABILIZED frames through the real compositor.
+            //    Analysis runs at the canvas (= source) resolution.
+            let analysisWidth = max(16, Int(sourceSize.width.rounded()))
+            let analysisHeight = max(16, Int(sourceSize.height.rounded()))
+            let totalFrames = max(1, min(120, Int(currentProject.timeline.duration * fps)))
+            let inputLuma = try await renderStabilizationLumaFrames(count: totalFrames, fps: fps, width: analysisWidth, height: analysisHeight, tag: "input")
+            dump.frameCount = inputLuma.count
+            guard inputLuma.count > 10 else {
+                throw NSError(domain: "G24", code: 3, userInfo: [NSLocalizedDescriptionKey: "insufficient rendered frames (\(inputLuma.count))"])
+            }
+
+            // Luminance-jump fallback for scene change detection, on the
+            // rendered frames (the stabilization math consumes TIMES, not
+            // the provider itself).
+            if detectedTimes.isEmpty {
                 var previousMean: Double = 0
-                for (index, luma) in lumaFrames.enumerated() {
+                for (index, luma) in inputLuma.enumerated() {
                     let mean = luma.reduce(0.0) { acc, v in acc + Double(v) } / Double(max(luma.count, 1))
                     if index > 0, abs(mean - previousMean) > 30 {
                         detectedTimes.append(Double(index) / fps)
@@ -3204,31 +3351,33 @@ extension EditorViewModel {
                 dump.sceneChangeTimes = detectedTimes
                 dump.sceneCutDetected = detectedTimes.isEmpty == false
             }
+            report("stabilize_checkpoint stage=input_render count=\(inputLuma.count)")
 
-            guard lumaFrames.count > 10 else {
-                throw NSError(domain: "G24", code: 3, userInfo: [NSLocalizedDescriptionKey: "insufficient frames (\(lumaFrames.count))"])
-            }
-            report("stabilize_checkpoint stage=frames count=\(lumaFrames.count)")
+            // 4. Analysis on the rendered pixels: registration → positions
+            //    → smoothing → corrections, normalized to frame fractions
+            //    so the plan applies at the compositor's source extent.
+            let frameWidth = analysisWidth
+            let frameHeight = analysisHeight
+            let diagonal = (Double(frameWidth * frameWidth + frameHeight * frameHeight)).squareRoot()
 
-            // 3. Registration.
             var registrations: [StabilizationRegistration.RegistrationResult] = []
-            for i in 1..<lumaFrames.count {
-                let reg = StabilizationRegistration.estimateTranslation(
-                    previous: lumaFrames[i - 1],
-                    current: lumaFrames[i],
+            for i in 1..<inputLuma.count {
+                registrations.append(StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[i - 1],
+                    current: inputLuma[i],
                     width: frameWidth,
                     height: frameHeight
-                )
-                registrations.append(reg)
+                ))
             }
-
-            // 4. Accumulate frame-to-frame translations into POSITIONS
-            //    (the camera shake signal), then smooth the POSITIONS —
-            //    smoothing velocities averages the derivative, which
-            //    doesn't reduce the shake.
             var positions: [StabilizationRegistration.RegistrationResult] = []
             var accumulatedX: Double = 0
             var accumulatedY: Double = 0
+            // Seed FRAME 0's position (the origin) BEFORE accumulating:
+            // without it, positions[0] is the 0→1 displacement — every
+            // correction lands one frame late, and the warp partially
+            // DOUBLES the jitter instead of canceling it (measured: ratio
+            // 1.19 with the shift, 0.35 with correct pairing).
+            positions.append(.init(dx: 0, dy: 0, confidence: 1))
             for reg in registrations {
                 accumulatedX += reg.dx
                 accumulatedY += reg.dy
@@ -3236,39 +3385,178 @@ extension EditorViewModel {
             }
             let smoothedPositions = StabilizationRegistration.smooth(positions, window: 7)
 
-            // 5. DoD measurement — the correct model: the SHAKE is the
-            //    deviation of each raw position from the smoothed path.
-            //    The CORRECTION warps toward the smoothed path (clamped by
-            //    the crop budget), and the residual is what's left.
-            let diagonal = (Double(frameWidth * frameWidth + frameHeight * frameHeight)).squareRoot()
-
-            // Input shake = |raw - smoothed| (how far the camera is from
-            // the smooth path at each frame).
-            let inputShakes = (0..<positions.count).map { i in
-                let dx = positions[i].dx - smoothedPositions[i].dx
-                let dy = positions[i].dy - smoothedPositions[i].dy
-                return (dx * dx + dy * dy).squareRoot()
-            }
-
-            // The correction warps by (smoothed - raw), clamped at 15%.
-            let corrections = (0..<positions.count).map { i -> (dx: Double, dy: Double, cropFraction: Double) in
+            let planCorrections: [StabilizationPlan.Correction] = positions.indices.map { i in
                 let warpDx = smoothedPositions[i].dx - positions[i].dx
                 let warpDy = smoothedPositions[i].dy - positions[i].dy
                 let magnitude = (warpDx * warpDx + warpDy * warpDy).squareRoot()
                 let normalized = magnitude / diagonal
                 let crop = min(normalized, 0.15)
                 let scale = magnitude > 0 ? crop / normalized : 0
-                return (dx: warpDx * scale, dy: warpDy * scale, cropFraction: crop)
+                return StabilizationPlan.Correction(
+                    dx: warpDx * scale / Double(frameWidth),
+                    dy: warpDy * scale / Double(frameHeight),
+                    cropFraction: crop,
+                    // The correction derives from the SMOOTHED path, so its
+                    // reliability is the window-averaged confidence — a
+                    // single low-texture registration inside a confident
+                    // stretch must not zero that frame's correction (the
+                    // bypass alternation added ~4px jumps and pushed the
+                    // residual ABOVE the input; measured ratio 1.21).
+                    confidence: smoothedPositions[i].confidence
+                )
+            }
+            let plan = StabilizationPlan(frameRate: fps, corrections: planCorrections)
+            let maxTranslation = plan.maxNormalizedTranslation
+            dump.planCorrections = planCorrections.count
+            let confidences = planCorrections.map(\.confidence).sorted()
+            if !confidences.isEmpty {
+                dump.planConfidenceMin = confidences.first ?? 0
+                dump.planConfidenceMedian = confidences[confidences.count / 2]
+                dump.planConfidenceMean = confidences.reduce(0, +) / Double(confidences.count)
+                dump.planConfidenceMax = confidences.last ?? 0
+            }
+            dump.coverScale = 1 + 2 * max(maxTranslation.x, maxTranslation.y)
+            report("stabilize_checkpoint stage=plan corrections=\(planCorrections.count)")
+
+            // 5. Replace the empty plan with the REAL one — same session
+            //    route, so a late session-driven rebuild cannot drop it.
+            //    The compositor consumes it via CustomCompositionClipEffect.
+            var stabilizedProject = currentProject
+            for trackIndex in stabilizedProject.timeline.tracks.indices
+            where stabilizedProject.timeline.tracks[trackIndex].kind == .video {
+                for clipIndex in stabilizedProject.timeline.tracks[trackIndex].clips.indices
+                where stabilizedProject.timeline.tracks[trackIndex].clips[clipIndex].id == stabilizedClipID {
+                    stabilizedProject.timeline.tracks[trackIndex].clips[clipIndex].stabilization = plan
+                }
+            }
+            await apply(ReplaceProjectCommand(project: stabilizedProject))
+            // Same generation pin as the first rebuild — without it the wait
+            // can pass on the PREVIOUS item and the "stabilized" render
+            // would silently re-render the unstabilized composition (the
+            // exact failure the first #9 gate run caught: ratio 1.000).
+            try await waitForCompositionReady(
+                timeoutSeconds: 30,
+                expectedGeneration: playbackEngine.currentCompositionGeneration
+            )
+            guard playbackEngine.playerItem != nil,
+                  playbackEngine.lastCompositionError == nil else {
+                throw NSError(domain: "G24", code: 5, userInfo: [NSLocalizedDescriptionKey: "stabilized composition not ready (\(playbackEngine.lastCompositionError ?? "none"))"])
+            }
+            report("stabilize_checkpoint stage=attached")
+
+            // 6. Render the STABILIZED frames through the same path.
+            let stabilizedLuma = try await renderStabilizationLumaFrames(count: totalFrames, fps: fps, width: analysisWidth, height: analysisHeight, tag: "stab")
+            dump.stabilizedFrameCount = stabilizedLuma.count
+            guard stabilizedLuma.count > 10 else {
+                throw NSError(domain: "G24", code: 6, userInfo: [NSLocalizedDescriptionKey: "insufficient stabilized frames (\(stabilizedLuma.count))"])
+            }
+            let renderCounts = CustomVideoCompositor.takeStabilizationCounts()
+            dump.renderBypassed = renderCounts.bypassed
+            dump.renderWarpApplied = renderCounts.applied
+            // The wiring assertion itself (#9): a plan attached to the clip
+            // MUST reach the compositor. Zero applications means the path
+            // Clip.stabilization → CustomCompositionClipEffect → warp broke
+            // somewhere — fail loudly instead of measuring an unstabilized
+            // render and calling it residual.
+            guard dump.renderWarpApplied > 0 else {
+                throw NSError(domain: "G24", code: 9, userInfo: [NSLocalizedDescriptionKey: "stabilization plan never reached the compositor (warp_applied=0)"])
+            }
+            report("stabilize_checkpoint stage=stabilized_render count=\(stabilizedLuma.count) warp_applied=\(renderCounts.applied) bypassed=\(renderCounts.bypassed)")
+
+            // Offline-analysis artifact: dump the raw luma frames of BOTH
+            // passes plus the plan, so alignment/gain analysis can iterate
+            // in a script instead of a full app rebuild per hypothesis.
+            if let lumaDir = environment["MOVIECUT_UITEST_STABILIZE_LUMA_DIR"], !lumaDir.isEmpty {
+                try? FileManager.default.createDirectory(atPath: lumaDir, withIntermediateDirectories: true)
+                func writeFrames(_ frames: [[UInt8]], name: String) {
+                    let data = frames.reduce(into: Data()) { $0.append(contentsOf: $1) }
+                    try? data.write(to: URL(fileURLWithPath: lumaDir).appendingPathComponent(name))
+                }
+                writeFrames(inputLuma, name: "input.bin")
+                writeFrames(stabilizedLuma, name: "stab.bin")
+                struct PlanDump: Codable {
+                    var frameRate: Double
+                    var width: Int
+                    var height: Int
+                    var corrections: [[String: Double]]
+                }
+                let planDump = PlanDump(
+                    frameRate: fps,
+                    width: analysisWidth,
+                    height: analysisHeight,
+                    corrections: planCorrections.map {
+                        ["dx": $0.dx, "dy": $0.dy, "crop": $0.cropFraction, "conf": $0.confidence]
+                    }
+                )
+                if let encoded = try? JSONEncoder().encode(planDump) {
+                    try? encoded.write(to: URL(fileURLWithPath: lumaDir).appendingPathComponent("plan.json"))
+                }
             }
 
-            // Residual = |(raw + correction) - smoothed| — what shake is
-            // left after the warp.
-            let residualShakes = (0..<positions.count).map { i in
-                let correctedX = positions[i].dx + corrections[i].dx
-                let correctedY = positions[i].dy + corrections[i].dy
-                let dx = correctedX - smoothedPositions[i].dx
-                let dy = correctedY - smoothedPositions[i].dy
-                return (dx * dx + dy * dy).squareRoot()
+            var appliedByK: [Int: (dx: Double, dy: Double)] = [:]
+            for k in stride(from: 15, to: min(inputLuma.count - 1, stabilizedLuma.count) - 1, by: 5) {
+                guard let intendedProbe = plan.correction(atLocalTime: Double(k) / fps),
+                      intendedProbe.confidence >= StabilizationWarpProcessor.confidenceBypassThreshold else { continue }
+                let applied = StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[k],
+                    current: stabilizedLuma[k],
+                    width: analysisWidth,
+                    height: analysisHeight
+                )
+                appliedByK[k] = (applied.dx, applied.dy)
+            }
+            var dotX = 0.0
+            var dotY = 0.0
+            var normX = 0.0
+            var normY = 0.0
+            var samples = 0
+            for (k, applied) in appliedByK {
+                guard k < planCorrections.count else { continue }
+                let intendedDx = planCorrections[k].dx * Double(analysisWidth)
+                let intendedDy = planCorrections[k].dy * Double(analysisHeight)
+                guard abs(intendedDx) + abs(intendedDy) > 1.0 else { continue }
+                dotX += applied.dx * intendedDx
+                dotY += applied.dy * intendedDy
+                normX += intendedDx * intendedDx
+                normY += intendedDy * intendedDy
+                samples += 1
+            }
+            if samples > 0, normX > 1.0e-9 {
+                dump.appliedVsIntendedDx = dotX / normX
+            }
+            if samples > 0, normY > 1.0e-9 {
+                dump.appliedVsIntendedDy = dotY / normY
+            }
+
+            // 7. DoD on real pixels. INPUT shake: the input render's own
+            //    self-relative deviation. RESIDUAL shake: the stabilized
+            //    output's content position = input position + the warp the
+            //    render APPLIED, where the applied warp is measured per
+            //    frame by registering the stabilized render against the
+            //    input render (their mutual translation IS the applied
+            //    warp — measured 0.59px median error). Self-registering
+            //    the stabilized frames instead RANDOM-WALKS: each warp
+            //    translates by a different sub-pixel phase, so the
+            //    resampled fine texture decorrelates between consecutive
+            //    stabilized frames and per-step errors accumulate
+            //    (measured: 6px drift from the exact positions).
+            let inputPositions = stabilizationAccumulatedPositions(
+                lumaFrames: inputLuma, width: analysisWidth, height: analysisHeight
+            )
+            var correctedPositions: [(x: Double, y: Double)] = []
+            for k in 0..<inputPositions.count where k < stabilizedLuma.count {
+                let applied = StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[k],
+                    current: stabilizedLuma[k],
+                    width: analysisWidth,
+                    height: analysisHeight
+                )
+                correctedPositions.append((inputPositions[k].x + applied.dx, inputPositions[k].y + applied.dy))
+            }
+            let inputShakes = stabilizationJitterDeviations(positions: inputPositions)
+            let residualShakes = stabilizationJitterDeviations(positions: correctedPositions)
+            guard !inputShakes.isEmpty, !residualShakes.isEmpty else {
+                throw NSError(domain: "G24", code: 7, userInfo: [NSLocalizedDescriptionKey: "jitter analysis produced no samples"])
             }
 
             let inputFrames = StabilizationSegmentation.frames(
@@ -3285,7 +3573,7 @@ extension EditorViewModel {
                 input: inputFrames,
                 residual: residualFrames,
                 severeThreshold: 5.0,
-                cropFractions: corrections.map(\.cropFraction)
+                cropFractions: planCorrections.map(\.cropFraction)
             )
 
             dump.inputMedian = metricsReport.inputShakeMedian
@@ -3296,7 +3584,11 @@ extension EditorViewModel {
             dump.sceneCutErrors = metricsReport.sceneCutErrors
             dump.meetsDoD = metricsReport.meetsDoD()
 
-            report("stabilize_done frames=\(dump.frameCount) scene_cut=\(dump.sceneCutDetected ? 1 : 0) input=\(String(format: "%.2f", dump.inputMedian)) residual=\(String(format: "%.2f", dump.residualMedian)) ratio=\(String(format: "%.3f", dump.reductionRatio)) crop=\(String(format: "%.3f", dump.cropMedian)) wobble=\(String(format: "%.3f", dump.severeWobbleFraction)) cut_err=\(dump.sceneCutErrors) dod=\(dump.meetsDoD ? 1 : 0)")
+            guard dump.inputMedian >= 0.5 else {
+                throw NSError(domain: "G24", code: 8, userInfo: [NSLocalizedDescriptionKey: "no measurable shake in the unstabilized render (inputMedian=\(dump.inputMedian)) — render path broken?"])
+            }
+
+            report("stabilize_done frames=\(dump.frameCount) stab_frames=\(dump.stabilizedFrameCount) scene_cut=\(dump.sceneCutDetected ? 1 : 0) input=\(String(format: "%.2f", dump.inputMedian)) residual=\(String(format: "%.2f", dump.residualMedian)) ratio=\(String(format: "%.3f", dump.reductionRatio)) crop=\(String(format: "%.3f", dump.cropMedian)) wobble=\(String(format: "%.3f", dump.severeWobbleFraction)) cut_err=\(dump.sceneCutErrors) dod=\(dump.meetsDoD ? 1 : 0) bypassed=\(dump.renderBypassed)")
         } catch {
             dump.error = error.localizedDescription
             report("stabilize_done error=\(error.localizedDescription)")

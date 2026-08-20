@@ -299,6 +299,31 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         request: AVAsynchronousVideoCompositionRequest
     ) -> CIImage {
         var image = image
+        // G-24 (#9): the stabilization warp runs FIRST — the camera-path
+        // correction must see the raw decoded frame before crop/color/
+        // transform touch it. Same contract as the Mac compositor: dy
+        // negates (analysis rows are top-down, Core Image's y is up) and
+        // the cover zoom is constant per plan so it never breathes.
+        if let effect,
+           let plan = effect.stabilization,
+           !plan.isEmpty,
+           let correction = plan.correction(
+               atLocalTime: CMTimeSubtract(request.compositionTime, effect.timeRange.start).seconds
+           ) {
+            let extent = image.extent
+            let maxTranslation = plan.maxNormalizedTranslation
+            let (warped, _) = StabilizationWarpProcessor.apply(
+                image,
+                correction: (
+                    dx: correction.dx * Double(extent.width),
+                    dy: -correction.dy * Double(extent.height),
+                    cropFraction: correction.cropFraction
+                ),
+                confidence: correction.confidence,
+                coverScale: 1 + 2 * max(maxTranslation.x, maxTranslation.y)
+            )
+            image = warped
+        }
         // Crop runs first so every downstream processor (visual effects,
         // color, chroma key, mask, transform) sees the cropped region — the
         // order a user perceives in the inspector (G-23). Shared processor,

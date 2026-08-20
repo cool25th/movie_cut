@@ -65,6 +65,8 @@ public enum StabilizationRegistration {
         let patchX = (width - patchWidth) / 2
         let patchY = (height - patchHeight) / 2
 
+        let axisSpan = 2 * searchRadius + 1
+        var scores = [Double](repeating: .infinity, count: axisSpan * axisSpan)
         var bestScore = Double.infinity
         var bestDx = 0
         var bestDy = 0
@@ -93,6 +95,7 @@ public enum StabilizationRegistration {
                 }
                 guard count > 0 else { continue }
                 let normalized = score / Double(count)
+                scores[(dy + searchRadius) * axisSpan + (dx + searchRadius)] = normalized
                 if dx == 0 && dy == 0 {
                     baselineScore = normalized
                 }
@@ -108,14 +111,51 @@ public enum StabilizationRegistration {
             return RegistrationResult(dx: 0, dy: 0, confidence: 0)
         }
 
-        // Confidence: how much better the best match is than the zero
-        // offset, capped at 1. A perfect alignment scores near 0.
+        // Sub-pixel refinement: parabolic fit through the SAD minimum and
+        // its two axial neighbors (scores the search already computed).
+        // Without it the estimate quantizes to whole pixels — a ±1px noise
+        // floor that dominates small-amplitude wobble measurements (the
+        // #9 real-render gate exposed exactly that). Falls back to the
+        // integer minimum whenever a neighbor is missing or the parabola
+        // is degenerate (e.g. identical frames: all scores equal).
+        func refinedOffset(along offset: Int, center: Int, stride: Int) -> Double {
+            let minus = center - stride
+            let plus = center + stride
+            guard minus >= 0, plus < scores.count else { return Double(offset) }
+            let s0 = scores[center]
+            let sm = scores[minus]
+            let sp = scores[plus]
+            // A PERFECT integer match (SAD 0) is exact — interpolating
+            // away from it would invent displacement for identical frames.
+            guard s0 > 0, s0.isFinite, sm.isFinite, sp.isFinite else { return Double(offset) }
+            let denominator = sm - 2 * s0 + sp
+            guard abs(denominator) > 1.0e-9 else { return Double(offset) }
+            let delta = 0.5 * (sm - sp) / denominator
+            guard delta.isFinite else { return Double(offset) }
+            return Double(offset) + min(max(delta, -0.5), 0.5)
+        }
+
+        let bestIndex = (bestDy + searchRadius) * axisSpan + (bestDx + searchRadius)
+        let refinedDx = refinedOffset(along: bestDx, center: bestIndex, stride: 1)
+        let refinedDy = refinedOffset(along: bestDy, center: bestIndex, stride: axisSpan)
+
+        // Confidence: the RELATIVE improvement of the best match over the
+        // zero offset — how much of the zero-offset mismatch energy the
+        // match removed (1 = perfect alignment, 0 = no offset is better
+        // than zero, i.e. noise without motion). Scale-invariant, unlike
+        // the previous absolute normalization (improvement/30), which made
+        // the value depend on texture contrast: soft-but-trackable content
+        // (blurred noise, median relative confidence 0.9+) scored below
+        // the bypass threshold while the #9 gate measured 62/120 bypasses
+        // on genuinely trackable motion.
         let improvement = baselineScore - bestScore
-        let confidence = min(1.0, max(0.0, improvement / 30.0))
+        let confidence = baselineScore > 1.0e-9
+            ? min(1.0, max(0.0, improvement / baselineScore))
+            : 0
 
         return RegistrationResult(
-            dx: Double(bestDx),
-            dy: Double(bestDy),
+            dx: refinedDx,
+            dy: refinedDy,
             confidence: confidence
         )
     }

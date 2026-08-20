@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,294 테스트).
 
-### 완료 — G-28 브라우저 UI (이번 세션 커밋)
+### 완료 — G-28 브라우저 UI (커밋 5e6e611)
 - **`EffectBrowserView`**(App/Inspector): 검색(이름+태그)·costTier 배지(EffectCostProfile 소비)·즐겨찾기(정렬 우선)·카드 탭 적용(실제 updateSelectedEffects). 태그 18종 exhaustive.
 - **인스펙터 통합**: Effects 섹션 헤더 "Browse" 버튼 + sheet.
 - 정렬: 즐겨찾기 우선→비용 오름차순.

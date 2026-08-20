@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 43 (P2-G24-5 — CI warp 프로세서)
+
+**게이트**: verify_gate 5/5(1,289 테스트 — 신규 4종).
+
+### 완료 — P2-G24-5 (이번 세션 커밋)
+- **`StabilizationWarpProcessor`**(Core/Rendering): confidence fallback 포함 CI 워프. 확신 ≥ 0.15 → CGAffineTransform 평행 이동(extent 이동 검증). 제로 보정 → 비트 항등(CIImage equality). 확신 < 0.15 → 원본 통과(픽셀 동일)+bypassed 플래그(호출자 로그 — DoD fallback 지표).
+- **범위 조정**: 컴포지터 배선은 P2-G24-6 E2E와 함께 — 실제 등록 데이터(Vision)가 흐르는 종단 경로에서만 측정 가능(측정 증거 없는 배선 금지 원칙).
+
+### 다음 회차 인계 — P2-G24-6 (E2E 종단 + DoD)
+1. 하니스 `MOVIECUT_UITEST_STABILIZE=1`: 등록(estimateTranslation)→평활화(smooth)→보정(correction)→워프(StabilizationWarpProcessor)→컴포지터가 소비하는 종단 경로를 앱 컨텍스트에서 구동.
+2. 픽스처 실측 변위로 StabilizationMetrics.report 판정 — DoD: 잔류 50%↓·크롭 ≤15%·워블 ≤3%·장면 전환 0.
+3. SceneChangeProvider도 앱 컨텍스트에서 검증(P2-G24-2에서 이관된 통합 테스트).
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 42 (P2-G24-3 — 등록 + 평활화 + 보정)
 
 **게이트**: verify_gate 5/5(1,285 테스트 — 신규 7종).

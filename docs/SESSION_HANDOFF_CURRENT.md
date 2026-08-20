@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-21 세션 57 (G-26 파라미터 직렬화 — 스펙 §6)
+
+**게이트**: null test PASS(3그래프 · 패리티 −0.02 LU · 드리프트 0샘플) + verify_gate 5/5(1,340).
+
+### 완료 — 마스터 체인 파라미터가 그래프와 함께 직렬된다
+- **스펙 모델**: `AudioGraphMasterBus`에 `masterChain`(전체 파라미터) + `presetAlgorithmVersion`(§6) 추가 + `resolvedMasterChain()`(직렬값 우선·래거시 limiter-only 그래프는 SNS 폴백·둘 다 없으면 미처리).
+- **렌더러 2곳**(오프라인·AVAudioEngine): 하드코딩 `chain: .sns` 폐지 — 스펙의 직렬화 체인 소비. 역직렬화된 그래프는 어디서든 동일 렌더.
+- **프로젝트 저장**: `Project.masterAudioProcessing`(프리셋 이름 — §6의 버전 단위) + 스키마 v8(additive no-op 마이그레이션).
+- **빌더**: 프리셋 → masterBus 전개(체인 파라미터 + 프리셋 버전 + 리미터 지연 선언[5ms 룩어헤드]). **발견**: 빌더가 masterBus를 아예 설정하지 않아 제품 경로에서 마스터 체인이 실행조차 되지 않았음(테스트만 limiter 선언) — 이제 프로젝트 프리셋이 전체 경로를 연다.
+- **실측 테스트 6종**: 왕복(버스·프로젝트)·우선순위(래거시 폴백)·빌더 전개·**변경된 직렬 체인(realpeak 차이) 소비 검증** — #8 결함 부류(호출 없는 배선) 재발 방지.
+
+### 다음 회차 — G-28 메모리 실측
+`EffectCostProfile.peakMemoryMegabytes`가 `physicalMemory/1000` placeholder — 실측(프로세스 풋프린트 샘플링)으로 교체.
+
 ## 2026-08-20 세션 56 (코드 리뷰 결함 #9 — G-24 warp 렌더 체인 통합)
 
 **게이트**: G-24 E2E **2회 연속 PASS — 실측 ratio 0.348/0.342 (입력 4.24px → 잔여 1.47px), crop 0.006, 심각 워블 0.000, 장면 전환 오류 0, 적용 게인 1.008/1.019** + verify_gate 5/5(1,335) + W 29/29=100% 무회귀.

@@ -20,6 +20,7 @@ v1 출시 검증을 위한 최소 두 등급. 절대값은 장비에 따라 조�
 |---|---|---|---|---|
 | **메모리 피크** | 4 GB 미만 | 4K Debug 237 MB (5.8%) / Release 225 MB | `perf_4k.sh` `MEM_LIMIT_BYTES=4GB` | 메모리 누수 또는 4K 처리 비정상 |
 | **4K export 실시간 배수** | Release ≤ 1.2× / Debug ≤ 1.5× | Release color 0.99× / Debug color 0.92× | `perf_release.sh`·`perf_4k.sh` `REALTIME_LIMIT` (신규) | 인코딩 파이프라인 회귀 (CoreImage 병목 의심 지점) |
+| **이펙트 렌더 비용** (G-28) | ms/frame ≤ 23 (30fps 안전) — 비용 등급(instant ≤5ms / moderate ≤15ms / heavy >15ms) | **프로파일러**: `EffectCostProfiler.measureAllBuiltIns()` — 1080p 참조 프레임·중앙값·GPU/CPU 구분·Codable | `EffectCostProfiler` + 단위 테스트(전 빌트인 유한·비음수) | 이펙트 브라우저의 검색/랭킹·프리뷰 프록시 강등 판정 |
 | **1080p 단일트랙 프리뷰** | 30 fps 유지 | 5.51 ms/frame → 182 fps (33% of 60fps 예산) | signpost `playback.buildComposition` + 수동 측정 | 프리뷰 렌더 회귀 |
 | **4K 프리뷰** | 자동 프록시 전환 또는 드롭률 < 5% | 단계 강등: `.fair` 프리뷰 1/2 클램프 → `.serious`+ 프록시 (`effectivePreviewQuality`) | `ThermalProxyDowngradeTests`(정책) + signpost | 열 부하 시 프리뷰 끊김 방어 회귀 |
 | **타임라인 seek 응답** | 중앙값 100 ms 이하 | **실측 (2026-08-19, 게이트 2회): 소형(2s) p50 0.05–0.06 ms / p95 0.06–0.17 ms·10분 fixture p50 0.05–0.06 ms / p95 0.08–0.10 ms — 목표의 ~0.1%.** 종전 "장형 재측정 필요" 주의 해소 | `scripts/run_latency_baseline.sh` (**위반 차단 강제 — 기본 enforce**, 진단 시 `--no-enforce`) | seek 지연 회귀 |

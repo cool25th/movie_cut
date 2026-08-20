@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 46 (G-28 Inc 1 — EffectCostProfile 스키마 + 측정 파이프라인)
+
+**게이트**: verify_gate 5/5(1,294 테스트 — 신규 5종).
+
+### 완료 — G-28 전제 (이번 세션 커밋)
+- **`EffectCostProfile`**: ms/frame(중앙값)·peakMemory·gpu/cpu·realTimeSafe(≤23ms)·costTier(instant/moderate/heavy)·measurementVersion — Codable. 브라우저의 검색/랭킹/배지 데이터 원천.
+- **`EffectCostProfiler`**: 참조 프레임(1080p gradient+stripes)에서 전 빌트인 이펙트의 실측 프로파일 생성 — 워밍업 후 중앙값. 전 유형 유한·비음수 단위 테스트.
+- PERFORMANCE_SLO 신설 행.
+
+### 다음 회차 인계 — G-28 Inc 2 (브라우저 UI)
+1. 검색·미리보기·즐겨찾기·파라미터 편집 — costTier 배지 포함(EffectCostProfile 소비).
+2. KPI 측정 창구: 검색 성공률·재사용률(하니스 env).
+3. 이후 G-26(Apple AU 오디오 B). 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 45 (P2-G24-6b — 실제 움블 픽스처 + DoD 활성화 · **G-24 완결**)
 
 **게이트**: run_g24_stabilize_gate.sh **2회 연속 DoD PASS** + verify_gate 5/5.

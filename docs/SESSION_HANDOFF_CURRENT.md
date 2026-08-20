@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,325) + null test·W 스위트 무회귀.
 
-### 완료 — G-28 KPI 모델 + 회귀 (이번 세션 커밋)
+### 완료 — G-28 KPI 모델 + 회귀 (커밋 443ca69)
 - **회귀**: G-26 그래프 노드 변경 후 null test(3그래프 통과·패리티 −0.02 LU)·W 스위트(29/29=100%) 무회귀.
 - **`EffectBrowserKPI`**(Core/Rendering): 검색 성공률·재사용률 — "개수 KPI 폐지"의 대체. meetsTargets·Codable·기록 API.
 - 테스트 5종.

@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,289) + run_g24_stabilize_gate.sh(파이프라인 PASS — DoD 보고·비게이트).
 
-### 완료 — P2-G24-6 (이번 세션 커밋)
+### 완료 — P2-G24-6 (커밋 4a056bd)
 - **하니스 STABILIZE env**: SceneChangeProvider→프레임 추출(120 luma)→등록(SAD)→평활화→보정→DoD 판정 — **종단 파이프라인 앱 컨텍스트에서 실증**(ratio 0.25·error=none).
 - **`run_g24_stabilize_gate.sh`**: 실행·메트릭 보고(JSON 아티팩트).
 - **픽스처 결함 2건 발견(정직한 기록)**: (a) 경계 검출 실패 — testsrc→smptebars 크롭 후 유사 휘도 (b) 실제 움블 부재 — testsrc의 카운터만 모션. DoD 보고는 하지만 게이트하지 않음.

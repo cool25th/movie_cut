@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,303 테스트 — 신규 9종).
 
-### 완료 — G-26 컴프레서 (이번 세션 커밋)
+### 완료 — G-26 컴프레서 (커밋 1af3f6a)
 - **`AudioGraphCompressor`**(Core/Audio): 피드포워드 컴프레서 — threshold/ratio/attack/release/makeup. 정적 전달곡선(`staticOutputDb`) + 동적 PCM 적용(`apply`). 그래프의 자리 노드(nodeKind .compressor)가 스키마 불변으로 구현을 받음.
 - 테스트 9종: 무릎 통일성·ratio 압축·메이크업·극단 ratio·실측 감쇠(≥6dB)·조용한 통일·빈 안전·클램프.
 

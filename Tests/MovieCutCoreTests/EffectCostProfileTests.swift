@@ -56,4 +56,31 @@ struct EffectCostProfileTests {
             #expect(profile.millisecondsPerFrame.isFinite, "\(profile.effectType.rawValue) must be finite")
         }
     }
+
+    // MARK: - G-28 real memory measurement
+
+    @Test("the footprint probe reads a plausible physical footprint")
+    func footprintProbeSanity() throws {
+        let footprint = try #require(EffectCostProfiler.currentFootprintBytes())
+        #expect(footprint > 0)
+        // The footprint can never exceed the machine's physical memory.
+        #expect(Double(footprint) < Double(ProcessInfo.processInfo.physicalMemory))
+    }
+
+    @Test("measured memory is the differential footprint, never the physicalMemory placeholder")
+    func measuredMemoryIsNotThePlaceholder() {
+        let profile = EffectCostProfiler.measure(
+            effect: Effect(type: .blur, parameters: ["radius": 40]),
+            iterations: 5
+        )
+        #expect(profile.millisecondsPerFrame > 0)
+        #expect(profile.peakMemoryMegabytes >= 0)
+        #expect(profile.peakMemoryMegabytes.isFinite)
+        // The retired placeholder: physicalMemory/1e6 × 0.001 MB, IDENTICAL
+        // for every effect. A measured differential hitting that exact
+        // constant would mean the placeholder resurrected.
+        let placeholder = Double(ProcessInfo.processInfo.physicalMemory) / 1_000_000 * 0.001
+        #expect(profile.peakMemoryMegabytes != placeholder,
+                "measured=\(profile.peakMemoryMegabytes) placeholder=\(placeholder)")
+    }
 }

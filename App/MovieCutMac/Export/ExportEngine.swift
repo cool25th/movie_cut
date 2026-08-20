@@ -238,14 +238,19 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// package owns. nil when the project has no audio at all.
     private func renderGraphAudio(
         for project: Project,
-        audioProcessing: ClipAudioProcessingOptions
+        audioProcessing: ClipAudioProcessingOptions,
+        flattenedTracks: [Track]? = nil
     ) async throws -> URL? {
         let mix: AudioGraphSourceAudio
         do {
+            // Code-review #5: pass the FLATTENED tracks (compound clips
+            // expanded) so their audio isn't lost — the builder skips
+            // container clips (no assetId).
             mix = try await GraphMixRenderer.renderMix(
                 project: project,
                 eqPresetsByClipId: audioProcessing.eqPresets,
-                trimToAudibleSpan: true
+                trimToAudibleSpan: true,
+                tracks: flattenedTracks
             )
         } catch GraphMixRenderer.RenderError.noAudio {
             return nil
@@ -594,7 +599,14 @@ final class ExportEngine: FlattenedTimelineConsumer {
         }
 
         let transitionEffects = makeTransitionEffects(from: clips)
-        let usesCustomVideoCompositor = clips.contains { clip in
+        // Code-review #6: an adjustment layer needs the custom compositor
+        // — the adjustment chain applies there. Without this check, a
+        // project whose only custom feature is an adjustment layer takes
+        // the plain instruction path and the adjustment is dropped.
+        let hasAdjustmentLayer = project.timeline.tracks
+            .flatMap(\.clips)
+            .contains { $0.isAdjustmentLayer }
+        let usesCustomVideoCompositor = hasAdjustmentLayer || clips.contains { clip in
             clip.colorCorrection != nil
                 || clip.colorGrade != nil
                 || clip.textContent != nil
@@ -722,12 +734,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             // G-03: one instruction spans the whole timeline today, so the
             // adjustment chain is the full-timeline set, ordered bottom-first.
             // (Range granularity arrives with per-range instructions.)
+            // Code-review #7: ALL adjustment clips are attached (not just
+            // those active at t=0) — the compositor's per-frame evaluation
+            // is where range filtering belongs, not here.
             let videoTracks = project.timeline.tracks.filter { $0.kind == .video }
-            let adjustmentClips: [Clip] = AdjustmentLayerChain.activeAdjustments(
-                at: 0, in: videoTracks
-            ).isEmpty
-                ? []
-                : videoTracks
+            let adjustmentClips: [Clip] = videoTracks
                     .sorted { $0.zIndex < $1.zIndex }
                     .flatMap(\.clips)
                     .filter(\.isAdjustmentLayer)
@@ -1425,33 +1436,39 @@ final class ExportEngine: FlattenedTimelineConsumer {
             // the graph AAC parks forever (measured); each side alone is
             // clean. The graph already applied every audio edit, so no
             // audioMix is needed here either.
-            var audioTracks: [AVAssetTrack] = []
-            if let graphAudioURL = exportPackage.graphAudioURL {
-                let graphAudioAsset = AVURLAsset(url: graphAudioURL)
-                audioTracks = (try? await graphAudioAsset.loadTracks(withMediaType: .audio)) ?? []
-            }
+            // Code-review #3: the graph AAC is a SEPARATE asset, so it
+            // needs its own AVAssetReader — the composition's reader
+            // cannot add outputs for tracks it doesn't own (canAdd
+            // returns false and audio was silently skipped).
+            var audioReader: AVAssetReader?
             var audioReaderOutput: AVAssetReaderAudioMixOutput?
             var writerAudioInput: AVAssetWriterInput?
-            if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
-                let readerOutput = AVAssetReaderAudioMixOutput(
-                    audioTracks: audioTracks,
-                    audioSettings: [
-                        AVFormatIDKey: kAudioFormatLinearPCM,
-                        AVLinearPCMBitDepthKey: 16,
-                        AVLinearPCMIsFloatKey: false,
-                        AVLinearPCMIsBigEndianKey: false,
-                        AVLinearPCMIsNonInterleaved: false
-                    ]
-                )
-                if reader.canAdd(readerOutput) {
-                    reader.add(readerOutput)
-                    audioReaderOutput = readerOutput
+            if let graphAudioURL = exportPackage.graphAudioURL {
+                let graphAudioAsset = AVURLAsset(url: graphAudioURL)
+                let audioTracks = (try? await graphAudioAsset.loadTracks(withMediaType: .audio)) ?? []
+                if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
+                    let graphAudioReader = try AVAssetReader(asset: graphAudioAsset)
+                    let output = AVAssetReaderAudioMixOutput(
+                        audioTracks: audioTracks,
+                        audioSettings: [
+                            AVFormatIDKey: kAudioFormatLinearPCM,
+                            AVLinearPCMBitDepthKey: 16,
+                            AVLinearPCMIsFloatKey: false,
+                            AVLinearPCMIsBigEndianKey: false,
+                            AVLinearPCMIsNonInterleaved: false
+                        ]
+                    )
+                    if graphAudioReader.canAdd(output) {
+                        graphAudioReader.add(output)
+                        audioReader = graphAudioReader
+                        audioReaderOutput = output
 
-                    let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
-                    input.expectsMediaDataInRealTime = false
-                    if writer.canAdd(input) {
-                        writer.add(input)
-                        writerAudioInput = input
+                        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
+                        input.expectsMediaDataInRealTime = false
+                        if writer.canAdd(input) {
+                            writer.add(input)
+                            writerAudioInput = input
+                        }
                     }
                 }
             }
@@ -1478,6 +1495,13 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
             guard reader.startReading() else {
                 throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            // The graph audio reader is a separate asset — start it
+            // independently (code-review #3).
+            if let audioReader {
+                guard audioReader.startReading() else {
+                    throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
+                }
             }
             guard writer.startWriting() else {
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
@@ -1515,6 +1539,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
             guard reader.status != .failed else {
                 throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            if let audioReader, audioReader.status == .failed {
+                throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
             await finishWriting(UncheckedSendable(writer))

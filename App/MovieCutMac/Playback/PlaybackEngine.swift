@@ -1227,7 +1227,13 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             // it (the same trigger-gap class as the G-23 Inc 1 cropRect bug;
             // reproduced 2026-08-17 with the compositor probe: bg-removal-only
             // project → preview_render_n=0 pre-fix).
-            let usesCustomVideoCompositor = videoClipInstructions.contains { clipInstruction in
+            // Code-review #6: an adjustment layer needs the custom
+            // compositor — the adjustment chain applies there (the
+            // same trigger-gap class as cropRect/keyframes).
+            let hasAdjustmentLayer = project.timeline.tracks
+                .flatMap(\.clips)
+                .contains { $0.isAdjustmentLayer }
+            let usesCustomVideoCompositor = hasAdjustmentLayer || videoClipInstructions.contains { clipInstruction in
                 clipInstruction.colorCorrection != nil
                     || clipInstruction.colorGrade != nil
                     || clipInstruction.chromaKey != nil

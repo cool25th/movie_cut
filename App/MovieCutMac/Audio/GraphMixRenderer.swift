@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreMedia
 import Foundation
 import MovieCutCore
@@ -51,17 +52,24 @@ enum GraphMixRenderer {
     ///     timeline — the legacy audio-only export's length semantics (the
     ///     composition dropped soloed-out tracks, so its file ended with the
     ///     surviving audio). The meter measures the full timeline.
+    ///   - tracks: the FLATTENED tracks (compound clips expanded — the
+    ///     builder's `tracks` parameter); nil uses `project.timeline.tracks`.
+    ///     Code-review #5: without this, compound container clips (which
+    ///     carry no assetId) are skipped and their audio is lost.
     static func renderMix(
         project: Project,
         graphSampleRate: Double = 48_000,
         eqPresetsByClipId: [UUID: EqualizerPreset],
-        trimToAudibleSpan: Bool = false
+        trimToAudibleSpan: Bool = false,
+        tracks: [Track]? = nil
     ) async throws -> AudioGraphSourceAudio {
+        let renderTracks = tracks ?? project.timeline.tracks
+
         // 1. Derive EQ media per clip — the clip's EFFECTIVE media (§0).
         var derivedByClip: [UUID: URL] = [:]
         var temporaryURLs: [URL] = []
         defer { for url in temporaryURLs { try? FileManager.default.removeItem(at: url) } }
-        for track in project.timeline.tracks {
+        for track in renderTracks {
             for clip in track.clips {
                 guard let assetId = clip.assetId,
                       let asset = project.mediaLibrary.assets[assetId],
@@ -77,10 +85,45 @@ enum GraphMixRenderer {
             }
         }
 
-        // 2. Build the graph (derived media in, effectiveMediaFor wired).
+        // 2. Probe each source's FORMAT (rate/channels — header only, no
+        //    PCM read), then build the graph with correct channel info.
+        //    Code-review #4: without channelCountFor, every strip defaults
+        //    to .stereo and mono sources lose the right channel.
+        var sourceFormats: [UUID: (sampleRate: Double, channels: Int)] = [:]
+        func probeSourceFormat(assetId: UUID) async {
+            guard sourceFormats[assetId] == nil,
+                  let asset = project.mediaLibrary.assets[assetId] else { return }
+            if let file = try? AVAudioFile(forReading: asset.originalURL) {
+                sourceFormats[assetId] = (file.processingFormat.sampleRate, Int(file.processingFormat.channelCount))
+            } else {
+                // Video container — probe via the track's format description.
+                let avAsset = AVURLAsset(url: asset.originalURL)
+                let tracks = (try? await avAsset.loadTracks(withMediaType: .audio)) ?? []
+                if let track = tracks.first,
+                   let desc = try? await track.load(.formatDescriptions).first,
+                   let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
+                    sourceFormats[assetId] = (asbd.pointee.mSampleRate, Int(asbd.pointee.mChannelsPerFrame))
+                }
+            }
+        }
+        for track in renderTracks {
+            for clip in track.clips {
+                if let assetId = clip.assetId {
+                    await probeSourceFormat(assetId: assetId)
+                }
+            }
+        }
+
         let plan = AudioGraphProjectBuilder.build(
             project: project,
+            tracks: renderTracks,
             graphSampleRate: graphSampleRate,
+            decodedSampleRateFor: { sourceId in
+                sourceFormats[sourceId]?.sampleRate
+            },
+            channelCountFor: { sourceId in
+                sourceFormats[sourceId]?.channels
+            },
             effectiveMediaFor: { clip in
                 derivedByClip[clip.id].map {
                     AudioGraphProjectBuilder.EffectiveAudioMedia(
@@ -121,7 +164,7 @@ enum GraphMixRenderer {
             let url = derivedByClip[request.clipId]
                 ?? project.mediaLibrary.assets[request.assetId]?.originalURL
             guard let url else { throw RenderError.assetMissing(request.assetId) }
-            guard let clip = project.timeline.tracks.flatMap(\.clips)
+            guard let clip = renderTracks.flatMap(\.clips)
                 .first(where: { $0.id == request.clipId }) else {
                 throw RenderError.clipMissing(request.clipId)
             }

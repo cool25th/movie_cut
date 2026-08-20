@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 54 (코드 리뷰 결함 #3-#7 수정)
+
+**게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
+
+### 완료 — 결함 5건 수정 (이번 세션 커밋)
+- **#3 라이터 오디오**: 그래프 AAC에 별도 AVAssetReader(교차 자산 canAdd=false로 조용히 스킵되던 것 수정).
+- **#4 모노 채널**: GraphMixRenderer가 소스 포맷 프로브(AVAudioFile/AVAssetTrack 헤더) 후 channelCountFor 전달.
+- **#5 컴파운드**: renderMix가 tracks 파라미터 수신(플래트닝) — 컨테이너 클립의 오디오 복원.
+- **#6 G-03 트리거**: usesCustomVideoCompositor에 hasAdjustmentLayer 추가(양쪽 엔진).
+- **#7 G-03 범위**: at:0 게이트 제거 — 전체 세트 전달.
+
+### 다음 회차 — 결함 #8-#10
+#8(G-26 배선)·#9(G-24 warp 통합)·#10(G-28 프로파일러). 이후 문서 정정.
+
 ## 2026-08-20 세션 53 (코드 리뷰 결함 #1·#2 수정 — 페이드 방향 + 스테레오)
 
 **게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.

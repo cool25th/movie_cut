@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,317 테스트 — 신규 5종).
 
-### 완료 — G-26 마스터 체인 (이번 세션 커밋)
+### 완료 — G-26 마스터 체인 (커밋 4c8f903)
 - **`AudioGraphMasterChain`**(Core/Audio): compressor→limiter→reverb 체인 조합(nil=우회·bypass=비트 항등) + **SNS 프리셋**(§7 "좋은 소리") + **`measureChainEffect`**(입력/출력 LUFS + true-peak — §8 ±0.2LU 데이터).
 - **실측**: 다이나믹 신호에서 SNS 체인이 LUFS 감소·true-peak ≤ −0.5dB 보장·리미터 피크 추가 감소.
 - **G-26 완결** — Inc1(컴프레서)→Inc2(리미터+리버브)→Inc3(체인+프리셋).

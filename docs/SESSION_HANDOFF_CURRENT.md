@@ -7,7 +7,7 @@
 
 **게이트**: run_g24_stabilize_gate.sh **2회 연속 DoD PASS** + verify_gate 5/5.
 
-### 완료 — P2-G24-6b (이번 세션 커밋)
+### 완료 — P2-G24-6b (커밋 6dc3d28)
 - **픽스처**: dark mandelbrot→bright testsrc2(eq ±0.4)+sine 움블 crop — 실제 카메라 흔들림 내장.
 - **측정 모델 근본 수정**: 변위(속도)→**누적 위치**에서 작업 — accumulate→smooth→|raw−smoothed| 입력·correction=(smoothed−raw) 15% 클램프·residual=|(raw+corr)−smoothed|.
 - **장면 전환 폴백**: 프로바이더의 카이제곱이 밝기 전환에도 불응 → 하니스 내장 평균 휘도 점프 폴백.

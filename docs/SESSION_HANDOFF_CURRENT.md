@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,328) + null test PASS + W 29/29=100% 무회귀.
 
-### 완료 — G-26 배선(실제 호출) + G-28 프로파일러 + 리버브 크래시 (이번 세션 커밋)
+### 완료 — G-26 배선(실제 호출) + G-28 프로파일러 + 리버브 크래시 (커밋 b2ffe46)
 - **#8 G-26**: AudioGraphMasterChain.apply가 두 렌더러에서 실제 호출됨(이전: rejection만 제거). 체인 순서 수정: compressor→reverb→limiter(마지막).
 - **리버브 크래시**: 짧은 오디오에서 delayFrames > frameCount 시 Range 치명적 오류 — guard 추가.
 - **#10 G-28**: 참조 프레임 합성 순서 수정(스크라이프가 보임) + 파라미터 키 수정(amount/ev/radius).

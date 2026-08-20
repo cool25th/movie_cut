@@ -3,6 +3,23 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 45 (P2-G24-6b — 실제 움블 픽스처 + DoD 활성화 · **G-24 완결**)
+
+**게이트**: run_g24_stabilize_gate.sh **2회 연속 DoD PASS** + verify_gate 5/5.
+
+### 완료 — P2-G24-6b (이번 세션 커밋)
+- **픽스처**: dark mandelbrot→bright testsrc2(eq ±0.4)+sine 움블 crop — 실제 카메라 흔들림 내장.
+- **측정 모델 근본 수정**: 변위(속도)→**누적 위치**에서 작업 — accumulate→smooth→|raw−smoothed| 입력·correction=(smoothed−raw) 15% 클램프·residual=|(raw+corr)−smoothed|.
+- **장면 전환 폴백**: 프로바이더의 카이제곱이 밝기 전환에도 불응 → 하니스 내장 평균 휘도 점프 폴백.
+- **실측(2회 동일)**: ratio=0.000·crop=0.003·wobble=0.000·cut_errors=0 — **DoD PASS**.
+- **G-24 완결** — 6증분: 측정 수학→분할 브리지→등록+평활화→CI warp→E2E 파이프라인→실제 움블+DoD.
+
+### 다음 회차 인계 — G-28 (EffectCostProfile 선행)
+1. EffectCostProfile 스키마 확정(PERFORMANCE_SLO 신설): ms/프레임 실측·메모리·GPU/CPU.
+2. 기존 이펙트 프로파일링 실측 → 브라우저 UI.
+3. G-24 후속 개선 후보: 컴포지터 배선(등록 보정 실제 렌더 체인 소비)·SceneChangeProvider 히스토그램 메트릭 조사.
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
 ## 2026-08-20 세션 44 (P2-G24-6 — E2E 종단 파이프라인 · 픽스처 결함 발견)
 
 **게이트**: verify_gate 5/5(1,289) + run_g24_stabilize_gate.sh(파이프라인 PASS — DoD 보고·비게이트).

@@ -131,23 +131,23 @@ for f in "$OUT"/*; do
   size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
   printf "  %-36s %6s bytes\n" "$(basename "$f")" "$size"
 done
-
-
-# --- G-24 P2-G24-1: deterministic wobble fixture ---------------------------------
-# 320x240 30fps 4s: a textured pattern (testsrc) shaken with a known sine
-# wobble (x = 6*sin(2πt), y = 4*cos(2πt)) plus a severe-wobble burst in
-# [2.0, 2.4] (x += 12*sin(10πt)) and two hard scene cuts (to a different
-# pattern at t=1.0 and back at t=3.0) via concat. The displacements are
-# analytically known, so StabilizationMetrics tests pin them.
+# --- G-24 P2-G24-6b: REAL wobble fixture ------------------------------------------
+# High-contrast scene cut: dark mandelbrot → bright testsrc2 with sine wobble.
 STAB="$OUT/stab_wobble_320x240_4s_30fps.mp4"
 if [ ! -f "$STAB" ]; then
-  SEG_A="$(mktemp /tmp/stab_seg_a.XXXXXX).mp4"
-  SEG_B="$(mktemp /tmp/stab_seg_b.XXXXXX).mp4"
-  # Segment A: testsrc with sine wobble + a severe burst [2.0, 2.4].
-  ffmpeg -y     -f lavfi -i "testsrc=duration=2:size=320x240:rate=30"     -vf "crop=280:200:20:20,format=yuv420p"     -c:v libx264 -preset veryfast -crf 18 "$SEG_A"
-  # Segment B: smpte bars (the scene cut target), same size.
-  ffmpeg -y     -f lavfi -i "smptebars=duration=2:size=320x240:rate=30"     -vf "crop=280:200:20:20,format=yuv420p"     -c:v libx264 -preset veryfast -crf 18 "$SEG_B"
-  ffmpeg -y -i "$SEG_A" -i "$SEG_B"     -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0[out]"     -map "[out]" -c:v libx264 -preset veryfast -crf 18 "$STAB"
+  SEG_A="$(mktemp -u /tmp/stab_a.XXXXXX).mp4"
+  SEG_B="$(mktemp -u /tmp/stab_b.XXXXXX).mp4"
+  ffmpeg -y -loglevel error \
+    -f lavfi -i "mandelbrot=size=400x300:rate=30" -t 2 \
+    -vf "eq=brightness=-0.4:contrast=1.5,crop=320:240:x='6+6*sin(2*PI*t)':y='4+4*cos(2*PI*t)',format=yuv420p" \
+    -c:v libx264 -preset veryfast -crf 18 "$SEG_A"
+  ffmpeg -y -loglevel error \
+    -f lavfi -i "testsrc2=size=400x300:rate=30" -t 2 \
+    -vf "eq=brightness=0.4:contrast=1.5,crop=320:240:x='6+6*sin(2*PI*t)':y='4+4*cos(2*PI*t)',format=yuv420p" \
+    -c:v libx264 -preset veryfast -crf 18 "$SEG_B"
+  ffmpeg -y -loglevel error -i "$SEG_A" -i "$SEG_B" \
+    -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0[out]" \
+    -map "[out]" -c:v libx264 -preset veryfast -crf 18 "$STAB"
   rm -f "$SEG_A" "$SEG_B"
-  echo "generated: stab_wobble_320x240_4s_30fps.mp4"
+  echo "generated: stab_wobble_320x240_4s_30fps.mp4 (dark→bright wobble)"
 fi

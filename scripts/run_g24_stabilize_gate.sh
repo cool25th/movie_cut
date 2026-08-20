@@ -67,11 +67,8 @@ problems = []
 
 if dump.get("error", "none") != "none":
     problems.append(f"error: {dump['error']}")
-# KNOWN ISSUE (recorded): the fixture's testsrc→smptebars boundary
-# uses similar luminance histograms after cropping — the provider's
-# chi-squared test misses it. The fixture also lacks actual camera
-# wobble (testsrc's counter is its only motion). Both are the next
-# increment's work; the PIPELINE itself is proven end-to-end.
+if not dump.get("sceneCutDetected"):
+    problems.append("scene change not detected in app context")
 if dump.get("frameCount", 0) < 100:
     problems.append(f"insufficient frames: {dump.get('frameCount')}")
 
@@ -89,9 +86,9 @@ print(f"elapsed: {dump.get('elapsedSeconds', 0):.1f}s")
 if problems:
     print(f"FAIL: {'; '.join(problems)}")
     sys.exit(1)
-# DoD verdict reported but not gated yet — the fixture must first
-# carry real wobble. The pipeline (registration→smoothing→metrics) IS
-# the deliverable of this increment.
+if not dump.get("meetsDoD"):
+    print("FAIL: DoD not met")
+    sys.exit(1)
 PY
 
 echo "G-24 STABILIZATION E2E PASS"

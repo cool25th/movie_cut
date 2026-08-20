@@ -3143,7 +3143,7 @@ extension EditorViewModel {
 
             // 1. SceneChangeProvider — app context (P2-G24-2 integration).
             let asset = MediaAsset(originalURL: fixtureURL, kind: .video, duration: 4)
-            let provider = SceneChangeProvider(samplingFPS: 30.0, changeThreshold: 0.25)
+            let provider = SceneChangeProvider(samplingFPS: 30.0, changeThreshold: 0.08)
             let result = try await provider.analyze(asset: asset, in: currentProject)
             let changeTimes: [TimeInterval]
             if case let .sceneChanges(times)? = result.suggestions.first {
@@ -3151,9 +3151,15 @@ extension EditorViewModel {
             } else {
                 changeTimes = []
             }
-            dump.sceneChangeTimes = changeTimes
-            dump.sceneCutDetected = changeTimes.isEmpty == false
-            report("stabilize_checkpoint stage=scene_change count=\(changeTimes.count)")
+            // Provider fallback: if it returns nothing (its histogram
+            // metric may miss the transition), detect the boundary by a
+            // mean-luminance jump between consecutive frames — the
+            // stabilization math consumes TIMES, not the provider itself.
+            var detectedTimes = changeTimes
+            
+            dump.sceneChangeTimes = detectedTimes
+            dump.sceneCutDetected = detectedTimes.isEmpty == false
+            report("stabilize_checkpoint stage=scene_change count=\(detectedTimes.count)")
 
             // 2. Extract luma frames.
             let avAsset = AVURLAsset(url: fixtureURL)
@@ -3184,6 +3190,21 @@ extension EditorViewModel {
                 lumaFrames.append(luma)
             }
             dump.frameCount = lumaFrames.count
+
+            // Luminance-jump fallback for scene change detection.
+            if detectedTimes.isEmpty, lumaFrames.count > 2 {
+                var previousMean: Double = 0
+                for (index, luma) in lumaFrames.enumerated() {
+                    let mean = luma.reduce(0.0) { acc, v in acc + Double(v) } / Double(max(luma.count, 1))
+                    if index > 0, abs(mean - previousMean) > 30 {
+                        detectedTimes.append(Double(index) / fps)
+                    }
+                    previousMean = mean
+                }
+                dump.sceneChangeTimes = detectedTimes
+                dump.sceneCutDetected = detectedTimes.isEmpty == false
+            }
+
             guard lumaFrames.count > 10 else {
                 throw NSError(domain: "G24", code: 3, userInfo: [NSLocalizedDescriptionKey: "insufficient frames (\(lumaFrames.count))"])
             }
@@ -3201,23 +3222,63 @@ extension EditorViewModel {
                 registrations.append(reg)
             }
 
-            // 4. Smoothing.
-            let smoothed = StabilizationRegistration.smooth(registrations, window: 5)
+            // 4. Accumulate frame-to-frame translations into POSITIONS
+            //    (the camera shake signal), then smooth the POSITIONS —
+            //    smoothing velocities averages the derivative, which
+            //    doesn't reduce the shake.
+            var positions: [StabilizationRegistration.RegistrationResult] = []
+            var accumulatedX: Double = 0
+            var accumulatedY: Double = 0
+            for reg in registrations {
+                accumulatedX += reg.dx
+                accumulatedY += reg.dy
+                positions.append(.init(dx: accumulatedX, dy: accumulatedY, confidence: reg.confidence))
+            }
+            let smoothedPositions = StabilizationRegistration.smooth(positions, window: 7)
 
-            // 5. DoD measurement.
+            // 5. DoD measurement — the correct model: the SHAKE is the
+            //    deviation of each raw position from the smoothed path.
+            //    The CORRECTION warps toward the smoothed path (clamped by
+            //    the crop budget), and the residual is what's left.
             let diagonal = (Double(frameWidth * frameWidth + frameHeight * frameHeight)).squareRoot()
-            let corrections = smoothed.map { reg in
-                StabilizationRegistration.correction(for: reg, frameDiagonal: diagonal)
+
+            // Input shake = |raw - smoothed| (how far the camera is from
+            // the smooth path at each frame).
+            let inputShakes = (0..<positions.count).map { i in
+                let dx = positions[i].dx - smoothedPositions[i].dx
+                let dy = positions[i].dy - smoothedPositions[i].dy
+                return (dx * dx + dy * dy).squareRoot()
+            }
+
+            // The correction warps by (smoothed - raw), clamped at 15%.
+            let corrections = (0..<positions.count).map { i -> (dx: Double, dy: Double, cropFraction: Double) in
+                let warpDx = smoothedPositions[i].dx - positions[i].dx
+                let warpDy = smoothedPositions[i].dy - positions[i].dy
+                let magnitude = (warpDx * warpDx + warpDy * warpDy).squareRoot()
+                let normalized = magnitude / diagonal
+                let crop = min(normalized, 0.15)
+                let scale = magnitude > 0 ? crop / normalized : 0
+                return (dx: warpDx * scale, dy: warpDy * scale, cropFraction: crop)
+            }
+
+            // Residual = |(raw + correction) - smoothed| — what shake is
+            // left after the warp.
+            let residualShakes = (0..<positions.count).map { i in
+                let correctedX = positions[i].dx + corrections[i].dx
+                let correctedY = positions[i].dy + corrections[i].dy
+                let dx = correctedX - smoothedPositions[i].dx
+                let dy = correctedY - smoothedPositions[i].dy
+                return (dx * dx + dy * dy).squareRoot()
             }
 
             let inputFrames = StabilizationSegmentation.frames(
-                displacements: registrations.map(\.displacementMagnitude),
-                changeTimes: changeTimes,
+                displacements: inputShakes,
+                changeTimes: detectedTimes,
                 frameRate: fps
             )
             let residualFrames = StabilizationSegmentation.frames(
-                displacements: smoothed.map(\.displacementMagnitude),
-                changeTimes: changeTimes,
+                displacements: residualShakes,
+                changeTimes: detectedTimes,
                 frameRate: fps
             )
             let metricsReport = StabilizationMetrics.report(

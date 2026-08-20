@@ -75,9 +75,7 @@ public enum AudioGraphAVAudioEngineRenderer {
 
         // §5 rejection parity: a graph the pure renderer cannot honor must
         // fail here too, before any engine node is built.
-        if let limiter = spec.masterBus.limiter {
-            throw AudioGraphRenderError.unsupportedNodeKind(limiter.nodeKind)
-        }
+        // G-26: the limiter is now supported (see AudioGraphRendering).
 
         let strips = try resolvedStrips(
             spec: spec, activations: activations, sourceAudio: sourceAudio

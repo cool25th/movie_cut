@@ -167,11 +167,12 @@ struct AudioRenderGraphSpecTests {
     func stage1SupportMatchesSpec() {
         let supported = AudioGraphNodeKind.allCases.filter(\.isStage1Supported)
         #expect(supported == [
-            .channelMapping, .gainFade, .pan, .summing, .ducking, .fader, .meter, .encoder
+            .channelMapping, .gainFade, .pan, .summing, .ducking, .fader, .meter, .encoder,
+            .compressor, .limiter
         ])
         let placeholders = AudioGraphNodeKind.allCases.filter { !$0.isStage1Supported }
         #expect(placeholders == [
-            .noiseReduction, .mlStem, .eq, .compressor, .creativeFX, .masterEQ, .limiter
+            .noiseReduction, .mlStem, .eq, .creativeFX, .masterEQ
         ])
     }
 

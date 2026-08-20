@@ -273,9 +273,9 @@ struct AudioGraphEngineNullTests {
         #expect(first.interleaved.contains { $0 != 0 })
     }
 
-    @Test("placeholder limiter graphs are rejected by BOTH engines (§5 parity)")
+    @Test("placeholder limiter graphs render (G-26: now supported by both engines)")
     func limiterRejectionParity() throws {
-        let (spec, sourceA, stripA, _, _) = twoBusGraph()
+        let (spec, sourceA, stripA, sourceB, stripB) = twoBusGraph()
         let specLimited = AudioRenderGraphSpec(
             version: spec.version,
             sources: spec.sources,
@@ -287,18 +287,27 @@ struct AudioGraphEngineNullTests {
             timebase: spec.timebase,
             rendering: spec.rendering
         )
-        let activations = [stripA: AudioGraphStripActivation(sampleRange: 0..<8)]
-        let sources = [sourceA: sineSource(frames: 8, channels: 1, sampleRate: 48_000, seed: 220)]
-        #expect(throws: AudioGraphRenderError.unsupportedNodeKind(.limiter)) {
-            _ = try AudioGraphAVAudioEngineRenderer.render(
-                spec: specLimited, activations: activations, sourceAudio: { sources[$0] }, frameCount: 8
-            )
-        }
-        #expect(throws: AudioGraphRenderError.unsupportedNodeKind(.limiter)) {
-            _ = try AudioGraphEncoderInput.render(
-                spec: specLimited, activations: activations, sourceAudio: { sources[$0] }, frameCount: 8
-            )
-        }
+        let activations = [
+            stripA: AudioGraphStripActivation(sampleRange: 0..<8),
+            stripB: AudioGraphStripActivation(sampleRange: 0..<8),
+        ]
+        let sources = [
+            sourceA: sineSource(frames: 8, channels: 1, sampleRate: 48_000, seed: 220),
+            sourceB: sineSource(frames: 8, channels: 2, sampleRate: 48_000, seed: 330),
+        ]
+        // G-26 Inc 4: the limiter is now SUPPORTED — both engines render.
+        let preview = try AudioGraphAVAudioEngineRenderer.render(
+            spec: specLimited, activations: activations, sourceAudio: { sources[$0] }, frameCount: 8
+        )
+        let export = try AudioGraphEncoderInput.render(
+            spec: specLimited, activations: activations, sourceAudio: { sources[$0] }, frameCount: 8
+        )
+        #expect(preview.frameCount == 8)
+        #expect(export.frameCount == 8)
+        // The two engines still null-compare (the limiter doesn't change
+        // the strip math — it's applied in the master chain, after sum).
+        let compare = AudioGraphNullTest.compare(reference: export.interleaved, candidate: preview.interleaved)
+        #expect(compare.passed, "engines must remain null-identical with a limiter declared")
     }
 
     @Test("missing inputs are explicit errors in the engine generator too")

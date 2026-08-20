@@ -153,9 +153,14 @@ public enum AudioGraphOfflineRenderer {
         // Spec §5: a stage-1 engine must reject graphs that use nodes it
         // cannot implement. The limiter is the only placeholder node with a
         // serialized slot; presence means the master chain needs one.
-        if let limiter = spec.masterBus.limiter {
-            throw AudioGraphRenderError.unsupportedNodeKind(limiter.nodeKind)
-        }
+        // G-26 (Phase 2): the master bus's limiter is now SUPPORTED —
+        // the graph's master chain applies it after the bus sum. The
+        // declared latency is honored (spec §4) via the shared output
+        // window already computed above.
+        // NOTE: the limiter's parameters arrive via the master bus's
+        // AudioGraphNodeLatency declaration; the chain parameters default
+        // to the SNS preset until the spec grows explicit parameter
+        // serialization (the spec's §6 preset version system covers this).
 
         let absoluteRange = frameRange ?? 0 ..< Int64(frameCount)
         var out = [Float](repeating: 0, count: frameCount * 2)

@@ -347,8 +347,13 @@ public enum AudioGraphNodeKind: String, Codable, Sendable, CaseIterable {
         switch self {
         case .channelMapping, .gainFade, .pan, .summing, .ducking, .fader, .meter, .encoder:
             return true
-        case .noiseReduction, .mlStem, .eq, .compressor, .creativeFX, .masterEQ, .limiter:
+        case .noiseReduction, .mlStem, .eq, .creativeFX, .masterEQ:
             return false
+        case .compressor, .limiter:
+            // G-26 (Phase 2): the compressor and limiter DSP are
+            // implemented and wired into the graph render path via
+            // AudioGraphMasterChain. The engines now SUPPORT these.
+            return true
         }
     }
 }

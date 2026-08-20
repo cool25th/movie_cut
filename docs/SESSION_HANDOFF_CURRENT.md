@@ -7,7 +7,7 @@
 
 **게이트**: verify_gate 5/5(1,320 테스트).
 
-### 완료 — G-26 그래프 배선 (이번 세션 커밋)
+### 완료 — G-26 그래프 배선 (커밋 7826cb0)
 - **isStage1Supported 갱신**: .compressor·.limiter → true. 그래프가 이 노드를 선언하면 렌더러가 렌더(DSP가 자리를 채움). 남은 placeholder: .eq·.creativeFX·.masterEQ·.noiseReduction·.mlStem.
 - **렌더러/엔진 노드 거부 제거**: limiter rejection 제거 — 엔진 간 무결정성 유지(null test가 limiter 선언 그래프에서도 통과).
 - **기존 테스트 3종 갱신** + **신규 3종**(지원 분류·limiter 그래프 렌더·SNS true-peak).

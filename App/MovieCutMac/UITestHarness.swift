@@ -197,6 +197,10 @@ extension EditorViewModel {
             await runWScenarioUITestScenario(environment: env, scenario: wScenario)
             return
         }
+        if env["MOVIECUT_UITEST_STABILIZE"] == "1" {
+            await runStabilizationUITestScenario(environment: env)
+            return
+        }
         if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
             await runLatencyBaselineUITestScenario(
                 environment: env,
@@ -3097,6 +3101,155 @@ extension EditorViewModel {
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 once.run(continuation, false)
             }
+        }
+    }
+
+    // MARK: - G-24 stabilization E2E (P2-G24-6)
+
+    /// JSON artifact for `MOVIECUT_UITEST_STABILIZE`.
+    private struct StabilizationDump: Codable {
+        var sceneChangeTimes: [Double] = []
+        var sceneCutDetected = false
+        var frameCount = 0
+        var inputMedian = 0.0
+        var residualMedian = 0.0
+        var reductionRatio = 0.0
+        var cropMedian = 0.0
+        var severeWobbleFraction = 0.0
+        var sceneCutErrors = 0
+        var meetsDoD = false
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// G-24 P2-G24-6 — the FULL stabilization pipeline in the app context.
+    private func runStabilizationUITestScenario(environment: [String: String]) async {
+        let started = Date()
+        var dump = StabilizationDump()
+
+        func report(_ line: String) {
+            lastStatusMessage = line
+            if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+                writeHarnessStatus(line, to: resultPath)
+            }
+        }
+
+        do {
+            guard let fixturePath = environment["MOVIECUT_UITEST_IMPORT"],
+                  !fixturePath.isEmpty else {
+                throw NSError(domain: "G24", code: 1, userInfo: [NSLocalizedDescriptionKey: "STABILIZE requires MOVIECUT_UITEST_IMPORT"])
+            }
+            let fixtureURL = URL(fileURLWithPath: fixturePath)
+
+            // 1. SceneChangeProvider — app context (P2-G24-2 integration).
+            let asset = MediaAsset(originalURL: fixtureURL, kind: .video, duration: 4)
+            let provider = SceneChangeProvider(samplingFPS: 30.0, changeThreshold: 0.25)
+            let result = try await provider.analyze(asset: asset, in: currentProject)
+            let changeTimes: [TimeInterval]
+            if case let .sceneChanges(times)? = result.suggestions.first {
+                changeTimes = times
+            } else {
+                changeTimes = []
+            }
+            dump.sceneChangeTimes = changeTimes
+            dump.sceneCutDetected = changeTimes.isEmpty == false
+            report("stabilize_checkpoint stage=scene_change count=\(changeTimes.count)")
+
+            // 2. Extract luma frames.
+            let avAsset = AVURLAsset(url: fixtureURL)
+            let generator = AVAssetImageGenerator(asset: avAsset)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .zero
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 140, height: 100)
+
+            let ciContext = CIContext(options: [.useSoftwareRenderer: true])
+            var lumaFrames: [[UInt8]] = []
+            let fps: Double = 30.0
+            let totalFrames = 120
+            let frameWidth = 140
+            let frameHeight = 100
+            for frame in 0..<totalFrames {
+                let t = CMTime(seconds: Double(frame) / fps, preferredTimescale: 600)
+                guard let cgImage = try? generator.copyCGImage(at: t, actualTime: nil) else { continue }
+                let ciImage = CIImage(cgImage: cgImage)
+                var bitmap = [UInt8](repeating: 0, count: frameWidth * frameHeight * 4)
+                ciContext.render(ciImage, toBitmap: &bitmap, rowBytes: frameWidth * 4, bounds: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight), format: .RGBA8, colorSpace: nil)
+                let luma = (0..<frameWidth * frameHeight).map { i in
+                    let r = Double(bitmap[i * 4])
+                    let g = Double(bitmap[i * 4 + 1])
+                    let b = Double(bitmap[i * 4 + 2])
+                    return UInt8(clamping: Int(0.299 * r + 0.587 * g + 0.114 * b))
+                }
+                lumaFrames.append(luma)
+            }
+            dump.frameCount = lumaFrames.count
+            guard lumaFrames.count > 10 else {
+                throw NSError(domain: "G24", code: 3, userInfo: [NSLocalizedDescriptionKey: "insufficient frames (\(lumaFrames.count))"])
+            }
+            report("stabilize_checkpoint stage=frames count=\(lumaFrames.count)")
+
+            // 3. Registration.
+            var registrations: [StabilizationRegistration.RegistrationResult] = []
+            for i in 1..<lumaFrames.count {
+                let reg = StabilizationRegistration.estimateTranslation(
+                    previous: lumaFrames[i - 1],
+                    current: lumaFrames[i],
+                    width: frameWidth,
+                    height: frameHeight
+                )
+                registrations.append(reg)
+            }
+
+            // 4. Smoothing.
+            let smoothed = StabilizationRegistration.smooth(registrations, window: 5)
+
+            // 5. DoD measurement.
+            let diagonal = (Double(frameWidth * frameWidth + frameHeight * frameHeight)).squareRoot()
+            let corrections = smoothed.map { reg in
+                StabilizationRegistration.correction(for: reg, frameDiagonal: diagonal)
+            }
+
+            let inputFrames = StabilizationSegmentation.frames(
+                displacements: registrations.map(\.displacementMagnitude),
+                changeTimes: changeTimes,
+                frameRate: fps
+            )
+            let residualFrames = StabilizationSegmentation.frames(
+                displacements: smoothed.map(\.displacementMagnitude),
+                changeTimes: changeTimes,
+                frameRate: fps
+            )
+            let metricsReport = StabilizationMetrics.report(
+                input: inputFrames,
+                residual: residualFrames,
+                severeThreshold: 5.0,
+                cropFractions: corrections.map(\.cropFraction)
+            )
+
+            dump.inputMedian = metricsReport.inputShakeMedian
+            dump.residualMedian = metricsReport.residualShakeMedian
+            dump.reductionRatio = metricsReport.reductionRatio
+            dump.cropMedian = metricsReport.cropFractionMedian
+            dump.severeWobbleFraction = metricsReport.severeWobbleFraction
+            dump.sceneCutErrors = metricsReport.sceneCutErrors
+            dump.meetsDoD = metricsReport.meetsDoD()
+
+            report("stabilize_done frames=\(dump.frameCount) scene_cut=\(dump.sceneCutDetected ? 1 : 0) input=\(String(format: "%.2f", dump.inputMedian)) residual=\(String(format: "%.2f", dump.residualMedian)) ratio=\(String(format: "%.3f", dump.reductionRatio)) crop=\(String(format: "%.3f", dump.cropMedian)) wobble=\(String(format: "%.3f", dump.severeWobbleFraction)) cut_err=\(dump.sceneCutErrors) dod=\(dump.meetsDoD ? 1 : 0)")
+        } catch {
+            dump.error = error.localizedDescription
+            report("stabilize_done error=\(error.localizedDescription)")
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        if let artifactPath = environment["MOVIECUT_UITEST_STABILIZE_RESULT"], !artifactPath.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try? encoder.encode(dump).write(to: URL(fileURLWithPath: artifactPath))
+        }
+
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
         }
     }
 

@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-20 세션 44 (P2-G24-6 — E2E 종단 파이프라인 · 픽스처 결함 발견)
+
+**게이트**: verify_gate 5/5(1,289) + run_g24_stabilize_gate.sh(파이프라인 PASS — DoD 보고·비게이트).
+
+### 완료 — P2-G24-6 (이번 세션 커밋)
+- **하니스 STABILIZE env**: SceneChangeProvider→프레임 추출(120 luma)→등록(SAD)→평활화→보정→DoD 판정 — **종단 파이프라인 앱 컨텍스트에서 실증**(ratio 0.25·error=none).
+- **`run_g24_stabilize_gate.sh`**: 실행·메트릭 보고(JSON 아티팩트).
+- **픽스처 결함 2건 발견(정직한 기록)**: (a) 경계 검출 실패 — testsrc→smptebars 크롭 후 유사 휘도 (b) 실제 움블 부재 — testsrc의 카운터만 모션. DoD 보고는 하지만 게이트하지 않음.
+
+### 다음 회차 인계 — P2-G24-6b (실제 움블 픽스처 + DoD 활성화)
+1. ffmpeg 시변 crop 오프셋으로 sine 움블 적용(±6px x ±4px y @ 2Hz + 강한 대비 패턴 전환) → 경계 검출 + 실제 흔들림.
+2. run_g24_stabilize_gate.sh가 DoD 차단 모드로 전환(ratio ≤ 0.5·crop ≤ 15%·wobble ≤ 3%·cut errors 0).
+3. G-24 완결 선언. 이후 G-28(EffectCostProfile 스키마 확정 선행).
+
 ## 2026-08-20 세션 43 (P2-G24-5 — CI warp 프로세서)
 
 **게이트**: verify_gate 5/5(1,289 테스트 — 신규 4종).

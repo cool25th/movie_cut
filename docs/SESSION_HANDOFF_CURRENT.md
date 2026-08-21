@@ -52,20 +52,27 @@ G-28 계획은 ① EffectCostProfile/실측 → ② 브라우저 UI(검색·미�
 - default/preview 값이 UI range 내부
 - unknown override 제거 + 누락값 보충 + clamp 동작
 
+### Codex P2 보강 — preview와 실제 commit chain 일치
+첫 Ready HEAD `b6f3cc71f9` 리뷰에서 Codex가 P2 1건을 발견했다.
+
+- 문제: 기존 효과가 있는 clip에서 browser preview는 raw thumbnail에 **draft effect만** 렌더했지만 Apply는 `existingEffects + draft`로 commit했다. 효과 합성은 순서 의존이므로 preview와 실제 결과가 달라질 수 있었다.
+- 수정(`78bb00f94c72f503a0e025645ee8be9297d7da87`): `EffectBrowserCatalogItem.previewEffects(existingEffects:parameters:)`를 추가해 preview/apply 순서를 **기존 clip effect chain + draft effect**로 단일화.
+- 회귀 테스트: brightness → cinematic LUT 기존 체인 뒤에 draft contrast가 정확히 append되고 parameter 값도 보존되는지 고정.
+- review thread는 자동으로 닫았다고 가정하지 않고, 새 HEAD review 결과를 별도로 확인한다.
+
 ### 검증
-구현 커밋: `fdcf8adf0e03fd925aa06264af6000415f399dcf`
+초기 구현 커밋 `fdcf8adf0e03fd925aa06264af6000415f399dcf`:
+- CI #87 (`32503478653`) — `build-and-test` ✅ / `ios-tests` ✅ / `lint` ✅
 
-PR CI #87 (`32503478653`):
-- `build-and-test` ✅
-  - Core build ✅
-  - full Core tests ✅
-  - Mac app build ✅
-  - Mac unit tests(best-effort) ✅
-  - generic iOS app build ✅
-- `ios-tests` ✅
-- `lint` ✅
+Codex P2 수정 커밋 `78bb00f94c72f503a0e025645ee8be9297d7da87`:
+- CI #89 (`32505933496`) — `build-and-test` ✅ / `ios-tests` ✅ / `lint` ✅
+- Core build/tests ✅
+- Mac app build + Mac unit tests ✅
+- generic iOS app build ✅
+- iOS simulator tests ✅
+- high-signal lint gate ✅
 
-따라서 Inc 2b의 코드/컴파일/회귀 게이트는 통과했다. 단, 이 수치는 G-28의 최종 사용자 작업 성공률 게이트가 아니다.
+따라서 Inc 2b의 코드/컴파일/회귀 게이트는 P2 수정 후에도 통과했다. 단, 이 수치는 G-28의 최종 사용자 작업 성공률 게이트가 아니다.
 
 ### 2단계 잔여
 1. **G-28 Inc 3 — Template browser**
@@ -84,6 +91,7 @@ PR CI #87 (`32503478653`):
 
 ### Git / tracking anchor
 - baseline main before this increment: `54e9d3a8264e9abc4b5ad137ef43780d580f484e`
-- implementation commit: `fdcf8adf0e03fd925aa06264af6000415f399dcf`
+- initial implementation: `fdcf8adf0e03fd925aa06264af6000415f399dcf`
+- Codex P2 fix: `78bb00f94c72f503a0e025645ee8be9297d7da87`
 - change set: PR #17
 - umbrella gap: Issue #16

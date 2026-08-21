@@ -1,15 +1,15 @@
 name: G26 Review Patch
 
 on:
-  push:
-    branches: [feat/g26-master-audio-inspector]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.event.pull_request.head.ref == 'feat/g26-master-audio-inspector'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,7 @@ jobs:
               "audio track graph bypass",
           )
 
-          graph_insert = """        // G-26 Preview↔Export audio parity: with a master chain enabled,\n        // render the same graph mix export uses and install it as Preview's\n        // SINGLE audio track. The temp AAC joins the composition-build owned\n        // URL set, so cancellation/failure/next rebuild cleans it together\n        // with reverse/image renders; the generation guard still controls\n        // whether this composition can become the active player item.\n        if usesGraphMasterAudio,\n           let graphAudioURL = try await renderGraphPreviewAudio(\n               for: project,\n               audioProcessing: audioProcessing,\n               tracks: renderTracks\n           ) {\n            temporaryReverseRenderURLs.append(graphAudioURL)\n            let graphAudioAsset = AVURLAsset(url: graphAudioURL)\n            if let graphAudioTrack = try await graphAudioAsset.loadTracks(withMediaType: .audio).first {\n                let trackRange = try await graphAudioTrack.load(.timeRange)\n                if trackRange.duration > .zero {\n                    let previewAudioTrack = try makeCompositionTrack(in: composition, mediaType: .audio)\n                    try previewAudioTrack.insertTimeRange(trackRange, of: graphAudioTrack, at: .zero)\n                }\n            }\n        }\n\n"""
+          graph_insert = """        // G-26 Preview↔Export audio parity: with a master chain enabled,\n        // render the same graph mix export uses and install it as Preview's\n        // SINGLE audio track. The temp AAC joins the composition-build owned\n        // URL set, so cancellation/failure/next rebuild cleans it together\n        // with reverse/image renders.\n        if usesGraphMasterAudio,\n           let graphAudioURL = try await renderGraphPreviewAudio(\n               for: project,\n               audioProcessing: audioProcessing,\n               tracks: renderTracks\n           ) {\n            temporaryReverseRenderURLs.append(graphAudioURL)\n            let graphAudioAsset = AVURLAsset(url: graphAudioURL)\n            if let graphAudioTrack = try await graphAudioAsset.loadTracks(withMediaType: .audio).first {\n                let trackRange = try await graphAudioTrack.load(.timeRange)\n                if trackRange.duration > .zero {\n                    let previewAudioTrack = try makeCompositionTrack(in: composition, mediaType: .audio)\n                    try previewAudioTrack.insertTimeRange(trackRange, of: graphAudioTrack, at: .zero)\n                }\n            }\n        }\n\n"""
           s = replace_once(
               s,
               "        let sortedVideoCompositionTracks = videoCompositionTracks.sorted { $0.zIndex > $1.zIndex }\n",
@@ -72,16 +72,28 @@ jobs:
               "graph preview insertion",
           )
 
-          helper = """    /// Renders Preview's project-level master audio through the same graph\n    /// implementation used by export. The graph renderer is nonisolated async;\n    /// AAC encoding is explicitly detached so the MainActor-owned player does\n    /// not synchronously encode the whole timeline.\n    private func renderGraphPreviewAudio(\n        for project: Project,\n        audioProcessing: ClipAudioProcessingOptions,\n        tracks: [Track]\n    ) async throws -> URL? {\n        let mix: AudioGraphSourceAudio\n        do {\n            mix = try await GraphMixRenderer.renderMix(\n                project: project,\n                eqPresetsByClipId: audioProcessing.eqPresets,\n                trimToAudibleSpan: false,\n                tracks: tracks\n            )\n        } catch GraphMixRenderer.RenderError.noAudio {\n            return nil\n        }\n\n        try Task.checkCancellation()\n        let url = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"MovieCutGraphPreview-\\(UUID().uuidString).m4a\")\n        do {\n            try await Task.detached(priority: .userInitiated) {\n                try AudioGraphAacEncoder.encode(mix, to: url)\n            }.value\n            try Task.checkCancellation()\n            return url\n        } catch {\n            try? FileManager.default.removeItem(at: url)\n            throw error\n        }\n    }\n\n"""
+          helper = """    /// Renders Preview's project-level master audio through the same graph\n    /// implementation used by export. The graph renderer is async; AAC encoding\n    /// is detached so the MainActor-owned player does not synchronously encode\n    /// the whole timeline.\n    private func renderGraphPreviewAudio(\n        for project: Project,\n        audioProcessing: ClipAudioProcessingOptions,\n        tracks: [Track]\n    ) async throws -> URL? {\n        let mix: AudioGraphSourceAudio\n        do {\n            mix = try await GraphMixRenderer.renderMix(\n                project: project,\n                eqPresetsByClipId: audioProcessing.eqPresets,\n                trimToAudibleSpan: false,\n                tracks: tracks\n            )\n        } catch GraphMixRenderer.RenderError.noAudio {\n            return nil\n        }\n\n        try Task.checkCancellation()\n        let url = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"MovieCutGraphPreview-\\(UUID().uuidString).m4a\")\n        do {\n            try await Task.detached(priority: .userInitiated) {\n                try AudioGraphAacEncoder.encode(mix, to: url)\n            }.value\n            try Task.checkCancellation()\n            return url\n        } catch {\n            try? FileManager.default.removeItem(at: url)\n            throw error\n        }\n    }\n\n"""
           s = replace_once(
               s,
               "    private func temporaryImageRenderURL(for clip: Clip) -> URL {\n",
               helper + "    private func temporaryImageRenderURL(for clip: Clip) -> URL {\n",
               "graph preview helper",
           )
+
+          # A stale completed composition must release the build-owned graph AAC
+          # instead of returning before it is transferred to engine ownership.
+          s = replace_once(
+              s,
+              """                // Stale guard: another rebuild was requested while we built.\n                guard requestedGeneration == compositionGeneration else { return }\n""",
+              """                // Stale guard: another rebuild was requested while we built.\n                guard requestedGeneration == compositionGeneration else {\n                    removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)\n                    return\n                }\n""",
+              "stale build temp cleanup",
+          )
           path.write_text(s)
 
-          # 2) Loudness result freshness: every committed project mutation\n          # advances a revision and clears the cached reading. This covers\n          # command dispatch, undo, redo and preset transitions.\n          path = Path("App/MovieCutMac/EditorViewModel.swift")
+          # 2) Loudness result freshness: every committed project mutation
+          # advances a revision and clears the cached reading. This covers
+          # command dispatch, undo, redo and preset transitions.
+          path = Path("App/MovieCutMac/EditorViewModel.swift")
           s = path.read_text()
           s = replace_once(
               s,
@@ -97,7 +109,9 @@ jobs:
           )
           path.write_text(s)
 
-          # 3) Measurement uses a value snapshot plus revision guard on success\n          # and errors; preset setter still uses the normal command path.\n          path = Path("App/MovieCutMac/EditorViewModel+Audio.swift")
+          # 3) Measurement uses a value snapshot plus revision guard on success
+          # and errors; preset setter still uses the normal command path.
+          path = Path("App/MovieCutMac/EditorViewModel+Audio.swift")
           s = path.read_text()
           start = "    func measureMasterLoudness() async {\n"
           end = "    #if DEBUG || MOVIECUT_HARNESS\n"
@@ -105,7 +119,10 @@ jobs:
           s = replace_between(s, start, end, replacement, "measurement revision guard")
           path.write_text(s)
 
-          # 4) Regression contracts: product path must use graph audio only when\n          # the master chain is enabled, and stale async measurements must be\n          # invalidated centrally rather than only by the picker setter.\n          Path("Tests/MovieCutCoreTests/MasterAudioPreviewParityStaticContractTests.swift").write_text(r'''import Foundation
+          # 4) Regression contracts: product path must use graph audio only when
+          # the master chain is enabled, and stale async measurements must be
+          # invalidated centrally rather than only by the picker setter.
+          Path("Tests/MovieCutCoreTests/MasterAudioPreviewParityStaticContractTests.swift").write_text(r'''import Foundation
 import Testing
 
 @Suite("G-26 Master Audio Preview Parity StaticContract")
@@ -134,6 +151,7 @@ struct MasterAudioPreviewParityStaticContractTests {
         #expect(playback.contains("guard !usesGraphMasterAudio else { continue }"))
         #expect(playback.contains("applyAudioVolumeAndFades("))
         #expect(playback.contains("let mutableAudioMix = AVMutableAudioMix()"))
+        #expect(playback.contains("removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)"))
     }
 }
 ''')

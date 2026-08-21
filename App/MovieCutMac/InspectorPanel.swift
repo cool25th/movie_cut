@@ -172,9 +172,9 @@ struct InspectorPanel: View {
     }
 }
 
-/// G-25 Inc 9 (spec §7·§11④): the master loudness meter card. Shows the
-/// MEASURED LUFS-I / true-peak dBTP of the project's real preview mix with
-/// the §7 SNS guideline bands — a display guideline, never auto-enforced.
+/// G-26 master processing inspector + G-25 loudness meter. The preset picker
+/// edits the serialized project-level chain choice; measurements always describe
+/// the currently selected/bypassed master chain and are invalidated on changes.
 private struct MasterLoudnessSection: View {
     var viewModel: EditorViewModel
     @State private var isExpanded = true
@@ -182,6 +182,28 @@ private struct MasterLoudnessSection: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
+                VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                    Text("Master Processing")
+                        .font(.caption.weight(.semibold))
+
+                    Picker("Master processing", selection: masterProcessingBinding) {
+                        Text("Off").tag(nil as MasterAudioProcessing?)
+                        Text("SNS 좋은 소리").tag(MasterAudioProcessing.sns as MasterAudioProcessing?)
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .accessibilityLabel("Master audio processing")
+                    .accessibilityHint("Chooses bypass or the SNS 좋은 소리 master processing preset for this project.")
+
+                    Text(masterProcessingDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                    .overlay(MovieCutTheme.divider.opacity(0.7))
+
                 if let measurement = viewModel.masterLoudness {
                     meterRow(
                         title: NSLocalizedString("Integrated Loudness", comment: ""),
@@ -238,6 +260,24 @@ private struct MasterLoudnessSection: View {
                 }
             }
             .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private var masterProcessingBinding: Binding<MasterAudioProcessing?> {
+        Binding(
+            get: { viewModel.currentProject.masterAudioProcessing },
+            set: { processing in
+                viewModel.setMasterAudioProcessing(processing)
+            }
+        )
+    }
+
+    private var masterProcessingDescription: String {
+        switch viewModel.currentProject.masterAudioProcessing {
+        case .sns:
+            return "Gentle compression · room reverb · −1 dBTP limiter."
+        case nil:
+            return "Bypass the project master chain; clip and track processing still applies."
         }
     }
 

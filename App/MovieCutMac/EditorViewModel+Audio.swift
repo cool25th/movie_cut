@@ -20,6 +20,51 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    /// G-26 inspector control. Picker events enqueue synchronously on MainActor
+    /// so their order matches the user's order. A single worker drains the
+    /// latest desired value and coalesces intermediate selections while an
+    /// EditorSession dispatch is suspended.
+    func setMasterAudioProcessing(_ processing: MasterAudioProcessing?) {
+        desiredMasterAudioProcessing = processing
+        masterAudioProcessingMutationGeneration &+= 1
+
+        guard masterAudioProcessingMutationTask == nil else { return }
+        masterAudioProcessingMutationTask = Task { @MainActor [weak self] in
+            await self?.drainMasterAudioProcessingMutations()
+        }
+    }
+
+    private func drainMasterAudioProcessingMutations() async {
+        while !Task.isCancelled {
+            let requestGeneration = masterAudioProcessingMutationGeneration
+            let processing = desiredMasterAudioProcessing
+
+            if currentProject.masterAudioProcessing != processing {
+                await apply(SetMasterAudioProcessingCommand(processing: processing))
+            }
+
+            // A newer picker event or project/session replacement arrived while
+            // dispatch/refresh was suspended. Loop once more using only the
+            // newest desired state; never let an older request win last.
+            guard requestGeneration == masterAudioProcessingMutationGeneration else {
+                continue
+            }
+
+            masterAudioProcessingMutationTask = nil
+            guard currentProject.masterAudioProcessing == processing else { return }
+
+            switch processing {
+            case .sns:
+                lastStatusMessage = "Master audio processing set to SNS 좋은 소리."
+            case nil:
+                lastStatusMessage = "Master audio processing turned off."
+            }
+            return
+        }
+
+        masterAudioProcessingMutationTask = nil
+    }
+
     /// G-25 switchover step 2B (spec §7·§11④): measures the project's REAL
     /// current mix through the GRAPH — `GraphMixRenderer` builds the graph
     /// from project state (volumes, fades, ducking, mute/solo, EQ as
@@ -32,19 +77,30 @@ extension EditorViewModel {
         guard !isMeasuringMasterLoudness else { return }
         isMeasuringMasterLoudness = true
         masterLoudnessError = nil
+        let measuredProject = currentProject
+        let measuredRevision = masterLoudnessRevision
+        let options = buildAudioProcessingOptions()
         defer { isMeasuringMasterLoudness = false }
+
+        func isStillCurrent() -> Bool {
+            measuredRevision == masterLoudnessRevision && measuredProject == currentProject
+        }
+
         do {
-            let options = buildAudioProcessingOptions()
             let mix = try await GraphMixRenderer.renderMix(
-                project: currentProject,
+                project: measuredProject,
                 eqPresetsByClipId: options.eqPresets
             )
-            masterLoudness = AudioGraphLoudness.measure(mix)
+            let measurement = AudioGraphLoudness.measure(mix)
+            guard isStillCurrent() else { return }
+            masterLoudness = measurement
         } catch GraphMixRenderer.RenderError.noAudio {
+            guard isStillCurrent() else { return }
             masterLoudnessError = NSLocalizedString(
                 "This project has no audio to measure.", comment: ""
             )
         } catch {
+            guard isStillCurrent() else { return }
             masterLoudnessError = error.localizedDescription
         }
     }

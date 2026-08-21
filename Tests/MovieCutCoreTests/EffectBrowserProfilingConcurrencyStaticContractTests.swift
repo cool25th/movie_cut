@@ -2,7 +2,8 @@ import Foundation
 import Testing
 
 /// G-28 regression contract: opening the effect browser must not synchronously
-/// benchmark every built-in effect on the SwiftUI/MainActor path.
+/// benchmark every built-in effect on the SwiftUI/MainActor path, and repeated
+/// browser presentations must coalesce onto one process-local measurement.
 @Suite("G-28 Effect Browser Profiling Concurrency StaticContract")
 struct EffectBrowserProfilingConcurrencyStaticContractTests {
     private func source(_ path: String) throws -> String {
@@ -19,22 +20,23 @@ struct EffectBrowserProfilingConcurrencyStaticContractTests {
         return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
-    @Test("effect cost measurement runs in a detached utility task")
-    func effectCostMeasurementRunsOffMainActor() throws {
+    @Test("effect cost measurement is a detached process-wide single flight")
+    func effectCostMeasurementRunsOffMainActorAndCoalesces() throws {
         let browser = try source("App/MovieCutMac/Inspector/EffectBrowserView.swift")
 
         #expect(browser.contains(".task { await loadProfiles() }"))
         #expect(browser.contains("private func loadProfiles() async"))
+        #expect(browser.contains("private static let profileMeasurementTask = Task.detached(priority: .utility)"))
 
-        let detachedMeasurement = try section(
+        let sharedMeasurement = try section(
             in: browser,
-            from: "let all = await Task.detached(priority: .utility)",
-            to: "        }.value"
+            from: "private static let profileMeasurementTask = Task.detached(priority: .utility)",
+            to: "    @State private var searchText"
         )
-        #expect(detachedMeasurement.contains("EffectCostProfiler.measureAllBuiltIns(iterations: 3)"))
+        #expect(sharedMeasurement.contains("EffectCostProfiler.measureAllBuiltIns(iterations: 3)"))
     }
 
-    @Test("profile state is committed after detached measurement returns")
+    @Test("browser instances await the shared task and only commit UI state after return")
     func profileStateCommitStaysOutsideDetachedWork() throws {
         let browser = try source("App/MovieCutMac/Inspector/EffectBrowserView.swift")
         let loadProfiles = try section(
@@ -43,15 +45,11 @@ struct EffectBrowserProfilingConcurrencyStaticContractTests {
             to: "    private func displayName"
         )
 
+        #expect(loadProfiles.contains("let all = await Self.profileMeasurementTask.value"))
         #expect(loadProfiles.contains("guard !Task.isCancelled else { return }"))
         #expect(loadProfiles.contains("profiles = map"))
-
-        let detachedMeasurement = try section(
-            in: loadProfiles,
-            from: "Task.detached(priority: .utility)",
-            to: "        }.value"
-        )
-        #expect(!detachedMeasurement.contains("profiles ="))
+        #expect(!loadProfiles.contains("Task.detached"))
+        #expect(!loadProfiles.contains("EffectCostProfiler.measureAllBuiltIns"))
     }
 }
 

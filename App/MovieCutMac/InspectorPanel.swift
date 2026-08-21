@@ -209,6 +209,22 @@ private struct MasterLoudnessSection: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+                // G-26 (spec §6·§7): the SNS preset toggle — the only user
+                // surface for the master chain. Session-routed, so preview
+                // and export consume the serialized chain on the next
+                // rebuild; re-measure to see the effect in the meter.
+                Toggle(isOn: masterProcessingBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NSLocalizedString("SNS 좋은 소리 프리셋", comment: ""))
+                            .font(.caption.weight(.semibold))
+                        Text(NSLocalizedString("컴프레서 · 리버브 · 리미터 (−1 dBTP)", comment: ""))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .controlSize(.small)
+                .accessibilityLabel("SNS master audio processing preset")
+                .accessibilityHint("Applies gentle compression, room reverb, and −1 dBTP limiting to the master mix.")
                 Button {
                     Task { await viewModel.measureMasterLoudness() }
                 } label: {
@@ -239,6 +255,17 @@ private struct MasterLoudnessSection: View {
             }
             .font(.subheadline.weight(.semibold))
         }
+    }
+
+    private var masterProcessingBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.currentProject.masterAudioProcessing == .sns },
+            set: { enabled in
+                Task {
+                    await viewModel.updateMasterAudioProcessing(enabled ? .sns : nil)
+                }
+            }
+        )
     }
 
     private func meterRow(title: String, value: String, within: Bool?) -> some View {

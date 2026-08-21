@@ -20,6 +20,15 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    /// G-26 (spec §6·§7): sets the project's master audio processing
+    /// preset. Session-routed (single undo); the refreshed session
+    /// rebuilds the preview composition, whose graph now carries the
+    /// serialized master chain — the loudness meter and export consume
+    /// the same values.
+    func updateMasterAudioProcessing(_ preset: MasterAudioProcessing?) async {
+        await apply(SetMasterAudioProcessingCommand(preset: preset))
+    }
+
     /// G-25 switchover step 2B (spec §7·§11④): measures the project's REAL
     /// current mix through the GRAPH — `GraphMixRenderer` builds the graph
     /// from project state (volumes, fades, ducking, mute/solo, EQ as

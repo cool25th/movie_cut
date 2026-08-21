@@ -9,6 +9,15 @@ struct EffectBrowserView: View {
     @Bindable var viewModel: EditorViewModel
     let clip: Clip
 
+    /// `measureAllBuiltIns` is intentionally a process-wide single flight.
+    /// A sheet dismissal cancels the view's `.task`, but detached work does not
+    /// inherit that cancellation. Sharing one task prevents a quick reopen from
+    /// starting a second expensive Core Image + process-memory measurement run,
+    /// and the completed Task value acts as the browser's process-local cache.
+    private static let profileMeasurementTask = Task.detached(priority: .utility) {
+        EffectCostProfiler.measureAllBuiltIns(iterations: 3)
+    }
+
     @State private var searchText = ""
     @State private var favoriteIds: Set<String> = []
     @State private var selectedEffectType: EffectType?
@@ -29,7 +38,7 @@ struct EffectBrowserView: View {
         }
         .frame(minWidth: 480, minHeight: 360)
         .background(MovieCutTheme.editorBackground)
-        .onAppear(perform: loadProfiles)
+        .task { await loadProfiles() }
     }
 
     // MARK: - Search
@@ -148,17 +157,19 @@ struct EffectBrowserView: View {
 
     // MARK: - Data
 
-    private func loadProfiles() {
-        Task {
-            let all = EffectCostProfiler.measureAllBuiltIns(iterations: 3)
-            var map: [EffectType: EffectCostProfile] = [:]
-            for profile in all {
-                map[profile.effectType] = profile
-            }
-            await MainActor.run {
-                profiles = map
-            }
+    /// The synchronous profiler executes outside MainActor and is shared by
+    /// every browser instance. Cancelling this view only suppresses its state
+    /// update; a later browser instance reuses the same in-flight/completed
+    /// measurement instead of launching duplicate profiling work.
+    private func loadProfiles() async {
+        let all = await Self.profileMeasurementTask.value
+        guard !Task.isCancelled else { return }
+
+        var map: [EffectType: EffectCostProfile] = [:]
+        for profile in all {
+            map[profile.effectType] = profile
         }
+        profiles = map
     }
 
     private func displayName(for type: EffectType) -> String {

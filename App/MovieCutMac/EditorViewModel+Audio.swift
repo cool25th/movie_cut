@@ -20,6 +20,27 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    /// G-26 inspector control: routes the project-level master preset through
+    /// the command/session path so persistence, dirty-state tracking, undo and
+    /// redo all behave like normal edits. Changing the chain invalidates the
+    /// previous loudness measurement because it described a different mix.
+    func setMasterAudioProcessing(_ processing: MasterAudioProcessing?) async {
+        let previous = currentProject.masterAudioProcessing
+        guard previous != processing else { return }
+
+        await apply(SetMasterAudioProcessingCommand(processing: processing))
+        guard currentProject.masterAudioProcessing == processing else { return }
+
+        masterLoudness = nil
+        masterLoudnessError = nil
+        switch processing {
+        case .sns:
+            lastStatusMessage = "Master audio processing set to SNS 좋은 소리."
+        case nil:
+            lastStatusMessage = "Master audio processing turned off."
+        }
+    }
+
     /// G-25 switchover step 2B (spec §7·§11④): measures the project's REAL
     /// current mix through the GRAPH — `GraphMixRenderer` builds the graph
     /// from project state (volumes, fades, ducking, mute/solo, EQ as

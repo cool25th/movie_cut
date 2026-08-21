@@ -41,18 +41,8 @@ jobs:
       - name: Build Core
         run: swift build
       - name: Run Core tests
-        run: |
-          set -o pipefail
-          swift test 2>&1 | tee /tmp/moviecut-core-tests.log
+        run: swift test
         timeout-minutes: 15
-      - name: Upload Core test failure log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-test-failure-log
-          path: /tmp/moviecut-core-tests.log
-          if-no-files-found: error
-          retention-days: 1
 
       # The Mac app target (33k lines) was previously never compiled in CI.
       # Building it here catches App-side regressions that Core tests cannot.
@@ -123,7 +113,7 @@ jobs:
           xcodebuild -project MovieCut.xcodeproj \
             -scheme MovieCutiOS \
             -destination "platform=iOS Simulator,name=$SIM" \
-            -only-testing:MovieCutCutiOSTests \
+            -only-testing:MovieCutiOSTests \
             CODE_SIGNING_ALLOWED=NO \
             test
 

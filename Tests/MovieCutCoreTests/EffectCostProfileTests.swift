@@ -67,6 +67,32 @@ struct EffectCostProfileTests {
         #expect(Double(footprint) < Double(ProcessInfo.processInfo.physicalMemory))
     }
 
+    @Test("the browser measurement runs off the main thread — main stays responsive")
+    func measurementLeavesMainThreadResponsive() async {
+        // The browser's loadProfiles must call the profiler from a
+        // DETACHED task: a MainActor-inherited Task runs the multi-second
+        // measurement ON the main thread and freezes the UI (the pre-fix
+        // browser did exactly that). Probing main-actor hops while the
+        // measurement runs pins the property: a main-thread measurement
+        // would stall the hops for the whole load.
+        let load = Task.detached(priority: .userInitiated) {
+            EffectCostProfiler.measureAllBuiltIns(iterations: 3)
+        }
+        await MainActor.run {}
+        var worstHopMs = 0.0
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline {
+            let start = DispatchTime.now()
+            await MainActor.run {}
+            worstHopMs = max(worstHopMs, Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+        }
+        _ = await load.value
+        // The full measurement takes well over a second on every machine
+        // this suite runs on; a blocked main actor would show a hop in the
+        // hundreds-to-thousands of ms. 250ms tolerates scheduler noise.
+        #expect(worstHopMs < 250, "main actor stalled \(worstHopMs)ms during the measurement")
+    }
+
     @Test("measured memory is the differential footprint, never the physicalMemory placeholder")
     func measuredMemoryIsNotThePlaceholder() {
         let profile = EffectCostProfiler.measure(

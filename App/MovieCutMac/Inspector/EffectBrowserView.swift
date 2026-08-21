@@ -149,7 +149,12 @@ struct EffectBrowserView: View {
     // MARK: - Data
 
     private func loadProfiles() {
-        Task {
+        // DETACHED on purpose: a plain Task { } in this @MainActor view
+        // inherits main-actor isolation, so the multi-second measurement
+        // ran ON the main thread and froze the browser (the redundant
+        // await MainActor.run below was the tell). A detached task keeps
+        // the renders off the main thread; only the state update hops back.
+        Task.detached(priority: .userInitiated) {
             let all = EffectCostProfiler.measureAllBuiltIns(iterations: 3)
             var map: [EffectType: EffectCostProfile] = [:]
             for profile in all {

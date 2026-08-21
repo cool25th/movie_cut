@@ -6,5 +6,6 @@
 자율 다음 작업: **2단계 완료 판정 + 잔여 gap 재스캔**. 과거 LOOP_STATE의 다음 후보였던 `마스터 체인 인스펙터 UI`와 `G-28 measureAllBuiltIns 백그라운드 이관`은 현재 main에 이미 구현/회귀 잠금까지 존재하므로 재작업 금지. 방향 문서 §3·§9와 `EXECUTION_PLAN_PHASE2_20260819.md`를 현재 코드에 재대조한 뒤 다음 원자 증분을 확정한다. 3단계 HDR 공개는 단계 게이트 판정 전 선행 착수하지 않는다.
 기존 결함 기록 갱신: motion tracking full-occlusion loss recovery 결함 폐쇄. recovery 중 appearance verification 없는 후보 수용 및 late candidate timeout 우회 P2도 PR #13으로 폐쇄. snapshotFrame 중복 프레임은 하니스 문서화 상태 유지.
 대기 결정 사항: **접근 정규화 승인**만 유지. `모션 트래킹 재검출 시드` 대기 항목은 #11 완료로 제거.
-마지막 main 커밋: cd173cf8cb1b2821fa1182ca762e5fa0ef3928f5
+제품 코드 기준점(PR #13 merge): cd173cf8cb1b2821fa1182ca762e5fa0ef3928f5
+문서 상태 동기화: PR #14
 갱신: 2026-08-22 00:32 KST

@@ -56,7 +56,8 @@ Issue #11의 `<=0.5s`는 "initial target; fixture evidence로만 calibrate" 조�
 - 모션 트래킹 재검출 시드 결정은 **종료됨**.
 
 ### Git anchor
-- current `main`: `cd173cf8cb1b2821fa1182ca762e5fa0ef3928f5`
+- product-code baseline (PR #13 merge): `cd173cf8cb1b2821fa1182ca762e5fa0ef3928f5`
+- docs state synchronization: PR #14
 - issue closure: #11 completed
 - recovery feature: PR #12
 - safety hotfix: PR #13

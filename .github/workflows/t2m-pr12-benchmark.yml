@@ -3,6 +3,8 @@ name: T2-M PR12 Benchmark
 on:
   push:
     branches: [feat/motion-tracking-recovery-v1]
+  pull_request:
+    branches: [main]
 
 jobs:
   benchmark:

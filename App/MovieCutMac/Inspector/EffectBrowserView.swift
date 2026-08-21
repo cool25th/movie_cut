@@ -9,6 +9,15 @@ struct EffectBrowserView: View {
     @Bindable var viewModel: EditorViewModel
     let clip: Clip
 
+    /// `measureAllBuiltIns` is intentionally a process-wide single flight.
+    /// A sheet dismissal cancels the view's `.task`, but detached work does not
+    /// inherit that cancellation. Sharing one task prevents a quick reopen from
+    /// starting a second expensive Core Image + process-memory measurement run,
+    /// and the completed Task value acts as the browser's process-local cache.
+    private static let profileMeasurementTask = Task.detached(priority: .utility) {
+        EffectCostProfiler.measureAllBuiltIns(iterations: 3)
+    }
+
     @State private var searchText = ""
     @State private var favoriteIds: Set<String> = []
     @State private var selectedEffectType: EffectType?
@@ -148,16 +157,12 @@ struct EffectBrowserView: View {
 
     // MARK: - Data
 
-    /// The built-in profiler performs synchronous render + memory sampling for
-    /// every effect. Running it in a plain `Task {}` from this SwiftUI view
-    /// inherits the view's MainActor context and can freeze search/scrolling
-    /// while the browser opens. Keep only the state commit on the UI actor;
-    /// the expensive measurement runs on a detached utility task.
+    /// The synchronous profiler executes outside MainActor and is shared by
+    /// every browser instance. Cancelling this view only suppresses its state
+    /// update; a later browser instance reuses the same in-flight/completed
+    /// measurement instead of launching duplicate profiling work.
     private func loadProfiles() async {
-        let all = await Task.detached(priority: .utility) {
-            EffectCostProfiler.measureAllBuiltIns(iterations: 3)
-        }.value
-
+        let all = await Self.profileMeasurementTask.value
         guard !Task.isCancelled else { return }
 
         var map: [EffectType: EffectCostProfile] = [:]

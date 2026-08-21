@@ -9,11 +9,10 @@ on:
 jobs:
   benchmark:
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: feat/motion-tracking-recovery-v1
 
       - name: Select Xcode
@@ -23,59 +22,20 @@ jobs:
           sudo xcode-select -s "$NEWEST/Contents/Developer"
           swift --version
 
-      - name: Prepare baseline worktree
-        run: git worktree add /tmp/moviecut-t2m-base af34d3ae37858ed99bfdfa35124aa3fc65067133
-
-      - name: Prebuild baseline Release tests
-        working-directory: /tmp/moviecut-t2m-base
-        run: swift test -c release --filter MotionTrackingAnalysisPerfTests
-
-      - name: Prebuild PR-head Release tests
-        run: swift test -c release --filter MotionTrackingAnalysisPerfTests
-
-      - name: Measure A1 baseline
-        continue-on-error: true
-        working-directory: /tmp/moviecut-t2m-base
+      - name: Same-binary legacy vs recovery T2-M
         run: |
           set -o pipefail
-          echo "T2M_COMPARE pass=A1 role=baseline sha=af34d3ae37858ed99bfdfa35124aa3fc65067133"
-          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-A1-baseline.log
+          MOVIECUT_T2M_AB=1 swift test -c release --filter MotionTrackingSameBinaryPerfTests 2>&1 | tee /tmp/t2m-same-binary.log
 
-      - name: Measure B1 PR head
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "T2M_COMPARE pass=B1 role=head sha=$(git rev-parse HEAD)"
-          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-B1-head.log
-
-      - name: Measure B2 PR head
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "T2M_COMPARE pass=B2 role=head sha=$(git rev-parse HEAD)"
-          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-B2-head.log
-
-      - name: Measure A2 baseline
-        continue-on-error: true
-        working-directory: /tmp/moviecut-t2m-base
-        run: |
-          set -o pipefail
-          echo "T2M_COMPARE pass=A2 role=baseline sha=af34d3ae37858ed99bfdfa35124aa3fc65067133"
-          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-A2-baseline.log
-
-      - name: Summarize ABBA comparison
+      - name: Summarize
         if: always()
-        run: |
-          for f in /tmp/t2m-A1-baseline.log /tmp/t2m-B1-head.log /tmp/t2m-B2-head.log /tmp/t2m-A2-baseline.log; do
-            echo "=== $(basename "$f") ==="
-            grep -E '^T2M_AGG|^T2M_OCC' "$f" || true
-          done
+        run: grep -E '^T2M_SAME_BINARY' /tmp/t2m-same-binary.log || true
 
-      - name: Upload T2-M ABBA logs
+      - name: Upload log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: t2m-pr12-abba
-          path: /tmp/t2m-*.log
+          name: t2m-pr12-same-binary
+          path: /tmp/t2m-same-binary.log
           if-no-files-found: error
           retention-days: 3

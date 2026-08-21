@@ -142,6 +142,10 @@ final class EditorViewModel {
     var masterLoudness: AudioGraphLoudness.Measurement?
     var isMeasuringMasterLoudness = false
     var masterLoudnessError: String?
+    /// Increments whenever the committed project snapshot changes. A meter
+    /// render captures this revision so an older async result cannot overwrite
+    /// a newer edit, undo, or redo state.
+    @ObservationIgnored var masterLoudnessRevision: UInt64 = 0
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
@@ -4007,7 +4011,13 @@ final class EditorViewModel {
     }
 
     func refreshFromSession() async throws {
+        let previousProject = currentProject
         currentProject = await session.snapshot()
+        if currentProject != previousProject {
+            masterLoudnessRevision &+= 1
+            masterLoudness = nil
+            masterLoudnessError = nil
+        }
         await refreshFlattenedTimeline(for: currentProject)
         canvasSelection = currentProject.canvas.aspectRatio
         syncExportUI(from: currentProject.exportSettings)

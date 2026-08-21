@@ -53,19 +53,30 @@ extension EditorViewModel {
         guard !isMeasuringMasterLoudness else { return }
         isMeasuringMasterLoudness = true
         masterLoudnessError = nil
+        let measuredProject = currentProject
+        let measuredRevision = masterLoudnessRevision
+        let options = buildAudioProcessingOptions()
         defer { isMeasuringMasterLoudness = false }
+
+        func isStillCurrent() -> Bool {
+            measuredRevision == masterLoudnessRevision && measuredProject == currentProject
+        }
+
         do {
-            let options = buildAudioProcessingOptions()
             let mix = try await GraphMixRenderer.renderMix(
-                project: currentProject,
+                project: measuredProject,
                 eqPresetsByClipId: options.eqPresets
             )
-            masterLoudness = AudioGraphLoudness.measure(mix)
+            let measurement = AudioGraphLoudness.measure(mix)
+            guard isStillCurrent() else { return }
+            masterLoudness = measurement
         } catch GraphMixRenderer.RenderError.noAudio {
+            guard isStillCurrent() else { return }
             masterLoudnessError = NSLocalizedString(
                 "This project has no audio to measure.", comment: ""
             )
         } catch {
+            guard isStillCurrent() else { return }
             masterLoudnessError = error.localizedDescription
         }
     }

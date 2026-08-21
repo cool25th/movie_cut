@@ -9,16 +9,11 @@ import Foundation
 /// - `AudioGraphTimebase` conversions — exact Int64 sample-position math
 ///   (spec rule ①; the 60-minute mixed-rate drift gate is built on it).
 /// - `AudioGraphOfflineRenderer` — sample-exact graph evaluation
-///   (mapping → gain/fades → pan → bus summing/fader → master). The
-///   App-side preview (AVAudioEngine) and export (encoder input) wiring on
-///   top of this math, plus the E2E null test, are the Inc 8 App half.
+///   (mapping → gain/fades → pan → bus summing/fader → master).
 public enum AudioGraphLatency {
     /// The single global compensation for a graph (spec §4): the pipeline is
-    /// read advanced by `lookAheadSamples` (the maximum look-ahead any node
-    /// declares) and the output is realigned by `outputDelaySamples` (the
-    /// maximum total delay: reported latency + look-ahead). One global pair,
-    /// never per-node compensation — both engines must call THIS function so
-    /// preview and export always agree. Stage-1 graphs yield (0, 0).
+    /// read advanced by `lookAheadSamples` and the output is realigned by
+    /// `outputDelaySamples`. One global pair, never per-node compensation.
     public static func globalCompensation(
         _ declaredLatencies: [AudioGraphNodeLatency]?
     ) -> (lookAheadSamples: Int64, outputDelaySamples: Int64) {
@@ -28,13 +23,8 @@ public enum AudioGraphLatency {
         return (lookAhead, totalDelay)
     }
 
-    /// The absolute pipeline window both engines must render for a request of
-    /// `frameCount` timeline frames starting at timeline sample 0: the final
-    /// output for timeline frame f is pipeline frame f + outputDelaySamples
-    /// (the maximum total delay). The two engine generators derive their
-    /// window from THIS function — never from their own math — so preview and
-    /// export compensate identically (spec rule ②). Stage-1 graphs yield
-    /// 0..<frameCount (identity).
+    /// The absolute pipeline window both engines render for a request of
+    /// `frameCount` timeline frames starting at sample 0.
     public static func outputWindow(
         forFrameCount frameCount: Int,
         declaredLatencies: [AudioGraphNodeLatency]?
@@ -45,33 +35,56 @@ public enum AudioGraphLatency {
 }
 
 extension AudioGraphTimebase {
-    /// Exact Int64 conversion: sample position = time.value * sampleRate /
-    /// time.timescale, computed so the result is identical in both engines.
-    /// Floor rounding — a sample position is the sample INDEX at/after the
-    /// instant, never a fractional float.
+    /// Converts an absolute timeline instant to a graph-relative sample
+    /// position. `origin` is the timeline instant represented by graph sample
+    /// zero, so it MUST participate in both directions of the conversion.
+    ///
+    /// Integer division is mathematical floor for negative pre-origin times,
+    /// keeping the sample index on the same side of the instant as positive
+    /// times instead of Swift's default truncation-toward-zero asymmetry.
     public func samplePosition(at time: CMTime) -> Int64 {
-        guard time.timescale > 0, time.value != 0 else { return 0 }
         let rate = Int64(sampleRate)
-        // value * rate first (exact while it fits Int64 — 60min@600 ≈ 1e13,
-        // far from overflow), then divide with floor toward zero.
-        return (time.value * rate) / Int64(time.timescale)
+        guard rate > 0,
+              rate <= Int64(Int32.max),
+              CMTIME_IS_NUMERIC(time),
+              CMTIME_IS_NUMERIC(origin)
+        else {
+            return 0
+        }
+
+        let relative = CMTimeSubtract(time, origin)
+        guard CMTIME_IS_NUMERIC(relative), relative.timescale > 0 else { return 0 }
+
+        let (numerator, overflow) = relative.value.multipliedReportingOverflow(by: rate)
+        guard !overflow else { return relative.value >= 0 ? Int64.max : Int64.min }
+        let denominator = Int64(relative.timescale)
+        let quotient = numerator / denominator
+        let remainder = numerator % denominator
+        if remainder != 0, numerator < 0 {
+            return quotient - 1
+        }
+        return quotient
     }
 
-    /// Inverse conversion — the CMTime a sample position corresponds to.
-    /// Uses the sample rate itself as the timescale, so integer-rate
-    /// timebases round-trip EXACTLY (position p ↔ CMTime(p / rate)).
+    /// Inverse conversion — the absolute timeline instant a graph sample
+    /// position corresponds to. The graph-relative sample time is offset by
+    /// the serialized `origin`, making this the true inverse of
+    /// `samplePosition(at:)` for exact sample instants.
     public func time(atSamplePosition position: Int64) -> CMTime {
         let rate = Int64(sampleRate)
-        guard rate > 0, rate <= Int64(Int32.max) else { return .zero }
-        return CMTime(value: position, timescale: Int32(rate))
+        guard rate > 0,
+              rate <= Int64(Int32.max),
+              CMTIME_IS_NUMERIC(origin)
+        else {
+            return .zero
+        }
+        let relative = CMTime(value: position, timescale: Int32(rate))
+        return CMTimeAdd(origin, relative)
     }
 }
 
 /// In-memory source audio for the offline renderer. Interleaved Float32
-/// (`channels`-wide frames), any sample rate — the renderer resamples by
-/// NEAREST FRAME ONLY for non-integer frame ratios and asserts nothing:
-/// resampling policy belongs to the engine generators, which are told the
-/// ratio via `playbackRate` below.
+/// (`channels`-wide frames), any sample rate.
 public struct AudioGraphSourceAudio: Sendable, Equatable {
     public var sampleRate: Double
     public var channels: Int
@@ -92,15 +105,14 @@ public struct AudioGraphSourceAudio: Sendable, Equatable {
 }
 
 /// When a strip is active in graph sample time, and which source frame its
-/// first graph sample reads. Timing lives HERE (runtime plan data), not in
-/// the serialized spec — the approved schema carries no timeline ranges.
+/// first graph sample reads. Timing lives here as runtime plan data.
 public struct AudioGraphStripActivation: Sendable, Equatable {
     /// Active sample range in graph time [lowerBound, upperBound).
     public var sampleRange: Range<Int64>
     /// Source frame read at `sampleRange.lowerBound`.
     public var sourceFrameOffset: Int64
-    /// Source playback rate (1 = native). Non-integer-ratio resampling is
-    /// nearest-frame in stage 1; the engines may pre-resample instead.
+    /// Source playback rate (1 = native). Product sources are normalized by
+    /// `AudioGraphSourceAdapter`; this remains useful for synthetic fixtures.
     public var playbackRate: Double
 
     public init(sampleRange: Range<Int64>, sourceFrameOffset: Int64 = 0, playbackRate: Double = 1) {
@@ -111,38 +123,16 @@ public struct AudioGraphStripActivation: Sendable, Equatable {
 }
 
 public enum AudioGraphRenderError: Error, Equatable, Sendable {
-    /// The graph contains a node kind this engine does not implement —
-    /// explicit rejection, never silent degradation (spec §5).
     case unsupportedNodeKind(AudioGraphNodeKind)
-    /// A strip references a source or activation the renderer was not given.
     case missingInput(what: String, id: UUID)
 }
 
 /// Sample-exact offline evaluation of an audio render graph. PURE: same
-/// inputs → bit-identical output every run and on every host — this is the
-/// property the preview↔export null test (spec §9) leans on.
-///
-/// Stage-1 semantics (documented where the spec leaves the math open):
-/// - Automation: piecewise LINEAR between adjacent points; constant before
-///   the first / after the last point. Values are dB for gain/fader and
-///   -1…1 for pan, evaluated at exact integer sample positions.
-/// - Fades: multiply the strip signal; linear curve is a straight amplitude
-///   ramp, exponential is the standard squared ramp (1-t)².
-/// - Pan: no pan points bypass the node at unity; with points, equal-power
-///   law, pan ∈ [-1, 1] → gains (cos θ, sin θ), θ = (pan + 1) · π/4
-///   (center = -3 dB on each side).
-/// - Channel mapping to the stereo bus: .mono → the mono channel feeds both
-///   L and R; .stereo → L and R pass through; .dualMono → mono duplicated
-///   to L and R (electrically identical to .mono, distinct as metadata).
-/// - Buses: any soloed bus silences non-solo buses; mute silences the bus;
-///   bus fader automation is gain in dB. Ducking (sidechain-timed) has no
-///   input data in a pure render and is therefore identity here — the node
-///   stays in the graph for the engines, which own the sidechain wiring.
+/// inputs → bit-identical output every run and on every host.
 public enum AudioGraphOfflineRenderer {
     /// - Parameter frameRange: absolute graph-sample range to evaluate into
     ///   the returned buffer (buffer frame 0 = `frameRange.lowerBound`).
-    ///   nil = `0..<frameCount`. The ENGINE GENERATORS pass the latency
-    ///   output window here; direct callers get the uncompensated origin.
+    ///   nil = `0..<frameCount`.
     public static func render(
         spec: AudioRenderGraphSpec,
         activations: [UUID: AudioGraphStripActivation],
@@ -150,13 +140,6 @@ public enum AudioGraphOfflineRenderer {
         frameCount: Int,
         frameRange: Range<Int64>? = nil
     ) throws -> AudioGraphSourceAudio {
-        // Spec §5: a stage-1 engine must reject graphs that use nodes it
-        // cannot implement. G-26 (Phase 2): the limiter is now SUPPORTED —
-        // the master chain applies it after the bus sum (code-review #8:
-        // the DSP is actually invoked here, not just declared supported).
-        // Parameters default to the SNS preset until the spec grows
-        // explicit parameter serialization (§6 preset version system).
-
         let absoluteRange = frameRange ?? 0 ..< Int64(frameCount)
         var out = [Float](repeating: 0, count: frameCount * 2)
         let soloedBuses = spec.trackBuses.contains { $0.solo }
@@ -191,18 +174,19 @@ public enum AudioGraphOfflineRenderer {
                         activation: activation,
                         at: frame
                     )
-                    let l = Int(frame - absoluteRange.lowerBound) * 2
-                    out[l] += left
-                    out[l + 1] += right
+                    let outputIndex = Int(frame - absoluteRange.lowerBound) * 2
+                    guard outputIndex >= 0, outputIndex + 1 < out.count else { continue }
+                    out[outputIndex] += left
+                    out[outputIndex + 1] += right
                 }
             }
         }
 
-        // G-26 §6 serialization: the chain comes from the SPEC — the saved
-        // parameters (SNS fallback only for legacy limiter-only graphs),
-        // applied AFTER the bus sum (code-review #8's placement holds:
-        // the limiter stays last, before the meter/encoder).
-        let mixed = AudioGraphSourceAudio(sampleRate: spec.timebase.sampleRate, channels: 2, interleaved: out)
+        let mixed = AudioGraphSourceAudio(
+            sampleRate: spec.timebase.sampleRate,
+            channels: 2,
+            interleaved: out
+        )
         if let chain = spec.masterBus.resolvedMasterChain() {
             return AudioGraphMasterChain.apply(mixed, chain: chain)
         }
@@ -212,13 +196,7 @@ public enum AudioGraphOfflineRenderer {
     // MARK: - Evaluation math (pure, shared semantics)
 
     /// ONE strip's stereo contribution to the master mix at an absolute graph
-    /// sample position — the full per-strip chain (channel mapping →
-    /// gain/fades → pan → bus fader/mute/solo → master fader) with the exact
-    /// multiplication order both engine generators must reproduce. The
-    /// offline renderer accumulates it directly; the AVAudioEngine generator
-    /// precomputes each strip's window from it and lets the ENGINE own
-    /// scheduling and summing — shared math is what makes the preview↔export
-    /// null test (spec §9) a plumbing check rather than a semantics check.
+    /// sample position.
     static func stripFrame(
         strip: AudioGraphClipStrip,
         bus: AudioGraphTrackBus,
@@ -242,9 +220,6 @@ public enum AudioGraphOfflineRenderer {
             fallbackDb: 0
         )
         let fade = fadeFactor(strip.fades, at: frame)
-        // No pan points → the pan node is bypassed (unity).
-        // With points, the held/evaluated value maps through the
-        // equal-power law (0 = center = -3 dB on both).
         let (panL, panR) = strip.pan.isEmpty
             ? (1.0, 1.0)
             : panGains(automationValue(strip.pan, at: frame))
@@ -260,13 +235,12 @@ public enum AudioGraphOfflineRenderer {
         return (left * total * Float(panL), right * total * Float(panR))
     }
 
-    /// Piecewise-linear automation evaluation in dB (or pan) at an exact
-    /// sample position; constant outside the point range.
+    /// Piecewise-linear automation evaluation at an exact sample position;
+    /// constant before the first and after the last point.
     static func automationValue(_ points: [AudioGraphAutomationPoint], at position: Int64) -> Double {
         guard !points.isEmpty else { return 0 }
         let sorted = points.sorted { $0.samplePosition < $1.samplePosition }
         guard position > sorted.first!.samplePosition, position < sorted.last!.samplePosition else {
-            // At/before the first point and at/after the last: hold.
             if position <= sorted.first!.samplePosition { return sorted.first!.value }
             return sorted.last!.value
         }
@@ -291,7 +265,7 @@ public enum AudioGraphOfflineRenderer {
         return pow(10, db / 20)
     }
 
-    /// Equal-power pan gains (spec-silent choice, documented above).
+    /// Equal-power pan gains.
     static func panGains(_ pan: Double) -> (left: Double, right: Double) {
         let clamped = min(max(pan, -1), 1)
         let theta = (clamped + 1) * .pi / 4
@@ -299,7 +273,7 @@ public enum AudioGraphOfflineRenderer {
     }
 
     /// Product of every fade covering the position. A `.fadeIn` ramps
-    /// 0→1, a `.fadeOut` ramps 1→0 (the legacy setVolumeRamp semantics).
+    /// 0→1, a `.fadeOut` ramps 1→0.
     static func fadeFactor(_ fades: [AudioGraphFade], at position: Int64) -> Double {
         var factor = 1.0
         for fade in fades {
@@ -307,8 +281,6 @@ public enum AudioGraphOfflineRenderer {
             let span = fade.endSample - fade.startSample
             guard span > 0 else { continue }
             let t = Double(position - fade.startSample) / Double(span)
-            // Fade-in: 0→1. Fade-out: 1→0. The exponential curve is the
-            // standard squared ramp in the ramp's own direction.
             let gain: Double
             switch (fade.curve, fade.direction) {
             case (.linear, .fadeIn):

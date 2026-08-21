@@ -341,6 +341,13 @@ struct EffectBrowserView: View {
         }
     }
 
+    private var currentBrowserClipEffects: [Effect] {
+        if let selectedClip = viewModel.selectedClip, selectedClip.id == clip.id {
+            return selectedClip.effects
+        }
+        return clip.effects
+    }
+
     private func refreshPreview(for item: EffectBrowserCatalogItem) {
         guard let data = previewSourceData,
               let inputImage = CIImage(data: data)
@@ -349,8 +356,11 @@ struct EffectBrowserView: View {
             return
         }
 
-        let effect = item.makeEffect(parameters: draftParameters)
-        let outputImage = VisualEffectPixelProcessor.apply(effect, to: inputImage)
+        let previewEffects = item.previewEffects(
+            existingEffects: currentBrowserClipEffects,
+            parameters: draftParameters
+        )
+        let outputImage = VisualEffectPixelProcessor.apply(previewEffects, to: inputImage)
         let context = CIContext()
         guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else {
             effectPreviewImage = nil
@@ -375,15 +385,9 @@ struct EffectBrowserView: View {
     private func applyEffect(_ type: EffectType) {
         guard let item = EffectBrowserCatalog.item(for: type) else { return }
         let effect = item.makeEffect(parameters: draftParameters)
+        let currentEffects = currentBrowserClipEffects
 
         Task {
-            let currentEffects: [Effect]
-            if let selectedClip = viewModel.selectedClip, selectedClip.id == clip.id {
-                currentEffects = selectedClip.effects
-            } else {
-                currentEffects = clip.effects
-            }
-
             await viewModel.updateSelectedEffects(currentEffects + [effect])
             appliedMessage = "Applied \(displayName(for: type))"
         }

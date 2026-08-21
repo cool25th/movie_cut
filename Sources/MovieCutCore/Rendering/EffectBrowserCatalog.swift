@@ -76,6 +76,18 @@ public struct EffectBrowserCatalogItem: Sendable, Equatable, Identifiable {
         })
         return Effect(type: type, parameters: normalized)
     }
+
+    /// The preview must represent the exact composition order that Apply will
+    /// commit: all effects already on the clip followed by the drafted effect.
+    /// Keeping this as a pure Core contract prevents the browser from silently
+    /// previewing a draft against the raw source while committing it after an
+    /// existing brightness/LUT/etc. chain.
+    public func previewEffects(
+        existingEffects: [Effect],
+        parameters overrides: [String: Double]? = nil
+    ) -> [Effect] {
+        existingEffects + [makeEffect(parameters: overrides)]
+    }
 }
 
 /// Single source of truth for the built-in effects that can be meaningfully

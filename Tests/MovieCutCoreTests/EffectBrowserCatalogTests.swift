@@ -69,4 +69,26 @@ struct EffectBrowserCatalogTests {
         #expect(effect.parameters["intensity"] == 0.75)
         #expect(effect.parameters["unknown"] == nil)
     }
+
+    @Test("preview chain preserves existing effect order and appends the draft last")
+    func previewChainMatchesApplyOrder() throws {
+        let contrast = try #require(EffectBrowserCatalog.item(for: .contrast))
+        let existing = [
+            Effect(type: .brightness, parameters: ["amount": 0.25]),
+            Effect(type: .cinematicLUT, parameters: ["intensity": 0.8])
+        ]
+
+        let preview = contrast.previewEffects(
+            existingEffects: existing,
+            parameters: ["amount": 1.4]
+        )
+
+        #expect(preview.count == 3)
+        #expect(preview[0].type == .brightness)
+        #expect(preview[0].parameters["amount"] == 0.25)
+        #expect(preview[1].type == .cinematicLUT)
+        #expect(preview[1].parameters["intensity"] == 0.8)
+        #expect(preview[2].type == .contrast)
+        #expect(preview[2].parameters["amount"] == 1.4)
+    }
 }

@@ -30,8 +30,8 @@ public struct TrackingResult: Sendable, Codable, Equatable {
 /// Vision's sequential tracker can keep returning a plausible rectangle after
 /// the selected subject disappears behind an occluder. Recovery therefore
 /// cannot depend on `results == nil` alone: a candidate must be both confident
-/// and motion-consistent with the last trusted trajectory. Once a candidate is
-/// rejected, the planner keeps extrapolating the last trusted velocity and
+/// and motion-consistent with the trusted trajectory. Once a candidate is
+/// rejected, the planner keeps extrapolating a smoothed trusted velocity and
 /// asks the provider to recreate the Vision request around that predicted box.
 ///
 /// This is intentionally detector-free v1 behavior. It does not pretend to
@@ -48,17 +48,20 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         public var minimumPredictionIoU: Double
         public var maximumRecoveryDuration: TimeInterval
         public var maximumNormalizedVelocityPerSecond: CGFloat
+        public var velocitySmoothingFactor: CGFloat
 
         public init(
             minimumTrustedConfidence: Float = 0.25,
             minimumPredictionIoU: Double = 0.30,
             maximumRecoveryDuration: TimeInterval = 2.25,
-            maximumNormalizedVelocityPerSecond: CGFloat = 1.5
+            maximumNormalizedVelocityPerSecond: CGFloat = 1.5,
+            velocitySmoothingFactor: CGFloat = 0.25
         ) {
             self.minimumTrustedConfidence = min(max(minimumTrustedConfidence, 0), 1)
             self.minimumPredictionIoU = min(max(minimumPredictionIoU, 0), 1)
             self.maximumRecoveryDuration = max(maximumRecoveryDuration, 0)
             self.maximumNormalizedVelocityPerSecond = max(maximumNormalizedVelocityPerSecond, 0)
+            self.velocitySmoothingFactor = min(max(velocitySmoothingFactor, 0), 1)
         }
     }
 
@@ -84,13 +87,13 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
 
     public let configuration: Configuration
 
-    private var previousTrusted: TrackingResult?
     private var lastTrusted: TrackingResult
+    private var filteredVelocity = CGVector.zero
+    private var hasVelocityEstimate = false
     private var recoveryStartedAt: TimeInterval?
 
     public init(seed: TrackingResult, configuration: Configuration = Configuration()) {
         self.configuration = configuration
-        self.previousTrusted = nil
         self.lastTrusted = seed
         self.recoveryStartedAt = nil
     }
@@ -104,7 +107,7 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
     ///
     /// A missing/invalid candidate, low confidence, or trajectory-inconsistent
     /// candidate starts/continues recovery. A trusted candidate resets recovery
-    /// and becomes the new velocity anchor.
+    /// and updates the smoothed velocity anchor.
     public mutating func evaluate(
         timestamp: TimeInterval,
         candidateRect: CGRect?,
@@ -128,7 +131,7 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         // velocity; accept the first confident candidate and establish it.
         // Thereafter, reject candidates that have drifted away from the trusted
         // trajectory. During recovery this is also the reacquisition gate.
-        if previousTrusted != nil {
+        if hasVelocityEstimate {
             let predictionIoU = Self.intersectionOverUnion(candidate, predicted)
             guard predictionIoU >= configuration.minimumPredictionIoU else {
                 return registerLoss(
@@ -144,22 +147,20 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
             rect: candidate,
             confidence: resolvedConfidence
         )
-        previousTrusted = lastTrusted
+        updateVelocity(with: result)
         lastTrusted = result
         recoveryStartedAt = nil
         return .accept(result: result, reacquired: wasRecovering)
     }
 
-    /// Constant-velocity extrapolation from the last two trusted centers.
-    /// Size is deliberately held at the most recent trusted size so a noisy
-    /// Vision box cannot create a runaway scale during an occlusion.
+    /// Constant-velocity extrapolation from the filtered trusted trajectory.
+    ///
+    /// A single noisy final Vision box can otherwise dominate a two-frame
+    /// derivative and send the recovery seed far away during a long occlusion.
+    /// The EWMA keeps normal constant motion responsive while making recovery
+    /// depend on several trusted frames rather than the final pair alone.
     public func predictedRect(at timestamp: TimeInterval) -> CGRect {
-        guard let previousTrusted else {
-            return Self.clampPreservingSize(lastTrusted.rect)
-        }
-
-        let sampleDelta = lastTrusted.timestamp - previousTrusted.timestamp
-        guard sampleDelta.isFinite, sampleDelta > 1.0e-9 else {
+        guard hasVelocityEstimate else {
             return Self.clampPreservingSize(lastTrusted.rect)
         }
 
@@ -168,15 +169,9 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
             return Self.clampPreservingSize(lastTrusted.rect)
         }
 
-        let maxVelocity = configuration.maximumNormalizedVelocityPerSecond
-        let rawVX = (lastTrusted.rect.midX - previousTrusted.rect.midX) / sampleDelta
-        let rawVY = (lastTrusted.rect.midY - previousTrusted.rect.midY) / sampleDelta
-        let vx = min(max(rawVX, -maxVelocity), maxVelocity)
-        let vy = min(max(rawVY, -maxVelocity), maxVelocity)
-
         let center = CGPoint(
-            x: lastTrusted.rect.midX + vx * horizon,
-            y: lastTrusted.rect.midY + vy * horizon
+            x: lastTrusted.rect.midX + filteredVelocity.dx * horizon,
+            y: lastTrusted.rect.midY + filteredVelocity.dy * horizon
         )
         let proposed = CGRect(
             x: center.x - lastTrusted.rect.width * 0.5,
@@ -185,6 +180,29 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
             height: lastTrusted.rect.height
         )
         return Self.clampPreservingSize(proposed)
+    }
+
+    private mutating func updateVelocity(with result: TrackingResult) {
+        let sampleDelta = result.timestamp - lastTrusted.timestamp
+        guard sampleDelta.isFinite, sampleDelta > 1.0e-9 else { return }
+
+        let maxVelocity = configuration.maximumNormalizedVelocityPerSecond
+        let measuredDX = (result.rect.midX - lastTrusted.rect.midX) / sampleDelta
+        let measuredDY = (result.rect.midY - lastTrusted.rect.midY) / sampleDelta
+        let clampedDX = min(max(measuredDX, -maxVelocity), maxVelocity)
+        let clampedDY = min(max(measuredDY, -maxVelocity), maxVelocity)
+
+        guard hasVelocityEstimate else {
+            filteredVelocity = CGVector(dx: clampedDX, dy: clampedDY)
+            hasVelocityEstimate = true
+            return
+        }
+
+        let alpha = configuration.velocitySmoothingFactor
+        filteredVelocity = CGVector(
+            dx: filteredVelocity.dx + alpha * (clampedDX - filteredVelocity.dx),
+            dy: filteredVelocity.dy + alpha * (clampedDY - filteredVelocity.dy)
+        )
     }
 
     private mutating func registerLoss(

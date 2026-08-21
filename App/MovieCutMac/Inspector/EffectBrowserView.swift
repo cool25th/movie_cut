@@ -29,7 +29,7 @@ struct EffectBrowserView: View {
         }
         .frame(minWidth: 480, minHeight: 360)
         .background(MovieCutTheme.editorBackground)
-        .onAppear(perform: loadProfiles)
+        .task { await loadProfiles() }
     }
 
     // MARK: - Search
@@ -148,17 +148,23 @@ struct EffectBrowserView: View {
 
     // MARK: - Data
 
-    private func loadProfiles() {
-        Task {
-            let all = EffectCostProfiler.measureAllBuiltIns(iterations: 3)
-            var map: [EffectType: EffectCostProfile] = [:]
-            for profile in all {
-                map[profile.effectType] = profile
-            }
-            await MainActor.run {
-                profiles = map
-            }
+    /// The built-in profiler performs synchronous render + memory sampling for
+    /// every effect. Running it in a plain `Task {}` from this SwiftUI view
+    /// inherits the view's MainActor context and can freeze search/scrolling
+    /// while the browser opens. Keep only the state commit on the UI actor;
+    /// the expensive measurement runs on a detached utility task.
+    private func loadProfiles() async {
+        let all = await Task.detached(priority: .utility) {
+            EffectCostProfiler.measureAllBuiltIns(iterations: 3)
+        }.value
+
+        guard !Task.isCancelled else { return }
+
+        var map: [EffectType: EffectCostProfile] = [:]
+        for profile in all {
+            map[profile.effectType] = profile
         }
+        profiles = map
     }
 
     private func displayName(for type: EffectType) -> String {

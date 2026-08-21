@@ -1,11 +1,13 @@
 상태: RUN(2단계 계획 승인됨 2026-08-20)
-현재 증분: 완료 = **Motion Tracking Recovery v1 + safety hotfix** — PR #12(`1af95b8`)로 완전 가림 후 재획득을 구현하고, PR #13(`cd173cf`)으로 Codex P2 2건(appearance matcher 부재 시 fail-closed·recovery timeout 선검사)을 보강. Issue #11은 측정 근거를 기록한 뒤 `completed`로 종료.
-검증 증거: normal fixture mean/min IoU **0.7995/0.7041**, fail rate **0.0000**; occlusion `reacquire_at=2.033s`, latency **0.633s**, sustained post-emergence IoU **0.7543**. 동일 binary/process Release attribution: RTF **0.9670→0.9388(-2.92%)**, p95 **85.34→79.15ms(-7.25%)**. PR #12 CI #79 및 PR #13 CI #81 모두 `build-and-test / ios-tests / lint` green. PR #13 최종 Codex review: major issue 없음.
-이전 완료(최근): G-28 effect cost 실측/브라우저·background single-flight, G-26 master chain 직렬화/제품 배선/Inspector preset UI, G-24 stabilization warp 종단 통합, G-03 adjustment layer, G-27 simulator E2E, W representative-work gate, latency enforce, G-25 audio graph 전환.
-공식 잔여 게이트: **G-27 iOS 실기기 3종(최소/중간/최신) 검증**. 하니스/가이드는 준비 완료이며 물리 iPhone 연결이 필요. 3종 PASS 전에는 Phase 1의 공식 실기기 조건을 완료로 선언하지 않음.
-자율 다음 작업: **2단계 완료 판정 + 잔여 gap 재스캔**. 과거 LOOP_STATE의 다음 후보였던 `마스터 체인 인스펙터 UI`와 `G-28 measureAllBuiltIns 백그라운드 이관`은 현재 main에 이미 구현/회귀 잠금까지 존재하므로 재작업 금지. 방향 문서 §3·§9와 `EXECUTION_PLAN_PHASE2_20260819.md`를 현재 코드에 재대조한 뒤 다음 원자 증분을 확정한다. 3단계 HDR 공개는 단계 게이트 판정 전 선행 착수하지 않는다.
-기존 결함 기록 갱신: motion tracking full-occlusion loss recovery 결함 폐쇄. recovery 중 appearance verification 없는 후보 수용 및 late candidate timeout 우회 P2도 PR #13으로 폐쇄. snapshotFrame 중복 프레임은 하니스 문서화 상태 유지.
-대기 결정 사항: **접근 정규화 승인**만 유지. `모션 트래킹 재검출 시드` 대기 항목은 #11 완료로 제거.
-제품 코드 기준점(PR #13 merge): cd173cf8cb1b2821fa1182ca762e5fa0ef3928f5
-문서 상태 동기화: PR #14
-갱신: 2026-08-22 00:32 KST
+현재 증분: **G-28 Inc 2b — effect browser preview + parameter drafting** (PR #17, Issue #16 추적). 2단계 재스캔에서 기존 브라우저가 검색·즐겨찾기·cost badge까지만 구현됐고, 계획상 필수인 미리보기·적용 전 파라미터 편집이 빠져 있음을 확인. 또한 모든 효과를 `["intensity": 0.5]`로 적용해 brightness/contrast/saturation/temperature/exposure/blur 등 renderer key와 불일치하여 일부 카드가 no-op이 될 수 있는 결함을 폐쇄.
+구현 증거: Core `EffectBrowserCatalog`를 단일 browser-facing 계약으로 추가해 효과별 renderer key/range/default/visible preview value를 고정. transitions는 전용 Transition inspector, external LUT는 파일 경로 요구 때문에 preview grid에서 제외. Mac `EffectBrowserView`는 선택 즉시 적용을 중단하고 **Original/Preview 썸네일 + 효과별 slider + 명시적 Apply to Clip**으로 변경하며, preview는 실제 preview/export와 같은 `VisualEffectPixelProcessor`를 사용. 적용 시 stale sheet snapshot 대신 현재 selected clip의 effect list에 draft effect를 추가.
+리뷰 보강: 첫 Ready HEAD에 대한 Codex review에서 **P2 — 기존 clip effect chain을 preview에 포함하지 않아 preview≠commit 가능**을 발견. `EffectBrowserCatalogItem.previewEffects(existingEffects:parameters:)` 순수 계약으로 **기존 효과 순서 + draft effect**를 고정하고, preview와 Apply가 동일 순서를 사용하도록 수정(`78bb00f9`). 회귀 테스트는 brightness → cinematic LUT → draft contrast 순서와 draft parameter를 고정.
+검증 증거: 최초 구현 커밋 `fdcf8adf0e03fd925aa06264af6000415f399dcf` CI #87(`32503478653`) 3-green. Codex P2 수정 커밋 `78bb00f94c72f503a0e025645ee8be9297d7da87` CI #89(`32505933496`)도 `build-and-test` ✅ / `ios-tests` ✅ / `lint` ✅. Core catalog/chain 행동 테스트, Mac app build, generic iOS build 모두 green.
+2단계 완료 판정: **아직 NOT DONE.** `EXECUTION_PLAN_PHASE2_20260819.md`의 G-28 증분 중 ① EffectCostProfile/실측 완료, ② browser UI는 이번 Inc 2b로 검색·미리보기·즐겨찾기·파라미터까지 충족. 남은 필수는 **③ 템플릿 브라우저(G-19 확장)**, **④ KPI 측정 하니스(검색→미리보기→적용/재사용) + 작업 성공률 ≥90% 실측 게이트**. 이 둘을 닫기 전 G-28/2단계 완료 또는 G-29 HDR 진입을 선언하지 않음.
+이전 완료(최근): Motion Tracking Recovery v1 + safety hotfix(#11, PR #12/#13), G-28 effect cost 실측/background single-flight, G-26 master chain 직렬화/제품 배선/Inspector preset UI, G-24 stabilization warp 종단 통합, G-03 adjustment layer, G-27 simulator E2E, W representative-work gate, latency enforce, G-25 audio graph 전환.
+공식 병렬 잔여 게이트: **G-27 iOS 실기기 3종(최소/중간/최신) 검증**. 하니스/가이드는 준비 완료이며 물리 iPhone 연결이 필요. 3종 PASS 전에는 Phase 1의 공식 실기기 조건을 완료로 선언하지 않음.
+다음 자율 증분: **G-28 Inc 3 — 템플릿 브라우저**. 기존 `BuiltinCardTemplates` / `CardTemplateGallery` 등 G-19 자산을 재사용 가능한지 먼저 감사하고, 검색·미리보기·즐겨찾기·적용 흐름을 effect browser와 정보구조 수준에서 정합한다. 이후 Inc 4 KPI 하니스에서 effect/template discovery workflow를 함께 실측한다.
+대기 결정 사항: **접근 정규화 승인**만 유지. 모션 트래킹 재검출 시드 결정은 #11 완료로 종료. N2 원클릭 오토스타일은 기존 계획대로 사용자 등록 결정 전제.
+제품 코드 기준점(PR #15 이후 main): 54e9d3a8264e9abc4b5ad137ef43780d580f484e
+현재 변경 세트: PR #17 / Issue #16
+갱신: 2026-08-22 KST

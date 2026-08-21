@@ -52,7 +52,7 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         public init(
             minimumTrustedConfidence: Float = 0.25,
             minimumPredictionIoU: Double = 0.30,
-            maximumRecoveryDuration: TimeInterval = 1.75,
+            maximumRecoveryDuration: TimeInterval = 2.25,
             maximumNormalizedVelocityPerSecond: CGFloat = 1.5
         ) {
             self.minimumTrustedConfidence = min(max(minimumTrustedConfidence, 0), 1)

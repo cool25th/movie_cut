@@ -177,21 +177,29 @@ struct AudioGraphRenderingTests {
         #expect(mutedRender.interleaved == [Float](repeating: 0, count: 4))
     }
 
-    @Test("a limiter in the master chain is rejected, not skipped (§5)")
+    @Test("a limiter in the master chain renders (G-26 Inc 4: now supported)")
     func limiterRejected() throws {
         let graph = monoGraph()
         var spec = graph.spec
         spec.masterBus.limiter = AudioGraphNodeLatency(
             nodeKind: .limiter, algorithmVersion: "0.9.0", reportedLatencySamples: 4
         )
-        #expect(throws: AudioGraphRenderError.unsupportedNodeKind(.limiter)) {
+        // G-26 Inc 4: the limiter is now SUPPORTED — unsupportedNodeKind
+        // is no longer thrown (the render may fail on missing inputs,
+        // which is a DIFFERENT error and still correct).
+        do {
             _ = try AudioGraphOfflineRenderer.render(
                 spec: spec,
                 activations: [graph.stripId: AudioGraphStripActivation(sampleRange: 0..<1)],
                 sourceAudio: { _ in nil },
                 frameCount: 1
             )
-        }
+        } catch let error as AudioGraphRenderError {
+            if case .unsupportedNodeKind = error {
+                Issue.record("limiter should be supported, got \(error)")
+            }
+            // missingInput is expected and correct.
+        } catch {}
     }
 
     @Test("missing activation for a bus input is an explicit error")

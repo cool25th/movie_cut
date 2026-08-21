@@ -230,19 +230,45 @@ public struct AudioGraphMasterBus: Codable, Sendable, Equatable {
     /// Target integrated loudness in LUFS for the meter guideline
     /// (spec §7: -16…-14 LUFS-I guideline, never auto-enforced).
     public var targetLoudness: Double?
+    /// G-26 §6 serialization: the master chain's FULL parameters as saved.
+    /// The renderers consume these — not a hardcoded preset — so a graph
+    /// renders identically wherever it is deserialized. Nil on legacy
+    /// graphs that only declared a limiter.
+    public var masterChain: AudioGraphMasterChain.Chain?
+    /// The §6 preset algorithm version recorded when the chain was
+    /// serialized (e.g. "1.0.0" for SNS). Informational at render time —
+    /// the saved parameters render as-is; a version mismatch on reopen
+    /// surfaces "rendered with the previous algorithm" rather than
+    /// silently regenerating.
+    public var presetAlgorithmVersion: String?
 
     public init(
         fader: [AudioGraphAutomationPoint] = [],
         limiter: AudioGraphNodeLatency? = nil,
-        targetLoudness: Double? = nil
+        targetLoudness: Double? = nil,
+        masterChain: AudioGraphMasterChain.Chain? = nil,
+        presetAlgorithmVersion: String? = nil
     ) {
         self.fader = fader
         self.limiter = limiter
         self.targetLoudness = targetLoudness
+        self.masterChain = masterChain
+        self.presetAlgorithmVersion = presetAlgorithmVersion
+    }
+
+    /// The chain a renderer must apply: the SERIALIZED parameters when
+    /// present; the SNS preset for legacy graphs that only declared a
+    /// limiter (the pre-serialization renderers hardcoded SNS, so this
+    /// preserves their behavior); nil means no master processing.
+    public func resolvedMasterChain() -> AudioGraphMasterChain.Chain? {
+        if let masterChain {
+            return masterChain
+        }
+        return limiter != nil ? .sns : nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fader, limiter, targetLoudness
+        case fader, limiter, targetLoudness, masterChain, presetAlgorithmVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -250,6 +276,8 @@ public struct AudioGraphMasterBus: Codable, Sendable, Equatable {
         fader = try container.decodeIfPresent([AudioGraphAutomationPoint].self, forKey: .fader) ?? []
         limiter = try container.decodeIfPresent(AudioGraphNodeLatency.self, forKey: .limiter)
         targetLoudness = try container.decodeIfPresent(Double.self, forKey: .targetLoudness)
+        masterChain = try container.decodeIfPresent(AudioGraphMasterChain.Chain.self, forKey: .masterChain)
+        presetAlgorithmVersion = try container.decodeIfPresent(String.self, forKey: .presetAlgorithmVersion)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -257,6 +285,8 @@ public struct AudioGraphMasterBus: Codable, Sendable, Equatable {
         try container.encode(fader, forKey: .fader)
         try container.encodeIfPresent(limiter, forKey: .limiter)
         try container.encodeIfPresent(targetLoudness, forKey: .targetLoudness)
+        try container.encodeIfPresent(masterChain, forKey: .masterChain)
+        try container.encodeIfPresent(presetAlgorithmVersion, forKey: .presetAlgorithmVersion)
     }
 }
 
@@ -298,14 +328,29 @@ public struct AudioGraphFade: Codable, Sendable, Equatable {
         case exponential
     }
 
+    /// Which direction the gain ramps inside the window:
+    /// `.fadeIn` = 0→1 (a fade-in), `.fadeOut` = 1→0 (a fade-out).
+    /// Without this the renderer can only express ascending ramps.
+    public enum Direction: String, Codable, Sendable {
+        case fadeIn
+        case fadeOut
+    }
+
     public var startSample: Int64
     public var endSample: Int64
     public var curve: Curve
+    public var direction: Direction
 
-    public init(startSample: Int64, endSample: Int64, curve: Curve = .linear) {
+    public init(
+        startSample: Int64,
+        endSample: Int64,
+        curve: Curve = .linear,
+        direction: Direction = .fadeIn
+    ) {
         self.startSample = startSample
         self.endSample = endSample
         self.curve = curve
+        self.direction = direction
     }
 }
 
@@ -347,8 +392,13 @@ public enum AudioGraphNodeKind: String, Codable, Sendable, CaseIterable {
         switch self {
         case .channelMapping, .gainFade, .pan, .summing, .ducking, .fader, .meter, .encoder:
             return true
-        case .noiseReduction, .mlStem, .eq, .compressor, .creativeFX, .masterEQ, .limiter:
+        case .noiseReduction, .mlStem, .eq, .creativeFX, .masterEQ:
             return false
+        case .compressor, .limiter:
+            // G-26 (Phase 2): the compressor and limiter DSP are
+            // implemented and wired into the graph render path via
+            // AudioGraphMasterChain. The engines now SUPPORT these.
+            return true
         }
     }
 }

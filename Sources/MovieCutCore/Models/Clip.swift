@@ -126,6 +126,12 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
 
     /// Whether the background is removed via person segmentation (F-08).
     public var isBackgroundRemoved: Bool
+    /// G-03 adjustment layer: this clip carries no content of its own —
+    /// its colorCorrection/colorGrade apply to every VISIBLE clip under it
+    /// during its timeline range (design note: a clip flag, not a Track.kind,
+    /// so ranges/undo ride the existing clip machinery; v1 applies on video
+    /// tracks only, enforced at the consumption sites).
+    public var isAdjustmentLayer: Bool
 
     /// Optional color correction adjustments.
     public var colorCorrection: ColorCorrection?
@@ -170,6 +176,15 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// Decodes to nil for legacy projects. The schema bump is deferred to task 6.
     public var compoundId: UUID?
 
+    /// G-24 stabilization: the per-frame warp plan computed by the analysis
+    /// pipeline (registration → smoothing → correction). Nil means the clip
+    /// was never stabilized; an EMPTY plan means analyzed-but-nothing-to-
+    /// correct. Preview and export consume the same plan through
+    /// `CustomCompositionClipEffect`, so they warp identically by
+    /// construction. Decodes to nil for legacy projects and is only
+    /// persisted when set, keeping unstabilized JSON byte-identical.
+    public var stabilization: StabilizationPlan?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -194,6 +209,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case effects
         case isReversed
         case isBackgroundRemoved
+        case isAdjustmentLayer
         case colorCorrection
         case colorGrade
         case groupId
@@ -202,6 +218,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case blendMode
         case compoundId
         case cropRect
+        case stabilization
     }
 
     /// Creates a clip.
@@ -232,6 +249,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         effects: [Effect] = [],
         isReversed: Bool = false,
         isBackgroundRemoved: Bool = false,
+        isAdjustmentLayer: Bool = false,
         colorCorrection: ColorCorrection? = nil,
         colorGrade: ColorGrade? = nil,
         groupId: UUID? = nil,
@@ -239,7 +257,8 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         duckingLevel: Double? = nil,
         blendMode: BlendMode = .normal,
         compoundId: UUID? = nil,
-        cropRect: NormalizedRect? = nil
+        cropRect: NormalizedRect? = nil,
+        stabilization: StabilizationPlan? = nil
     ) {
         self.id = id
         self.assetId = assetId
@@ -276,6 +295,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.effects = effects
         self.isReversed = isReversed
         self.isBackgroundRemoved = isBackgroundRemoved
+        self.isAdjustmentLayer = isAdjustmentLayer
         self.colorCorrection = colorCorrection
         self.colorGrade = colorGrade
         self.groupId = groupId
@@ -284,6 +304,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.blendMode = blendMode
         self.compoundId = compoundId
         self.cropRect = cropRect
+        self.stabilization = stabilization
     }
 
     public init(from decoder: any Decoder) throws {
@@ -311,6 +332,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         effects = try container.decodeIfPresent([Effect].self, forKey: .effects) ?? []
         isReversed = try container.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
         isBackgroundRemoved = try container.decodeIfPresent(Bool.self, forKey: .isBackgroundRemoved) ?? false
+        isAdjustmentLayer = try container.decodeIfPresent(Bool.self, forKey: .isAdjustmentLayer) ?? false
         colorCorrection = try container.decodeIfPresent(ColorCorrection.self, forKey: .colorCorrection)
         colorGrade = try container.decodeIfPresent(ColorGrade.self, forKey: .colorGrade)
         groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
@@ -324,6 +346,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // broken-ref validation happens in `Project.validateCompounds` at load.
         compoundId = try container.decodeIfPresent(UUID.self, forKey: .compoundId) ?? nil
         cropRect = try container.decodeIfPresent(NormalizedRect.self, forKey: .cropRect)
+        stabilization = try container.decodeIfPresent(StabilizationPlan.self, forKey: .stabilization)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -351,6 +374,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         try container.encode(effects, forKey: .effects)
         try container.encode(isReversed, forKey: .isReversed)
         if isBackgroundRemoved { try container.encode(isBackgroundRemoved, forKey: .isBackgroundRemoved) }
+        if isAdjustmentLayer { try container.encode(isAdjustmentLayer, forKey: .isAdjustmentLayer) }
         try container.encodeIfPresent(colorCorrection, forKey: .colorCorrection)
         try container.encodeIfPresent(colorGrade, forKey: .colorGrade)
         try container.encodeIfPresent(groupId, forKey: .groupId)
@@ -367,6 +391,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // byte-identical to its pre-feature JSON (Requirement 7.6).
         try container.encodeIfPresent(compoundId, forKey: .compoundId)
         try container.encodeIfPresent(cropRect, forKey: .cropRect)
+        // Persist the stabilization plan only when set — the analysis
+        // output is re-derivable and unstabilized clips stay byte-identical.
+        try container.encodeIfPresent(stabilization, forKey: .stabilization)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

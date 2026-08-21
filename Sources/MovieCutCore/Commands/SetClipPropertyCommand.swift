@@ -58,6 +58,9 @@ public enum ClipProperty: Codable, Sendable, Equatable {
 
     /// Replaces the dedicated crop rect; nil clears the crop (G-23).
     case cropRect(NormalizedRect?)
+    /// G-03: mark/unmark a clip as an adjustment layer (carries color
+    /// correction/grade only, renders no content).
+    case isAdjustmentLayer(Bool)
 }
 
 /// Sets one editable clip property.
@@ -147,6 +150,9 @@ public struct SetClipPropertyCommand: EditorCommand {
         case .blendMode(let blendMode):
             previousProperty = .blendMode(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].blendMode = blendMode
+        case .isAdjustmentLayer(let isAdjustmentLayer):
+            previousProperty = .isAdjustmentLayer(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isAdjustmentLayer)
+            project.timeline.tracks[location.trackIndex].clips[location.clipIndex].isAdjustmentLayer = isAdjustmentLayer
         case .cropRect(let cropRect):
             previousProperty = .cropRect(project.timeline.tracks[location.trackIndex].clips[location.clipIndex].cropRect)
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].cropRect = cropRect

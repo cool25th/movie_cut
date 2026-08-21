@@ -43,12 +43,16 @@ struct R503TrackHeaderStaticContractTests {
         // `App/MovieCutMacUITests/TimelineAccessibilityLabelUITests.swift`.
         #expect(lane.contains("handleTrackDrop(providers: providers, location: location, trackId: track.id)"))
 
-        #expect(controls.components(separatedBy: "Button {").count - 1 == 3)
+        // G-25 Inc 9: a fourth control — audio solo — joins mute/hide/lock
+        // for audio-capable tracks (kind != .text).
+        #expect(controls.components(separatedBy: "Button {").count - 1 == 4)
         #expect(controls.contains(#"Image(systemName: track.isMuted ? "speaker.slash" : "speaker.wave.2")"#))
         #expect(controls.contains(#"Image(systemName: track.isHidden ? "eye.slash" : "eye")"#))
         #expect(controls.contains(#"Image(systemName: track.isLocked ? "lock" : "lock.open")"#))
-        #expect(controls.components(separatedBy: ".buttonStyle(.borderless)").count - 1 == 3)
+        #expect(controls.contains(#"Image(systemName: "headphones")"#))
+        #expect(controls.components(separatedBy: ".buttonStyle(.borderless)").count - 1 == 4)
         #expect(controls.contains(#"accessibilityLabel(NSLocalizedString("Mute track", comment: ""))"#))
+        #expect(controls.contains(#"accessibilityLabel(NSLocalizedString("Solo track", comment: ""))"#))
         #expect(controls.contains(#"accessibilityLabel(NSLocalizedString("Hide track", comment: ""))"#))
         #expect(controls.contains(#"accessibilityLabel(NSLocalizedString("Lock track", comment: ""))"#))
         #expect(controls.contains("accessibilityValue(track.isMuted ?"))

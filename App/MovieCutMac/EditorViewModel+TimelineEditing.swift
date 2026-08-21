@@ -284,6 +284,12 @@ extension EditorViewModel {
         await apply(SetTrackPropertyCommand(trackId: track.id, property: .isMuted(!track.isMuted)))
     }
 
+    /// G-25 Inc 9: audio solo — soloing silences every other track's audio
+    /// (preview and export honor it alongside mute).
+    func toggleTrackSolo(_ track: Track) async {
+        await apply(SetTrackPropertyCommand(trackId: track.id, property: .isSolo(!track.isSolo)))
+    }
+
     func toggleTrackLock(_ track: Track) async {
         await apply(SetTrackPropertyCommand(trackId: track.id, property: .isLocked(!track.isLocked)))
     }

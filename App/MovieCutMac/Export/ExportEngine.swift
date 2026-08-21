@@ -83,7 +83,16 @@ final class ExportEngine: FlattenedTimelineConsumer {
         do {
             beginSecurityScopes(for: project)
             defer { endSecurityScopes() }
-            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            // G-25 2C-1b (spec §1): the mix's samples come from the graph —
+            // render + AAC-encode it once here; the package inserts it as
+            // the composition's single audio track (no per-clip audioMix).
+            let graphAudioURL = try await renderGraphAudio(for: project, audioProcessing: audioProcessing)
+            var graphAudioOwnedURLs = graphAudioURL.map { [$0] } ?? []
+            defer { removeTemporaryRenderURLs(graphAudioOwnedURLs) }
+            let exportPackage = try await makeExportPackage(
+                for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL
+            )
+            graphAudioOwnedURLs.removeAll()
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {
                 throw ExportEngineError.noExportableMedia
@@ -223,128 +232,61 @@ final class ExportEngine: FlattenedTimelineConsumer {
         activeSecurityScopes = []
     }
 
+    /// G-25 2C-1b (spec §1): renders the graph mix (volumes, fades,
+    /// ducking, mute/solo, EQ as derived effective media, §3.1-normalized
+    /// sources) and encodes it as AAC into a temporary file the export
+    /// package owns. nil when the project has no audio at all.
+    private func renderGraphAudio(
+        for project: Project,
+        audioProcessing: ClipAudioProcessingOptions,
+        flattenedTracks: [Track]? = nil
+    ) async throws -> URL? {
+        let mix: AudioGraphSourceAudio
+        do {
+            // Code-review #5: pass the FLATTENED tracks (compound clips
+            // expanded) so their audio isn't lost — the builder skips
+            // container clips (no assetId).
+            mix = try await GraphMixRenderer.renderMix(
+                project: project,
+                eqPresetsByClipId: audioProcessing.eqPresets,
+                trimToAudibleSpan: true,
+                tracks: flattenedTracks
+            )
+        } catch GraphMixRenderer.RenderError.noAudio {
+            return nil
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutGraphMix-\(UUID().uuidString).m4a")
+        do {
+            try AudioGraphAacEncoder.encode(mix, to: url)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+        return url
+    }
+
     private func makeExportPackage(
         for project: Project,
-        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()
+        audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions(),
+        graphAudio: URL? = nil,
+        includeAudioTrack: Bool = true
     ) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
         var videoClipInstructions: [ExportClipInstructionMetadata] = []
-        var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
-        var temporaryEqualizedAudioURLs: [URL] = []
         var temporaryOpticalFlowURLs: [URL] = []
         var temporaryImageRenderURLs: [URL] = []
-        var shouldKeepTemporaryEqualizedAudioURLs = false
-        defer {
-            if !shouldKeepTemporaryEqualizedAudioURLs {
-                removeTemporaryRenderURLs(temporaryEqualizedAudioURLs)
-            }
-        }
 
-        func applyAudioVolumeAndFades(
-            for clip: Clip,
-            audioParameters: AVMutableAudioMixInputParameters,
-            destinationTime: CMTime,
-            clipDuration: CMTime
-        ) {
-            let volume = Float(min(max(clip.volume, 0), 2))
-            audioParameters.setVolume(volume, at: destinationTime)
-
-            guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
-
-            if clip.fadeInDuration > 0 {
-                let fadeInDuration = min(clip.fadeInDuration, clipDuration.seconds)
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: 0,
-                    toEndVolume: volume,
-                    timeRange: CMTimeRange(
-                        start: destinationTime,
-                        duration: CMTime(seconds: fadeInDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-
-            if clip.fadeOutDuration > 0 {
-                let fadeOutDuration = min(clip.fadeOutDuration, clipDuration.seconds)
-                let fadeOutStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: clipDuration.seconds - fadeOutDuration, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: volume,
-                    toEndVolume: 0,
-                    timeRange: CMTimeRange(
-                        start: fadeOutStart,
-                        duration: CMTime(seconds: fadeOutDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-            applyDuckingRamps(
-                for: clip,
-                audioParameters: audioParameters,
-                destinationTime: destinationTime,
-                clipDuration: clipDuration,
-                baseVolume: volume
-            )
-        }
-
-        func applyDuckingRamps(
-            for clip: Clip,
-            audioParameters: AVMutableAudioMixInputParameters,
-            destinationTime: CMTime,
-            clipDuration: CMTime,
-            baseVolume: Float
-        ) {
-            guard let duckingLevel = clip.duckingLevel,
-                  duckingLevel < 1,
-                  !clip.duckingRanges.isEmpty,
-                  clipDuration.seconds.isFinite, clipDuration.seconds > 0
-            else { return }
-
-            let duckedVolume = baseVolume * Float(max(0, duckingLevel))
-            let attack = AudioDuckingPlanner.attackDuration
-            let release = AudioDuckingPlanner.releaseDuration
-            // Keep ducking ramps clear of the fade windows so AVFoundation
-            // never receives overlapping volume ramps on one clip.
-            let lowerBound = clip.fadeInDuration > 0 ? min(clip.fadeInDuration, clipDuration.seconds) : 0
-            let upperBound = clipDuration.seconds
-                - (clip.fadeOutDuration > 0 ? min(clip.fadeOutDuration, clipDuration.seconds) : 0)
-            guard upperBound > lowerBound else { return }
-
-            for range in AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges) {
-                let start = max(range.start, lowerBound)
-                let end = min(range.end, upperBound)
-                guard end - start > attack + release else { continue }
-
-                let attackStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: start, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: baseVolume,
-                    toEndVolume: duckedVolume,
-                    timeRange: CMTimeRange(
-                        start: attackStart,
-                        duration: CMTime(seconds: attack, preferredTimescale: 600)
-                    )
-                )
-
-                let releaseStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: end - release, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: duckedVolume,
-                    toEndVolume: baseVolume,
-                    timeRange: CMTimeRange(
-                        start: releaseStart,
-                        duration: CMTime(seconds: release, preferredTimescale: 600)
-                    )
-                )
-            }
-        }
-
-        for track in renderingTracks(for: project) where !track.isMuted {
+        // G-25 2C-1b (spec §1): per-clip audio insertion and the audioMix
+        // are RETIRED — the mix's samples come from the graph (one AAC track
+        // inserted below). Ducking/fades/volume live in
+        // AudioGraphProjectBuilder (spec §1.1); EQ in GraphMixRenderer's
+        // derived effective media (§0). VIDEO-kind tracks still contribute
+        // only video here; their embedded audio flows through the graph.
+        let anyTrackSoloed = project.timeline.tracks.contains { $0.isSolo && $0.kind != .text }
+        for track in renderingTracks(for: project)
+        where !track.isMuted && !(anyTrackSoloed && track.kind == .audio && !track.isSolo) {
             if track.kind == .text {
                 for clip in track.clips {
                     guard let textContent = clip.textContent else {
@@ -388,14 +330,17 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
 
             guard let mediaType = mediaType(for: track.kind) else { continue }
+            // G-25 2C-1b: audio-kind tracks contribute through the graph's
+            // mix, never as composition tracks.
+            guard mediaType != .audio else { continue }
 
-            var destinationTrack: AVMutableCompositionTrack?
             var videoDestinationTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
-            let audioParameters = AVMutableAudioMixInputParameters()
 
             let sortedClips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
 
             for (clipIndex, clip) in sortedClips.enumerated() {
+                // G-03: adjustment clips carry no content — render nothing.
+                guard clip.isAdjustmentLayer == false else { continue }
                 guard let assetId = clip.assetId,
                       let mediaAsset = project.mediaLibrary.assets[assetId] else {
                     continue
@@ -427,17 +372,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
                     }
                     sourceTrack = loadedTrack
                 }
-                if mediaType == .audio,
-                   let preset = clip.resolvedEqualizerPreset(fallback: audioProcessing.eqPresets[clip.id]) {
-                    let rendered = try await equalizedAudioAsset(
-                        for: clip,
-                        mediaAsset: mediaAsset,
-                        preset: preset,
-                        temporaryURLs: &temporaryEqualizedAudioURLs
-                    )
-                    sourceAsset = rendered.asset
-                    sourceTrack = rendered.track
-                }
 
                 let compositionTrack: AVMutableCompositionTrack
                 if mediaType == .video {
@@ -456,22 +390,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         videoCompositionTracks.append(createdTrack)
                         compositionTrack = createdTrack
                     }
-                } else if let destinationTrack {
-                    compositionTrack = destinationTrack
                 } else {
-                    guard let createdTrack = composition.addMutableTrack(
-                        withMediaType: mediaType,
-                        preferredTrackID: kCMPersistentTrackID_Invalid
-                    ) else {
-                        throw ExportEngineError.compositionTrackCreationFailed
-                    }
-                    createdTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
-                    destinationTrack = createdTrack
-                    compositionTrack = createdTrack
-
-                    if mediaType == .audio {
-                        audioParameters.trackID = createdTrack.trackID
-                    }
+                    continue
                 }
 
                 // Transition overlap: when previous clip has a transition, overlap by transition duration
@@ -609,22 +529,29 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         useOpticalFlow: clip.useOpticalFlow,
                         playbackRate: playbackRate,
                         blendMode: clip.blendMode,
-                        cropRect: clip.cropRect
+                        cropRect: clip.cropRect,
+                        stabilization: clip.stabilization
                     ))
                 }
-
-                if mediaType == .audio {
-                    applyAudioVolumeAndFades(
-                        for: clip,
-                        audioParameters: audioParameters,
-                        destinationTime: destinationTime,
-                        clipDuration: clipCompositionDuration
-                    )
-                }
             }
+        }
 
-            if mediaType == .audio, destinationTrack != nil {
-                audioMixInputParameters.append(audioParameters)
+        // G-25 2C-1b: the graph's mix as the composition's SINGLE audio
+        // track — inserted at zero spanning the AAC file's own range (the
+        // audible span; a shorter audio track in a longer video matches the
+        // legacy composition's shape). The WRITER path skips the insertion
+        // (see ExportPackage.graphAudioURL) — its reader stays video-only.
+        if includeAudioTrack, let graphAudio {
+            let audioAsset = AVURLAsset(url: graphAudio)
+            if let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first {
+                let trackRange = try await audioTrack.load(.timeRange)
+                if trackRange.duration > .zero,
+                   let compositionAudioTrack = composition.addMutableTrack(
+                       withMediaType: .audio,
+                       preferredTrackID: kCMPersistentTrackID_Invalid
+                   ) {
+                    try compositionAudioTrack.insertTimeRange(trackRange, of: audioTrack, at: .zero)
+                }
             }
         }
 
@@ -634,18 +561,20 @@ final class ExportEngine: FlattenedTimelineConsumer {
             duration: composition.duration,
             canvas: project.canvas,
             exportSettings: project.exportSettings,
-            canvasBackground: project.canvasBackground
+            canvasBackground: project.canvasBackground,
+            project: project
         )
-        let audioMix = makeAudioMix(parameters: audioMixInputParameters)
 
-        shouldKeepTemporaryEqualizedAudioURLs = true
         return ExportPackage(
             composition: composition,
             videoComposition: videoComposition,
-            audioMix: audioMix,
-            temporaryRenderURLs: temporaryEqualizedAudioURLs
+            // nil by design (G-25 2C-1b): the graph already applied every
+            // audio edit; there is nothing left for an audioMix to do.
+            audioMix: nil,
+            temporaryRenderURLs: (graphAudio.map { [$0] } ?? [])
                 + temporaryOpticalFlowURLs
-                + temporaryImageRenderURLs
+                + temporaryImageRenderURLs,
+            graphAudioURL: graphAudio
         )
     }
 
@@ -655,7 +584,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
         duration: CMTime,
         canvas: CanvasPreset,
         exportSettings: ExportSettings,
-        canvasBackground: CanvasBackground? = nil
+        canvasBackground: CanvasBackground? = nil,
+        project: Project
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
 
@@ -670,7 +600,14 @@ final class ExportEngine: FlattenedTimelineConsumer {
         }
 
         let transitionEffects = makeTransitionEffects(from: clips)
-        let usesCustomVideoCompositor = clips.contains { clip in
+        // Code-review #6: an adjustment layer needs the custom compositor
+        // — the adjustment chain applies there. Without this check, a
+        // project whose only custom feature is an adjustment layer takes
+        // the plain instruction path and the adjustment is dropped.
+        let hasAdjustmentLayer = project.timeline.tracks
+            .flatMap(\.clips)
+            .contains { $0.isAdjustmentLayer }
+        let usesCustomVideoCompositor = hasAdjustmentLayer || clips.contains { clip in
             clip.colorCorrection != nil
                 || clip.colorGrade != nil
                 || clip.textContent != nil
@@ -684,6 +621,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 || clip.isBackgroundRemoved
                 || clip.blendMode != .normal
                 || clip.cropRect != nil
+                // G-24 (#9): stabilization warps in the custom compositor —
+                // same trigger as the other custom-render features.
+                || clip.stabilization != nil
         } || !transitionEffects.isEmpty
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
@@ -795,6 +735,17 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
         if usesCustomVideoCompositor {
             videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
+            // G-03: one instruction spans the whole timeline today, so the
+            // adjustment chain is the full-timeline set, ordered bottom-first.
+            // (Range granularity arrives with per-range instructions.)
+            // Code-review #7: ALL adjustment clips are attached (not just
+            // those active at t=0) — the compositor's per-frame evaluation
+            // is where range filtering belongs, not here.
+            let videoTracks = project.timeline.tracks.filter { $0.kind == .video }
+            let adjustmentClips: [Clip] = videoTracks
+                    .sorted { $0.zIndex < $1.zIndex }
+                    .flatMap(\.clips)
+                    .filter(\.isAdjustmentLayer)
             videoComposition.instructions = [
                 CustomCompositionInstruction(
                     timeRange: CMTimeRange(start: .zero, duration: duration),
@@ -821,11 +772,13 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             isBackgroundRemoved: clip.isBackgroundRemoved,
                             blendMode: clip.blendMode,
                             cropRect: clip.cropRect,
+                            stabilization: clip.stabilization,
                             includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
                     transitionEffects: transitionEffects,
-                    canvasBackground: canvasBackground
+                    canvasBackground: canvasBackground,
+                    adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             ]
         } else {
@@ -965,12 +918,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
         return AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoLayer, in: parentLayer)
     }
 
-    private func temporaryEqualizedAudioURL(for clip: Clip) -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutEQ-\(clip.id.uuidString)-\(UUID().uuidString)")
-            .appendingPathExtension("caf")
-    }
-
     private func temporaryOpticalFlowRenderURL(for clip: Clip) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutOpticalFlow-\(clip.id.uuidString)-\(UUID().uuidString)")
@@ -981,28 +928,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutImage-\(clip.id.uuidString)-\(UUID().uuidString)")
             .appendingPathExtension("mp4")
-    }
-
-    private func equalizedAudioAsset(
-        for clip: Clip,
-        mediaAsset: MediaAsset,
-        preset: EqualizerPreset,
-        temporaryURLs: inout [URL]
-    ) async throws -> (asset: AVURLAsset, track: AVAssetTrack) {
-        let outputURL = temporaryEqualizedAudioURL(for: clip)
-        try await AudioEqualizerService().apply(
-            preset: preset,
-            inputURL: mediaAsset.originalURL,
-            outputURL: outputURL
-        )
-
-        let asset = AVURLAsset(url: outputURL)
-        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
-            throw ExportEngineError.exportSessionCreationFailed
-        }
-
-        temporaryURLs.append(outputURL)
-        return (asset, track)
     }
 
     private func removeTemporaryRenderURLs(_ urls: [URL]) {
@@ -1168,14 +1093,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
         return CGPoint(x: canvasSize.width * 0.5, y: canvasSize.height * 0.5)
     }
 
-    private func makeAudioMix(parameters: [AVMutableAudioMixInputParameters]) -> AVMutableAudioMix? {
-        guard !parameters.isEmpty else { return nil }
-
-        let audioMix = AVMutableAudioMix()
-        audioMix.inputParameters = parameters
-        return audioMix
-    }
-
     private func mediaType(for trackKind: TrackKind) -> AVMediaType? {
         switch trackKind {
         case .video:
@@ -1248,6 +1165,13 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// Reuses the same composition/audio-mix builder as the video path so
     /// volume, fades, ducking, and EQ are preserved, then muxes audio only.
     @discardableResult
+    /// G-25 switchover 2C-1a (spec §1): the audio-only export's samples come
+    /// from the GRAPH — `GraphMixRenderer` builds the graph from project
+    /// state (volumes/fades/ducking/mute/solo, EQ as derived effective
+    /// media, §3.1-normalized sources) and `AudioGraphAacEncoder` writes the
+    /// encoder-input PCM as AAC. No composition build and no audioMix — the
+    /// legacy AVAssetExportSession mixing path is gone for audio-only
+    /// exports, and with it that path's deadlock exposure and EQ tap defect.
     func exportAudioOnly(
         project: Project,
         to url: URL,
@@ -1261,27 +1185,23 @@ final class ExportEngine: FlattenedTimelineConsumer {
         do {
             beginSecurityScopes(for: project)
             defer { endSecurityScopes() }
-            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
-            defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
-            guard !exportPackage.composition.tracks(withMediaType: .audio).isEmpty else {
+
+            let mix: AudioGraphSourceAudio
+            do {
+                mix = try await GraphMixRenderer.renderMix(
+                    project: project,
+                    eqPresetsByClipId: audioProcessing.eqPresets,
+                    trimToAudibleSpan: true
+                )
+            } catch GraphMixRenderer.RenderError.noAudio {
                 throw ExportEngineError.noExportableMedia
             }
-            guard let exportSession = AVAssetExportSession(
-                asset: exportPackage.composition,
-                presetName: AVAssetExportPresetAppleM4A
-            ) else {
-                throw ExportEngineError.exportSessionCreationFailed
-            }
-
-            exportSession.audioMix = exportPackage.audioMix
-            activeExportSession = exportSession
-            startProgressPolling()
 
             if FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
             }
+            try AudioGraphAacEncoder.encode(mix, to: url)
 
-            try await AVExportCompatibility.export(.init(exportSession), to: url, as: .m4a)
             exportProgress = 1
             lastExportURL = url
             finishExport()
@@ -1451,7 +1371,15 @@ final class ExportEngine: FlattenedTimelineConsumer {
         do {
             beginSecurityScopes(for: project)
             defer { endSecurityScopes() }
-            let exportPackage = try await makeExportPackage(for: project, audioProcessing: audioProcessing)
+            // G-25 2C-1b: graph-owned audio (see export(_:to:audioProcessing:)).
+            let graphAudioURL = try await renderGraphAudio(for: project, audioProcessing: audioProcessing)
+            var graphAudioOwnedURLs = graphAudioURL.map { [$0] } ?? []
+            defer { removeTemporaryRenderURLs(graphAudioOwnedURLs) }
+            let exportPackage = try await makeExportPackage(
+                for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL,
+                includeAudioTrack: false
+            )
+            graphAudioOwnedURLs.removeAll()
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
             guard !exportPackage.composition.tracks.isEmpty else {
                 throw ExportEngineError.noExportableMedia
@@ -1508,30 +1436,44 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 writerVideoInput = input
             }
 
-            let audioTracks = exportPackage.composition.tracks(withMediaType: .audio)
+            // W4 defect fix: read audio from the graph AAC FILE, not the
+            // composition — a reader over a composition mixing video with
+            // the graph AAC parks forever (measured); each side alone is
+            // clean. The graph already applied every audio edit, so no
+            // audioMix is needed here either.
+            // Code-review #3: the graph AAC is a SEPARATE asset, so it
+            // needs its own AVAssetReader — the composition's reader
+            // cannot add outputs for tracks it doesn't own (canAdd
+            // returns false and audio was silently skipped).
+            var audioReader: AVAssetReader?
             var audioReaderOutput: AVAssetReaderAudioMixOutput?
             var writerAudioInput: AVAssetWriterInput?
-            if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
-                let readerOutput = AVAssetReaderAudioMixOutput(
-                    audioTracks: audioTracks,
-                    audioSettings: [
-                        AVFormatIDKey: kAudioFormatLinearPCM,
-                        AVLinearPCMBitDepthKey: 16,
-                        AVLinearPCMIsFloatKey: false,
-                        AVLinearPCMIsBigEndianKey: false,
-                        AVLinearPCMIsNonInterleaved: false
-                    ]
-                )
-                readerOutput.audioMix = exportPackage.audioMix
-                if reader.canAdd(readerOutput) {
-                    reader.add(readerOutput)
-                    audioReaderOutput = readerOutput
+            if let graphAudioURL = exportPackage.graphAudioURL {
+                let graphAudioAsset = AVURLAsset(url: graphAudioURL)
+                let audioTracks = (try? await graphAudioAsset.loadTracks(withMediaType: .audio)) ?? []
+                if !audioTracks.isEmpty, let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: plan) {
+                    let graphAudioReader = try AVAssetReader(asset: graphAudioAsset)
+                    let output = AVAssetReaderAudioMixOutput(
+                        audioTracks: audioTracks,
+                        audioSettings: [
+                            AVFormatIDKey: kAudioFormatLinearPCM,
+                            AVLinearPCMBitDepthKey: 16,
+                            AVLinearPCMIsFloatKey: false,
+                            AVLinearPCMIsBigEndianKey: false,
+                            AVLinearPCMIsNonInterleaved: false
+                        ]
+                    )
+                    if graphAudioReader.canAdd(output) {
+                        graphAudioReader.add(output)
+                        audioReader = graphAudioReader
+                        audioReaderOutput = output
 
-                    let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
-                    input.expectsMediaDataInRealTime = false
-                    if writer.canAdd(input) {
-                        writer.add(input)
-                        writerAudioInput = input
+                        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
+                        input.expectsMediaDataInRealTime = false
+                        if writer.canAdd(input) {
+                            writer.add(input)
+                            writerAudioInput = input
+                        }
                     }
                 }
             }
@@ -1558,6 +1500,13 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
             guard reader.startReading() else {
                 throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            // The graph audio reader is a separate asset — start it
+            // independently (code-review #3).
+            if let audioReader {
+                guard audioReader.startReading() else {
+                    throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
+                }
             }
             guard writer.startWriting() else {
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
@@ -1595,6 +1544,9 @@ final class ExportEngine: FlattenedTimelineConsumer {
 
             guard reader.status != .failed else {
                 throw reader.error ?? ExportEngineError.exportSessionCreationFailed
+            }
+            if let audioReader, audioReader.status == .failed {
+                throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
             await finishWriting(UncheckedSendable(writer))
@@ -1759,6 +1711,12 @@ private struct ExportPackage {
     var videoComposition: AVMutableVideoComposition?
     var audioMix: AVMutableAudioMix?
     var temporaryRenderURLs: [URL] = []
+    /// The graph-mix AAC the composition's audio track was inserted from
+    /// (when present). The WRITER path reads its audio directly from this
+    /// file — a reader over a composition mixing video tracks with the
+    /// graph AAC measurably parks forever (W4 defect), while each side
+    /// alone reads cleanly.
+    var graphAudioURL: URL?
 }
 
 /// Carries a non-`Sendable` value across a concurrency boundary when the caller
@@ -2354,6 +2312,7 @@ private struct ExportClipInstructionMetadata {
     var playbackRate: Double = 1.0
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
+    var stabilization: StabilizationPlan? = nil
 
     var usesOpticalFlowSlowMotion: Bool {
         opticalFlowSlowMotionRate != nil
@@ -2379,6 +2338,7 @@ private struct ExportClipInstructionMetadata {
             || blendMode != .normal
             || !keyframes.isEmpty
             || cropRect != nil
+            || stabilization != nil
     }
 }
 

@@ -13,8 +13,13 @@ public final class AudioEqualizerService: Sendable {
     public init() {}
 
     /// Applies an equalizer preset to an audio file and writes the processed output.
+    /// G-25 2C-2: input is decoded through the §3.1 adapter, so VIDEO
+    /// containers' embedded audio derives too (previously AVAudioFile-only,
+    /// which failed on video files — a latent gap for EQ'd video clips in
+    /// the graph and export paths as well).
     public func apply(preset: EqualizerPreset, inputURL: URL, outputURL: URL) async throws {
-        try render(preset: preset, inputURL: inputURL, outputURL: outputURL)
+        let decoded = try await AudioGraphSourceAdapter.decode(fileAt: inputURL)
+        try Self.applyDSP(preset: preset, to: decoded, outputURL: outputURL)
     }
 
     /// Returns an AVAudioEngine configured with the equalizer on the main output path.
@@ -33,10 +38,12 @@ public final class AudioEqualizerService: Sendable {
         return engine
     }
 
-    private func render(preset: EqualizerPreset, inputURL: URL, outputURL: URL) throws {
-        let inputFile = try AVAudioFile(forReading: inputURL)
-        let inputFormat = inputFile.processingFormat
-        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+    /// The one DSP every EQ consumer runs (preview derived media, export
+    /// derivation, the graph's §0 effective media): a three-band one-pole
+    /// split (180 Hz / 3 kHz) with the preset's averaged band gains,
+    /// written as float PCM at the decoded rate/channel count.
+    static func applyDSP(preset: EqualizerPreset, to audio: AudioGraphSourceAudio, outputURL: URL) throws {
+        guard audio.frameCount > 0, audio.sampleRate > 0, audio.channels > 0 else {
             throw AudioEqualizerServiceError.invalidInputFormat
         }
 
@@ -48,46 +55,53 @@ public final class AudioEqualizerService: Sendable {
             try FileManager.default.removeItem(at: outputURL)
         }
 
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: inputFormat.settings)
-        let channelCount = Int(inputFormat.channelCount)
-        let frameCapacity: AVAudioFrameCount = 4_096
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCapacity),
+        let channelCount = AVAudioChannelCount(audio.channels)
+        guard let format = AVAudioFormat(
+            standardFormatWithSampleRate: audio.sampleRate, channels: channelCount
+        ) else {
+            throw AudioEqualizerServiceError.invalidInputFormat
+        }
+        let outputFile = try AVAudioFile(
+            forWriting: outputURL,
+            settings: format.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+
+        let gains = Self.renderGains(for: preset)
+        let sampleRate = Float(audio.sampleRate)
+        let lowAlpha = Self.onePoleAlpha(cutoff: 180, sampleRate: sampleRate)
+        let highAlpha = Self.onePoleAlpha(cutoff: 3_000, sampleRate: sampleRate)
+        var lowState = Array(repeating: Float(0), count: audio.channels)
+        var highState = Array(repeating: Float(0), count: audio.channels)
+
+        let chunkFrames = 65_536
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkFrames)),
               let channels = buffer.floatChannelData else {
             throw AudioEqualizerServiceError.renderBufferUnavailable
         }
-
-        let gains = Self.renderGains(for: preset)
-        let sampleRate = Float(inputFormat.sampleRate)
-        let lowAlpha = Self.onePoleAlpha(cutoff: 180, sampleRate: sampleRate)
-        let highAlpha = Self.onePoleAlpha(cutoff: 3_000, sampleRate: sampleRate)
-        var lowState = Array(repeating: Float(0), count: channelCount)
-        var highState = Array(repeating: Float(0), count: channelCount)
-
-        while inputFile.framePosition < inputFile.length {
-            let remaining = AVAudioFrameCount(inputFile.length - inputFile.framePosition)
-            let framesToRead = min(frameCapacity, remaining)
-            try inputFile.read(into: buffer, frameCount: framesToRead)
-            let frameLength = Int(buffer.frameLength)
-            guard frameLength > 0 else { break }
-
-            for channel in 0..<channelCount {
+        var frame = 0
+        while frame < audio.frameCount {
+            let frames = min(chunkFrames, audio.frameCount - frame)
+            buffer.frameLength = AVAudioFrameCount(frames)
+            for channel in 0..<audio.channels {
                 let samples = channels[channel]
                 var low = lowState[channel]
                 var highLowpass = highState[channel]
-                for frame in 0..<frameLength {
-                    let input = samples[frame]
+                for index in 0..<frames {
+                    let input = audio.sample(frame: frame + index, channel: channel)
                     low += lowAlpha * (input - low)
                     highLowpass += highAlpha * (input - highLowpass)
                     let high = input - highLowpass
                     let mid = input - low - high
                     let output = low * gains.low + mid * gains.mid + high * gains.high
-                    samples[frame] = max(-1, min(1, output))
+                    samples[index] = max(-1, min(1, output))
                 }
                 lowState[channel] = low
                 highState[channel] = highLowpass
             }
-
             try outputFile.write(from: buffer)
+            frame += frames
         }
     }
 

@@ -20,6 +20,35 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
+    /// G-25 switchover step 2B (spec §7·§11④): measures the project's REAL
+    /// current mix through the GRAPH — `GraphMixRenderer` builds the graph
+    /// from project state (volumes, fades, ducking, mute/solo, EQ as
+    /// derived effective media) and renders the encoder-input PCM, which
+    /// the shared Core meter (BS.1770-4 LUFS-I + 4× true peak) measures.
+    /// No preview composition build and no AVAssetExportSession — the old
+    /// meter path's deadlock exposure is structurally gone. 실측값 — never
+    /// an estimate of the source files.
+    func measureMasterLoudness() async {
+        guard !isMeasuringMasterLoudness else { return }
+        isMeasuringMasterLoudness = true
+        masterLoudnessError = nil
+        defer { isMeasuringMasterLoudness = false }
+        do {
+            let options = buildAudioProcessingOptions()
+            let mix = try await GraphMixRenderer.renderMix(
+                project: currentProject,
+                eqPresetsByClipId: options.eqPresets
+            )
+            masterLoudness = AudioGraphLoudness.measure(mix)
+        } catch GraphMixRenderer.RenderError.noAudio {
+            masterLoudnessError = NSLocalizedString(
+                "This project has no audio to measure.", comment: ""
+            )
+        } catch {
+            masterLoudnessError = error.localizedDescription
+        }
+    }
+
     #if DEBUG || MOVIECUT_HARNESS
     /// Deterministic two-track ducking fixture used by the headless E2E harness.
     /// It builds the same project state a user would create, then applies

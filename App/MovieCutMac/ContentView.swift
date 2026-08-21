@@ -15,8 +15,13 @@ struct ContentView: View {
     private var isPreviewExportParityHarness: Bool {
         #if DEBUG || MOVIECUT_HARNESS
         let environment = ProcessInfo.processInfo.environment
-        return environment["MOVIECUT_UITEST"] == "1"
-            && environment["MOVIECUT_UITEST_PARITY"] == "1"
+        guard environment["MOVIECUT_UITEST"] == "1" else { return false }
+        // The isolated Color.clear surface for harness runs that mutate
+        // project state rapidly headlessly (parity, W representative jobs)
+        // — the full editor's live SwiftUI layout can crash on the rapid
+        // intermediate states (macOS 26 executor; see the comment above).
+        return environment["MOVIECUT_UITEST_PARITY"] == "1"
+            || environment["MOVIECUT_UITEST_W_SCENARIO"] != nil
         #else
         return false
         #endif

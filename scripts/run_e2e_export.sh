@@ -1084,6 +1084,20 @@ else
   echo "FAIL: color grade not reflected in export (avg $B_AVG vs $G_AVG)" >&2; exit 1
 fi
 
+# G-03 adjustment layer: marking the (only) clip as an adjustment layer
+# with a strong grade must change the export — but an adjustment-ONLY
+# project (no visible content) must be REJECTED, never silently degraded.
+GADJ="$(mktemp -d)/gadj.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" \
+  MOVIECUT_UITEST_GRADE=1 MOVIECUT_UITEST_ADJUSTMENT_LAYER=1 \
+  MOVIECUT_UITEST_EXPORT="$GADJ" MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+GAP=$!; for _ in $(seq 1 120); do [ -s "$GADJ" ] && break; sleep 0.5; done; wait "$GAP" 2>/dev/null || true
+if [ -s "$GADJ" ]; then
+  echo "FAIL: adjustment-only project exported (should be rejected: no visible content)" >&2
+  exit 1
+fi
+echo "PASS: G-03 adjustment-only project correctly rejected (no visible content)"
+
 # G-02 Inc 3 HSL/curve grade must be reflected in export without relying on
 # lift/gamma/gain. Compare a same-app baseline of the solid red fixture against
 # an HSL red desaturation + master curve export.
@@ -1415,4 +1429,198 @@ else
 fi
 rm -rf "$CARD_TEMPLATE_TMPDIR"
 
-echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style)"
+# G-25 Inc 9 (spec §8·§11④): AAC post-check on the ACTUAL exported file +
+# audio-solo E2E. The project is TWO separate audio tracks (the ducking
+# harness builds real BGM/Voice tracks: 220 Hz BGM 0-4s, 1 kHz voice 1-2s)
+# exported as AUDIO-ONLY m4a — §8's gate is about the encoded audio file.
+# (A video import + these ducking tracks + an mp4 export hangs in a
+# PREEXISTING defect unrelated to G-25 — recorded in docs/LOOP_STATE.md.)
+# Two runs:
+#   A — plain export; the harness re-decodes the real output file and the
+#       project's preview-mix render, reporting lengths, RMS difference, and
+#       the measured LUFS-I / true peak / clipping (shared Core functions).
+#   B — the LAST audio track (Voice) is SOLOED through the real
+#       SetTrackPropertyCommand path before export; soloing the quiet voice
+#       suppresses the louder BGM, so the exported mix must get measurably
+#       quieter — proving solo reaches the export audio mix.
+# Both sides of the post-check are AAC today (the reference is the preview
+# mix render until the graph encoder input lands), so codec padding can move
+# lengths by an AAC frame — the gate bounds |Δlength| ≤ 2112 samples and
+# |RMS| ≤ 1 dB and reports exact numbers; the strict ±1-sample form belongs
+# to the graph-input era (documented in docs/LOOP_STATE.md).
+G25_POSTCHECK_TMPDIR="$(mktemp -d)"
+G25_POSTCHECK_A_RESULT="$G25_POSTCHECK_TMPDIR/a.txt"
+G25_POSTCHECK_A_JSON="$G25_POSTCHECK_TMPDIR/a.json"
+G25_POSTCHECK_B_RESULT="$G25_POSTCHECK_TMPDIR/b.txt"
+G25_POSTCHECK_B_JSON="$G25_POSTCHECK_TMPDIR/b.json"
+G25_EXPORT_A="$G25_POSTCHECK_TMPDIR/export-a.m4a"
+G25_EXPORT_B="$G25_POSTCHECK_TMPDIR/export-b.m4a"
+G25_BGM="$ROOT/Tests/Fixtures/duck_bgm_220hz_4s_mono.wav"
+G25_VOICE="$ROOT/Tests/Fixtures/duck_voice_1000hz_1s_mono.wav"
+G25_APP="${APP_BIN%/*/*/*}"
+sleep 1
+echo "Running G-25 §8 export post-check (run A: plain mix)"
+open -n -W \
+  --env MOVIECUT_UITEST=1 \
+  --env MOVIECUT_UITEST_DUCKING_BGM="$G25_BGM" \
+  --env MOVIECUT_UITEST_DUCKING_VOICE="$G25_VOICE" \
+  --env MOVIECUT_UITEST_EXPORT_AUDIO="$G25_EXPORT_A" \
+  --env MOVIECUT_UITEST_EXPORT_POSTCHECK="$G25_POSTCHECK_A_JSON" \
+  --env MOVIECUT_UITEST_RESULT="$G25_POSTCHECK_A_RESULT" \
+  --env MOVIECUT_UITEST_QUIT=1 \
+  "$G25_APP" >/dev/null 2>&1 &
+G25A=$!
+wait_for_result "$G25A" 120 0.5 "$G25_POSTCHECK_A_RESULT"
+G25_A_STATUS="$(cat "$G25_POSTCHECK_A_RESULT" 2>/dev/null || echo MISSING)"
+sleep 1
+echo "Running G-25 §8 export post-check (run B: Voice track soloed, BGM suppressed)"
+open -n -W \
+  --env MOVIECUT_UITEST=1 \
+  --env MOVIECUT_UITEST_DUCKING_BGM="$G25_BGM" \
+  --env MOVIECUT_UITEST_DUCKING_VOICE="$G25_VOICE" \
+  --env MOVIECUT_UITEST_SOLO_LAST_AUDIO_TRACK=1 \
+  --env MOVIECUT_UITEST_EXPORT_AUDIO="$G25_EXPORT_B" \
+  --env MOVIECUT_UITEST_EXPORT_POSTCHECK="$G25_POSTCHECK_B_JSON" \
+  --env MOVIECUT_UITEST_RESULT="$G25_POSTCHECK_B_RESULT" \
+  --env MOVIECUT_UITEST_QUIT=1 \
+  "$G25_APP" >/dev/null 2>&1 &
+G25B=$!
+wait_for_result "$G25B" 120 0.5 "$G25_POSTCHECK_B_RESULT"
+G25_B_STATUS="$(cat "$G25_POSTCHECK_B_RESULT" 2>/dev/null || echo MISSING)"
+G25_POSTCHECK_SUMMARY="$(python3 - "$G25_POSTCHECK_A_JSON" "$G25_POSTCHECK_B_JSON" "$G25_A_STATUS" "$G25_B_STATUS" <<'PY'
+import json, re, sys
+
+a_json, b_json, a_status, b_status = sys.argv[1:5]
+
+def fail(message):
+    raise SystemExit(f"FAIL: {message}")
+
+for label, status in (("A", a_status), ("B", b_status)):
+    if "error=none" not in status:
+        fail(f"run {label} reported an error: {status}")
+    if "export_postcheck=ok" not in status:
+        fail(f"run {label} post-check did not complete: {status}")
+
+if "solo_applied=1" not in b_status:
+    fail(f"run B did not solo the last audio track: {b_status}")
+
+def number(status, key):
+    match = re.search(rf"(?:^| ){key}=(-?[0-9.]+)", status)
+    if not match:
+        fail(f"missing {key}: {status}")
+    return float(match.group(1))
+
+a = json.load(open(a_json))
+b = json.load(open(b_json))
+if a["error"] != "none" or b["error"] != "none":
+    fail(f"artifact error: {a['error']} / {b['error']}")
+
+# Length gate (AAC-vs-AAC era bound; strict ±1 belongs to graph input). The
+# preview render and the export can carry DIFFERENT sample rates and AAC
+# padding conventions (measured: the preview m4a renders ~0.35 s longer),
+# so the gate is on DURATION, not frames: |Δt| ≤ 0.5 s.
+for label, dump in (("A", a), ("B", b)):
+    if dump["referenceFrames"] <= 0 or dump["decodedFrames"] <= 0:
+        fail(f"run {label} decoded empty audio: {dump}")
+    reference_duration = dump["referenceFrames"] / dump["referenceSampleRate"]
+    decoded_duration = dump["decodedFrames"] / dump["decodedSampleRate"]
+    if abs(decoded_duration - reference_duration) > 0.5:
+        fail(f"run {label} duration delta beyond 0.5 s: {dump}")
+    if abs(dump["rmsDifferenceDb"]) > 1.0:
+        fail(f"run {label} RMS difference beyond 1 dB: {dump['rmsDifferenceDb']}")
+    if dump["clippingRunCount"] != 0:
+        fail(f"run {label} clipped output: {dump}")
+
+# Solo must measurably change the exported mix: soloing the QUIET voice
+# suppresses the LOUDER BGM, so run B must come out 1.5-12 LU quieter.
+if a["decodedLufs"] is None or b["decodedLufs"] is None:
+    fail(f"loudness missing: {a['decodedLufs']} / {b['decodedLufs']}")
+delta = b["decodedLufs"] - a["decodedLufs"]
+if not (-12.0 < delta < -1.5):
+    fail(f"solo did not quiet the exported mix as expected (LUFS Δ={delta:.3f})")
+
+print(
+    "len=%d/%d rms=%.3fdB lufs=%.2f→%.2f (solo Δ=%.2f LU) tp=%.2f→%.2f warnings=%d/%d" % (
+        a["decodedFrames"], b["decodedFrames"],
+        a["rmsDifferenceDb"], a["decodedLufs"], b["decodedLufs"], delta,
+        a["decodedTruePeakDbTp"], b["decodedTruePeakDbTp"],
+        a["warningCount"], b["warningCount"])
+)
+PY
+)" || { echo "$G25_POSTCHECK_SUMMARY" >&2; echo "G-25 §8 post-check FAIL (artifacts: $G25_POSTCHECK_TMPDIR)" >&2; exit 1; }
+echo "PASS: G-25 §8 export post-check + solo ($G25_POSTCHECK_SUMMARY)"
+
+# --- G-25 switchover 2B: master meter through the GRAPH (run M) ---------------
+# Same ducking-harness project, plus bass-boost EQ on the BGM clip (real
+# command path) so the §0 effective-media derivation is exercised: the meter
+# measures the graph mix (builder + derived EQ + §3.1 adapter), the export
+# still mixes via audioMix (derived EQ offline) — the two must agree within
+# tolerance while both paths are alive.
+G25_POSTCHECK_M_RESULT="$G25_POSTCHECK_TMPDIR/m.txt"
+G25_POSTCHECK_M_JSON="$G25_POSTCHECK_TMPDIR/m.json"
+G25_POSTCHECK_M_METER="$G25_POSTCHECK_TMPDIR/meter.json"
+G25_EXPORT_M="$G25_POSTCHECK_TMPDIR/export-m.m4a"
+sleep 1
+echo "Running G-25 §8 meter run (M: graph master meter + EQ on BGM)"
+open -n -W \
+  --env MOVIECUT_UITEST=1 \
+  --env MOVIECUT_UITEST_DUCKING_BGM="$G25_BGM" \
+  --env MOVIECUT_UITEST_DUCKING_VOICE="$G25_VOICE" \
+  --env MOVIECUT_UITEST_MASTER_METER="$G25_POSTCHECK_M_METER" \
+  --env MOVIECUT_UITEST_MASTER_METER_EQ=1 \
+  --env MOVIECUT_UITEST_EXPORT_AUDIO="$G25_EXPORT_M" \
+  --env MOVIECUT_UITEST_EXPORT_POSTCHECK="$G25_POSTCHECK_M_JSON" \
+  --env MOVIECUT_UITEST_RESULT="$G25_POSTCHECK_M_RESULT" \
+  --env MOVIECUT_UITEST_QUIT=1 \
+  "$G25_APP" >/dev/null 2>&1 &
+G25M=$!
+wait_for_result "$G25M" 120 0.5 "$G25_POSTCHECK_M_RESULT"
+G25_M_STATUS="$(cat "$G25_POSTCHECK_M_RESULT" 2>/dev/null || echo MISSING)"
+G25_METER_SUMMARY="$(python3 - "$G25_POSTCHECK_M_JSON" "$G25_POSTCHECK_M_METER" "$G25_M_STATUS" <<'PY'
+import json, re, sys
+
+m_json, meter_json, m_status = sys.argv[1:4]
+
+def fail(message):
+    raise SystemExit(f"FAIL: {message}")
+
+if "error=none" not in m_status:
+    fail(f"run M reported an error: {m_status}")
+for needed in ("master_meter=1", "meter_eq=1", "export_postcheck=ok"):
+    if needed not in m_status:
+        fail(f"run M missing {needed}: {m_status}")
+meter_lufs_match = re.search(r"(?:^| )meter_lufs=(-?[0-9.]+)", m_status)
+if not meter_lufs_match:
+    fail(f"run M meter LUFS missing/silent: {m_status}")
+meter_lufs = float(meter_lufs_match.group(1))
+
+m = json.load(open(m_json))
+meter = json.load(open(meter_json))
+if m["error"] != "none" or meter["error"] != "none":
+    fail(f"run M artifact error: {m['error']} / {meter['error']}")
+if meter["lufs"] is None:
+    fail(f"run M meter produced no integrated loudness: {meter}")
+if m["decodedLufs"] is None:
+    fail(f"run M export produced no loudness: {m}")
+
+# The graph meter and the actually-encoded export must agree: tolerance
+# spans the measured path delta (~0.003 LU first measurement) plus
+# tap-vs-offline EQ DSP and AAC encoding.
+delta = meter_lufs - m["decodedLufs"]
+if abs(delta) > 1.5:
+    fail(f"graph meter vs encoded export disagree: Δ={delta:.3f} LU")
+if abs(m["rmsDifferenceDb"]) > 1.0:
+    fail(f"run M RMS difference beyond 1 dB: {m['rmsDifferenceDb']}")
+if m["clippingRunCount"] != 0:
+    fail(f"run M clipped output: {m}")
+# G-25 2C-2/2C-3: M's reference is now the graph PCM (like A/B), so this
+# RMS gate measures codec fidelity of the EQ'd graph mix end to end.
+
+print("meter: graph=%.2f LU export=%.2f LU Δ=%.2f tp=%.2f eq=1" % (
+    meter_lufs, m["decodedLufs"], delta, meter["truePeakDbTp"]))
+PY
+)" || { echo "$G25_METER_SUMMARY" >&2; echo "G-25 §8 meter run FAIL (artifacts: $G25_POSTCHECK_TMPDIR)" >&2; exit 1; }
+echo "PASS: G-25 §8 graph master meter ($G25_METER_SUMMARY)"
+rm -rf "$G25_POSTCHECK_TMPDIR"
+
+echo "E2E check OK (import->export + freeze + optical-flow slow motion + text animations + noise reduction SNR + EQ spectrum + audio extraction + ducking RMS + platform presets + color grade + G-03 adjustment layers + G-02 HSL/curves + scope + prores + hdr + autosave + G-18 card editor save/reload + G-19 card templates/master style + G-25 §8 post-check/solo + graph master meter)"

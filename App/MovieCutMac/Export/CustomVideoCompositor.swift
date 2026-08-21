@@ -35,6 +35,10 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let enablePostProcessing: Bool = true
     let containsTweening: Bool = true
     let requiredSourceTrackIDs: [NSValue]?
+    /// G-03: the adjustment clips active during this instruction's time
+    /// range (precomputed, ordered bottom-track-first). Applied AFTER each
+    /// visible clip's own chain. Defaulted so the legacy init is unchanged.
+    var adjustmentClips: [Clip]? = nil
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let colorCorrection: ColorCorrection?
     let colorGrade: ColorGrade?
@@ -92,7 +96,8 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
-        prefersFastSegmentation: Bool = false
+        prefersFastSegmentation: Bool = false,
+        adjustmentClips: [Clip]? = nil
     ) {
         self.timeRange = timeRange
         self.requiredSourceTrackIDs = Self.requiredTrackIDValues(
@@ -101,6 +106,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         )
         self.colorCorrection = nil
         self.colorGrade = nil
+        self.adjustmentClips = adjustmentClips ?? []
         self.textContent = nil
         self.stickerEmoji = nil
         self.stickerImageURL = nil
@@ -232,6 +238,39 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
     private let probeArmed = ProcessInfo.processInfo.environment["MOVIECUT_UITEST_PREVIEW_PERF"] != nil
+
+    /// G-24 (#9): render-side low-confidence warp bypass counter — the
+    /// DoD's fallback metric, counted where the fallback actually fires.
+    /// Static (not per-instance) because a composition swap creates a new
+    /// compositor instance; the count is cumulative until read. Same lock
+    /// pattern as `CompositorRenderProbe`. `stabilizationWarpAppliedTotal`
+    /// counts every frame the warp branch executed (plan non-nil) — the
+    /// diagnostic that separates "warp never ran" from "ran invisibly".
+    private static let bypassLock = NSLock()
+    nonisolated(unsafe) private static var stabilizationBypassTotal = 0
+    nonisolated(unsafe) private static var stabilizationWarpAppliedTotal = 0
+
+    nonisolated static func recordStabilizationBypass() {
+        bypassLock.lock()
+        stabilizationBypassTotal += 1
+        bypassLock.unlock()
+    }
+
+    nonisolated static func recordStabilizationWarpApplied() {
+        bypassLock.lock()
+        stabilizationWarpAppliedTotal += 1
+        bypassLock.unlock()
+    }
+
+    nonisolated static func takeStabilizationCounts() -> (applied: Int, bypassed: Int) {
+        bypassLock.lock()
+        defer { bypassLock.unlock() }
+        defer {
+            stabilizationBypassTotal = 0
+            stabilizationWarpAppliedTotal = 0
+        }
+        return (stabilizationWarpAppliedTotal, stabilizationBypassTotal)
+    }
 
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {
         renderContext = newRenderContext
@@ -461,6 +500,38 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         request: AVAsynchronousVideoCompositionRequest
     ) -> CIImage {
         var image = image
+        // G-24 (#9): the stabilization warp runs FIRST — the camera-path
+        // correction must see the raw decoded frame before crop/color/
+        // transform touch it. Translations are normalized against the
+        // source extent; dy negates because the analysis luma rows run
+        // top-down while Core Image's y axis points up. The cover zoom is
+        // derived from the WHOLE plan (constant per clip — a per-frame
+        // zoom would breathe) and applies even on low-confidence bypass
+        // frames for the same reason.
+        if let effect,
+           let plan = effect.stabilization,
+           !plan.isEmpty,
+           let correction = plan.correction(
+               atLocalTime: CMTimeSubtract(request.compositionTime, effect.timeRange.start).seconds
+           ) {
+            let extent = image.extent
+            let maxTranslation = plan.maxNormalizedTranslation
+            let (warped, bypassed) = StabilizationWarpProcessor.apply(
+                image,
+                correction: (
+                    dx: correction.dx * Double(extent.width),
+                    dy: -correction.dy * Double(extent.height),
+                    cropFraction: correction.cropFraction
+                ),
+                confidence: correction.confidence,
+                coverScale: 1 + 2 * max(maxTranslation.x, maxTranslation.y)
+            )
+            image = warped
+            Self.recordStabilizationWarpApplied()
+            if bypassed {
+                Self.recordStabilizationBypass()
+            }
+        }
         // Crop runs first so every downstream processor (visual effects,
         // color, chroma key, mask, transform) sees the cropped region — the
         // order a user perceives in the inspector (G-23). Shared processor,
@@ -522,6 +593,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 to: image,
                 renderSize: request.renderContext.size
             )
+        }
+
+        // G-03 adjustment layers: after the clip's OWN chain (the locked
+        // order), the active adjustments at this frame apply — every visible
+        // clip under the layer receives the chain (v1: color correction +
+        // grade; plan Inc 10). The chain is precomputed per-instruction.
+        if let adjustments = instruction.adjustmentClips, !adjustments.isEmpty {
+            image = AdjustmentLayerChain.applyAdjustments(adjustments, to: image)
         }
 
         return image

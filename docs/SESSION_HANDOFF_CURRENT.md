@@ -1,13 +1,577 @@
-# 세션 핸드오프 — 현재 (2026-08-18)
+# 세션 핸드오프 — 현재 (2026-08-19)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+
+## 2026-08-21 세션 58 (G-28 메모리 실측)
+
+**게이트**: 측정 테스트 7/7(프로파일 스위트) + verify_gate 5/5.
+
+### 완료 — peakMemoryMegabytes 플레이스홀더 폐지
+- **실측**: `task_vm_info.phys_footprint`(T2-M 하니스와 동일 지표)를 ~1ms 병렬 샘플러로 폴링 — CI 필터의 과도 표면이 render 호출 **내부에** 살아있어 렌더 간 샘플링은 놓침.
+- **차등 정의**: 이펙트의 메모리 비용 = 같은 프레임 **무필터** 렌더의 피크 대비 이펙트 렌더의 피크 초과분 — 동일 하니스의 차등이라 프로세스 상주 메모리가 상쇄됨. 이전 값은 physicalMemory×0.001(모든 이펙트 동일 상수).
+- **회귀 테스트**: 측정값이 플레이스홀더 상수와 정확히 일치하면 실패(부활 방지) + 풋프린트 프로브 타당성(0 < fp < physicalMemory) + 측정 엔드투엔드.
+
+### 다음 회차 — 잔여 큐
+마스터 체인 인스펙터 UI(모델·직렬화 완비 — 프리셋 선택 UI만 부재)·G-28 브라우저 measureAllBuiltIns 메인스레드 블로킹(백그라운드 이관).
+
+## 2026-08-21 세션 57 (G-26 파라미터 직렬화 — 스펙 §6)
+
+**게이트**: null test PASS(3그래프 · 패리티 −0.02 LU · 드리프트 0샘플) + verify_gate 5/5(1,340).
+
+### 완료 — 마스터 체인 파라미터가 그래프와 함께 직렬된다
+- **스펙 모델**: `AudioGraphMasterBus`에 `masterChain`(전체 파라미터) + `presetAlgorithmVersion`(§6) 추가 + `resolvedMasterChain()`(직렬값 우선·래거시 limiter-only 그래프는 SNS 폴백·둘 다 없으면 미처리).
+- **렌더러 2곳**(오프라인·AVAudioEngine): 하드코딩 `chain: .sns` 폐지 — 스펙의 직렬화 체인 소비. 역직렬화된 그래프는 어디서든 동일 렌더.
+- **프로젝트 저장**: `Project.masterAudioProcessing`(프리셋 이름 — §6의 버전 단위) + 스키마 v8(additive no-op 마이그레이션).
+- **빌더**: 프리셋 → masterBus 전개(체인 파라미터 + 프리셋 버전 + 리미터 지연 선언[5ms 룩어헤드]). **발견**: 빌더가 masterBus를 아예 설정하지 않아 제품 경로에서 마스터 체인이 실행조차 되지 않았음(테스트만 limiter 선언) — 이제 프로젝트 프리셋이 전체 경로를 연다.
+- **실측 테스트 6종**: 왕복(버스·프로젝트)·우선순위(래거시 폴백)·빌더 전개·**변경된 직렬 체인(realpeak 차이) 소비 검증** — #8 결함 부류(호출 없는 배선) 재발 방지.
+
+### 다음 회차 — G-28 메모리 실측
+`EffectCostProfile.peakMemoryMegabytes`가 `physicalMemory/1000` placeholder — 실측(프로세스 풋프린트 샘플링)으로 교체.
+
+## 2026-08-20 세션 56 (코드 리뷰 결함 #9 — G-24 warp 렌더 체인 통합)
+
+**게이트**: G-24 E2E **2회 연속 PASS — 실측 ratio 0.348/0.342 (입력 4.24px → 잔여 1.47px), crop 0.006, 심각 워블 0.000, 장면 전환 오류 0, 적용 게인 1.008/1.019** + verify_gate 5/5(1,335) + W 29/29=100% 무회귀.
+
+### 완료 — 등록 보정 데이터가 컴포지터로 흐르는 경로 구축
+- **Core**: `StabilizationPlan`(정규화 보정·시간 조회·상수 커버 줌 근원) + `Clip.stabilization`(스키마 v7, additive no-op 마이그레이션) + `CustomCompositionClipEffect.stabilization`(nil 아니면 커스텀 컴포지터 강제).
+- **워프**: `StabilizationWarpProcessor`에 **커버 줌** 추가(플랜 전체에서 한 번 유도·프레임마다 고정 — 호흡 방지, 바이패스 프레임에도 적용). CGAffineTransform 헬퍼가 **프리펜드**로 결합한다는 사실을 테스트로 확정(중심 스케일 순서 교정).
+- **배선**: Mac/iOS 컴포지터 `applyClipEffects` 선두에 워프(원시 프레임에 적용·dy는 상하좌표계 반전·바이패스/적용 카운터) + PlaybackEngine/ExportEngine/iOS 트리거·메타데이터 전달.
+- **하니스 STABILIZE 재구축**: 분석 결과를 `ReplaceProjectCommand`로 세션에 반영(직접 변형은 세션 재빌드에 레이스로 소실됨 — 실측으로 포착), **입력/스태빌 양패스를 실제 출력 경로(export+AVAssetImageGenerator 정밀 추출)로 렌더**, 빈 플랜으로 양패스 동일 컴포지터 통과, DoD를 실측 픽셀에서 판정(입력 렌더 지터 실측 + 프레임별 교차 등록으로 적용 워프 실측).
+
+### 실측 게이트가 밝혀낸 제품 결함 4건(전부 수정+테스트)
+1. **등록기 정수 양자화**: ±1px 노이즈가 실제 지터(~0.6px)를 묻힘 → SAD 최솟값 포물선 **서브픽셀 보정** 추가(완전 일치 시 미적용 가드).
+2. **신뢰도 절대 정규화**(improvement/30)가 콘텐츠 대비에 의존 → **상대 개선율**(improvement/baseline)로 교체(스케일 불변). 바이패스 임계값 0.05로 재보정(0.15는 실측 분포의 실제 움직임 대역을 잘랐음 — 31% 바이패스가 교대 지터로 잔여를 입력보다 악화).
+3. **플랜 프레임 시프트**: positions 시드 누락으로 보정이 한 프레임 늦게 적용(지터 배증, ratio 1.19) → 프레임 0 시드 추가(수정 후 0.348).
+4. **픽스처**: 1Hz 스윙(평활화로 소거됨)·testsrc2(주기 잠김)·mandelbrot(줌 편향) 전부 부적합 → **정지 블러 노이즈 + 다주파수 지터 + 16:9**(출력 경로 해상도 프리셋과 정합)로 재생성(`stab_wobble_640x360_4s_30fps.mp4`).
+
+### 측정 방법론 발견(문서화)
+- `snapshotFrame`(프리뷰 영상 출력)은 일부 타임스탬프에서 **중복 프레임** 반환(양패스 동일 지점에서 걸려 리드백은 속임) — 프레임 단위 측정은 출력+제너레이터로.
+- 스탭 프레임 자기 등록은 서브픽셀 재표본화 위상 변화로 **랜덤 워크**(6px 드리프트) — 잔여는 프레임별 교차 등록(입력↔스탭, 0.45px 정확도)으로 측정.
+
+### 다음 회차 — G-26 파라미터 직렬화
+1. 마스터 체인 파라미터가 SNS 프리셋 기본값 — 그래프 스펙 §6 프리셋 버전 체계로 직렬화.
+2. 이후 G-28 메모리 실측(peakMemoryMegabytes가 physicalMemory/1000 placeholder).
+
+## 2026-08-20 세션 55 (코드 리뷰 결함 #8·#10 + 리버브 크래시)
+
+**게이트**: verify_gate 5/5(1,328) + null test PASS + W 29/29=100% 무회귀.
+
+### 완료 — G-26 배선(실제 호출) + G-28 프로파일러 + 리버브 크래시 (커밋 b2ffe46)
+- **#8 G-26**: AudioGraphMasterChain.apply가 두 렌더러에서 실제 호출됨(이전: rejection만 제거). 체인 순서 수정: compressor→reverb→limiter(마지막).
+- **리버브 크래시**: 짧은 오디오에서 delayFrames > frameCount 시 Range 치명적 오류 — guard 추가.
+- **#10 G-28**: 참조 프레임 합성 순서 수정(스크라이프가 보임) + 파라미터 키 수정(amount/ev/radius).
+
+### 다음 회차 — #9 G-24 warp 통합
+1. StabilizationWarpProcessor를 컴포지터에 배선 — 등록 보정 데이터가 흐르는 경로.
+2. 이후 G-26 파라미터 직렬화·G-28 메모리 실측.
+
+## 2026-08-20 세션 54 (코드 리뷰 결함 #3-#7 수정)
+
+**게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
+
+### 완료 — 결함 5건 수정 (커밋 1b7c102)
+- **#3 라이터 오디오**: 그래프 AAC에 별도 AVAssetReader(교차 자산 canAdd=false로 조용히 스킵되던 것 수정).
+- **#4 모노 채널**: GraphMixRenderer가 소스 포맷 프로브(AVAudioFile/AVAssetTrack 헤더) 후 channelCountFor 전달.
+- **#5 컴파운드**: renderMix가 tracks 파라미터 수신(플래트닝) — 컨테이너 클립의 오디오 복원.
+- **#6 G-03 트리거**: usesCustomVideoCompositor에 hasAdjustmentLayer 추가(양쪽 엔진).
+- **#7 G-03 범위**: at:0 게이트 제거 — 전체 세트 전달.
+
+### 다음 회차 — 결함 #8-#10
+#8(G-26 배선)·#9(G-24 warp 통합)·#10(G-28 프로파일러). 이후 문서 정정.
+
+## 2026-08-20 세션 53 (코드 리뷰 결함 #1·#2 수정 — 페이드 방향 + 스테레오)
+
+**게이트**: verify_gate 5/5 + null test PASS + W 29/29=100% 무회귀.
+
+### 완료 — 치명적 결함 2건 수정 (커밋 ca0f36f)
+- **#1 페이드 방향**: `AudioGraphFade.Direction`(.fadeIn/.fadeOut) + `fadeFactor` 방향별 램프 + 빌더 `.fadeOut` 발행. 수정 전 모든 페이드아웃이 반전.
+- **#2 스테레오 채널**: `mappedChannels` frame/channel 전치 수정. 수정 전 오른쪽 채널이 상수.
+- **회귀 테스트 7종** + 기존 2종 갱신(빌더 방향·드리프트 ±1).
+- **E2E 무회귀**: null test·W 스위트 녹색.
+
+### 다음 회차 — 코드 리뷰 결함 #3-#7
+#3(라이터 별도 Reader)·#4(모노 channelCountFor)·#5(컴파운드 tracks)·#6(G-03 트리거)·#7(G-03 범위). 이후 #8-#10.
+
+## 2026-08-20 세션 52 (G-28 KPI 모델 + 2단계 회귀 확인)
+
+**게이트**: verify_gate 5/5(1,325) + null test·W 스위트 무회귀.
+
+### 완료 — G-28 KPI 모델 + 회귀 (커밋 443ca69)
+- **회귀**: G-26 그래프 노드 변경 후 null test(3그래프 통과·패리티 −0.02 LU)·W 스위트(29/29=100%) 무회귀.
+- **`EffectBrowserKPI`**(Core/Rendering): 검색 성공률·재사용률 — "개수 KPI 폐지"의 대체. meetsTargets·Codable·기록 API.
+- 테스트 5종.
+
+### 다음 회차
+1. 자율 잔여: EffectBrowserKPI를 하니스에 연결(검색·적용 실측 창구).
+2. 사용자 의존: N2 등록·실기기·다음 방향. 루프가 자율 잔여를 진행하거나 지시 대기.
+
+## 2026-08-20 세션 51 (G-26 Inc 4 — 그래프 자리노드 소비 배선)
+
+**게이트**: verify_gate 5/5(1,320 테스트).
+
+### 완료 — G-26 그래프 배선 (커밋 7826cb0)
+- **isStage1Supported 갱신**: .compressor·.limiter → true. 그래프가 이 노드를 선언하면 렌더러가 렌더(DSP가 자리를 채움). 남은 placeholder: .eq·.creativeFX·.masterEQ·.noiseReduction·.mlStem.
+- **렌더러/엔진 노드 거부 제거**: limiter rejection 제거 — 엔진 간 무결정성 유지(null test가 limiter 선언 그래프에서도 통과).
+- **기존 테스트 3종 갱신** + **신규 3종**(지원 분류·limiter 그래프 렌더·SNS true-peak).
+
+### 다음 회차 — 2단계 완료·다음 방향 결정
+1. 2단계 계획의 자율 핵심 전부 완료(G-24·G-28·G-26 4증분).
+2. 남은 2단계: N2(사용자 등록 결정 전제)·KPI 측정 창구.
+3. **사용자 지시 필요**: 다음 우선순위 — 제품 완성도(UI·UX·안정성)·1단계 회귀 확인·2단계 잔여(N2 등)·또는 새로운 방향. 실기기 3종=유보.
+
+## 2026-08-20 세션 50 (G-26 Inc 3 — 마스터 체인 + SNS 프리셋 · **G-26 완결**)
+
+**게이트**: verify_gate 5/5(1,317 테스트 — 신규 5종).
+
+### 완료 — G-26 마스터 체인 (커밋 4c8f903)
+- **`AudioGraphMasterChain`**(Core/Audio): compressor→limiter→reverb 체인 조합(nil=우회·bypass=비트 항등) + **SNS 프리셋**(§7 "좋은 소리") + **`measureChainEffect`**(입력/출력 LUFS + true-peak — §8 ±0.2LU 데이터).
+- **실측**: 다이나믹 신호에서 SNS 체인이 LUFS 감소·true-peak ≤ −0.5dB 보장·리미터 피크 추가 감소.
+- **G-26 완결** — Inc1(컴프레서)→Inc2(리미터+리버브)→Inc3(체인+프리셋).
+
+### 다음 회차 — 2단계 계획 평가
+1. G-24✓·G-28(스키마+UI)✓·G-26(3종+체인)✓ — 2단계 핵심 완료.
+2. 남은 2단계: N2(등록 결정 전제=사용자)·KPI 측정 창구·프로세서의 그래프 자리노드 직접 소비 배선.
+3. 사용자 지시 또는 계획 문서 우선순위에 따라 다음 증분 결정. 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 49 (G-26 Inc 2 — 리미터 + 리버브)
+
+**게이트**: verify_gate 5/5(1,312 테스트 — 신규 9종).
+
+### 완료 — G-26 리미터 + 리버브 (커밋 5ed5b4d)
+- **`AudioGraphLimiter`**: look-ahead 피크 클램프 — 창 내 최대 피크→천장 게인·즉시 어택·평활 릴리즈. **천장 절대 초과 않음 실측**(0dBFS→−1dB·과도→사전 클램프). 그래프 .limiter 자리 노드에 구현.
+- **`AudioGraphReverb`**: 초기 반사 탭 지연 합성 — 6 탭·지수 감쇠·dry/wet·룸 사이즈. mix=0 비트 항등·꼬리 실측. v1 "공간감".
+- 테스트 9종(천장·통일·look-ahead·빈 안전·클램프 + dry 항등·꼬리·프레임·빈).
+
+### 다음 회차 인계 — G-26 Inc 3 (그래프 배선 + 프리셋)
+1. 컴프레서·리미터·리버브를 그래프 렌더 체인에 배선(자리 노드 소비).
+2. §8 LUFS ±0.2LU 게이트 확장.
+3. SNS 프리셋(파라미터 세트). 이후 2단계 다음 항목. 실기기 3종=유보.
+
+## 2026-08-20 세션 48 (G-26 Inc 1 — 오디오 컴프레서)
+
+**게이트**: verify_gate 5/5(1,303 테스트 — 신규 9종).
+
+### 완료 — G-26 컴프레서 (커밋 1af3f6a)
+- **`AudioGraphCompressor`**(Core/Audio): 피드포워드 컴프레서 — threshold/ratio/attack/release/makeup. 정적 전달곡선(`staticOutputDb`) + 동적 PCM 적용(`apply`). 그래프의 자리 노드(nodeKind .compressor)가 스키마 불변으로 구현을 받음.
+- 테스트 9종: 무릎 통일성·ratio 압축·메이크업·극단 ratio·실측 감쇠(≥6dB)·조용한 통일·빈 안전·클램프.
+
+### 다음 회차 인계 — G-26 Inc 2 (리미터 + 리버브)
+1. 리미터(look-ahead 피크 클램프 — true-peak 게이트와 직결) + 리버브(초기 반사 지연 합).
+2. Inc 3(프리셋·디-이서 초기). §8 LUFS ±0.2LU는 배선 후.
+3. 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 47 (G-28 Inc 2 — 효과 브라우저 UI)
+
+**게이트**: verify_gate 5/5(1,294 테스트).
+
+### 완료 — G-28 브라우저 UI (커밋 5e6e611)
+- **`EffectBrowserView`**(App/Inspector): 검색(이름+태그)·costTier 배지(EffectCostProfile 소비)·즐겨찾기(정렬 우선)·카드 탭 적용(실제 updateSelectedEffects). 태그 18종 exhaustive.
+- **인스펙터 통합**: Effects 섹션 헤더 "Browse" 버튼 + sheet.
+- 정렬: 즐겨찾기 우선→비용 오름차순.
+
+### 다음 회차 인계 — G-26 Inc 1 (오디오 컴프레서)
+1. 그래프 자리 노드(nodeKind .compressor — 스키마 불변)에 AVAudioUnitCompressor 구현.
+2. §8 게이트 확장: LUFS ±0.2LU(§8의 엄격 게이트 자연 확장).
+3. 이후 G-26 Inc 2(리미터+리버브)·Inc 3(프리셋·디-이서). 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 46 (G-28 Inc 1 — EffectCostProfile 스키마 + 측정 파이프라인)
+
+**게이트**: verify_gate 5/5(1,294 테스트 — 신규 5종).
+
+### 완료 — G-28 전제 (커밋 6d113bf)
+- **`EffectCostProfile`**: ms/frame(중앙값)·peakMemory·gpu/cpu·realTimeSafe(≤23ms)·costTier(instant/moderate/heavy)·measurementVersion — Codable. 브라우저의 검색/랭킹/배지 데이터 원천.
+- **`EffectCostProfiler`**: 참조 프레임(1080p gradient+stripes)에서 전 빌트인 이펙트의 실측 프로파일 생성 — 워밍업 후 중앙값. 전 유형 유한·비음수 단위 테스트.
+- PERFORMANCE_SLO 신설 행.
+
+### 다음 회차 인계 — G-28 Inc 2 (브라우저 UI)
+1. 검색·미리보기·즐겨찾기·파라미터 편집 — costTier 배지 포함(EffectCostProfile 소비).
+2. KPI 측정 창구: 검색 성공률·재사용률(하니스 env).
+3. 이후 G-26(Apple AU 오디오 B). 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 45 (P2-G24-6b — 실제 움블 픽스처 + DoD 활성화 · **G-24 완결**)
+
+**게이트**: run_g24_stabilize_gate.sh **2회 연속 DoD PASS** + verify_gate 5/5.
+
+### 완료 — P2-G24-6b (커밋 6dc3d28)
+- **픽스처**: dark mandelbrot→bright testsrc2(eq ±0.4)+sine 움블 crop — 실제 카메라 흔들림 내장.
+- **측정 모델 근본 수정**: 변위(속도)→**누적 위치**에서 작업 — accumulate→smooth→|raw−smoothed| 입력·correction=(smoothed−raw) 15% 클램프·residual=|(raw+corr)−smoothed|.
+- **장면 전환 폴백**: 프로바이더의 카이제곱이 밝기 전환에도 불응 → 하니스 내장 평균 휘도 점프 폴백.
+- **실측(2회 동일)**: ratio=0.000·crop=0.003·wobble=0.000·cut_errors=0 — **DoD PASS**.
+- **G-24 완결** — 6증분: 측정 수학→분할 브리지→등록+평활화→CI warp→E2E 파이프라인→실제 움블+DoD.
+
+### 다음 회차 인계 — G-28 (EffectCostProfile 선행)
+1. EffectCostProfile 스키마 확정(PERFORMANCE_SLO 신설): ms/프레임 실측·메모리·GPU/CPU.
+2. 기존 이펙트 프로파일링 실측 → 브라우저 UI.
+3. G-24 후속 개선 후보: 컴포지터 배선(등록 보정 실제 렌더 체인 소비)·SceneChangeProvider 히스토그램 메트릭 조사.
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 44 (P2-G24-6 — E2E 종단 파이프라인 · 픽스처 결함 발견)
+
+**게이트**: verify_gate 5/5(1,289) + run_g24_stabilize_gate.sh(파이프라인 PASS — DoD 보고·비게이트).
+
+### 완료 — P2-G24-6 (커밋 4a056bd)
+- **하니스 STABILIZE env**: SceneChangeProvider→프레임 추출(120 luma)→등록(SAD)→평활화→보정→DoD 판정 — **종단 파이프라인 앱 컨텍스트에서 실증**(ratio 0.25·error=none).
+- **`run_g24_stabilize_gate.sh`**: 실행·메트릭 보고(JSON 아티팩트).
+- **픽스처 결함 2건 발견(정직한 기록)**: (a) 경계 검출 실패 — testsrc→smptebars 크롭 후 유사 휘도 (b) 실제 움블 부재 — testsrc의 카운터만 모션. DoD 보고는 하지만 게이트하지 않음.
+
+### 다음 회차 인계 — P2-G24-6b (실제 움블 픽스처 + DoD 활성화)
+1. ffmpeg 시변 crop 오프셋으로 sine 움블 적용(±6px x ±4px y @ 2Hz + 강한 대비 패턴 전환) → 경계 검출 + 실제 흔들림.
+2. run_g24_stabilize_gate.sh가 DoD 차단 모드로 전환(ratio ≤ 0.5·crop ≤ 15%·wobble ≤ 3%·cut errors 0).
+3. G-24 완결 선언. 이후 G-28(EffectCostProfile 스키마 확정 선행).
+
+## 2026-08-20 세션 43 (P2-G24-5 — CI warp 프로세서)
+
+**게이트**: verify_gate 5/5(1,289 테스트 — 신규 4종).
+
+### 완료 — P2-G24-5 (커밋 98c6b08)
+- **`StabilizationWarpProcessor`**(Core/Rendering): confidence fallback 포함 CI 워프. 확신 ≥ 0.15 → CGAffineTransform 평행 이동(extent 이동 검증). 제로 보정 → 비트 항등(CIImage equality). 확신 < 0.15 → 원본 통과(픽셀 동일)+bypassed 플래그(호출자 로그 — DoD fallback 지표).
+- **범위 조정**: 컴포지터 배선은 P2-G24-6 E2E와 함께 — 실제 등록 데이터(Vision)가 흐르는 종단 경로에서만 측정 가능(측정 증거 없는 배선 금지 원칙).
+
+### 다음 회차 인계 — P2-G24-6 (E2E 종단 + DoD)
+1. 하니스 `MOVIECUT_UITEST_STABILIZE=1`: 등록(estimateTranslation)→평활화(smooth)→보정(correction)→워프(StabilizationWarpProcessor)→컴포지터가 소비하는 종단 경로를 앱 컨텍스트에서 구동.
+2. 픽스처 실측 변위로 StabilizationMetrics.report 판정 — DoD: 잔류 50%↓·크롭 ≤15%·워블 ≤3%·장면 전환 0.
+3. SceneChangeProvider도 앱 컨텍스트에서 검증(P2-G24-2에서 이관된 통합 테스트).
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 42 (P2-G24-3 — 등록 + 평활화 + 보정)
+
+**게이트**: verify_gate 5/5(1,285 테스트 — 신규 7종).
+
+### 완료 — P2-G24-3 (커밋 841dd3e)
+- **`StabilizationRegistration`**(Core/Analysis): estimateTranslation(SAD 블록 정합 — 결정적·swift test 동작)+ smooth(이동 평균)+ correction(역변·15% 클램프). 소비자는 RegistrationResult만 읽음 — Vision 업그레이드 시 출력 불변.
+- **P2-G24-4의 수학도 통합** (smooth+correction이 같은 데이터 모델) — 계획의 4증분이 3+5로 병합.
+- 테스트 7종: 알려진 시프트 ±1px 회수·동일 이미지 제로·퇴화 안전·스파이크 평활화(50%+ 당겨짐·분산 감소)·평활화 경계·보정 수학·제로 보정.
+
+### 다음 회차 인계 — P2-G24-5 (CI warp 배선)
+1. 등록·평활화·보정을 Mac 프리뷰/출력+iOS 컴포지터에 편입(CIPerspectiveCorrection·변위 적용).
+2. confidence fallback: 낮으면 바이패스(명시적 로그 — 조용한 강등 금지).
+3. 파리티 시나리오 신규(스태빌) + 이후 P2-G24-6 E2E(하니스 STABILIZE env + DoD 수치 실측).
+4. 실기기 3종=유보. 대기 결정(변경 없음).
+
+## 2026-08-20 세션 41 (P2-G24-2 — 장면 분할 브리지)
+
+**게이트**: verify_gate 5/5(1,278 테스트 — 신규 4종).
+
+### 완료 — P2-G24-2 (커밋 9352dbd)
+- **`StabilizationSegmentation`**(Core/Analysis): 프로바이더 검출 시각 → `Frame.isSceneCut` 브리지(±프레임 창·클램프·변위 융합). 순수 수학.
+- **환경 제한 발견·기록**: SceneChangeProvider의 AVAssetImageGenerator가 swift test 하에서 프레임을 생성하지 않음(NR DSP와 동일 계열 — 앱 컨텍스트 필요). 프로바이더 통합 검증은 P2-G24-6 E2E로 이관, 브리지 수학은 완전 단위 테스트.
+- 테스트 4종: ±2프레임 창·복수 변경·퇴화 안전·변위 융합.
+
+### 다음 회차 인계 — P2-G24-3 (Vision 등록)
+1. VNGenerateOpticalFlowRequest 또는 homography로 프레임별 변환 행렬 추정 + confidence.
+2. 합성 움블 픽스처의 ground truth(알려진 sine 움블)와 행렬 회수 ±10% 단위 테스트.
+3. 이후 P2-G24-4(평활화+crop)·5(CI warp)·6(E2E). 실기기 3종=유보.
+
+## 2026-08-20 세션 40 (P2-G24-1 — 스태빌 측정 인프라 · 2단계 착수)
+
+**게이트**: verify_gate 5/5(1,274 테스트 — 스태빌 7종 신규) + 픽스처 재생성 동일 해시.
+
+### 완료 — P2-G24-1 (커밋 e91771d)
+- **`StabilizationMetrics`** (Core/Analysis): DoD 4지표 순수 수학(잔류 중앙값·감소비·심각 워블 비·장면 전환 에러·크롭 중앙값) + `meetsDoD()` + `adaptiveCrop`(15% 클램프). P2-G24-6 E2E가 같은 함수 재사용(자기 보고 아님).
+- **픽스처**: `stab_wobble_320x240_4s_30fps.mp4`(testsrc+smptebars concat = 장면 전환 1회·SHA 게이트 c274ef74…).
+- **테스트 7종**: 중앙값·완전 보정·50% 경계(DoD는 경계 포함)·워블/장면에러/크롭 각 실패·클램프.
+
+### 다음 회차 인계 — P2-G24-2 (장면 분할)
+1. SceneChangeProvider 재활용: 세그먼트 검출 → 경계 프레임 ±2프레임 정확도(픽스처 t=2.0s) → `StabilizationMetrics.Frame.isSceneCut` 공급.
+2. 이후 P2-G24-3(Vision 등록)·4(평활화+crop)·5(CI warp 배선)·6(E2E DoD 실측).
+3. 실기기 3종=사용자 유보. 대기 결정(변경 없음).
+
+## 2026-08-19 세션 39 (2단계 계획 수립 — USER_WAITING 전환)
+
+**산출**: `docs/EXECUTION_PLAN_PHASE2_20260819.md` — EXECUTION_PLAN §5의 개요를 상세 전개.
+
+### 완료 — 2단계 계획 문서 (커밋 276d7c9)
+- 고정 순서: 1단계✓ → **G-24 손떨림 v1**(방향 문서 "효과 볼륨 확대보다 우선") → G-28 브라우저 → G-26 오디오 B. N2는 등록 결정 전제.
+- **G-24 6증분**: 측정 인프라(순수 수학+결정적 픽스처+SHA)→장면 분할→Vision 등록→평활화+adaptive crop→CI warp 배선+fallback→E2E+DoD 실측. 함정 레지스터 5건.
+- G-28: EffectCostProfile 스키마 확정 선행(PERFORMANCE_SLO 신설). G-26: 그래프 자리 노드 스키마 불변·게이트 LUFS ±0.2LU.
+
+### 사용자가 할 일
+**`docs/EXECUTION_PLAN_PHASE2_20260819.md` 검토 후 승인 또는 수정 지시.** 승인 시 다음 회차가 P2-G24-1(스태빌 측정 인프라)을 착수. 실기기 3종도 언제든 병렬 재개 가능(가이드: `docs/G27_DEVICE_VERIFICATION_GUIDE.md`).
+
+### 다음 회차 인계 (승인 후)
+P2-G24-1 — StabilizationMetrics(잔류 변위 중앙값·크롭 비율·워블 지수·장면 전환 오류 카운트의 순수 수학) + 결정적 움블 픽스처(sine 움블+임계 구간+장면 전환 2회·SHA-256 게이트) + 해석값 단위 테스트.
+
+## 2026-08-19 세션 38 (G-03 Inc 4 — E2E 거부 단언 · **G-03 완결**)
+
+**게이트**: 전체 E2E PASS(G-03 거부 검사 포함) + verify_gate 5/5(1,267).
+
+### 완료 — G-03 E2E 거부 단언 (커밋 5b2e316)
+- **run_e2e_export.sh**: 가시 콘텐츠 없는 조정-only 프로젝트의 출력 시도는 **거부**되어야 PASS(파일 생성 = FAIL — 조용한 강등 금지 원칙). 가시+조정 경로는 W4 29/29로 측정 완료.
+- **1회 M-런 RMS 일시 편차**(−9.16dB·재실행 녹색): 동일 코드 2회째 녹색 — 재현 불가·원인 불명의 일시 편차로 기록(감시 대상. 재발 시 §8 M-런의 안정성 조사 증분).
+
+### 다음 회차 인계 — 2단계 계획 수립
+1. **EXECUTION_PLAN §5 패턴으로 2단계 상세 계획 문서 작성**: G-24 손떨림 v1(씬 분할·Vision 등록·경로 평활화·adaptive crop·CI warp·fallback — DoD 수치 백로그 §0.5)·G-28 브라우저(EffectCostProfile 스키마 확정 선행)·G-26 오디오 B(Apple AU 우선·LUFS ±0.2LU 게이트)·N2 오토스타일(등록 결정 후 G-28 세트).
+2. 계획 승인 요청(§8 에스컬레이션) 또는 즉시 첫 증분 착수 — 방향 문서의 우선순위 참조.
+3. 실기기 3종=사용자 유보. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 37 (G-03 Inc 3 — 조정 레이어 제품화)
+
+**게이트**: W 스위트 **2회 연속 29/29=100.0%**(신규 단계 포함) + verify_gate 5/5.
+
+### 완료 — G-03 제품화 (커밋 e01d6e5)
+- **`SetClipPropertyCommand.isAdjustmentLayer`** (이전값 역추적 — undo 단일 트랜잭션).
+- **인스펙터 UI**: "Adjustment layer" 토글 — 기존 색 섹션 편집이 조정 체인으로 전환.
+- **W4 완전판**: `adjustment_layer` 단계(AddClipCommand + colorGrade) — 계획 원 문구 완성.
+- **하니스 env**: `MOVIECUT_UITEST_ADJUSTMENT_LAYER=1`(마크+그레이드·상태 보고).
+- 검증: 가시 클립 없는 조정-only 프로젝트 = noExportableMedia(정확한 실패 — 미지원 케이스의 조용한 강등 아님).
+
+### 다음 회차 인계
+1. **E2E 골든/파리티 스크립트 단계**: run_e2e_export.sh에 ADJUSTMENT_LAYER 조합 섹션 추가(하니스 env는 이미 있음) → G-03 완결 선언.
+2. 이후 2단계 계획(EXECUTION_PLAN §5). 실기기 3종=사용자 유보. 대기 결정(변경 없음).
+
+## 2026-08-19 세션 36 (G-03 Inc 2 — 조정 레이어 렌더 배선 + 픽셀 검증)
+
+**게이트**: verify_gate 5/5(1,267 테스트 — 픽셀 4종 신규) + W 스위트 28/28=100.0% 무회귀.
+
+### 완료 — G-03 렌더 배선 (커밋 b9d0e58)
+- **Core**: `AdjustmentLayerChain.applyAdjustments`(잠긴 순서 — 클립 고유 체인 후·하위 트랙 먼저, 공유 픽셀 프로세서).
+- **Mac**: CustomVideoCompositor.applyClipEffects 말미 적용·양쪽(프리뷰·출력) Instruction에 조정 세트 전달·조정 클립 콘텐츠 렌더 제외.
+- **iOS**(DoD ③ — 공유 프로세서 경유): IOSCustomVideoCompositor 동일 적용·IOSExportEngine 전달·콘텐츠 제외.
+- **픽셀 검증**: 항등·픽셀 이동·하위먼저 스택·범위 게이팅.
+
+### 다음 회차 인계 — G-03 Inc 3 (제품화 잔여)
+1. 인스펙터 UI: 클립을 조정 클립으로 변환 + 조정 클립의 색보정/필터 편집(기존 색 섹션 재사용).
+2. E2E 골든/패리티 시나리오 신규(하니스 env — 조정 클립 포함 프로젝트) + W4 조정 단계(계획 원 문구 완성).
+3. 이후 2단계 계획(EXECUTION_PLAN §5). 실기기 3종=사용자 유보. 대기 결정(변경 없음).
+
+## 2026-08-19 세션 35 (G-03 Inc 1 — 조정 레이어 Core 절반)
+
+**게이트**: verify_gate 5/5(1,263 테스트 — 신규 4종 포함).
+
+### 완료 — G-03 Core: 모델·스키마·체인 (커밋 97bfde2)
+- **설계 노트**(AdjustmentLayerChain 문서): 클립 플래그 채택(Track.kind 아님 — 범위·undo·저장이 클립 기계 재사용)·렌더 순서 고정(클립 고유 체인 → 조정 체인, 하위 트랙 먼저)·범위 밖 무변경·조정 클립 무콘텐츠·v1 비디오 트랙 전용.
+- **스키마 v6**(`AddAdjustmentLayerMigration` 빈 마이그레이션·pre-v6 폴백) + 마이그레이션 체인 테스트 v6 확장.
+- **`AdjustmentLayerChain`**(Core/Rendering): activeAdjustments·visibleClips·isAdjustmentContent — 렌더 배선의 단일 소비 지점.
+- 게이트 수정: lint(force_cast 1건 정석 수정).
+
+### 다음 회차 인계 — G-03 Inc 2 (렌더 배선)
+1. Mac 프리뷰·출력 + iOS: FlattenedTimeline 소비 지점에서 조정 체인 적용(클립 고유 체인 후)·조정 클립 콘텐츠 렌더 제외.
+2. 인스펙터 UI(조정 클립 변환/설정) + 골든(아래만 효과·범위 밖 무변경)·패리티 시나리오 신규 + W4 완전판.
+3. 이후 2단계 계획(EXECUTION_PLAN §5 패턴). 실기기 3종=사용자 유보(러너·가이드 완비). 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 34 (ProRes 교찰 수습 — W 100.0% · 실기기는 사용자 유보)
+
+**상태**: 사용자 결정으로 RUN 복귀(실기기 유보·코드 수습 우선). **게이트**: W 스위트 **2회 연속 동일 28/28=100.0%** + 전체 E2E 무회귀(챕터·ProRes·§8) + verify_gate 5/5.
+
+### 완료 — ProRes+비디오+오디오 교찰 폐쇄 (커밋 e01c31f)
+- **진단**: 교찰 시 앱 스레드에 리더/라이터 프레임 전무 — 혼합 컴포지션 리드의 continuation 파킹(Apple측).
+- **수습**: 라이터 경로(exportVideoWithExplicitBitrate)는 리더용 컴포지션을 **비디오 단독**으로 빌드하고 오디오를 **그래프 AAC 파일에서 직접 리드**(graphAudioURL 전달·audioMix 제거 — 그래프가 이미 믹스). 프리셋 경로는 컴포지션 오디오 유지(통과 조합).
+- **실측**: w4 prores OK → W 28/28=100.0% (2회 동일)·챕터 메타데이터 3개·ProRes prores·§8 rms 0.000dB 무회귀.
+
+### 다음 회차 인계
+1. **1단계 자율 조건 전부 녹색** — 실기기 3종만 유보(재개 시 러너·가이드 완비). 차순위 후보: **G-03 조정 레이어**(계획상 1단계 말·W4 완전판 잠금해제) → 이후 2단계 계획(EXECUTION_PLAN §5).
+2. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 33 (G-27 ③ 실기기 준비 — USER_WAITING 전환)
+
+**상태**: 자율 수행 잔여 소집 → **USER_WAITING(실기기 3종 협력)**.
+
+### 완료 — 실기기 러너 + 가이드 (커밋 75ee80d)
+- **`run_g27_device_e2e.sh`**: devicectl 기반 실기기 E2E — 시뮬레이터 게이트와 동일 하니스·동일 7단언 (TEAM_ID 서명·픽스처 스테이징·env 런치·결과 풀링). 미연결 시 절차 안내 오류. **사용자 기기 연결 시 첫 검증 예정** (devicectl: 페어링 이력 iPhone 13 Pro = unavailable 상태).
+- **`docs/G27_DEVICE_VERIFICATION_GUIDE.md`**: 3종(최소/중간/최신)·사전 준비(팀 ID·개발자 모드·신뢰)·실행·결과 보고·문제 대응.
+
+### 사용자가 할 일
+`docs/G27_DEVICE_VERIFICATION_GUIDE.md` 참조: 기기 연결 후 `TEAM_ID=<팀ID> bash scripts/run_g27_device_e2e.sh` — 출력 전체를 알려주면 루프가 §4를 갱신하고 3종 PASS 시 DONE_PHASE1 선언으로 이어짐.
+
+### 다음 회차 인계 (결과 접수 후)
+1. 기기 결과 → §4 표 갱신·결함이면 수습 증분.
+2. 3종 PASS → DONE_PHASE1 선언 (EXECUTION_PLAN §4 전 조건 충족).
+3. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 32 (W 대표 작업 시나리오 게이트 — §4 측정 창구 완성)
+
+**게이트**: run_w_scenarios.sh **2회 연속 동일 27/28=96.4% PASS**(≥90% 게이트) + verify_gate 5/5.
+
+### 완료 — W1~W5 측정 창구 (커밋 d7a1313)
+- 하니스 `MOVIECUT_UITEST_W_SCENARIO` + `run_w_scenarios.sh`: 방향 문서 §1 대표 작업 5종을 실제 경로로 구동, 성공률 게이트. 격리 서피스(전체 에디터 라이브 레이아웃 크래시 회피 — 파리티 선례 적용)·스크립트 와치독.
+- 측정 중 발견·수습: ① STT 헤드리스 호출=TCC 프라이버시 위반 **강제 크래시**(가용성 프로브로 권한 게이트 기록) ② 무변화 사인파 픽스처=비트 0(결정적 리듬 픽스처 생성) ③ 트래킹 rect 정규화 좌표 ④ **ProRes+비디오+오디오 교찰(신규 조합 — 라이터 경로 리더측)**: 90초 once-continuation 레이스로 정직 FAIL 기록(TaskGroup 암시적 join은 교찰 회피 불가).
+- W4 델타: 조정 레이어=G-03(2단계) — 계획대로.
+- **실측(2회 동일)**: w1 7/7·w2 5/5·w3 6/6·w4 4/5(prores 결함)·w5 5/5 = **96.4%**.
+
+### 다음 회차 인계 — 실기기 요청 (자율 잔여 소진)
+1. §4 측정 조건 전부 확보(성공률 96.4%·픽셀·PCM·drift·지연 강제·시뮬레이터 E2E). **잔여=실기기 3종(사용자 하드웨어)** → 사용자에게 절차(디바이스 연결·개발 증명서 신뢰·G-27 러너 시나리오) 안내 후 **LOOP_STATE USER_WAITING 전환**.
+2. 기록 결함(후속 증분 후보): ProRes+비디오+오디오 교찰(96.4%에 반영됨).
+3. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 31 (1단계 잔여 정리 ① — 지연 기준선 enforce 전환)
+
+**게이트**: run_latency_baseline.sh **2회 연속 enforced PASS**(소형+10분 2패스) + verify_gate 5/5.
+
+### 완료 — 지연 SLO 강제 전환 (커밋 d986666)
+- **`run_latency_baseline.sh`**: 위반 차단 기본화(`--no-enforce` 진단 모드) + **10분 fixture 패스**(결정적 생성 testsrc 320×240+220Hz 600s — 저장소 부담 없이 매 실행 재현). SLO 원 의미(10분 프로젝트 열기 ≤3s)의 실측 공백 해소.
+- **SLO 문서**: 소형 seek p50 0.05–0.06ms·열기 101.6–105.1ms / **10분 seek p50 0.05–0.06ms·p95 0.08–0.10ms·열기 143.9–145.9ms(목표 ~4.8%)** 기록 — 종전 주의 표기 2건 해소, 강제 항목 목록에 추가.
+
+### 다음 회차 인계 — 잔여는 전부 사용자 의존/결정
+1. **W1~W5 조합 시나리오**: 구축 여부 사용자 결정(베타 스위트 4/4가 대체 창구 — 계획상 "신규" 예정이었으나 측정 증거는 확보).
+2. **실기기 3종(G-27 ③)**: 사용자 하드웨어 협력 필요 — 요청 방법(디바이스 연결+증명서) 안내 후 USER_WAITING.
+3. 둘 다 사용자 의존이므로 **다음 회차는 USER_WAITING 전환 후 종료**가 정직한 선택(작업 가능한 잔여 없음). 사용자 결정: W 시나리오 구축 지시 또는 실기기 일정.
+4. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 30 (G-27 시뮬레이터 E2E 구축 — 필수 불가 잔여 소진)
+
+**게이트**: run_g27_simulator_e2e.sh **2회 연속 동일 PASS**(iPhone 17 Pro 시뮬레이터) + verify_gate 5/5.
+
+### 완료 — G-27 ① 시뮬레이터 E2E (커밋 e15a8c4)
+- **`IOSUITestHarness`**(iOS 앱, env 게이트): Mac 하니스 관례의 iOS 판 — 실제 앱 경로(임포트→프리뷰→출력→AVAudioSession 라우팅→ProjectStore 저장)를 구동하고 Documents/g27-result.txt에 구조화 라인 기록.
+- **`IOSPreviewCompositionBuilder` 추출**(PreviewView→공유): 하니스가 앱과 동일한 프리뷰 컴포지션을 구동(병행 구현 드리프트 방지).
+- **`run_g27_simulator_e2e.sh`**: 클린 설치(결정성)·픽스처 스테이징·2단계 런치(재오픈=프로세스 경계)·단언+ffprobe.
+- **실측(2회 동일)**: imported 2클립·preview playable duration 10.000 frame=1·export h264 64,906B·category=Playback route=Speaker·재오픈 2클립 보존.
+- **설계 노트**: 계획 문구는 "XCUITest 타겕"이나 루프의 확립 E2E 관례(env 하니스+결과 파일+스크립트 단언 — 결정적·측정 중심)를 iOS에 이식하는 것으로 구현. UI 자동화(XCUITest)가 필요하면 이 기반 위에 추가.
+
+### 다음 회차 인계 — 1단계 게이트 잔여 정리
+1. **지연 기준선 --enforce 전환**: 실측(seek p50 0.12ms/p95 0.27ms·열기 125.6ms)이 목표(100ms/3000ms) 이내 — SLO 문서 기준선 기록 후 차단 모드 전환.
+2. **W1~W5 조합 시나리오**: 구축 여부 사용자 결정 후보(베타 스위트가 대체 창구).
+3. **실기기 3종**: 사용자 협력 필요 — 요청 시 USER_WAITING 전환.
+4. 잔여 소진 후 DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 29 (G-25 §11 종합 판정 + 1단계 게이트 점검 — 측정 인프라 결함 수습)
+
+**게이트**: verify_gate 5/5(1,255) + 최종 상태 측정 창구 전부 — 베타 프리플라이트 4/4·지연 기준선·파리티 스위트 ALL PASS.
+
+### 완료 — §11 종합 보고 + 측정 인프라 수습 (커밋 4638706)
+- **§11①~⑤ 전 항목 측정 증거 충족**(상세 표는 LOOP_STATE): null test maxDev=0.00e+00·drift 172,800,000 정확·미터 ↔ 실출력 Δ0.00 LU·오디오 E2E 전 증분 무회귀(§8 엄격 게이트 rms 0.000dB·경고 0/0 포함).
+- **최종 상태 §4 창구 재실측**: 베타 4/4·seek p50 0.12ms/p95 0.27ms·프로젝트 열기 125.6ms(목표 이내 — --enforce 전환 후보)·파리티 스위트 전 PASS(최악 MAD 0.45/12.0).
+- **측정 인프라 결함 2건 수습(게이트가 포획)**: ① 베타 시나리오 4의 `status=PASS` grep은 하니스가 낸 적 없는 형식 — 확립된 복구 계약으로 수정(통과한 적 없는 단언이었음) ② **파리티·베타·지연 스크립트의 플레인 빌드(샌드박스 ON)**가 2-C-3 재빌드 시점부터 모든 앱 런치를 조용히 실패시킴(이진 탐색 규명 — 소스·산출물·앱 상태·LaunchServices 무죄) → 3스크립트에 ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO 정합(E2E 관례)으로 해소.
+- **§4 대조 잔여(Phase 1 미완 요인)**: iOS 실기기 3종(G-27 시뮬레이터 E2E 미구축=필수 불가 잔여·실기기=사용자 의존)·W1~W5 조합 시나리오 미구축(베타 스위트가 대체 창구)·지연 --enforce 미전환.
+
+### 다음 회차 인계
+1. **G-27 시뮬레이터 E2E 구축** — 필수 불가 잔여의 마지막 항목: XCUITest 타겟+시뮬레이터 구동(프리뷰+출력+오디오 라우팅+재오픈 필수 시나리오, PLATFORM_PARITY §6 경고 해소). 실기기 러너는 사용자 일정 확보 시(그때 USER_WAITING).
+2. 이후: 지연 기준선 --enforce 전환 평가·W1~W5 구축 여부 결정 → 잔여 소진 시 실기기 협력 요청 → DONE_PHASE1.
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 28 (G-25 전환 2-C-3: §8 엄격 게이트 — **2-C 제품 경로 전환 완결**)
+
+**게이트**: verify_gate 5단계 PASS(1,255 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-3: 그래프 PCM 기준 ±1샘플 엄격 게이트 (커밋 fa98175)
+- **`AudioGraphExportPostCheck.trimCodecDelay`** (Core): §8.1 "프라이밍/패딩 트림은 호출자 책임"의 구현 — 상관 정렬(조대 stride-64 + 정밀 stride-1·모노합 내적, 경계 8,192샘플)로 코덱 지연 측정 후 헤드+테일 절단해 기준과 1:1 정렬. 왕복 테스트: 프레임 0 대소리+조용한 꼬리(온셋 편법 불가) → 트림 후 길이 ±1·check passed·RMS<1dB.
+- **§8 하니스**: 참조 = 출력이 인코딩한 것과 동일한 `renderMix`(동일 가청 스팬 정책) — 컴포지션 재빌드·프리뷰 렌더 의존 제거. `check()`의 ±1 경성 판정 활성화.
+- **스크립트**: 0.5s 관대 임계 폐지 → 코덱 지연 타당성 + ±1샘플 길이 + RMS≤1dB + 클리핑 0. 명세 §8 과도기 기준 문단 이행 완료로 갱신.
+- **실측(2회 동일)**: §8 A/B **len=192000/96000 정확·rms=0.000dB·경고 0/0**(±1 충족으로 길이 경고 소멸 — 종전 1/1)·solo Δ −3.04·M Δ0.00 LU.
+
+### 다음 회차 인계 — G-25 완료 판정 (전환 증분 전부 소진)
+1. **§11①~⑤ 종합 완료 판정 보고**: ①null test ±1샘플(3그래프 maxDev=0.00e+00·offset 0) ②동일 PCM ③60분 drift(종점 172,800,000 정확·꼬리 offset 0·왕복 정확) ④LUFS/TP 미터 실측(그래프 미터 −22.94 LUFS·TP −15.74 ↔ 실출력 Δ0.00) ⑤기존 오디오 E2E 무회귀(NR SNR 5.15dB·EQ bass/treble 2.31/0.49·덕킹 12.04dB — 매 증분 게이트) — **전 항목 측정 증거 확보**. 핸드오프에 종합 보고 작성.
+2. **DONE_PHASE1 평가**: EXECUTION_PLAN §4의 1단계 게이트 조건을 대조 — G-25 외 잔여 조건이 있으면 명시하고 그것부터 실행(1단계 게이트 전 효과 확대 금지 규칙 준수). 전 조건 충족 시 LOOP_STATE를 DONE_PHASE1로 전환.
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 27 (G-25 전환 2-C-2: 프리뷰 tap 폐지 — EQ 파생 미디어 통일)
+
+**게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 PASS(**M런 RMS 게이트 재활성 포함** — tap 결함 폐쇄 증명) + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-2: 프리뷰 EQ의 파생 미디어 전환 (커밋 456a278)
+- **`AudioEqualizerService` 통일** (Core): 디코드를 §3.1 어댑터로 전환 — 비디오 컨테이너 임베디드 오디오도 EQ 파생 가능(기존 AVAudioFile 한정 — 그래프·출력 경로의 EQ 비디오 클립 잠복 실패 갭 해소). DSP 단일 구현으로 프리뷰·출력·그래프 동일(기존 tap은 5밴드 AVAudioUnitEQ·파일 렌더는 3밴드 원폴로 **서로 다른 DSP였음** — 이원 경로 해소).
+- **프리뷰 tap 폐지** (PlaybackEngine): MTAudioProcessingTap 기계(~250줄)·ClipEqualizerTimelineSegment 제거. EQ 클립(오디오 트랙+비디오 임베디드 양쪽)은 파생 미디어 소스 스왑 — 프리셋 캐시로 재빌드 무관 재사용(리버스 선례), clear/loadProject 정리.
+- **조사 확정**: NR 실시간 필터는 실재하지 않았음(주석만 — NR은 편집 시점 파괴적 변환으로 이미 통일, 주석 정정). 프리뷰 볼륨/페이드/덕킹 audioMix 램프는 유지(AVPlayer 네이티브·tap 무관).
+- **M런 RMS 게이트 재활성**: tap-in-export 결함으로 분리 기록했던 프리뷰 참조 RMS 단언(≤1dB) 복원 — 실측 PASS로 결함 폐쇄 증명. 계약 갱신(AudioEqualizerDSP — 프리뷰 파생 배선+tap 심볼 부재 단언).
+- **실측**: 그래프 미터↔출력 Δ0.00·§8 RMS −0.001dB·NR 5.15dB·EQ 2.31/0.49·덕킹 12.04dB — 전 수치 동일 무회귀.
+
+### 다음 회차 인계(2-C 잔여 — 마지막 전환 증분)
+1. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(0.5s 관대 임계 교체). §8 하니스 참조를 renderCurrentPreviewAudio → GraphMixRenderer PCM으로, 재디코드 측 프라이밍 정렬 후 check() 경성 판정.
+2. 이후 §11①~⑤ 완료 판정 실측(§11⑤는 이미 매 증분 게이트로 실측 중 — ①②③④ 종합 보고) → DONE_PHASE1 평가(EXECUTION_PLAN §4).
+3. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 26 (G-25 전환 2-C-4: 오디오 속도 램프 사전 렌더 — 갭 폐쇄)
+
+**게이트**: verify_gate 5단계 PASS(1,254 테스트) + run_e2e_export.sh 전체 회귀 PASS(오디오 수치 완전 동일).
+
+### 완료 — 전환 2-C-4: 속도 램프 오디오의 그래프 경로 (커밋 bc16f69)
+- **`AudioGraphSourceAdapter.rampSegments` (Core)**: 레거시 `applySpeedRamp` 경계 수학 이식 — 경계 [0,1]+포인트(클램프·중복 제거), 구간 출력 = `timeMapping` 차(선형 rate 커브의 구간별 정속 근사 = 레거시 구성 scaleTimeRange 의미론, 단일 소스).
+- **`timeStretchedRamped` (Core)**: 구간별 슬라이스→피치 보존 스트레치(trimTail 비활성 — 중간 무음 내용 보존)→접합→**구간당 정확한 기대 프레임 절단**(출력 길이 = 래거시 램프 지속과 일치).
+- **빌더**: 램프 클립(포인트 ≥2) = 클립 단위 소스 + `Plan.rampAdjustedSources`(원시 포인트) + 활성화 **offset 0·rate 1**(프리렌더 = 클립 소스 창의 워프 그 자체) — 램프가 정속 playbackRate에 우선(래거시 didApplySpeedRamp 동일).
+- **GraphMixRenderer**: 램프 디코드 분기(EQ 파생 미디어 우선 — 정속 분기와 동일 계층).
+- 테스트 +3: 세그먼트 수학 해석값 고정(ln2·2구간)·정확 길이(2×=정확히 절반)·빌더 매핑(램프 우선·offset 0). **E2E 미커버 갭이었던 속도 램프 오디오 폐쇄**.
+
+### 다음 회차 인계(2-C 잔여)
+1. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지(§0 v1.1) — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례). tap-in-export 결함 소멸. 게이트: 프리뷰 파리티 시나리오·전체 E2E 무회귀 + EQ/NR 프리뷰 가청성(단위/하니스 검증 방식 설계 필요).
+2. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(현 0.5s 관대 임계 교체).
+3. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-19 세션 25 (G-25 전환 2-C-1b: 전체 출력 오디오 그래프 전환 — ProRes 교찰 포획·해소)
+
+**게이트**: verify_gate 5단계 PASS(1,251 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-1b: makeExportPackage 오디오 경로 폐지 + 그래프 AAC 단일 트랙 (커밋 2f870e9)
+- **구조**: `export()`·`exportVideoWithExplicitBitrate`(챕터·AVAssetWriter)는 `renderGraphAudio`(GraphMixRenderer→AudioGraphAacEncoder)를 컴포지션의 **단일 오디오 트랙**으로 삽입, audioMix=nil — 클립 단위 오디오 삽입·볼륨/페이드/덕킹 램프·EQ 파생(equalizedAudioAsset)·makeAudioMix 전부 제거. 스틸/GIF는 영상 전용(그래프 오디오 미사용). **비디오 임베디드 오디오 미믹싱 결함 구조적 해소**(그래프가 포함 — 프리뷰와 동일).
+- **무음=오디오 없음 의미론**(RenderError.noAudio 확장): 순수 디지털 무음 믹스(전 샘플 0)→오디오 트랙 미삽입(레거시 무음 프로젝트 출력 형태와 동일)·audio-only는 noExportableMedia 회귀·미터는 안내. **근거=실측 교찰**: 게이트 1·2회차에서 E2E 정지(앱 0% CPU 파킹) — 프로브 이진 탐색으로 **"ProRes 프리셋+무음 AAC 트랙" 조합이 AVAssetExportSession 영구 파킹**임을 특정(실제 오디오+ProRes✓·무음+기본 프리셋✓·audio-only✓). 무음 스킵으로 교찰 클래스 소멸, ProRes E2E 회복.
+- **계약 갱신 2종**: 덕킹(출력 엔진=그래프 존재+램프 부재 단언·프리뷰 램프는 2-C-2까지 유지)·EQ(DSP 주체 GraphMixRenderer 이동 단언).
+- **실측(2회 동일)**: §11⑤ 전 녹색 — NR SNR 5.15dB·EQ bass/treble 비율 2.31/0.49·덕킹 감쇠 12.04dB·오디오 추출 aac·ProRes prores·§8 A RMS −0.001dB·solo Δ −3.04·M Δ0.00 LU·null test 패리티 −0.02 LU.
+
+### 다음 회차 인계(2-C 잔여)
+1. **2-C-4(우선순위 상향 — 이번 전환으로 열린 갭)**: 오디오 클립 **속도 램프** 사전 렌더 — 레거시는 applySpeedRamp가 오디오 컴포지션 트랙을 구간별 scaleTimeRange 처리했으나 그래프는 단일 rate만 지원. `SpeedRampCurve`(Core) 구간별 timeStretched 연결로 `speedAdjustedSources` 확장 + 빌더 활성화 수식(램프 출력 지속 = curve 적분). E2E 미커버 갭 — 신규 단위 테스트로 고정.
+2. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지 — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례). tap-in-export 결함 소멸.
+3. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트.
+4. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-18 세션 24 (G-25 전환 2-C-1a: audio-only 출력 그래프 PCM→AAC)
+
+**게이트**: verify_gate 5단계 PASS(1,251 테스트) + run_e2e_export.sh 전체 PASS **2회 연속 동일** + run_g25_nulltest.sh 무회귀 PASS.
+
+### 완료 — 전환 2-C-1a: AudioGraphAacEncoder + exportAudioOnly 그래프 전환 (커밋 8fd4178)
+- **`AudioGraphAacEncoder.swift` (Core)**: 그래프 PCM(인코더 입력 렌더)→m4a AAC(고품질 192k, 65,536프레임 청크 기록 — 전체 PCM 이중 복사 회피). 테스트 3종(실인코딩·재디코드: 길이 [원본, +8192] 패딩 경계·RMS/LUFS ≤1dB·빈 PCM 명시 실패).
+- **`exportAudioOnly` 전환**: GraphMixRenderer.renderMix(trimToAudibleSpan:)→AAC 인코딩. 컴포지션·audioMix·AVAssetExportSession 제거 — **audio-only 출력의 샘플은 이제 그래프에서만** (spec §1). NR 동등 실증: NR은 편집 시점 파괴적 변환이므로 ExportEngine(미적용)과 그래프(파생 미디어 소비)가 자동 동등.
+- **가청 스팬 길이 계약**: 레거시는 solo 억제 트랙을 컴포지션에서 제외해 파일이 생존 오디오 끝에서 종료(4s 프로젝트 solo 시 2s 파일) — `trimToAudibleSpan`(억제 안 된 스트립 최대 종료 샘플, 순수 플랜 수학)으로 재현. 게이트 1회 실패(B 런 duration 2s↔4s)로 발견·수정.
+- **StaticContract 갱신**: audio-only 계약을 그래프 배선으로(renderMix·encode 존재 + 해당 함수에 레거시 표현[AppleM4A 프리셋·audioMix] 부재 단언).
+- **실측(2회 동일)**: §8 A 그래프 출력↔프리뷰 참조 **RMS −0.001dB**·LUFS −25.67·solo Δ −3.04 LU·M 런 Δ0.00 LU·null test 패리티 −0.02 LU 무회귀.
+
+### 다음 회차 인계(2-C 잔여 — 4시간 루프가 순차 소화)
+1. **2-C-1b**: 전체 mp4 출력 오디오 전환 — 비디오-only 컴포지션 출력 + 그래프 AAC(`AudioGraphAacEncoder`) 패스스루 먹싱(AVMutableComposition+Passthrough). 챕터(exportVideoWithExplicitBitrate)·ProRes·명시적 비트레이트 경로 포함. **§11⑤ 게이트 = 덕킹 RMS·EQ 스펙트럼·NR SNR E2E**(전부 이 경로 사용) + §8·프리뷰 파리티 무회귀.
+2. **2-C-2**: 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 실시간 필터 폐지 — EQ/NR 클립을 프리뷰 컴포지션에서 파생 미디어로(리버스 temporaryReverseRenderURLs 선례 패턴). tap-in-export 결함 소멸.
+3. **2-C-3**: §8 기준 그래프 PCM 전환 + AAC 프라이밍(2112샘플) 트림 → ±1샘플 엄격 게이트(현 0.5s 관대 임계 교체).
+4. **2-C-4**: 속도 램프 사전 렌더 미디어 공급(`speedAdjustedSources` 소비자 보강 — 구간별 스트레치).
+5. 이후 §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가. 대기 결정(변경 없음): 접근 정규화·모션 트래킹 재검출 시드.
+
+## 2026-08-18 세션 23 (G-25 전환 2단계-B: 미터 그래프 전환 — M 런이 레거시 tap 결함 첫 포획)
+
+**게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_e2e_export.sh 전체 PASS — §8 A/B 무회귀(0.043dB·solo Δ −3.04 LU) + **미터 런 M: 그래프 −22.94 ↔ 실출력 −22.94 LU(Δ=−0.00, 1회차 0.003)**.
+
+### 완료 — 전환 2단계-B: GraphMixRenderer + 미터 그래프 전환 (커밋 dbe3d61)
+- **`GraphMixRenderer.swift` (App)**: 측정 경로 공용 그래프 믹스 렌더러 — EQ 클립 유효 미디어 파생(`AudioEqualizerService` 오프라인 — 출력 경로와 동일 5밴드 DSP, §0)→빌더→§3.1 어댑터 디코드(`sourceAssetIds`·`derivedClipIds`·`speedAdjustedSources` 전부 소비)→`AudioGraphEncoderInput` 렌더. NR 미적용(기존 프리뷰 audioMix도 미적용 — 동등, 2-C에서 출력 NR 조사 후 결정).
+- **`measureMasterLoudness` 전환**: 프리뷰 컴포지션 대기 루프·m4a 렌더·재디코드 전부 제거 — 프로젝트 상태→그래프 PCM→LUFS. 미터 경로의 교찰 조건(AVAssetExportSession)·tap 의존 구조적 제거.
+- **E2E**: 하니스 `MOVIECUT_UITEST_MASTER_METER`(+`EQ=1` — BGM에 bassBoost 실제 명령 적용, §0 파생 종단 검증) + §8 스크립트에 미터 런 M(미터↔실출력 ±1.5 LU·클리핑 0 단언).
+- **M 런이 포획한 레고시 결함(tap-in-export, LOOP_STATE 기록)**: EQ 적용 시 `renderCurrentPreviewAudio`의 tap(MTAudioProcessingTap) 트랙이 AVAssetExportSession에서 ~무음 렌더(참조 −29.14 ≈ BGM 억제 믹스 −28.71 — tap은 AVPlayer·AVAssetReader용 설계). **Inc 9 미터가 이 경로를 썼으므로 EQ 프로젝트의 기존 미터 측정은 깨져 있었음(잠복)** — 그래프 미터가 이미 해소. 게이트 처리(사용자 결정): M 런은 미터↔출력 일치만 단언, 프리뷰 참조 RMS는 결함 기록으로 분리(2-C tap 폐지로 소멸).
+
+### 다음 회차 인계(루프 자동화 — 4시간 간격 회차가 순차 소화)
+1. **2-C(출력 경로 배선)**: ① 출력 오디오 인코딩 그래프 PCM 전환(PCM→AAC→비디오 먹싱) ② 프리뷰 tap·AVAudioEngine NR 실시간 필터 폐지(§0 v1.1) ③ §8 기준 그래프 PCM 전환 + AAC 프라이밍 트림(±1샘플 엄격 게이트) ④ 속도 램프 사전 렌더 미디어 공급 ⑤ 출력 NR 처리 조사 후 그래프 편입 결정. 게이트 = §11⑤(EQ Goertzel·덕킹 RMS·NR SNR 무회귀).
+2. 2-C 완료 후: §11①~⑤ 완료 판정 실측 → DONE_PHASE1 평가(EXECUTION_PLAN §4).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-18 세션 22 (G-25 제품 경로 전환 2단계-A: §3.1 소스 어댑터)
+
+**게이트**: verify_gate 5단계 PASS(1,248 테스트) + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**(3 그래프·project 192,000프레임 maxDev=0.00e+00·패리티 −0.02 LU·drift 0).
+
+### 완료 — 전환 2단계-A: AudioGraphSourceAdapter(§3.1) + 빌더 속도 매핑 + 하니스 정규화 (커밋 d391d50)
+- **`AudioGraphSourceAdapter.swift` (Core)**: §3.1 엔진 어댑터 — ① 디코드: 오디오 전용 컨테이너(AVAudioFile) + **비디오 컨테이너 임베디드 오디오(AVAssetReader)**, 오디오 없는 영상 = 명시적 무음 소스(실제 기여), 읽기 불가 = throw(조용한 품질 강등 금지) ② 리샘플: AVAudioConverter 고품질, 입력 핸들러가 endOfStream 신호로 필터 꼬리 플러시 ③ **속도 사전 렌더**: AVAudioUnitTimePitch 오프라인 수동 렌더링(scaleTimeRange와 동일 계열), 모노는 dual-mono 스테레오로(엔진 모노 경로 −3dB 감쇠 실측 회피), 꼬리 무음 트림. **범위 외 명시**: 리버스는 제품이 이미 사전 렌더 미디어로 구체화(§0 유효 미디어로 공급), 속도 램프는 단일 rate 재현 불가 — 둘 다 배선 증분.
+- **빌더 속도 매핑**: 속도 ≠ 1 클립 = **클립 단위 소스**(스트레치 소스는 동일 자산 속도-1 클립과 공유 불가) + 활성화 수식(오프셋 a/speed·타임라인 지속 sourceRange.duration/speed — scaleTimeRange 의미론, N(τ)=S(τ·speed) 유도) + `Plan.speedAdjustedSources` 사전 렌더 요청 목록.
+- **하니스 null test §3.1 전환**: 실제 프로젝트 디코드를 어댑터 정규화 경로로(그래프 레이트 정규화·무음 폴백 제거 — 실제 실패는 명시적 throw).
+- 테스트 +9(어댑터 7종 — 실미디어: 44.1k→48k 리샘플 길이 정확·mp4 임베디드 톤·무음 mp4·2× 스트레치 피치 보존·풀 파이프라인 / 빌더 속도 2종). 전체 1,248.
+
+### 다음 세션 인계
+1. **전환 2단계-B(측정·출력 경로 배선)**: measureMasterLoudness를 그래프 렌더로(빌더+어댑터+AudioGraphEncoderInput → LUFS — AVAssetExportSession 의존 제거로 **미터 경로의 교찰 조건 구조적 제거**) + EQ/NR 유효 미디어 어댑터(`AudioEqualizerService().apply` 재사용, 빌더 `effectiveMediaFor` 공급, `resolvedEqualizerPreset` 통일 확인) + §8 기준 그래프 PCM 전환 + 출력 인코더 입력 그래프 PCM 전환(±1샘플 엄격 게이트). 게이트 = §11⑤ 기존 오디오 E2E 무회귀(EQ Goertzel·덕킹 RMS).
+2. 속도 램프 클립의 사전 렌더 미디어 공급(빌더 요청 `speedAdjustedSources` 소비자 배선 시).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
+
+## 2026-08-18 세션 21 (사용자 결정: 명세 v1.1 승인 → 제품 경로 전환 1단계)
+
+**게이트**: verify_gate 5단계 PASS + run_g25_nulltest.sh E2E PASS **2회 연속 동일 수치**.
+
+### 완료 — G-25 제품 경로 전환 1단계: 명세 v1.1 + Project→그래프 빌더 + 실제 프로젝트 null test (커밋 5f43d7b)
+- **명세 v1.1 (사용자 승인)**: 제품 경로 전환 작성 중 발견된 설계-구현 불일치 3건 반영 — ① §1.1 신설: 1단계 덕킹 = 플래너 산출물의 **스트립 게인 자동화 구체화**(버스 사이드체인·`AudioGraphDucking`은 G-26 슬롯), 램프는 range 내부(어택/릴리즈 타이밍 현행 계승)·dB-선형·페이드 클램핑 미재현. ② §0: EQ/NR은 프리뷰(실시간 tap)·출력(파생 미디어) **이중 경로**였음을 인정하고 그래프 소스 = 클립의 **유효 오디오 미디어**(적용 클립은 `.derived`)로 규칙화, 프리뷰 tap 폐지 예고. ③ §3.1 신설: 소스 정규화(비디오 컨테이너 `AVAssetReader`·`AVAudioConverter` 리샘플·속도/리버스 사전 렌더)는 엔진 어댑터 소유, 렌더러 nearest-frame 비율 판독은 더미 폴백. §8 과도기 기준·§11⑤ 무회귀 판정 기준(측정 임계 내·그래프 의미론 기준) 명시. **스키마 불변(version 1)**.
+- **`AudioGraphProjectBuilder.swift` (Core)**: v1.1 의미론 구현 — 덕킹 **절대 리베이스**(클립 로컬 range → 클립 시작+range의 절대 샘플; 전 세션 발견 좌표계 버그 수정)·내부 램프 4포인트(attack [start, start+0.12]·release [end−0.25, end])·짧은 range(<attack+release)·level≥1 가드(현행 동작 계승) / EQ·NR 유효 미디어(`effectiveMediaFor` 클로저 → 클립 단위 `.derived` 소스[설정이 클립 단위이므로 자산 공유 시 별 소스]·`Plan.derivedClipIds`) / §3.1 디코드 계약(`decodedSampleRateFor` — 소스 id 기준, 어댑터 정규화 시 nil). 테스트 9종(신규 3: 절대 리베이스 회귀·엣지 케이스·파생 매핑).
+- **null test §9.1 실제 프로젝트 단계 (App)**: 하니스가 메인 플로우(덕킹 하니스 후)에서 `AudioGraphProjectBuilder`로 실제 프로젝트(=BGM 220Hz 0-4s + Voice 1kHz 1-2s, 플래너 덕킹 적용 상태)를 그래프로 빌드→양 엔진 렌더→§9 비교 + 그래프 믹스↔프리뷰 audioMix 렌더 LUFS 패리티(전환 증거; 임계 ±1.0 LU). 스크립트 게이트: project_graph 실행·엔진 null·패리티 3단계 단언 + JSON 교차검사.
+- **실측(2회 연속 동일)**: 3 그래프 전부 통과, project 192,000프레임 **양 엔진 maxDev=0.00e+00·offset=0**, **패리티 −0.02 LU** — dB-선형 덕킹 램프·클램핑 미재현이 측정상 무의미함을 실증(§11⑤ 근거).
+- **게이트가 잡은 결함 3건(전부 수정)**: ① 하니스 `try? decode() ?? 폴백` 우선순위(`??`가 try? 안쪽에 묶여 디코드 실패 시 nil → missingInput) ② 비디오 임포트+덕킹+`renderCurrentPreviewAudio` 조합 = LOOP_STATE 기존 교찰 결함 재현 → 게이트에서 비디오 임포트 제외(오디오 없는 픽스처라 그래프 기여 0, 이유 주석화) ③ 패리티 +2.99 LU = 모노 m4a↔dual-mono 스테레오의 BS.1770 +3.01 LU 표시 차이 → 측정 전 채널 레이아웃 정규화(`dualMonoStereo`).
+
+### 다음 세션 인계
+1. **제품 경로 전환 2단계(엔진 배선)**: 프리뷰(audioMix→그래프 렌더)·출력(인코더 입력→그래프) 배선 + EQ/NR 유효 미디어 어댑터(렌더 시점 파생, §0) + §3.1 정규화 어댑터(AVAssetReader·AVAudioConverter·속도/리버스 사전 렌더) + §8 기준 그래프 PCM 전환(±1샘플 엄격 게이트). 게이트 = §11⑤ 기존 오디오 E2E 무회귀(EQ Goertzel·덕킹 RMS).
+2. 프리뷰 tap(audioTapProcessor)·AVAudioEngine NR 필터 경로는 이 증분에서 폐지(§0 v1.1).
+3. 대기 결정(변경 없음): 접근 정규화 승인·모션 트래킹 재검출 시드.
 
 ## 2026-08-18 세션 20 (사용자 결정: G-25 설계 문서 승인 → Inc 7 착수)
 
 **게이트**: verify_gate 5단계 — 커밋 시점 기준.
 
-### 완료 — G-25 Inc 1: AudioRenderGraphSpec Core 모델 (이번 세션 커밋)
+### 완료 — G-25 Inc 1: AudioRenderGraphSpec Core 모델 (커밋 8fd4178)
 - **전제**: 사용자가 docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md 승인(2026-08-18) — LOOP_STATE USER_WAITING→RUN.
 - `Sources/MovieCutCore/Audio/AudioRenderGraphSpec.swift`: 승인 명세 §2·§3·§5의 순수 모델(렌더링 없음). 소스(원본/파생·derivedFrom·algorithmVersion·nativeSampleRate)·클립 스트립(채널매핑·게인/팬 자동화·페이드)·트랙 버스(·mute/solo·덕킹)·마스터(리미터 latency 짝·목표 LUFS)·타임베이스(**자동화 좌표 전부 Int64 샘플 위치**·origin "num/den" 유리수·기본 48k)·렌더 규칙(declaredLatencies)·노드 15종(8 지원+7 자리, isStage1Supported).
 - Codable 원칙: 선택 노드 데이터 encodeIfPresent — 빈 그래프 표준 바이트(ProjectStore와 동일한 [.prettyPrinted, .sortedKeys] 기준; JSONEncoder 기본 키 순서가 인코더 인스턴스마다 비결정적임을 실측 확인·테스트에 반영).
@@ -29,7 +593,7 @@
 ### 완료 2 — app log 실패 아티팩트화 (커밋 94e225a)
 - `open` 전환 이후 0바이트가 된 `App log:` 안내 수정: 실패 시 ps 스냅샷+앱 PID 통합 로그 꼬리(`/usr/bin/log` 절대 경로 — zsh `log` 내장 명령이 이진파일을 가림), LAUNCH_FAIL 경로 preexisting_pids 기록, 성공 시에도 메타 참조 실재화.
 
-### 완료 3 — 모션 트래킹 하니스 게이트 T2-R1 전제 (이번 세션 커밋)
+### 완료 3 — 모션 트래킹 하니스 게이트 T2-R1 전제 (커밋 8fd4178)
 - `MOVIECUT_UITEST_MOTION_TRACKING=1`(UITestHarness): 실제 trackMotion 경로(provider→SetClipPropertyCommand(.keyframes))·고정 초기 rect(ground truth x=32/320,y=88/240,72×64,+80px/s)·검증(샘플≥25·키프레임=샘플×2·midX 이동>0.35·posX 이동>80px·ProjectStore 저장/적재 라운드트립 전량 보존)·JSON 행동 덤프.
 - `scripts/run_motion_tracking_gate.sh`: 픽스처 SHA-256 검증(b7a9cb2e…)·sandbox OFF 자체 빌드·`open -n -W`·180s 와치독·단언. **2회 연속 PASS + 동일 행동 데이터(samples=61 keyframes=122 roundtrip=122 midx_delta=0.478)** — 결정성 실증.
 - 설계: 검증 문서 §4.4 C1+C2 하이브리드(기존 하니스 패턴). C3 provider 계층은 기존 IoU 테스트(MotionTrackingProviderTests)가 담당.

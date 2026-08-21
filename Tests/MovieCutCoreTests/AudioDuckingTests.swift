@@ -202,18 +202,22 @@ struct AudioDuckingStaticContractTests {
         try String(contentsOfFile: path, encoding: .utf8)
     }
 
-    @Test("both mac engines apply identical ducking ramps")
+    @Test("both mac engines apply identical ducking semantics")
     func enginesApplyDuckingRamps() throws {
-        for path in [
-            "App/MovieCutMac/Export/ExportEngine.swift",
-            "App/MovieCutMac/Playback/PlaybackEngine.swift"
-        ] {
-            let engine = try source(path)
-            #expect(engine.contains("func applyDuckingRamps"), Comment(rawValue: path))
-            #expect(engine.contains("AudioDuckingPlanner.attackDuration"), Comment(rawValue: path))
-            #expect(engine.contains("AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges)"), Comment(rawValue: path))
-            #expect(engine.contains("applyDuckingRamps(\n                for: clip,"), Comment(rawValue: path))
-        }
+        // Export (G-25 2C-1b): ducking is materialized by the GRAPH — the
+        // engine renders the graph mix (AudioGraphProjectBuilder §1.1
+        // materialization) and carries no per-clip ramp code.
+        let export = try source("App/MovieCutMac/Export/ExportEngine.swift")
+        #expect(export.contains("GraphMixRenderer.renderMix"), Comment(rawValue: "ExportEngine"))
+        #expect(!export.contains("func applyDuckingRamps"), Comment(rawValue: "ExportEngine"))
+
+        // Playback still applies planner ramps via the audioMix (the tap-era
+        // path retires with G-25 2-C-2).
+        let playback = try source("App/MovieCutMac/Playback/PlaybackEngine.swift")
+        #expect(playback.contains("func applyDuckingRamps"), Comment(rawValue: "PlaybackEngine"))
+        #expect(playback.contains("AudioDuckingPlanner.attackDuration"), Comment(rawValue: "PlaybackEngine"))
+        #expect(playback.contains("AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges)"), Comment(rawValue: "PlaybackEngine"))
+        #expect(playback.contains("applyDuckingRamps(\n                for: clip,"), Comment(rawValue: "PlaybackEngine"))
     }
 
     @Test("view model orchestrates silence analysis into ducking command")

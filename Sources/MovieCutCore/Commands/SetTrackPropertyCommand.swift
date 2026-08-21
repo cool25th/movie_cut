@@ -3,6 +3,7 @@ import Foundation
 public enum TrackProperty: Sendable, Codable, Equatable {
     case isLocked(Bool)
     case isMuted(Bool)
+    case isSolo(Bool)
     case isHidden(Bool)
     case zIndex(Int)
 }
@@ -36,6 +37,9 @@ public struct SetTrackPropertyCommand: EditorCommand, Sendable, Codable {
         case .isMuted(let isMuted):
             previous = .isMuted(project.timeline.tracks[index].isMuted)
             project.timeline.tracks[index].isMuted = isMuted
+        case .isSolo(let isSolo):
+            previous = .isSolo(project.timeline.tracks[index].isSolo)
+            project.timeline.tracks[index].isSolo = isSolo
         case .isHidden(let isHidden):
             previous = .isHidden(project.timeline.tracks[index].isHidden)
             project.timeline.tracks[index].isHidden = isHidden
@@ -53,6 +57,8 @@ private extension TrackProperty {
             return .isLocked(value)
         case .isMuted:
             return .isMuted(value)
+        case .isSolo:
+            return .isSolo(value)
         case .isHidden:
             return .isHidden(value)
         case .zIndex:

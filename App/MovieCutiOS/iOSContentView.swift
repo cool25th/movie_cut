@@ -138,6 +138,12 @@ struct IOSContentView: View {
                     .presentationDetents([.height(300), .medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            .task {
+                // G-27 simulator E2E: env-gated harness (no-op in normal
+                // launches) — drives the real import/preview/export/audio/
+                // persistence paths and reports to Documents/g27-result.txt.
+                await IOSUITestHarness.runIfRequested(viewModel: viewModel)
+            }
             .sheet(isPresented: $isExportProgressPresented) {
                 IOSExportProgressSheet(
                     progress: viewModel.exportProgress,

@@ -81,16 +81,26 @@ struct AudioEqualizerDSPTests {
         let export = try source("App/MovieCutMac/Export/ExportEngine.swift")
         let helper = try source("App/MovieCutMac/Audio/ClipEqualizerProcessing.swift")
 
-        #expect(playback.contains("MTAudioProcessingTapCreate"))
-        #expect(playback.contains("AVAudioUnitEQ(numberOfBands: 5)"))
-        #expect(playback.contains("audioParameters.audioTapProcessor = audioTap"))
+        // G-25 2C-2 (spec §0 v1.1): preview consumes DERIVED effective
+        // media — the same AudioEqualizerService render export and the
+        // graph use. The MTAudioProcessingTap is RETIRED (its
+        // export-session silence defect is structurally gone).
+        #expect(playback.contains("equalizedPreviewURL"))
+        #expect(playback.contains("AudioEqualizerService().apply"))
         #expect(playback.contains("clip.resolvedEqualizerPreset"))
+        #expect(!playback.contains("MTAudioProcessingTapCreate"))
+        #expect(!playback.contains("audioTapProcessor"))
         #expect(!playback.contains("applyEQBands"))
 
-        #expect(export.contains("AudioEqualizerService().apply"))
-        #expect(export.contains("equalizedAudioAsset"))
+        // Export (G-25 2C-1b): EQ reaches the file through the graph mix —
+        // GraphMixRenderer derives the clip's effective media with the same
+        // AudioEqualizerService DSP the legacy export path used.
+        #expect(export.contains("GraphMixRenderer.renderMix"))
+        #expect(!export.contains("equalizedAudioAsset"))
+        let renderer = try source("App/MovieCutMac/Audio/GraphMixRenderer.swift")
+        #expect(renderer.contains("AudioEqualizerService().apply"))
+        #expect(renderer.contains("eqAlgorithmVersion"))
         #expect(export.contains("temporaryRenderURLs"))
-        #expect(export.contains("clip.resolvedEqualizerPreset"))
         #expect(!export.contains("eqVolumeMultiplier"))
         #expect(!export.contains("averageGain"))
 

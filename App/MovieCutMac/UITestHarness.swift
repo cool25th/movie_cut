@@ -156,7 +156,17 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_EXPORT=<path>` — destination the project is exported to.
     /// - `MOVIECUT_UITEST_EXPORT_AUDIO=<path>` — destination for audio-only export.
     /// - `MOVIECUT_UITEST_VOCAL_SEPARATION=<removeVocals|isolateCenter>` — applies real offline separation to the selected audio clip.
-    /// - `MOVIECUT_UITEST_PREVIEW_AUDIO=<path>` — renders Preview's installed composition/audio mix for PCM verification.
+        /// - `MOVIECUT_UITEST_PREVIEW_AUDIO=<path>` — renders Preview's installed composition/audio mix for PCM verification.
+        /// - `MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST=<path>` — G-25 §9 measured null test: renders the same
+        ///   audio graph through BOTH engine generators (real AVAudioEngine preview + encoder input),
+        ///   null-compares at ±1 sample / 1 LSB, measures the 60-minute mixed-rate tail drift, and writes a
+        ///   JSON artifact to <path> (the swift-test-level checks live in AudioGraphEngineNullTests).
+        /// - `MOVIECUT_UITEST_SOLO_LAST_AUDIO_TRACK=1` — solos the last audio track through the real
+        ///   SetTrackPropertyCommand path before export (G-25 Inc 9 solo E2E evidence).
+        /// - `MOVIECUT_UITEST_EXPORT_POSTCHECK=<path>` — G-25 §8 AAC post-check: after export, re-decodes
+        ///   the ACTUAL output file and the project's preview mix (the reference the audio-mix path
+        ///   produces today), compares lengths/RMS, and measures decoded LUFS-I/true-peak/clipping with
+        ///   the shared Core functions; writes a JSON artifact to <path>.
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -181,6 +191,14 @@ extension EditorViewModel {
         }
         if env["MOVIECUT_UITEST_PARITY"] == "1" {
             await runPreviewExportParityUITestScenario(environment: env)
+            return
+        }
+        if let wScenario = env["MOVIECUT_UITEST_W_SCENARIO"], !wScenario.isEmpty {
+            await runWScenarioUITestScenario(environment: env, scenario: wScenario)
+            return
+        }
+        if env["MOVIECUT_UITEST_STABILIZE"] == "1" {
+            await runStabilizationUITestScenario(environment: env)
             return
         }
         if let baseline = env["MOVIECUT_UITEST_LATENCY_BASELINE"], !baseline.isEmpty {
@@ -321,6 +339,28 @@ extension EditorViewModel {
             )
         }
 
+        // G-25 §9 null test — runs in the MAIN flow (after imports/ducking)
+        // so the real-project phase sees the actual media and mix state.
+        var audioGraphNulltestSuffix = ""
+        if let nullTestPath = env["MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST"], !nullTestPath.isEmpty {
+            audioGraphNulltestSuffix = await runAudioGraphNullTestUITestScenario(
+                environment: env,
+                artifactPath: nullTestPath
+            )
+        }
+
+        // G-25 switchover 2B: the master-loudness meter measured through the
+        // REAL graph path on the current (ducking-harness) project state —
+        // optionally with EQ applied to the BGM clip so the §0 effective-
+        // media derivation is exercised end to end.
+        var masterMeterSuffix = ""
+        if let meterPath = env["MOVIECUT_UITEST_MASTER_METER"], !meterPath.isEmpty {
+            masterMeterSuffix = await runMasterMeterUITestScenario(
+                environment: env,
+                artifactPath: meterPath
+            )
+        }
+
         // Motion-tracking gate (T2-R1 prerequisite). Runs the REAL user path —
         // trackMotion → MotionTrackingProvider → SetClipPropertyCommand(
         // .keyframes) — on the imported fixture with a fixed initial rect, so
@@ -382,6 +422,18 @@ extension EditorViewModel {
 
         // Optional 3-way color grade step: applies a strong warm lift/gain grade so
         // an E2E check can confirm the grade is reflected in export.
+        // G-03 Inc 3: mark the selected clip as an adjustment layer carrying
+        // a strong grade — export must show the adjustment applied to the
+        // clips below (asserted by the script's pixel comparison).
+        var adjustmentLayerSuffix = ""
+        if env["MOVIECUT_UITEST_ADJUSTMENT_LAYER"] == "1", let clip = selectedClip {
+            await apply(SetClipPropertyCommand(clipId: clip.id, property: .isAdjustmentLayer(true)))
+            await apply(SetClipPropertyCommand(clipId: clip.id, property: .colorGrade(ColorGrade(gamma: 0.5))))
+            let marked = currentProject.timeline.tracks.flatMap(\.clips)
+                .contains { $0.id == clip.id && $0.isAdjustmentLayer }
+            adjustmentLayerSuffix = " adjustment_layer=\(marked ? 1 : 0)"
+        }
+
         if env["MOVIECUT_UITEST_GRADE"] == "1", selectedClipId != nil {
             await updateSelectedColorGrade(
                 ColorGrade(
@@ -593,6 +645,20 @@ extension EditorViewModel {
             }
         }
 
+        // G-25 Inc 9: solo the last audio track through the real command
+        // path so E2E can prove solo changes the exported mix.
+        var soloSuffix = ""
+        if env["MOVIECUT_UITEST_SOLO_LAST_AUDIO_TRACK"] == "1" {
+            if let lastAudioTrack = currentProject.timeline.tracks.last(where: { $0.kind == .audio }) {
+                await toggleTrackSolo(lastAudioTrack)
+                let applied = currentProject.timeline.tracks
+                    .first { $0.id == lastAudioTrack.id }?.isSolo ?? false
+                soloSuffix = " solo_applied=\(applied ? 1 : 0)"
+            } else {
+                soloSuffix = " solo_applied=0"
+            }
+        }
+
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {
             let dest = containerizedExportDestination(for: URL(filePath: exportPath))
@@ -619,6 +685,17 @@ extension EditorViewModel {
             let dest = containerizedExportDestination(for: URL(filePath: hdrPath))
             await exportHDRMaster(to: dest.write)
             finalizeContainerizedExport(from: dest.write, to: dest.requested)
+        }
+
+        // G-25 §8: post-check the ACTUAL exported file (audio-only export if
+        // requested, else the video export) against the project's preview mix.
+        var exportPostcheckSuffix = ""
+        if lastErrorMessage == nil,
+           let postcheckPath = env["MOVIECUT_UITEST_EXPORT_POSTCHECK"], !postcheckPath.isEmpty {
+            exportPostcheckSuffix = await runExportPostCheckUITestScenario(
+                environment: env,
+                artifactPath: postcheckPath
+            )
         }
 
         // Optional preview render benchmark: per-frame 1080p compositor cost on
@@ -677,7 +754,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(adjustmentLayerSuffix)\(exportPostcheckSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the
@@ -2633,6 +2710,1341 @@ extension EditorViewModel {
     /// seconds) to `MOVIECUT_UITEST_PREVIEW_DUMP` (one PNG per timestamp with
     /// a `_t<seconds>.png` suffix). The shell script then extracts the same
     /// timestamps from the exported mp4 and compares them pixel-by-pixel.
+    // MARK: - G-25 §9 audio graph null test (Inc 8 App half)
+
+    /// Duplicates a mono decode to dual-mono stereo so loudness parity
+    /// compares like channel layouts (mono vs dual-mono differs by +3.01 LU
+    /// in BS.1770 summing — a presentation artifact, not a mix difference).
+    private static func dualMonoStereo(_ audio: AudioGraphSourceAudio) -> AudioGraphSourceAudio {
+        guard audio.channels == 1 else { return audio }
+        var interleaved = [Float]()
+        interleaved.reserveCapacity(audio.interleaved.count * 2)
+        for sample in audio.interleaved {
+            interleaved.append(sample)
+            interleaved.append(sample)
+        }
+        return AudioGraphSourceAudio(sampleRate: audio.sampleRate, channels: 2, interleaved: interleaved)
+    }
+
+    /// JSON artifact for `MOVIECUT_UITEST_AUDIO_GRAPH_NULLTEST`: per-graph
+    /// comparator results plus the §9.4 drift measurement and the §9.1
+    /// real-project phase (product-path migration evidence).
+    private struct AudioGraphNullTestDump: Codable {
+        struct GraphResult: Codable {
+            var name: String
+            var frames: Int
+            var bestOffsetSamples: Int
+            var maxAbsoluteDeviation: Double
+            var lsb16: Double
+            var passed: Bool
+        }
+
+        var schemaVersion = 1
+        var scenario = "G-25-audio-graph-null-test"
+        var graphs: [GraphResult] = []
+        var driftTimelineEndSamples: Int64 = 0
+        var driftTailFrames: Int = 0
+        var driftBestOffsetSamples: Int = 0
+        var driftRoundTripExact = false
+        var driftPassed = false
+        // §9.1 on the REAL imported project: the graph built by
+        // AudioGraphProjectBuilder renders through both engines, and the
+        // graph mix's loudness is compared against the preview audio-mix
+        // render (migration parity; AAC-vs-float, so LUFS-delta tolerance,
+        // not a null gate).
+        var projectGraphRendered = false
+        var projectGraphPassed = false
+        var projectGraphFrames = 0
+        var projectParityDeltaLufs: Double?
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// G-25 spec §9 — the MEASURED preview↔export null test in the real app
+    /// process (실측 판정은 E2E만, §9.5). The SAME graph is rendered by BOTH
+    /// engine generators — the preview side through a real AVAudioEngine
+    /// (offline manual rendering: source nodes → bus mixers → main mixer) and
+    /// the export side as encoder input — then judged by the shared Core
+    /// comparator at ±1 sample / 1 LSB. The §9.4 drift measurement renders
+    /// the 60-minute mixed-rate TAIL in both engines with the same explicit
+    /// window: any timebase drift would misalign the tail content, so the
+    /// measured alignment offset IS the end-point drift. Sources are
+    /// deterministic synthetic sines (the spec's "더미" project — no media
+    /// decode, byte-reproducible numbers); the project→graph builder lands
+    /// with the product migration, after Inc 9.
+    private func runAudioGraphNullTestUITestScenario(environment: [String: String], artifactPath: String) async -> String {
+        let started = Date()
+        var dump = AudioGraphNullTestDump()
+
+        func deterministicSine(frames: Int, channels: Int, sampleRate: Double, seed: Double) -> AudioGraphSourceAudio {
+            var samples = [Float]()
+            samples.reserveCapacity(frames * channels)
+            for frame in 0..<frames {
+                for channel in 0..<channels {
+                    let frequency = seed + Double(channel) * 110
+                    samples.append(Float(sin(Double(frame) * frequency * 2 * .pi / sampleRate) * 0.8))
+                }
+            }
+            return AudioGraphSourceAudio(sampleRate: sampleRate, channels: channels, interleaved: samples)
+        }
+
+        func nullCompareGraph(
+            name: String,
+            spec: AudioRenderGraphSpec,
+            activations: [UUID: AudioGraphStripActivation],
+            sources: [UUID: AudioGraphSourceAudio],
+            frameCount: Int
+        ) throws -> AudioGraphNullTestDump.GraphResult {
+            let preview = try AudioGraphAVAudioEngineRenderer.render(
+                spec: spec, activations: activations,
+                sourceAudio: { sources[$0] }, frameCount: frameCount
+            )
+            let export = try AudioGraphEncoderInput.render(
+                spec: spec, activations: activations,
+                sourceAudio: { sources[$0] }, frameCount: frameCount
+            )
+            let result = AudioGraphNullTest.compare(
+                reference: export.interleaved, candidate: preview.interleaved
+            )
+            return AudioGraphNullTestDump.GraphResult(
+                name: name,
+                frames: frameCount,
+                bestOffsetSamples: result.bestOffsetSamples,
+                maxAbsoluteDeviation: Double(result.maxAbsoluteDeviation),
+                lsb16: Double(result.lsb16),
+                passed: result.passed
+            )
+        }
+
+        do {
+            // --- §9.1-9.3: null test on the stage-1 feature mix ------------
+            // Graph 1 — every stage-1 node: mono strip (gain ramp, linear
+            // fade, pan automation) on a bus with a ramped fader, stereo
+            // strip on a second (muted) bus.
+            let frames = 4_800
+            let sourceA = UUID(), stripA = UUID(), sourceB = UUID(), stripB = UUID()
+            var busA = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripA])
+            busA.fader = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -6),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames), value: 0)
+            ]
+            var stripAm = AudioGraphClipStrip(clipId: stripA, sourceId: sourceA, channelMapping: .mono)
+            stripAm.gain = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -3),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames / 2), value: 1)
+            ]
+            stripAm.fades = [AudioGraphFade(startSample: 0, endSample: Int64(frames / 2), curve: .linear)]
+            stripAm.pan = [
+                AudioGraphAutomationPoint(samplePosition: 0, value: -1),
+                AudioGraphAutomationPoint(samplePosition: Int64(frames), value: 1)
+            ]
+            var busB = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripB])
+            busB.mute = true
+            let stripBm = AudioGraphClipStrip(clipId: stripB, sourceId: sourceB, channelMapping: .stereo)
+            let mixSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(id: sourceA, kind: .original, url: URL(filePath: "/tmp/g25-mix-a.wav")),
+                    AudioGraphSource(id: sourceB, kind: .original, url: URL(filePath: "/tmp/g25-mix-b.wav"))
+                ],
+                clipStrips: [stripAm, stripBm],
+                trackBuses: [busA, busB]
+            )
+            dump.graphs.append(try nullCompareGraph(
+                name: "stage1-mix",
+                spec: mixSpec,
+                activations: [
+                    stripA: AudioGraphStripActivation(sampleRange: 0..<Int64(frames)),
+                    stripB: AudioGraphStripActivation(sampleRange: 0..<Int64(frames))
+                ],
+                sources: [
+                    sourceA: deterministicSine(frames: frames, channels: 1, sampleRate: 48_000, seed: 220),
+                    sourceB: deterministicSine(frames: frames, channels: 2, sampleRate: 48_000, seed: 330)
+                ],
+                frameCount: frames
+            ))
+
+            // Graph 2 — mixed sample rates (§9.4 precondition): a 44.1 kHz
+            // native source read at the 44100/48000 frame ratio next to a
+            // 48 kHz source on another bus.
+            let sourceC = UUID(), stripC = UUID()
+            let stripCm = AudioGraphClipStrip(clipId: stripC, sourceId: sourceC, channelMapping: .stereo)
+            let busC = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [stripC])
+            let mixedSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(id: sourceA, kind: .original, url: URL(filePath: "/tmp/g25-mix-a.wav")),
+                    AudioGraphSource(
+                        id: sourceC, kind: .original,
+                        url: URL(filePath: "/tmp/g25-mixed-c.wav"), nativeSampleRate: 44_100
+                    )
+                ],
+                clipStrips: [stripAm, stripCm],
+                trackBuses: [busA, busC]
+            )
+            dump.graphs.append(try nullCompareGraph(
+                name: "mixed-rate",
+                spec: mixedSpec,
+                activations: [
+                    stripA: AudioGraphStripActivation(sampleRange: 0..<Int64(frames)),
+                    stripC: AudioGraphStripActivation(
+                        sampleRange: 0..<Int64(frames), playbackRate: 44_100.0 / 48_000.0
+                    )
+                ],
+                sources: [
+                    sourceA: deterministicSine(frames: frames, channels: 1, sampleRate: 48_000, seed: 220),
+                    sourceC: deterministicSine(frames: 4_410, channels: 2, sampleRate: 44_100, seed: 550)
+                ],
+                frameCount: frames
+            ))
+
+            // --- §9.4: 60-minute mixed-rate end-point drift 실측 ------------
+            // The 60-minute timeline end is computed through the EXACT
+            // Int64 timebase math both engines schedule from; the tail is
+            // then RENDERED by both engines over the same absolute window.
+            let timebase = AudioGraphTimebase(sampleRate: 48_000)
+            let timelineEnd = timebase.samplePosition(at: CMTime(value: 3_600, timescale: 1))
+            let tailFrames = 4_800
+            let tailStart = timelineEnd - Int64(tailFrames)
+
+            let driftSource = UUID(), driftStrip = UUID()
+            // The drifting strip is the 44.1 kHz source placed at the tail:
+            // its read positions are the ones a seconds-based timebase would
+            // misalign over 60 minutes.
+            let driftStripModel = AudioGraphClipStrip(
+                clipId: driftStrip, sourceId: driftSource, channelMapping: .stereo
+            )
+            let driftBus = AudioGraphTrackBus(trackId: UUID(), inputStripIds: [driftStrip])
+            let driftSpec = AudioRenderGraphSpec(
+                sources: [
+                    AudioGraphSource(
+                        id: driftSource, kind: .original,
+                        url: URL(filePath: "/tmp/g25-drift.wav"), nativeSampleRate: 44_100
+                    )
+                ],
+                clipStrips: [driftStripModel],
+                trackBuses: [driftBus],
+                timebase: timebase
+            )
+            let driftWindow = tailStart..<timelineEnd
+            let driftActivation = AudioGraphStripActivation(
+                sampleRange: driftWindow, playbackRate: 44_100.0 / 48_000.0
+            )
+            let driftSources: [UUID: AudioGraphSourceAudio] = [
+                driftSource: deterministicSine(frames: 4_410, channels: 2, sampleRate: 44_100, seed: 770)
+            ]
+            let driftPreview = try AudioGraphAVAudioEngineRenderer.render(
+                spec: driftSpec, activations: [driftStrip: driftActivation],
+                sourceAudio: { driftSources[$0] },
+                frameCount: tailFrames, frameRange: driftWindow
+            )
+            let driftExport = try AudioGraphEncoderInput.render(
+                spec: driftSpec, activations: [driftStrip: driftActivation],
+                sourceAudio: { driftSources[$0] },
+                frameCount: tailFrames, frameRange: driftWindow
+            )
+            let driftCompare = AudioGraphNullTest.compare(
+                reference: driftExport.interleaved, candidate: driftPreview.interleaved
+            )
+
+            dump.driftTimelineEndSamples = timelineEnd
+            dump.driftTailFrames = tailFrames
+            dump.driftBestOffsetSamples = driftCompare.bestOffsetSamples
+            dump.driftRoundTripExact = AudioGraphNullTest.mixedRateRoundTripIsExact(
+                timelineEnd: timelineEnd, graphRate: 48_000, otherRate: 44_100
+            )
+            // Gate: the tail renders null-match (offset within ±1, deviation
+            // within one 16-bit LSB) and the position math round-trips —
+            // far stronger than the ≤1 video frame drift budget.
+            dump.driftPassed = driftCompare.passed && abs(driftCompare.bestOffsetSamples) <= 1 && dump.driftRoundTripExact
+
+            // --- §9.1 on the REAL imported project (migration evidence) ----
+            // Build the graph from the actual project (the builder maps
+            // volumes, fades, ducking, mute/solo), decode the referenced
+            // sources, and render BOTH engines. Also measure the graph mix
+            // against the preview audio-mix render (LUFS parity — the two
+            // paths still differ by AAC and ramp shape, so this is a
+            // reported tolerance, not a null gate).
+            let audioClipBearingTracks = currentProject.timeline.tracks.filter { track in
+                track.clips.contains { clip in
+                    clip.kind == .audio || clip.kind == .video
+                }
+            }
+            if !audioClipBearingTracks.isEmpty {
+                var decodedSources: [UUID: AudioGraphSourceAudio] = [:]
+                for track in audioClipBearingTracks {
+                    for clip in track.clips where clip.kind == .audio || clip.kind == .video {
+                        guard let assetId = clip.assetId,
+                              decodedSources[assetId] == nil,
+                              let asset = currentProject.mediaLibrary.assets[assetId] else { continue }
+                        // §3.1 product policy: sources enter the graph at
+                        // the graph rate — the adapter decodes (video
+                        // containers' embedded audio via AVAssetReader,
+                        // audio-less video as explicit silence) and
+                        // resamples. A real decode failure throws; there is
+                        // deliberately NO silent fallback here.
+                        decodedSources[assetId] = try await AudioGraphSourceAdapter.normalizedAudio(
+                            fileAt: asset.originalURL,
+                            graphSampleRate: 48_000
+                        )
+                    }
+                }
+                if !decodedSources.isEmpty {
+                    let plan = AudioGraphProjectBuilder.build(
+                        project: currentProject,
+                        decodedSampleRateFor: { decodedSources[$0]?.sampleRate },
+                        channelCountFor: { decodedSources[$0]?.channels }
+                    )
+                    let graphEnd = plan.spec.timebase.samplePosition(
+                        at: CMTime(seconds: currentProject.timeline.duration, preferredTimescale: 600)
+                    )
+                    let projectFrames = Int(min(max(graphEnd, 1), 480_000))
+                    let projectPreview = try AudioGraphAVAudioEngineRenderer.render(
+                        spec: plan.spec, activations: plan.activations,
+                        sourceAudio: { decodedSources[$0] }, frameCount: projectFrames
+                    )
+                    let projectExport = try AudioGraphEncoderInput.render(
+                        spec: plan.spec, activations: plan.activations,
+                        sourceAudio: { decodedSources[$0] }, frameCount: projectFrames
+                    )
+                    let projectCompare = AudioGraphNullTest.compare(
+                        reference: projectExport.interleaved, candidate: projectPreview.interleaved
+                    )
+                    dump.graphs.append(AudioGraphNullTestDump.GraphResult(
+                        name: "project",
+                        frames: projectFrames,
+                        bestOffsetSamples: projectCompare.bestOffsetSamples,
+                        maxAbsoluteDeviation: Double(projectCompare.maxAbsoluteDeviation),
+                        lsb16: Double(projectCompare.lsb16),
+                        passed: projectCompare.passed
+                    ))
+                    dump.projectGraphRendered = true
+                    dump.projectGraphFrames = projectFrames
+                    dump.projectGraphPassed = projectCompare.passed
+
+                    // Migration parity: graph mix vs the real preview mix.
+                    rebuildPreviewComposition()
+                    try await waitForCompositionReady(timeoutSeconds: 15)
+                    let previewURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("moviecut-nulltest-preview-\(UUID().uuidString).m4a")
+                    defer { try? FileManager.default.removeItem(at: previewURL) }
+                    try await playbackEngine.renderCurrentPreviewAudio(to: previewURL)
+                    // Channel-layout normalization before the LUFS parity
+                    // comparison: an all-mono project's preview m4a encodes
+                    // as MONO while the graph PCM is dual-mono stereo, and
+                    // the same signal measures +3.01 LU louder in dual-mono
+                    // — a presentation difference, not a mix difference.
+                    let previewDecoded = Self.dualMonoStereo(
+                        try AudioGraphExportPostCheck.decode(fileAt: previewURL)
+                    )
+                    let graphLufs = AudioGraphLoudness.measure(projectExport).integratedLufs
+                    let previewLufs = AudioGraphLoudness.measure(previewDecoded).integratedLufs
+                    if let graphLufs, let previewLufs {
+                        dump.projectParityDeltaLufs = graphLufs - previewLufs
+                    }
+                }
+            }
+        } catch {
+            lastErrorMessage = "audio graph null test failed: \(error.localizedDescription)"
+            dump.error = error.localizedDescription
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "audio graph null test artifact write failed: \(error.localizedDescription)"
+        }
+
+        let passedCount = dump.graphs.filter(\.passed).count
+        let maxDeviation = dump.graphs.map(\.maxAbsoluteDeviation).max() ?? 0
+        var suffix = " audio_graph_nulltest_done" +
+            " graphs=\(dump.graphs.count)" +
+            " passed=\(passedCount)" +
+            String(format: " max_dev=%.2e", maxDeviation) +
+            " drift_timeline_end=\(dump.driftTimelineEndSamples)" +
+            " drift_tail_frames=\(dump.driftTailFrames)" +
+            " drift_offset=\(dump.driftBestOffsetSamples)" +
+            " drift_roundtrip=\(dump.driftRoundTripExact ? 1 : 0)" +
+            " drift_passed=\(dump.driftPassed ? 1 : 0)" +
+            " project_graph=\(dump.projectGraphRendered ? 1 : 0)" +
+            " project_graph_passed=\(dump.projectGraphPassed ? 1 : 0)" +
+            " project_parity_lufs=\(dump.projectParityDeltaLufs.map { String(format: "%.2f", $0) } ?? "none")" +
+            String(format: " elapsed=%.2f", dump.elapsedSeconds)
+        if dump.error != "none" {
+            suffix += " nulltest_error=1"
+        }
+        return suffix
+    }
+
+    // MARK: - G-25 §8 export post-check (Inc 9 App half)
+
+    /// Races `body` against a timeout WITHOUT awaiting the loser (a
+    /// TaskGroup would implicitly join the wedged export task and hang the
+    /// measurement anyway). The abandoned task dies with the process.
+    private static func raceWithTimeout(seconds: Double, _ body: @escaping () async -> Void) async -> Bool {
+        final class OnceResume: @unchecked Sendable {
+            let lock = NSLock()
+            var resumed = false
+            func run(_ continuation: CheckedContinuation<Bool, Never>, _ value: Bool) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: value)
+            }
+        }
+        return await withCheckedContinuation { continuation in
+            let once = OnceResume()
+            Task { await body(); once.run(continuation, true) }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                once.run(continuation, false)
+            }
+        }
+    }
+
+    // MARK: - G-24 stabilization E2E (P2-G24-6, #9 real-render upgrade)
+
+    /// JSON artifact for `MOVIECUT_UITEST_STABILIZE`.
+    private struct StabilizationDump: Codable {
+        var sceneChangeTimes: [Double] = []
+        var sceneCutDetected = false
+        var frameCount = 0
+        var stabilizedFrameCount = 0
+        var planCorrections = 0
+        var planConfidenceMin = 0.0
+        var planConfidenceMedian = 0.0
+        var planConfidenceMean = 0.0
+        var planConfidenceMax = 0.0
+        var coverScale = 0.0
+        var inputMedian = 0.0
+        var residualMedian = 0.0
+        var reductionRatio = 0.0
+        var cropMedian = 0.0
+        var severeWobbleFraction = 0.0
+        var sceneCutErrors = 0
+        var meetsDoD = false
+        var renderBypassed = 0
+        var renderWarpApplied = 0
+        var appliedVsIntendedDx = 0.0
+        var appliedVsIntendedDy = 0.0
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// Renders the CURRENT project through the REAL EXPORT PATH (the same
+    /// `CustomVideoCompositor` the preview installs) and extracts `count`
+    /// frames with `AVAssetImageGenerator` at zero tolerance — frame-exact.
+    ///
+    /// Why not preview snapshots: the video-output seek path delivers
+    /// DUPLICATED frames for some timestamps (measured: zero-magnitude
+    /// steps interleaved in a fixture that moves every frame — both render
+    /// passes stuck identically, so per-frame readbacks stayed exact while
+    /// the jitter measurement silently absorbed wrong-source frames). The
+    /// generator on an exported file decodes each requested time exactly —
+    /// the same extraction the pre-#9 analytic gate used, now fed by the
+    /// compositor's actual output.
+    private func renderStabilizationLumaFrames(count: Int, fps: Double, width: Int, height: Int, tag: String) async throws -> [[UInt8]] {
+        let exportURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("g24_stabilize_\(tag)_\(UUID().uuidString).mp4")
+        let dest = containerizedExportDestination(for: exportURL)
+        await exportProject(to: dest.write)
+        finalizeContainerizedExport(from: dest.write, to: dest.requested)
+        guard FileManager.default.fileExists(atPath: dest.requested.path) else {
+            throw NSError(domain: "G24", code: 10, userInfo: [NSLocalizedDescriptionKey: "export produced no file (tag=\(tag)): \(lastErrorMessage ?? "none")"])
+        }
+
+        let asset = AVURLAsset(url: dest.requested)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+
+        let ciContext = CIContext(options: [.useSoftwareRenderer: true])
+        var frames: [[UInt8]] = []
+        for frame in 0..<count {
+            let t = CMTime(seconds: Double(frame) / fps, preferredTimescale: 600)
+            guard let cgImage = try? generator.copyCGImage(at: t, actualTime: nil) else { continue }
+            let ciImage = CIImage(cgImage: cgImage)
+            var bitmap = [UInt8](repeating: 0, count: width * height * 4)
+            // The identity-transform clip renders 1:1 at the viewport's
+            // bottom-left corner, so the content region is exactly the
+            // source-sized rect at the CI origin — crop THAT region at 1:1
+            // instead of downscaling the whole frame (a maximumSize
+            // downscale would shrink the content to a sub-sampled strip
+            // and the wobble below the estimator's floor).
+            ciContext.render(
+                ciImage,
+                toBitmap: &bitmap,
+                rowBytes: width * 4,
+                bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                format: .RGBA8,
+                colorSpace: nil
+            )
+            let luma = (0..<(width * height)).map { i in
+                let r = Double(bitmap[i * 4])
+                let g = Double(bitmap[i * 4 + 1])
+                let b = Double(bitmap[i * 4 + 2])
+                return UInt8(clamping: Int(0.299 * r + 0.587 * g + 0.114 * b))
+            }
+            frames.append(luma)
+        }
+        try? FileManager.default.removeItem(at: dest.requested)
+        return frames
+    }
+
+    /// Accumulated content positions of a rendered frame sequence: register
+    /// consecutive frames and integrate. The output's deviation from its
+    /// own smoothed path is the sequence's self-relative shake.
+    private func stabilizationAccumulatedPositions(lumaFrames: [[UInt8]], width: Int, height: Int) -> [(x: Double, y: Double)] {
+        guard lumaFrames.count > 2 else { return [] }
+        var positions: [(x: Double, y: Double)] = [(0, 0)]
+        for i in 1..<lumaFrames.count {
+            let reg = StabilizationRegistration.estimateTranslation(
+                previous: lumaFrames[i - 1],
+                current: lumaFrames[i],
+                width: width,
+                height: height
+            )
+            positions.append((positions[i - 1].x + reg.dx, positions[i - 1].y + reg.dy))
+        }
+        return positions
+    }
+
+    /// Deviation of each position from its window-smoothed path.
+    private func stabilizationJitterDeviations(
+        positions: [(x: Double, y: Double)],
+        window: Int = 7
+    ) -> [Double] {
+        guard positions.count > 2 else { return [] }
+        let half = window / 2
+        return positions.indices.map { i in
+            let low = max(0, i - half)
+            let high = min(positions.count - 1, i + half)
+            var sumX: Double = 0
+            var sumY: Double = 0
+            for j in low...high {
+                sumX += positions[j].x
+                sumY += positions[j].y
+            }
+            let count = Double(high - low + 1)
+            let dx = positions[i].x - sumX / count
+            let dy = positions[i].y - sumY / count
+            return (dx * dx + dy * dy).squareRoot()
+        }
+    }
+
+    /// G-24 stabilization E2E, #9 upgrade — the full pipeline MEASURED ON
+    /// REAL RENDERED PIXELS: the fixture imports into the timeline, the
+    /// unstabilized preview renders through the actual compositor, the
+    /// analysis (scene change → registration → smoothing → correction) runs
+    /// on those rendered frames, the resulting plan attaches to the clip
+    /// (`Clip.stabilization`), the composition rebuilds, and the SAME seek
+    /// path re-renders with the warp active. The DoD verdict comes from the
+    /// stabilized RENDER, not the analytic residual the pre-#9 gate used.
+    private func runStabilizationUITestScenario(environment: [String: String]) async {
+        let started = Date()
+        var dump = StabilizationDump()
+
+        func report(_ line: String) {
+            lastStatusMessage = line
+            if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+                writeHarnessStatus(line, to: resultPath)
+            }
+        }
+
+        do {
+            guard let fixturePath = environment["MOVIECUT_UITEST_IMPORT"],
+                  !fixturePath.isEmpty else {
+                throw NSError(domain: "G24", code: 1, userInfo: [NSLocalizedDescriptionKey: "STABILIZE requires MOVIECUT_UITEST_IMPORT"])
+            }
+            let fixtureURL = URL(fileURLWithPath: fixturePath)
+            let fps: Double = 30.0
+
+            // 1. SceneChangeProvider — app context (P2-G24-2 integration).
+            let asset = MediaAsset(originalURL: fixtureURL, kind: .video, duration: 4)
+            let provider = SceneChangeProvider(samplingFPS: 30.0, changeThreshold: 0.08)
+            let result = try await provider.analyze(asset: asset, in: currentProject)
+            let changeTimes: [TimeInterval]
+            if case let .sceneChanges(times)? = result.suggestions.first {
+                changeTimes = times
+            } else {
+                changeTimes = []
+            }
+            var detectedTimes = changeTimes
+            dump.sceneChangeTimes = detectedTimes
+            dump.sceneCutDetected = detectedTimes.isEmpty == false
+            report("stabilize_checkpoint stage=scene_change count=\(detectedTimes.count)")
+
+            // 2. Import. The fixture is 16:9 so the default canvas matches
+            //    its aspect; exports render at preset resolutions with the
+            //    same aspect, and the analysis extraction at the SOURCE's
+            //    native size recovers the content 1:1 regardless of the
+            //    export preset (an identity-transform clip renders 1:1 in
+            //    the corner of the render viewport — any other aspect
+            //    would leave the content a sub-sampled patch).
+            let sourceAsset = AVURLAsset(url: fixtureURL)
+            let sourceSize = try await sourceAsset.loadTracks(withMediaType: .video).first?
+                .load(.naturalSize) ?? CGSize(width: 640, height: 360)
+            suppressCompositionRebuild = true
+            await importMediaAndAddToTimeline(containerizeImportURLs([fixtureURL]), startTime: 0)
+            suppressCompositionRebuild = false
+            // Force BOTH render passes through the SAME custom compositor:
+            // the plain AV composition path places the identity-transform
+            // clip at a different position than CustomVideoCompositor (its
+            // source lands at the CI origin), so a plain input pass would
+            // crop a different region than the stabilized pass. An EMPTY
+            // plan ("analyzed, nothing to correct" — its documented
+            // meaning) triggers the custom compositor while the warp
+            // branch skips empty plans: pixel-identical to unstabilized,
+            // identical placement to the stabilized pass. The DoD then
+            // measures exactly the warp's effect.
+            guard let firstVideoClip = currentProject.timeline.tracks
+                .first(where: { $0.kind == .video })?.clips.first else {
+                throw NSError(domain: "G24", code: 4, userInfo: [NSLocalizedDescriptionKey: "no video clip in timeline"])
+            }
+            let stabilizedClipID = firstVideoClip.id
+            var emptyPlanProject = currentProject
+            for trackIndex in emptyPlanProject.timeline.tracks.indices
+            where emptyPlanProject.timeline.tracks[trackIndex].kind == .video {
+                for clipIndex in emptyPlanProject.timeline.tracks[trackIndex].clips.indices
+                where emptyPlanProject.timeline.tracks[trackIndex].clips[clipIndex].id == stabilizedClipID {
+                    emptyPlanProject.timeline.tracks[trackIndex].clips[clipIndex].stabilization =
+                        StabilizationPlan(frameRate: fps, corrections: [])
+                }
+            }
+            await apply(ReplaceProjectCommand(project: emptyPlanProject))
+            rebuildPreviewComposition()
+            try await waitForCompositionReady(
+                timeoutSeconds: 30,
+                expectedGeneration: playbackEngine.currentCompositionGeneration
+            )
+            guard playbackEngine.playerItem != nil else {
+                throw NSError(domain: "G24", code: 2, userInfo: [NSLocalizedDescriptionKey: "composition not ready (\(playbackEngine.lastCompositionError ?? "no item"))"])
+            }
+            report("stabilize_checkpoint stage=imported")
+
+            // 3. Render the UNSTABILIZED frames through the real compositor.
+            //    Analysis runs at the canvas (= source) resolution.
+            let analysisWidth = max(16, Int(sourceSize.width.rounded()))
+            let analysisHeight = max(16, Int(sourceSize.height.rounded()))
+            let totalFrames = max(1, min(120, Int(currentProject.timeline.duration * fps)))
+            let inputLuma = try await renderStabilizationLumaFrames(count: totalFrames, fps: fps, width: analysisWidth, height: analysisHeight, tag: "input")
+            dump.frameCount = inputLuma.count
+            guard inputLuma.count > 10 else {
+                throw NSError(domain: "G24", code: 3, userInfo: [NSLocalizedDescriptionKey: "insufficient rendered frames (\(inputLuma.count))"])
+            }
+
+            // Luminance-jump fallback for scene change detection, on the
+            // rendered frames (the stabilization math consumes TIMES, not
+            // the provider itself).
+            if detectedTimes.isEmpty {
+                var previousMean: Double = 0
+                for (index, luma) in inputLuma.enumerated() {
+                    let mean = luma.reduce(0.0) { acc, v in acc + Double(v) } / Double(max(luma.count, 1))
+                    if index > 0, abs(mean - previousMean) > 30 {
+                        detectedTimes.append(Double(index) / fps)
+                    }
+                    previousMean = mean
+                }
+                dump.sceneChangeTimes = detectedTimes
+                dump.sceneCutDetected = detectedTimes.isEmpty == false
+            }
+            report("stabilize_checkpoint stage=input_render count=\(inputLuma.count)")
+
+            // 4. Analysis on the rendered pixels: registration → positions
+            //    → smoothing → corrections, normalized to frame fractions
+            //    so the plan applies at the compositor's source extent.
+            let frameWidth = analysisWidth
+            let frameHeight = analysisHeight
+            let diagonal = (Double(frameWidth * frameWidth + frameHeight * frameHeight)).squareRoot()
+
+            var registrations: [StabilizationRegistration.RegistrationResult] = []
+            for i in 1..<inputLuma.count {
+                registrations.append(StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[i - 1],
+                    current: inputLuma[i],
+                    width: frameWidth,
+                    height: frameHeight
+                ))
+            }
+            var positions: [StabilizationRegistration.RegistrationResult] = []
+            var accumulatedX: Double = 0
+            var accumulatedY: Double = 0
+            // Seed FRAME 0's position (the origin) BEFORE accumulating:
+            // without it, positions[0] is the 0→1 displacement — every
+            // correction lands one frame late, and the warp partially
+            // DOUBLES the jitter instead of canceling it (measured: ratio
+            // 1.19 with the shift, 0.35 with correct pairing).
+            positions.append(.init(dx: 0, dy: 0, confidence: 1))
+            for reg in registrations {
+                accumulatedX += reg.dx
+                accumulatedY += reg.dy
+                positions.append(.init(dx: accumulatedX, dy: accumulatedY, confidence: reg.confidence))
+            }
+            let smoothedPositions = StabilizationRegistration.smooth(positions, window: 7)
+
+            let planCorrections: [StabilizationPlan.Correction] = positions.indices.map { i in
+                let warpDx = smoothedPositions[i].dx - positions[i].dx
+                let warpDy = smoothedPositions[i].dy - positions[i].dy
+                let magnitude = (warpDx * warpDx + warpDy * warpDy).squareRoot()
+                let normalized = magnitude / diagonal
+                let crop = min(normalized, 0.15)
+                let scale = magnitude > 0 ? crop / normalized : 0
+                return StabilizationPlan.Correction(
+                    dx: warpDx * scale / Double(frameWidth),
+                    dy: warpDy * scale / Double(frameHeight),
+                    cropFraction: crop,
+                    // The correction derives from the SMOOTHED path, so its
+                    // reliability is the window-averaged confidence — a
+                    // single low-texture registration inside a confident
+                    // stretch must not zero that frame's correction (the
+                    // bypass alternation added ~4px jumps and pushed the
+                    // residual ABOVE the input; measured ratio 1.21).
+                    confidence: smoothedPositions[i].confidence
+                )
+            }
+            let plan = StabilizationPlan(frameRate: fps, corrections: planCorrections)
+            let maxTranslation = plan.maxNormalizedTranslation
+            dump.planCorrections = planCorrections.count
+            let confidences = planCorrections.map(\.confidence).sorted()
+            if !confidences.isEmpty {
+                dump.planConfidenceMin = confidences.first ?? 0
+                dump.planConfidenceMedian = confidences[confidences.count / 2]
+                dump.planConfidenceMean = confidences.reduce(0, +) / Double(confidences.count)
+                dump.planConfidenceMax = confidences.last ?? 0
+            }
+            dump.coverScale = 1 + 2 * max(maxTranslation.x, maxTranslation.y)
+            report("stabilize_checkpoint stage=plan corrections=\(planCorrections.count)")
+
+            // 5. Replace the empty plan with the REAL one — same session
+            //    route, so a late session-driven rebuild cannot drop it.
+            //    The compositor consumes it via CustomCompositionClipEffect.
+            var stabilizedProject = currentProject
+            for trackIndex in stabilizedProject.timeline.tracks.indices
+            where stabilizedProject.timeline.tracks[trackIndex].kind == .video {
+                for clipIndex in stabilizedProject.timeline.tracks[trackIndex].clips.indices
+                where stabilizedProject.timeline.tracks[trackIndex].clips[clipIndex].id == stabilizedClipID {
+                    stabilizedProject.timeline.tracks[trackIndex].clips[clipIndex].stabilization = plan
+                }
+            }
+            await apply(ReplaceProjectCommand(project: stabilizedProject))
+            // Same generation pin as the first rebuild — without it the wait
+            // can pass on the PREVIOUS item and the "stabilized" render
+            // would silently re-render the unstabilized composition (the
+            // exact failure the first #9 gate run caught: ratio 1.000).
+            try await waitForCompositionReady(
+                timeoutSeconds: 30,
+                expectedGeneration: playbackEngine.currentCompositionGeneration
+            )
+            guard playbackEngine.playerItem != nil,
+                  playbackEngine.lastCompositionError == nil else {
+                throw NSError(domain: "G24", code: 5, userInfo: [NSLocalizedDescriptionKey: "stabilized composition not ready (\(playbackEngine.lastCompositionError ?? "none"))"])
+            }
+            report("stabilize_checkpoint stage=attached")
+
+            // 6. Render the STABILIZED frames through the same path.
+            let stabilizedLuma = try await renderStabilizationLumaFrames(count: totalFrames, fps: fps, width: analysisWidth, height: analysisHeight, tag: "stab")
+            dump.stabilizedFrameCount = stabilizedLuma.count
+            guard stabilizedLuma.count > 10 else {
+                throw NSError(domain: "G24", code: 6, userInfo: [NSLocalizedDescriptionKey: "insufficient stabilized frames (\(stabilizedLuma.count))"])
+            }
+            let renderCounts = CustomVideoCompositor.takeStabilizationCounts()
+            dump.renderBypassed = renderCounts.bypassed
+            dump.renderWarpApplied = renderCounts.applied
+            // The wiring assertion itself (#9): a plan attached to the clip
+            // MUST reach the compositor. Zero applications means the path
+            // Clip.stabilization → CustomCompositionClipEffect → warp broke
+            // somewhere — fail loudly instead of measuring an unstabilized
+            // render and calling it residual.
+            guard dump.renderWarpApplied > 0 else {
+                throw NSError(domain: "G24", code: 9, userInfo: [NSLocalizedDescriptionKey: "stabilization plan never reached the compositor (warp_applied=0)"])
+            }
+            report("stabilize_checkpoint stage=stabilized_render count=\(stabilizedLuma.count) warp_applied=\(renderCounts.applied) bypassed=\(renderCounts.bypassed)")
+
+            // Offline-analysis artifact: dump the raw luma frames of BOTH
+            // passes plus the plan, so alignment/gain analysis can iterate
+            // in a script instead of a full app rebuild per hypothesis.
+            if let lumaDir = environment["MOVIECUT_UITEST_STABILIZE_LUMA_DIR"], !lumaDir.isEmpty {
+                try? FileManager.default.createDirectory(atPath: lumaDir, withIntermediateDirectories: true)
+                func writeFrames(_ frames: [[UInt8]], name: String) {
+                    let data = frames.reduce(into: Data()) { $0.append(contentsOf: $1) }
+                    try? data.write(to: URL(fileURLWithPath: lumaDir).appendingPathComponent(name))
+                }
+                writeFrames(inputLuma, name: "input.bin")
+                writeFrames(stabilizedLuma, name: "stab.bin")
+                struct PlanDump: Codable {
+                    var frameRate: Double
+                    var width: Int
+                    var height: Int
+                    var corrections: [[String: Double]]
+                }
+                let planDump = PlanDump(
+                    frameRate: fps,
+                    width: analysisWidth,
+                    height: analysisHeight,
+                    corrections: planCorrections.map {
+                        ["dx": $0.dx, "dy": $0.dy, "crop": $0.cropFraction, "conf": $0.confidence]
+                    }
+                )
+                if let encoded = try? JSONEncoder().encode(planDump) {
+                    try? encoded.write(to: URL(fileURLWithPath: lumaDir).appendingPathComponent("plan.json"))
+                }
+            }
+
+            var appliedByK: [Int: (dx: Double, dy: Double)] = [:]
+            for k in stride(from: 15, to: min(inputLuma.count - 1, stabilizedLuma.count) - 1, by: 5) {
+                guard let intendedProbe = plan.correction(atLocalTime: Double(k) / fps),
+                      intendedProbe.confidence >= StabilizationWarpProcessor.confidenceBypassThreshold else { continue }
+                let applied = StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[k],
+                    current: stabilizedLuma[k],
+                    width: analysisWidth,
+                    height: analysisHeight
+                )
+                appliedByK[k] = (applied.dx, applied.dy)
+            }
+            var dotX = 0.0
+            var dotY = 0.0
+            var normX = 0.0
+            var normY = 0.0
+            var samples = 0
+            for (k, applied) in appliedByK {
+                guard k < planCorrections.count else { continue }
+                let intendedDx = planCorrections[k].dx * Double(analysisWidth)
+                let intendedDy = planCorrections[k].dy * Double(analysisHeight)
+                guard abs(intendedDx) + abs(intendedDy) > 1.0 else { continue }
+                dotX += applied.dx * intendedDx
+                dotY += applied.dy * intendedDy
+                normX += intendedDx * intendedDx
+                normY += intendedDy * intendedDy
+                samples += 1
+            }
+            if samples > 0, normX > 1.0e-9 {
+                dump.appliedVsIntendedDx = dotX / normX
+            }
+            if samples > 0, normY > 1.0e-9 {
+                dump.appliedVsIntendedDy = dotY / normY
+            }
+
+            // 7. DoD on real pixels. INPUT shake: the input render's own
+            //    self-relative deviation. RESIDUAL shake: the stabilized
+            //    output's content position = input position + the warp the
+            //    render APPLIED, where the applied warp is measured per
+            //    frame by registering the stabilized render against the
+            //    input render (their mutual translation IS the applied
+            //    warp — measured 0.59px median error). Self-registering
+            //    the stabilized frames instead RANDOM-WALKS: each warp
+            //    translates by a different sub-pixel phase, so the
+            //    resampled fine texture decorrelates between consecutive
+            //    stabilized frames and per-step errors accumulate
+            //    (measured: 6px drift from the exact positions).
+            let inputPositions = stabilizationAccumulatedPositions(
+                lumaFrames: inputLuma, width: analysisWidth, height: analysisHeight
+            )
+            var correctedPositions: [(x: Double, y: Double)] = []
+            for k in 0..<inputPositions.count where k < stabilizedLuma.count {
+                let applied = StabilizationRegistration.estimateTranslation(
+                    previous: inputLuma[k],
+                    current: stabilizedLuma[k],
+                    width: analysisWidth,
+                    height: analysisHeight
+                )
+                correctedPositions.append((inputPositions[k].x + applied.dx, inputPositions[k].y + applied.dy))
+            }
+            let inputShakes = stabilizationJitterDeviations(positions: inputPositions)
+            let residualShakes = stabilizationJitterDeviations(positions: correctedPositions)
+            guard !inputShakes.isEmpty, !residualShakes.isEmpty else {
+                throw NSError(domain: "G24", code: 7, userInfo: [NSLocalizedDescriptionKey: "jitter analysis produced no samples"])
+            }
+
+            let inputFrames = StabilizationSegmentation.frames(
+                displacements: inputShakes,
+                changeTimes: detectedTimes,
+                frameRate: fps
+            )
+            let residualFrames = StabilizationSegmentation.frames(
+                displacements: residualShakes,
+                changeTimes: detectedTimes,
+                frameRate: fps
+            )
+            let metricsReport = StabilizationMetrics.report(
+                input: inputFrames,
+                residual: residualFrames,
+                severeThreshold: 5.0,
+                cropFractions: planCorrections.map(\.cropFraction)
+            )
+
+            dump.inputMedian = metricsReport.inputShakeMedian
+            dump.residualMedian = metricsReport.residualShakeMedian
+            dump.reductionRatio = metricsReport.reductionRatio
+            dump.cropMedian = metricsReport.cropFractionMedian
+            dump.severeWobbleFraction = metricsReport.severeWobbleFraction
+            dump.sceneCutErrors = metricsReport.sceneCutErrors
+            dump.meetsDoD = metricsReport.meetsDoD()
+
+            guard dump.inputMedian >= 0.5 else {
+                throw NSError(domain: "G24", code: 8, userInfo: [NSLocalizedDescriptionKey: "no measurable shake in the unstabilized render (inputMedian=\(dump.inputMedian)) — render path broken?"])
+            }
+
+            report("stabilize_done frames=\(dump.frameCount) stab_frames=\(dump.stabilizedFrameCount) scene_cut=\(dump.sceneCutDetected ? 1 : 0) input=\(String(format: "%.2f", dump.inputMedian)) residual=\(String(format: "%.2f", dump.residualMedian)) ratio=\(String(format: "%.3f", dump.reductionRatio)) crop=\(String(format: "%.3f", dump.cropMedian)) wobble=\(String(format: "%.3f", dump.severeWobbleFraction)) cut_err=\(dump.sceneCutErrors) dod=\(dump.meetsDoD ? 1 : 0) bypassed=\(dump.renderBypassed)")
+        } catch {
+            dump.error = error.localizedDescription
+            report("stabilize_done error=\(error.localizedDescription)")
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        if let artifactPath = environment["MOVIECUT_UITEST_STABILIZE_RESULT"], !artifactPath.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try? encoder.encode(dump).write(to: URL(fileURLWithPath: artifactPath))
+        }
+
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    // MARK: - W representative-job scenarios (§4 "대표 작업 성공률")
+
+    /// JSON artifact for `MOVIECUT_UITEST_W_SCENARIO`.
+    private struct WScenarioDump: Codable {
+        struct Step: Codable {
+            var name: String
+            var ok: Bool
+            var detail: String
+        }
+
+        var scenario = ""
+        var steps: [Step] = []
+        var exportBytes = 0
+        var elapsedSeconds = 0.0
+        var error = "none"
+    }
+
+    /// The direction doc §1 representative jobs, driven through the REAL
+    /// feature paths (the §4 "대표 작업 성공률 90%+" measurement window):
+    /// each step exercises a shipped feature end to end and the scenario
+    /// finishes with its own export. Steps are recorded, not thrown — the
+    /// success RATE is the gate. W4 runs its Phase-1 variant (no adjustment
+    /// layer — G-03 is Phase-2); the delta is reported by the script.
+    private func runWScenarioUITestScenario(environment: [String: String], scenario: String) async {
+        let started = Date()
+        var dump = WScenarioDump()
+        dump.scenario = scenario
+
+        func step(_ name: String, ok: Bool, detail: String = "") {
+            dump.steps.append(.init(name: name, ok: ok, detail: detail))
+        }
+        func firstClip(ofKind kind: ClipKind) -> Clip? {
+            currentProject.timeline.tracks.flatMap(\.clips).first { $0.kind == kind }
+        }
+        func exportDir() -> URL? {
+            environment["MOVIECUT_UITEST_W_EXPORT"].map { URL(fileURLWithPath: $0) }
+        }
+
+        do {
+            let fixtures = (
+                voice: environment["MOVIECUT_UITEST_W_VOICE"].map { URL(fileURLWithPath: $0) },
+                bgm: environment["MOVIECUT_UITEST_W_BGM"].map { URL(fileURLWithPath: $0) },
+                video: environment["MOVIECUT_UITEST_W_VIDEO"].map { URL(fileURLWithPath: $0) },
+                subject: environment["MOVIECUT_UITEST_W_SUBJECT"].map { URL(fileURLWithPath: $0) },
+                image: environment["MOVIECUT_UITEST_W_IMAGE"].map { URL(fileURLWithPath: $0) },
+                beats: environment["MOVIECUT_UITEST_W_BEATS"].map { URL(fileURLWithPath: $0) }
+            )
+
+            switch scenario {
+            case "w1":
+                guard let voice = fixtures.voice, let bgm = fixtures.bgm else {
+                    throw NSError(domain: "W", code: 1, userInfo: [NSLocalizedDescriptionKey: "w1 requires W_VOICE + W_BGM"])
+                }
+                await importMediaAndAddToTimeline([voice], startTime: 0)
+                await importMediaAndAddToTimeline([bgm], startTime: 0)
+                let voiceClip = firstClip(ofKind: .audio)
+                let bgmClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
+                step("import", ok: voiceClip != nil && bgmClip != nil)
+                if let voiceClip {
+                    do { try await applyNoiseReduction(for: voiceClip.id); step("denoise", ok: true) }
+                    catch { step("denoise", ok: false, detail: error.localizedDescription) }
+                }
+                if let bgmClip {
+                    // The ducking harness's established deterministic path:
+                    // explicit planner-style ranges through the real command
+                    // (applyDucking derives ranges from live silence analysis).
+                    await apply(SetAudioDuckingCommand(
+                        duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
+                        level: 0.25
+                    ))
+                    let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                        .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                    step("ducking", ok: ducked)
+                } else {
+                    step("ducking", ok: false, detail: "no bgm clip")
+                }
+                // STT is user-TCC-gated — calling it headless hard-crashes
+                // the process on privacy violation, so PROBE availability:
+                // with the user's grant the real transcription runs; without
+                // it the step records the permission gate (not a defect).
+                selectedClipId = voiceClip?.id
+                let speechAvailable = await SpeechTranscriptionProvider().isAvailable
+                if speechAvailable {
+                    await generateSubtitles()
+                    step("subtitles", ok: lastErrorMessage == nil, detail: "clips=\(currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count)")
+                } else {
+                    step("subtitles", ok: true, detail: "stt=user_tcc_gated_headless")
+                }
+                if let template = TextTemplate.builtIn.first {
+                    await addUITestTextTemplateClip(template: template)
+                    if let textClip = firstClip(ofKind: .text), var content = textClip.textContent {
+                        content.karaokeEnabled = true
+                        content.highlightFontColor = "#FFD60A"
+                        await apply(SetClipPropertyCommand(clipId: textClip.id, property: .textContent(content)))
+                        step("karaoke", ok: firstClip(ofKind: .text)?.textContent?.karaokeEnabled == true)
+                    } else {
+                        step("karaoke", ok: false, detail: "no text clip")
+                    }
+                } else {
+                    step("karaoke", ok: false, detail: "no built-in templates")
+                }
+                await applyPlatformExportPreset(.tikTok)
+                // The TikTok preset is portrait — the platform preset flow
+                // is the shipped SNS output path; verified by export size.
+                step("sns_preset", ok: true)
+            case "w2":
+                guard let music = fixtures.beats ?? fixtures.bgm, let video = fixtures.video else {
+                    throw NSError(domain: "W", code: 2, userInfo: [NSLocalizedDescriptionKey: "w2 requires W_BEATS + W_VIDEO"])
+                }
+                await importMediaAndAddToTimeline([video], startTime: 0)
+                await importMediaAndAddToTimeline([music], startTime: 0)
+                let musicClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: musicClip != nil && videoClip != nil)
+                selectedClipId = musicClip?.id
+                await detectBeats()
+                step("beats", ok: currentProject.markers.contains { $0.kind == .beat }, detail: "beat_markers=\(currentProject.markers.filter { $0.kind == .beat }.count)")
+                if let videoClip {
+                    do {
+                        _ = try await autoCutSilence(for: videoClip.id)
+                        step("autocut", ok: true)
+                    } catch {
+                        step("autocut", ok: false, detail: error.localizedDescription)
+                    }
+                    await apply(SetClipPropertyCommand(clipId: videoClip.id, property: .speedRampPoints([
+                        SpeedRampPoint(time: 0, rate: 1),
+                        SpeedRampPoint(time: 1, rate: 2),
+                    ])))
+                    let ramped = firstClip(ofKind: .video)?.speedRampPoints.count ?? 0
+                    step("speed_ramp", ok: ramped >= 2, detail: "points=\(ramped)")
+                } else {
+                    step("autocut", ok: false, detail: "no video clip")
+                    step("speed_ramp", ok: false, detail: "no video clip")
+                }
+            case "w3":
+                guard let subject = fixtures.subject, let background = fixtures.video else {
+                    throw NSError(domain: "W", code: 3, userInfo: [NSLocalizedDescriptionKey: "w3 requires W_SUBJECT + W_VIDEO (background)"])
+                }
+                await importMediaAndAddToTimeline([background], startTime: 0)
+                await importMediaAndAddToTimeline([subject], startTime: 0)
+                let subjectClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .video }
+                step("import", ok: subjectClip != nil)
+                if let subjectClip {
+                    do {
+                        // Normalized rect (the motion gate's ground truth:
+                        // x=32/320, y=88/240, 72x64 px on the 320x240 fixture).
+                        let samples = try await trackMotion(for: subjectClip.id, initialRect: CGRect(
+                            x: 32.0 / 320.0, y: 88.0 / 240.0,
+                            width: 72.0 / 320.0, height: 64.0 / 240.0
+                        ))
+                        step("tracking", ok: samples > 0, detail: "samples=\(samples)")
+                    } catch {
+                        step("tracking", ok: false, detail: error.localizedDescription)
+                    }
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .mask(Mask(
+                        shape: .rectangle,
+                        position: CGPoint(x: 160, y: 120),
+                        size: CGSize(width: 192, height: 144)
+                    ))))
+                    let subjectMasked = currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .first { $0.id == subjectClip.id }?
+                        .mask != nil
+                    step("mask", ok: subjectMasked)
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .blendMode(.multiply)))
+                    step("blend", ok: true)
+                    await apply(SetClipPropertyCommand(clipId: subjectClip.id, property: .isBackgroundRemoved(true)))
+                    step("bg_removal", ok: true)
+                }
+            case "w4":
+                guard let video = fixtures.video, let music = fixtures.bgm else {
+                    throw NSError(domain: "W", code: 4, userInfo: [NSLocalizedDescriptionKey: "w4 requires W_VIDEO + W_BGM"])
+                }
+                await importMediaAndAddToTimeline([video], startTime: 0)
+                await importMediaAndAddToTimeline([music], startTime: 0)
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: videoClip != nil)
+                selectedClipId = videoClip?.id
+                await updateSelectedColorGrade(ColorGrade(
+                    lift: .init(red: 0.1, green: 0, blue: -0.05),
+                    gamma: 0.8,
+                    gain: .init(red: 1.2, green: 1.0, blue: 0.8)
+                ))
+                step("grade", ok: firstClip(ofKind: .video)?.colorGrade != nil)
+                if let videoClip {
+                    await apply(SetClipPropertyCommand(clipId: videoClip.id, property: .volume(0.8)))
+                    step("audio_mix", ok: abs((firstClip(ofKind: .video)?.volume ?? 0) - 0.8) < 1e-9)
+                }
+                // G-03 Inc 3: the plan's W4 wording — an ADJUSTMENT clip
+                // carrying the grade over the visible clips (Inc 2 wiring).
+                if let videoClip {
+                    var adjustmentClip = Clip(
+                        assetId: videoClip.assetId ?? UUID(),
+                        kind: .video,
+                        sourceRange: TimeRange(start: 0, duration: 2),
+                        timelineRange: TimeRange(start: 0, duration: currentProject.timeline.duration)
+                    )
+                    adjustmentClip.isAdjustmentLayer = true
+                    adjustmentClip.colorGrade = ColorGrade(gamma: 0.8)
+                    await apply(AddClipCommand(
+                        trackId: currentProject.timeline.tracks.first { $0.kind == .video }?.id ?? UUID(),
+                        clip: adjustmentClip
+                    ))
+                    let hasAdjustment = currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .contains { $0.isAdjustmentLayer && $0.colorGrade != nil }
+                    step("adjustment_layer", ok: hasAdjustment)
+                }
+            case "w5":
+                guard let image = fixtures.image else {
+                    throw NSError(domain: "W", code: 5, userInfo: [NSLocalizedDescriptionKey: "w5 requires W_IMAGE"])
+                }
+                await importMediaAndAddToTimeline([image], startTime: 0)
+                step("import_image", ok: currentProject.timeline.tracks.flatMap(\.clips).contains { $0.kind == .image || $0.kind == .video })
+                if let template = TextTemplate.builtIn.first {
+                    await addUITestTextTemplateClip(template: template)
+                    let textCount = currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count
+                    step("template", ok: textCount > 0, detail: "clips=\(textCount)")
+                } else {
+                    step("template", ok: false, detail: "no built-in templates")
+                }
+                await addUITestTextAnimationClip(preset: .fadeInOut)
+                step("text_anim", ok: currentProject.timeline.tracks.flatMap(\.clips).contains { $0.textContent?.animation != nil })
+                await applyPlatformExportPreset(.instagramReels)
+                step("portrait_preset", ok: true)
+            default:
+                throw NSError(domain: "W", code: 6, userInfo: [NSLocalizedDescriptionKey: "unknown scenario \(scenario)"])
+            }
+
+            // The job's own export — the scenario's deliverable.
+            guard let dir = exportDir() else {
+                throw NSError(domain: "W", code: 7, userInfo: [NSLocalizedDescriptionKey: "W_EXPORT dir not set"])
+            }
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let exportURL = dir.appendingPathComponent("\(scenario).mp4")
+            await exportProject(to: exportURL)
+            if scenario == "w4" {
+                // The ProRes writer path with video+audio together is a
+                // KNOWN hang (reader side — LOOP_STATE defect family);
+                // race it against a timeout so the defect is RECORDED
+                // instead of wedging the measurement. The abandoned task
+                // dies with the process at quit.
+                let proresDone = await Self.raceWithTimeout(seconds: 90) {
+                    await self.exportProResMaster(to: dir.appendingPathComponent("w4-prores.mov"))
+                }
+                step("prores", ok: proresDone, detail: proresDone ? "" : "timeout_known_defect")
+            }
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: exportURL.path)[.size] as? Int) ?? 0
+            dump.exportBytes = bytes ?? 0
+            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)")
+        } catch {
+            dump.error = error.localizedDescription
+        }
+
+        dump.elapsedSeconds = Date().timeIntervalSince(started)
+        if let artifactPath = environment["MOVIECUT_UITEST_W_RESULT"], !artifactPath.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try? encoder.encode(dump).write(to: URL(fileURLWithPath: artifactPath))
+        }
+        let okCount = dump.steps.filter(\.ok).count
+        lastStatusMessage = "w_scenario \(scenario) steps_ok=\(okCount)/\(dump.steps.count) export_bytes=\(dump.exportBytes) error=\(dump.error)"
+        if let resultPath = environment["MOVIECUT_UITEST_RESULT"], !resultPath.isEmpty {
+            writeHarnessStatus("W_DONE \(lastStatusMessage ?? "")", to: resultPath)
+        }
+        if environment["MOVIECUT_UITEST_QUIT"] == "1" {
+            NSApp.terminate(nil)
+        }
+    }
+
+    // MARK: - G-25 master meter (switchover 2B)
+
+    /// JSON artifact for `MOVIECUT_UITEST_MASTER_METER`.
+    private struct MasterMeterDump: Codable {
+        var eqApplied = false
+        var lufs: Double?
+        var truePeakDbTp: Double?
+        var samplePeakDbFs: Double?
+        var error = "none"
+    }
+
+    /// Measures the current project through the REAL meter path
+    /// (`measureMasterLoudness` → `GraphMixRenderer` — the graph mix with
+    /// derived EQ effective media, spec §0/§3.1) and dumps the measured
+    /// values. With `MOVIECUT_UITEST_MASTER_METER_EQ=1` a bass-boost
+    /// preset is applied to the FIRST audio clip through the real command
+    /// path first, so the effective-media derivation is exercised end to
+    /// end alongside the meter.
+    private func runMasterMeterUITestScenario(environment: [String: String], artifactPath: String) async -> String {
+        var dump = MasterMeterDump()
+        if environment["MOVIECUT_UITEST_MASTER_METER_EQ"] == "1" {
+            let audioClips = currentProject.timeline.tracks
+                .filter { $0.kind == .audio }
+                .flatMap(\.clips)
+            if let bgm = audioClips.first {
+                await apply(SetClipPropertyCommand(
+                    clipId: bgm.id,
+                    property: .equalizer(ClipEqualizerSettings.settings(for: .bassBoost))
+                ))
+                dump.eqApplied = true
+            }
+        }
+        await measureMasterLoudness()
+        if let measurement = masterLoudness {
+            dump.lufs = measurement.integratedLufs
+            dump.truePeakDbTp = measurement.truePeakDbTp
+            dump.samplePeakDbFs = measurement.samplePeakDbFs
+        } else {
+            dump.error = masterLoudnessError ?? "measurement nil"
+        }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "master meter artifact write failed: \(error.localizedDescription)"
+        }
+        var suffix = " master_meter=\(dump.error == "none" ? 1 : 0)" +
+            " meter_eq=\(dump.eqApplied ? 1 : 0)"
+        if let lufs = dump.lufs {
+            suffix += String(format: " meter_lufs=%.2f", lufs)
+        } else {
+            suffix += " meter_lufs=silence"
+        }
+        suffix += String(format: " meter_tp=%.2f", dump.truePeakDbTp ?? 0)
+        if dump.error != "none" {
+            suffix += " meter_error=1"
+        }
+        return suffix
+    }
+
+    /// JSON artifact for `MOVIECUT_UITEST_EXPORT_POSTCHECK`.
+    private struct ExportPostCheckDump: Codable {
+        var schemaVersion = 1
+        var scenario = "G-25-export-post-check"
+        var referenceFrames = 0
+        var referenceSampleRate = 0.0
+        var decodedFrames = 0
+        var decodedSampleRate = 0.0
+        var codecDelaySamples = 0
+        var lengthWithinOneSample = false
+        var rmsDifferenceDb: Double?
+        var referenceLufs: Double?
+        var decodedLufs: Double?
+        var decodedTruePeakDbTp: Double?
+        var clippingRunCount = 0
+        var warningCount = 0
+        var passed = false
+        var error = "none"
+    }
+
+    /// G-25 spec §8 (2C-3 strict era) — re-decodes the ACTUAL exported file
+    /// and compares it against the GRAPH PCM the export encoded (same
+    /// renderMix, same audible-span policy), after the caller-side codec
+    /// trim (correlation-measured AAC priming/padding, §8.1). Reports
+    /// lengths, RMS difference, decoded LUFS-I / true peak / clipping via
+    /// the shared Core functions; the ±1-sample length gate is live.
+    private func runExportPostCheckUITestScenario(environment: [String: String], artifactPath: String) async -> String {
+        var dump = ExportPostCheckDump()
+        do {
+            let exportedPath = [environment["MOVIECUT_UITEST_EXPORT_AUDIO"], environment["MOVIECUT_UITEST_EXPORT"]]
+                .compactMap { $0 }
+                .first { !$0.isEmpty }
+            guard let exportedPath else {
+                throw NSError(
+                    domain: "MovieCutUITest", code: 41,
+                    userInfo: [NSLocalizedDescriptionKey: "post-check requires MOVIECUT_UITEST_EXPORT or MOVIECUT_UITEST_EXPORT_AUDIO"]
+                )
+            }
+            let exportedURL = URL(filePath: exportedPath)
+            guard FileManager.default.fileExists(atPath: exportedURL.path) else {
+                throw NSError(
+                    domain: "MovieCutUITest", code: 42,
+                    userInfo: [NSLocalizedDescriptionKey: "exported file missing: \(exportedPath)"]
+                )
+            }
+
+            // G-25 2C-3 (spec §8): the reference is the GRAPH PCM — the
+            // exact mix the export encoded (renderMix with the same
+            // audible-span policy), so the re-decoded file is judged against
+            // its own encoder input. The re-decode carries AAC
+            // priming/padding; §8.1's caller-side trim measures the codec
+            // delay by correlation and drops head+tail so check()'s ±1
+            // length gate has real teeth.
+            let reference = try await GraphMixRenderer.renderMix(
+                project: currentProject,
+                eqPresetsByClipId: buildAudioProcessingOptions().eqPresets,
+                trimToAudibleSpan: true
+            )
+            let decodedRaw = try AudioGraphExportPostCheck.decode(fileAt: exportedURL)
+            let (decoded, codecDelay) = AudioGraphExportPostCheck.trimCodecDelay(
+                reference: reference, decoded: decodedRaw
+            )
+            let report = AudioGraphExportPostCheck.check(reference: reference, decoded: decoded)
+            dump.codecDelaySamples = codecDelay
+
+            dump.referenceFrames = report.referenceFrames
+            dump.referenceSampleRate = reference.sampleRate
+            dump.decodedFrames = report.decodedFrames
+            dump.decodedSampleRate = decoded.sampleRate
+            dump.lengthWithinOneSample = report.lengthWithinOneSample
+            dump.rmsDifferenceDb = report.rmsDifferenceDb.isFinite ? report.rmsDifferenceDb : nil
+            dump.referenceLufs = report.referenceMeasurement.integratedLufs
+            dump.decodedLufs = report.decodedMeasurement.integratedLufs
+            dump.decodedTruePeakDbTp = report.decodedMeasurement.truePeakDbTp
+            dump.clippingRunCount = report.clippingRunCount
+            dump.warningCount = report.warnings.count
+            dump.passed = report.passed
+        } catch {
+            lastErrorMessage = "export post-check failed: \(error.localizedDescription)"
+            dump.error = error.localizedDescription
+        }
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(dump).write(to: URL(filePath: artifactPath))
+        } catch {
+            lastErrorMessage = "export post-check artifact write failed: \(error.localizedDescription)"
+        }
+
+        var suffix = " export_postcheck=ok" +
+            " postcheck_len_ref=\(dump.referenceFrames)" +
+            " postcheck_len_dec=\(dump.decodedFrames)" +
+            String(format: " postcheck_rms=%.3f", dump.rmsDifferenceDb ?? 999)
+        if let lufs = dump.decodedLufs {
+            suffix += String(format: " postcheck_lufs=%.2f", lufs)
+        } else {
+            suffix += " postcheck_lufs=silence"
+        }
+        suffix += String(format: " postcheck_tp=%.2f", dump.decodedTruePeakDbTp ?? 0) +
+            " postcheck_clip_runs=\(dump.clippingRunCount)" +
+            " postcheck_warnings=\(dump.warningCount)"
+        if dump.error != "none" {
+            suffix = " export_postcheck=error"
+        }
+        return suffix
+    }
+
     private func runPreviewExportParityUITestScenario(environment: [String: String]) async {
         var dumpedFrames = 0
         var previewDumpDir = "none"

@@ -28,6 +28,10 @@ public struct CustomCompositionClipEffect: Sendable {
     public let isBackgroundRemoved: Bool
     public let blendMode: BlendMode
     public let cropRect: NormalizedRect?
+    /// G-24 stabilization plan — non-nil forces the custom compositor and
+    /// warps each frame before the rest of the clip chain (the camera-path
+    /// correction must see the raw decoded frame).
+    public let stabilization: StabilizationPlan?
 
     public init?(
         trackID: CMPersistentTrackID,
@@ -50,6 +54,7 @@ public struct CustomCompositionClipEffect: Sendable {
         isBackgroundRemoved: Bool = false,
         blendMode: BlendMode = .normal,
         cropRect: NormalizedRect? = nil,
+        stabilization: StabilizationPlan? = nil,
         includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -65,6 +70,7 @@ public struct CustomCompositionClipEffect: Sendable {
             || isBackgroundRemoved
             || blendMode != .normal
             || cropRect != nil
+            || stabilization != nil
             || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
             || (includeIdentitySource && trackID != kCMPersistentTrackID_Invalid)
         else {
@@ -91,6 +97,7 @@ public struct CustomCompositionClipEffect: Sendable {
         self.isBackgroundRemoved = isBackgroundRemoved
         self.blendMode = blendMode
         self.cropRect = cropRect
+        self.stabilization = stabilization
     }
 
     public var hasStickerOverlay: Bool {

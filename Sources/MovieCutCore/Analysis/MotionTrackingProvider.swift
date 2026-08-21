@@ -118,6 +118,11 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         let predicted = predictedRect(at: timestamp)
         let wasRecovering = isRecovering
 
+        if let recoveryStartedAt,
+           timestamp - recoveryStartedAt > configuration.maximumRecoveryDuration {
+            return .exhausted
+        }
+
         guard let candidateRect,
               let candidate = MotionTrackingProvider.clampedNormalizedRect(candidateRect)
         else {
@@ -127,6 +132,18 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         let resolvedConfidence = confidence ?? 0
         guard resolvedConfidence >= configuration.minimumTrustedConfidence else {
             return registerLoss(timestamp: timestamp, predictedRect: predicted, reason: .lowConfidence)
+        }
+
+        // Once recovery has started, sequential Vision output alone is not
+        // enough evidence to trust the subject again. This fail-closed check is
+        // deliberately enforced in the planner as well as the provider so a
+        // missing/failed appearance matcher cannot silently bypass the policy.
+        if wasRecovering && !appearanceVerified {
+            return registerLoss(
+                timestamp: timestamp,
+                predictedRect: predicted,
+                reason: .motionInconsistent
+            )
         }
 
         let canReanchorFromAppearance = wasRecovering && appearanceVerified
@@ -399,19 +416,21 @@ public final class MotionTrackingProvider: AnalysisProvider {
 
             // Once recovery begins, a sequential tracker observation is not
             // sufficient evidence to become trusted again: it may simply be
-            // tracking the occluder. Require an appearance redetection near
-            // the predicted trajectory before returning to the Vision tracker.
-            if planner.isRecovering, let recoveryTemplate {
-                if let match = recoveryTemplate.bestMatch(
+            // tracking the occluder. Require an appearance redetection before
+            // returning to the Vision tracker. If the matcher is unavailable
+            // or finds no candidate, fail closed instead of using Vision output.
+            if planner.isRecovering {
+                candidateRect = nil
+                candidateConfidence = nil
+
+                if let recoveryTemplate,
+                   let match = recoveryTemplate.bestMatch(
                     in: image,
                     around: planner.predictedRect(at: timestamp)
-                ) {
+                   ) {
                     candidateRect = match.rect
                     candidateConfidence = Float(match.score)
                     usedTemplateRedetection = true
-                } else {
-                    candidateRect = nil
-                    candidateConfidence = nil
                 }
             }
 

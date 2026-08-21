@@ -83,7 +83,7 @@ struct MotionTrackingProviderTests {
         #expect(abs(predicted.height - 0.20) < 0.0001)
     }
 
-    @Test("low confidence reseeds and the next trusted trajectory candidate is reacquired")
+    @Test("low confidence reseeds and the next appearance-verified candidate is reacquired")
     func lowConfidenceReseedsThenReacquires() throws {
         let seed = TrackingResult(
             timestamp: 0,
@@ -114,15 +114,44 @@ struct MotionTrackingProviderTests {
         let recovered = planner.evaluate(
             timestamp: 0.3,
             candidateRect: CGRect(x: 0.16, y: 0.20, width: 0.20, height: 0.20),
-            confidence: 0.95
+            confidence: 0.95,
+            appearanceVerified: true
         )
         guard case .accept(let result, let reacquired) = recovered else {
-            Issue.record("trajectory-consistent candidate should reacquire")
+            Issue.record("appearance-verified candidate should reacquire")
             return
         }
         #expect(reacquired)
         #expect(abs(result.rect.minX - 0.16) < 0.0001)
         #expect(!planner.isRecovering)
+    }
+
+    @Test("recovery never accepts an unverified candidate")
+    func recoveryRejectsUnverifiedCandidate() {
+        let seed = TrackingResult(
+            timestamp: 0,
+            rect: CGRect(x: 0.10, y: 0.20, width: 0.20, height: 0.20),
+            confidence: 1
+        )
+        var planner = MotionTrackingRecoveryPlanner(seed: seed)
+        _ = planner.evaluate(
+            timestamp: 0.1,
+            candidateRect: CGRect(x: 0.12, y: 0.20, width: 0.20, height: 0.20),
+            confidence: 0.9
+        )
+        _ = planner.evaluate(timestamp: 0.2, candidateRect: nil, confidence: nil)
+
+        let unverified = planner.evaluate(
+            timestamp: 0.3,
+            candidateRect: CGRect(x: 0.16, y: 0.20, width: 0.20, height: 0.20),
+            confidence: 0.95
+        )
+        guard case .reseed(_, let reason) = unverified else {
+            Issue.record("recovery must fail closed without appearance verification")
+            return
+        }
+        #expect(reason == .motionInconsistent)
+        #expect(planner.isRecovering)
     }
 
     @Test("appearance-verified recovery can re-anchor outside a stale trajectory")
@@ -215,6 +244,37 @@ struct MotionTrackingProviderTests {
 
         let exhausted = planner.evaluate(timestamp: 0.31, candidateRect: nil, confidence: nil)
         #expect(exhausted == .exhausted)
+    }
+
+    @Test("recovery timeout wins over a valid appearance-verified candidate")
+    func recoveryTimeoutPreventsLateReacquisition() {
+        let seed = TrackingResult(
+            timestamp: 0,
+            rect: CGRect(x: 0.10, y: 0.20, width: 0.20, height: 0.20),
+            confidence: 1
+        )
+        let configuration = MotionTrackingRecoveryPlanner.Configuration(
+            minimumTrustedConfidence: 0.25,
+            minimumPredictionIoU: 0.30,
+            maximumRecoveryDuration: 0.20,
+            maximumNormalizedVelocityPerSecond: 1.5
+        )
+        var planner = MotionTrackingRecoveryPlanner(seed: seed, configuration: configuration)
+
+        let firstLoss = planner.evaluate(timestamp: 0.10, candidateRect: nil, confidence: nil)
+        guard case .reseed = firstLoss else {
+            Issue.record("first loss should enter bounded recovery")
+            return
+        }
+
+        let lateCandidate = planner.evaluate(
+            timestamp: 0.31,
+            candidateRect: seed.rect,
+            confidence: 0.99,
+            appearanceVerified: true
+        )
+        #expect(lateCandidate == .exhausted)
+        #expect(planner.isRecovering)
     }
 
     @Test("prediction clamps at the frame edge while preserving trusted box size")

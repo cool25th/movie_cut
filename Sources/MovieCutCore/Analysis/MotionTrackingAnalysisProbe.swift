@@ -13,10 +13,18 @@ public enum MotionTrackingAnalysisProbe {
         public enum Status: String, Sendable, Equatable {
             /// First decoded frame; seeds the initial rect without Vision.
             case seed
-            /// Vision returned a usable observation.
+            /// Vision returned a trusted observation on the normal path.
             case tracked
-            /// Vision returned no usable observation for this frame.
+            /// First trusted observation after one or more recovery frames.
+            case reacquired
+            /// Vision returned no usable observation; the next request is reseeded.
             case lostObservation
+            /// Vision returned a box below the trusted-confidence floor; reseed follows.
+            case lowConfidence
+            /// Vision returned a confident box inconsistent with the trusted trajectory.
+            case motionInconsistent
+            /// The bounded recovery window expired without a trusted observation.
+            case recoveryExhausted
             /// The frame could not be decoded.
             case decodeFailure
         }

@@ -44,7 +44,11 @@ struct MotionTrackingAnalysisPerfTests {
             var samples = 0
             var frames = 0
             var tracked = 0
+            var reacquired = 0
             var lost = 0
+            var lowConfidence = 0
+            var motionInconsistent = 0
+            var recoveryExhausted = 0
             var decodeFailed = 0
             var failRate = 0.0
             var maxConsecutiveFailures = 0
@@ -94,15 +98,24 @@ struct MotionTrackingAnalysisPerfTests {
             metrics.samples = results.count
             metrics.frames = frames.count
             metrics.tracked = frames.filter { $0.status == .tracked }.count
+            metrics.reacquired = frames.filter { $0.status == .reacquired }.count
             metrics.lost = frames.filter { $0.status == .lostObservation }.count
+            metrics.lowConfidence = frames.filter { $0.status == .lowConfidence }.count
+            metrics.motionInconsistent = frames.filter { $0.status == .motionInconsistent }.count
+            metrics.recoveryExhausted = frames.filter { $0.status == .recoveryExhausted }.count
             metrics.decodeFailed = frames.filter { $0.status == .decodeFailure }.count
+            let recoveryFailures = metrics.lost
+                + metrics.lowConfidence
+                + metrics.motionInconsistent
+                + metrics.recoveryExhausted
+                + metrics.decodeFailed
             metrics.failRate = frames.isEmpty
                 ? 1.0
-                : Double(metrics.lost + metrics.decodeFailed) / Double(frames.count)
+                : Double(recoveryFailures) / Double(frames.count)
 
             var consecutive = 0
             for frame in frames {
-                if frame.status == .tracked || frame.status == .seed {
+                if frame.status == .tracked || frame.status == .reacquired || frame.status == .seed {
                     consecutive = 0
                 } else {
                     consecutive += 1
@@ -114,7 +127,7 @@ struct MotionTrackingAnalysisPerfTests {
             // warm-up sample (first-decode cost) and is excluded, matching
             // CompositorRenderProbe's first_ms policy.
             let trackedDurations = frames
-                .filter { $0.status == .tracked }
+                .filter { $0.status == .tracked || $0.status == .reacquired }
                 .map(\.durationMs)
                 .sorted()
             if !trackedDurations.isEmpty {
@@ -146,9 +159,10 @@ struct MotionTrackingAnalysisPerfTests {
 
             runs.append(metrics)
             print(String(
-                format: "T2M_RUN i=%d rtf=%.4f total_ms=%.1f frames=%d tracked=%d lost=%d decode_failed=%d p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f iou_mean=%.4f iou_median=%.4f iou_p10=%.4f iou_min=%.4f iou_final=%.4f fail_rate=%.4f max_consec_fail=%d samples=%d peak_footprint_mb=%.1f footprint_delta_mb=%.1f",
-                run, metrics.rtf, metrics.totalMs, metrics.frames, metrics.tracked, metrics.lost,
-                metrics.decodeFailed, metrics.p50Ms, metrics.p95Ms, metrics.p99Ms,
+                format: "T2M_RUN i=%d rtf=%.4f total_ms=%.1f frames=%d tracked=%d reacquired=%d lost=%d low_conf=%d motion_inconsistent=%d recovery_exhausted=%d decode_failed=%d p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f iou_mean=%.4f iou_median=%.4f iou_p10=%.4f iou_min=%.4f iou_final=%.4f fail_rate=%.4f max_consec_fail=%d samples=%d peak_footprint_mb=%.1f footprint_delta_mb=%.1f",
+                run, metrics.rtf, metrics.totalMs, metrics.frames, metrics.tracked, metrics.reacquired, metrics.lost,
+                metrics.lowConfidence, metrics.motionInconsistent, metrics.recoveryExhausted, metrics.decodeFailed,
+                metrics.p50Ms, metrics.p95Ms, metrics.p99Ms,
                 metrics.iouMean, metrics.iouMedian, metrics.iouP10, metrics.iouMin, metrics.iouFinal,
                 metrics.failRate, metrics.maxConsecutiveFailures, metrics.samples,
                 metrics.peakFootprintMb, metrics.footprintDeltaMb
@@ -226,10 +240,15 @@ struct MotionTrackingAnalysisPerfTests {
         let before = ious.filter { MotionTrackingGroundTruth.occlusionCoverageFraction(at: $0.t) == 0 && $0.t < 1.1 }
         let occluded = ious.filter { MotionTrackingGroundTruth.occlusionCoverageFraction(at: $0.t) >= 0.99 }
         let emerged = ious.filter { $0.t >= 2.3 }
-        let occludedTimestamps = Set(occluded.map { ($0.t * 1000).rounded() })
-        let lostInWindow = frames.filter {
-            $0.status == .lostObservation && occludedTimestamps.contains(($0.timestamp * 1000).rounded())
-        }.count
+        let recoveryFramesInWindow = frames.filter { frame in
+            MotionTrackingGroundTruth.occlusionCoverageFraction(at: frame.timestamp) >= 0.99
+                && frame.status != .seed
+                && frame.status != .tracked
+                && frame.status != .reacquired
+        }
+        let lostInWindow = recoveryFramesInWindow.filter { $0.status == .lostObservation }.count
+        let lowConfidenceInWindow = recoveryFramesInWindow.filter { $0.status == .lowConfidence }.count
+        let inconsistentInWindow = recoveryFramesInWindow.filter { $0.status == .motionInconsistent }.count
         let dipMinIoU = occluded.map(\.iou).min() ?? 1
 
         // Reacquisition: first sample at/after the full-occlusion exit (t=1.4)
@@ -242,9 +261,10 @@ struct MotionTrackingAnalysisPerfTests {
         let beforeMeanIoU = before.isEmpty ? 0 : before.map(\.iou).reduce(0, +) / Double(before.count)
 
         print(String(
-            format: "T2M_OCC total_ms=%.1f samples=%d before_n=%d before_iou_mean=%.4f occluded_n=%d occluded_iou_min=%.4f lost_in_window=%d emerged_n=%d emerged_iou_mean=%.4f reacquire_at=%@ reacquire_latency_s=%@",
-            elapsedMs, results.count, before.count, beforeMeanIoU, occluded.count, dipMinIoU,
-            lostInWindow, emerged.count, emergedMeanIoU,
+            format: "T2M_OCC total_ms=%.1f frames=%d samples=%d before_n=%d before_iou_mean=%.4f occluded_n=%d occluded_iou_min=%.4f recovery_in_window=%d lost_in_window=%d low_conf_in_window=%d inconsistent_in_window=%d emerged_n=%d emerged_iou_mean=%.4f reacquire_at=%@ reacquire_latency_s=%@",
+            elapsedMs, frames.count, results.count, before.count, beforeMeanIoU, occluded.count, dipMinIoU,
+            recoveryFramesInWindow.count, lostInWindow, lowConfidenceInWindow, inconsistentInWindow,
+            emerged.count, emergedMeanIoU,
             reacquireAt.map { String(format: "%.3f", $0) } ?? "none",
             reacquireLatency.map { String(format: "%.3f", $0) } ?? "none"
         ))
@@ -252,10 +272,10 @@ struct MotionTrackingAnalysisPerfTests {
         // Behavioral floors.
         #expect(!before.isEmpty, "no pre-occlusion samples")
         #expect(beforeMeanIoU >= 0.75, "pre-occlusion mean IoU \(beforeMeanIoU) below 0.75")
-        #expect(!occluded.isEmpty, "no samples inside the full-occlusion window")
-        #expect(dipMinIoU < 0.5 || lostInWindow > 0,
-                "occlusion did not degrade tracking (min IoU \(dipMinIoU), lost \(lostInWindow)) — vacuous fixture")
-        #expect(results.count >= 35, "too few samples for the 3s fixture")
+        let occlusionDegraded = occluded.isEmpty || dipMinIoU < 0.5 || !recoveryFramesInWindow.isEmpty
+        #expect(occlusionDegraded,
+                "occlusion did not suppress trusted output, lower IoU, or trigger recovery — vacuous fixture")
+        #expect(frames.count >= 35, "too few analyzed frames for the 3s fixture")
     }
 
     /// Physical footprint of this process in bytes (task_vm_info), the same

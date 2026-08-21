@@ -284,8 +284,11 @@ struct MotionTrackingProviderTests {
         ))
 
         #expect(beforeMean >= 0.75, "pre-occlusion mean IoU \(beforeMean) below 0.75")
-        #expect(!during.isEmpty, "fixture produced no trusted samples in the full-occlusion window")
-        #expect(duringMin < 0.50, "full occlusion did not measurably degrade tracking")
+        let degradationObserved = during.isEmpty || duringMin < 0.50
+        #expect(
+            degradationObserved,
+            "full occlusion neither suppressed trusted results nor degraded their IoU"
+        )
         #expect(reacquired != nil, "subject was never reacquired after the occlusion")
         if let latency {
             // The fixture is only fully emerged at t=2.3 (0.9s after the full

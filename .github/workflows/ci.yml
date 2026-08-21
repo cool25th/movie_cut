@@ -121,16 +121,13 @@ jobs:
   # shorthand_operator — correctness-risk rules; see scripts/lint_gate.sh).
   # The full ~1,000-finding SwiftLint report stays non-blocking and is
   # printed for visibility after the gate. The allow-list was brought to
-  # zero violations on 2026-08-17, so the gate can block without freezing
-  # every PR. Still runs if build-and-test failed so lint output is always
-  # available; the job-level continue-on-error below covers ONLY the known
-  # GitHub runner-assignment infra flake (job failing with zero steps
-  # executed), not lint findings.
+  # zero violations on 2026-08-17, so the gate can block every PR. Runner
+  # infrastructure failures should be retried/diagnosed as infrastructure;
+  # they must not make a genuine lint failure green.
   lint:
     runs-on: macos-15
     if: always()
     needs: build-and-test
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode

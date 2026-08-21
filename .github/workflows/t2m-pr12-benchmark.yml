@@ -9,7 +9,7 @@ on:
 jobs:
   benchmark:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,39 +24,58 @@ jobs:
           swift --version
 
       - name: Prepare baseline worktree
-        run: |
-          git worktree add /tmp/moviecut-t2m-base af34d3ae37858ed99bfdfa35124aa3fc65067133
+        run: git worktree add /tmp/moviecut-t2m-base af34d3ae37858ed99bfdfa35124aa3fc65067133
 
-      - name: Measure baseline main
+      - name: Prebuild baseline Release tests
+        working-directory: /tmp/moviecut-t2m-base
+        run: swift test -c release --filter MotionTrackingAnalysisPerfTests
+
+      - name: Prebuild PR-head Release tests
+        run: swift test -c release --filter MotionTrackingAnalysisPerfTests
+
+      - name: Measure A1 baseline
         continue-on-error: true
         working-directory: /tmp/moviecut-t2m-base
         run: |
           set -o pipefail
-          echo "T2M_COMPARE role=baseline sha=af34d3ae37858ed99bfdfa35124aa3fc65067133"
-          MOVIECUT_T2M_REPEATS=5 bash scripts/run_t2m_motion_tracking.sh 2>&1 | tee /tmp/t2m-baseline.log
+          echo "T2M_COMPARE pass=A1 role=baseline sha=af34d3ae37858ed99bfdfa35124aa3fc65067133"
+          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-A1-baseline.log
 
-      - name: Measure PR head
+      - name: Measure B1 PR head
         continue-on-error: true
         run: |
           set -o pipefail
-          echo "T2M_COMPARE role=head sha=$(git rev-parse HEAD)"
-          MOVIECUT_T2M_REPEATS=5 bash scripts/run_t2m_motion_tracking.sh 2>&1 | tee /tmp/t2m-head.log
+          echo "T2M_COMPARE pass=B1 role=head sha=$(git rev-parse HEAD)"
+          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-B1-head.log
 
-      - name: Summarize comparison
+      - name: Measure B2 PR head
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "T2M_COMPARE pass=B2 role=head sha=$(git rev-parse HEAD)"
+          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-B2-head.log
+
+      - name: Measure A2 baseline
+        continue-on-error: true
+        working-directory: /tmp/moviecut-t2m-base
+        run: |
+          set -o pipefail
+          echo "T2M_COMPARE pass=A2 role=baseline sha=af34d3ae37858ed99bfdfa35124aa3fc65067133"
+          MOVIECUT_T2M=1 MOVIECUT_T2M_REPEATS=5 swift test -c release --skip-build --filter MotionTrackingAnalysisPerfTests 2>&1 | tee /tmp/t2m-A2-baseline.log
+
+      - name: Summarize ABBA comparison
         if: always()
         run: |
-          echo "=== BASELINE ==="
-          grep -E 'T2M_AGG|T2M_OCC' /tmp/t2m-baseline.log || true
-          echo "=== HEAD ==="
-          grep -E 'T2M_AGG|T2M_OCC' /tmp/t2m-head.log || true
+          for f in /tmp/t2m-A1-baseline.log /tmp/t2m-B1-head.log /tmp/t2m-B2-head.log /tmp/t2m-A2-baseline.log; do
+            echo "=== $(basename "$f") ==="
+            grep -E '^T2M_AGG|^T2M_OCC' "$f" || true
+          done
 
-      - name: Upload T2-M comparison logs
+      - name: Upload T2-M ABBA logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: t2m-pr12-comparison
-          path: |
-            /tmp/t2m-baseline.log
-            /tmp/t2m-head.log
+          name: t2m-pr12-abba
+          path: /tmp/t2m-*.log
           if-no-files-found: error
           retention-days: 3

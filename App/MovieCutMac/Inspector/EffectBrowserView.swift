@@ -1,5 +1,4 @@
 import AppKit
-import CoreImage
 import SwiftUI
 import MovieCutCore
 
@@ -26,6 +25,7 @@ struct EffectBrowserView: View {
     @State private var previewSourceData: Data?
     @State private var sourcePreviewImage: NSImage?
     @State private var effectPreviewImage: NSImage?
+    @State private var previewGeneration = 0
     @State private var appliedMessage: String?
 
     var body: some View {
@@ -341,36 +341,43 @@ struct EffectBrowserView: View {
         }
     }
 
-    private var currentBrowserClipEffects: [Effect] {
+    private var currentBrowserClip: Clip {
         if let selectedClip = viewModel.selectedClip, selectedClip.id == clip.id {
-            return selectedClip.effects
+            return selectedClip
         }
-        return clip.effects
+        return clip
+    }
+
+    private var currentBrowserClipEffects: [Effect] {
+        currentBrowserClip.effects
     }
 
     private func refreshPreview(for item: EffectBrowserCatalogItem) {
-        guard let data = previewSourceData,
-              let inputImage = CIImage(data: data)
-        else {
+        guard let data = previewSourceData else {
             effectPreviewImage = nil
             return
         }
 
+        let clipSnapshot = currentBrowserClip
         let previewEffects = item.previewEffects(
-            existingEffects: currentBrowserClipEffects,
+            existingEffects: clipSnapshot.effects,
             parameters: draftParameters
         )
-        let outputImage = VisualEffectPixelProcessor.apply(previewEffects, to: inputImage)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else {
-            effectPreviewImage = nil
-            return
-        }
+        previewGeneration += 1
+        let generation = previewGeneration
 
-        effectPreviewImage = NSImage(
-            cgImage: cgImage,
-            size: NSSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
-        )
+        Task {
+            let renderedData = await Task.detached(priority: .userInitiated) {
+                EffectBrowserPreviewRenderer.render(
+                    sourceData: data,
+                    clip: clipSnapshot,
+                    effects: previewEffects
+                )
+            }.value
+
+            guard generation == previewGeneration else { return }
+            effectPreviewImage = renderedData.flatMap(NSImage.init(data:))
+        }
     }
 
     // MARK: - Actions

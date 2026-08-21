@@ -142,9 +142,11 @@ final class EditorViewModel {
     var masterLoudness: AudioGraphLoudness.Measurement?
     var isMeasuringMasterLoudness = false
     var masterLoudnessError: String?
-    /// Increments whenever the committed project snapshot changes. A meter
-    /// render captures this revision so an older async result cannot overwrite
-    /// a newer edit, undo, or redo state.
+    /// Monotonic committed session/mix generation. It advances for every
+    /// committed session refresh and every session replacement, even when the
+    /// resulting Project value compares equal to the UI's provisional snapshot.
+    /// Async meter work captures this value so stale results cannot cross an
+    /// edit, undo/redo, or project/session lifetime boundary.
     @ObservationIgnored var masterLoudnessRevision: UInt64 = 0
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
@@ -185,6 +187,15 @@ final class EditorViewModel {
             playbackEngine,
             exportEngine
         )
+    }
+
+    /// Invalidates any measurement tied to the previous committed mix.
+    /// Call this on every EditorSession commit refresh and on every fresh
+    /// EditorSession replacement; Project equality is intentionally irrelevant.
+    func invalidateMasterLoudnessContext() {
+        masterLoudnessRevision &+= 1
+        masterLoudness = nil
+        masterLoudnessError = nil
     }
 
     /// Writes the current project to the crash-recovery autosave off the edit
@@ -741,6 +752,7 @@ final class EditorViewModel {
         let project = Self.defaultProject()
         session = EditorSession(project: project)
         currentProject = project
+        invalidateMasterLoudnessContext()
         await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
@@ -773,6 +785,7 @@ final class EditorViewModel {
                 let project = Self.ensureDefaultTracks(in: loadedProject)
                 session = EditorSession(project: project)
                 currentProject = project
+                invalidateMasterLoudnessContext()
                 await refreshFlattenedTimeline(for: project)
                 currentProjectURL = url
                 canvasSelection = project.canvas.aspectRatio
@@ -899,6 +912,7 @@ final class EditorViewModel {
         let project = Self.ensureDefaultTracks(in: recovered)
         session = EditorSession(project: project)
         currentProject = project
+        invalidateMasterLoudnessContext()
         await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
@@ -940,6 +954,7 @@ final class EditorViewModel {
             let project = try ProjectPackage.load(from: url)
             session = EditorSession(project: project)
             currentProject = project
+            invalidateMasterLoudnessContext()
             currentProjectURL = nil
             canvasSelection = project.canvas.aspectRatio
             syncExportUI(from: project.exportSettings)
@@ -4011,13 +4026,8 @@ final class EditorViewModel {
     }
 
     func refreshFromSession() async throws {
-        let previousProject = currentProject
         currentProject = await session.snapshot()
-        if currentProject != previousProject {
-            masterLoudnessRevision &+= 1
-            masterLoudness = nil
-            masterLoudnessError = nil
-        }
+        invalidateMasterLoudnessContext()
         await refreshFlattenedTimeline(for: currentProject)
         canvasSelection = currentProject.canvas.aspectRatio
         syncExportUI(from: currentProject.exportSettings)
@@ -4776,6 +4786,7 @@ final class EditorViewModel {
         let project = templateStore.createProject(from: bundle)
         session = EditorSession(project: project)
         currentProject = project
+        invalidateMasterLoudnessContext()
         canvasSelection = project.canvas.aspectRatio
         syncExportUI(from: project.exportSettings)
         selectedClipId = nil

@@ -267,7 +267,7 @@ private struct MasterLoudnessSection: View {
         Binding(
             get: { viewModel.currentProject.masterAudioProcessing },
             set: { processing in
-                Task { await viewModel.setMasterAudioProcessing(processing) }
+                viewModel.setMasterAudioProcessing(processing)
             }
         )
     }

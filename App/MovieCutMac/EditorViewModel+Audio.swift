@@ -20,25 +20,49 @@ extension EditorViewModel {
         await apply(AudioDuckingCommand(clipId: clipId, duckLevel: duckLevel))
     }
 
-    /// G-26 inspector control: routes the project-level master preset through
-    /// the command/session path so persistence, dirty-state tracking, undo and
-    /// redo all behave like normal edits. Changing the chain invalidates the
-    /// previous loudness measurement because it described a different mix.
-    func setMasterAudioProcessing(_ processing: MasterAudioProcessing?) async {
-        let previous = currentProject.masterAudioProcessing
-        guard previous != processing else { return }
+    /// G-26 inspector control. Picker events enqueue synchronously on MainActor
+    /// so their order matches the user's order. A single worker drains the
+    /// latest desired value and coalesces intermediate selections while an
+    /// EditorSession dispatch is suspended.
+    func setMasterAudioProcessing(_ processing: MasterAudioProcessing?) {
+        desiredMasterAudioProcessing = processing
+        masterAudioProcessingMutationGeneration &+= 1
 
-        await apply(SetMasterAudioProcessingCommand(processing: processing))
-        guard currentProject.masterAudioProcessing == processing else { return }
-
-        masterLoudness = nil
-        masterLoudnessError = nil
-        switch processing {
-        case .sns:
-            lastStatusMessage = "Master audio processing set to SNS 좋은 소리."
-        case nil:
-            lastStatusMessage = "Master audio processing turned off."
+        guard masterAudioProcessingMutationTask == nil else { return }
+        masterAudioProcessingMutationTask = Task { @MainActor [weak self] in
+            await self?.drainMasterAudioProcessingMutations()
         }
+    }
+
+    private func drainMasterAudioProcessingMutations() async {
+        while !Task.isCancelled {
+            let requestGeneration = masterAudioProcessingMutationGeneration
+            let processing = desiredMasterAudioProcessing
+
+            if currentProject.masterAudioProcessing != processing {
+                await apply(SetMasterAudioProcessingCommand(processing: processing))
+            }
+
+            // A newer picker event or project/session replacement arrived while
+            // dispatch/refresh was suspended. Loop once more using only the
+            // newest desired state; never let an older request win last.
+            guard requestGeneration == masterAudioProcessingMutationGeneration else {
+                continue
+            }
+
+            masterAudioProcessingMutationTask = nil
+            guard currentProject.masterAudioProcessing == processing else { return }
+
+            switch processing {
+            case .sns:
+                lastStatusMessage = "Master audio processing set to SNS 좋은 소리."
+            case nil:
+                lastStatusMessage = "Master audio processing turned off."
+            }
+            return
+        }
+
+        masterAudioProcessingMutationTask = nil
     }
 
     /// G-25 switchover step 2B (spec §7·§11④): measures the project's REAL

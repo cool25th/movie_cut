@@ -148,6 +148,12 @@ final class EditorViewModel {
     /// Async meter work captures this value so stale results cannot cross an
     /// edit, undo/redo, or project/session lifetime boundary.
     @ObservationIgnored var masterLoudnessRevision: UInt64 = 0
+    /// Latest user intent for the project master preset. Picker events update
+    /// this synchronously on MainActor; one worker drains/coalesces them so
+    /// rapid selections cannot commit out of order.
+    @ObservationIgnored var desiredMasterAudioProcessing: MasterAudioProcessing?
+    @ObservationIgnored var masterAudioProcessingMutationGeneration: UInt64 = 0
+    @ObservationIgnored var masterAudioProcessingMutationTask: Task<Void, Never>?
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
@@ -196,6 +202,12 @@ final class EditorViewModel {
         masterLoudnessRevision &+= 1
         masterLoudness = nil
         masterLoudnessError = nil
+    }
+
+    /// Re-bases the serialized master-preset queue on a fresh project session.
+    func resetMasterAudioProcessingMutationContext(to processing: MasterAudioProcessing?) {
+        masterAudioProcessingMutationGeneration &+= 1
+        desiredMasterAudioProcessing = processing
     }
 
     /// Writes the current project to the crash-recovery autosave off the edit
@@ -753,6 +765,7 @@ final class EditorViewModel {
         session = EditorSession(project: project)
         currentProject = project
         invalidateMasterLoudnessContext()
+        resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
         await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
@@ -786,6 +799,7 @@ final class EditorViewModel {
                 session = EditorSession(project: project)
                 currentProject = project
                 invalidateMasterLoudnessContext()
+                resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
                 await refreshFlattenedTimeline(for: project)
                 currentProjectURL = url
                 canvasSelection = project.canvas.aspectRatio
@@ -913,6 +927,7 @@ final class EditorViewModel {
         session = EditorSession(project: project)
         currentProject = project
         invalidateMasterLoudnessContext()
+        resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
         await refreshFlattenedTimeline(for: project)
         currentProjectURL = nil
         canvasSelection = project.canvas.aspectRatio
@@ -955,6 +970,7 @@ final class EditorViewModel {
             session = EditorSession(project: project)
             currentProject = project
             invalidateMasterLoudnessContext()
+            resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
             currentProjectURL = nil
             canvasSelection = project.canvas.aspectRatio
             syncExportUI(from: project.exportSettings)
@@ -4787,6 +4803,7 @@ final class EditorViewModel {
         session = EditorSession(project: project)
         currentProject = project
         invalidateMasterLoudnessContext()
+        resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
         canvasSelection = project.canvas.aspectRatio
         syncExportUI(from: project.exportSettings)
         selectedClipId = nil

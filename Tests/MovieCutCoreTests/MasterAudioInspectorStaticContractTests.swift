@@ -33,20 +33,28 @@ struct MasterAudioInspectorStaticContractTests {
         #expect(master.contains(".pickerStyle(.segmented)"))
         #expect(master.contains(".accessibilityLabel(\"Master audio processing\")"))
         #expect(master.contains("viewModel.setMasterAudioProcessing(processing)"))
+        #expect(!master.contains("Task { await viewModel.setMasterAudioProcessing(processing) }"))
     }
 
-    @Test("view model routes preset changes through a command and invalidates stale loudness")
-    func viewModelUsesCommandPathAndInvalidatesMeter() throws {
+    @Test("preset changes enqueue synchronously and one worker coalesces rapid selections")
+    func viewModelSerializesPresetMutations() throws {
         let audio = try source("App/MovieCutMac/EditorViewModel+Audio.swift")
-        let setter = try section(
+        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        let setterAndWorker = try section(
             in: audio,
             from: "func setMasterAudioProcessing",
             to: "    /// G-25 switchover step 2B"
         )
 
-        #expect(setter.contains("await apply(SetMasterAudioProcessingCommand(processing: processing))"))
-        #expect(setter.contains("masterLoudness = nil"))
-        #expect(setter.contains("masterLoudnessError = nil"))
+        #expect(setterAndWorker.contains("desiredMasterAudioProcessing = processing"))
+        #expect(setterAndWorker.contains("masterAudioProcessingMutationGeneration &+= 1"))
+        #expect(setterAndWorker.contains("guard masterAudioProcessingMutationTask == nil else { return }"))
+        #expect(setterAndWorker.contains("await self?.drainMasterAudioProcessingMutations()"))
+        #expect(setterAndWorker.contains("await apply(SetMasterAudioProcessingCommand(processing: processing))"))
+        #expect(setterAndWorker.contains("guard requestGeneration == masterAudioProcessingMutationGeneration else"))
+        #expect(!setterAndWorker.contains("guard previous != processing"))
+
+        #expect(viewModel.contains("resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)"))
     }
 }
 

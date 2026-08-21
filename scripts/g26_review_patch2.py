@@ -8,6 +8,13 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def replace_all_exact(text: str, old: str, new: str, expected: int, label: str) -> str:
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(f"{label}: expected {expected} matches, found {count}")
+    return text.replace(old, new)
+
+
 path = Path("App/MovieCutMac/EditorViewModel.swift")
 s = path.read_text()
 
@@ -37,16 +44,19 @@ s = replace_once(
     "unconditional committed refresh invalidation",
 )
 
-# There are five Mac session-lifetime replacement paths in this type today:
-# newProject, openProject, adoptRecoveredProject, ProjectPackage import, and
-# template project creation. Advance the generation in all five, including when
-# a replacement happens to decode to an equal Project value.
-replacement_old = """        session = EditorSession(project: project)\n        currentProject = project\n"""
-replacement_new = """        session = EditorSession(project: project)\n        currentProject = project\n        invalidateMasterLoudnessContext()\n"""
-count = s.count(replacement_old)
-if count != 5:
-    raise SystemExit(f"session replacements: expected 5 matches, found {count}")
-s = s.replace(replacement_old, replacement_new)
+# Five Mac session-lifetime replacement paths currently exist at three nesting
+# levels: newProject/adoptRecoveredProject/template creation (8 spaces), package
+# import (12), and openProject's timed closure (16). Pin all 3/1/1 counts so a
+# future replacement path cannot silently escape the generation boundary.
+for indent, expected, label in [
+    ("        ", 3, "top-level session replacements"),
+    ("            ", 1, "package session replacement"),
+    ("                ", 1, "open-project session replacement"),
+]:
+    old = f"{indent}session = EditorSession(project: project)\n{indent}currentProject = project\n"
+    new = old + f"{indent}invalidateMasterLoudnessContext()\n"
+    s = replace_all_exact(s, old, new, expected, label)
+
 path.write_text(s)
 
 
@@ -77,12 +87,12 @@ struct MasterAudioLoudnessFreshnessStaticContractTests {
     @Test("all five project session replacement paths advance the meter generation")
     func projectReplacementAdvancesGeneration() throws {
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
-        let pattern = "session = EditorSession(project: project)\n        currentProject = project\n        invalidateMasterLoudnessContext()"
-        let replacements = viewModel.components(separatedBy: pattern).count - 1
+        let occurrences = viewModel.components(separatedBy: "invalidateMasterLoudnessContext()").count - 1
 
-        // newProject, openProject, adoptRecoveredProject, ProjectPackage import,
-        // and template creation must all break the previous measurement lifetime.
-        #expect(replacements == 5)
+        // One declaration + one committed refresh call + five fresh-session
+        // replacement calls. The count intentionally makes new replacement
+        // paths fail this contract until they join the same generation boundary.
+        #expect(occurrences == 7)
     }
 
     @Test("async measurement commits only for its captured project generation")

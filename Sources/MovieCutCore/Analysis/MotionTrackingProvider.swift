@@ -103,11 +103,17 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
         recoveryStartedAt != nil
     }
 
-    /// Evaluates a Vision or local-redetection candidate for `timestamp`.
+    /// Evaluates a candidate for `timestamp`.
+    ///
+    /// Normal Vision observations must remain motion-consistent with the trusted
+    /// trajectory. During recovery the provider may instead supply an
+    /// appearance-verified redetection; that stronger evidence is allowed to
+    /// re-anchor tracking even when the old trajectory prediction has drifted.
     public mutating func evaluate(
         timestamp: TimeInterval,
         candidateRect: CGRect?,
-        confidence: Float?
+        confidence: Float?,
+        appearanceVerified: Bool = false
     ) -> Decision {
         let predicted = predictedRect(at: timestamp)
         let wasRecovering = isRecovering
@@ -123,7 +129,8 @@ public struct MotionTrackingRecoveryPlanner: Sendable {
             return registerLoss(timestamp: timestamp, predictedRect: predicted, reason: .lowConfidence)
         }
 
-        if hasVelocityEstimate {
+        let canReanchorFromAppearance = wasRecovering && appearanceVerified
+        if hasVelocityEstimate && !canReanchorFromAppearance {
             let predictionIoU = Self.intersectionOverUnion(candidate, predicted)
             guard predictionIoU >= configuration.minimumPredictionIoU else {
                 return registerLoss(
@@ -411,7 +418,8 @@ public final class MotionTrackingProvider: AnalysisProvider {
             let decision = planner.evaluate(
                 timestamp: timestamp,
                 candidateRect: candidateRect,
-                confidence: candidateConfidence
+                confidence: candidateConfidence,
+                appearanceVerified: usedTemplateRedetection
             )
             recoveryPlanner = planner
 

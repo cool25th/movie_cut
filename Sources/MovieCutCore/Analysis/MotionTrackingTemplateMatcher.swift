@@ -83,60 +83,105 @@ struct MotionTrackingTemplateMatcher: Sendable {
             forcedWidth: templateWidth,
             forcedHeight: templateHeight
         )
-        let radiusX = max(Int((CGFloat(frameWidth) * 0.30).rounded()), templateWidth / 2)
-        let radiusY = max(Int((CGFloat(frameHeight) * 0.20).rounded()), templateHeight / 2)
         let maxX = frameWidth - templateWidth
         let maxY = frameHeight - templateHeight
-        let minSearchX = max(0, predictedPixelRect.x - radiusX)
-        let maxSearchX = min(maxX, predictedPixelRect.x + radiusX)
-        let minSearchY = max(0, predictedPixelRect.y - radiusY)
-        let maxSearchY = min(maxY, predictedPixelRect.y + radiusY)
-        guard minSearchX <= maxSearchX, minSearchY <= maxSearchY else { return nil }
-
-        let step = 2
-        var bestScore = -Double.infinity
-        var bestX = predictedPixelRect.x
-        var bestY = predictedPixelRect.y
         let normalization = Double(255 * templatePixels.count)
 
-        var y = minSearchY
-        while y <= maxSearchY {
-            var x = minSearchX
-            while x <= maxSearchX {
-                var absoluteDifference = 0
-                for templateY in 0..<templateHeight {
-                    let templateBase = templateY * templateWidth
-                    let frameBase = (y + templateY) * frameWidth + x
-                    for templateX in 0..<templateWidth {
-                        absoluteDifference += abs(
-                            Int(templatePixels[templateBase + templateX]) -
-                                Int(frame[frameBase + templateX])
-                        )
-                    }
+        func score(atX x: Int, y: Int) -> Double {
+            var absoluteDifference = 0
+            for templateY in 0..<templateHeight {
+                let templateBase = templateY * templateWidth
+                let frameBase = (y + templateY) * frameWidth + x
+                for templateX in 0..<templateWidth {
+                    absoluteDifference += abs(
+                        Int(templatePixels[templateBase + templateX]) -
+                            Int(frame[frameBase + templateX])
+                    )
                 }
-
-                let score = 1 - (Double(absoluteDifference) / normalization)
-                if score > bestScore {
-                    bestScore = score
-                    bestX = x
-                    bestY = y
-                }
-                x += step
             }
-            y += step
+            return 1 - (Double(absoluteDifference) / normalization)
         }
 
-        guard bestScore >= minimumScore else { return nil }
+        func scan(
+            minX: Int,
+            maxX: Int,
+            minY: Int,
+            maxY: Int,
+            step: Int
+        ) -> (score: Double, x: Int, y: Int)? {
+            guard minX <= maxX, minY <= maxY else { return nil }
+            var bestScore = -Double.infinity
+            var bestX = minX
+            var bestY = minY
+            var y = minY
+            while y <= maxY {
+                var x = minX
+                while x <= maxX {
+                    let candidateScore = score(atX: x, y: y)
+                    if candidateScore > bestScore {
+                        bestScore = candidateScore
+                        bestX = x
+                        bestY = y
+                    }
+                    x += step
+                }
+                y += step
+            }
+            return (bestScore, bestX, bestY)
+        }
+
+        let radiusX = max(Int((CGFloat(frameWidth) * 0.30).rounded()), templateWidth / 2)
+        let radiusY = max(Int((CGFloat(frameHeight) * 0.20).rounded()), templateHeight / 2)
+        let localMinX = max(0, predictedPixelRect.x - radiusX)
+        let localMaxX = min(maxX, predictedPixelRect.x + radiusX)
+        let localMinY = max(0, predictedPixelRect.y - radiusY)
+        let localMaxY = min(maxY, predictedPixelRect.y + radiusY)
+
+        if let local = scan(
+            minX: localMinX,
+            maxX: localMaxX,
+            minY: localMinY,
+            maxY: localMaxY,
+            step: 2
+        ), local.score >= minimumScore {
+            return Match(
+                rect: Self.normalizedDisplayRect(
+                    x: local.x,
+                    y: local.y,
+                    width: templateWidth,
+                    height: templateHeight,
+                    frameWidth: frameWidth,
+                    frameHeight: frameHeight
+                ),
+                score: local.score
+            )
+        }
+
+        // Full occlusion can make the motion prediction stale. Search the
+        // already-downsampled frame coarsely, then refine the best candidate.
+        guard let coarse = scan(minX: 0, maxX: maxX, minY: 0, maxY: maxY, step: 4) else {
+            return nil
+        }
+        let refineRadius = 4
+        let refined = scan(
+            minX: max(0, coarse.x - refineRadius),
+            maxX: min(maxX, coarse.x + refineRadius),
+            minY: max(0, coarse.y - refineRadius),
+            maxY: min(maxY, coarse.y + refineRadius),
+            step: 1
+        ) ?? coarse
+
+        guard refined.score >= minimumScore else { return nil }
         return Match(
             rect: Self.normalizedDisplayRect(
-                x: bestX,
-                y: bestY,
+                x: refined.x,
+                y: refined.y,
                 width: templateWidth,
                 height: templateHeight,
                 frameWidth: frameWidth,
                 frameHeight: frameHeight
             ),
-            score: bestScore
+            score: refined.score
         )
     }
 

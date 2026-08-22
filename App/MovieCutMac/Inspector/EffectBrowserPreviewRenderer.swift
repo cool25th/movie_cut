@@ -5,39 +5,56 @@ import Foundation
 import MovieCutCore
 import Vision
 
-/// Renders the effect-browser thumbnail through the clip-local pipeline used by
-/// the product compositor. The expensive Vision request executes in the caller's
-/// detached task; only `Data`/`Clip`/`Effect` cross the concurrency boundary.
+/// Renders the effect-browser thumbnail through the same color and clip-local
+/// contracts used by the product compositor.
 enum EffectBrowserPreviewRenderer {
+    private static let context = CIContext(options: RenderColorConfiguration.contextOptions)
+
     static func render(
         sourceData: Data,
         clip: Clip,
         effects: [Effect],
+        canvasSize: CGSize,
         localTime: Double = 0
     ) -> Data? {
-        guard let sourceImage = CIImage(data: sourceData) else { return nil }
+        guard let sourceImage = CIImage(
+            data: sourceData,
+            options: [.colorSpace: RenderColorConfiguration.workingColorSpace]
+        ) else { return nil }
 
-        let context = CIContext()
+        let renderSize = previewRenderSize(for: canvasSize)
         let rendered = EffectBrowserPreviewPipeline.apply(
             clip: clip,
             effects: effects,
             to: sourceImage,
+            canvasSize: canvasSize,
+            renderSize: renderSize,
             at: localTime,
             backgroundRemoval: { image in
-                removeBackground(from: image, context: context)
+                removeBackground(from: image)
             }
         )
 
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         return context.pngRepresentation(
             of: rendered,
             format: .RGBA8,
-            colorSpace: colorSpace,
+            colorSpace: RenderColorConfiguration.destinationColorSpace,
             options: [:]
         )
     }
 
-    private static func removeBackground(from image: CIImage, context: CIContext) -> CIImage {
+    private static func previewRenderSize(for canvasSize: CGSize) -> CGSize {
+        let width = max(canvasSize.width, 1)
+        let height = max(canvasSize.height, 1)
+        let longestEdge: CGFloat = 320
+        let scale = min(longestEdge / max(width, height), 1)
+        return CGSize(
+            width: max((width * scale).rounded(), 1),
+            height: max((height * scale).rounded(), 1)
+        )
+    }
+
+    private static func removeBackground(from image: CIImage) -> CIImage {
         let extent = image.extent
         guard extent.width > 0,
               extent.height > 0,
@@ -53,8 +70,6 @@ enum EffectBrowserPreviewRenderer {
         do {
             try VNImageRequestHandler(cgImage: sourceImage).perform([request])
         } catch {
-            // Match the product compositor's fail-open contract when Vision
-            // cannot produce a mask for this representative thumbnail.
             return image
         }
 

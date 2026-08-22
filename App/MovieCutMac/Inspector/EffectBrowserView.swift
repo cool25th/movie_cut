@@ -431,7 +431,7 @@ struct EffectBrowserView: View {
         let effect = item.makeEffect(parameters: draftParameters)
 
         Task {
-            await viewModel.appendSelectedEffect(effect)
+            await viewModel.appendEffect(effect, to: clip.id)
             appliedMessage = "Applied \(displayName(for: type))"
         }
     }

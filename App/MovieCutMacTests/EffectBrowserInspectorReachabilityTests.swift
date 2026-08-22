@@ -5,6 +5,31 @@ import MovieCutCore
 import Testing
 @testable import MovieCutMac
 
+private final class RenderPermitTestState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = 0
+    private var peakActive = 0
+
+    func enter() {
+        lock.lock()
+        defer { lock.unlock() }
+        active += 1
+        peakActive = max(peakActive, active)
+    }
+
+    func leave() {
+        lock.lock()
+        defer { lock.unlock() }
+        active -= 1
+    }
+
+    var maxActive: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return peakActive
+    }
+}
+
 @Suite("Effect Browser Inspector Reachability")
 struct EffectBrowserInspectorReachabilityTests {
     @Test("effect browser is reachable from the visible Adjustment inspector")
@@ -50,32 +75,25 @@ struct EffectBrowserInspectorReachabilityTests {
 
     @Test("preview render permit serializes work across independent workers")
     func renderPermitIsProcessWideSingleFlight() {
-        let stateLock = NSLock()
         let group = DispatchGroup()
         let queue = DispatchQueue(label: "g28.render-permit-test", attributes: .concurrent)
-        var active = 0
-        var maxActive = 0
+        let state = RenderPermitTestState()
 
         for _ in 0..<2 {
             group.enter()
             queue.async {
                 EffectBrowserPreviewRenderer.withRenderPermit {
-                    stateLock.lock()
-                    active += 1
-                    maxActive = max(maxActive, active)
-                    stateLock.unlock()
+                    state.enter()
 
                     Thread.sleep(forTimeInterval: 0.05)
 
-                    stateLock.lock()
-                    active -= 1
-                    stateLock.unlock()
+                    state.leave()
                 }
                 group.leave()
             }
         }
 
         #expect(group.wait(timeout: .now() + 2) == .success)
-        #expect(maxActive == 1)
+        #expect(state.maxActive == 1)
     }
 }

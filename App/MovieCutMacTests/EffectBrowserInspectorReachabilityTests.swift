@@ -1,5 +1,6 @@
 import AppKit
 import CoreImage
+import Foundation
 import MovieCutCore
 import Testing
 @testable import MovieCutMac
@@ -45,5 +46,36 @@ struct EffectBrowserInspectorReachabilityTests {
 
         #expect(bitmap?.pixelsWide == 180)
         #expect(bitmap?.pixelsHigh == 320)
+    }
+
+    @Test("preview render permit serializes work across independent workers")
+    func renderPermitIsProcessWideSingleFlight() {
+        let stateLock = NSLock()
+        let group = DispatchGroup()
+        let queue = DispatchQueue(label: "g28.render-permit-test", attributes: .concurrent)
+        var active = 0
+        var maxActive = 0
+
+        for _ in 0..<2 {
+            group.enter()
+            queue.async {
+                EffectBrowserPreviewRenderer.withRenderPermit {
+                    stateLock.lock()
+                    active += 1
+                    maxActive = max(maxActive, active)
+                    stateLock.unlock()
+
+                    Thread.sleep(forTimeInterval: 0.05)
+
+                    stateLock.lock()
+                    active -= 1
+                    stateLock.unlock()
+                }
+                group.leave()
+            }
+        }
+
+        #expect(group.wait(timeout: .now() + 2) == .success)
+        #expect(maxActive == 1)
     }
 }

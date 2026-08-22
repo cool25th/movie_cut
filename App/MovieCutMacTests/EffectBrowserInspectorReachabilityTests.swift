@@ -43,7 +43,7 @@ private final class RenderPermitTestState: @unchecked Sendable {
     }
 }
 
-@Suite("Effect Browser Inspector Reachability")
+@Suite("Effect Browser Inspector Reachability", .serialized)
 struct EffectBrowserInspectorReachabilityTests {
     @Test("effect browser is reachable from the visible Adjustment inspector")
     func adjustmentModeShowsBrowser() {
@@ -128,20 +128,22 @@ struct EffectBrowserInspectorReachabilityTests {
 
         #expect(holderStarted.wait(timeout: .now() + 1) == .success)
 
+        // Reserve tokens before scheduling the workers. This models the
+        // product queue, where the latest request is known before detached
+        // task scheduling can reorder which worker starts first.
+        let stalePermit = EffectBrowserPreviewRenderer.reserveLatestRenderPermit()
+        let latestPermit = EffectBrowserPreviewRenderer.reserveLatestRenderPermit()
+
         queue.async {
-            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit {
+            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit(stalePermit) {
                 state.record("stale")
                 return true
             }
             staleFinished.signal()
         }
 
-        // Give the first waiter enough time to reserve its generation while the
-        // process-wide permit is held, then supersede it with the newest request.
-        Thread.sleep(forTimeInterval: 0.03)
-
         queue.async {
-            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit {
+            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit(latestPermit) {
                 state.record("latest")
                 return true
             }

@@ -10,6 +10,7 @@ struct EffectBrowserView: View {
         let clip: Clip
         let effects: [Effect]
         let canvasSize: CGSize
+        let renderPermit: EffectBrowserPreviewRenderer.RenderPermit
         let generation: Int
     }
 
@@ -71,6 +72,7 @@ struct EffectBrowserView: View {
             previewWorkerTask?.cancel()
             previewWorkerTask = nil
             pendingPreviewRequest = nil
+            EffectBrowserPreviewRenderer.invalidateLatestRenderPermit()
         }
     }
 
@@ -369,11 +371,13 @@ struct EffectBrowserView: View {
             parameters: draftParameters
         )
         previewGeneration += 1
+        let renderPermit = EffectBrowserPreviewRenderer.reserveLatestRenderPermit()
         pendingPreviewRequest = PreviewRequest(
             sourceData: data,
             clip: clipSnapshot,
             effects: previewEffects,
             canvasSize: viewModel.currentProject.canvas.size,
+            renderPermit: renderPermit,
             generation: previewGeneration
         )
         startPreviewWorkerIfNeeded()
@@ -401,7 +405,8 @@ struct EffectBrowserView: View {
                     clip: request.clip,
                     effects: request.effects,
                     canvasSize: request.canvasSize,
-                    localTime: 0
+                    localTime: 0,
+                    permit: request.renderPermit
                 )
             }.value
 

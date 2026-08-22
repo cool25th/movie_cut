@@ -8,6 +8,10 @@ import Vision
 /// Renders the effect-browser thumbnail through the same color and clip-local
 /// contracts used by the product compositor.
 enum EffectBrowserPreviewRenderer {
+    struct RenderPermit: Sendable {
+        fileprivate let generation: UInt64
+    }
+
     private final class PermitState: @unchecked Sendable {
         private let lock = NSLock()
         private var latestGeneration: UInt64 = 0
@@ -35,9 +39,10 @@ enum EffectBrowserPreviewRenderer {
         clip: Clip,
         effects: [Effect],
         canvasSize: CGSize,
-        localTime: Double = 0
+        localTime: Double = 0,
+        permit: RenderPermit? = nil
     ) -> Data? {
-        withLatestRenderPermit {
+        withLatestRenderPermit(permit ?? reserveLatestRenderPermit()) {
             guard let sourceImage = CIImage(
                 data: sourceData,
                 options: [.colorSpace: RenderColorConfiguration.workingColorSpace]
@@ -82,7 +87,26 @@ enum EffectBrowserPreviewRenderer {
     /// return before acquiring the expensive render permit, so repeated sheet
     /// dismissal/reopen cycles cannot build an unbounded queue of stale renders.
     static func withLatestRenderPermit<T>(_ operation: () -> T?) -> T? {
-        let generation = reserveLatestPermitGeneration()
+        withLatestRenderPermit(reserveLatestRenderPermit(), operation)
+    }
+
+    /// Reserves the latest-only token at request enqueue time. The caller must
+    /// pass the token to `render` or `withLatestRenderPermit` after any detached
+    /// work is scheduled so task scheduling cannot reorder preview requests.
+    static func reserveLatestRenderPermit() -> RenderPermit {
+        RenderPermit(generation: reserveLatestPermitGeneration())
+    }
+
+    /// Invalidates any queued preview that belongs to a dismissed browser sheet.
+    static func invalidateLatestRenderPermit() {
+        _ = reserveLatestRenderPermit()
+    }
+
+    static func withLatestRenderPermit<T>(
+        _ permit: RenderPermit,
+        _ operation: () -> T?
+    ) -> T? {
+        let generation = permit.generation
 
         while isLatestPermitGeneration(generation) {
             if renderLock.try() {

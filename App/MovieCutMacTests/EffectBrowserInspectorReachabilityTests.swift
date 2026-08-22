@@ -9,6 +9,7 @@ private final class RenderPermitTestState: @unchecked Sendable {
     private let lock = NSLock()
     private var active = 0
     private var peakActive = 0
+    private var labels: [String] = []
 
     func enter() {
         lock.lock()
@@ -23,10 +24,22 @@ private final class RenderPermitTestState: @unchecked Sendable {
         active -= 1
     }
 
+    func record(_ label: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        labels.append(label)
+    }
+
     var maxActive: Int {
         lock.lock()
         defer { lock.unlock() }
         return peakActive
+    }
+
+    var recordedLabels: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return labels
     }
 }
 
@@ -95,5 +108,49 @@ struct EffectBrowserInspectorReachabilityTests {
 
         #expect(group.wait(timeout: .now() + 2) == .success)
         #expect(state.maxActive == 1)
+    }
+
+    @Test("superseded preview waiter is dropped before render permit")
+    func latestPreviewCoalescesQueuedWaiters() {
+        let queue = DispatchQueue(label: "g28.latest-render-permit-test", attributes: .concurrent)
+        let holderStarted = DispatchSemaphore(value: 0)
+        let releaseHolder = DispatchSemaphore(value: 0)
+        let staleFinished = DispatchSemaphore(value: 0)
+        let latestFinished = DispatchSemaphore(value: 0)
+        let state = RenderPermitTestState()
+
+        queue.async {
+            EffectBrowserPreviewRenderer.withRenderPermit {
+                holderStarted.signal()
+                _ = releaseHolder.wait(timeout: .now() + 2)
+            }
+        }
+
+        #expect(holderStarted.wait(timeout: .now() + 1) == .success)
+
+        queue.async {
+            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit {
+                state.record("stale")
+                return true
+            }
+            staleFinished.signal()
+        }
+
+        // Give the first waiter enough time to reserve its generation while the
+        // process-wide permit is held, then supersede it with the newest request.
+        Thread.sleep(forTimeInterval: 0.03)
+
+        queue.async {
+            _ = EffectBrowserPreviewRenderer.withLatestRenderPermit {
+                state.record("latest")
+                return true
+            }
+            latestFinished.signal()
+        }
+
+        #expect(staleFinished.wait(timeout: .now() + 1) == .success)
+        releaseHolder.signal()
+        #expect(latestFinished.wait(timeout: .now() + 1) == .success)
+        #expect(state.recordedLabels == ["latest"])
     }
 }

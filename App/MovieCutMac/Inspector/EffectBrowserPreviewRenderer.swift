@@ -18,37 +18,41 @@ enum EffectBrowserPreviewRenderer {
         canvasSize: CGSize,
         localTime: Double = 0
     ) -> Data? {
-        // Vision's synchronous segmentation request cannot be reliably cancelled
-        // once it has started. Keep one process-wide render permit so dismissing
-        // and immediately reopening the sheet cannot overlap expensive work from
-        // two sheet-local workers.
+        withRenderPermit {
+            guard let sourceImage = CIImage(
+                data: sourceData,
+                options: [.colorSpace: RenderColorConfiguration.workingColorSpace]
+            ) else { return nil }
+
+            let renderSize = previewRenderSize(for: canvasSize)
+            let rendered = EffectBrowserPreviewPipeline.apply(
+                clip: clip,
+                effects: effects,
+                to: sourceImage,
+                canvasSize: canvasSize,
+                renderSize: renderSize,
+                at: localTime,
+                backgroundRemoval: { image in
+                    removeBackground(from: image)
+                }
+            )
+
+            return context.pngRepresentation(
+                of: rendered,
+                format: .RGBA8,
+                colorSpace: RenderColorConfiguration.destinationColorSpace,
+                options: [:]
+            )
+        }
+    }
+
+    /// Process-wide permit for expensive Core Image/Vision browser rendering.
+    /// Vision's synchronous segmentation request cannot be reliably cancelled
+    /// once started, so this serialization must outlive any individual sheet.
+    static func withRenderPermit<T>(_ operation: () -> T) -> T {
         renderLock.lock()
         defer { renderLock.unlock() }
-
-        guard let sourceImage = CIImage(
-            data: sourceData,
-            options: [.colorSpace: RenderColorConfiguration.workingColorSpace]
-        ) else { return nil }
-
-        let renderSize = previewRenderSize(for: canvasSize)
-        let rendered = EffectBrowserPreviewPipeline.apply(
-            clip: clip,
-            effects: effects,
-            to: sourceImage,
-            canvasSize: canvasSize,
-            renderSize: renderSize,
-            at: localTime,
-            backgroundRemoval: { image in
-                removeBackground(from: image)
-            }
-        )
-
-        return context.pngRepresentation(
-            of: rendered,
-            format: .RGBA8,
-            colorSpace: RenderColorConfiguration.destinationColorSpace,
-            options: [:]
-        )
+        return operation()
     }
 
     private static func previewRenderSize(for canvasSize: CGSize) -> CGSize {

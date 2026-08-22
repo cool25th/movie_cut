@@ -8,10 +8,27 @@ import Vision
 /// Renders the effect-browser thumbnail through the same color and clip-local
 /// contracts used by the product compositor.
 enum EffectBrowserPreviewRenderer {
+    private final class PermitState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var latestGeneration: UInt64 = 0
+
+        func reserveGeneration() -> UInt64 {
+            lock.lock()
+            defer { lock.unlock() }
+            latestGeneration &+= 1
+            return latestGeneration
+        }
+
+        func isLatest(_ generation: UInt64) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return latestGeneration == generation
+        }
+    }
+
     private static let context = CIContext(options: RenderColorConfiguration.contextOptions)
     private static let renderLock = NSLock()
-    private static let permitStateLock = NSLock()
-    private static var latestPermitGeneration: UInt64 = 0
+    private static let permitState = PermitState()
 
     static func render(
         sourceData: Data,
@@ -84,16 +101,11 @@ enum EffectBrowserPreviewRenderer {
     }
 
     private static func reserveLatestPermitGeneration() -> UInt64 {
-        permitStateLock.lock()
-        defer { permitStateLock.unlock() }
-        latestPermitGeneration &+= 1
-        return latestPermitGeneration
+        permitState.reserveGeneration()
     }
 
     private static func isLatestPermitGeneration(_ generation: UInt64) -> Bool {
-        permitStateLock.lock()
-        defer { permitStateLock.unlock() }
-        return latestPermitGeneration == generation
+        permitState.isLatest(generation)
     }
 
     private static func previewRenderSize(for canvasSize: CGSize) -> CGSize {

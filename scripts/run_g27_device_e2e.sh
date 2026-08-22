@@ -56,35 +56,82 @@ trap 'rm -rf "$WORK"' EXIT
 
 xcrun devicectl device install app --device "$UDID" "$APP" >/dev/null
 
+# Robust launch: the phone's auto-lock fires during the ~2-minute build
+# phase and iOS denies launches with reason "Locked" (runs 6 and 7 died
+# this way seconds after a manual unlock). Retry until the launch is
+# accepted — the user just needs to keep the screen unlocked.
+launch_app() {
+  local env_json="${1:-}"
+  local deadline=$((SECONDS + 180))
+  while true; do
+    if [ -n "$env_json" ]; then
+      xcrun devicectl device process launch --device "$UDID" --terminate-existing \
+        -e "$env_json" "$BUNDLE_ID" >/dev/null 2>&1 && return 0
+    else
+      xcrun devicectl device process launch --device "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 && return 0
+    fi
+    [ $SECONDS -ge $deadline ] && return 1
+    echo "…device locked or busy — keep the phone unlocked; retrying" >&2
+    sleep 5
+  done
+}
+
 # --- 3. Create the container (first launch), then stage fixtures -------------
 echo "Preparing app container…"
-xcrun devicectl device process launch --device "$UDID" "$BUNDLE_ID" >/dev/null || true
+launch_app || { echo "ERROR: could not launch app (device locked >3min?)" >&2; exit 1; }
 sleep 3
 xcrun devicectl device process terminate --device "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 sleep 1
-xcrun devicectl device copy to --device "$UDID" \
-  --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
-  --destination "Documents/in" --source "$FIXTURE" >/dev/null 2>&1 \
-  || xcrun devicectl device copy to --device "$UDID" \
+# Stage fixtures at the EXPLICIT file paths the harness reads
+# (Documents/in/fixture.mp4 · Documents/in/tone.wav). The first device
+# run failed with "missing staged fixture": the old code's first variant
+# copied to destination "Documents/in" WITHOUT a filename, which
+# devicectl accepts (creating a file named "in") — so the correct
+# fallback variant never ran and the harness found nothing. Explicit
+# destinations only; failures are loud, and the staged listing is
+# printed so the run log carries the evidence.
+stage() {
+  xcrun devicectl device copy to --device "$UDID" \
     --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
-    --destination "Documents/in/fixture.mp4" --source "$FIXTURE" >/dev/null
-xcrun devicectl device copy to --device "$UDID" \
+    --destination "$1" --source "$2" >/dev/null \
+    || { echo "ERROR: failed to stage $1" >&2; exit 1; }
+}
+stage "Documents/in/fixture.mp4" "$FIXTURE"
+stage "Documents/in/tone.wav" "$TONE"
+echo "--- staged in Documents/in ---"
+xcrun devicectl device copy from --device "$UDID" \
   --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
-  --destination "Documents/in/tone.wav" --source "$TONE" >/dev/null
+  --source Documents/in/ --destination "$WORK/" >/dev/null 2>&1 || true
+# set -euo pipefail + this pipeline: a missing dir makes ls fail and
+# would kill the script SILENTLY right after successful staging (run 4
+# exited 1 here with no message). The listing is diagnostic only.
+ls -l "$WORK/in" 2>/dev/null | tail -3 || true
 
 pull_result() {
   rm -f "$WORK/g27-result.txt"
+  # Destination must be the exact FILE path: a directory destination
+  # ("$WORK/") fails silently on this devicectl, and with `|| true`
+  # swallowing it the wait loop polled forever while the device already
+  # held g27_done (the run-2 hang and run-6 "did not finish" were both
+  # this, not app failures — the result file was on device each time).
   xcrun devicectl device copy from --device "$UDID" \
     --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
-    --source "Documents/g27-result.txt" --destination "$WORK/" >/dev/null 2>&1 || true
+    --source "Documents/g27-result.txt" \
+    --destination "$WORK/g27-result.txt" >/dev/null 2>&1 || true
 }
 
 wait_for() {
+  # WALL-CLOCK budget: a devicectl file copy costs seconds per roundtrip,
+  # so an iteration-count loop stretched its nominal 300s timeout to
+  # 40+ minutes of real time (the first device run hung this way with
+  # the result file already sitting on the device). Poll gently and
+  # honor the actual seconds.
   local pattern="$1" timeout="${2:-300}"
-  for _ in $(seq 1 $((timeout * 2))); do
+  local deadline=$((SECONDS + timeout))
+  while [ $SECONDS -lt $deadline ]; do
     pull_result
     grep -q "$pattern" "$WORK/g27-result.txt" 2>/dev/null && return 0
-    sleep 0.5
+    sleep 2
   done
   return 1
 }
@@ -94,8 +141,8 @@ ENV_JSON_PHASE2='{"MOVIECUT_UITEST":"1","MOVIECUT_UITEST_REOPEN":"1"}'
 
 # --- 4. Phase 1 ---------------------------------------------------------------
 echo "Phase 1: import → preview → export → audio routing → save…"
-xcrun devicectl device process launch --device "$UDID" \
-  --terminate-existing -e "$ENV_JSON_PHASE1" "$BUNDLE_ID" >/dev/null
+launch_app "$ENV_JSON_PHASE1" \
+  || { echo "ERROR: could not launch app for phase 1 (device locked >3min?)" >&2; exit 1; }
 if ! wait_for "g27_done"; then
   echo "FAIL: phase 1 did not finish" >&2
   cat "$WORK/g27-result.txt" 2>/dev/null >&2
@@ -107,8 +154,8 @@ cat "$WORK/g27-result.txt"
 
 # --- 5. Phase 2 (fresh process: reopen) ---------------------------------------
 echo "Phase 2: reopen…"
-xcrun devicectl device process launch --device "$UDID" \
-  --terminate-existing -e "$ENV_JSON_PHASE2" "$BUNDLE_ID" >/dev/null
+launch_app "$ENV_JSON_PHASE2" \
+  || { echo "ERROR: could not launch app for phase 2 (device locked >3min?)" >&2; exit 1; }
 if ! wait_for "g27_reopen"; then
   echo "FAIL: phase 2 did not finish" >&2
   cat "$WORK/g27-result.txt" 2>/dev/null >&2

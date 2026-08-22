@@ -9,6 +9,7 @@ import Vision
 /// contracts used by the product compositor.
 enum EffectBrowserPreviewRenderer {
     private static let context = CIContext(options: RenderColorConfiguration.contextOptions)
+    private static let renderLock = NSLock()
 
     static func render(
         sourceData: Data,
@@ -17,6 +18,13 @@ enum EffectBrowserPreviewRenderer {
         canvasSize: CGSize,
         localTime: Double = 0
     ) -> Data? {
+        // Vision's synchronous segmentation request cannot be reliably cancelled
+        // once it has started. Keep one process-wide render permit so dismissing
+        // and immediately reopening the sheet cannot overlap expensive work from
+        // two sheet-local workers.
+        renderLock.lock()
+        defer { renderLock.unlock() }
+
         guard let sourceImage = CIImage(
             data: sourceData,
             options: [.colorSpace: RenderColorConfiguration.workingColorSpace]

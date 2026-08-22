@@ -92,6 +92,7 @@ struct EffectBrowserPreviewPipelineTests {
             shape: .rectangle,
             position: CGPoint(x: 960, y: 540),
             size: CGSize(width: 960, height: 540),
+            feather: 12,
             brushPoints: [CGPoint(x: 0, y: 0), CGPoint(x: 1920, y: 1080)]
         )
 
@@ -105,6 +106,7 @@ struct EffectBrowserPreviewPipelineTests {
         #expect(abs(scaled.position.y - 90) < 0.001)
         #expect(abs(scaled.size.width - 160) < 0.001)
         #expect(abs(scaled.size.height - 90) < 0.001)
+        #expect(abs(scaled.feather - 2) < 0.001)
         #expect(abs((scaled.brushPoints.last?.x ?? 0) - 320) < 0.001)
         #expect(abs((scaled.brushPoints.last?.y ?? 0) - 180) < 0.001)
     }

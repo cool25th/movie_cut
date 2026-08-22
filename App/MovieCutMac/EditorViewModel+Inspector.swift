@@ -138,10 +138,9 @@ extension EditorViewModel {
     }
 
     /// Appends against the EditorSession's current state rather than replacing
-    /// an effects array captured by the sheet. This prevents rapid Apply actions
-    /// from losing an earlier effect while async refresh is in flight.
-    func appendSelectedEffect(_ effect: Effect) async {
-        guard let selectedClipId else { return }
-        await apply(AppendClipEffectCommand(clipId: selectedClipId, effect: effect))
+    /// an effects array captured by the sheet. The target clip is explicit so a
+    /// selection change while the browser sheet is open cannot redirect Apply.
+    func appendEffect(_ effect: Effect, to clipId: UUID) async {
+        await apply(AppendClipEffectCommand(clipId: clipId, effect: effect))
     }
 }

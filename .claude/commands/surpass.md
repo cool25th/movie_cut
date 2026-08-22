@@ -11,7 +11,7 @@ MovieCut의 CapCut 능가 계획을 G-ID(기능)/U-ID(UI) 단위로 실행한다
 
 ## 0. 컨텍스트 로드 (필수, 순서대로)
 
-1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — **작업 명세(데이터 모델·구현 증분·AC·검증 계획)**. §3 G-ID(기능)와 §5 U-ID(UI)가 작업 단위다.
+1. `docs/archive/CAPCUT_SURPASS_SPEC_20260703.md` — **작업 명세(데이터 모델·구현 증분·AC·검증 계획)**. §3 G-ID(기능)와 §5 U-ID(UI)가 작업 단위다.
 1-b. `docs/CAPCUT_BENCHMARK_STANDARD.md` — 작업할 G/U-ID가 대응하는 **B-ID 기준 문장**을 확인. 완료 선언 = 해당 B-ID **= 이상** 도달(증거 포함)이어야 한다.
 2. 최신 `docs/GAP_ANALYSIS_V*`(버전 번호 최고) — 기능+UI 통합 재감사 (권장 실행 순서 포함).
 3. `docs/archive/CAPCUT_GAP_IMPROVEMENT_PLAN_20260703.md` — 기능 격차 배경.
@@ -58,7 +58,7 @@ scripts/run_e2e_export.sh
 
 ## 5. 마무리 (매 세션 필수)
 
-1. **스펙 갱신**: `CAPCUT_SURPASS_SPEC_20260703.md` 해당 G-ID의 AC에 검증 결과 1줄 추가 (통과한 AC 번호 + 증거). AC를 바꿔야 했으면 스펙 수정을 먼저 커밋.
+1. **스펙 갱신**: `archive/CAPCUT_SURPASS_SPEC_20260703.md` 해당 G-ID의 AC에 검증 결과 1줄 추가 (통과한 AC 번호 + 증거). AC를 바꿔야 했으면 스펙 수정을 먼저 커밋.
 2. **백로그 갱신**: `CAPCUT_FEATURE_BACKLOG.md` 해당 항목에 ✅/🟡 + caveat 1줄.
 3. 미완 증분이 있으면 스펙 해당 항목에 `[진행중] 다음 증분: Inc N, 시작점: <파일:라인>` 기록.
 4. 최종 검증(빌드+필터 테스트+E2E) 재실행 후 커밋·보고. **검증 없이 완료 선언 금지.**

@@ -1,8 +1,8 @@
 # MovieCut 개발 방향 확정 (2026-08-15)
 
 > **버전:** 1.0 (2026-08-15)
-> **근거:** 외부 리서치·계획 검수(`docs/EXTERNAL_RESEARCH_PLAN_REVIEW_20260815.md`에 대한 피드백, 2026-08-15 수신) 채택 + 저장소 실정 반영
-> **지위:** 이 문서가 향후 12개월의 **우선순위 최종 결정 문서**다. `REMAINING_TASKS.md`, `CAPCUT_FEATURE_BACKLOG.md`는 이 문서에 맞춰 재정렬된다(§8 후속 문서 작업).
+> **근거:** 외부 리서치·계획 검수(`docs/archive/EXTERNAL_RESEARCH_PLAN_REVIEW_20260815.md`에 대한 피드백, 2026-08-15 수신) 채택 + 저장소 실정 반영
+> **지위:** 이 문서가 향후 12개월의 **우선순위 최종 결정 문서**다. `archive/REMAINING_TASKS.md`, `CAPCUT_FEATURE_BACKLOG.md`는 이 문서에 맞춰 재정렬된다(§8 후속 문서 작업).
 
 ---
 
@@ -147,7 +147,7 @@ Metal 재검토 트리거(하나가 반복 발생 시): 1080p60 p95 > 12ms(최�
 ## 8. 후속 문서 작업 (다음 세션에서 반영)
 
 1. `CAPCUT_FEATURE_BACKLOG.md`: 신규 ID 등록(**G-23 크롭, G-24 스태빌 v1, G-25 오디오 믹싱 골격, G-26 오디오 프로세서 단계 B, G-27 iOS 실기기 검증 인프라, G-28 효과 브라우저·선별 자산, G-29 HDR-ready 색관리**) + G-07(G-28로 흡수 재정의)·G-05(G-25/26으로 분해)·G-13/G-14(보류 유지) 상태 갱신 + "상회 금지" 헤더를 새 포지셔닝 문구로 교체.
-2. `REMAINING_TASKS.md`: Track 구조를 4단계 로드맵에 맞춰 재작성(이번 세션에서 §3만 우선 갱신함).
+2. `archive/REMAINING_TASKS.md`: Track 구조를 4단계 로드맵에 맞춰 재작성(이번 세션에서 §3만 우선 갱신함).
 3. `VERIFICATION_STANDARD.md`: §5의 검증 업그레이드 6항 반영.
 4. `PERFORMANCE_SLO.md`: 3종 스트레스 타임라인·EffectCostProfile·Metal 트리거 표 추가.
 5. `REQUIREMENTS.md` §13 체인지로그: 포지셔닝 재정의·90% 정의 등록.

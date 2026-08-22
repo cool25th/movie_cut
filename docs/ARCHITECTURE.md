@@ -1,6 +1,6 @@
 # MovieCut 아키텍처 명세서 (Architecture Specification)
 
-> **버전:** 1.0 (2026-08-15)  
+> **버전:** 1.2 (2026-08-22 — G-24/G-25/G-26/G-28 완성·G-03 반영·네트워크 증명 체계 정밀화)  
 > **대상 플랫폼:** macOS (14.0+), iOS (17.0+)  
 > **기술 스택:** Swift 6, SwiftUI, AVFoundation, CoreImage, CoreAudio/AVAudioEngine, Vision
 
@@ -33,7 +33,7 @@ graph TD
 1. **렌더링 파리티 (Rendering Parity)**: 메인 프리뷰(`PlaybackEngine`)와 내보내기(`ExportEngine`)는 완전히 동일한 snapshot(`FlattenedTimeline`)과 공유 픽셀 프로세서(`PixelProcessor`) 파이프라인을 통과합니다.
 2. **트랜잭션 기반 단일 변경 (Command Pattern)**: 모든 타임라인 변경 및 프로퍼티 수정은 `EditorSession.dispatch(Command)`를 경유하며, 원자적 Undo/Redo 단위를 보장합니다.
 3. **App Sandbox & 보안 북마크 격리**: 파일 I/O는 `SecurityScopedAccess`가 단일 소유하며, 프로젝트 파일은 스키마 버전 체인(v1~v4)을 통해 무손실 로드/마이그레이션됩니다.
-4. **로컬 우선 & 제로 네트워크 권한**: 외부 네트워크 통신(`network.client`) entitlement가 0건이며, 모든 AI/DSP(STT, 보컬 분리, 인물 세그멘테이션)는 온디바이스로 처리됩니다.
+4. **로컬 우선 & 외부 전송 없음**: Mac 앱은 App Sandbox에서 `network.client` entitlement가 없어 외부 발신이 OS 수준에서 차단된다(2026-08-22 entitlements 확인). iOS는 별도 증명 체계를 사용한다 — ① 코드 감사(네트워크 API 부재, 2026-08-22 확인) ② 네트워크 차단 환경 대표 작업 통과 ③ 트래픽 캡처(②③은 P0 미실행). STT는 `requiresOnDeviceRecognition` 강제 + 미지원 시 명시적 실패로 서버 폴백이 없다. 모든 AI/DSP(STT, 보컬 분리, 인물 세그멘테이션)가 온디바이스에서 처리된다.
 
 ---
 
@@ -48,6 +48,7 @@ graph TD
   * 시간 매핑: `timelineRange` (타임라인 상 위치/길이) ↔ `sourceRange` (원본 소스 시간)
   * 속성: `speed`, `speedRamp`, `isReversed`, `opacity`, `blendMode`, `zIndex`, `volume`, `fadeInDuration`, `fadeOutDuration`, `isBackgroundRemoved`, `chromaKeySettings`
 * **`CompoundDefinition`**: 컴파운드 클립(중첩 시퀀스)을 정의하며, 단일 레벨 Flatten 처리를 위한 자식 클립들을 격리 보관합니다.
+* **조정 클립(G-03)**: 타임라인 구간에 색·필터를 일괄 적용하는 오버레이형 클립. Mac UI·렌더 체인과 iOS 렌더 배선이 완료됐다(b9d0e58).
 
 ### 2.2 명령 및 세션 계층 (`Sources/MovieCutCore/Commands/`)
 
@@ -74,7 +75,10 @@ macOS/iOS의 `CustomVideoCompositor`는 프레임 단위로 CoreImage 기반의 
 | [`MaskPixelProcessor`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/MaskPixelProcessor.swift) | 사각형/원형/선형/미러/별/하트 및 브러시 마스크 합성, 반전(Invert) 및 페더(Feather) 지원. |
 | [`TextOverlayPixelProcessor`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/TextOverlayPixelProcessor.swift) | 폰트, 크기, 정렬, 배경 박스, 자막 오버레이 렌더링. |
 | [`TransitionPixelProcessor`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/TransitionPixelProcessor.swift) | 인접 클립 간 12종 Two-source 화면 전환 (Cross Dissolve, Dip to Black/White, Wipe, Slide, Zoom, Glitch 등). |
-| [`ColorCorrectionPixelProcessor`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/ColorCorrectionPixelProcessor.swift) | Brightness, Contrast, Saturation, Exposure, Warmth, Tint, 3-way Lift/Gamma/Gain 및 톤 커브. |
+| [`ColorCorrectionPixelProcessor`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/ColorCorrectionPixelProcessor.swift) | Brightness, Contrast, Saturation, Exposure, Warmth, Tint, 3-way Lift/Gamma/Gain 및 톤 커브. HSL 8밴드 큐브 렌더 체인(G-02 Inc5, 파리티 `hsl_curves` 실증) 및 편집 UI 연결 완료. |
+| 안정화 warp (G-24) | Vision 등록(homography) → 경로 평활화 → CoreImage warp → confidence fallback. 렌더 체인 통합(1dbf49a, Mac·iOS 컴포지터). |
+| [`RenderColorConfiguration`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Sources/MovieCutCore/Rendering/RenderColorConfiguration.swift) | 프리뷰(AVPlayer 디코드 ICC 태그)·출력(무태그) 양쪽 다리의 소스 색 해석을 작업 공간으로 고정(2026-08-17, 파리티 `crop_rect_video` MAD 10.25→0.50). G-29 색관리 전환의 토대. |
+| LUT/필터 (`VisualEffectPixelProcessor`) | `.cube` LUT 임포트 + 절차적 LUT/필터를 프리뷰·출력 공통 경로에 연결. |
 
 ### 2.4 오디오 DSP 파이프라인 (`Sources/MovieCutCore/Audio/`)
 
@@ -82,6 +86,12 @@ macOS/iOS의 `CustomVideoCompositor`는 프레임 단위로 CoreImage 기반의 
 * **`AudioDuckingPlanner`**: 비디오/보이스오버 트랙의 볼륨을 감지하여 BGM 트랙의 볼륨을 자동으로 낮추는 램프 볼륨 커브 생성.
 * **`NoiseReductionService`**: 음성 노이즈 억제 필터링.
 * **`BeatDetector`**: 오디오 에너지 분석을 통한 비트 지점 마커 자동 생성.
+
+### 2.4.1 오디오 렌더 그래프 (G-25/G-26, 2026-08 완성)
+
+* **`AudioRenderGraphSpec`** ([`AUDIO_RENDER_GRAPH_SPEC_20260817.md`](AUDIO_RENDER_GRAPH_SPEC_20260817.md) v1.1): 프리뷰와 출력이 **같은 명세에서 각자 그래프를 생성**하며, 그 외 어떤 경로도 오디오 샘플을 만들지 않는다. 덕킹은 플래너 산출물의 스트립 게인 자동화로 구현.
+* **G-25 믹싱 골격**: 좌우 팬, 채널 매핑(mono/stereo/dual-mono), 트랙·마스터 미터, master bus, mute/solo, LUFS·true-peak 분석. 실증 — 프리뷰↔출력 null test(±1 샘플·−0.02LU), 혼합 sample rate 60분 드리프트 0.
+* **G-26 프로세서 기본선**: 컴프레서·피크 리미터·리버브(Apple Audio Unit 우선), 트랙 채널 스트립, master limiter, 프리셋 + 그래프 직렬화(Codable, version 1) + 마스터 체인 UI. 측정 게이트 — LUFS ±0.2LU·true-peak ±0.2dB·transfer curve 자동 검사 통과.
 
 ### 2.5 스토리지 & App Sandbox (`Sources/MovieCutCore/Storage/`)
 
@@ -103,11 +113,14 @@ macOS/iOS의 `CustomVideoCompositor`는 프레임 단위로 CoreImage 기반의 
   * Center: `PreviewPanel` (`AVPlayerView`, Safe Zone 가이드, 실시간 스코프 3종)
   * Right: `InspectorPanel` (Basic, Effects, Audio, Vocal, Text, Subtitles)
   * Bottom: `TimelineView` (다중 트랙 타임라인, 타임라인 툴바, 줌 컨트롤, 룰러)
+* **효과·템플릿 브라우저(G-28)**: 검색·미리보기·비용 등급(`EffectCostProfile`, ms/frame 실측 — instant/moderate/heavy)·KPI 모델. 브라우저 메모리 측정은 메인 스레드 밖에서 수행(836d246).
 
 ### 3.2 iOS 앱 (`App/MovieCutiOS/`)
 * **`MovieCutiOSApp` / `iOSContentView`**: 모바일/아이패드 환경에 최적화된 적응형 레이아웃.
 * **`IOSEditorViewModel`**: Mac ViewModel과 동일한 Core 엔진을 공유하며, 터치 인터랙션과 Bottom Sheet 기반 인스펙터 지원.
 * **`IOSCustomVideoCompositor`**: Core의 공유 `PixelProcessor`를 활용하여 동일한 렌더링 결과 보장.
+* **`IOSExportEngine`**: 프리젠트별 특수 분기 포함 — 정지프레임(tiny source → scaleTimeRange), 역재생(`ReverseRenderService` 사전 렌더), 스피드램프(세그먼트 워커), 조정 레이어. **iOS 실기기 런타임 검증은 G-27 대기 중**(시뮬레이터 E2E·환경 게이트 하니스 `IOSUITestHarness` 구축 완료).
+* **`IOSPreviewCompositionBuilder`**: 프리뷰 합성 구성 로직의 분리 추출(G-27, e15a8c4) — Mac 경로와 동일한 `Clip.makeTimeMapping()` 기반 시간 매핑.
 
 ---
 

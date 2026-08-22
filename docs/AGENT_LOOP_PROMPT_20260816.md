@@ -1,3 +1,5 @@
+> (2026-08-22) EXECUTION_PLAN·REMAINING_TASKS는 archive 이동 — 현재 진행 상태는 LOOP_STATE.md·SESSION_HANDOFF_CURRENT.md·CAPCUT_FEATURE_BACKLOG.md §0.5 참조.
+
 # MovieCut 자율 개발 루프 — 회차 프롬프트 (2026-08-16)
 
 > 이 파일 전체가 프롬프트다. 드라이버(크론/스크립트)는 매 회차 이 파일을 통째로 주입한다.
@@ -11,23 +13,26 @@
 
 ## 권한 서열 (해석이 충돌하면 상위 문서 우선)
 1. docs/DEVELOPMENT_DIRECTION_20260815.md (방향·고정 순서)
-2. docs/EXECUTION_PLAN_20260816.md (증분 명세·게이트·함정 레지스터)
-3. docs/CAPCUT_FEATURE_BACKLOG.md · docs/REMAINING_TASKS.md (항목 원장)
-4. 본 프롬프트의 세부 지침
+2. docs/COMPETITIVE_ANALYSIS_20260822.md Part 7·8 (경쟁 파생 CA 큐·열린 결정 Q1~Q12 — **방향 문서와 충돌하는 항목은 사용자 승인 전 미실행**)
+3. docs/archive/EXECUTION_PLAN_20260816.md (증분 명세·게이트·함정 레지스터)
+4. docs/CAPCUT_FEATURE_BACKLOG.md §0.5·§0.5.1 (G-ID·CA-ID 항목 원장)
+5. 본 프롬프트의 세부 지침
 
 ## 회차 시작 절차 (순서 엄수)
 
 0. **루프 상태 확인** — docs/LOOP_STATE.md를 읽는다.
-   - 상태가 `USER_WAITING` 또는 `DONE_PHASE1`이면: 어떤 작업도 하지 않는다.
-     현재 상태·대기 사유·사용자가 해야 할 일을 3줄로 보고하고 즉시 종료한다.
+   - 상태가 `USER_WAITING`이면: 어떤 작업도 하지 않는다.
+     현재 상태·대기 사유·사용자가 해야 할 일을 3줄로 보고하고,
+     **백로그 §0.5.1 CA 표의 '승인 대기' 항목과 COMPETITIVE_ANALYSIS Part 8의 미답변 질문(Q1~Q12)을 함께 나열한 뒤** 즉시 종료한다.
+   - 상태가 `DONE_PHASE1`이면: 다음 증분은 **백로그 §0.5.1 CA 표 순서** — '즉시 실행 가능' 항목(CA-01 → CA-12 → 소형)부터 세션당 1개 원칙으로 실행한다. '승인 대기' 항목은 보고만 한다(착수 금지).
    - 상태가 `RUN`이면 1번으로 간다.
 1. **병렬 세션·WIP 확인** — `git status --short && git log --oneline -5`를 실행한다.
-   - 커밋되지 않은 WIP가 있으면 EXECUTION_PLAN_20260816.md §2(프로토콜 0) 절차대로
+   - 커밋되지 않은 WIP가 있으면 archive/EXECUTION_PLAN_20260816.md §2(프로토콜 0) 절차대로
      검증 후 커밋한다. 이 작업만으로 이번 회차를 마쳐도 된다(회차는 원자 단위).
    - WIP가 타 세션 진행 중(파일 타임스탬프가 최근이고 해석 불가)으로 판단되면
      간섭하지 말고 보고 후 종료한다.
 2. **이번 회차 증분 확정** — docs/SESSION_HANDOFF_CURRENT.md 최상단 세션의
-   "다음 세션 인계"를 읽는다. EXECUTION_PLAN_20260816.md §3의 해당 증분 명세가
+   "다음 세션 인계"를 읽는다. archive/EXECUTION_PLAN_20260816.md §3의 해당 증분 명세가
    작업 지시서다. 규칙:
    - Inc 순서를 임의로 바꾸거나 건너뛰지 않는다.
    - 전제 조건이 미충족이면(예: UI 증분 전 ViewModel 경계 분해) 전제 증분을 실행한다.

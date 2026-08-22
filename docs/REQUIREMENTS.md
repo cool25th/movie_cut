@@ -1,6 +1,6 @@
 # MovieCut 요구사항 문서
 
-작성일: 2026-06-02 / 최종 갱신: 2026-07-30  
+작성일: 2026-06-02 / 최종 갱신: 2026-08-22  
 대상: macOS 14.0+, iOS 17.0+  
 언어/프레임워크: Swift 6, SwiftUI, AppKit, AVFoundation, Metal, Core Media, Core Video  
 프로젝트 성격: **로컬 우선 Pro/프로슈머 비디오 에디터 + 카드뉴스 제작기.** App Store 배포를 목표로 한다.
@@ -20,6 +20,7 @@
 | 2026-08-17 | **프리뷰 색공간 발산 결함 수정(G-29 전도부)** — AVPlayer 디코드 ICC 태그로 컴포지터 프리뷰에만 색조 회전 발생하던 것을 폐쇄(파리티 시나리오 `crop_rect_video` 신설, MAD 10.25→0.50). §13.3 증거 기반 완료 기준 적용 |
 | 2026-08-17 | **EditorViewModel 1호 경계 분해 완결 + G-02 Inc5 HSL 밴드 편집 UI** — 타임라인 편집 클러스터 순수 이동(본체 6,107→5,535줄, 사용자 승인 접근 정규화), 8색상 밴드 HSL 편집 UI 인스펙터 연결(파리티 시나리오 `hsl_curves` 신설, 스키마 무변경) |
 | 2026-08-17 | **G-01 Inc2 카라오케 활성 단어 UI 노출·실증 + transport 경계 분해** — 자막 카라오케 토글·정렬 경로 wordTimings 수선(파리티 `karaoke_text`·E2E 실측 on_changed=5127), 셔틀·seek·줌 순수 이동(본체 −618줄 누적), T1/T2/T3 구성 확정 |
+| 2026-08-22 | **검증 정의 확정 + 경쟁 분석 통합 + 문서 체계 정리** — ① 완료 판정을 E/U/P/X/D/S 6단계로 정의(UI 미노출=미구현, 경쟁 비교는 S만), ② 프리뷰=출력을 Exact/Tolerance/Perceptual 3등급 허용 오차로 재정의(외부 문구 "보이는 대로 출력"), ③ 성능 수치 정의(RTF=경과/출력길이, seek는 모델 계산과 입력→표시 분리), ④ 오프라인 주장의 증명 체계(Mac entitlement 확인·iOS 코드감사 완료·차단테스트 P0), ⑤ 경쟁 분석을 `COMPETITIVE_ANALYSIS_20260822.md`로 통합(YT Create·CapCut·FCP 12.3), ⑥ 출시 기본기 신규 P0 후보(미디어 관리·입력 포맷·실패/복구 UX·접근성·가격 결정 — 방향 문서 반영은 승인 대기). 구형 문서 9종 archive 이동 |
 
 ---
 
@@ -1488,7 +1489,7 @@ UI test:
 
 > **왜 이 절이 있나.** §1~§12는 2026-06-02에 "개인용 CapCut 스타일 에디터"를 전제로 썼다. 그 뒤 두 번의 전환(2026-06-22 Pro 능가, 2026-07-30 App Store 배포)과 13차례의 격차 감사가 있었고, 거기서 확정된 요구사항들이 요구사항 문서에 반영되지 않은 채 작업지시서에만 흩어져 있었다. 이 절이 그것을 요구사항으로 등재한다.
 > **§1~§12와 충돌하면 이 절이 우선한다.**
-> 각 항목의 작업 단위·AC·검증 계획은 [CAPCUT_SURPASS_SPEC_20260703.md](CAPCUT_SURPASS_SPEC_20260703.md)(G-ID/U-ID)와 [archive/PRO_SPEC_GAP_WORKORDER_20260730.md](archive/PRO_SPEC_GAP_WORKORDER_20260730.md)(S-ID)에 있다. 진행 상태는 [docs/README.md](README.md) §2.
+> 각 항목의 작업 단위·AC·검증 계획은 [CAPCUT_SURPASS_SPEC_20260703.md](archive/CAPCUT_SURPASS_SPEC_20260703.md)(G-ID/U-ID)와 [archive/PRO_SPEC_GAP_WORKORDER_20260730.md](archive/PRO_SPEC_GAP_WORKORDER_20260730.md)(S-ID)에 있다. 진행 상태는 [docs/README.md](README.md) §2.
 
 ### 13.1 포지셔닝과 차별화 축
 
@@ -1534,7 +1535,7 @@ UI test:
 
 ### 13.4 사용성 요구사항
 
-**요구사항.** "쉽게 쓴다"를 관찰 가능한 값으로 고정한다. 판정 기준서는 [USABILITY_BENCHMARK_STANDARD.md](USABILITY_BENCHMARK_STANDARD.md), 베이스라인 감사는 [UB_AUDIT_V1_20260714.md](UB_AUDIT_V1_20260714.md).
+**요구사항.** "쉽게 쓴다"를 관찰 가능한 값으로 고정한다. 판정 기준서는 [USABILITY_BENCHMARK_STANDARD.md](archive/USABILITY_BENCHMARK_STANDARD.md), 베이스라인 감사는 [UB_AUDIT_V1_20260714.md](archive/UB_AUDIT_V1_20260714.md).
 
 - **페르소나 2종을 명시한다** — P-신규(첫 실행, 안내 없음) / P-반복(CapCut·미리캔버스 경험자).
 - **시나리오 완주 기준**: 정해진 시나리오를 목표 시간 안에 완주하고 **막힘 0회**여야 한다. 막힘 = 15초 이상 다음 행동을 못 찾음, 또는 같은 목적으로 잘못된 메뉴/버튼을 3회 이상 클릭.
@@ -1556,7 +1557,7 @@ UI test:
 | 대본 자동 카드 분배 | 대본 텍스트를 페이지로 자동 분배한다 |
 | 카드뉴스 진입점 | 홈에서 영상 편집과 카드뉴스를 선택할 수 있다 |
 
-**수용 기준.** 클릭 수·완주 시간·출력 규격은 [USABILITY_BENCHMARK_STANDARD.md](USABILITY_BENCHMARK_STANDARD.md)의 UB-C/SC-C 값을 그대로 쓴다. 기존 타임라인 구성요소가 있다는 것을 카드 워크플로 완료로 간주하지 않는다.
+**수용 기준.** 클릭 수·완주 시간·출력 규격은 [USABILITY_BENCHMARK_STANDARD.md](archive/USABILITY_BENCHMARK_STANDARD.md)의 UB-C/SC-C 값을 그대로 쓴다. 기존 타임라인 구성요소가 있다는 것을 카드 워크플로 완료로 간주하지 않는다.
 
 ### 13.6 성능·프록시·열 관리
 
@@ -1565,7 +1566,7 @@ UI test:
 - **프록시 워크플로**: 프록시를 생성하고, **재생 경로가 실제로 프록시를 소비**하며, 타임라인 클립에 프록시 상태 배지를 표시하고, **export는 원본을 쓴다**. 프록시 해상도는 사용자가 고른다(480p/540p/720p/1080p, 720p 권장).
   - 수용 기준: 선택한 해상도가 실제 생성 파일의 해상도와 일치한다. 해상도를 바꾸면 기존 프록시를 재사용하지 않는다.
 - **열 기반 자동 강등**: `thermalState`가 나빠지면 프록시/미리보기 품질을 자동으로 낮추고, 사용자에게 그 사실을 알린다.
-- **4K·열·메모리 실측**: 4K 소스와 무거운 합성으로 export 시간·peak 메모리·열 상태를 측정한다. **이 측정이 Metal 착수 결정의 입력이다** — CoreImage가 실제 병목으로 증명되지 않으면 Metal 전면 재작성을 하지 않는다. 현재 베이스라인은 [PERF_BASELINE_20260622.md](PERF_BASELINE_20260622.md).
+- **4K·열·메모리 실측**: 4K 소스와 무거운 합성으로 export 시간·peak 메모리·열 상태를 측정한다. **이 측정이 Metal 착수 결정의 입력이다** — CoreImage가 실제 병목으로 증명되지 않으면 Metal 전면 재작성을 하지 않는다. 현재 베이스라인은 [PERF_BASELINE_20260622.md](archive/PERF_BASELINE_20260622.md).
 
 ### 13.7 Pro 편집 조작
 

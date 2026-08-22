@@ -5,14 +5,18 @@ import MovieCutCore
 /// G-28 Inc 2b — searchable, cost-aware effect discovery with real before /
 /// after preview and renderer-compatible parameter drafting before commit.
 struct EffectBrowserView: View {
+    private struct PreviewRequest: Sendable {
+        let sourceData: Data
+        let clip: Clip
+        let effects: [Effect]
+        let canvasSize: CGSize
+        let generation: Int
+    }
+
     @Bindable var viewModel: EditorViewModel
     let clip: Clip
 
     /// `measureAllBuiltIns` is intentionally a process-wide single flight.
-    /// A sheet dismissal cancels the view's `.task`, but detached work does not
-    /// inherit that cancellation. Sharing one task prevents a quick reopen from
-    /// starting a second expensive Core Image + process-memory measurement run,
-    /// and the completed Task value acts as the browser's process-local cache.
     private static let profileMeasurementTask = Task.detached(priority: .utility) {
         EffectCostProfiler.measureAllBuiltIns(iterations: 3)
     }
@@ -26,6 +30,8 @@ struct EffectBrowserView: View {
     @State private var sourcePreviewImage: NSImage?
     @State private var effectPreviewImage: NSImage?
     @State private var previewGeneration = 0
+    @State private var pendingPreviewRequest: PreviewRequest?
+    @State private var previewWorkerTask: Task<Void, Never>?
     @State private var appliedMessage: String?
 
     var body: some View {
@@ -61,6 +67,11 @@ struct EffectBrowserView: View {
                 selectEffect(first)
             }
         }
+        .onDisappear {
+            previewWorkerTask?.cancel()
+            previewWorkerTask = nil
+            pendingPreviewRequest = nil
+        }
     }
 
     // MARK: - Search
@@ -85,8 +96,6 @@ struct EffectBrowserView: View {
                 || tags(for: item.type).contains { $0.localizedCaseInsensitiveContains(searchText) }
         }
 
-        // Favorites first, then by measured cost (cheapest first), then name so
-        // the list remains deterministic before profiling finishes.
         return matching.sorted { lhs, rhs in
             let lhsFavorite = favoriteIds.contains(lhs.type.rawValue)
             let rhsFavorite = favoriteIds.contains(rhs.type.rawValue)
@@ -348,10 +357,6 @@ struct EffectBrowserView: View {
         return clip
     }
 
-    private var currentBrowserClipEffects: [Effect] {
-        currentBrowserClip.effects
-    }
-
     private func refreshPreview(for item: EffectBrowserCatalogItem) {
         guard let data = previewSourceData else {
             effectPreviewImage = nil
@@ -364,19 +369,51 @@ struct EffectBrowserView: View {
             parameters: draftParameters
         )
         previewGeneration += 1
-        let generation = previewGeneration
+        pendingPreviewRequest = PreviewRequest(
+            sourceData: data,
+            clip: clipSnapshot,
+            effects: previewEffects,
+            canvasSize: viewModel.currentProject.canvas.size,
+            generation: previewGeneration
+        )
+        startPreviewWorkerIfNeeded()
+    }
 
-        Task {
+    private func startPreviewWorkerIfNeeded() {
+        guard previewWorkerTask == nil else { return }
+        previewWorkerTask = Task {
+            await drainPreviewQueue()
+        }
+    }
+
+    /// Debounces slider changes and permits at most one expensive detached
+    /// Core Image/Vision render at a time. While it runs, subsequent changes
+    /// replace `pendingPreviewRequest`; only the latest request is rendered next.
+    private func drainPreviewQueue() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(90))
+            guard !Task.isCancelled, let request = pendingPreviewRequest else { break }
+            pendingPreviewRequest = nil
+
             let renderedData = await Task.detached(priority: .userInitiated) {
                 EffectBrowserPreviewRenderer.render(
-                    sourceData: data,
-                    clip: clipSnapshot,
-                    effects: previewEffects
+                    sourceData: request.sourceData,
+                    clip: request.clip,
+                    effects: request.effects,
+                    canvasSize: request.canvasSize,
+                    localTime: 0
                 )
             }.value
 
-            guard generation == previewGeneration else { return }
-            effectPreviewImage = renderedData.flatMap(NSImage.init(data:))
+            guard !Task.isCancelled else { break }
+            if pendingPreviewRequest == nil, request.generation == previewGeneration {
+                effectPreviewImage = renderedData.flatMap(NSImage.init(data:))
+            }
+        }
+
+        previewWorkerTask = nil
+        if pendingPreviewRequest != nil {
+            startPreviewWorkerIfNeeded()
         }
     }
 
@@ -392,10 +429,9 @@ struct EffectBrowserView: View {
     private func applyEffect(_ type: EffectType) {
         guard let item = EffectBrowserCatalog.item(for: type) else { return }
         let effect = item.makeEffect(parameters: draftParameters)
-        let currentEffects = currentBrowserClipEffects
 
         Task {
-            await viewModel.updateSelectedEffects(currentEffects + [effect])
+            await viewModel.appendSelectedEffect(effect)
             appliedMessage = "Applied \(displayName(for: type))"
         }
     }
@@ -410,10 +446,6 @@ struct EffectBrowserView: View {
 
     // MARK: - Data
 
-    /// The synchronous profiler executes outside MainActor and is shared by
-    /// every browser instance. Cancelling this view only suppresses its state
-    /// update; a later browser instance reuses the same in-flight/completed
-    /// measurement instead of launching duplicate profiling work.
     private func loadProfiles() async {
         let all = await Self.profileMeasurementTask.value
         guard !Task.isCancelled else { return }

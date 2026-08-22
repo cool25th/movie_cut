@@ -95,12 +95,17 @@ public enum EffectBrowserPreviewPipeline {
         guard canvasSize.width > 0, canvasSize.height > 0 else { return mask }
         let scaleX = renderSize.width / canvasSize.width
         let scaleY = renderSize.height / canvasSize.height
+        // The preview surface preserves the canvas aspect ratio, so both axes
+        // should have the same scale apart from pixel rounding. Feather is a
+        // pixel-space blur radius in MaskPixelProcessor and must follow the same
+        // downscale to keep edge softness proportional to playback/export.
+        let distanceScale = min(scaleX, scaleY)
         return Mask(
             shape: mask.shape,
             position: CGPoint(x: mask.position.x * scaleX, y: mask.position.y * scaleY),
             size: CGSize(width: mask.size.width * scaleX, height: mask.size.height * scaleY),
             rotation: mask.rotation,
-            feather: mask.feather,
+            feather: mask.feather * distanceScale,
             inverted: mask.inverted,
             brushPoints: mask.brushPoints.map { CGPoint(x: $0.x * scaleX, y: $0.y * scaleY) }
         )

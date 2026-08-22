@@ -38,7 +38,9 @@ struct EffectBrowserPreviewPipelineTests {
         let actual = EffectBrowserPreviewPipeline.apply(
             clip: clip,
             effects: effects,
-            to: source
+            to: source,
+            canvasSize: bounds.size,
+            renderSize: bounds.size
         )
 
         #expect(pixelDistance(sample(actual), sample(expected)) <= 2)
@@ -75,11 +77,108 @@ struct EffectBrowserPreviewPipelineTests {
             clip: clip,
             effects: effects,
             to: source,
+            canvasSize: bounds.size,
+            renderSize: bounds.size,
             backgroundRemoval: syntheticRemoval
         )
 
         #expect(callbackCount == 1)
         #expect(pixelDistance(sample(actual), sample(expected)) <= 2)
+    }
+
+    @Test("canvas-space masks scale onto the bounded preview surface")
+    func maskCoordinatesScaleFromCanvas() {
+        let mask = Mask(
+            shape: .rectangle,
+            position: CGPoint(x: 960, y: 540),
+            size: CGSize(width: 960, height: 540),
+            brushPoints: [CGPoint(x: 0, y: 0), CGPoint(x: 1920, y: 1080)]
+        )
+
+        let scaled = EffectBrowserPreviewPipeline.scaledMask(
+            mask,
+            from: CGSize(width: 1920, height: 1080),
+            to: CGSize(width: 320, height: 180)
+        )
+
+        #expect(abs(scaled.position.x - 160) < 0.001)
+        #expect(abs(scaled.position.y - 90) < 0.001)
+        #expect(abs(scaled.size.width - 160) < 0.001)
+        #expect(abs(scaled.size.height - 90) < 0.001)
+        #expect(abs((scaled.brushPoints.last?.x ?? 0) - 320) < 0.001)
+        #expect(abs((scaled.brushPoints.last?.y ?? 0) - 180) < 0.001)
+    }
+
+    @Test("crop output uses the canvas-aspect preview render size")
+    func cropUsesCanvasRenderSize() {
+        let source = CIImage(color: CIColor(red: 0.2, green: 0.4, blue: 0.6)).cropped(
+            to: CGRect(x: 0, y: 0, width: 400, height: 300)
+        )
+        let clip = Clip(
+            kind: .image,
+            sourceRange: TimeRange(start: 0, duration: 1),
+            timelineRange: TimeRange(start: 0, duration: 1),
+            cropRect: NormalizedRect(x: 0.25, y: 0, width: 0.5, height: 1)
+        )
+        let renderSize = CGSize(width: 180, height: 320)
+
+        let output = EffectBrowserPreviewPipeline.apply(
+            clip: clip,
+            effects: [],
+            to: source,
+            canvasSize: CGSize(width: 1080, height: 1920),
+            renderSize: renderSize
+        )
+
+        #expect(output.extent == CGRect(origin: .zero, size: renderSize))
+    }
+
+    @Test("stabilization runs before crop using representative local time")
+    func stabilizationIsPartOfPreviewPipeline() {
+        let source = CIImage(color: CIColor.white).cropped(to: CGRect(x: 0, y: 0, width: 10, height: 10))
+        let plan = StabilizationPlan(
+            frameRate: 30,
+            corrections: [
+                .init(dx: 0.1, dy: 0, cropFraction: 0, confidence: 1)
+            ]
+        )
+        let clip = Clip(
+            kind: .image,
+            sourceRange: TimeRange(start: 0, duration: 1),
+            timelineRange: TimeRange(start: 0, duration: 1),
+            stabilization: plan
+        )
+
+        let output = EffectBrowserPreviewPipeline.apply(
+            clip: clip,
+            effects: [],
+            to: source,
+            canvasSize: CGSize(width: 10, height: 10),
+            renderSize: CGSize(width: 10, height: 10),
+            at: 0
+        )
+
+        #expect(output.extent == CGRect(x: 0, y: 0, width: 10, height: 10))
+    }
+
+    @Test("atomic append command preserves sequential browser applies")
+    func appendCommandPreservesEarlierEffects() async throws {
+        let clip = Clip(
+            kind: .image,
+            sourceRange: TimeRange(start: 0, duration: 1),
+            timelineRange: TimeRange(start: 0, duration: 1)
+        )
+        let track = Track(kind: .video, clips: [clip])
+        let session = EditorSession(project: Project(name: "Browser", timeline: Timeline(tracks: [track])))
+        let first = Effect(type: .brightness, parameters: ["amount": 0.2])
+        let second = Effect(type: .contrast, parameters: ["amount": 1.4])
+
+        try await session.dispatch(AppendClipEffectCommand(clipId: clip.id, effect: first))
+        try await session.dispatch(AppendClipEffectCommand(clipId: clip.id, effect: second))
+
+        let snapshot = await session.snapshot()
+        let stored = snapshot.timeline.tracks[0].clips[0].effects
+        #expect(stored == [first, second])
     }
 
     private func solidColor(red: CGFloat, green: CGFloat, blue: CGFloat) -> CIImage {

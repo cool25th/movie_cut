@@ -168,7 +168,7 @@ struct EffectBrowserPreviewPipelineTests {
             sourceRange: TimeRange(start: 0, duration: 1),
             timelineRange: TimeRange(start: 0, duration: 1)
         )
-        let track = Track(kind: .video, clips: [clip])
+        let track = Track(kind: .video, name: "Video", clips: [clip])
         let session = EditorSession(project: Project(name: "Browser", timeline: Timeline(tracks: [track])))
         let first = Effect(type: .brightness, parameters: ["amount": 0.2])
         let second = Effect(type: .contrast, parameters: ["amount": 1.4])

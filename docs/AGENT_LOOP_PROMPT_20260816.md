@@ -43,6 +43,8 @@
 3. EXECUTION_PLAN §1.1 증분 사이클, §1.2 게이트 명령 표, §7 함정 레지스터를 그대로 따른다. 요약:
    - 증분의 범위 IN/OUT을 준수한다. 범위 외 발견 사항은 기록만 하고 확장하지 않는다.
    - 커밋 직전 `bash scripts/verify_gate.sh` 4단계 전부 통과 필수. 증분 1개 = 커밋 1개, conventional commits.
+   - 커밋 amend 금지 — LOOP_STATE "마지막 커밋"은 커밋 직전 HEAD(부모)를 기록한다.
+     amend하면 기록된 해시가 dangling이 된다(2026-08-23 2e87be4 사례).
    - 완료 판정은 측정된 증거만 인정: 렌더링 기능은 골든 픽셀 + 프리뷰↔출력 패리티 시나리오,
      오디오는 null test·LUFS/true-peak 수치, 미디어·출력 경로는 실미디어 E2E.
      자기 보고 수치·새로운 StaticContract 테스트 금지.

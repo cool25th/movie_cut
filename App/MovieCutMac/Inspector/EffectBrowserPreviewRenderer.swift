@@ -10,6 +10,8 @@ import Vision
 enum EffectBrowserPreviewRenderer {
     private static let context = CIContext(options: RenderColorConfiguration.contextOptions)
     private static let renderLock = NSLock()
+    private static let permitStateLock = NSLock()
+    private static var latestPermitGeneration: UInt64 = 0
 
     static func render(
         sourceData: Data,
@@ -18,7 +20,7 @@ enum EffectBrowserPreviewRenderer {
         canvasSize: CGSize,
         localTime: Double = 0
     ) -> Data? {
-        withRenderPermit {
+        withLatestRenderPermit {
             guard let sourceImage = CIImage(
                 data: sourceData,
                 options: [.colorSpace: RenderColorConfiguration.workingColorSpace]
@@ -53,6 +55,45 @@ enum EffectBrowserPreviewRenderer {
         renderLock.lock()
         defer { renderLock.unlock() }
         return operation()
+    }
+
+    /// Coalescing process-wide permit used by product preview rendering.
+    ///
+    /// A synchronous Vision request that already owns `renderLock` is allowed to
+    /// finish. While it runs, however, each new preview supersedes the previous
+    /// waiter. Superseded waiters observe that their generation is stale and
+    /// return before acquiring the expensive render permit, so repeated sheet
+    /// dismissal/reopen cycles cannot build an unbounded queue of stale renders.
+    static func withLatestRenderPermit<T>(_ operation: () -> T?) -> T? {
+        let generation = reserveLatestPermitGeneration()
+
+        while isLatestPermitGeneration(generation) {
+            if renderLock.try() {
+                defer { renderLock.unlock() }
+                guard isLatestPermitGeneration(generation) else { return nil }
+                return operation()
+            }
+
+            // `NSLock.lock()` is not cancellation-aware. Polling with a short
+            // sleep lets superseded callers leave the queue without waiting for
+            // the currently-running synchronous Vision request to finish.
+            Thread.sleep(forTimeInterval: 0.005)
+        }
+
+        return nil
+    }
+
+    private static func reserveLatestPermitGeneration() -> UInt64 {
+        permitStateLock.lock()
+        defer { permitStateLock.unlock() }
+        latestPermitGeneration &+= 1
+        return latestPermitGeneration
+    }
+
+    private static func isLatestPermitGeneration(_ generation: UInt64) -> Bool {
+        permitStateLock.lock()
+        defer { permitStateLock.unlock() }
+        return latestPermitGeneration == generation
     }
 
     private static func previewRenderSize(for canvasSize: CGSize) -> CGSize {

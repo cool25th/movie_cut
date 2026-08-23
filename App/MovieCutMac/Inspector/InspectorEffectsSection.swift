@@ -423,6 +423,14 @@ struct InspectorEffectsSection: View {
                 .controlSize(.small)
                 .help("Import an external .cube color LUT and apply it to this clip.")
 
+                Button {
+                    exportLUT()
+                } label: {
+                    Label("Export LUT…", systemImage: "square.and.arrow.up")
+                }
+                .controlSize(.small)
+                .help("Export this clip's LUT: re-exports an imported .cube losslessly, or bakes the basic color correction.")
+
                 Menu {
                     ForEach(EffectType.allCases.filter { $0 != .externalLUT }, id: \.self) { type in
                         Button(type.displayName) {
@@ -723,6 +731,16 @@ struct InspectorEffectsSection: View {
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await viewModel.importExternalLUT(from: url) }
+    }
+
+    /// CA-26 — LUT 내보내기 저장 패널.
+    private func exportLUT() {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [UTType(filenameExtension: "cube")].compactMap { $0 }
+        panel.nameFieldStringValue = "lut.cube"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await viewModel.exportLUTForSelectedClip(to: url) }
     }
 
     private func removeEffect(_ effectId: UUID) {

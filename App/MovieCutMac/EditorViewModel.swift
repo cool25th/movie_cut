@@ -5137,6 +5137,47 @@ final class EditorViewModel {
         }
     }
 
+    /// CA-26 — LUT export. An active external LUT is re-exported losslessly
+    /// (parse → serialize round-trip); otherwise the clip's basic color
+    /// correction is baked through the production processor. The bake scope
+    /// (basic correction only — 3-way/HSL/masks excluded) is surfaced in the
+    /// status message so users don't assume a full-grade bake.
+    func exportLUTForSelectedClip(to url: URL) async {
+        if let lutEffect = selectedClip?.effects.first(where: { $0.type == .externalLUT }),
+           let path = lutEffect.lutPath {
+            do {
+                let lut = try CubeLUTParser.parse(contentsOf: URL(fileURLWithPath: path))
+                try CubeLUTExporter
+                    .serialize(lut, title: url.deletingPathExtension().lastPathComponent)
+                    .write(to: url, atomically: true, encoding: .utf8)
+                lastErrorMessage = nil
+                lastStatusMessage = "Exported \(lut.dimension)-size LUT (re-export of the imported file)."
+            } catch {
+                lastStatusMessage = nil
+                lastErrorMessage = "Could not export LUT: \(error.localizedDescription)"
+            }
+            return
+        }
+
+        guard let clip = selectedClip, let correction = clip.colorCorrection,
+              !ColorCorrectionPixelProcessor.isIdentity(correction) else {
+            lastStatusMessage = nil
+            lastErrorMessage = "Nothing to export: apply an external LUT or a color correction first."
+            return
+        }
+        let lut = CubeLUTExporter.bake(colorCorrection: correction)
+        do {
+            try CubeLUTExporter
+                .serialize(lut, title: url.deletingPathExtension().lastPathComponent)
+                .write(to: url, atomically: true, encoding: .utf8)
+            lastErrorMessage = nil
+            lastStatusMessage = "Baked basic color correction to a \(lut.dimension)-size LUT (3-way/HSL/masks excluded)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not write LUT: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Media methods kept in the main file
     // evaluateMissingMedia assigns the private(set) missingMediaAssets;
     // the reportInvalid*Drop trio uses the private DropFeedbackMessage type;

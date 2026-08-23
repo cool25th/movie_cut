@@ -75,22 +75,46 @@ struct EffectCostProfileTests {
         // browser did exactly that). Probing main-actor hops while the
         // measurement runs pins the property: a main-thread measurement
         // would stall the hops for the whole load.
+        //
+        // v2 (2026-08-23, user-approved robustness fix): the v1 single
+        // worst-hop over a fixed 1s window false-failed under ambient CPU
+        // load (LOOP_STATE defect record: 5 repros 2026-08-22/23, worst
+        // ~500ms vs the 250ms limit, isolated-pass). A main-thread
+        // measurement stalls EVERY hop for the whole load, so the MEDIAN
+        // hop discriminates just as strongly while ignoring scheduler-noise
+        // outliers. Sampling stops when the load finishes so post-load fast
+        // hops cannot dilute the median on fast machines (iterations:3 can
+        // complete in ~1s idle).
+        final class LoadDone: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            var isDone: Bool { lock.lock(); defer { lock.unlock() }; return done }
+            func markDone() { lock.lock(); defer { lock.unlock() }; done = true }
+        }
+        let loadDone = LoadDone()
         let load = Task.detached(priority: .userInitiated) {
+            defer { loadDone.markDone() }
             EffectCostProfiler.measureAllBuiltIns(iterations: 3)
         }
         await MainActor.run {}
-        var worstHopMs = 0.0
-        let deadline = Date().addingTimeInterval(1.0)
-        while Date() < deadline {
+        var hopSamplesMs: [Double] = []
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline && !loadDone.isDone {
             let start = DispatchTime.now()
             await MainActor.run {}
-            worstHopMs = max(worstHopMs, Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+            hopSamplesMs.append(Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
         }
         _ = await load.value
-        // The full measurement takes well over a second on every machine
-        // this suite runs on; a blocked main actor would show a hop in the
-        // hundreds-to-thousands of ms. 250ms tolerates scheduler noise.
-        #expect(worstHopMs < 250, "main actor stalled \(worstHopMs)ms during the measurement")
+        // A blocked main actor stalls every hop for the multi-second load,
+        // pushing the median into the hundreds-to-thousands of ms. 250ms on
+        // the median tolerates arbitrarily large single-hop scheduler noise.
+        let sorted = hopSamplesMs.sorted()
+        let medianHopMs = sorted.isEmpty ? 0 : sorted[sorted.count / 2]
+        let worstHopMs = sorted.last ?? 0
+        #expect(
+            medianHopMs < 250,
+            "main actor stalled during the measurement — median hop \(medianHopMs)ms (worst \(worstHopMs)ms, \(hopSamplesMs.count) samples)"
+        )
     }
 
     @Test("measured memory is the differential footprint, never the physicalMemory placeholder")

@@ -170,7 +170,7 @@ FCP급 철회 — 미보유: AU 플러그인·roles·서라운드 패닝·자동
 
 ### D. 색·이미지
 
-기본 보정·휠·커브·HSL(8월 닫힘)·LUT Mac✅. 스코프 히스토+웨이브+**벡터스코프(Mac U 확보 — `InspectorEffectsSection.swift:200`, 2026-08-23 확인, P/X 미검증; 구 문서 "P2"는 오류로 정정 — CA_REGISTRATION_PROPOSAL §4)**. **매치컬러: FCP 12.3 + CapCut 모두 보유(공식 문서 — §9 CC-01 정정), MovieCut 없음 → P2.** 안정화 v1 완료(v2는 4단계). 뷰티 N6 **비목표 확정(Q4)** — 오프라인 원칙·포지셔닝상 제외, 백로그 명시 완료. HDR G-29 3단계 게이트 유지.
+기본 보정·휠·커브·HSL(8월 닫힘)·LUT Mac✅. 스코프 히스토+웨이브+**벡터스코프(Mac U 확보 — `InspectorEffectsSection.swift:200`, 2026-08-23 확인, P/X 미검증; 구 문서 "P2"는 오류로 정정 — CA_REGISTRATION_PROPOSAL §4)**. **매치컬러: FCP 12.3 + CapCut 모두 보유(공식 문서 — §9 CC-01 정정), MovieCut 없음 → P2.** 안정화 v1 완료(v2는 4단계). **LUT export·RGB 파레이드 부재(2026-08-23 확인) — CA-26·28 등록.** 뷰티 N6 **비목표 확정(Q4)** — 오프라인 원칙·포지셔닝상 제외, 백로그 명시 완료. HDR G-29 3단계 게이트 유지.
 
 ### E. 이펙트·콘텐츠
 

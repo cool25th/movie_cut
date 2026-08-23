@@ -156,3 +156,16 @@ G-09 Inc3 각 항목의 DoD에는 preview에서 사용자가 발동 가능한 �
 - 화자 분리 미보유: 전역 검색 0건 + Apple Speech diarization API 부재
 - iOS 자막 sidecar export 부재: `IOSAutoSubtitlesView`에 srt/vtt/export 경로 0건
 - V13 판정 정정(해소 확인): 블렌딩 UI 노출 · 홈 화면 · 속도 커브 프리셋 — 격차 제외 유지
+
+
+---
+
+## v4 — FCP 확정판 파생 등록 (2026-08-23, 사용자 승인 반영)
+
+외부 세션의 "FCP 12.3 대비 격차 확정판" 검증 결과 반영:
+
+**코드 확인 완료(신규 4건)**: LUT export 부재(writeLUT/exportLUT 0건) · Timecode 직접 입력 부재(`PreviewPanel` 표시 전용) · Auditions 부재 · 연결 스토리라인 부재(패러다임 차이로 격차 제외) · RGB 파레이드 부재(parade 0건).
+
+**등록(승인)**: CA-26 LUT export · CA-27 Timecode 직접 입력 · CA-28 RGB 파레이드 — 전부 즉시 실행 가능 소형. **보류**: Auditions는 CA-16 P2 묶음 편입(중간 규모·FCP 고유 패러다임, 베타 반응 후).
+
+**확정판 정정 2건(외부 재검증)**: ① "보컬분리 dead code" 허위 — `VocalSeparationService`·`EditorViewModel+VocalSeparation`·`InspectorVocalSection`(UI) 활성 존재, 부재는 ML 음성 향상(Voice Isolation급). ② CA-09/10 "승인 완료" 부정확 — DECISIONS 명시 "조건 변동 없음" = 승인 대기 유지.

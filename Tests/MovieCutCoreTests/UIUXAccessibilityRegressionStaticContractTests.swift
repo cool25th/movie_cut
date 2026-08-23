@@ -57,7 +57,7 @@ struct UIUXAccessibilityRegressionStaticContractTests {
         for marker in [
             #"accessibilityLabel(NSLocalizedString("Preview", comment: ""))"#,
             #"accessibilityValue(previewAccessibilityValue)"#,
-            #"accessibilityLabel: NSLocalizedString("Current Time", comment: "")"#,
+            #"accessibilityLabel(NSLocalizedString("Current Time — type a timecode and press Return to jump", comment: ""))"#,
             #"accessibilityLabel: NSLocalizedString("Duration", comment: "")"#,
             #"accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))"#,
             #"accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))"#,

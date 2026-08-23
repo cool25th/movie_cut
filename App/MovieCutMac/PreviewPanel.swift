@@ -10,6 +10,9 @@ struct PreviewPanel: View {
     @State private var previewZoom: Double = 1
     @State private var isPreviewZoomFit = true
     @State private var showsSafeZoneGuides = false
+    // CA-27 — editable current-time field. nil = not editing (show live time).
+    @State private var timecodeDraft: String? = nil
+    @FocusState private var timecodeFieldFocused: Bool
 
     private let previewZoomRange: ClosedRange<Double> = 0.5...2
     private let previewZoomStep: Double = 0.25
@@ -125,27 +128,23 @@ struct PreviewPanel: View {
 
     private var previewTransportBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                previewTimeBadge(
-                    title: NSLocalizedString("Current", comment: ""),
-                    value: timecodeString(playbackEngine.currentTime),
-                    accessibilityLabel: NSLocalizedString("Current Time", comment: "")
-                )
+                HStack(spacing: 8) {
+                    currentTimeField
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                playbackTransportCapsule
+                    playbackTransportCapsule
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                previewTimeBadge(
-                    title: NSLocalizedString("Duration", comment: ""),
-                    value: timecodeString(playbackEngine.duration),
-                    accessibilityLabel: NSLocalizedString("Duration", comment: "")
-                )
+                    previewTimeBadge(
+                        title: NSLocalizedString("Duration", comment: ""),
+                        value: timecodeString(playbackEngine.duration),
+                        accessibilityLabel: NSLocalizedString("Duration", comment: "")
+                    )
 
-                Divider()
-                    .overlay(MovieCutTheme.divider.opacity(0.55))
+                    Divider()
+                        .overlay(MovieCutTheme.divider.opacity(0.55))
                     .frame(height: 20)
 
                 previewCanvasResolutionBadge
@@ -156,11 +155,7 @@ struct PreviewPanel: View {
 
             VStack(spacing: 6) {
                 HStack(spacing: 10) {
-                    previewTimeBadge(
-                        title: NSLocalizedString("Current", comment: ""),
-                        value: timecodeString(playbackEngine.currentTime),
-                        accessibilityLabel: NSLocalizedString("Current Time", comment: "")
-                    )
+                    currentTimeField
 
                     Spacer(minLength: 12)
 
@@ -499,6 +494,55 @@ struct PreviewPanel: View {
         .accessibilityHint(emptyStateMessage)
     }
 
+    /// CA-27 — current-time badge with direct timecode entry. Commit on
+    /// Return or focus loss; unrecognized input fails explicitly (status
+    /// message + revert) and never seeks.
+    private var currentTimeField: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(NSLocalizedString("Current", comment: ""))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+            TextField(
+                "MM:SS:FF",
+                text: Binding(
+                    get: { timecodeDraft ?? timecodeString(playbackEngine.currentTime) },
+                    set: { timecodeDraft = $0 }
+                )
+            )
+            .font(.system(.caption, design: .monospaced).weight(.medium))
+            .multilineTextAlignment(.leading)
+            .frame(width: 72)
+            .focused($timecodeFieldFocused)
+            .onSubmit { commitTimecodeDraft() }
+            .onChange(of: timecodeFieldFocused) { _, focused in
+                if !focused { commitTimecodeDraft() }
+            }
+        }
+        .frame(width: 104, alignment: .leading)
+        .accessibilityElement()
+        .accessibilityLabel(NSLocalizedString("Current Time — type a timecode and press Return to jump", comment: ""))
+        .accessibilityValue(timecodeString(playbackEngine.currentTime))
+    }
+
+    private func commitTimecodeDraft() {
+        let draft = timecodeDraft?.trimmingCharacters(in: .whitespaces) ?? ""
+        timecodeDraft = nil
+        guard !draft.isEmpty else { return }
+        let fps = viewModel.currentProject.timeline.frameRate.doubleValue
+        guard fps > 0, let seconds = TimecodeParser.seconds(from: draft, frameRate: fps) else {
+            viewModel.lastStatusMessage = nil
+            viewModel.lastErrorMessage = NSLocalizedString(
+                "Timecode not recognized. Use MM:SS:FF (e.g. 01:30:15), MM:SS, or seconds.",
+                comment: ""
+            )
+            return
+        }
+        let duration = max(0, viewModel.currentProject.timeline.duration)
+        let clamped = min(max(0, seconds), duration)
+        playbackEngine.seek(to: clamped)
+        viewModel.playheadTime = clamped
+    }
+
     private func previewTimeBadge(title: String, value: String, accessibilityLabel: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(title)
@@ -792,10 +836,18 @@ struct PreviewPanel: View {
     private func timecodeString(_ time: TimeInterval) -> String {
         let t = max(0, time)
         let totalSeconds = Int(t)
-        let minutes = totalSeconds / 60
+        let minutes = (totalSeconds / 60) % 60
         let seconds = totalSeconds % 60
-        let frames = Int((t - Double(totalSeconds)) * 30)
-        return String(format: "%02d:%02d:%02d", minutes, seconds, abs(frames))
+        // CA-27: frame count follows the project frame rate so the display,
+        // the parser, and the seek all agree (was a hard-coded 30).
+        let fps = viewModel.currentProject.timeline.frameRate.doubleValue
+        let effectiveFps = fps > 0 ? fps : 30
+        let frames = Int((t - Double(totalSeconds)) * effectiveFps)
+        let hours = totalSeconds / 3600
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, min(frames, Int(effectiveFps) - 1))
+        }
+        return String(format: "%02d:%02d:%02d", minutes, seconds, min(frames, Int(effectiveFps) - 1))
     }
 }
 

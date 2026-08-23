@@ -57,7 +57,9 @@ struct R301R302PreviewTransportZoomStaticContractTests {
 
         #expect(transport.contains("ViewThatFits(in: .horizontal)"))
         #expect(transport.contains("previewTimeBadge("))
-        #expect(transport.contains("title: NSLocalizedString(\"Current\", comment: \"\")"))
+        // CA-27: the Current badge became an editable timecode field; the Current
+        // title now lives inside currentTimeField (referenced from both layouts).
+        #expect(transport.contains("currentTimeField"))
         #expect(transport.contains("title: NSLocalizedString(\"Duration\", comment: \"\")"))
         #expect(transport.contains("playbackTransportCapsule"))
         #expect(transport.contains("previewCanvasResolutionBadge"))

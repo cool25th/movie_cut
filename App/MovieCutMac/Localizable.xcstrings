@@ -5525,6 +5525,39 @@
           }
         }
       }
+    },
+    "MM:SS:FF": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MM:SS:FF"
+          }
+        }
+      }
+    },
+    "Current Time — type a timecode and press Return to jump": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 시간 — 타임코드를 입력하고 Return을 누르면 이동합니다"
+          }
+        }
+      }
+    },
+    "Timecode not recognized. Use MM:SS:FF (e.g. 01:30:15), MM:SS, or seconds.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임코드를 인식할 수 없습니다. MM:SS:FF(예: 01:30:15), MM:SS 또는 초를 입력하세요."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -988,6 +988,40 @@
         }
       }
     },
+    "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 저장 실패: %@. 크래시 복구 백업이 이루어지지 않고 있습니다 — 디스크 여유 공간을 확인하세요."
+          }
+        }
+      }
+    },
+    "Autosave failure warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autosave failure warning"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 저장 실패 경고"
+          }
+        }
+      }
+    },
     "B": {
       "extractionState": "manual",
       "localizations": {

@@ -160,7 +160,7 @@ final class EditorViewModel {
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession
-    @ObservationIgnored private let projectStore = EditorViewModel.makeProjectStore()
+    @ObservationIgnored private let projectStore: ProjectStore
     /// Single owner of compound flattening. Engines receive the same value
     /// snapshot and never compute or cache flattened timelines themselves.
     @ObservationIgnored private let flattenedTimelineCache = FlattenedTimelineCache()
@@ -214,13 +214,47 @@ final class EditorViewModel {
     /// path (fire-and-forget so edits stay responsive).
     private func scheduleAutosave() {
         let snapshot = currentProject
-        Task { [projectStore] in try? await projectStore.saveAutosave(snapshot) }
+        Task { [projectStore, weak self] in
+            do {
+                try await projectStore.saveAutosave(snapshot)
+                self?.autosaveSaveSucceeded()
+            } catch {
+                self?.autosaveSaveFailed(FileOperationError.classify(error))
+            }
+        }
     }
 
     /// Awaitable autosave flush (used by automation to deterministically persist
     /// recovery state before quitting; same path as the edit-driven autosave).
     func flushAutosave() async {
-        try? await projectStore.saveAutosave(currentProject)
+        do {
+            try await projectStore.saveAutosave(currentProject)
+            autosaveSaveSucceeded()
+        } catch {
+            autosaveSaveFailed(FileOperationError.classify(error))
+        }
+    }
+
+    /// Non-blocking crash-recovery warning. nil while autosaves succeed;
+    /// set when the latest autosave failed (shown in the status bar).
+    var autosaveFailureMessage: String?
+    @ObservationIgnored private var consecutiveAutosaveFailures = 0
+
+    private func autosaveSaveSucceeded() {
+        guard autosaveFailureMessage != nil || consecutiveAutosaveFailures > 0 else { return }
+        consecutiveAutosaveFailures = 0
+        autosaveFailureMessage = nil
+    }
+
+    private func autosaveSaveFailed(_ failure: FileOperationError) {
+        consecutiveAutosaveFailures += 1
+        autosaveFailureMessage = String(
+            format: NSLocalizedString(
+                "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space.",
+                comment: "Warning shown when the crash-recovery autosave cannot be written"
+            ),
+            failure.userMessage
+        )
     }
 
     /// A project recovered from a non-clean previous session, if any.
@@ -267,7 +301,12 @@ final class EditorViewModel {
     @ObservationIgnored var pendingScrubTask: Task<Void, Never>?
     @ObservationIgnored var pendingScrubTime: TimeInterval?
 
-    init(project: Project? = nil) {
+    /// - Parameter autosaveDirectory: test seam — routes the crash-recovery
+    ///   autosave to an explicit directory (e.g. a read-only path to exercise
+    ///   the BUG-01 failure surfacing). nil uses the production location.
+    init(project: Project? = nil, autosaveDirectory: URL? = nil) {
+        self.projectStore = autosaveDirectory.map { ProjectStore(autosaveDirectory: $0) }
+            ?? EditorViewModel.makeProjectStore()
         let project = EditorViewModel.ensureDefaultTracks(in: project ?? Project(name: "Untitled"))
         self.currentProject = project
         self.canvasSelection = project.canvas.aspectRatio

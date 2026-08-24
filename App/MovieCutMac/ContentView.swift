@@ -475,6 +475,17 @@ struct ContentView: View {
         HStack(spacing: MovieCutSpacing.medium) {
             Label(canvasSizeText, systemImage: "rectangle")
             Text(viewModel.currentProject.canvas.frameRate.statusDisplayName)
+            if let autosaveWarning = viewModel.autosaveFailureMessage {
+                // BUG-01: crash-recovery autosave is failing (e.g. disk full) —
+                // editing continues, but the user must know backups stopped.
+                Label(
+                    title: { Text(autosaveWarning) },
+                    icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                )
+                .foregroundStyle(.orange)
+                .help(autosaveWarning)
+                .accessibilityLabel(Text(NSLocalizedString("Autosave failure warning", comment: "")))
+            }
             Spacer()
             Text(viewModel.lastErrorMessage ?? viewModel.lastStatusMessage ?? "")
                 .foregroundStyle(viewModel.lastErrorMessage != nil ? .red : .secondary)

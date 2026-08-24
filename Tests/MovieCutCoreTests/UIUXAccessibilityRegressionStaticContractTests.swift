@@ -57,7 +57,12 @@ struct UIUXAccessibilityRegressionStaticContractTests {
         for marker in [
             #"accessibilityLabel(NSLocalizedString("Preview", comment: ""))"#,
             #"accessibilityValue(previewAccessibilityValue)"#,
-            #"accessibilityLabel(NSLocalizedString("Current Time — type a timecode and press Return to jump", comment: ""))"#,
+            // CA-27 review fix: the timecode TextField is its own accessibility
+            // element (label/value/hint directly on the field) — the flattening
+            // container-level label is gone.
+            #"accessibilityLabel(Text(NSLocalizedString("Current time", comment: "")))"#,
+            #"accessibilityValue(Text(timecodeString(playbackEngine.currentTime)))"#,
+            #"accessibilityHint(Text(NSLocalizedString("Type a timecode and press Return to jump", comment: "")))"#,
             #"accessibilityLabel: NSLocalizedString("Duration", comment: "")"#,
             #"accessibilityLabel(NSLocalizedString("Seek Back One Frame", comment: ""))"#,
             #"accessibilityHint(NSLocalizedString("Moves the playhead back by one frame.", comment: ""))"#,

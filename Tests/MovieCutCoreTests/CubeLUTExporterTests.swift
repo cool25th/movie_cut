@@ -87,45 +87,48 @@ struct CubeLUTExporterTests {
     @Test("a 65³ bake+serialize keeps the main actor responsive")
     func bigLUTWorkStaysOffMainThread() async throws {
         // The heavy LUT work must be safe to run off the main actor (the
-        // export path schedules exactly this combo on a detached task). While
-        // it runs, main-actor hops must stay fast.
+        // export path schedules exactly this combo on a detached task).
+        //
+        // Ordering-based assertion (robust under full-suite parallel load,
+        // where wall-clock main-actor latency also picks up contention from
+        // unrelated suites): a batch of tiny main-actor hops must ALL
+        // complete while the multi-second heavy task is still running. If
+        // the heavy work ever runs ON the main actor, the hops queue behind
+        // it on the serial actor and cannot finish first — a deterministic
+        // failure, independent of machine load.
         let correction = ColorCorrection(brightness: 0.15, contrast: 1.1, saturation: 1.05)
         let clock = ContinuousClock()
-        final class Progress: @unchecked Sendable {
-            private let lock = NSLock()
-            private var finished = false
-            var isFinished: Bool {
-                lock.lock(); defer { lock.unlock() }
-                return finished
-            }
-            func markFinished() {
-                lock.lock(); defer { lock.unlock() }
-                finished = true
-            }
-        }
-        let progress = Progress()
+        let heavyStarted = clock.now
+
         let heavy = Task.detached(priority: .userInitiated) {
-            defer { progress.markFinished() }
-            let lut = try CubeLUTExporter.bake(dimension: 65, colorCorrection: correction)
-            _ = try CubeLUTExporter.serialize(lut, title: "responsiveness")
+            // Two rounds keep the heavy window comfortably multi-second so
+            // the hop batch has ample time to complete inside it.
+            for _ in 0..<2 {
+                let lut = try CubeLUTExporter.bake(dimension: 65, colorCorrection: correction)
+                _ = try CubeLUTExporter.serialize(lut, title: "responsiveness")
+            }
         }
 
-        var slowestMainActorHop: Duration = .zero
-        var probes = 0
-        while !progress.isFinished {
-            let hopStart = clock.now
+        // Give the detached task a moment to start, then run the hop batch.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        for _ in 0..<20 {
             await MainActor.run {}
-            let elapsed = hopStart.duration(to: clock.now)
-            if elapsed > slowestMainActorHop { slowestMainActorHop = elapsed }
-            probes += 1
-            try? await Task.sleep(nanoseconds: 5_000_000)
         }
-        try await heavy.value
+        let hopsCompleted = clock.now
 
-        #expect(probes > 0, "the probe loop must overlap the heavy work")
+        try await heavy.value
+        let heavyCompleted = clock.now
+
+        // Deliberately NO wall-clock budget on the hop batch: under the full
+        // parallel suite the cooperative pool is contended and hop LATENCY
+        // also includes unrelated suites' work (observed 5.5s for 20
+        // near-zero-cost hops) — that noise is not signal. Only the ORDER is
+        // deterministic: a main-actor-blocking bake queues every hop behind
+        // the multi-second heavy work, so hopsCompleted can never precede
+        // heavyCompleted in that failure mode.
         #expect(
-            slowestMainActorHop < .milliseconds(500),
-            "main actor blocked for \(slowestMainActorHop) during a 65³ LUT export"
+            hopsCompleted < heavyCompleted,
+            "main-actor hops finished at +\(hopsCompleted - heavyStarted) while the heavy LUT work ran until +\(heavyCompleted - heavyStarted); the hops should complete well inside the heavy window, not queue behind it"
         )
     }
 

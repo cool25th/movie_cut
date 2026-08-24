@@ -524,9 +524,7 @@ struct PreviewPanel: View {
             // static element.
             .accessibilityLabel(Text(NSLocalizedString("Current time", comment: "")))
             .accessibilityValue(Text(timecodeString(playbackEngine.currentTime)))
-            .accessibilityHint(Text(NSLocalizedString(
-                "Type a timecode and press Return to jump", comment: ""
-            )))
+            .accessibilityHint(Text(NSLocalizedString("Type a timecode and press Return to jump", comment: "")))
         }
         .frame(width: 104, alignment: .leading)
     }

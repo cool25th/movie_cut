@@ -136,6 +136,44 @@
 
 ---
 
+## 1.8 외부 리뷰(2026-08-24) 검증 등록 — iOS 정확성·신뢰성 (같은 날 실사 확정)
+
+> 원천: 사용자 제공 외부 리뷰. 코드 실사로 검증 후 등록 — 리뷰의 P0-2(iOS 속도·램프·프리즈·Reverse) 4건은 **현재 코드에서 이미 수정됨**(`IOSExportEngine`의 macOS 패리티 주석·`sourceTimeRange` 전체 소스 스팬·`renderReversedAsset` throw로 확인) → 등록 않음. 30fps 고정 주장도 부정확(동적 `exportSettings.frameRate`).
+
+### BUG-IOS-01 (P0) — iOS 프로젝트 상태 이중화: 세션 우회 변경이 되돌아감
+
+- 위치: `IOSEditorViewModel.swift:20` `currentProject` + 별도 `EditorSession`; 캔버스 변경(`:652` `currentProject.canvas = preset`)·템플릿 적용(`IOSTemplatePickerView.swift:138`)이 세션을 우회.
+- 다음 dispatch/undo 시 세션 스냅샷이 우회 변경을 덮어씀. 수정: 단일 `EditorSession` 경로로 통합(캔버스·템플릿용 Core 커맨드 필요 시 신설).
+
+### BUG-IOS-02 (P0) — iOS 프로젝트 저장·복구 부재 — **수정 완료(2026-08-24)**
+
+- 수정 완료: `IOSEditorViewModel`이 Core `ProjectStore`로 커밋마다 autosave(실패 시 비차단 `autosaveFailureMessage`) + 런치 시 `restoreAutosaveIfAvailable()`(하니스 실행 제외). 테스트: `IOSPersistenceTests` 2종(재시작 복원·읽기전용 실패 표면화).
+
+### BUG-IOS-03 (P1) — iOS 합성 누락 잔존 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 효과 객체 생성 2곳에 `blendMode: clip.blendMode` 전달 + 게이트에 transform(≠identity)·opacity(≠1) 트리거 추가.
+
+### BUG-IOS-04 (P1) — 프로젝트 패키지 미디어 복사 실패 무시 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 복사 실패 전량 수집 → `mediaCopyFailed(fileNames:)` throw + 부분 패키지 제거 + `LocalizedError` 사용자 문구. 테스트 2건 갱신(누락 명시적 실패·북마크 스트립 실제 파일).
+
+### BUG-IOS-05 (P1) — 보이스오버 버퍼 쓰기 실패 무시 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 탭 내 첫 쓰기 실패 래치(스레드 안전) → `stopRecording()`이 `writeFailed(underlying:)` throw — 불완전 테이크 폐기.
+
+### BUG-IOS-06 (P1) — iOS 사진 임포트 전체 메모리 적재 + 실패 무음
+
+- `iOSContentView.swift:571` `loadTransferable(type: Data.self)` — 4K 대형 파일 OOM 위험, `try?` 실패 무음. 수정: 파일 URL 기반 전송(`loadTransferable(type: URL.self)` 복사) + 오류 표면화.
+
+### 참고 등록 (결함 아님)
+
+- **Mac 앱 테스트 CI 비차단은 의도설계**: `ci.yml:59` `continue-on-error`는 기록된 호스트 플랫폼 플레이크 완화 + G-28 스위트 별도 차단. 전면 차단화는 플레이크 원인 해소 후(별도 결정).
+- **ko 번역 누락 106개×2 카탈로그**: 빈 값이 아닌 ko 항목 자체가 없는 키(Mac/iOS 각 106). 현지화 완료 증분 필요(자동 검증기는 미싱 키만 잡음).
+- **SwiftLint 전체 936건(error 94)**: high-signal 게이트는 유지, 전체 부채는 파일 분리(5,348행 `EditorViewModel`) 증분으로.
+- **리뷰의 스크린샷 UI 지적(가짜 skeleton 카드·Inspector Picker 라벨 접힘)**: UX 부채로 CA-06 접근성 매트릭스와 함께 처리.
+
+---
+
 ## 2. 갭 분석 V6 현실 점검 (중요)
 
 V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이는가"였고, **실제 동작/렌더 결과를 검증한 것이 아님.** 패턴:
@@ -312,7 +350,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 챕터/비트 마커 export 메타데이터 (P3) — **2026-07-05 G-12 #9 상환**: `MOVIECUT_UITEST_CHAPTER_MARKERS=1`/`MOVIECUT_UITEST_BEAT_CHAPTERS=1` 하니스가 표준/비트 마커를 command path로 추가하고, ExportEngine이 AssetWriter timed metadata track + `.chapterList` association으로 MP4 chapter atom을 기록한다. `run_e2e_export.sh` ffprobe 실측: `count=3 starts=0.25,0.75,1.25 ends=0.75,1.25,1.75`. Caveat: ffprobe title tag는 빈 문자열로 표시되어 하니스 status로 marker name/count를 함께 검증한다.
 
 ### J. 협업/배포
-- [ ] 🟡 클라우드 동기화(F-22) (P3→충돌 해소+테스트 완료) — `CloudSyncService` latestWins+백업(`resolveConflictKeepingBackup`/`writeConflictBackup`), `CloudConflictTests` 7개(2기기 시나리오). Caveat: 실 iCloud 2기기 GUI 검증 잔여.
+- [ ] 🔴 클라우드 동기화(F-22) (P3, 미구현) — **2026-08-24 정정**: 과거 기록이 `CloudSyncService`·`CloudConflictTests`의 존재를 주장했으나 현재 저장소에 소스 0건(아카이브/DerivedData 잔재만 존재). 구현 시 신규 착수로 취급.
 - [ ] 🟡 템플릿 마켓플레이스 — picker만 (P3)
 - [ ] 🟡 템플릿 패키지(F-23) (P3→구현됨) — `ProjectPackage` .mctemplate export/import + Package 메뉴, `ProjectPackageTests` 7개. Caveat: 실기기 GUI 잔여.
 - [x] ✅ 플랫폼 게시(F-24) — OS 공유 시트(ShareLink)로 충족. 직접 API 게시는 스펙 권고대로 범위 외.

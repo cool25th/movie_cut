@@ -3,6 +3,22 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-24 세션 (외부 리뷰 반영 — 검증·등록·BUG-IOS-02/03/04/05 수정)
+
+**입력**: 사용자 제공 외부 리뷰(iOS 정확성 중심). **실사로 검증 후 반영** — 리뷰의 P0-2 4건(속도·램프·프리즈·Reverse)과 30fps 고정 주장은 현재 코드에서 이미 수정/부정확(등록 않음), 나머지는 백로그 §1.8에 BUG-IOS-01~06 + 참고 4건으로 등록.
+
+### 완료
+- **BUG-IOS-02 (P0)**: iOS 크래시 복구 영속성 — `IOSEditorViewModel`이 Core `ProjectStore`로 커밋마다 autosave(실패 비차단 표면화), 루트 뷰 `task`에서 런치 복원(하니스 제외). `IOSPersistenceTests` 2종(재시작 복원·읽기전용 실패).
+- **BUG-IOS-03**: iOS 익스포트 `blendMode` 효과 객체 전달 + transform/opacity 컴포지터 게이트 트리거.
+- **BUG-IOS-04**: `ProjectPackage.export` 복사 실패 수집 → `mediaCopyFailed` throw + 부분 패키지 제거 + LocalizedError. 테스트 2건 갱신.
+- **BUG-IOS-05**: `VoiceoverRecorder` 쓰기 실패 래치 → `stopRecording()`이 `writeFailed` throw.
+- 백로그 CloudSync 허위 완료 기록 정정(소스 0건 확인).
+- **게이트**: 5/5(1,413/207)·Mac 38/38·iOS 11/11.
+
+### 잔여 (§1.8)
+- **BUG-IOS-01 (P0)**: iOS 상태 이중화(캔버스/템플릿 세션 우회) — Core 커맨드 신설 필요, 다음 증분.
+- BUG-IOS-06(iOS 파일기반 임포트)·ko 번역 106×2·CI 차단화(플레이크 해소 후)·SwiftLint 부채·UX 지적(CA-06 연계).
+
 ## 2026-08-24 세션 (CA-03 결함 수정 — BUG-01/02/04/05 전량)
 
 **게이트**: verify_gate 5/5 — 1,413 테스트/207 스위트, Mac 앱 테스트 38/38, iOS generic 빌드 통과.

@@ -12,6 +12,7 @@ final class IOSExportEngine {
     var lastExportURL: URL?
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
+    @ObservationIgnored private var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
 
     @discardableResult
@@ -43,6 +44,7 @@ final class IOSExportEngine {
             }
 
             let outputURL = try makeOutputURL()
+            activeOutputURL = outputURL
             exportSession.outputURL = outputURL
             exportSession.outputFileType = .mov
             exportSession.shouldOptimizeForNetworkUse = true
@@ -56,8 +58,10 @@ final class IOSExportEngine {
             exportProgress = 1
             lastExportURL = outputURL
             finishExport()
+            activeOutputURL = nil
             return outputURL
         } catch {
+            removePartialOutput()
             finishExport()
             throw error
         }
@@ -71,6 +75,20 @@ final class IOSExportEngine {
         exportProgress = 0
         lastExportURL = nil
         isExporting = false
+        // UX-REC-01: a cancelled export leaves a truncated .mov at the output
+        // — remove it so the user never shares a broken artifact. The
+        // in-flight export call also fails into the catch path, which removes
+        // again (idempotent).
+        removePartialOutput()
+    }
+
+    /// Removes a partial output file left behind by a cancelled or failed
+    /// export (Mac-parity with ExportEngine.removePartialOutput). Best-effort:
+    /// cleanup failures must not mask the original export error.
+    private func removePartialOutput() {
+        guard let url = activeOutputURL else { return }
+        try? FileManager.default.removeItem(at: url)
+        activeOutputURL = nil
     }
 
     private func makeComposition(for project: Project) async throws -> AVMutableComposition {

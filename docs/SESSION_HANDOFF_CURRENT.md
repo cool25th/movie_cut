@@ -3,6 +3,21 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-24 세션 (CA-03 결함 수정 — BUG-01/02/04/05 전량)
+
+**게이트**: verify_gate 5/5 — 1,413 테스트/207 스위트, Mac 앱 테스트 38/38, iOS generic 빌드 통과.
+
+### 완료 (커밋 순)
+- **BUG-05** (5674250): `FileOperationError` `LocalizedError` 채택 — 엔진이 분류해 throw한 값이 VM catch의 `localizedDescription`에서 살아남음(디스크 풀 안내 보존).
+- **BUG-01** (9277d86): 오토토회복 실패 표면화 — `scheduleAutosave`/`flushAutosave`가 `try?` 삼킴 대신 분류 후 비차단 상태바 경고(주황 배너+접근성), 성공 시 해제. 테스트 주입용 `autosaveDirectory` 시임 추가. 동작 테스트 3종.
+- **BUG-04** (e00b3fe): 익스포트 5개 진입점(무비·명시 비트레이트·ProRes 패널/자동화·프로젝트 패키지) 전 `ensureAllMediaReachableForExport()` — 누락 미디어 재연결 안내 후 렌더 전 거부. 동작 테스트 3종.
+- **BUG-02** (11b2f20): Core `MediaImporter.validatedProbe` — 확장자 허용목록(미지원 명시적 거부, 기존 `.video` 폴백 폐지) + 512바이트 매직 스니프(알려진 시그니처 없는 가비지 거부·종족 충돌 거부·mp3/aac 원시스트림 예외). 맥/iOS 임포트 경로 전환, TTS 자기생성 .caf는 신뢰 경로 유지. Core 테스트 7종 + 재연결 픽스처 ftyp 헤더 갱신 + StaticContract 2건 갱신.
+
+### 다음 회차 — P0-D 감사 계속
+1. **CA-04** 입력 포맷 매트릭스(VFR·10bit·Log·혼합 fps/sample rate·rotation).
+2. CA-05 실패·복구 UX 매트릭스 / CA-06 접근성 핵심 경로 매트릭스(병렬 가능).
+3. 잔여 소형(P2): BUG-01 재시도 백오프, 북마크 자동 치유.
+
 ## 2026-08-24 세션 (프로토콜0 WIP 커밋 + CA-03 미디어 생존성 감사 — 1·2차 병합 완료)
 
 **게이트**: verify_gate 5/5(1,405) — 프로토콜0 커밋(a9103e9) 검증. 감사는 문서 전용(기존 증거 재조사).

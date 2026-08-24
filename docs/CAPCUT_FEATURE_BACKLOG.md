@@ -112,27 +112,27 @@
 
 > 원천: `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(1차 감사 e36f83a + §4 2차 실사 병합). 2차 병합에서 BUG-04/05 신규 등록·BUG-03 폐기(`App/MovieCutMacTests/MediaRelinkTests.swift`가 이미 재연결·누락 감지 자동화를 실경로로 잠금).
 
-### BUG-01 (P0) — 오토토회복 저장 실패 무음 (디스크 풀 시 크래시 복구 약정 소리 없이 붕괴)
+### BUG-01 (P0) — 오토토회복 저장 실패 무음 — **수정 완료(2026-08-24, 9277d86)**
 
 - 위치: `App/MovieCutMac/EditorViewModel.swift:215-218` — `scheduleAutosave`의 `try? await saveAutosave`.
 - 디스크 풀/권한 상실 시 모든 autosave가 실패해도 신호 없음 → 크래시 시 옛 복구 파일 또는 부재 → 데이터 손실. 저장(saveProject)은 분류 메시지가 있으나 autosave는 부재.
-- 수정: 실패 분류 → 상태 경고(비차단 유지) + 재시도 백오프. 검증: 읽기전용 autosave 디렉터리 주입 테스트.
+- 수정 완료: `scheduleAutosave`/`flushAutosave` 실패 분류 → 비차단 상태바 경고(성공 시 해제). 검증: `AutosaveFailureSurfacingTests` 3종(읽기전용 디렉터리 경고·회복 시 해제·flush 경고). 재시도 백오프는 미구현(경고 표면화가 본질 — 잔여는 P2).
 
-### BUG-02 (P0) — 임포트 무결성 검증 부재
+### BUG-02 (P0) — 임포트 무결성 검증 부재 — **수정 완료(2026-08-24, 11b2f20)**
 
 - 위치: `Sources/MovieCutCore/Media/MediaImporter.swift:17-27,51-52` — 확장자 판별만, 미지원 확장자의 조용한 `.video` 디폴트.
-- 손상 미디어가 정상 임포트되어 출력 단계에 폭발. 수정: 경량 헤더 스니프 + 미지원 확장자 명시적 거부.
+- 수정 완료: Core `validatedProbe`(확장자 허용목록 + 512바이트 매직 스니프 + 종족 충돌 거부, mp3/aac 원시스트림 예외). 제품 경로 전환(맥 임포트·카드 이미지·재연결·보이스오버·슬라이드쇼·iOS 임포트). 검증: `MediaImporterValidationTests` 7종.
 
-### BUG-04 (P1) — 익스포트/패키지 전 미디어 사전 검사 없음
+### BUG-04 (P1) — 익스포트/패키지 전 미디어 사전 검사 없음 — **수정 완료(2026-08-24, e00b3fe)**
 
 - 위치: `exportProject(to:)`(`EditorViewModel.swift:1237`), `exportProjectPackage`(`EditorViewModel+Export.swift:20`) 등 전 익스포트 경로.
 - 누락 감지·재연결은 프로젝트 열기 시에만 — 세션 중 디스크 분리 후 익스포트하면 렌더 도중(수분) 실패.
-- 수정: 익스포트 시작 전 `evaluateMissingMedia` 재실행 → 누락 시 재연결 유도 후 명시적 거부. 검증: 누락 상태 익스포트 동작 테스트.
+- 수정 완료: 5개 익스포트 진입점(무비·명시 비트레이트·ProRes×2·프로젝트 패키지) 전 `ensureAllMediaReachableForExport()` 가드. 검증: `ExportMediaPreflightTests` 3종.
 
-### BUG-05 (P1) — VM 익스포트 catch가 분류 오류를 일반 문구로 덮어씀
+### BUG-05 (P1) — VM 익스포트 catch가 분류 오류를 일반 문구로 덮어씀 — **수정 완료(2026-08-24, 5674250)**
 
 - 위치: `EditorViewModel.swift:1256-1259` 등 — `lastErrorMessage = error.localizedDescription`. `FileOperationError`가 `LocalizedError` 미준수라 엔진이 분류해 throw한 디스크 풀 안내가 사라짐(계약 불이행).
-- 수정: `FileOperationError`에 `LocalizedError` 채택(errorDescription=userMessage). 검증: 분류 오류의 UI 메시지 일치 테스트.
+- 수정 완료: `FileOperationError` `LocalizedError` 채택(errorDescription=userMessage) — throw·catch 양단에서 분류 문구 생존. 검증: `FileOperationErrorTests` 3건 추가.
 
 ---
 

@@ -223,6 +223,9 @@ struct InspectorEffectsSection: View {
                     VectorscopeView(vectorscope: vectorscope)
                 }
             }
+            if let parade = viewModel.scopeRGBParade {
+                RGBParadeView(parade: parade)
+            }
 
             HStack(alignment: .top, spacing: 16) {
                 ColorGradeWheel(

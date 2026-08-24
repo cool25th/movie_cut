@@ -3978,7 +3978,41 @@
     },
     "Quick": {},
     "Quick Tools": {},
+    "RGB parade": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RGB parade"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RGB 퍼레이드"
+          }
+        }
+      }
+    },
     "Rate": {},
+    "Red, green, and blue channel waveforms side by side": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red, green, and blue channel waveforms side by side"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "빨강·초록·파랑 채널 파형을 나란히 표시합니다"
+          }
+        }
+      }
+    },
     "Release Compound Clip": {
       "extractionState": "manual",
       "localizations": {

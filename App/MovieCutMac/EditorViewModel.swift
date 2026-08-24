@@ -2495,6 +2495,7 @@ final class EditorViewModel {
     var scopeHistogram: ScopeAnalyzer.Histogram?
     var scopeWaveform: [[Int]]?
     var scopeVectorscope: ScopeAnalyzer.Vectorscope?
+    var scopeRGBParade: ScopeAnalyzer.RGBParade?
 
     @ObservationIgnored private let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
 
@@ -2502,6 +2503,7 @@ final class EditorViewModel {
         scopeHistogram = nil
         scopeWaveform = nil
         scopeVectorscope = nil
+        scopeRGBParade = nil
     }
 
 
@@ -2549,6 +2551,7 @@ final class EditorViewModel {
         scopeHistogram = ScopeAnalyzer.histogram(rgba: bytes, binCount: 64)
         scopeWaveform = ScopeAnalyzer.lumaWaveform(rgba: bytes, width: width, height: height, columns: width, levels: 48)
         scopeVectorscope = ScopeAnalyzer.vectorscope(rgba: bytes, size: 48)
+        scopeRGBParade = ScopeAnalyzer.rgbParade(rgba: bytes, width: width, height: height, columns: width, levels: 48)
     }
 
 

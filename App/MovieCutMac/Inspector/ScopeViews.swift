@@ -84,3 +84,53 @@ struct VectorscopeView: View {
         .accessibilityLabel("Vectorscope")
     }
 }
+
+/// RGB parade (CA-28): the waveform's per-channel form — red, green, and blue
+/// panels side by side, each showing that channel's value distribution vs. x.
+/// A white-balance skew or channel clip shows as one panel's trace shifting
+/// against the others.
+struct RGBParadeView: View {
+    let parade: ScopeAnalyzer.RGBParade
+
+    var body: some View {
+        HStack(spacing: 2) {
+            paradePanel(parade.red, tint: .red)
+            paradePanel(parade.green, tint: .green)
+            paradePanel(parade.blue, tint: .blue)
+        }
+        .frame(height: 56)
+        .background(MovieCutTheme.previewBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(MovieCutTheme.border, lineWidth: 0.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(NSLocalizedString("RGB parade", comment: "")))
+        .accessibilityValue(Text(NSLocalizedString(
+            "Red, green, and blue channel waveforms side by side", comment: ""
+        )))
+    }
+
+    /// One channel's intensity field — the same rendering contract as
+    /// ``WaveformView``, tinted per channel.
+    private func paradePanel(_ waveform: [[Int]], tint: Color) -> some View {
+        Canvas { context, size in
+            let columns = waveform.count
+            guard columns > 0, let levels = waveform.first?.count, levels > 0 else { return }
+            let cellWidth = size.width / CGFloat(columns)
+            let cellHeight = size.height / CGFloat(levels)
+            let scale = Double(max(1, waveform.flatMap { $0 }.max() ?? 1))
+            for (column, levelsCounts) in waveform.enumerated() {
+                for (level, count) in levelsCounts.enumerated() where count > 0 {
+                    let intensity = min(1, Double(count) / scale)
+                    let rect = CGRect(
+                        x: CGFloat(column) * cellWidth,
+                        y: size.height - CGFloat(level + 1) * cellHeight,
+                        width: cellWidth + 0.5,
+                        height: cellHeight + 0.5
+                    )
+                    context.fill(Path(rect), with: .color(tint.opacity(0.12 + 0.75 * intensity)))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}

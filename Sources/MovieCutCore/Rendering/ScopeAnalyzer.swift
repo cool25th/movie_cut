@@ -112,4 +112,51 @@ public enum ScopeAnalyzer {
         }
         return result
     }
+
+    /// RGB parade: one waveform per channel (R, G, B value distribution vs. x),
+    /// the data for the classic side-by-side parade scope. Binning mirrors
+    /// ``lumaWaveform(rgba:width:height:columns:levels:)`` so the two scopes
+    /// stay directly comparable.
+    public struct RGBParade: Sendable, Equatable {
+        /// `columns × levels` counts for the red channel.
+        public var red: [[Int]]
+        /// `columns × levels` counts for the green channel.
+        public var green: [[Int]]
+        /// `columns × levels` counts for the blue channel.
+        public var blue: [[Int]]
+
+        public init(red: [[Int]], green: [[Int]], blue: [[Int]]) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+        }
+    }
+
+    /// For each of `columns` evenly-spaced image columns, the per-channel pixel
+    /// count at each of `levels` channel levels.
+    public static func rgbParade(
+        rgba: [UInt8],
+        width: Int,
+        height: Int,
+        columns: Int,
+        levels: Int
+    ) -> RGBParade {
+        guard width > 0, height > 0, columns > 0, levels > 0 else {
+            return RGBParade(red: [], green: [], blue: [])
+        }
+        var red = Array(repeating: Array(repeating: 0, count: levels), count: columns)
+        var green = red
+        var blue = red
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                guard offset + 2 < rgba.count else { continue }
+                let column = Swift.min(columns - 1, x * columns / width)
+                red[column][Swift.min(levels - 1, Int(rgba[offset]) * levels / 256)] += 1
+                green[column][Swift.min(levels - 1, Int(rgba[offset + 1]) * levels / 256)] += 1
+                blue[column][Swift.min(levels - 1, Int(rgba[offset + 2]) * levels / 256)] += 1
+            }
+        }
+        return RGBParade(red: red, green: green, blue: blue)
+    }
 }

@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-24 세션 65 (방향 문서 §3 v1.1 반영 + CA-28 RGB 파레이드)
+
+### ① 방향 문서 §3 v1.1 — Q11 승인 P0 편입
+- `DEVELOPMENT_DIRECTION_20260815.md` v1.0→v1.1(2026-08-24): §3 1단계 테이블에 **P0-D 신뢰성·호환성·접근성 감사** 스트림 신설(CA-03 미디어 생존성·CA-04 입력 포맷·CA-05 실패·복구 UX·CA-06 접근성 핵심 경로), 1단계 완료 게이트에 4종 산출물 명시.
+- 백로그 §0.5.1: CA-03~06 상태를 "방향 문서 §3 반영 후 실행"→"**즉시 실행 가능**(v1.1 반영 완료 2026-08-24)"으로, 실행 규칙 문장 갱신. **CA-03~06 실행 자격 확보 — 다음 증분부터 P0-D 순서 진행.**
+
+### ② CA-28 RGB 파레이드 스코프 완료
+- Core `ScopeAnalyzer.rgbParade(rgba:width:height:columns:levels:)` — `lumaWaveform`과 동일한 빈ning 계약으로 R/G/B 채널별 파형(`RGBParade` 구조체). 골든 테스트 4건(Exact 등급): 순수 빨강 채널 분리·가로 램프 x 추적·혼합 픽셀 독립 빈ning·퇴화 지오메트리 가드. 기존 스코프(histogram·waveform·vectorscope) 무변경.
+- Mac `RGBParadeView`(`ScopeViews.swift`) — R/G/B 패널 3개 나란히, 각 패널은 `WaveformView`와 동일 렌더링 계약(채널 색조). `EditorViewModel.scopeRGBParade` + `refreshScopes()` 계산·`clearScopes()` 해제. 그레이딩 인스펙터에서 waveform/vectorscope 행 아래 전체 폭 노출. 접근성 라벨/값 영어 키+en/ko 등록(지역화 검증 PASS).
+- 백로그 CA-28 행 완료 처리.
+
+### 다음 세션 우선순위
+① **CA-03** 미디어 생존성 감사(P0-D 첫 항목) ② CA-04 ③ CA-05 ④ CA-06(P0-D 내 병렬 가능). G-27 실기기는 기기 잠금 해제+연결 시 `TEAM_ID=98ZKV9N9T4 bash scripts/run_g27_device_e2e.sh` 재실행. `scripts/ui_capture.sh` 미커밋 사용자 변경(유효해 보이는 pgrep errexit 가드) 처리 대기.
+
 ## 2026-08-24 세션 64 (전역 코드 리뷰 후속 수정 — origin/main 통합 + P1/P2)
 
 ### origin/main 통합 (merge commit)

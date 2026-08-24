@@ -93,8 +93,14 @@ struct SecurityScopedBookmarkMigrationTests {
         // .mctemplate would only mislead the loader on another machine. The
         // package writer must drop them, the same way it drops proxies.
         let bookmark = Data([0x01, 0x02, 0x03])
+        // Package export now REQUIRES copyable media (BUG-IOS-04) — stage a
+        // real source file instead of relying on the old skip-missing behavior.
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bookmark-strip-\(UUID().uuidString).mp4")
+        try Data([0x00, 0x00, 0x00, 0x18] + Array("ftypisom".utf8)).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
         var asset = MediaAsset(
-            originalURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            originalURL: sourceURL,
             kind: .video
         )
         asset.originalBookmark = bookmark
@@ -108,8 +114,7 @@ struct SecurityScopedBookmarkMigrationTests {
         try? FileManager.default.createDirectory(at: packageDir, withIntermediateDirectories: true)
         let packageURL = packageDir.appendingPathComponent("pkg.mctemplate")
 
-        // ProjectPackage.export copies media by path; the source need not exist,
-        // it just won't be copied. We only assert the bookmark is stripped.
+        // We assert the bookmark is stripped from the packaged manifest.
         _ = try ProjectPackage.export(project, to: packageURL)
         let loaded = try ProjectPackage.load(from: packageURL)
 

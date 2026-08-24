@@ -43,7 +43,7 @@
 |---|---|---|---|---|
 | CA-01 | 오프라인 차단·DNS/HTTP 트래픽 캡처 테스트(iOS 포함) — 증거원장 MC-02 ②③ | P0 | **즉시 실행 가능** | 네트워크 차단망에서 대표 작업 전 통과 + 캡처 0 기록을 증거원장 MC-02에 갱신 |
 | CA-02 | 파리티 허용 오차 등급 수치 확정(Exact/Tolerance/Perceptual) | P0 | **완료(2026-08-23)** — VERIFICATION_STANDARD §2 등급별 수치 확정(Exact=수치 동일·유닛테스트 담당 / Tolerance=MAD ≤ 2.0+1프레임·17 시나리오 게이트 / Perceptual=블라인드 비열등)+신규 시나리오 등급 명시·허용치 변경 승인제 기재 | 골든 재판정 기준 문서화 |
-| CA-03 | 미디어 관리·프로젝트 생존성 감사(재연결·누락·손상·마이그레이션 실패 경로·디스크) | P0 | **완료(2026-08-24, e36f83a) — `AUDIT_MEDIA_SURVIVABILITY_20260824.md`: 경로 5종 판정 + P0 결함 3건 등록(BUG-01 오토토회복 침묵·BUG-02 임포트 무검증·BUG-03 재연결 무측정). 수정은 BUG 증분으로** | 감사 보고 + 발견 결함의 P0 버그 등록 |
+| CA-03 | 미디어 관리·프로젝트 생존성 감사(재연결·누락·손상·마이그레이션 실패 경로·디스크) | P0 | **완료(2026-08-24, e36f83a + 2차 실사 병합)** — `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(경로 5종 판정 + §4 2차 병합). 등록: BUG-01(P0 오토토회복 침묵)·BUG-02(P0 임포트 무검증)·**BUG-04(P1 익스포트 사전 미디어 검사 부재 — 2차 신규)**·**BUG-05(P1 분류 오류 미분류 덮어씀 — 2차 신규)**. BUG-03(재연결 자동화 0)은 **폐기** — `MediaRelinkTests`가 이미 실경로 잠금(1차 탐색 누락). 수정은 BUG 증분으로(§1.7) | 감사 보고 + 발견 결함의 P0 버그 등록 (완료) |
 | CA-04 | 입력 포맷 호환 매트릭스(VFR·10bit·Log·혼합 fps/sample rate·rotation) | P0 | **즉시 실행 가능(방향 문서 §3 v1.1 반영 완료 2026-08-24)** | 매트릭스 작성 + 최우선 회귀(혼합 미디어 sync·색 유지) 실측 |
 | CA-05 | 실패·복구 UX 매트릭스(15 실패 시나리오 × 무손실/원인/재시도/이어하기/임시파일) | P0 | **즉시 실행 가능(방향 문서 §3 v1.1 반영 완료 2026-08-24)** | 매트릭스 + 결함 우선순위화 |
 | CA-06 | 접근성 핵심 경로 매트릭스(임포트→편집→출력, VoiceOver 등) | P0 | **즉시 실행 가능(Q6·Q11 승인 + 방향 문서 §3 v1.1 반영 완료 2026-08-24 — 범위: 핵심 경로+키보드)** | 매트릭스 + 차단 결함 등록 |
@@ -105,6 +105,34 @@
 실제 mp4/png 파일을 ① 타임라인에 직접 드롭 ② 라이브러리에서 타임라인으로 드래그 — 두 경로 모두 올바른 위치에 올바른 길이의 클립이 생기는지 확인. `swift build` + `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`.
 
 > 참고: 현재 sandbox 엔타이틀먼트 파일 없음(`.entitlements` 부재) → 파일 접근 권한 문제는 아님. 순수하게 클립 생성 로직 누락이 원인.
+
+---
+
+## 1.7 CA-03 감사 발견 결함 — 미디어 생존성 (2026-08-24 등록·병합)
+
+> 원천: `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(1차 감사 e36f83a + §4 2차 실사 병합). 2차 병합에서 BUG-04/05 신규 등록·BUG-03 폐기(`App/MovieCutMacTests/MediaRelinkTests.swift`가 이미 재연결·누락 감지 자동화를 실경로로 잠금).
+
+### BUG-01 (P0) — 오토토회복 저장 실패 무음 (디스크 풀 시 크래시 복구 약정 소리 없이 붕괴)
+
+- 위치: `App/MovieCutMac/EditorViewModel.swift:215-218` — `scheduleAutosave`의 `try? await saveAutosave`.
+- 디스크 풀/권한 상실 시 모든 autosave가 실패해도 신호 없음 → 크래시 시 옛 복구 파일 또는 부재 → 데이터 손실. 저장(saveProject)은 분류 메시지가 있으나 autosave는 부재.
+- 수정: 실패 분류 → 상태 경고(비차단 유지) + 재시도 백오프. 검증: 읽기전용 autosave 디렉터리 주입 테스트.
+
+### BUG-02 (P0) — 임포트 무결성 검증 부재
+
+- 위치: `Sources/MovieCutCore/Media/MediaImporter.swift:17-27,51-52` — 확장자 판별만, 미지원 확장자의 조용한 `.video` 디폴트.
+- 손상 미디어가 정상 임포트되어 출력 단계에 폭발. 수정: 경량 헤더 스니프 + 미지원 확장자 명시적 거부.
+
+### BUG-04 (P1) — 익스포트/패키지 전 미디어 사전 검사 없음
+
+- 위치: `exportProject(to:)`(`EditorViewModel.swift:1237`), `exportProjectPackage`(`EditorViewModel+Export.swift:20`) 등 전 익스포트 경로.
+- 누락 감지·재연결은 프로젝트 열기 시에만 — 세션 중 디스크 분리 후 익스포트하면 렌더 도중(수분) 실패.
+- 수정: 익스포트 시작 전 `evaluateMissingMedia` 재실행 → 누락 시 재연결 유도 후 명시적 거부. 검증: 누락 상태 익스포트 동작 테스트.
+
+### BUG-05 (P1) — VM 익스포트 catch가 분류 오류를 일반 문구로 덮어씀
+
+- 위치: `EditorViewModel.swift:1256-1259` 등 — `lastErrorMessage = error.localizedDescription`. `FileOperationError`가 `LocalizedError` 미준수라 엔진이 분류해 throw한 디스크 풀 안내가 사라짐(계약 불이행).
+- 수정: `FileOperationError`에 `LocalizedError` 채택(errorDescription=userMessage). 검증: 분류 오류의 UI 메시지 일치 테스트.
 
 ---
 

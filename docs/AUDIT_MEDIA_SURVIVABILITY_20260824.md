@@ -63,3 +63,38 @@
 - `Tests/MovieCutCoreTests/SecurityScopedBookmarkMigrationTests.swift` — 북마크 복원
 - `scripts/run_recovery_gate.sh` — 크래시 복구 E2E 게이트 (B-U7)
 - `verify_gate` 5/5·1,405 테스트 @ a9103e9 (감사 시점 HEAD)
+
+## 4. 2차 실사 보완 (2026-08-24, 동일 날 병렬 감사 병합)
+
+> 동일 범위를 독립적으로 실사한 2차 패스의 결과를 병합한다. 신규 결함 2건(BUG-04/05) 등록 +
+> BUG-03 정정. 근거 파일:라인은 동일 HEAD 계열.
+
+### 4.1 BUG-03 정정 — 재연결 자동화는 이미 존재했음
+
+1차 감사의 탐색이 `Tests/MovieCutCoreTests/`에 한정되어 **`App/MovieCutMacTests/MediaRelinkTests.swift`를 놓쳤다**. 해당 스위트는 `evaluateMissingMedia`(누락 판정)·`relinkMedia`(실제 파일 이동 후 UUID 보존 재연결)·재평가 루프를 **실제 ViewModel 경로로 구동하는 동작 테스트**다(`MediaRelinkTests.swift:66-107`). 따라서 BUG-03의 "자동화 증거 0" 주장은 근거 오류 — **폐기**한다. 남는 개선 여지는 하니스 E2E(누락 프로젝트 열기→재연결 UI→전체 복구) 수준으로, 이는 CA-05 실패·복구 UX 매트릭스와 함께 처리한다(P2).
+
+### 4.2 BUG-04 (P1) — 익스포트/패키지 전 미디어 사전 검사 없음
+
+- **위치**: `exportProject(to:)`(`EditorViewModel.swift:1237-1260`), `exportProjectPackage`(`EditorViewModel+Export.swift:20-40`), `exportProResMaster`·`exportWithExplicitBitrate`(동일 패턴).
+- 누락 감지·재연결 프롬프트는 프로젝트 **열기 시에만** 실행(`EditorViewModel.swift:825`). 세션 중 외장 디스크 분리 후 익스포트하면 렌더 도중(수분) 실패 — 원인을 렌더 끝에서야 알게 됨.
+- **수정**: 익스포트 시작 전 `evaluateMissingMedia(in:)` 재실행 → 누락 시 재연결 유도(`presentRelinkMissingMedia` 재사용) 후 명시적 거부. **검증**: 누락 asset 상태에서 `exportProject(to:)`가 렌더 진입 전 거부·안내하는 동작 테스트.
+
+### 4.3 BUG-05 (P1) — VM 익스포트 catch가 분류된 오류를 일반 문구로 덮어씀
+
+- **위치**: `exportProject(to:)` catch(`EditorViewModel.swift:1256-1259`) 등 — `lastErrorMessage = error.localizedDescription`. `exportWithExplicitBitrate`·`exportProResMaster`·`exportProjectPackage`·`generateProxy`(`EditorViewModel+Media.swift:124-127`) 동일.
+- `ExportEngine`은 `FileOperationError`로 **분류된 값을 그대로 throw**하지만 `FileOperationError`가 `LocalizedError` 미준수라 `localizedDescription`는 "The operation couldn't be completed. (…)" 류 일반 문구가 됨 — **디스크 풀 안내가 사라짐**. `FileOperationError` 문서 주장("single source of truth … across save and export paths")과 불일치(저장 경로만 `classify().userMessage` 사용).
+- **수정**: `FileOperationError`에 `LocalizedError` 채택(`errorDescription` → `userMessage`) — throw·catch 양단 안전. **검증**: 분류 오류 throw 시 UI 메시지가 userMessage와 일치하는 동작 테스트.
+
+### 4.4 개선 기회 (P2, 결함 아님) — 북마크 자동 치유
+
+macOS 북마크는 이동된 파일의 새 위치를 해석해 반환할 수 있으나(`resolveBookmark`의 `isStale`), 현재 감지(`evaluateMissingMedia`)·재생(`playbackURL`)·익스포트 트랙 삽입 모두 `asset.originalURL`을 직접 사용 — 해석 URL 반영·갱신(write-back)으로 자동 치유 가능. 데이터 손실 경로는 아님(감지→수동 재연결 흐름 존재).
+
+### 4.5 병합 후 등록 결함 총괄
+
+| ID | 결함 | 심각도 | 상태 |
+|---|---|---|---|
+| BUG-01 | 오토토회복 저장 실패 침묵 | P0 | 등록 유지 |
+| BUG-02 | 임포트 무결성 검증 부재 | P0 | 등록 유지 |
+| BUG-03 | 재연결 자동화 0 | — | **폐기(4.1 근거 오류)** |
+| BUG-04 | 익스포트 전 미디어 사전 검사 부재 | P1 | 신규 등록 |
+| BUG-05 | VM catch 미분류 오류 덮어씀 | P1 | 신규 등록 |

@@ -47,6 +47,7 @@
 		7A1C9E24F0B3D58100000001 /* IOSUITestHarnessRunScopingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58100000002 /* IOSUITestHarnessRunScopingTests.swift */; };
 		7A1C9E24F0B3D58600000001 /* IOSPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58600000002 /* IOSPersistenceTests.swift */; };
 		7A1C9E24F0B3D58700000001 /* IOSSessionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58700000002 /* IOSSessionStateTests.swift */; };
+		7A1C9E24F0B3D58800000001 /* IOSInspectorAccessibilityContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58800000002 /* IOSInspectorAccessibilityContractTests.swift */; };
 		248B46DEDC71F46D95501C0B /* CardEditorUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0894F45D2229E1625E3F7ED /* CardEditorUITests.swift */; };
 		24A47720566FC9FA88458DAD /* AudioGraphEngineNullTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA70D7770612A05CC44B498 /* AudioGraphEngineNullTests.swift */; };
 		2503D56A9B64CF2E3B27BD0A /* KeyboardShortcutStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16947AA334227D5B01D6762 /* KeyboardShortcutStaticContractTests.swift */; };
@@ -575,6 +576,7 @@
 		7A1C9E24F0B3D58100000002 /* IOSUITestHarnessRunScopingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSUITestHarnessRunScopingTests.swift; sourceTree = "<group>"; };
 		7A1C9E24F0B3D58600000002 /* IOSPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPersistenceTests.swift; sourceTree = "<group>"; };
 		7A1C9E24F0B3D58700000002 /* IOSSessionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSSessionStateTests.swift; sourceTree = "<group>"; };
+		7A1C9E24F0B3D58800000002 /* IOSInspectorAccessibilityContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSInspectorAccessibilityContractTests.swift; sourceTree = "<group>"; };
 		BD0954A6FF0B99AD1F06410C /* EffectBrowserInspectorReachabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectBrowserInspectorReachabilityTests.swift; sourceTree = "<group>"; };
 		BD7234313775A9C045C724CB /* EditorViewModel+AssistantProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+AssistantProvider.swift"; sourceTree = "<group>"; };
 		BDCA941B099070F6075A766D /* ClipTrimMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipTrimMathTests.swift; sourceTree = "<group>"; };
@@ -923,6 +925,7 @@
 				7A1C9E24F0B3D58100000002 /* IOSUITestHarnessRunScopingTests.swift */,
 				7A1C9E24F0B3D58600000002 /* IOSPersistenceTests.swift */,
 				7A1C9E24F0B3D58700000002 /* IOSSessionStateTests.swift */,
+				7A1C9E24F0B3D58800000002 /* IOSInspectorAccessibilityContractTests.swift */,
 			);
 			name = MovieCutiOSTests;
 			path = App/MovieCutiOSTests;
@@ -1775,6 +1778,7 @@
 				7A1C9E24F0B3D58100000001 /* IOSUITestHarnessRunScopingTests.swift in Sources */,
 				7A1C9E24F0B3D58600000001 /* IOSPersistenceTests.swift in Sources */,
 				7A1C9E24F0B3D58700000001 /* IOSSessionStateTests.swift in Sources */,
+				7A1C9E24F0B3D58800000001 /* IOSInspectorAccessibilityContractTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

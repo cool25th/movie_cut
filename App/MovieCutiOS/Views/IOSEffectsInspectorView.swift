@@ -119,7 +119,7 @@ struct IOSEffectsInspectorView: View {
     private var opacitySection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("불투명도")
+                Text(verbatim: opacityTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -131,13 +131,15 @@ struct IOSEffectsInspectorView: View {
                 get: { clip.opacity },
                 set: { newValue in Task { await viewModel.updateSelectedOpacity(newValue) } }
             ), in: 0...1)
+            .accessibilityLabel(Text(opacityTitle))
+            .accessibilityValue(Text(String(format: "%.0f%%", clip.opacity * 100)))
         }
     }
 
     private var speedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("속도")
+                Text(verbatim: speedTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -149,10 +151,15 @@ struct IOSEffectsInspectorView: View {
                 get: { clip.playbackRate },
                 set: { newValue in Task { await viewModel.updateSelectedPlaybackRate(newValue) } }
             ), in: 0.25...4.0)
+            .accessibilityLabel(Text(speedTitle))
+            .accessibilityValue(Text(String(format: "%.2gx", clip.playbackRate)))
         }
     }
 
     // MARK: - Effects Section
+
+    private var opacityTitle: String { "불투명도" }
+    private var speedTitle: String { "속도" }
 
     private var effectsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -381,6 +388,10 @@ struct IOSEffectsInspectorView: View {
                     .frame(width: 38, alignment: .trailing)
             }
             Slider(value: binding, in: range, step: 0.01)
+                // A11Y-01: the visible title lives in a sibling Text — without
+                // an explicit label VoiceOver announces a bare "slider".
+                .accessibilityLabel(Text(title))
+                .accessibilityValue(Text(String(format: "%.2f", value)))
         }
     }
 

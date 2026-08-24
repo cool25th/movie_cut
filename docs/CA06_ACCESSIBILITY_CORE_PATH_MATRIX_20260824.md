@@ -32,7 +32,7 @@
 | 편집 | 캔버스·핵심 컨트롤 | ✅ 11개 라벨(`iOSContentView`) | — |
 | 편집 | 캔버스 설정·키프레임 | ⚠️ 2·6개 라벨만 | `IOSCanvasSettingsView`·`IOSKeyframeEditorView` |
 | 편집 | 인스펙터 하위 뷰 | ❌ **자막·필터·크로마키·효과·어시스턴트 라벨 0건** | `IOSAutoSubtitlesView`·`IOSFilterPickerView`·`IOSChromaKeyView`·`IOSEffectsInspectorView`·`IOSAutoAssistantView` |
-| 출력 | 진행 시트 | ⚠️ 진행률·취소 표면 존재, 접근성 값 미검증 | `IOSExportProgressSheet` |
+| 출력 | 진행 시트 | ✅ 진행률 라벨+값+힌트·취소 라벨+힌트 확인(A11Y-02 해소 — 구현 이미 존재) | `iOSContentView.swift` `IOSExportProgressSheet` |
 
 ## 3. 차단·결함 등록
 

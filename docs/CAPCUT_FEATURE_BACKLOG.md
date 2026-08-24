@@ -196,14 +196,13 @@
 
 > 원천: `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md`. Mac 핵심 경로는 차단 없음 — 아래는 iOS 중심.
 
-### A11Y-01 (P1, iOS 차단급) — iOS 인스펙터 하위 뷰 VoiceOver 라벨 전무
+### A11Y-01 (P1, iOS 차단급) — iOS 인스펙터 하위 뷰 VoiceOver — **수정 완료(2026-08-24)**
 
-- 위치: `IOSAutoSubtitlesView`·`IOSFilterPickerView`·`IOSChromaKeyView`·`IOSEffectsInspectorView`·`IOSAutoAssistantView` — `accessibilityLabel` 0건. iOS 편집 핵심 경로의 조정 화면이 VoiceOver 조작 불가.
-- 수정: 영어 키 라벨+값 추가(Mac UX-08 패턴 준용) + 계약 테스트.
+- 실사 정정: 텍스트 라벨 버튼/토글/ColorPicker는 기본 announced(0건 카운트는 과대) — 실제 갭은 bare `Slider`(효과 인스펙터 opacity/speed/inspectorSlider·크로마키 slider 헬퍼)와 필터 선택 상태. 수정 완료: 슬라이더 라벨+값·필터 선택 announce + `IOSInspectorAccessibilityContractTests` 4종(시뮬레이터 #filePath 경로 해석 포함).
 
-### A11Y-02 (P2) — iOS 익스포트 진행 시트 접근성 미검증
+### A11Y-02 (P2) — iOS 익스포트 진행 시트 — **해소(2026-08-24, 기존 구현 확인)**
 
-- `IOSExportProgressSheet` 진행률 접근성 값·취소 라벨 확인·보강. A11Y-01과 같은 증분 처리.
+- 실사 결과 이미 구현돼 있었음(라벨+값+힌트·취소 파괴적 롤+힌트) — 계약 테스트로 잠금.
 
 ### A11Y-03 (P3) — 빈 라이브러리 스켈리톤 카드 시각 신뢰감
 

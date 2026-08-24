@@ -16,6 +16,7 @@ public final class VoiceoverRecorder: ObservableObject {
     private var recordingURL: URL?
     private var startDate: Date?
     private var meterTask: Task<Void, Never>?
+    private var writeFailure: WriteFailureFlag?
 
     /// Creates a voiceover recorder.
     public init() {}
@@ -36,8 +37,17 @@ public final class VoiceoverRecorder: ObservableObject {
         }
 
         let audioFile = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
+        // BUG-IOS-05 (external review, verified): per-buffer write failures
+        // (e.g. disk filling mid-recording) were swallowed by `try?` — the
+        // recording "succeeded" with missing audio. Record the first failure
+        // and surface it from stopRecording().
+        let writeFailure = WriteFailureFlag()
         inputNode.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) { buffer, _ in
-            try? audioFile.write(from: buffer)
+            do {
+                try audioFile.write(from: buffer)
+            } catch {
+                writeFailure.record(error)
+            }
             let level = Self.audioLevel(from: buffer)
             Task { @MainActor [weak self] in
                 self?.audioLevel = level
@@ -47,6 +57,7 @@ public final class VoiceoverRecorder: ObservableObject {
         try engine.start()
 
         self.engine = engine
+        self.writeFailure = writeFailure
         recordingURL = url
         startDate = Date()
         currentTime = 0
@@ -55,7 +66,9 @@ public final class VoiceoverRecorder: ObservableObject {
         startMeterTask()
     }
 
-    /// Stops recording and returns the written file URL.
+    /// Stops recording and returns the written file URL. Throws
+    /// `writeFailed(underlying:)` when any buffer write failed — the file on
+    /// disk is incomplete, so the caller must treat the take as failed.
     public func stopRecording() throws -> URL {
         guard isRecording else {
             throw VoiceoverRecorderError.notRecording
@@ -64,7 +77,11 @@ public final class VoiceoverRecorder: ObservableObject {
             throw VoiceoverRecorderError.recordingURLUnavailable
         }
 
+        let failure = writeFailure?.error
         finishRecording(resetTime: false)
+        if let failure {
+            throw VoiceoverRecorderError.writeFailed(underlying: failure.localizedDescription)
+        }
         return url
     }
 
@@ -98,6 +115,7 @@ public final class VoiceoverRecorder: ObservableObject {
         engine = nil
         recordingURL = nil
         startDate = nil
+        writeFailure = nil
         isRecording = false
         audioLevel = 0
 
@@ -144,4 +162,27 @@ public enum VoiceoverRecorderError: Error, Sendable, Equatable {
 
     /// The recording URL was lost before stopping.
     case recordingURLUnavailable
+
+    /// A buffer write failed mid-recording (e.g. disk full) — the file is
+    /// incomplete and the take must be discarded.
+    case writeFailed(underlying: String)
+}
+
+/// Thread-safe first-write-failure latch, readable from the main actor after
+/// the tap stops.
+final class WriteFailureFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (any Error)?
+
+    func record(_ error: any Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        if stored == nil { stored = error }
+    }
+
+    var error: (any Error)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
 }

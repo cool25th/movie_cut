@@ -133,9 +133,9 @@ struct MasterChainSerializationTests {
     @Test("the set-preset command installs and clears the project preset")
     func commandAppliesPreset() throws {
         var project = Project(name: "g26-cmd")
-        try SetMasterAudioProcessingCommand(preset: .sns).apply(to: &project)
+        try SetMasterAudioProcessingCommand(processing: .sns).apply(to: &project)
         #expect(project.masterAudioProcessing == .sns)
-        try SetMasterAudioProcessingCommand(preset: nil).apply(to: &project)
+        try SetMasterAudioProcessingCommand(processing: nil).apply(to: &project)
         #expect(project.masterAudioProcessing == nil)
     }
 

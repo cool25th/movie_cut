@@ -25,6 +25,236 @@ public struct TrackingResult: Sendable, Codable, Equatable {
     }
 }
 
+/// Pure loss/recovery state machine used by `MotionTrackingProvider`.
+///
+/// Vision's sequential tracker can keep returning a plausible rectangle after
+/// the selected subject disappears behind an occluder. Recovery therefore
+/// cannot depend on `results == nil` alone: a candidate must be both confident
+/// and motion-consistent with the trusted trajectory. Once a candidate is
+/// rejected, the planner keeps extrapolating a smoothed trusted velocity and
+/// asks the provider to recreate the Vision request around that predicted box.
+///
+/// This is intentionally detector-free v1 behavior. It does not pretend to
+/// semantically re-identify arbitrary objects; it provides a bounded local
+/// reacquisition policy for short occlusions while failing closed on stale or
+/// implausible observations.
+public struct MotionTrackingRecoveryPlanner: Sendable {
+    /// Tunable recovery policy. Defaults are deliberately conservative: the
+    /// confidence floor is low enough not to disturb the established normal
+    /// fixture while the prediction IoU rejects a tracker that latches onto a
+    /// stationary occluder as the expected subject keeps moving.
+    public struct Configuration: Sendable, Equatable {
+        public var minimumTrustedConfidence: Float
+        public var minimumPredictionIoU: Double
+        public var maximumRecoveryDuration: TimeInterval
+        public var maximumNormalizedVelocityPerSecond: CGFloat
+        public var velocitySmoothingFactor: CGFloat
+
+        public init(
+            minimumTrustedConfidence: Float = 0.25,
+            minimumPredictionIoU: Double = 0.30,
+            maximumRecoveryDuration: TimeInterval = 2.25,
+            maximumNormalizedVelocityPerSecond: CGFloat = 1.5,
+            velocitySmoothingFactor: CGFloat = 0.25
+        ) {
+            self.minimumTrustedConfidence = min(max(minimumTrustedConfidence, 0), 1)
+            self.minimumPredictionIoU = min(max(minimumPredictionIoU, 0), 1)
+            self.maximumRecoveryDuration = max(maximumRecoveryDuration, 0)
+            self.maximumNormalizedVelocityPerSecond = max(maximumNormalizedVelocityPerSecond, 0)
+            self.velocitySmoothingFactor = min(max(velocitySmoothingFactor, 0), 1)
+        }
+    }
+
+    /// Why an observation was rejected and the tracker should be re-seeded.
+    public enum ReseedReason: Sendable, Equatable {
+        case lostObservation
+        case lowConfidence
+        case motionInconsistent
+    }
+
+    /// Decision for one decoded frame.
+    public enum Decision: Sendable, Equatable {
+        /// Candidate is trusted. `reacquired` is true for the first trusted
+        /// result after one or more recovery frames.
+        case accept(result: TrackingResult, reacquired: Bool)
+        /// Candidate is not trusted. The provider should start a new Vision
+        /// tracking sequence from `predictedRect` for the next frame.
+        case reseed(predictedRect: CGRect, reason: ReseedReason)
+        /// Recovery exceeded the bounded duration. The provider should stop
+        /// rather than loop indefinitely on a lost subject.
+        case exhausted
+    }
+
+    public let configuration: Configuration
+
+    private var lastTrusted: TrackingResult
+    private var filteredVelocity = CGVector.zero
+    private var hasVelocityEstimate = false
+    private var recoveryStartedAt: TimeInterval?
+
+    public init(seed: TrackingResult, configuration: Configuration = Configuration()) {
+        self.configuration = configuration
+        self.lastTrusted = seed
+        self.recoveryStartedAt = nil
+    }
+
+    /// Whether the planner is currently attempting to recover a lost subject.
+    public var isRecovering: Bool {
+        recoveryStartedAt != nil
+    }
+
+    /// Evaluates a candidate for `timestamp`.
+    ///
+    /// Normal Vision observations must remain motion-consistent with the trusted
+    /// trajectory. During recovery the provider may instead supply an
+    /// appearance-verified redetection; that stronger evidence is allowed to
+    /// re-anchor tracking even when the old trajectory prediction has drifted.
+    public mutating func evaluate(
+        timestamp: TimeInterval,
+        candidateRect: CGRect?,
+        confidence: Float?,
+        appearanceVerified: Bool = false
+    ) -> Decision {
+        let predicted = predictedRect(at: timestamp)
+        let wasRecovering = isRecovering
+
+        if let recoveryStartedAt,
+           timestamp - recoveryStartedAt > configuration.maximumRecoveryDuration {
+            return .exhausted
+        }
+
+        guard let candidateRect,
+              let candidate = MotionTrackingProvider.clampedNormalizedRect(candidateRect)
+        else {
+            return registerLoss(timestamp: timestamp, predictedRect: predicted, reason: .lostObservation)
+        }
+
+        let resolvedConfidence = confidence ?? 0
+        guard resolvedConfidence >= configuration.minimumTrustedConfidence else {
+            return registerLoss(timestamp: timestamp, predictedRect: predicted, reason: .lowConfidence)
+        }
+
+        // Once recovery has started, sequential Vision output alone is not
+        // enough evidence to trust the subject again. This fail-closed check is
+        // deliberately enforced in the planner as well as the provider so a
+        // missing/failed appearance matcher cannot silently bypass the policy.
+        if wasRecovering && !appearanceVerified {
+            return registerLoss(
+                timestamp: timestamp,
+                predictedRect: predicted,
+                reason: .motionInconsistent
+            )
+        }
+
+        let canReanchorFromAppearance = wasRecovering && appearanceVerified
+        if hasVelocityEstimate && !canReanchorFromAppearance {
+            let predictionIoU = Self.intersectionOverUnion(candidate, predicted)
+            guard predictionIoU >= configuration.minimumPredictionIoU else {
+                return registerLoss(
+                    timestamp: timestamp,
+                    predictedRect: predicted,
+                    reason: .motionInconsistent
+                )
+            }
+        }
+
+        let result = TrackingResult(
+            timestamp: timestamp,
+            rect: candidate,
+            confidence: resolvedConfidence
+        )
+        updateVelocity(with: result)
+        lastTrusted = result
+        recoveryStartedAt = nil
+        return .accept(result: result, reacquired: wasRecovering)
+    }
+
+    /// Constant-velocity extrapolation from the filtered trusted trajectory.
+    public func predictedRect(at timestamp: TimeInterval) -> CGRect {
+        guard hasVelocityEstimate else {
+            return Self.clampPreservingSize(lastTrusted.rect)
+        }
+
+        let horizon = max(timestamp - lastTrusted.timestamp, 0)
+        guard horizon.isFinite else {
+            return Self.clampPreservingSize(lastTrusted.rect)
+        }
+
+        let center = CGPoint(
+            x: lastTrusted.rect.midX + filteredVelocity.dx * horizon,
+            y: lastTrusted.rect.midY + filteredVelocity.dy * horizon
+        )
+        let proposed = CGRect(
+            x: center.x - lastTrusted.rect.width * 0.5,
+            y: center.y - lastTrusted.rect.height * 0.5,
+            width: lastTrusted.rect.width,
+            height: lastTrusted.rect.height
+        )
+        return Self.clampPreservingSize(proposed)
+    }
+
+    private mutating func updateVelocity(with result: TrackingResult) {
+        let sampleDelta = result.timestamp - lastTrusted.timestamp
+        guard sampleDelta.isFinite, sampleDelta > 1.0e-9 else { return }
+
+        let maxVelocity = configuration.maximumNormalizedVelocityPerSecond
+        let measuredDX = (result.rect.midX - lastTrusted.rect.midX) / sampleDelta
+        let measuredDY = (result.rect.midY - lastTrusted.rect.midY) / sampleDelta
+        let clampedDX = min(max(measuredDX, -maxVelocity), maxVelocity)
+        let clampedDY = min(max(measuredDY, -maxVelocity), maxVelocity)
+
+        guard hasVelocityEstimate else {
+            filteredVelocity = CGVector(dx: clampedDX, dy: clampedDY)
+            hasVelocityEstimate = true
+            return
+        }
+
+        let alpha = configuration.velocitySmoothingFactor
+        filteredVelocity = CGVector(
+            dx: filteredVelocity.dx + alpha * (clampedDX - filteredVelocity.dx),
+            dy: filteredVelocity.dy + alpha * (clampedDY - filteredVelocity.dy)
+        )
+    }
+
+    private mutating func registerLoss(
+        timestamp: TimeInterval,
+        predictedRect: CGRect,
+        reason: ReseedReason
+    ) -> Decision {
+        if recoveryStartedAt == nil {
+            recoveryStartedAt = timestamp
+        }
+
+        if let recoveryStartedAt,
+           timestamp - recoveryStartedAt > configuration.maximumRecoveryDuration {
+            return .exhausted
+        }
+        return .reseed(predictedRect: predictedRect, reason: reason)
+    }
+
+    private static func clampPreservingSize(_ rect: CGRect) -> CGRect {
+        let standardized = rect.standardized
+        let width = min(max(standardized.width, 1.0e-6), 1)
+        let height = min(max(standardized.height, 1.0e-6), 1)
+        let x = min(max(standardized.minX, 0), 1 - width)
+        let y = min(max(standardized.minY, 0), 1 - height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private static func intersectionOverUnion(_ lhs: CGRect, _ rhs: CGRect) -> Double {
+        let intersection = lhs.intersection(rhs)
+        guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
+            return 0
+        }
+        let intersectionArea = Double(intersection.width * intersection.height)
+        let lhsArea = Double(lhs.width * lhs.height)
+        let rhsArea = Double(rhs.width * rhs.height)
+        let unionArea = lhsArea + rhsArea - intersectionArea
+        guard unionArea > 0 else { return 0 }
+        return intersectionArea / unionArea
+    }
+}
+
 /// Errors thrown by motion tracking.
 public enum MotionTrackingError: Error, LocalizedError, Sendable, Equatable {
     case visionUnavailable
@@ -51,9 +281,8 @@ public enum MotionTrackingError: Error, LocalizedError, Sendable, Equatable {
 
 /// Tracks an initial normalized object box across video frames.
 public final class MotionTrackingProvider: AnalysisProvider {
-    /// Probe frame shorthand for the loop instrumentation in `track(...)`.
     private typealias Frame = MotionTrackingAnalysisProbe.Frame
-    /// Whether Vision-backed motion tracking can run on this platform.
+
     public var isAvailable: Bool {
         #if canImport(Vision)
         true
@@ -62,24 +291,14 @@ public final class MotionTrackingProvider: AnalysisProvider {
         #endif
     }
 
-    /// User-visible provider name.
     public let providerName = "MotionTracking"
 
-    /// Creates a motion-tracking provider.
     public init() {}
 
     public func analyze(asset: MediaAsset, in project: Project) async throws -> AnalysisResult {
         AnalysisResult(suggestions: [], sourceAssetID: asset.id.uuidString, providerName: providerName)
     }
 
-    /// Tracks an object from an initial normalized display-space rectangle.
-    ///
-    /// - Parameters:
-    ///   - videoURL: Source video URL.
-    ///   - initialRect: Normalized display-space rectangle (0...1, top-left origin).
-    ///   - timeRange: Source time range to process.
-    ///   - frameRate: Optional sampling rate. Nil uses the asset's nominal video frame rate.
-    /// - Returns: Time-ordered normalized display-space tracking boxes.
     public func track(
         videoURL: URL,
         initialRect: CGRect,
@@ -117,14 +336,20 @@ public final class MotionTrackingProvider: AnalysisProvider {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
 
-        let request = VNTrackObjectRequest(
-            detectedObjectObservation: VNDetectedObjectObservation(
-                boundingBox: Self.visionBoundingBox(fromDisplayRect: normalizedInitialRect)
+        func makeRequest(seedRect: CGRect) -> VNTrackObjectRequest {
+            let request = VNTrackObjectRequest(
+                detectedObjectObservation: VNDetectedObjectObservation(
+                    boundingBox: Self.visionBoundingBox(fromDisplayRect: seedRect)
+                )
             )
-        )
-        request.trackingLevel = .accurate
+            request.trackingLevel = .accurate
+            return request
+        }
 
-        let sequenceHandler = VNSequenceRequestHandler()
+        var request = makeRequest(seedRect: normalizedInitialRect)
+        var sequenceHandler = VNSequenceRequestHandler()
+        var recoveryPlanner: MotionTrackingRecoveryPlanner?
+        var recoveryTemplate: MotionTrackingTemplateMatcher?
         var results: [TrackingResult] = []
         var time = startTime
         var didSeedInitialObservation = false
@@ -148,7 +373,15 @@ public final class MotionTrackingProvider: AnalysisProvider {
             let timestamp = actualTime.seconds.isFinite ? actualTime.seconds : time
 
             if !didSeedInitialObservation {
-                results.append(TrackingResult(timestamp: timestamp, rect: normalizedInitialRect, confidence: 1))
+                let seed = TrackingResult(timestamp: timestamp, rect: normalizedInitialRect, confidence: 1)
+                results.append(seed)
+                recoveryPlanner = MotionTrackingRecoveryPlanner(seed: seed)
+                recoveryTemplate = MotionTrackingTemplateMatcher(
+                    seedImage: image,
+                    normalizedRect: normalizedInitialRect
+                )
+                request = makeRequest(seedRect: normalizedInitialRect)
+                sequenceHandler = VNSequenceRequestHandler()
                 didSeedInitialObservation = true
                 MotionTrackingAnalysisProbe.record(Frame(
                     timestamp: timestamp,
@@ -166,32 +399,88 @@ public final class MotionTrackingProvider: AnalysisProvider {
                 throw MotionTrackingError.trackingFailed(error.localizedDescription)
             }
 
-            guard let observation = request.results?.first as? VNDetectedObjectObservation,
-                  let displayRect = Self.clampedNormalizedRect(
+            let observation = request.results?.first as? VNDetectedObjectObservation
+            let visionCandidateRect = observation.flatMap { observation in
+                Self.clampedNormalizedRect(
                     Self.displayRect(fromVisionBoundingBox: observation.boundingBox)
-                  )
-            else {
+                )
+            }
+
+            guard var planner = recoveryPlanner else {
+                throw MotionTrackingError.trackingFailed("recovery planner was not initialized")
+            }
+
+            var candidateRect = visionCandidateRect
+            var candidateConfidence = observation?.confidence
+            var usedTemplateRedetection = false
+
+            // Once recovery begins, a sequential tracker observation is not
+            // sufficient evidence to become trusted again: it may simply be
+            // tracking the occluder. Require an appearance redetection before
+            // returning to the Vision tracker. If the matcher is unavailable
+            // or finds no candidate, fail closed instead of using Vision output.
+            if planner.isRecovering {
+                candidateRect = nil
+                candidateConfidence = nil
+
+                if let recoveryTemplate,
+                   let match = recoveryTemplate.bestMatch(
+                    in: image,
+                    around: planner.predictedRect(at: timestamp)
+                   ) {
+                    candidateRect = match.rect
+                    candidateConfidence = Float(match.score)
+                    usedTemplateRedetection = true
+                }
+            }
+
+            let decision = planner.evaluate(
+                timestamp: timestamp,
+                candidateRect: candidateRect,
+                confidence: candidateConfidence,
+                appearanceVerified: usedTemplateRedetection
+            )
+            recoveryPlanner = planner
+
+            switch decision {
+            case .accept(let result, let reacquired):
+                if usedTemplateRedetection {
+                    request = makeRequest(seedRect: result.rect)
+                    sequenceHandler = VNSequenceRequestHandler()
+                } else if let observation {
+                    request.inputObservation = observation
+                }
+                results.append(result)
                 MotionTrackingAnalysisProbe.record(Frame(
                     timestamp: timestamp,
                     durationMs: Self.probeElapsedMs(since: frameProbeStart),
-                    status: .lostObservation
+                    status: reacquired ? .reacquired : .tracked,
+                    confidence: result.confidence
                 ))
-                time += frameDuration
-                continue
+
+            case .reseed(let predictedRect, let reason):
+                request = makeRequest(seedRect: predictedRect)
+                sequenceHandler = VNSequenceRequestHandler()
+                MotionTrackingAnalysisProbe.record(Frame(
+                    timestamp: timestamp,
+                    durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                    status: Self.probeStatus(for: reason),
+                    confidence: candidateConfidence
+                ))
+
+            case .exhausted:
+                MotionTrackingAnalysisProbe.record(Frame(
+                    timestamp: timestamp,
+                    durationMs: Self.probeElapsedMs(since: frameProbeStart),
+                    status: .recoveryExhausted,
+                    confidence: candidateConfidence
+                ))
+                break
             }
 
-            request.inputObservation = observation
-            results.append(TrackingResult(
-                timestamp: timestamp,
-                rect: displayRect,
-                confidence: observation.confidence
-            ))
-            MotionTrackingAnalysisProbe.record(Frame(
-                timestamp: timestamp,
-                durationMs: Self.probeElapsedMs(since: frameProbeStart),
-                status: .tracked,
-                confidence: observation.confidence
-            ))
+            if case .exhausted = decision {
+                break
+            }
             time += frameDuration
         }
 
@@ -203,12 +492,25 @@ public final class MotionTrackingProvider: AnalysisProvider {
         #endif
     }
 
-    /// Probe helper: wall-clock milliseconds elapsed since `start`.
+    #if canImport(Vision)
+    private static func probeStatus(
+        for reason: MotionTrackingRecoveryPlanner.ReseedReason
+    ) -> MotionTrackingAnalysisProbe.Frame.Status {
+        switch reason {
+        case .lostObservation:
+            return .lostObservation
+        case .lowConfidence:
+            return .lowConfidence
+        case .motionInconsistent:
+            return .motionInconsistent
+        }
+    }
+    #endif
+
     private static func probeElapsedMs(since start: DispatchTime) -> Double {
         Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000.0
     }
 
-    /// Clamps a normalized rectangle to the unit square. Returns nil for empty or non-finite boxes.
     public static func clampedNormalizedRect(_ rect: CGRect) -> CGRect? {
         let standardized = rect.standardized
         guard
@@ -234,7 +536,6 @@ public final class MotionTrackingProvider: AnalysisProvider {
         return CGRect(x: minX, y: minY, width: width, height: height)
     }
 
-    /// Converts a normalized top-left display rect into Vision's normalized bottom-left coordinate space.
     public static func visionBoundingBox(fromDisplayRect rect: CGRect) -> CGRect {
         let standardized = rect.standardized
         return CGRect(
@@ -245,7 +546,6 @@ public final class MotionTrackingProvider: AnalysisProvider {
         )
     }
 
-    /// Converts Vision's normalized bottom-left bounding box into a top-left display rect.
     public static func displayRect(fromVisionBoundingBox rect: CGRect) -> CGRect {
         let standardized = rect.standardized
         return CGRect(

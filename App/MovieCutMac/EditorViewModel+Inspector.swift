@@ -36,15 +36,8 @@ extension EditorViewModel {
         ))
     }
 
-
-
-
-
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
-        // Route through SetClipSpeedCommand so the rendered timeline duration,
-        // main-track ripple, and stale-field clamp happen atomically with the
-        // rate change (Step 4 of the core-editing repair).
         await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
         playbackEngine.setRate(Float(rate))
     }
@@ -89,10 +82,6 @@ extension EditorViewModel {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
     }
-
-
-
-
 
     func autoEnhance() async {
         guard let clipId = selectedClipId else { return }
@@ -146,5 +135,12 @@ extension EditorViewModel {
     func updateSelectedEffects(_ effects: [Effect]) async {
         guard let selectedClipId else { return }
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .effects(effects)))
+    }
+
+    /// Appends against the EditorSession's current state rather than replacing
+    /// an effects array captured by the sheet. The target clip is explicit so a
+    /// selection change while the browser sheet is open cannot redirect Apply.
+    func appendEffect(_ effect: Effect, to clipId: UUID) async {
+        await apply(AppendClipEffectCommand(clipId: clipId, effect: effect))
     }
 }

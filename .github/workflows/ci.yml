@@ -12,40 +12,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: |
-          # Select the NEWEST Xcode installed on the runner. The historical pin
-          # to Xcode_16.app crashed its swift-frontend on this codebase (no
-          # diagnostics — batch compiler crash), and the dev/release toolchain
-          # is Xcode 26.5. CI should verify the toolchain we actually ship
-          # with; the macOS 14/iOS 17 minimums are enforced by availability
-          # gates in the code, not by compiling with an old compiler.
           NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           echo "Available:"; ls -d /Applications/Xcode*.app
           echo "Selecting: $NEWEST"
           sudo xcode-select -s "$NEWEST/Contents/Developer"
           swift --version
 
-      # Core (SwiftPM): build then run the full test suite. The timeout guards
-      # against a regression of the cooperative-pool deadlock (Task A): if a
-      # blocking decode sneaks back onto the cooperative pool, the suite hangs
-      # instead of failing fast. The timeout turns that hang into a red build.
-      #
-      # This is the PR-time gate for the render-reliability invariants:
-      #   - ColorSpaceParityTests: preview↔export pixel parity under the pinned
-      #     sRGB/Rec.709 working space (no implicit CIContext regressions).
-      #   - HDRProfileGatingTests: HDR export is downgraded under the v1 flag,
-      #     and SDR outputs are tagged Rec.709 (no mislabeled files).
-      #   - ClipTransformAnchorTests: the shared affine helper reproduces both
-      #     engines' math (no preview/export transform drift).
-      # Behavioral/export-pixel checks (parity MAD, e2e, fuzz, perf) need a
-      # running app + GPU compositor and run on the nightly track instead.
       - name: Build Core
         run: swift build
       - name: Run Core tests
-        run: swift test
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee /tmp/moviecut-core-tests.log
         timeout-minutes: 15
+      - name: Upload Core test failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-failure-log
+          path: /tmp/moviecut-core-tests.log
+          if-no-files-found: error
+          retention-days: 1
 
-      # The Mac app target (33k lines) was previously never compiled in CI.
-      # Building it here catches App-side regressions that Core tests cannot.
       - name: Build Mac app
         run: |
           xcodebuild -project MovieCut.xcodeproj \
@@ -55,12 +43,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      # App unit tests (MovieCutMacTests): the only place ViewModels like
-      # EditorViewModel can be tested directly. Added for the waveform
-      # invalidation regression (4f1a65c). Best-effort on CI: the test host app
-      # bootstrap can be flaky in some runner environments, so a connection
-      # failure is reported but does not fail the build — Core's contract tests
-      # are the authoritative gate for the underlying fix.
+      # G-28 browser reachability/rendering regressions are product-path
+      # correctness gates, not best-effort diagnostics. Keep this focused suite
+      # blocking even while the broader Mac hosted suite retains its historical
+      # best-effort treatment for unrelated host-bootstrap flakes.
+      - name: Run G-28 Mac behavior tests (blocking)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -destination 'platform=macOS' \
+            -only-testing:MovieCutMacTests/EffectBrowserInspectorReachabilityTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
       - name: Run Mac app unit tests (best-effort)
         continue-on-error: true
         run: |
@@ -71,13 +66,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             test || true
 
-      # iOS app target (8.7k lines) — BLOCKING (kiro 9.3). The generic
-      # destination needs only the iOS SDK that ships with Xcode (no simulator
-      # runtime), and CODE_SIGNING_ALLOWED=NO matches the Mac step above. This
-      # gate is what would have caught the 7 IOSMaskCanvasView compile errors
-      # that hid behind the "iOS platform not installed" block from 2026-07-30
-      # to 2026-08-14 (fixed in cd1458f) — the iOS scheme was unbuildable for
-      # two weeks and no gate noticed.
       - name: Build iOS app (generic, blocking)
         run: |
           xcodebuild -project MovieCut.xcodeproj \
@@ -88,10 +76,6 @@ jobs:
             build
 
   ios-tests:
-    # kiro 9.2 increment 1: the first iOS app-hosted unit tests, on a
-    # simulator. Kept in its own job so simulator boot/flakiness never blocks
-    # the fast build-and-test signal. The destination picks the first
-    # available iPhone at run time — runner images differ from local ones.
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -117,30 +101,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             test
 
-  # Lint: BLOCKING on the high-signal allow-list (force_cast / force_try /
-  # shorthand_operator — correctness-risk rules; see scripts/lint_gate.sh).
-  # The full ~1,000-finding SwiftLint report stays non-blocking and is
-  # printed for visibility after the gate. The allow-list was brought to
-  # zero violations on 2026-08-17, so the gate can block without freezing
-  # every PR. Still runs if build-and-test failed so lint output is always
-  # available; the job-level continue-on-error below covers ONLY the known
-  # GitHub runner-assignment infra flake (job failing with zero steps
-  # executed), not lint findings.
   lint:
     runs-on: macos-15
     if: always()
     needs: build-and-test
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: |
-          # Select the NEWEST Xcode installed on the runner. The historical pin
-          # to Xcode_16.app crashed its swift-frontend on this codebase (no
-          # diagnostics — batch compiler crash), and the dev/release toolchain
-          # is Xcode 26.5. CI should verify the toolchain we actually ship
-          # with; the macOS 14/iOS 17 minimums are enforced by availability
-          # gates in the code, not by compiling with an old compiler.
           NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           echo "Available:"; ls -d /Applications/Xcode*.app
           echo "Selecting: $NEWEST"

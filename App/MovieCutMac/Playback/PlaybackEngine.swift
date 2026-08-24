@@ -230,7 +230,10 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 let (composition, videoComposition, audioMix, temporaryReverseRenderURLs) = try await buildComposition(from: project, audioProcessing: audioProcessing)
 
                 // Stale guard: another rebuild was requested while we built.
-                guard requestedGeneration == compositionGeneration else { return }
+                guard requestedGeneration == compositionGeneration else {
+                    removeTemporaryReverseRenderURLs(temporaryReverseRenderURLs)
+                    return
+                }
 
                 let item = AVPlayerItem(asset: composition)
                 item.videoComposition = videoComposition
@@ -746,18 +749,28 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         var videoClipInstructions: [PlaybackClipInstructionMetadata] = []
         var textOverlayClipEffects: [CustomCompositionClipEffect] = []
         var audioMixInputParameters: [AVMutableAudioMixInputParameters] = []
+        let renderTracks = renderingTracks(for: project)
+        // G-26: a project-level master chain is rendered once by the shared
+        // graph and inserted as Preview's single audio track. Off/nil keeps
+        // the established per-track AVAudioMix path.
+        let usesGraphMasterAudio = project.masterAudioProcessing != nil
         // G-25 Inc 9 audio solo: any soloed audio-capable track silences
         // every non-solo track's AUDIO (video keeps rendering).
         let anyTrackSoloed = project.timeline.tracks.contains { $0.isSolo && $0.kind != .text }
 
-        for track in renderingTracks(for: project).sorted(by: { $0.zIndex < $1.zIndex }) {
+        for track in renderTracks.sorted(by: { $0.zIndex < $1.zIndex }) {
             switch track.kind {
             case .video:
                 var videoCompositionTracksBySlot: [Int: AVMutableCompositionTrack] = [:]
-                let audioCompositionTrack = (track.isMuted || (anyTrackSoloed && !track.isSolo)) ? nil : try makeCompositionTrack(
-                    in: composition,
-                    mediaType: .audio
-                )
+                let audioCompositionTrack: AVMutableCompositionTrack?
+                if usesGraphMasterAudio || track.isMuted || (anyTrackSoloed && !track.isSolo) {
+                    audioCompositionTrack = nil
+                } else {
+                    audioCompositionTrack = try makeCompositionTrack(
+                        in: composition,
+                        mediaType: .audio
+                    )
+                }
                 let audioParameters = AVMutableAudioMixInputParameters()
 
                 if let audioCompositionTrack {
@@ -966,6 +979,9 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     audioMixInputParameters.append(audioParameters)
                 }
             case .audio:
+                // The graph master mix already contains every audio-capable
+                // track; inserting legacy clip audio here would double it.
+                guard !usesGraphMasterAudio else { continue }
                 guard !track.isMuted, !(anyTrackSoloed && !track.isSolo) else { continue }
 
                 let audioCompositionTrack = try makeCompositionTrack(in: composition, mediaType: .audio)
@@ -1191,6 +1207,26 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         )
                     }
                     textLayers.append(textLayer)
+                }
+            }
+        }
+
+        // G-26 Preview↔Export parity: with master processing enabled,
+        // install the exact shared graph mix as Preview's SINGLE audio track.
+        // The temp AAC joins the composition-build owned URL set.
+        if usesGraphMasterAudio,
+           let graphAudioURL = try await renderGraphPreviewAudio(
+               for: project,
+               audioProcessing: audioProcessing,
+               tracks: renderTracks
+           ) {
+            temporaryReverseRenderURLs.append(graphAudioURL)
+            let graphAudioAsset = AVURLAsset(url: graphAudioURL)
+            if let graphAudioTrack = try await graphAudioAsset.loadTracks(withMediaType: .audio).first {
+                let trackRange = try await graphAudioTrack.load(.timeRange)
+                if trackRange.duration > .zero {
+                    let previewAudioTrack = try makeCompositionTrack(in: composition, mediaType: .audio)
+                    try previewAudioTrack.insertTimeRange(trackRange, of: graphAudioTrack, at: .zero)
                 }
             }
         }
@@ -1547,6 +1583,41 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             to: layer,
             canvasSize: canvasSize
         )
+    }
+
+    /// Renders Preview's project-level master audio through the same graph
+    /// path used by export. AAC encoding is detached so the MainActor-owned
+    /// player never synchronously encodes the whole timeline.
+    private func renderGraphPreviewAudio(
+        for project: Project,
+        audioProcessing: ClipAudioProcessingOptions,
+        tracks: [Track]
+    ) async throws -> URL? {
+        let mix: AudioGraphSourceAudio
+        do {
+            mix = try await GraphMixRenderer.renderMix(
+                project: project,
+                eqPresetsByClipId: audioProcessing.eqPresets,
+                trimToAudibleSpan: false,
+                tracks: tracks
+            )
+        } catch GraphMixRenderer.RenderError.noAudio {
+            return nil
+        }
+
+        try Task.checkCancellation()
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutGraphPreview-\(UUID().uuidString).m4a")
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try AudioGraphAacEncoder.encode(mix, to: url)
+            }.value
+            try Task.checkCancellation()
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
     }
 
     private func temporaryImageRenderURL(for clip: Clip) -> URL {

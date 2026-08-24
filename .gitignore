@@ -21,6 +21,9 @@ artifacts/
 /log.md
 .zcode/
 
+# Local security scan artifacts (not user code, never committed)
+.mimosa/
+
 # macOS
 .DS_Store
 *.swp

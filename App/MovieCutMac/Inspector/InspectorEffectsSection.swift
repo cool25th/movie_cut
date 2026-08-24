@@ -8,6 +8,19 @@ enum InspectorEffectsMode {
     case adjustment
     case mask
     case animation
+
+    /// The effect browser belongs to effect/color discovery, so it is exposed
+    /// from the active Adjustment tab as well as the legacy full inspector.
+    /// Keeping the policy on the mode makes the reachable-path contract
+    /// behavior-testable instead of relying on source-string inspection.
+    var showsEffectBrowser: Bool {
+        switch self {
+        case .full, .adjustment:
+            return true
+        case .mask, .animation:
+            return false
+        }
+    }
 }
 
 struct InspectorEffectsSection: View {
@@ -45,24 +58,31 @@ struct InspectorEffectsSection: View {
     }
 
     @ViewBuilder
-    private var fullSections: some View {
-        // G-28: the cost-aware effect browser entry point.
-        HStack {
-            Text("Effects")
-                .font(MovieCutTypography.panelTitle)
-            Spacer()
-            Button {
-                isEffectBrowserPresented = true
-            } label: {
-                Label("Browse", systemImage: "square.grid.2x2")
-                    .font(MovieCutTypography.toolbar)
+    private var effectBrowserEntry: some View {
+        if mode.showsEffectBrowser {
+            HStack {
+                Text("Effects")
+                    .font(MovieCutTypography.panelTitle)
+                Spacer()
+                Button {
+                    isEffectBrowserPresented = true
+                } label: {
+                    Label("Browse", systemImage: "square.grid.2x2")
+                        .font(MovieCutTypography.toolbar)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Browse effects")
+                .accessibilityHint("Opens effect previews and parameter controls for the selected clip.")
             }
-            .buttonStyle(.bordered)
-            .accessibilityLabel("Browse effects")
+            .sheet(isPresented: $isEffectBrowserPresented) {
+                EffectBrowserView(viewModel: viewModel, clip: clip)
+            }
         }
-        .sheet(isPresented: $isEffectBrowserPresented) {
-            EffectBrowserView(viewModel: viewModel, clip: clip)
-        }
+    }
+
+    @ViewBuilder
+    private var fullSections: some View {
+        effectBrowserEntry
         colorCorrectionSection
         colorGradeSection
         maskSection
@@ -81,6 +101,9 @@ struct InspectorEffectsSection: View {
 
     @ViewBuilder
     private var adjustmentSections: some View {
+        // G-28: this is the mode used by InspectorPanel's visible Adjustment
+        // tab, so the browser must be reachable here (not only in `.full`).
+        effectBrowserEntry
         colorCorrectionSection
         colorGradeSection
         backgroundRemovalSection

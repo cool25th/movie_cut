@@ -94,23 +94,40 @@ final class IOSExportEngine {
     /// gate — the isBackgroundRemoved omission here was a silent no-op bug
     /// until W5 caught it.
     func needsCustomCompositor(for project: Project) -> Bool {
-        project.timeline.tracks.contains { track in
-            track.clips.contains { clip in
-                clip.colorCorrection != nil
-                    || clip.colorGrade != nil
-                    || !clip.effects.isEmpty
-                    || clip.mask != nil
-                    || clip.chromaKey != nil
-                    || clip.textContent != nil
-                    // Without this, a clip whose ONLY effect is background
-                    // removal never got the custom compositor attached — the
-                    // removal silently no-oped on export (the Mac gate at
-                    // ExportEngine.needsCustomCompositor includes it).
-                    || clip.isBackgroundRemoved
-                    || clip.blendMode != .normal
-                    || clip.cropRect != nil
-            }
+        // G-03: adjustment layers only render through the custom compositor.
+        let hasAdjustmentLayer = project.timeline.tracks
+            .flatMap(\.clips)
+            .contains { $0.isAdjustmentLayer }
+        if hasAdjustmentLayer { return true }
+        return project.timeline.tracks.contains { track in
+            track.clips.contains { clip in clipRequiresCustomCompositor(clip) }
         }
+    }
+
+    /// Per-clip compositor triggers, kept macOS-parity complete: without the
+    /// gate, the listed feature silently no-ops on export (the W5 background-
+    /// removal regression was exactly this class of gap).
+    private func clipRequiresCustomCompositor(_ clip: Clip) -> Bool {
+        if clip.colorCorrection != nil { return true }
+        if clip.colorGrade != nil { return true }
+        if !clip.effects.isEmpty { return true }
+        if clip.mask != nil { return true }
+        if clip.chromaKey != nil { return true }
+        if clip.chromaKeyColor != nil { return true }
+        if clip.textContent != nil { return true }
+        if clip.isBackgroundRemoved { return true }
+        if clip.blendMode != .normal { return true }
+        if clip.cropRect != nil { return true }
+        // BUG-IOS-03: a clip whose only edit is a transform or opacity change
+        // must still render through the custom compositor — the plain path
+        // drops both.
+        if clip.transform != ClipTransform() { return true }
+        if clip.opacity != 1 { return true }
+        // Keyframed properties and G-24 stabilization render inside the
+        // custom compositor.
+        if !clip.keyframes.isEmpty { return true }
+        if clip.stabilization != nil { return true }
+        return false
     }
 
     /// G-25 Inc 9 audio solo: true when some audio-capable track is soloed
@@ -137,7 +154,15 @@ final class IOSExportEngine {
             : CGSize(width: 1920, height: 1080)
 
         videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        // Frame rate follows the PROJECT's export settings — a hard-coded 30
+        // silently re-timed 24/60fps projects.
+        let fps: Int
+        switch project.exportSettings.frameRate {
+        case .fps24: fps = 24
+        case .fps30: fps = 30
+        case .fps60: fps = 60
+        }
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
         videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
 
         let sortedTracks = project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex })
@@ -209,6 +234,7 @@ final class IOSExportEngine {
                         effects: clip.effects,
                         textContent: clip.textContent,
                         isBackgroundRemoved: clip.isBackgroundRemoved,
+                        blendMode: clip.blendMode,
                         cropRect: clip.cropRect,
                         stabilization: clip.stabilization
                     ) else {
@@ -247,7 +273,8 @@ final class IOSExportEngine {
                         textContent: exportTextContent,
                         stickerEmoji: stickerEmoji,
                         stickerFontSize: stickerFontSize,
-                        isBackgroundRemoved: clip.isBackgroundRemoved
+                        isBackgroundRemoved: clip.isBackgroundRemoved,
+                        blendMode: clip.blendMode
                     ) else {
                         continue
                     }
@@ -429,8 +456,10 @@ final class IOSExportEngine {
         // corresponds to the original sourceRange.end.
         let effectiveAsset: AVURLAsset
         let effectiveSourceStart: TimeInterval
-        if clip.isReversed, mediaType == .video, let reversedURL = await renderReversedAsset(for: clip, from: asset) {
-            effectiveAsset = AVURLAsset(url: reversedURL)
+        if clip.isReversed, mediaType == .video {
+            // A failed reverse render must FAIL the export with a reason —
+            // silently exporting the clip forward mislabels the output.
+            effectiveAsset = AVURLAsset(url: try await renderReversedAsset(for: clip, from: asset))
             effectiveSourceStart = 0
         } else {
             effectiveAsset = asset
@@ -477,8 +506,11 @@ final class IOSExportEngine {
                 duration: cmTime(0.04)
             )
             try compositionTrack.insertTimeRange(minimalSource, of: sourceTrack, at: cursor)
-            let scaled = CMTimeRange(start: cursor, duration: cmTime(clip.timelineRange.duration))
-            compositionTrack.scaleTimeRange(scaled, toDuration: cmTime(clip.timelineRange.duration))
+            // Scale the INSERTED window (macOS parity): scaling a range that
+            // already has the target duration is a no-op and left the frozen
+            // frame at 0.04s with a gap after it.
+            let insertedWindow = CMTimeRange(start: cursor, duration: minimalSource.duration)
+            compositionTrack.scaleTimeRange(insertedWindow, toDuration: cmTime(clip.timelineRange.duration))
             cursor = CMTimeAdd(cursor, cmTime(clip.timelineRange.duration))
             return
         }
@@ -506,9 +538,10 @@ final class IOSExportEngine {
         }
     }
 
-    /// Renders a reversed copy of the clip's source range (video only). Returns
-    /// nil if rendering fails. Mirrors macOS ReverseRenderService usage.
-    private func renderReversedAsset(for clip: Clip, from asset: AVURLAsset) async -> URL? {
+    /// Renders a reversed copy of the clip's source range (video only).
+    /// Throws on failure — the caller must not silently fall back to forward.
+    /// Mirrors macOS ReverseRenderService usage.
+    private func renderReversedAsset(for clip: Clip, from asset: AVURLAsset) async throws -> URL {
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutiOSReverse-\(clip.id.uuidString)-\(UUID().uuidString)")
             .appendingPathExtension("mov")
@@ -525,7 +558,8 @@ final class IOSExportEngine {
             )
             return outputURL
         } catch {
-            return nil
+            // Surface the underlying failure instead of exporting forward.
+            throw error
         }
     }
 
@@ -569,18 +603,12 @@ final class IOSExportEngine {
             let outputSegmentEnd = curve.timeMapping(sourceTime: segEnd) * sourceDuration
             let outputSegmentDuration = max(outputSegmentEnd - outputSegmentStart, 1.0 / 600.0)
 
-            let sourceSegmentStart = clip.sourceRange.start + segStart * sourceDuration
             let sourceSegmentDuration = (segEnd - segStart) * sourceDuration
-            let segmentSourceRange = CMTimeRange(
-                start: cmTime(sourceSegmentStart),
-                duration: cmTime(sourceSegmentDuration)
-            )
 
-            // Insert the source segment at the accumulated destination time.
+            // Scale the ALREADY-inserted base range segment (macOS parity).
+            // Re-inserting the segment on top of the base insertion duplicated
+            // the media: every ramp clip rendered its content twice.
             let segDestination = CMTimeAdd(destinationTime, cmTime(accumulatedOutput))
-            try compositionTrack.insertTimeRange(segmentSourceRange, of: sourceTrack, at: segDestination)
-
-            // Scale it to the ramp-derived output duration.
             let scaledRange = CMTimeRange(start: segDestination, duration: cmTime(sourceSegmentDuration))
             compositionTrack.scaleTimeRange(scaledRange, toDuration: cmTime(outputSegmentDuration))
 
@@ -592,10 +620,11 @@ final class IOSExportEngine {
     }
 
     private func sourceTimeRange(for clip: Clip) -> CMTimeRange? {
-        let sourceDuration = min(
-            max(clip.sourceRange.duration, 0),
-            max(clip.timelineRange.duration, 0)
-        )
+        // The FULL source span (macOS parity). The previous
+        // min(timelineRange.duration) clamp truncated the source to the
+        // already speed-adjusted timeline length BEFORE dividing by the
+        // playback rate — every constant-rate clip was shortened twice.
+        let sourceDuration = max(clip.sourceRange.duration, 0)
 
         guard sourceDuration > 0 else { return nil }
 

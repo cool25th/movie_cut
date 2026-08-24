@@ -302,13 +302,19 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     at: request.compositionTime
                 )
                 let outgoingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                    to: Self.fittedToCanvas(
+                        RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: outgoingEffect,
                     instruction: instruction,
                     request: request
                 )
                 let incomingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                    to: Self.fittedToCanvas(
+                        RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: incomingEffect,
                     instruction: instruction,
                     request: request
@@ -346,7 +352,16 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 return
             }
 
-            var image = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            // BUG-06 root cause: source frames rendered 1:1 at the origin —
+            // any clip whose aspect differs from the canvas exported as a tiny
+            // corner sliver over black (mean luma collapses by the area ratio,
+            // e.g. 320×240 in 1920×1080 → 124→4.6). Aspect-fit + center every
+            // source into the render canvas BEFORE effects/overlays so the
+            // composited frame IS the canvas.
+            var image = Self.fittedToCanvas(
+                RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                canvasSize: request.renderContext.size
+            )
 
             if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
@@ -604,6 +619,28 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         return image
+    }
+
+    /// Aspect-fits and centers a source frame into the render canvas.
+    /// Identity-transform clips previously rendered 1:1 at the corner; content
+    /// smaller than the canvas left the rest black (BUG-06 / CA-04).
+    static func fittedToCanvas(_ image: CIImage, canvasSize: CGSize) -> CIImage {
+        let extent = image.extent
+        guard !extent.isEmpty,
+              extent.width > 0, extent.height > 0,
+              canvasSize.width > 0, canvasSize.height > 0 else { return image }
+        let scale = min(
+            canvasSize.width / extent.width,
+            canvasSize.height / extent.height
+        )
+        let scaledWidth = extent.width * scale
+        let scaledHeight = extent.height * scale
+        let dx = (canvasSize.width - scaledWidth) / 2 - extent.minX * scale
+        let dy = (canvasSize.height - scaledHeight) / 2 - extent.minY * scale
+        return image
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: dx, y: dy))
+            .cropped(to: CGRect(origin: .zero, size: canvasSize))
     }
 
     private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {

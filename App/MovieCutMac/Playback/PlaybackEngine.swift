@@ -902,12 +902,34 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
                         let preferredTransform = try await effectiveSourceTrack.load(.preferredTransform)
                         let sourceSize = try await effectiveSourceTrack.load(.naturalSize)
+                        // BUG-06 parity: the export path aspect-fits every
+                        // source into the canvas; the preview instruction must
+                        // carry the same base fit or preview and export drift
+                        // (and mismatched aspects previewed 1:1 at the corner).
+                        let displaySize: CGSize = sourceSize.applying(preferredTransform)
+                        let absWidth: CGFloat = abs(displaySize.width)
+                        let absHeight: CGFloat = abs(displaySize.height)
+                        let canvas: CGSize = project.timeline.canvasSize
+                        var previewFit: CGAffineTransform = .identity
+                        if absWidth > 0, absHeight > 0 {
+                            let fitScaleW: CGFloat = canvas.width / absWidth
+                            let fitScaleH: CGFloat = canvas.height / absHeight
+                            let fitScale: CGFloat = min(fitScaleW, fitScaleH)
+                            let scaledW: CGFloat = absWidth * fitScale
+                            let scaledH: CGFloat = absHeight * fitScale
+                            let tx: CGFloat = (canvas.width - scaledW) / 2
+                            let ty: CGFloat = (canvas.height - scaledH) / 2
+                            previewFit = CGAffineTransform(translationX: tx, y: ty)
+                                .scaledBy(x: fitScale, y: fitScale)
+                        }
                         videoClipInstructions.append(PlaybackClipInstructionMetadata(
                             timelineTrackID: track.id,
                             trackID: videoCompositionTrack.trackID,
                             timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
-                            transform: clip.transform.affineTransform(
-                                for: .sourceFrame(preferredTransform: preferredTransform, size: sourceSize)
+                            transform: previewFit.concatenating(
+                                clip.transform.affineTransform(
+                                    for: .sourceFrame(preferredTransform: preferredTransform, size: sourceSize)
+                                )
                             ),
                             clipTransform: clip.transform,
                             keyframes: clip.keyframes,

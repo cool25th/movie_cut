@@ -530,6 +530,12 @@ final class ExportEngine: FlattenedTimelineConsumer {
                         playbackRate: playbackRate,
                         blendMode: clip.blendMode,
                         cropRect: clip.cropRect,
+                        sourceNaturalSize: {
+                            if let w = mediaAsset.metadata.width, let h = mediaAsset.metadata.height {
+                                return CGSize(width: w, height: h)
+                            }
+                            return nil
+                        }(),
                         stabilization: clip.stabilization
                     ))
                 }
@@ -653,11 +659,24 @@ final class ExportEngine: FlattenedTimelineConsumer {
             layerInstruction.setOpacity(Float(min(max(clip.opacity, 0), 1)), at: clip.timeRange.start)
             layerInstruction.setOpacity(0, at: clipEnd)
 
+            // BUG-06 root cause: an identity-transform clip got NO transform,
+            // so it rendered 1:1 at the canvas origin — mismatched aspects
+            // exported as a corner sliver over black. Aspect-fit + center is
+            // now the BASE transform for every clip; the user transform
+            // composes on top.
+            let baseFit = Self.aspectFitTransform(
+                sourceSize: clip.sourceNaturalSize ?? resolvedSize,
+                canvasSize: resolvedSize
+            )
             if !clip.transform.isIdentity {
                 layerInstruction.setTransform(
-                    clip.transform.affineTransform(for: .canvas(size: resolvedSize)),
+                    clip.transform.affineTransform(for: .canvas(size: resolvedSize))
+                        .concatenating(baseFit),
                     at: clip.timeRange.start
                 )
+                layerInstruction.setTransform(.identity, at: clipEnd)
+            } else {
+                layerInstruction.setTransform(baseFit, at: clip.timeRange.start)
                 layerInstruction.setTransform(.identity, at: clipEnd)
             }
 
@@ -2286,6 +2305,26 @@ private enum MotionAwareSlowMotionRenderError: LocalizedError {
     }
 }
 
+extension ExportEngine {
+    /// Aspect-fit + center a source rectangle into the canvas — the base
+    /// transform every plain-path clip now carries (BUG-06: identity clips
+    /// previously rendered 1:1 at the origin over black).
+    static func aspectFitTransform(sourceSize: CGSize, canvasSize: CGSize) -> CGAffineTransform {
+        guard sourceSize.width > 0, sourceSize.height > 0,
+              canvasSize.width > 0, canvasSize.height > 0 else { return .identity }
+        let scale = min(
+            canvasSize.width / sourceSize.width,
+            canvasSize.height / sourceSize.height
+        )
+        let scaledWidth = sourceSize.width * scale
+        let scaledHeight = sourceSize.height * scale
+        let dx = (canvasSize.width - scaledWidth) / 2
+        let dy = (canvasSize.height - scaledHeight) / 2
+        return CGAffineTransform(translationX: dx, y: dy)
+            .scaledBy(x: scale, y: scale)
+    }
+}
+
 private struct ExportClipInstructionMetadata {
     var clipID: UUID
     var timelineTrackID: UUID
@@ -2312,6 +2351,9 @@ private struct ExportClipInstructionMetadata {
     var playbackRate: Double = 1.0
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
+    /// The source's natural pixel size (from the asset metadata) — drives
+    /// the aspect-fit base transform (BUG-06).
+    var sourceNaturalSize: CGSize? = nil
     var stabilization: StabilizationPlan? = nil
 
     var usesOpticalFlowSlowMotion: Bool {

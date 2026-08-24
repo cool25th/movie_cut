@@ -42,7 +42,6 @@ bad() { echo "[$1] FAIL: $2" >&2; fail=1; }
 # increments. An unregistered failure still fails.
 registered() {
   case "$1" in
-    tenbit) echo "BUG-06";;
     rotated) echo "BUG-07";;
     *) echo "";;
   esac
@@ -115,12 +114,15 @@ if [ -s "$WORK/tenbit_export.mp4" ]; then
   pix="$(json "$WORK/tenbit_export.mp4" v:0 stream=pix_fmt)"
   note tenbit "output pix_fmt=$pix (v1 contract: 8-bit yuv420p)"
   [ "$pix" = "yuv420p" ] || bad tenbit "unexpected output pix_fmt $pix"
-  # Color preservation: mean luma of source vs export at t=1.0 (Y channel).
+  # Color preservation (BUG-06 fixed 2026-08-25): the 4:3 source is
+  # pillarboxed into the 16:9 canvas, so the FULL-FRAME export mean is the
+  # content mean scaled by the content fraction (1440/1920 = 0.75). Compare
+  # the export's CENTER CONTENT REGION to the source instead.
   src_y="$(ffmpeg -loglevel error -ss 1.0 -i "$FIXDIR/ca04_tenbit_320x240_2s.mov" -frames:v 1 -f rawvideo -pix_fmt gray - 2>/dev/null | python3 -c 'import sys; d=sys.stdin.buffer.read(); print(sum(d)/len(d) if d else -1)')"
-  out_y="$(ffmpeg -loglevel error -ss 1.0 -i "$WORK/tenbit_export.mp4" -frames:v 1 -f rawvideo -pix_fmt gray - 2>/dev/null | python3 -c 'import sys; d=sys.stdin.buffer.read(); print(sum(d)/len(d) if d else -1)')"
-  note tenbit "mean luma source=${src_y} export=${out_y}"
-  python3 -c "import sys; sys.exit(0 if abs($src_y - $out_y) <= 4.0 else 1)" \
-    || reg tenbit "mean luma shifted more than ±4 (10→8-bit + encode): src=$src_y out=$out_y"
+  out_y="$(ffmpeg -loglevel error -ss 1.0 -i "$WORK/tenbit_export.mp4" -frames:v 1 -vf "crop=1440:1080:240:0" -f rawvideo -pix_fmt gray - 2>/dev/null | python3 -c 'import sys; d=sys.stdin.buffer.read(); print(sum(d)/len(d) if d else -1)')"
+  note tenbit "mean luma source=${src_y} export(content region)=${out_y}"
+  python3 -c "import sys; sys.exit(0 if abs($src_y - $out_y) <= 6.0 else 1)" \
+    || bad tenbit "content-region luma shifted more than ±6 (10→8-bit + encode): src=$src_y out=$out_y"
 fi
 
 echo "=== 3. Rotation metadata → upright export ==="

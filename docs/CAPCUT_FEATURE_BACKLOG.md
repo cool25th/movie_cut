@@ -161,9 +161,9 @@
 
 - 수정 완료: 탭 내 첫 쓰기 실패 래치(스레드 안전) → `stopRecording()`이 `writeFailed(underlying:)` throw — 불완전 테이크 폐기.
 
-### BUG-IOS-06 (P1) — iOS 사진 임포트 전체 메모리 적재 + 실패 무음
+### BUG-IOS-06 (P1) — iOS 사진 임포트 전체 메모리 적재 + 실패 무음 — **수정 완료(2026-08-24, b0a5f03)**
 
-- `iOSContentView.swift:571` `loadTransferable(type: Data.self)` — 4K 대형 파일 OOM 위험, `try?` 실패 무음. 수정: 파일 URL 기반 전송(`loadTransferable(type: URL.self)` 복사) + 오류 표면화.
+- 수정 완료: 파일 URL 전송 + 1MiB 버퍼 스트림 복사 + 전달/복사 실패 오류 채널 표면화(실행 가능 문구).
 
 ### 참고 등록 (결함 아님)
 
@@ -178,13 +178,13 @@
 
 > 원천: `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md`.
 
-### UX-REC-01 (P2) — iOS 익스포트 취소/실패 시 부분 출력 파일 잔존
+### UX-REC-01 (P2) — iOS 익스포트 취소/실패 시 부분 출력 — **수정 완료(2026-08-24, 2ca5f38)**
 
-- 위치: `IOSExportEngine.cancelExport`(`:66-74`)·catch 경로 — Mac `removePartialOutput`(4지점) 패리티 부재. 취소/실패 시 임시 디렉터리에 잘린 .mov 잔존(사용자 지정 경로 아님 → P2). 수정: 취소/실패 경로 정리 추가.
+- 수정 완료: 활성 출력 URL 추적 + 취소/실패 경로에서 제거(best-effort, 원 오류 보존).
 
-### UX-REC-02 (P2) — iOS 크래시 복구 무음 자동 채택 (버림 선택 부재)
+### UX-REC-02 (P2) — iOS 크래시 복구 무음 자동 채택 — **수정 완료(2026-08-24, 9d277fd)**
 
-- 위치: `IOSEditorViewModel.restoreAutosaveIfAvailable` — Mac recover/discard 프롬프트와 달리 조용히 채택. 복구 파일이 오래된 상태면 버릴 수단 없음. 수정: 런치 복구 알림 + 버림 선택지.
+- 수정 완료: 런치 복구 후 유지/버림 알림(영어 키+en/ko). 버림 → 신규 프로젝트 + 복구 파일 삭제.
 
 ### 참고 (UX-REC-03) — 세션 중 스코프 철회는 열기/익스포트 게이트에서만 감지
 

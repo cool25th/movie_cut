@@ -14,16 +14,30 @@ final class IOSEditorViewModel {
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
     var templateStore: TemplateStore
 
-    private let session: EditorSession
+    private var session: EditorSession
+    private let projectStore: ProjectStore
     private var sfxURLResolver: [String: URL]
 
-    init() {
+    /// BUG-IOS-02: crash-recovery autosave state. Committed edits persist to
+    /// the shared Core `ProjectStore`; a launch-time recovery restores work
+    /// that would previously vanish on every app termination or OS eviction.
+    /// Failure surfaces non-blocking (editing continues).
+    var autosaveFailureMessage: String?
+    var recoveredUnsavedWork = false
+
+    /// - Parameter autosaveDirectory: test seam — routes the crash-recovery
+    ///   autosave to an explicit directory. nil uses the production location.
+    init(autosaveDirectory: URL? = nil) {
+        // BUG-IOS-02: every launch used to start from a fresh project — work
+        // was lost on termination or OS eviction. Restore the crash-recovery
+        //   autosave when one exists (same Core ProjectStore contract as Mac).
         let project = Self.defaultProject()
         currentProject = project
         selectedClipId = nil
         playheadTime = 0
         isPlaying = false
         session = EditorSession(project: project)
+        projectStore = autosaveDirectory.map { ProjectStore(autosaveDirectory: $0) } ?? ProjectStore()
         sfxURLResolver = Self.makeSFXURLResolver()
         templateStore = TemplateStore()
         for bundle in TemplateStore.builtInTemplates() {
@@ -392,6 +406,49 @@ final class IOSEditorViewModel {
         if currentProject.timeline.duration == 0 {
             isPlaying = false
         }
+        scheduleAutosave()
+    }
+
+    // MARK: - Crash-recovery persistence (BUG-IOS-02)
+
+    /// Restores the crash-recovery autosave at launch, when present. Call
+    /// once from the root view's `task` before user interaction.
+    func restoreAutosaveIfAvailable() async {
+        guard let recovered = await projectStore.loadAutosaveIfAvailable() else { return }
+        let project = Self.defaultProjectIfEmpty(recovered)
+        session = EditorSession(project: project)
+        currentProject = project
+        selectedClipId = nil
+        playheadTime = 0
+        isPlaying = false
+        recoveredUnsavedWork = true
+    }
+
+    /// Clears the recovery file (clean quit semantics).
+    func clearRecoveryAutosave() async {
+        await projectStore.clearAutosave()
+    }
+
+    private func scheduleAutosave() {
+        let snapshot = currentProject
+        Task { [projectStore, weak self] in
+            do {
+                try await projectStore.saveAutosave(snapshot)
+                await MainActor.run { self?.autosaveSaveSucceeded() }
+            } catch {
+                let classified = FileOperationError.classify(error)
+                await MainActor.run { self?.autosaveSaveFailed(classified) }
+            }
+        }
+    }
+
+    private func autosaveSaveSucceeded() {
+        guard autosaveFailureMessage != nil else { return }
+        autosaveFailureMessage = nil
+    }
+
+    private func autosaveSaveFailed(_ failure: FileOperationError) {
+        autosaveFailureMessage = failure.userMessage
     }
 
     private func duplicatedClip(after originalClip: Clip?, trackId: UUID?, excluding originalClipId: UUID) -> Clip? {
@@ -460,6 +517,19 @@ final class IOSEditorViewModel {
         case .video, .image: .video
         case .audio: .audio
         }
+    }
+
+    /// A recovered project keeps its timeline; missing default tracks are
+    /// re-seeded the same way the Mac launch path does.
+    private static func defaultProjectIfEmpty(_ project: Project) -> Project {
+        var project = project
+        if !project.timeline.tracks.contains(where: { $0.kind == .video }) {
+            project.timeline.tracks.append(Track(kind: .video, name: "Video", zIndex: 0))
+        }
+        if !project.timeline.tracks.contains(where: { $0.kind == .audio }) {
+            project.timeline.tracks.append(Track(kind: .audio, name: "Audio", zIndex: 1))
+        }
+        return project
     }
 
     private static func defaultProject() -> Project {

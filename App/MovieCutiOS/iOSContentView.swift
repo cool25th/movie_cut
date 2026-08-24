@@ -139,6 +139,12 @@ struct IOSContentView: View {
                     .presentationDragIndicator(.visible)
             }
             .task {
+                // BUG-IOS-02: restore crash-recovery autosave BEFORE the
+                // harness or user interaction — work from a terminated or
+                // evicted session survives launches now.
+                if ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] != "1" {
+                    await viewModel.restoreAutosaveIfAvailable()
+                }
                 // G-27 simulator E2E: env-gated harness (no-op in normal
                 // launches) — drives the real import/preview/export/audio/
                 // persistence paths and reports to Documents/g27-result.txt.

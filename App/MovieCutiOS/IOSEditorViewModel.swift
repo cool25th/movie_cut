@@ -446,6 +446,21 @@ final class IOSEditorViewModel {
         await projectStore.clearAutosave()
     }
 
+    /// UX-REC-02: discard the silently-restored recovery and start fresh.
+    /// The launch restore previously had no discard option — an old recovery
+    /// file was adopted with no way back to a blank project.
+    func discardRecoveredProject() async {
+        let project = Self.defaultProject()
+        session = EditorSession(project: project)
+        currentProject = project
+        selectedClipId = nil
+        playheadTime = 0
+        isPlaying = false
+        recoveredUnsavedWork = false
+        lastErrorMessage = nil
+        await clearRecoveryAutosave()
+    }
+
     private func scheduleAutosave() {
         let snapshot = currentProject
         Task { [projectStore, weak self] in

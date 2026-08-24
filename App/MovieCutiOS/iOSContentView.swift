@@ -13,6 +13,8 @@ struct IOSContentView: View {
     @State private var isExportResultPresented = false
     @State private var isExportErrorPresented = false
     @State private var didCancelExport = false
+    // UX-REC-02: launch recovery prompt — offer Keep/Discard for restored work.
+    @State private var isRecoveryPromptPresented = false
     @State private var exportErrorMessage: String?
     @State private var isImporting = false
     @State private var isTextClipPresented = false
@@ -149,6 +151,28 @@ struct IOSContentView: View {
                 // launches) — drives the real import/preview/export/audio/
                 // persistence paths and reports to Documents/g27-result.txt.
                 await IOSUITestHarness.runIfRequested(viewModel: viewModel)
+                // UX-REC-02: the restore above adopts silently — offer the
+                // user an explicit choice to keep or discard the recovered
+                // work (the old recovery file may be stale).
+                if viewModel.recoveredUnsavedWork {
+                    isRecoveryPromptPresented = true
+                }
+            }
+            .alert(
+                NSLocalizedString("Recovered unsaved work", comment: ""),
+                isPresented: $isRecoveryPromptPresented
+            ) {
+                Button(NSLocalizedString("Keep", comment: "")) {
+                    viewModel.recoveredUnsavedWork = false
+                }
+                Button(NSLocalizedString("Discard", comment: ""), role: .destructive) {
+                    Task { await viewModel.discardRecoveredProject() }
+                }
+            } message: {
+                Text(NSLocalizedString(
+                    "MovieCut restored your last session. Keep the recovered project, or discard it and start fresh?",
+                    comment: ""
+                ))
             }
             .sheet(isPresented: $isExportProgressPresented) {
                 IOSExportProgressSheet(

@@ -120,8 +120,30 @@ jobs:
         run: bash scripts/lint_gate.sh
       - name: Verify doc/command file paths (blocking)
         run: bash scripts/verify_doc_paths.sh
-      - name: Verify localization keys (blocking)
-        run: python3 scripts/verify_localization_keys.py
+      - name: Verify localization keys (blocking, both platforms)
+        run: |
+          python3 scripts/verify_localization_keys.py \
+            --catalog App/MovieCutMac/Localizable.xcstrings --source-root App/MovieCutMac
+          python3 scripts/verify_localization_keys.py \
+            --catalog App/MovieCutiOS/Localizable.xcstrings --source-root App/MovieCutiOS
+          # Every key in BOTH catalogs must carry an en AND ko translation —
+          # a Mac-only fill once slipped through when the iOS catalog change
+          # was lost to a concurrent-write race (external review finding).
+          python3 - <<'PY'
+          import json, sys
+          failed = False
+          for path in ["App/MovieCutMac/Localizable.xcstrings",
+                       "App/MovieCutiOS/Localizable.xcstrings"]:
+              strings = json.load(open(path))["strings"]
+              for key, entry in strings.items():
+                  locs = entry.get("localizations", {})
+                  for lang in ("en", "ko"):
+                      value = locs.get(lang, {}).get("stringUnit", {}).get("value", "")
+                      if not value:
+                          print(f"MISSING {lang}: {path} :: {key[:80]}")
+                          failed = True
+          sys.exit(1 if failed else 0)
+          PY
       - name: Report full SwiftLint findings (non-blocking)
         if: always()
         run: swiftlint lint --reporter github-actions-logging . || true

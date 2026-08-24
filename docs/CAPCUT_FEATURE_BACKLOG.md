@@ -59,10 +59,10 @@
 | CA-18 | 화자 분리(diarization) 자막 — 게이트형 연구. **임계값 사전 등록: 화자 혼동율 ≤10%(합성·실녹음 각각)·RTF ≤0.5·메모리 예산(스템 게이트와 동일 기준)** | 연구 | **측정 단계만 승인(2026-08-23)** — 구현 착수는 측정 보고 후 별도 승인 | 2인 fixture 측정 보고 → 임계값 전항 통과 시에만 UI 착수 승인 요청, 미통과 시 명시적 실패 기록 |
 | CA-19 | 타임라인 **가이드라인**(드래그 기준선) + 눈자 밀도 감사 — 시간 눈자는 이미 존재(1/5/10초 밀도 적응, `TimelineView` timeRuler), 잔여는 가이드라인과 장편 분 단위 가독성 | 소형 | **즉시 실행 가능(2026-08-23 승인)** | 가이드라인 생성·이동·삭제·스냅 우선·undo 단일 골든 + 밀도 감사 보고 + VoiceOver 회귀 |
 | CA-20 | roles + 타임라인 인덱스(W4 장편 관리 세트) — 클립 role 태그·롤별 레인 색·인덱스 검색→이동. FCP roles+Timeline Index 대응. role·키워드·스마트컬렉션 전무(`CA_REGISTRATION_PROPOSAL_20260823.md` v3 §2, 2026-08-23 코드 확인) | P2 | **등록 승인(2026-08-23) — 방향 문서 §3 반영 후 실행**(W4 직결, 2단계 배치 검토) | role 영속화+migration round-trip · 롤별 레인 골든(U) · 인덱스 검색→이동 30분 fixture p95 · VoiceOver 인덱스 탐색 · iOS defer 사유 기록 |
-| CA-21 | Edit Detection(씬 자동 분할 제안) — Core `SceneChangeProvider` 존재, UI·명령 경로 없음. FCP 12.3 대응 | 연구(P2) | **측정 단계만 승인(2026-08-23)** — precision/recall 임계값은 측정 설계 시 사전 등록 후 고정 | 합성 fixture+실영상 2종 측정 보고 → 통과 시에만 UI 착수 승인 요청(§1.5 원칙 전항), 미통과 시 명시적 실패 기록 |
+| CA-21 | Edit Detection(씬 자동 분할 제안) — Core `SceneChangeProvider` + VM `detectAndSplitScenes` + UI 배선 모두 존재(2026-08-25 정정, §H 참조). FCP 12.3 대응 | 연구(P2) | **측정 단계만 승인(2026-08-23)** — precision/recall 임계값은 측정 설계 시 사전 등록 후 고정 | 합성 fixture+실영상 2종 측정 보고 → 통과 시에만 UI 착수 승인 요청(§1.5 원칙 전항), 미통과 시 명시적 실패 기록 |
 | CA-22 | 프록시 자동 생성 — 임포트 시 백그라운드 큐(현재 수동 전용 `EditorViewModel+Media.swift:63`). 인프라 완비(4단계+배지+thermal), 자동화만 부재(N8) | P2 | **즉시 실행 가능(2026-08-23 승인)** — G-27 이후 슬롯 | 백그라운드 생성 E2E(진행·취소·재개) · thermal 상호 정책 · 생성 중 편집 회귀 · 디스크 여유·실패 안내(CA-05 연결) |
 | CA-23 | 프로젝트 스냅샷/버전 히스토리 — autosave와 별개 사용자 주도 안전망(현 기능 부재. 과거 `VersionHistory`는 archive V1/V2 이후 삭제 — 2026-08-23 전역 검색 0건, dead-code 재활용 근거 정정) | P2 | **등록 승인(2026-08-23) — 실행 시점은 별도 결정** | 스냅샷 생성·목록·복원 앱 E2E(undo 독립) · 용량 정책·오래된 정리 · autosave 역할 구분 문서화 · 복원 전 현재 상태 보호 확인 |
-| CA-24 | 한국어 UI 커버리지 100% — xcstrings 파싱: Mac 316/422·iOS 303/409 키 ko 보유(각 106키 누락, 2026-08-23). Q1 페르소나 직결 | 소형(P1 하위) | **즉시 실행 가능(2026-08-23 승인)** — CA-15 묶음 처리 | 잔여 키 번역 완성(Mac+iOS) · 미번역 fallback 감지 게이트(CI 경고) · ko 실기기 스크린샷 골든 갱신 |
+| CA-24 | 한국어 UI 커버리지 100% — Q1 페르소나 직결 | 소형(P1 하위) | **완료(2026-08-25)** — 양 카탈로그 en+ko 전량(외부 리뷰가 iOS 106 미커밋 발견: fbf3149는 Mac만 반영돼 있었음 — 병렬 git 경합 유실, 재적용). CI 강화: 양 플랫폼 키+번역값(en·ko) 존재 검사 차단화. 잔여: `SNS 좋은 소리` 프리셋명은 로케일 불변 제품명(의도), ko 실기기 스크린샷 골든은 베타 시점 | 커버리지 100%·CI 이중 검사 (완료) |
 | CA-25 | 온보딩·샘플 프로젝트 — W1 미니 샘플 번들+첫실행 3단계 안내(임포트→자막→출력). 첫실행 경로 부재("Landscape Tutorial"은 템플릿 자산일 뿐, `BuiltinTemplates.swift:43`) | 소형 | **등록 승인(2026-08-23) — 방향 문서 §3 반영 후 실행**(Track A 베타 체감 직결) | 샘플 프로젝트 번들 내장(**오프라인 원칙 유지**) · 신규 사용자 첫 출력 ≤10분 목표 측정(SC-C1 스타일) · Quick Tools 발견률 최소 측정 |
 | CA-26 | LUT export(.cube 저장) — 그레이딩→LUT 저장 경로 부재(2026-08-23 전역 확인: writeLUT/exportLUT 0건, import만 존재). W3/W4 색 워크플로 완결·표준 포맷이라 오프라인 원칙 무관 | 소형 | **완료(2026-08-23)** — Core `CubeLUTExporter`(serialize: %.6f red-fastest round-trip 무손실 + bake: 기본 보정을 생산 `ColorCorrectionPixelProcessor` 경유 그리드 렌더, v1 스코프=기본 보정 한정·3-way/HSL/마스크 제외 UI 명시)+테스트 3건(round-trip·identity bake·brightness bake)+Inspector "Export LUT…" 저장패널 진입점(외부 LUT 재내보냄 무손실/기본 보정 bake 분기, 상태 메시지로 스코프 고지) | 게이트 5단계 통과(1,354 테스트) |
 | CA-27 | Timecode 직접 입력 — `PreviewPanel` 표시 전용이었음(2026-08-23 확인). 키보드 완결성·정밀 탐색(Q6 핵심 경로 정합) | 소형 | **완료(2026-08-23)** — Core `TimecodeParser`(SS·MM:SS·MM:SS:FF·HH:MM:SS:FF, 무효 입력 nil 명시적 실패)+유닛테스트 6건(Exact)+현재 시간 배지 편집 필드화(제출·포커스 상실 시 seek, 무효 입력 상태 메시지·원복)+VoiceOver 라벨+표시 fps를 프로젝트 프레임레이트로 정통화(기존 30 고정 오류)+StaticContract 2건 갱신·ko 문자열 3건 추가 | 게이트 5단계 통과(1,351 테스트) |
@@ -213,6 +213,34 @@
 ### A11Y-03 (P3) — 빈 라이브러리 스켈리톤 카드 시각 신뢰감
 
 - VO 숨김은 정상. 로딩/깨진 자산처럼 보이는 시각 문제 — 빈 상태 안내 카드로 교체(외부 리뷰 지적, 기능 아님).
+
+---
+
+## 1.11 외부 리뷰(2026-08-25) 검증 등록 — iOS 프리뷰·렌더 통합 (실사 확정)
+
+> 원천: 사용자 제공 리뷰. BUG-06·ko(iOS)는 본 세션에서 이미 수정(리뷰 작성 시점 기준). 아래는 검증된 신규 확정 항목.
+
+### RENDER-01 (P0) — iOS 프리뷰와 익스포트가 다른 엔진
+
+- 위치: `IOSPreviewCompositionBuilder.swift`(속도 램프 기본 속도 폴백 주석·프리즈 미확장·리버스 부재) + `PreviewView.makeFilteredFrame`(단일 클립 색보정·그레이드·일부 효과만 — transform/opacity/keyframe·crop/mask/chroma·blend/배경제거·stabilization·텍스트/스티커/캔버스 배경·다중 트랙 클립별 범위 미반영).
+- 수정 방향(리뷰 권고 채택): 기능별 패치가 아니라 **Mac/iOS preview·export가 동일 render plan을 소비하도록 통합** — Mac의 CustomVideoCompositor 체계 iOS 재사용. 패리티 테스트(램프·리버스·마스크·크로마·블렌드·다중 트랙) 동반.
+
+### CANVAS-01 (P1) — 캔버스만 변경한 프로젝트의 출력 비율 무시 가능
+
+- 위치: `IOSExportEngine.swift:44`(클립 효과 있을 때만 videoComposition 부착) + 합성 게이트에 캔버스·배경 검사 부재. 16:9 원본을 9:16/1:1 캔버스로만 바꾼 프로젝트가 원본 해상도로 출력될 수 있음. 캔버스 비율별 실제 출력 크기 골든 테스트 없음.
+- 수정: 캔버스·배경 변경 시 항상 composition 반영 + 비율별 출력 크기 골든.
+
+### BUG-IOS-06 재개방 (P1) — MediaBrowserView 경로 잔여
+
+- 상단 PhotosPicker는 파일 기반 전환 완료. 실제 연결된 `MediaBrowserView.swift:48`은 여전히 `loadTransferable(Data.self)` + `try?` 무음. 두 경로를 공통 파일 기반 임포터 서비스로 통합해 재발 방지.
+
+### AUTOSAVE-02 (P1) — iOS autosave 실패 미표시·비직렬 저장
+
+- `IOSEditorViewModel.autosaveFailureMessage`을 표시하는 iOS UI 없음. `lastAutosaveLoadFailure`(손상 복구 파일)도 iOS 미소비. `scheduleAutosave`가 편집마다 순서 미보장 Task 생성 — 빠른 연속 편집에서 오래된 스냅샷이 마지막에 저장될 위험. 수정: 직렬 autosave coordinator(세대 번호·debounce/flush) + 실패·손상 복구 UI.
+
+### MACUI-01 (P1, 인프라) — Mac UI 테스트 러너 부트스트랩 실패
+
+- 러너가 테스트 시작 전 signal kill로 종료(최소 앱 실행 테스트도 동일). 13개 Mac UI 시나리오는 "통과"가 아니라 **미실행**. CI의 Mac 앱 테스트 best-effort와 동일 인프라 문제 의심. 복구 후 CI 차단화(기존 결정 유지).
 
 ---
 

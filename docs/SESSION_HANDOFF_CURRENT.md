@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-25 세션 (외부 리뷰 반영 — iOS ko 유실 발견·재적용, §1.11 등록, 계획 재편)
+
+- **리뷰 검증**: BUG-06 "REG 통과" 주장은 낡음(이미 해결·게이트 승격). **iOS ko 106 미커밋은 사실** — fbf3149 커밋이 Mac 카탈로그만 담음(병렬 경합 유실), 커밋 메시지가 양쪽이라 주장해 기록 오류였음. iOS 프리뷰/익스포트 이중 엔진·캔버스 게이트 부재·MediaBrowser Data 임포트·automsave UI 부재·Mac UI 러너 kill 전부 코드로 확인.
+- **즉시 수정**: iOS ko 106 재적용 + 양 카탈로그 en 결손(Mac 103·iOS 100) 보완 → en+ko 전량. CI: 현지화 검사 양 플랫폼 실행 + 키별 en·ko 번역값 존재 차단 검사 추가.
+- **§1.11 등록**: RENDER-01(P0 iOS 공통 render plan)·CANVAS-01·BUG-IOS-06 재개방·AUTOSAVE-02·MACUI-01.
+- **문서 정정**: CA-21 큐 행(UI 존재 — §H와 모순 해소)·CA-24 완료 처리·LOOP_STATE 전면 재작성(병렬 커밋이 이전 상태로 덮어쓴 것 복구).
+
+### 다음 회차 — 리뷰 권고 순서
+RENDER-01(iOS 렌더 통합+패리티) → CANVAS-01 → 임포터 통합 → AUTOSAVE-02 → MACUI-01 → BUG-07·G-27. PARITY-TOL-01 승인 대기.
+
 ## 2026-08-24 세션 (CA-04 입력 포맷 호환 매트릭스 — 실측)
 
 **게이트**: `run_ca04_format_matrix.sh` PASS(등록 결함 REG 처리·신규 회귀만 차단) + verify_gate 5/5(1,413).

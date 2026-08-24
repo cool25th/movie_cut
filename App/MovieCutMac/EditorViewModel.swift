@@ -5175,21 +5175,34 @@ final class EditorViewModel {
         }
     }
 
-    /// CA-26 — LUT export. An active external LUT is re-exported losslessly
-    /// (parse → serialize round-trip); otherwise the clip's basic color
+    /// CA-26 — LUT export. An active external LUT re-exports the MANAGED
+    /// ORIGINAL FILE byte-for-byte (parse → serialize is NOT lossless:
+    /// DOMAIN lines, comments, the source title, source precision, and
+    /// out-of-0…1 values would be lost); otherwise the clip's basic color
     /// correction is baked through the production processor. The bake scope
     /// (basic correction only — 3-way/HSL/masks excluded) is surfaced in the
     /// status message so users don't assume a full-grade bake.
+    ///
+    /// Parsing/baking, serialization, and file writes run OFF the main
+    /// actor (a 65³ serialize is seconds of string work); only the UI state
+    /// updates below hop back to MainActor.
     func exportLUTForSelectedClip(to url: URL) async {
         if let lutEffect = selectedClip?.effects.first(where: { $0.type == .externalLUT }),
            let path = lutEffect.lutPath {
+            let source = URL(fileURLWithPath: path)
             do {
-                let lut = try CubeLUTParser.parse(contentsOf: URL(fileURLWithPath: path))
-                try CubeLUTExporter
-                    .serialize(lut, title: url.deletingPathExtension().lastPathComponent)
-                    .write(to: url, atomically: true, encoding: .utf8)
+                // Same file (path-variant) → nothing to do; copyItem would
+                // throw on identical source/destination.
+                if source.standardizedFileURL != url.standardizedFileURL {
+                    try await Task.detached(priority: .userInitiated) {
+                        if FileManager.default.fileExists(atPath: url.path) {
+                            try FileManager.default.removeItem(at: url)
+                        }
+                        try FileManager.default.copyItem(at: source, to: url)
+                    }.value
+                }
                 lastErrorMessage = nil
-                lastStatusMessage = "Exported \(lut.dimension)-size LUT (re-export of the imported file)."
+                lastStatusMessage = "Exported LUT (byte-for-byte copy of the imported file)."
             } catch {
                 lastStatusMessage = nil
                 lastErrorMessage = "Could not export LUT: \(error.localizedDescription)"
@@ -5203,13 +5216,16 @@ final class EditorViewModel {
             lastErrorMessage = "Nothing to export: apply an external LUT or a color correction first."
             return
         }
-        let lut = CubeLUTExporter.bake(colorCorrection: correction)
+        let title = url.deletingPathExtension().lastPathComponent
         do {
-            try CubeLUTExporter
-                .serialize(lut, title: url.deletingPathExtension().lastPathComponent)
-                .write(to: url, atomically: true, encoding: .utf8)
+            let dimension = try await Task.detached(priority: .userInitiated) {
+                let lut = try CubeLUTExporter.bake(colorCorrection: correction)
+                let text = try CubeLUTExporter.serialize(lut, title: title)
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                return lut.dimension
+            }.value
             lastErrorMessage = nil
-            lastStatusMessage = "Baked basic color correction to a \(lut.dimension)-size LUT (3-way/HSL/masks excluded)."
+            lastStatusMessage = "Baked basic color correction to a \(dimension)-size LUT (3-way/HSL/masks excluded)."
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = "Could not write LUT: \(error.localizedDescription)"

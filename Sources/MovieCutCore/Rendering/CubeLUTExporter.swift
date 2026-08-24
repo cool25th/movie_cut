@@ -3,15 +3,32 @@ import Foundation
 import CoreImage
 import CoreGraphics
 
-/// Serializes `CubeLUT` back into Adobe `.cube` text (CA-26).
+/// CA-26 LUT export failures — surfaced explicitly instead of silently
+/// substituting an identity LUT or crashing on malformed input.
+public enum CubeLUTExportError: Error, Equatable, Sendable {
+    /// Dimension outside the format/parser-supported range 2…65.
+    case dimensionOutOfRange(Int)
+    /// `data.count` does not match `dimension³ × 4`; serializing would read
+    /// past the end of the array.
+    case dataCountMismatch(dimension: Int, dataCount: Int)
+}
+
+/// Serializes `CubeLUT` into Adobe `.cube` text (CA-26).
 ///
-/// Rows are written red-fastest — the exact order `CubeLUTParser` reads —
-/// so parse → serialize → parse round-trips losslessly at `%.6f`
-/// precision. The alpha channel is not written (`.cube` is RGB-only).
+/// This is a NORMALIZED re-serialization at `%.6f` precision — NOT a
+/// lossless round-trip: DOMAIN lines, comments, the original title, source
+/// precision, and out-of-`0…1` values do not survive. It is only for cubes
+/// the app itself generated (color-correction bakes). Re-exporting an
+/// imported LUT must instead copy the managed original file byte-for-byte.
+///
+/// Rows are written red-fastest — the exact order `CubeLUTParser` reads.
+/// The alpha channel is not written (`.cube` is RGB-only).
 public enum CubeLUTExporter {
     /// Serializes a cube. The title is quoted; embedded double quotes are
     /// stripped so the header line stays a single quoted string.
-    public static func serialize(_ lut: CubeLUT, title: String) -> String {
+    /// Throws instead of crashing when dimension/data are inconsistent.
+    public static func serialize(_ lut: CubeLUT, title: String) throws -> String {
+        try validate(lut)
         let safeTitle = title.split(separator: "\"", omittingEmptySubsequences: false).joined()
         var lines: [String] = [
             "TITLE \"\(safeTitle)\"",
@@ -19,12 +36,26 @@ public enum CubeLUTExporter {
             "LUT_3D_SIZE \(lut.dimension)",
             "",
         ]
-        lines.reserveCapacity(5 + lut.dimension * lut.dimension * lut.dimension)
-        for index in 0..<(lut.dimension * lut.dimension * lut.dimension) {
+        let entryCount = lut.dimension * lut.dimension * lut.dimension
+        lines.reserveCapacity(5 + entryCount)
+        for index in 0..<entryCount {
             let base = index * 4
             lines.append("\(fmt(lut.data[base])) \(fmt(lut.data[base + 1])) \(fmt(lut.data[base + 2]))")
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// A public `CubeLUT` can be built with any dimension/data combination;
+    /// serialization would otherwise index past the array's end. Validate
+    /// BEFORE touching `data`.
+    public static func validate(_ lut: CubeLUT) throws {
+        guard lut.dimension >= 2, lut.dimension <= CubeLUTParser.maximumDimension else {
+            throw CubeLUTExportError.dimensionOutOfRange(lut.dimension)
+        }
+        let expected = lut.dimension * lut.dimension * lut.dimension * 4
+        guard lut.data.count == expected else {
+            throw CubeLUTExportError.dataCountMismatch(dimension: lut.dimension, dataCount: lut.data.count)
+        }
     }
 
     /// Bakes a clip's color correction into an identity cube by rendering
@@ -38,13 +69,15 @@ public enum CubeLUTExporter {
     ///
     /// Precision: the grid renders through a half-float bitmap (standard
     /// LUT precision, ~1e-3 per channel).
+    ///
+    /// Invalid dimensions are rejected explicitly — an out-of-range request
+    /// must never silently produce an identity/clamped cube.
     public static func bake(
         dimension: Int = 33,
         colorCorrection: ColorCorrection
-    ) -> CubeLUT {
-        let clampedDimension = max(2, min(dimension, CubeLUTParser.maximumDimension))
-        guard clampedDimension == dimension else {
-            return CubeLUT(dimension: clampedDimension, data: identityData(dimension: clampedDimension))
+    ) throws -> CubeLUT {
+        guard dimension >= 2, dimension <= CubeLUTParser.maximumDimension else {
+            throw CubeLUTExportError.dimensionOutOfRange(dimension)
         }
 
         let width = dimension * dimension
@@ -99,23 +132,6 @@ public enum CubeLUTExporter {
             data.append(1)
         }
         return CubeLUT(dimension: dimension, data: data)
-    }
-
-    private static func identityData(dimension: Int) -> [Float] {
-        let count = dimension * dimension * dimension
-        var data = [Float](repeating: 0, count: count * 4)
-        let scale = Float(dimension - 1)
-        for index in 0..<count {
-            let r = Float(index % dimension) / scale
-            let g = Float((index / dimension) % dimension) / scale
-            let b = Float(index / (dimension * dimension)) / scale
-            let offset = index * 4
-            data[offset] = r
-            data[offset + 1] = g
-            data[offset + 2] = b
-            data[offset + 3] = 1
-        }
-        return data
     }
 
     private static func clamp(_ value: Float) -> Float {

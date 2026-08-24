@@ -140,10 +140,10 @@
 
 > 원천: 사용자 제공 외부 리뷰. 코드 실사로 검증 후 등록 — 리뷰의 P0-2(iOS 속도·램프·프리즈·Reverse) 4건은 **현재 코드에서 이미 수정됨**(`IOSExportEngine`의 macOS 패리티 주석·`sourceTimeRange` 전체 소스 스팬·`renderReversedAsset` throw로 확인) → 등록 않음. 30fps 고정 주장도 부정확(동적 `exportSettings.frameRate`).
 
-### BUG-IOS-01 (P0) — iOS 프로젝트 상태 이중화: 세션 우회 변경이 되돌아감
+### BUG-IOS-01 (P0) — iOS 프로젝트 상태 이중화 — **수정 완료(2026-08-24)**
 
 - 위치: `IOSEditorViewModel.swift:20` `currentProject` + 별도 `EditorSession`; 캔버스 변경(`:652` `currentProject.canvas = preset`)·템플릿 적용(`IOSTemplatePickerView.swift:138`)이 세션을 우회.
-- 다음 dispatch/undo 시 세션 스냅샷이 우회 변경을 덮어씀. 수정: 단일 `EditorSession` 경로로 통합(캔버스·템플릿용 Core 커맨드 필요 시 신설).
+- 수정 완료: 캔버스는 기존 Core `SetProjectCanvasCommand`, 템플릿은 기존 `ReplaceProjectCommand`로 세션 경유(커맨드 신설 불필요). 직접 변경 지점 전수 스캔 제거 확인. 검증: `IOSSessionStateTests` 2종(캔버스 후속 커밋 생존·타임라인 재바인딩, 템플릿 후속 편집 시 프로젝트 유지).
 
 ### BUG-IOS-02 (P0) — iOS 프로젝트 저장·복구 부재 — **수정 완료(2026-08-24)**
 
@@ -338,7 +338,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ### H. AI 기능 (CapCut 차별화)
 - [ ] 🟡 자동 컷(무음 제거, F-18) (P1→preview/파라미터/단일undo 구현됨) — `AutoCutPlanner`(패딩으로 발화 보존) + `AutoCutCommand`(단일 undo) + ViewModel preview/apply/cancel + threshold/min/padding 슬라이더 + 타임라인 빨간 하이라이트. `AutoCutPlannerTests` 13개. Caveat: 실인터뷰 fixture 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
-- [ ] 🟡 씬 변경 감지 자동 분할 — Core 존재 (P2)
+- [ ] 🟡 씬 변경 감지 자동 분할 (P2) — **2026-08-24 정정**: Core `SceneChangeProvider` + ViewModel `detectAndSplitScenes` 명령 경로 + UI 배선(분석 섹션·suggestCuts) 모두 존재. 잔여는 CA-21 측정 게이트(precision/recall 사전등록)뿐.
 - [ ] 🟡 자동 리프레임(피사체 추적 crop, F-19) (P2→스무딩/미리보기 구현됨) — `ReframeSmoothing`(moving average + clamp, AC③ 떨림 감소 테스트) + ViewModel preview/apply/cancel + PreviewPanel crop-path 오버레이 + Inspector 섹션. `ReframeSmoothingTests` 8개. Caveat: 실영상 추적 정확도(AC②) 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 AI 어시스턴트(자연어 편집 명령, F-21) (P3→규칙기반 1단계 구현됨) — `AssistantCommandParser`(동의어 target×action + 숫자 파싱) + ViewModel 실행기(기존 명령 매핑) + Inspector AssistantSection. `AssistantCommandParserTests` 8개(20 intent 시나리오 포함). Caveat: 외부 LLM 연동 별도 합의 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 자동 하이라이트(롱폼→숏폼, F-20) (P3→구현됨) — `HighlightScorer`(silence/scene/beat 출력 조합, 비중첩 top-N) + ViewModel detect/createSequence(새 프로젝트 스왑) + Inspector HighlightsSection. `HighlightScorerTests` 8개. Caveat: 실영상 후보 적합성 확인 잔여 — DoD §1.3에 따라 ✅ 보류.

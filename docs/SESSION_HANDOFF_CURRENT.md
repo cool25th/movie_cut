@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-24 세션 (리뷰 잔여 마무리 — BUG-IOS-01·try? 지점·AppIcon·프로브 v4)
+
+**게이트**: 5/5(1,413/207)·Mac 38/38·iOS 13/13.
+
+- **BUG-IOS-01 (P0) 수정**: 캔버스는 `SetProjectCanvasCommand`, 템플릿은 `ReplaceProjectCommand`(둘 다 기존 Core 커맨드)로 세션 경유 — 이중 상태 제거. `IOSSessionStateTests` 2종. 외부 리뷰 §1.8 전 결함(등록분) 수정 완료.
+- 리뷰 지목 `try?` 2곳 표면화: 크롭 프리셋 클릭 실패 보고, suggestCuts 두 도구 시도 후 실패 목록 보고.
+- AppIcon 1024 alpha 제거(RGBA→RGB). '필수 크기 누락'은 부정확(단일 크기 형식).
+- scene detection 백로그 행 정정 — Core+VM+UI 모두 존재, 잔여는 CA-21 측정 게이트뿐.
+- G-28 EffectCostProfile 응답성 프로브 v4: 공유 프로세스 메인 액터 경합(61.5s hop 관측)으로 wall-clock·순서 프로브 모두 위양성 — 결정적 스레드 친화성 검사로 교체.
+
+### 다음 회차
+CA-04(병렬 진행) → CA-05 → CA-06. 잔여 소형: BUG-IOS-06, ko 106×2, iOS 출력 golden 테스트, BUG-01 백오프, 북마크 자동 치유.
+
 ## 2026-08-24 세션 (외부 리뷰 반영 — 검증·등록·BUG-IOS-02/03/04/05 수정)
 
 **입력**: 사용자 제공 외부 리뷰(iOS 정확성 중심). **실사로 검증 후 반영** — 리뷰의 P0-2 4건(속도·램프·프리즈·Reverse)과 30fps 고정 주장은 현재 코드에서 이미 수정/부정확(등록 않음), 나머지는 백로그 §1.8에 BUG-IOS-01~06 + 참고 4건으로 등록.

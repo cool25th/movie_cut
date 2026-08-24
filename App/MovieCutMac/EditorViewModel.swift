@@ -1245,7 +1245,28 @@ final class EditorViewModel {
             .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
     }
 
+    /// BUG-04 (CA-03 audit): export/package pre-flight. Missing-media
+    /// detection and the relink prompt only run at project OPEN — a disk
+    /// ejected mid-session used to fail the export minutes into the render.
+    /// Re-evaluate reachability NOW and refuse explicitly with relink
+    /// guidance before any render work starts.
+    func ensureAllMediaReachableForExport() -> Bool {
+        evaluateMissingMedia(in: currentProject)
+        guard !missingMediaAssets.isEmpty else { return true }
+        lastExportURL = nil
+        lastStatusMessage = nil
+        lastErrorMessage = String(
+            format: NSLocalizedString(
+                "Can't export: %d media file(s) can't be found. Use “Re-link Missing Media” to locate them, then export again.",
+                comment: "Export pre-flight refusal when source media is unreachable"
+            ),
+            missingMediaAssets.count
+        )
+        return false
+    }
+
     func exportProject() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1274,6 +1295,7 @@ final class EditorViewModel {
     /// but without the save panel. Used by automation and the XCUITest harness so
     /// the real export pipeline is exercised end-to-end.
     func exportProject(to url: URL) async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1301,6 +1323,7 @@ final class EditorViewModel {
     /// Exports the project to a movie with an explicit average video bitrate via
     /// the planner-backed `AVAssetWriter` path, instead of the preset approximation.
     func exportWithExplicitBitrate() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1332,6 +1355,7 @@ final class EditorViewModel {
 
     /// Exports a ProRes 422 master in a QuickTime container.
     func exportProResMaster() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.quickTimeMovie]
         panel.canCreateDirectories = true
@@ -1343,6 +1367,7 @@ final class EditorViewModel {
     /// Exports a ProRes 422 master to an explicit URL (no save panel). Used by
     /// automation and the harness.
     func exportProResMaster(to url: URL) async {
+        guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {

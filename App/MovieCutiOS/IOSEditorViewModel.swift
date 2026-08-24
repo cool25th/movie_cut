@@ -409,6 +409,23 @@ final class IOSEditorViewModel {
         scheduleAutosave()
     }
 
+    /// BUG-IOS-01: template application routes through
+    /// `ReplaceProjectCommand` — the picker used to swap `currentProject`
+    /// directly, leaving the session holding the OLD project so the next
+    /// edit or undo reverted the whole template.
+    func applyTemplateProject(_ project: Project) async {
+        do {
+            try await session.dispatch(ReplaceProjectCommand(project: project))
+            await refreshFromSession()
+            selectedClipId = nil
+            playheadTime = 0
+            isPlaying = false
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - Crash-recovery persistence (BUG-IOS-02)
 
     /// Restores the crash-recovery autosave at launch, when present. Call
@@ -720,7 +737,15 @@ final class IOSEditorViewModel {
     // MARK: - Integrated View Support
 
     func updateCanvasPreset(_ preset: CanvasPreset) async {
-        currentProject.canvas = preset
+        // BUG-IOS-01: route through the session command — the previous direct
+        // `currentProject.canvas = preset` mutation was invisible to the
+        // EditorSession, so the next dispatch or undo reverted it.
+        do {
+            try await session.dispatch(SetProjectCanvasCommand(canvas: preset))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     func updateSelectedChromaKey(_ chromaKey: ChromaKeySettings?) async {

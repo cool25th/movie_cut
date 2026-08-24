@@ -138,11 +138,9 @@ struct IOSTemplatePickerView: View {
     @MainActor
     private func applyTemplate(_ template: TemplateBundle) async {
         let project = viewModel.templateStore.createProject(from: template)
-        viewModel.currentProject = project
-        viewModel.selectedClipId = nil
-        viewModel.playheadTime = 0
-        viewModel.isPlaying = false
-        viewModel.lastErrorMessage = nil
+        // BUG-IOS-01: session-routed — the direct currentProject swap was
+        // reverted by the next edit or undo.
+        await viewModel.applyTemplateProject(project)
     }
 
     private func cardBackground(for template: TemplateBundle) -> Color {

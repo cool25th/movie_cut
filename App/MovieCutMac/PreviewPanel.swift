@@ -502,6 +502,7 @@ struct PreviewPanel: View {
             Text(NSLocalizedString("Current", comment: ""))
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(
                 "MM:SS:FF",
                 text: Binding(
@@ -517,11 +518,17 @@ struct PreviewPanel: View {
             .onChange(of: timecodeFieldFocused) { _, focused in
                 if !focused { commitTimecodeDraft() }
             }
+            // The field itself is the accessibility element so VoiceOver can
+            // reach and edit it independently — a container-level
+            // accessibilityElement() would flatten it into a non-editable
+            // static element.
+            .accessibilityLabel(Text(NSLocalizedString("Current time", comment: "")))
+            .accessibilityValue(Text(timecodeString(playbackEngine.currentTime)))
+            .accessibilityHint(Text(NSLocalizedString(
+                "Type a timecode and press Return to jump", comment: ""
+            )))
         }
         .frame(width: 104, alignment: .leading)
-        .accessibilityElement()
-        .accessibilityLabel(NSLocalizedString("Current Time — type a timecode and press Return to jump", comment: ""))
-        .accessibilityValue(timecodeString(playbackEngine.currentTime))
     }
 
     private func commitTimecodeDraft() {
@@ -529,7 +536,7 @@ struct PreviewPanel: View {
         timecodeDraft = nil
         guard !draft.isEmpty else { return }
         let fps = viewModel.currentProject.timeline.frameRate.doubleValue
-        guard fps > 0, let seconds = TimecodeParser.seconds(from: draft, frameRate: fps) else {
+        guard fps.isFinite, fps > 0, let seconds = TimecodeParser.seconds(from: draft, frameRate: fps) else {
             viewModel.lastStatusMessage = nil
             viewModel.lastErrorMessage = NSLocalizedString(
                 "Timecode not recognized. Use MM:SS:FF (e.g. 01:30:15), MM:SS, or seconds.",
@@ -841,13 +848,19 @@ struct PreviewPanel: View {
         // CA-27: frame count follows the project frame rate so the display,
         // the parser, and the seek all agree (was a hard-coded 30).
         let fps = viewModel.currentProject.timeline.frameRate.doubleValue
-        let effectiveFps = fps > 0 ? fps : 30
+        let effectiveFps = (fps.isFinite && fps > 0) ? fps : 30
         let frames = Int((t - Double(totalSeconds)) * effectiveFps)
+        // The largest displayable frame index is the largest whole number
+        // strictly below the rate — ceil(fps) − 1. Int(fps) − 1 wrongly
+        // shaved NTSC rates' last frame (29.97fps showed max FF=28,
+        // 23.976fps max FF=22) and broke the display↔parser round-trip.
+        let maxFrame = Int(ceil(effectiveFps)) - 1
+        let clampedFrames = min(frames, maxFrame)
         let hours = totalSeconds / 3600
         if hours > 0 {
-            return String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, min(frames, Int(effectiveFps) - 1))
+            return String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, clampedFrames)
         }
-        return String(format: "%02d:%02d:%02d", minutes, seconds, min(frames, Int(effectiveFps) - 1))
+        return String(format: "%02d:%02d:%02d", minutes, seconds, clampedFrames)
     }
 }
 

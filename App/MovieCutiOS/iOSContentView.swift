@@ -599,9 +599,24 @@ struct IOSContentView: View {
     }
 
     private func importPhotosItem(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        // BUG-IOS-06: the old path loaded the ENTIRE asset into memory via
+        // loadTransferable(Data.self) — a 4K video could OOM — and swallowed
+        // every failure with try?/empty-catch. Request a FILE URL instead and
+        // copy it into the managed imports directory with a bounded buffer;
+        // failures surface through the view model's error channel.
+        let stagedURL: URL
+        do {
+            guard let providedURL = try await item.loadTransferable(type: URL.self) else {
+                throw ImportError.transferUnavailable
+            }
+            stagedURL = providedURL
+        } catch {
+            viewModel.lastErrorMessage = ImportError.transferFailed.localizedDescription
+            return
+        }
 
-        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "mov"
+        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
+            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
         let folderURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
         let fileURL = folderURL
@@ -610,14 +625,44 @@ struct IOSContentView: View {
 
         do {
             try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
+            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
             await viewModel.importMedia(from: fileURL, kind: mediaKind(for: fileExtension))
 
             if let importedAsset = viewModel.mediaAssets.first(where: { $0.originalURL == fileURL }) {
                 await viewModel.addClipToTimeline(asset: importedAsset)
             }
         } catch {
-            return
+            viewModel.lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
+        }
+    }
+
+    private enum ImportError: Error, LocalizedError {
+        case transferUnavailable
+        case transferFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .transferUnavailable:
+                return "The selected item couldn't be accessed. Try picking it again."
+            case .transferFailed:
+                return "The selected item couldn't be loaded. Try picking it again."
+            }
+        }
+    }
+
+    /// Streams a file copy in bounded chunks so a large 4K video never has to
+    /// fit in memory (the Data-based write did exactly that).
+    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
+        let chunkSize = 1024 * 1024
+        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        let input = try FileHandle(forReadingFrom: source)
+        let output = try FileHandle(forWritingTo: destination)
+        defer {
+            try? input.closeFile()
+            try? output.closeFile()
+        }
+        while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
+            try output.write(contentsOf: chunk)
         }
     }
 

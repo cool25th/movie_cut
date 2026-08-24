@@ -27,6 +27,16 @@ final class IOSExportEngine {
 
         do {
             let composition = try await makeComposition(for: project)
+            // A video track whose sources carry no embedded audio leaves an
+            // EMPTY audio composition track — the export session fails with
+            // AVErrorOperationNotSupported for media-less tracks (caught by
+            // the output golden tests with a video-only fixture). A fresh
+            // empty track's timeRange is INVALID (not zero), so validity is
+            // part of the predicate.
+            for track in composition.tracks
+            where !track.timeRange.isValid || track.timeRange.duration <= .zero {
+                try? composition.removeTrack(track)
+            }
             guard !composition.tracks.isEmpty else {
                 throw IOSExportEngineError.noExportableMedia
             }

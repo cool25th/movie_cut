@@ -124,6 +124,43 @@ ffmpeg -y -loglevel error -f lavfi -i "color=c=0x208040:s=1920x1080:r=24" \
 ffmpeg -y -loglevel error -f lavfi -i "color=c=0x402080:s=720x1280:r=30" \
   -t 1 "${COLOR_V[@]}" "$OUT/rec709_720p_portrait_1s_30fps.mp4"
 
+# --- CA-04 input-format compatibility fixtures --------------------------------------
+# One deterministic fixture per matrix dimension (mixed fps already exists:
+# rec709_1080p_1s_24fps.mp4 vs the 30fps family). Each is exercised by
+# scripts/run_ca04_format_matrix.sh: import -> preview -> export via the
+# parity harness, then ffprobed on the OUTPUT.
+VFR="$OUT/ca04_vfr_320x240_5s.mp4"
+ROT90="$OUT/ca04_rotated_320x240_2s_90deg.mp4"
+if [ ! -f "$VFR" ] || [ ! -f "$ROT90" ]; then
+  # VFR (alternating 1/30·1/15 durations) and display-matrix rotation are
+  # generated through AVAssetWriter — ffmpeg 8.1.1 cannot WRITE a display
+  # matrix (-display_rotation is decode-side only), and its setpts routes
+  # produce CFR after muxing. AVAssetWriter produces exactly what an iPhone
+  # camera produces. See scripts/ca04_avfoundation_fixture_gen.swift.
+  swift scripts/ca04_avfoundation_fixture_gen.swift "$OUT"
+fi
+TENBIT="$OUT/ca04_tenbit_320x240_2s.mov"
+if [ ! -f "$TENBIT" ]; then
+  ffmpeg -y -loglevel error \
+    -f lavfi -i "testsrc2=size=320x240:rate=30" -t 2 \
+    -vf "format=yuv422p10le" \
+    -c:v prores_ks -profile:v 2 "$TENBIT"
+  echo "generated: ca04_tenbit_320x240_2s.mov (ProRes 422 HQ, 10-bit)"
+fi
+
+WIDE="$OUT/ca04_bt2020pq_320x240_2s.mp4"
+if [ ! -f "$WIDE" ]; then
+  # 8-bit container carrying BT.2020 + PQ TRC tags — observes how the v1
+  # SDR Rec.709 pipeline treats a wide-gamut/HDR-tagged source.
+  ffmpeg -y -loglevel error \
+    -f lavfi -i "testsrc2=size=320x240:rate=30" -t 2 \
+    -vf "scale=out_color_matrix=bt2020nc" \
+    -c:v libx264 -preset veryfast -crf 18 \
+    -color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc \
+    "$WIDE"
+  echo "generated: ca04_bt2020pq_320x240_2s.mp4 (BT.2020 + PQ tagged)"
+fi
+
 echo ""
 echo "Generated:"
 for f in "$OUT"/*; do

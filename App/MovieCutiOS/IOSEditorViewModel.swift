@@ -57,7 +57,15 @@ final class IOSEditorViewModel {
     }
 
     func importMedia(from url: URL, kind: MediaKind? = nil) async {
-        var asset = MediaImporter.probe(url: url)
+        // BUG-02: reject unknown extensions / signature-less content at
+        // import with an explicit reason (was a silent `.video` default).
+        var asset: MediaAsset
+        do {
+            asset = try MediaImporter.validatedProbe(url: url)
+        } catch {
+            self.lastErrorMessage = error.localizedDescription
+            return
+        }
         if let kind {
             asset.kind = kind
         }

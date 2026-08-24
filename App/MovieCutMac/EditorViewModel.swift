@@ -212,6 +212,12 @@ final class EditorViewModel {
 
     /// Writes the current project to the crash-recovery autosave off the edit
     /// path (fire-and-forget so edits stay responsive).
+    ///
+    /// BUG-01: a failed autosave (disk full, permission loss) is SURFACED via
+    /// ``autosaveFailureMessage`` instead of being swallowed by `try?` — the
+    /// user must know crash recovery stopped backing their edits up. Still
+    /// non-blocking: editing continues, and the warning clears on the next
+    /// successful autosave.
     private func scheduleAutosave() {
         let snapshot = currentProject
         Task { [projectStore, weak self] in
@@ -772,7 +778,14 @@ final class EditorViewModel {
         elementId: UUID,
         with url: URL
     ) async -> Bool {
-        let probedAsset = await mediaAssetWithAppProbe(for: url)
+        let probedAsset: MediaAsset
+        do {
+            probedAsset = try await mediaAssetWithAppProbe(for: url)
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
         guard probedAsset.kind == .image else {
             lastStatusMessage = nil
             lastErrorMessage = "Card image replacement requires an image file."
@@ -904,7 +917,7 @@ final class EditorViewModel {
         do {
             // Re-probe the new location for current metadata + bookmark, but
             // KEEP the original asset's UUID and id so clip references survive.
-            var relocated = MediaImporter.probe(url: newURL)
+            var relocated = try MediaImporter.validatedProbe(url: newURL)
             relocated.id = asset.id
             relocated.originalBookmark = SecurityScopedAccess.makeBookmark(for: newURL)
             let probe = await Self.appMetadataProbe(
@@ -1515,7 +1528,7 @@ final class EditorViewModel {
 
         do {
             for url in urls {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 selectedAssetId = asset.id
             }
@@ -1545,7 +1558,7 @@ final class EditorViewModel {
         do {
             var insertionStart = max(0, startTime)
             for url in urls {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 needsRefresh = true
 
@@ -4573,8 +4586,11 @@ final class EditorViewModel {
         }
     }
 
-    private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
-        var asset = MediaImporter.probe(url: url)
+    /// BUG-02: the probe is VALIDATED — unknown extensions and content whose
+    /// header bytes match no known media signature are rejected at import
+    /// with an explicit reason instead of exploding at preview/export.
+    private func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
+        var asset = try MediaImporter.validatedProbe(url: url)
 
         // Capture a security-scoped bookmark at import time so the file stays
         // reachable after restart under App Sandbox. (S2)
@@ -4840,7 +4856,7 @@ final class EditorViewModel {
 
     func addVoiceoverAudio(from url: URL, fallbackDuration: TimeInterval? = nil) async {
         do {
-            var asset = MediaImporter.probe(url: url)
+            var asset = try MediaImporter.validatedProbe(url: url)
             let duration = resolvedVoiceoverDuration(for: url, fallbackDuration: fallbackDuration)
             asset.duration = duration
             try await session.dispatch(ImportMediaCommand(asset: asset))
@@ -4912,7 +4928,7 @@ final class EditorViewModel {
         kenBurnsEnabled: Bool = true
     ) async {
         let imageURLs = urls.filter { url in
-            MediaImporter.probe(url: url).kind == .image
+            (try? MediaImporter.validatedProbe(url: url))?.kind == .image
         }
         guard !imageURLs.isEmpty else {
             lastErrorMessage = "Please choose at least one image to create a photo video."
@@ -4955,7 +4971,7 @@ final class EditorViewModel {
 
             var insertionStart: TimeInterval = 0
             for (index, url) in imageURLs.enumerated() {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
 
                 let duration = max(0.1, pace.clipDuration)

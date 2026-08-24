@@ -97,7 +97,7 @@ struct VoiceoverRecordingStaticContractTests {
         #expect(resolver.contains("audioDuration(for: url)"))
         #expect(resolver.contains("sanitizedDuration(fallbackDuration)"))
         #expect(resolver.contains("Self.minimumVoiceoverDuration"))
-        #expect(addVoiceover.contains("var asset = MediaImporter.probe(url: url)"))
+        #expect(addVoiceover.contains("var asset = try MediaImporter.validatedProbe(url: url)"))
         #expect(addVoiceover.contains("let duration = resolvedVoiceoverDuration(for: url, fallbackDuration: fallbackDuration)"))
         #expect(addVoiceover.contains("asset.duration = duration"))
         #expect(addVoiceover.contains("sourceRange: TimeRange(start: 0, duration: duration)"))

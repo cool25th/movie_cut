@@ -99,7 +99,7 @@ struct QuickStartHomeStaticContractTests {
         #expect(source.contains("kenBurnsEnabled: Bool = true"))
         // Filters to images, seeds from the slideshow template, and lays out the
         // photos sequentially on the first video track.
-        #expect(source.contains("MediaImporter.probe(url: url).kind == .image"))
+        #expect(source.contains("(try? MediaImporter.validatedProbe(url: url))?.kind == .image"))
         #expect(source.contains("com.moviecut.template.photo-slideshow"))
         #expect(source.contains("insertionStart += duration"))
         // Adjacent photos get a transition; the first photo does not.

@@ -532,17 +532,25 @@ struct InspectorBasicSection: View {
                 ForEach(cropPresets, id: \.label) { preset in
                     Button {
                         Task {
-                            try? await viewModel.dispatchCommand(
-                                SetClipPropertyCommand(
-                                    clipId: clip.id,
-                                    property: .cropRect(preset.aspect.flatMap { aspect in
-                                        CropPixelProcessor.centeredCropRect(
-                                            sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
-                                            targetAspect: aspect
-                                        )
-                                    })
+                            // A failed crop preset click used to vanish under
+                            // `try?` — surface it like every other edit path.
+                            do {
+                                try await viewModel.dispatchCommand(
+                                    SetClipPropertyCommand(
+                                        clipId: clip.id,
+                                        property: .cropRect(preset.aspect.flatMap { aspect in
+                                            CropPixelProcessor.centeredCropRect(
+                                                sourceAspect: viewModel.selectedClipSourceAspect ?? 16.0 / 9.0,
+                                                targetAspect: aspect
+                                            )
+                                        })
+                                    )
                                 )
-                            )
+                            } catch {
+                                viewModel.setDropError(
+                                    "Crop failed: \(error.localizedDescription)"
+                                )
+                            }
                         }
                     } label: {
                         Text(preset.label)

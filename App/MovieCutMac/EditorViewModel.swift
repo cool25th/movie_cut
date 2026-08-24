@@ -2634,8 +2634,24 @@ final class EditorViewModel {
 
     func suggestCuts() async throws {
         guard let clipId = selectedClipId else { return }
-        _ = try? await autoCutSilence(for: clipId)
-        _ = try? await detectAndSplitScenes(for: clipId)
+        // Attempt BOTH tools (a silence-cut result is still useful when scene
+        // detection fails), but never swallow the failures — report which
+        // ones failed so the user knows what they got.
+        var failures: [String] = []
+        do {
+            _ = try await autoCutSilence(for: clipId)
+        } catch {
+            failures.append("silence cut")
+        }
+        do {
+            _ = try await detectAndSplitScenes(for: clipId)
+        } catch {
+            failures.append("scene detection")
+        }
+        if !failures.isEmpty {
+            lastStatusMessage = nil
+            lastErrorMessage = "Cut suggestion failed for: \(failures.joined(separator: ", "))."
+        }
     }
 
 

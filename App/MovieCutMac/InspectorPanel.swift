@@ -183,17 +183,17 @@ private struct MasterLoudnessSection: View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
-                    Text("Master Processing")
+                    Text(NSLocalizedString("Master Processing", comment: ""))
                         .font(.caption.weight(.semibold))
 
                     Picker("Master processing", selection: masterProcessingBinding) {
-                        Text("Off").tag(nil as MasterAudioProcessing?)
+                        Text(NSLocalizedString("Off", comment: "")).tag(nil as MasterAudioProcessing?)
                         Text("SNS 좋은 소리").tag(MasterAudioProcessing.sns as MasterAudioProcessing?)
                     }
                     .pickerStyle(.segmented)
                     .controlSize(.small)
-                    .accessibilityLabel("Master audio processing")
-                    .accessibilityHint("Chooses bypass or the SNS 좋은 소리 master processing preset for this project.")
+                    .accessibilityLabel(Text(NSLocalizedString("Master audio processing", comment: "")))
+                    .accessibilityHint(Text(NSLocalizedString("Chooses bypass or the SNS preset for this project.", comment: "")))
 
                     Text(masterProcessingDescription)
                         .font(.caption2)
@@ -218,7 +218,7 @@ private struct MasterLoudnessSection: View {
                         value: String(format: "%.2f dBTP", measurement.truePeakDbTp),
                         within: measurement.truePeakDbTp <= AudioGraphLoudness.snsGuidelineTruePeakDbTp
                     )
-                    Text("SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)")
+                    Text(NSLocalizedString("SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)", comment: ""))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
@@ -251,7 +251,7 @@ private struct MasterLoudnessSection: View {
             .padding(.top, MovieCutSpacing.small)
         } label: {
             HStack(spacing: MovieCutSpacing.small) {
-                Label("Audio Master", systemImage: "waveform")
+                Label(NSLocalizedString("Audio Master", comment: ""), systemImage: "waveform")
                 Spacer()
                 if let lufs = viewModel.masterLoudness?.integratedLufs {
                     Text(String(format: "%.1f LUFS", lufs))
@@ -275,9 +275,9 @@ private struct MasterLoudnessSection: View {
     private var masterProcessingDescription: String {
         switch viewModel.currentProject.masterAudioProcessing {
         case .sns:
-            return "Gentle compression · room reverb · −1 dBTP limiter."
+            return NSLocalizedString("Gentle compression · room reverb · −1 dBTP limiter.", comment: "")
         case nil:
-            return "Bypass the project master chain; clip and track processing still applies."
+            return NSLocalizedString("Bypass the project master chain; clip and track processing still applies.", comment: "")
         }
     }
 

@@ -1490,7 +1490,7 @@ UI test:
 
 > **왜 이 절이 있나.** §1~§12는 2026-06-02에 "개인용 CapCut 스타일 에디터"를 전제로 썼다. 그 뒤 두 번의 전환(2026-06-22 Pro 능가, 2026-07-30 App Store 배포)과 13차례의 격차 감사가 있었고, 거기서 확정된 요구사항들이 요구사항 문서에 반영되지 않은 채 작업지시서에만 흩어져 있었다. 이 절이 그것을 요구사항으로 등재한다.
 > **§1~§12와 충돌하면 이 절이 우선한다.**
-> 각 항목의 작업 단위·AC·검증 계획은 [CAPCUT_SURPASS_SPEC_20260703.md](archive/CAPCUT_SURPASS_SPEC_20260703.md)(G-ID/U-ID)와 [archive/PRO_SPEC_GAP_WORKORDER_20260730.md](archive/PRO_SPEC_GAP_WORKORDER_20260730.md)(S-ID)에 있다. 진행 상태는 [docs/README.md](README.md) §2.
+> 각 항목의 작업 단위·AC·검증 계획은 [CAPCUT_SURPASS_SPEC_20260703.md](CAPCUT_SURPASS_SPEC_20260703.md)(G-ID/U-ID)와 [archive/PRO_SPEC_GAP_WORKORDER_20260730.md](archive/PRO_SPEC_GAP_WORKORDER_20260730.md)(S-ID)에 있다. 진행 상태는 [docs/README.md](README.md) §2.
 
 ### 13.1 포지셔닝과 차별화 축
 
@@ -1503,9 +1503,9 @@ UI test:
 | **무료·오프라인** | CapCut이 Pro 구독으로 가두는 기능을 계정·과금·클라우드 없이 로컬에서 제공한다. | 차별화 |
 | **범위 방어** | FCP/Resolve 전면 추격은 하지 않는다. 멀티캠도 하지 않는다. | 비목표 |
 
-**수용 기준.** "CapCut 수준"을 주장할 때는 [archive/CAPCUT_BENCHMARK_STANDARD.md](archive/CAPCUT_BENCHMARK_STANDARD.md)의 해당 B-ID에 대해 **동급(=) 이상 도달을 증거와 함께** 보인다. 코드 존재는 증거가 아니다.
+**수용 기준.** "CapCut 수준"을 주장할 때는 [CAPCUT_BENCHMARK_STANDARD.md](CAPCUT_BENCHMARK_STANDARD.md)의 해당 B-ID에 대해 **동급(=) 이상 도달을 증거와 함께** 보인다. 코드 존재는 증거가 아니다.
 
-**폐기된 지표.** "CapCut UI 유사도 ≥ 0.75"는 폐기했다 — 능가가 목표인데 유사도를 재는 것은 모순이다. UI는 [archive/UI_DESIGN_PRINCIPLES.md](archive/UI_DESIGN_PRINCIPLES.md)의 자체 기준(반응성·정보 밀도·발견성·접근성)으로 측정한다.
+**폐기된 지표.** "CapCut UI 유사도 ≥ 0.75"는 폐기했다 — 능가가 목표인데 유사도를 재는 것은 모순이다. UI는 [UI_DESIGN_PRINCIPLES.md](UI_DESIGN_PRINCIPLES.md)의 자체 기준(반응성·정보 밀도·발견성·접근성)으로 측정한다.
 
 ### 13.2 출시 요구사항 (App Store) — 최우선 차단 요소
 

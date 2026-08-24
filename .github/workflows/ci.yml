@@ -118,6 +118,10 @@ jobs:
         run: brew install swiftlint
       - name: High-signal lint gate (blocking)
         run: bash scripts/lint_gate.sh
+      - name: Verify doc/command file paths (blocking)
+        run: bash scripts/verify_doc_paths.sh
+      - name: Verify localization keys (blocking)
+        run: python3 scripts/verify_localization_keys.py
       - name: Report full SwiftLint findings (non-blocking)
         if: always()
         run: swiftlint lint --reporter github-actions-logging . || true

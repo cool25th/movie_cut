@@ -3,6 +3,34 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-24 세션 64 (전역 코드 리뷰 후속 수정 — origin/main 통합 + P1/P2)
+
+### origin/main 통합 (merge commit)
+- 충돌 6개 파일 기능별 조정: `SetMasterAudioProcessingCommand`는 main의 `processing:` API로 통일(HEAD의 미사용 `previousPreset` 폐기), `EditorViewModel+Audio`는 main의 mutation coalescing worker 보존, `InspectorPanel`은 main의 Picker UI 채택(HEAD 중복 Toggle 제거), `EffectBrowserView`는 main의 process-wide single-flight 비용 측정 보존, LOOP_STATE/SESSION_HANDOFF는 HEAD의 세션 63 상태 기반. G-26(main)·G-28(main)·CA-26/27(HEAD) 기능 모두 보존.
+
+### P1 — G-27 실기기 E2E 결과 격리
+- 러너 실행별 고유 `RUN_ID` 생성·양 phase 전달(`MOVIECUT_G27_RUN_ID`), phase 1 전 기기 결과 파일 초기화, 대기·검증·error=none 카운트 전부 현재 run 범위만. 하니스는 모든 행에 `run=<id>` 태깅(env 부재 시 실행별 생성). 과거 g27_done/g27_reopen이 들어있는 파일로 즉시 PASS 불가(재현 확인).
+- devicectl 감지 버그 수리: `awk '{print $NF}'`가 Model 컬럼 `(iPhone14,2)`를 잡아 xcodebuild destination 거부 → UUID 패턴 추출로 변경.
+- **실기기 실행(정직 기록)**: iPhone 13 Pro 연결 확인·러너 2회 실실행 — 화면 잠금으로 앱 런치 실패(각 3분 재시도 후 포기). 재실행 명령: 기기 잠금 해제 후 `TEAM_ID=98ZKV9N9T4 bash scripts/run_g27_device_e2e.sh`. **device PASS 선언 없음.**
+
+### P1 — 효과 브라우저 / P1 — G-26 오디오 최신성
+- 브라우저 계약(파라미터 키 amount/ev/radius, 전환·externalLUT 제외, 선택→미리보기→명시적 Apply, 싱글플라이트 비용 측정)은 main 병합으로 확보, 관련 동작 테스트 19건 통과.
+- G-26은 StaticContract만 있던 무효화/직렬화 계약을 EditorViewModel 실경로 동작 테스트 4건으로 잠금(빠른 토글 마지막 선택 승리, 프리셋 전환·ducking 커밋 시 masterLoudness 폐기, no-audio 오류 보고·커밋 시 소거).
+
+### P2 — CA-27 / CA-26
+- 타임코드: finite 검사(frameRate·입력·최종값; inf/infinity/nan/1e309/오버플로 거부), FF 정수 전용, 3필드=MM:SS:FF 통일(문서에서 모순되는 HH:MM:SS 3필드 형태 삭제), 29.97/23.976 마지막 프레임 보존(표시 클램프 `ceil(fps)-1`로 파서 수용과 정확 일치), TextField VoiceOver 독립 탐색(무인자 accessibilityElement 제거·라벨/힌트 필드 직접 적용). 테스트 11건.
+- LUT export: 외부 LUT 재내보내기=관리 원본 byte-for-byte 복사(DOMAIN·주석·음수·>1 보존 실증), 동일 경로 안전 no-op, serialize 형상 검증(dimension³×4 불일치 시 throw, 크래시 아님), bake 차원 범위 위반 시 명시적 오류(identity 대체 폐지), bake/65³ 직렬화/파일 쓰기 전부 메인 액터 밖+응답성 실증(최악 메인 홉 <500ms). Core 6건+Mac 3건.
+
+### 자동화·CI·문서·지역화
+- CapCut 현행 원장 5종 archive→active 승격(SURPASS 스펙·벤치마크 기준·격차 분석 V13·UI 설계 원칙·디자인 격차 감사 — git mv로 복제 없음). /gap-audit·/surpass 참조 경로 수리, AGENT_LOOP_PROMPT `docs/` 누락 경로 수리, REQUIREMENTS 승격 반영.
+- `scripts/verify_doc_paths.sh` 신설(활성 문서·명령 파일의 로컬 경로 자동 검증) — CI lint job blocking 연결. 지역화 검증기(`verify_localization_keys.py`)도 CI blocking 연결, 누락 키 17건+보간 키 1건 수리로 PASS.
+- VERIFICATION_STANDARD·README 5단계를 실제 verify_gate와 일치(swift build→전체 test→Mac 빌드→iOS generic 빌드→high-signal lint). ci.yml lint는 job-level continue-on-error 없이 blocking 유지.
+- G-26 표시·상태·접근성 문자열 영어 키+en/ko 등록(sourceLanguage=en 정합, 프리셋명 "SNS 좋은 소리"는 로케일 불변 제품명으로 유지).
+- `.mimosa/`를 .gitignore에 추가(사용자 코드 아님·커밋 금지).
+
+### 다음 세션 우선순위
+① 방향 문서 §3 반영(Q11 승인분 — 반영 후 CA-03/04/05/06 실행 자격) ② CA-28 RGB 파레이드 승인 완료·즉시 실행 가능 ③ 기기 잠금 해제+연결 시 G-27 실기기 재실행(위 명령).
+
 ## 2026-08-22 세션 63 (Q1~Q12 제품 결정 12건 확정)
 
 **결정 원천**: `docs/DECISIONS_20260822.md` (4지선다 사용자 답변, 전항목 권장안 채택) — 페르소나=1인 쇼츠 크리에이터·가격=일회성+유료 메이저 업데이트·macOS 14 유지·N6/F-24 비목표·자막 ko+en·접근성 핵심 경로·Tolerance MAD≤2.0 유지·성능 수치 출시 직전 재측정·경쟁 실측 분기 고정·릴리스 분기 1회·P0 편입 ⑤⑥⑨ 승인·지원 상한 60분.

@@ -1,6 +1,6 @@
 # MovieCut 문서 인덱스 및 개발 가이드 (Documentation Map)
 
-> **최종 갱신:** 2026-08-22 (문서 체계 정리 — 경쟁 분석 통합·구문서 9종 archive)  
+> **최종 갱신:** 2026-08-24 (CapCut 현행 원장 5종 archive→active 승격 — /gap-audit·/surpass 자동화가 사실의 원천으로 참조)  
 > **목적:** MovieCut 프로젝트의 아키텍처, 요구사항, 검증기준, 방향, 경쟁 분석을 한눈에 파악할 수 있는 단일 진입점 문서 지도입니다.
 
 ---
@@ -18,6 +18,11 @@
 | 🌐 **경쟁 분석·제품 방향 (통합)** | YT Create(모바일)·CapCut·FCP 12.3(맥 설치판) 격차 분석 + 증거 원장(Part 9) + 역량 매트릭스(Part 10) + P0/P1/P2 | [COMPETITIVE_ANALYSIS_20260822.md](COMPETITIVE_ANALYSIS_20260822.md) |
 | 📑 **기능 백로그 원장** | 작업 핸드오프. §0.5에 G-23~G-29 등록 상태 | [CAPCUT_FEATURE_BACKLOG.md](CAPCUT_FEATURE_BACKLOG.md) |
 | 📱 **플랫폼 파리티 매트릭스** | macOS vs iOS 배선 현황 및 defer 사유 | [PLATFORM_PARITY_MATRIX.md](PLATFORM_PARITY_MATRIX.md) |
+| 📐 **CapCut 능가 스펙 (현행 원장)** | G-ID/U-ID 작업 명세 — /gap-audit·/surpass 자동화의 사실의 원천 (2026-08-24 archive 승격) | [CAPCUT_SURPASS_SPEC_20260703.md](CAPCUT_SURPASS_SPEC_20260703.md) |
+| 📏 **CapCut 벤치마크 기준** | B-ID 명시적 비교 기준·채점 시트 | [CAPCUT_BENCHMARK_STANDARD.md](CAPCUT_BENCHMARK_STANDARD.md) |
+| 🔍 **최신 격차 분석 (V13)** | 기능+UI 통합 재감사 — 신규 분석은 V14+로 | [GAP_ANALYSIS_V13_FUNC_UI_20260729.md](GAP_ANALYSIS_V13_FUNC_UI_20260729.md) |
+| 🎨 **UI 설계 원칙** | UI 디자인 원칙·토큰 (U-ID 작업 시 참조) | [UI_DESIGN_PRINCIPLES.md](UI_DESIGN_PRINCIPLES.md) |
+| 🗺️ **CapCut 디자인 격차 감사** | IA 계약 배경 (U-ID 작업 시 참조) | [MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md](MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md) |
 
 ## 2. 루프 운영 문서 (세션 상태 — 자동 갱신 대상, 수동 편집 주의)
 
@@ -40,12 +45,12 @@
 
 ## 4. 과거 기록 보관소 (`docs/archive/`)
 
-완료·대체된 45개 문서(구 격차 분석 V1~V13, SURPASS 스펙, 실행 계획, 검수 리뷰, 진단 프롬프트, REMAINING_TASKS 등)는 [docs/archive/](archive/)에 보관됩니다. 역사 추적 시에만 열람하세요. 2026-08-22 이전 인덱스가 가리키던 다음 문서들은 모두 archive로 이동했습니다: `REMAINING_TASKS.md`, `CAPCUT_SURPASS_SPEC_20260703.md`, `EXECUTION_PLAN_20260816.md`, `EXECUTION_PLAN_PHASE2_20260819.md`, `STATIC_CONTRACT_TRIAGE_RESULT.md`, `COMPETITIVE_GAP_ANALYSIS_20260816.md`, `MovieCut_Compositor_Validation_Prompt.md`, `UI_CAPTURE_DIAGNOSIS_PROMPT_20260817.md`, `EXTERNAL_RESEARCH_PLAN_REVIEW_20260815.md`.
+완료·대체된 문서(구 격차 분석 V1~V12, 실행 계획, 검수 리뷰, 진단 프롬프트, REMAINING_TASKS 등)는 [docs/archive/](archive/)에 보관됩니다. **역사 추적 시에만 열람하세요 — 자동화·루프가 archive 문서를 현재 원장처럼 읽거나 수정하지 않습니다.** 2026-08-22 archive 이동: `REMAINING_TASKS.md`, `EXECUTION_PLAN_20260816.md`, `EXECUTION_PLAN_PHASE2_20260819.md`, `STATIC_CONTRACT_TRIAGE_RESULT.md`, `COMPETITIVE_GAP_ANALYSIS_20260816.md`, `MovieCut_Compositor_Validation_Prompt.md`, `UI_CAPTURE_DIAGNOSIS_PROMPT_20260817.md`, `EXTERNAL_RESEARCH_PLAN_REVIEW_20260815.md`. 2026-08-24 현행 원장 승격(archive→docs/): `CAPCUT_SURPASS_SPEC_20260703.md`, `CAPCUT_BENCHMARK_STANDARD.md`, `GAP_ANALYSIS_V13_FUNC_UI_20260729.md`, `UI_DESIGN_PRINCIPLES.md`, `MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` — 같은 문서의 active/archive 복제본은 존재하지 않는다.
 
 ## 5. 빌드 및 검증 명령 빠른 참조
 
 ```bash
-# 1. 5단계 전체 검증 게이트 (Core 빌드 + 전체 테스트 + Mac 빌드 + iOS 빌드 + iOS generic)
+# 1. 5단계 전체 검증 게이트 (swift build + 전체 swift test + Mac 빌드 + iOS generic 빌드 + high-signal lint)
 bash scripts/verify_gate.sh
 
 # 2. Core 렌더링 파리티 시나리오 실행 (17종, MAD ≤ 2.0 & duration 1프레임)

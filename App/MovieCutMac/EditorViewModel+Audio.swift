@@ -55,9 +55,9 @@ extension EditorViewModel {
 
             switch processing {
             case .sns:
-                lastStatusMessage = "Master audio processing set to SNS 좋은 소리."
+                lastStatusMessage = NSLocalizedString("Master audio processing set to the SNS preset.", comment: "")
             case nil:
-                lastStatusMessage = "Master audio processing turned off."
+                lastStatusMessage = NSLocalizedString("Master audio processing turned off.", comment: "")
             }
             return
         }

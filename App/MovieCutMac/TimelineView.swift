@@ -1356,9 +1356,12 @@ struct TimelineView: View {
             }
         }
         let joined = parts.joined(separator: ", ")
-        return NSLocalizedString(
-            "Preview quality lowered: \(joined). Export uses the original.",
-            comment: "Tooltip listing every active preview-quality cause; the list is substituted into the sentence"
+        return String(
+            format: NSLocalizedString(
+                "Preview quality lowered: %@. Export uses the original.",
+                comment: "Tooltip listing every active preview-quality cause; the list is substituted into the sentence"
+            ),
+            joined
         )
     }
 

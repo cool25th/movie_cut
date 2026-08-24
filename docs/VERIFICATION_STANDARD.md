@@ -109,8 +109,8 @@ bash scripts/verify_gate.sh
 1. **Step 1**: `swift build` (Core 라이브러리 및 Swift 컴파일 통과)
 2. **Step 2**: `swift test` (전체 유닛/통합·골든 전수 테스트 100% 통과 — 2026-08-21 기준 1,345개)
 3. **Step 3**: `xcodebuild -scheme MovieCutMac` (macOS 샌드박스 앱 빌드 성공)
-4. **Step 4**: `xcodebuild -scheme MovieCutiOS` (iOS 앱 빌드 성공)
-5. **Step 5**: iOS generic device 빌드(`CODE_SIGNING_ALLOWED=NO`) — iOS 스킴 장기 미빌드 사고(2026-08-14 이전 2주) 재발 방지 게이트
+4. **Step 4**: `xcodebuild -scheme MovieCutiOS` — iOS generic device 빌드(`CODE_SIGNING_ALLOWED=NO`). iOS 스킴 장기 미빌드 사고(2026-08-14 이전 2주) 재발 방지 게이트
+5. **Step 5**: high-signal lint 게이트(`scripts/lint_gate.sh` — force_cast / force_try / shorthand_operator 정정 위험 허용목록)
 
 ---
 

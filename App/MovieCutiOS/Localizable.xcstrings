@@ -514,6 +514,23 @@
         }
       }
     },
+    "%d media file(s) missing — clips will play empty until relinked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d media file(s) missing — clips will play empty until relinked"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d개 미디어 파일이 없습니다 — 다시 연결할 때까지 클립이 비어 재생됩니다"
+          }
+        }
+      }
+    },
     "-": {
       "localizations": {
         "en": {
@@ -3894,6 +3911,23 @@
         }
       }
     },
+    "Missing media relink banner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing media relink banner"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미디어 재연결 배너"
+          }
+        }
+      }
+    },
     "Motion Tracking": {
       "extractionState": "manual",
       "localizations": {
@@ -5018,6 +5052,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "복구된 미저장 작업"
+          }
+        }
+      }
+    },
+    "Relink": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relink"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 연결"
           }
         }
       }

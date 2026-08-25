@@ -42,6 +42,16 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
     /// Optional generated proxy metadata.
     public var proxy: ProxyInfo?
 
+    /// SURV-01 2차: the asset's location RELATIVE to the managed imports
+    /// root (`<projectId>/<file>`) when the original was staged there by the
+    /// iOS photo-picker import. The container's absolute path changes across
+    /// reinstalls and device restores, so the relative reference lets
+    /// `ProjectStore.rebaseManagedImports` re-point `originalURL` at the
+    /// file's CURRENT location instead of losing the media. Nil for Mac
+    /// (bookmark-based) assets and pre-2차 projects — the legacy absolute
+    /// path then goes through a suffix-match rebase.
+    public var managedImportPath: String?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case originalURL
@@ -51,6 +61,7 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         case metadata
         case thumbnailData
         case proxy
+        case managedImportPath
     }
 
     /// Creates a media asset.
@@ -62,7 +73,8 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         metadata: MediaMetadata = MediaMetadata(),
         thumbnailData: Data? = nil,
         proxy: ProxyInfo? = nil,
-        originalBookmark: Data? = nil
+        originalBookmark: Data? = nil,
+        managedImportPath: String? = nil
     ) {
         self.id = id
         self.originalURL = originalURL
@@ -72,6 +84,7 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         self.thumbnailData = thumbnailData
         self.proxy = proxy
         self.originalBookmark = originalBookmark
+        self.managedImportPath = managedImportPath
     }
 
     public init(from decoder: any Decoder) throws {
@@ -86,6 +99,7 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         metadata = try container.decodeIfPresent(MediaMetadata.self, forKey: .metadata) ?? MediaMetadata()
         thumbnailData = try container.decodeIfPresent(Data.self, forKey: .thumbnailData)
         proxy = try container.decodeIfPresent(ProxyInfo.self, forKey: .proxy)
+        managedImportPath = try container.decodeIfPresent(String.self, forKey: .managedImportPath)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -98,5 +112,6 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         try container.encode(metadata, forKey: .metadata)
         try container.encodeIfPresent(thumbnailData, forKey: .thumbnailData)
         try container.encodeIfPresent(proxy, forKey: .proxy)
+        try container.encodeIfPresent(managedImportPath, forKey: .managedImportPath)
     }
 }

@@ -3,12 +3,16 @@ import AVFoundation
 import MovieCutCore
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct IOSContentView: View {
     @State private var viewModel = IOSEditorViewModel()
     // 리뷰 2026-08-26 (Phase 2): background 진입 시 즉시 autosave flush —
     // 디바운스 대기 중 서스펜션되면 편집이 실종된다.
     @Environment(\.scenePhase) private var scenePhase
+    // SURV-01 2차: missing-originals relink — the banner offers relocation,
+    // the importer picks the replacement for the first missing asset.
+    @State private var isRelinkImporterPresented = false
     @State private var selectedPhotosItem: PhotosPickerItem?
     @State private var isMediaBrowserPresented = false
     @State private var isInspectorPresented = false
@@ -185,6 +189,49 @@ struct IOSContentView: View {
                     .accessibilityLabel(Text(NSLocalizedString("Autosave failure warning", comment: "")))
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                // SURV-01 2차: originals missing from this device — offer
+                // in-place relink instead of silently playing empty clips.
+                else if let firstMissing = viewModel.missingMediaAssets.first {
+                    HStack(spacing: 8) {
+                        Label(
+                            title: {
+                                Text(String(
+                                    format: NSLocalizedString(
+                                        "%d media file(s) missing — clips will play empty until relinked",
+                                        comment: "SURV-01 banner over the editor"
+                                    ),
+                                    viewModel.missingMediaAssets.count
+                                ))
+                                .font(.caption)
+                            },
+                            icon: { Image(systemName: "questionmark.square.dashed") }
+                        )
+                        Button(NSLocalizedString("Relink", comment: "SURV-01 banner action")) {
+                            isRelinkImporterPresented = true
+                        }
+                        .font(.caption.bold())
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 6)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(NSLocalizedString("Missing media relink banner", comment: "")))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .id(firstMissing.id)
+                }
+            }
+            .fileImporter(
+                isPresented: $isRelinkImporterPresented,
+                allowedContentTypes: [.movie, .video, .audio, .image],
+                allowsMultipleSelection: false
+            ) { result in
+                guard case .success(let urls) = result, let replacement = urls.first,
+                      let missing = viewModel.missingMediaAssets.first else {
+                    return
+                }
+                Task { await viewModel.relinkMedia(missing, to: replacement) }
             }
             .alert(
                 NSLocalizedString("Recovered unsaved work", comment: ""),

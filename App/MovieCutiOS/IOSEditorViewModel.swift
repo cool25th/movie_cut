@@ -59,6 +59,13 @@ final class IOSEditorViewModel {
         }
     }
 
+    /// SURV-01 2차: assets whose originals are gone from this device — the
+    /// relink banner drives ``relinkMedia(_:to:)`` over this list (Mac
+    /// `missingMediaAssets` parity).
+    var missingMediaAssets: [MediaAsset] {
+        mediaAssets.filter { !FileManager.default.fileExists(atPath: $0.originalURL.path) }
+    }
+
     var selectedClip: Clip? {
         guard let selectedClipId else { return nil }
         return currentProject.timeline.tracks
@@ -452,6 +459,7 @@ final class IOSEditorViewModel {
                     failure.userMessage
                 )
             }
+            cleanupStaleImports()
             return
         }
         let project = Self.defaultProjectIfEmpty(recovered)
@@ -464,12 +472,24 @@ final class IOSEditorViewModel {
 
         // SURV-01 (리뷰 2026-08-26): 복구 프로젝트가 참조하는 원본 중 이
         // 기기에 없는 파일은 표면화 — 조용히 빈 클립으로 재생되는 대신
-        // 사용자에게 재임포트를 안내한다(relink UI는 후속 증분).
-        let missingMedia = project.mediaLibrary.assets.values
-            .filter { !FileManager.default.fileExists(atPath: $0.originalURL.path) }
+        // relink 배너가 재배치를 안내한다(2차).
+        let missingMedia = missingMediaAssets
         if !missingMedia.isEmpty {
-            lastErrorMessage = "\(missingMedia.count) imported media file(s) are missing from this device. Re-import them to restore those clips."
+            lastErrorMessage = "\(missingMedia.count) imported media file(s) are missing from this device. Use Relink to relocate them."
         }
+        cleanupStaleImports()
+    }
+
+    /// SURV-01 2차: the stale-imports policy — per-project import
+    /// directories that no live project references AND that sat untouched
+    /// past the grace period are removed. Runs after the recovery attempt so
+    /// a project being recovered on THIS launch (already installed as
+    /// `currentProject`) is always kept.
+    func cleanupStaleImports() {
+        ProjectStore.cleanupOrphanedImports(
+            importsRoot: importsRootDirectory,
+            keepingProjectIds: [currentProject.id]
+        )
     }
 
     /// Clears the recovery file (clean quit semantics).
@@ -505,11 +525,63 @@ final class IOSEditorViewModel {
             )
             try Self.copyFileBuffered(from: stagedURL, to: fileURL)
             await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
-            if let importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
+            if var importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
+                // SURV-01 2차: stamp the imports-root-relative reference so a
+                // later container move (reinstall/restore) rebases the URL
+                // instead of losing the media. Only meaningful under the
+                // managed root — the temp fallback keeps absolute-only.
+                if importsRootDirectory != nil {
+                    importedAsset.managedImportPath = "\(currentProject.id.uuidString)/\(fileURL.lastPathComponent)"
+                    try? await session.dispatch(UpdateMediaAssetCommand(asset: importedAsset))
+                    await refreshFromSession()
+                }
                 await addClipToTimeline(asset: importedAsset)
             }
         } catch {
             lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
+        }
+    }
+
+    /// SURV-01 2차: re-links a missing media asset from a user-picked
+    /// replacement. The picked file is copied INTO the managed imports root
+    /// (so the relinked original survives like any staged import), the
+    /// asset's UUID is kept so clip references survive, and the relative
+    /// reference is stamped for future rebases. Mac `relinkMedia` parity.
+    func relinkMedia(_ asset: MediaAsset, to replacementURL: URL) async -> Bool {
+        do {
+            // The picker hands out security-scoped URLs; the copy must run
+            // inside the scope.
+            let didStartAccess = replacementURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    replacementURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            let fileExtension = replacementURL.pathExtension.isEmpty
+                ? "mov"
+                : replacementURL.pathExtension
+            let destination = stagedImportDestination(fileExtension: fileExtension)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Self.copyFileBuffered(from: replacementURL, to: destination)
+
+            var relocated = try MediaImporter.validatedProbe(url: destination)
+            relocated.id = asset.id
+            relocated.duration = relocated.duration ?? asset.duration
+            if importsRootDirectory != nil {
+                relocated.managedImportPath = "\(currentProject.id.uuidString)/\(destination.lastPathComponent)"
+            }
+            try await session.dispatch(UpdateMediaAssetCommand(asset: relocated))
+            await refreshFromSession()
+            if missingMediaAssets.isEmpty {
+                lastErrorMessage = nil
+            }
+            return true
+        } catch {
+            lastErrorMessage = "Couldn't relink the selected media: \(error.localizedDescription)"
+            return false
         }
     }
 

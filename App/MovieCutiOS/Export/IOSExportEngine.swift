@@ -230,27 +230,42 @@ final class IOSExportEngine {
 
         let sortedTracks = project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex })
         let trackIDComposition = AVMutableComposition()
-        var videoTrackIDsByTrackID: [UUID: CMPersistentTrackID] = [:]
+        // BUG-IOS-09: one entry per minted VIDEO track for the timeline track —
+        // transition tracks mint two (alternating slots). The allocation order
+        // mirrors insertVideoTrack exactly so the IDs match the real
+        // composition's.
+        var videoTrackIDsByTrackID: [UUID: [CMPersistentTrackID]] = [:]
 
         for timelineTrack in sortedTracks {
             switch timelineTrack.kind {
             case .video:
-                let playableClips = timelineTrack.clips.filter { $0.kind == .video || $0.kind == .image }
+                let playableClips = timelineTrack.clips
+                    .filter { ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false }
                 guard !playableClips.isEmpty else { continue }
+                let slotCount = Self.transitionSlotCount(for: playableClips)
 
-                if !timelineTrack.isHidden,
-                   let videoTrack = trackIDComposition.addMutableTrack(
-                       withMediaType: .video,
-                       preferredTrackID: kCMPersistentTrackID_Invalid
-                   ) {
-                    videoTrackIDsByTrackID[timelineTrack.id] = videoTrack.trackID
+                if !timelineTrack.isHidden {
+                    var mintedTrackIDs: [CMPersistentTrackID] = []
+                    for _ in 0..<slotCount {
+                        if let videoTrack = trackIDComposition.addMutableTrack(
+                            withMediaType: .video,
+                            preferredTrackID: kCMPersistentTrackID_Invalid
+                        ) {
+                            mintedTrackIDs.append(videoTrack.trackID)
+                        }
+                    }
+                    if !mintedTrackIDs.isEmpty {
+                        videoTrackIDsByTrackID[timelineTrack.id] = mintedTrackIDs
+                    }
                 }
 
                 if !timelineTrack.isMuted, !audioSoloSuppresses(timelineTrack, in: project) {
-                    trackIDComposition.addMutableTrack(
-                        withMediaType: .audio,
-                        preferredTrackID: kCMPersistentTrackID_Invalid
-                    )
+                    for _ in 0..<slotCount {
+                        trackIDComposition.addMutableTrack(
+                            withMediaType: .audio,
+                            preferredTrackID: kCMPersistentTrackID_Invalid
+                        )
+                    }
                 }
             case .audio:
                 let playableClips = timelineTrack.clips.filter { $0.kind == .audio || $0.kind == .video }
@@ -267,19 +282,43 @@ final class IOSExportEngine {
 
         var clipEffects: [CustomCompositionClipEffect] = []
         var videoTrackIDs: [CMPersistentTrackID] = []
+        var transitionClipInfos: [VideoClipTransitionInfo] = []
 
         for timelineTrack in sortedTracks {
             switch timelineTrack.kind {
             case .video:
-                guard let trackID = videoTrackIDsByTrackID[timelineTrack.id] else { continue }
-                videoTrackIDs.append(trackID)
+                guard let trackIDs = videoTrackIDsByTrackID[timelineTrack.id], !trackIDs.isEmpty else { continue }
+                videoTrackIDs.append(contentsOf: trackIDs)
 
-                for clip in timelineTrack.clips
+                let sortedClips = timelineTrack.clips
                     .filter({ ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false })
-                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start })
+
+                for (clipIndex, clip) in sortedClips.enumerated() {
+                    let slot = trackIDs.count > 1 ? clipIndex % trackIDs.count : 0
+                    let trackID = trackIDs[slot]
+
+                    // BUG-IOS-09: effect timeRanges follow the SAME adjusted
+                    // (back-timed) starts the composition inserts with, so
+                    // instruction boundaries and the transition window line up
+                    // with the real track content.
+                    var adjustedStart = clip.timelineRange.start
+                    if clipIndex > 0,
+                       let transition = sortedClips[clipIndex - 1].transition,
+                       transition.duration > 0 {
+                        adjustedStart = max(0, adjustedStart - transition.duration)
+                    }
                     let timeRange = CMTimeRange(
-                        start: cmTime(clip.timelineRange.start),
+                        start: cmTime(adjustedStart),
                         duration: cmTime(clip.timelineRange.duration)
+                    )
+                    transitionClipInfos.append(
+                        VideoClipTransitionInfo(
+                            timelineTrackID: timelineTrack.id,
+                            trackID: trackID,
+                            timeRange: timeRange,
+                            transition: clip.transition
+                        )
                     )
 
                     // BUG-IOS-08: composition source frames arrive in STORAGE
@@ -365,8 +404,13 @@ final class IOSExportEngine {
             }
         }
 
-        let durationSeconds = max(project.timeline.duration, 0)
+        // BUG-IOS-09: transition overlaps shorten the composition below the
+        // model timeline duration — boundaries must follow the REAL extent,
+        // or a trailing no-content segment would request source frames after
+        // the last clip ends.
+        let durationSeconds = max(composition.duration.seconds, 0)
         let duration = cmTime(durationSeconds)
+        let transitionEffects = makeTransitionEffects(from: transitionClipInfos)
         var instructionBoundaries = [TimeInterval(0), durationSeconds]
         for clipEffect in clipEffects {
             let start = min(max(clipEffect.timeRange.start.seconds, 0), durationSeconds)
@@ -406,6 +450,7 @@ final class IOSExportEngine {
                     timeRange: segmentRange,
                     trackIDs: videoTrackIDs,
                     clipEffects: activeClipEffects,
+                    transitionEffects: transitionEffects,
                     canvasBackground: project.canvasBackground,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
@@ -418,6 +463,7 @@ final class IOSExportEngine {
                     timeRange: CMTimeRange(start: .zero, duration: duration),
                     trackIDs: videoTrackIDs,
                     clipEffects: clipEffects,
+                    transitionEffects: transitionEffects,
                     canvasBackground: project.canvasBackground,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
@@ -429,6 +475,75 @@ final class IOSExportEngine {
 
     private func stickerEmoji(from textContent: TextClipContent) -> String? {
         StickerDetection.stickerEmoji(from: textContent)
+    }
+
+    /// BUG-IOS-09: per-clip metadata for transition pairing (Mac
+    /// ExportEngine's ExportClipInstructionMetadata, scoped to what the
+    /// compositor needs).
+    private struct VideoClipTransitionInfo {
+        let timelineTrackID: UUID
+        let trackID: CMPersistentTrackID
+        let timeRange: CMTimeRange
+        let transition: Transition?
+    }
+
+    /// BUG-IOS-09 (Mac ExportEngine parity, ExportEngine.swift:831-882):
+    /// pairs consecutive clips within each timeline track where the OUTGOING
+    /// clip carries a two-source transition. The window is the outgoing
+    /// clip's tail (clamped to the shorter clip), during which both slot
+    /// tracks carry live source frames for the compositor's transition
+    /// branch.
+    private func makeTransitionEffects(
+        from infos: [VideoClipTransitionInfo]
+    ) -> [CustomCompositionTransitionEffect] {
+        let clipsByTimelineTrack = Dictionary(
+            grouping: infos.filter { $0.trackID != kCMPersistentTrackID_Invalid },
+            by: \.timelineTrackID
+        )
+
+        return clipsByTimelineTrack.values.flatMap { trackClips in
+            let sortedClips = trackClips.sorted {
+                if $0.timeRange.start == $1.timeRange.start {
+                    return $0.timeRange.duration > $1.timeRange.duration
+                }
+                return $0.timeRange.start < $1.timeRange.start
+            }
+
+            guard sortedClips.count > 1 else {
+                return [CustomCompositionTransitionEffect]()
+            }
+
+            return sortedClips.indices.dropLast().compactMap { index in
+                let outgoingClip = sortedClips[index]
+                let incomingClip = sortedClips[index + 1]
+
+                guard let transition = outgoingClip.transition,
+                      transition.duration > 0,
+                      transition.type.requiresTwoSourcePixelProcessing
+                else {
+                    return nil
+                }
+
+                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
+                let transitionDuration = min(
+                    requestedDuration,
+                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
+                )
+                guard transitionDuration > .zero else {
+                    return nil
+                }
+
+                let outgoingEnd = CMTimeAdd(outgoingClip.timeRange.start, outgoingClip.timeRange.duration)
+                let transitionStart = CMTimeSubtract(outgoingEnd, transitionDuration)
+
+                return CustomCompositionTransitionEffect(
+                    outgoingTrackID: outgoingClip.trackID,
+                    incomingTrackID: incomingClip.trackID,
+                    timeRange: CMTimeRange(start: transitionStart, duration: transitionDuration),
+                    type: transition.type
+                )
+            }
+        }
     }
 
     /// G-15: temp segment backing an image clip in the current render plan.
@@ -454,27 +569,54 @@ final class IOSExportEngine {
     ) async throws {
         // G-15: image clips ride the video pipeline through a pre-rendered
         // segment (Mac ExportEngine parity) — filtering to .video only made
-        // photo-only projects export nothing and previews empty.
+        // photo-only projects export nothing and previews empty. Adjustment
+        // layers carry no content (they render via instruction.adjustmentClips)
+        // and must not consume a transition slot — the effect loop in
+        // makeVideoComposition enumerates the identical list.
         let playableClips = timelineTrack.clips
-            .filter { $0.kind == .video || $0.kind == .image }
+            .filter { ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false }
             .sorted { $0.timelineRange.start < $1.timelineRange.start }
 
         guard !playableClips.isEmpty else { return }
 
-        let compositionVideoTrack = timelineTrack.isHidden ? nil : composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
-        let compositionAudioTrack = (timelineTrack.isMuted
-            || audioSoloSuppresses(timelineTrack, in: project)) ? nil : composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
+        // BUG-IOS-09: two-source transitions need consecutive clips on
+        // DIFFERENT composition tracks — the custom compositor reads one
+        // source frame per track. Slots are allocated only when the track
+        // actually carries a transition; transition-free tracks keep the
+        // exact single-track layout (and byte-identical renders).
+        let slotCount = Self.transitionSlotCount(for: playableClips)
 
-        var videoCursor = CMTime.zero
-        var audioCursor = CMTime.zero
+        var videoTracks: [AVMutableCompositionTrack] = []
+        if !timelineTrack.isHidden {
+            for _ in 0..<slotCount {
+                if let track = composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                ) {
+                    videoTracks.append(track)
+                }
+            }
+        }
+        // Audio alternates across the same slot count with the same
+        // back-timing, so the overlapped window mixes both clips' audio and
+        // the composition extent stays aligned with the video.
+        let wantsAudio = !(timelineTrack.isMuted || audioSoloSuppresses(timelineTrack, in: project))
+        var audioTracks: [AVMutableCompositionTrack] = []
+        if wantsAudio {
+            for _ in 0..<slotCount {
+                if let track = composition.addMutableTrack(
+                    withMediaType: .audio,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                ) {
+                    audioTracks.append(track)
+                }
+            }
+        }
 
-        for clip in playableClips {
+        var videoCursors = [CMTime](repeating: .zero, count: videoTracks.count)
+        var audioCursors = [CMTime](repeating: .zero, count: audioTracks.count)
+
+        for (clipIndex, clip) in playableClips.enumerated() {
             guard
                 let assetId = clip.assetId,
                 let mediaAsset = project.mediaLibrary.assets[assetId]
@@ -504,26 +646,50 @@ final class IOSExportEngine {
                 asset = AVURLAsset(url: mediaAsset.originalURL)
             }
 
-            if let compositionVideoTrack, !timelineTrack.isHidden {
+            // BUG-IOS-09: overlap back-timing — the incoming clip starts
+            // transition-duration earlier so both sources are live during
+            // the transition window (Mac ExportEngine parity).
+            var adjustedStart = clip.timelineRange.start
+            if clipIndex > 0,
+               let transition = playableClips[clipIndex - 1].transition,
+               transition.duration > 0 {
+                adjustedStart = max(0, adjustedStart - transition.duration)
+            }
+
+            if !videoTracks.isEmpty {
+                let slot = videoTracks.count > 1 ? clipIndex % videoTracks.count : 0
                 try await insertClip(
                     clip,
                     mediaType: .video,
                     from: asset,
-                    into: compositionVideoTrack,
-                    cursor: &videoCursor
+                    into: videoTracks[slot],
+                    cursor: &videoCursors[slot],
+                    timelineStartOverride: adjustedStart
                 )
             }
 
-            if let compositionAudioTrack, !timelineTrack.isMuted {
+            if !audioTracks.isEmpty {
+                let slot = audioTracks.count > 1 ? clipIndex % audioTracks.count : 0
                 try await insertClip(
                     clip,
                     mediaType: .audio,
                     from: asset,
-                    into: compositionAudioTrack,
-                    cursor: &audioCursor
+                    into: audioTracks[slot],
+                    cursor: &audioCursors[slot],
+                    timelineStartOverride: adjustedStart
                 )
             }
         }
+    }
+
+    /// BUG-IOS-09: two composition tracks per video timeline track when any
+    /// clip boundary carries a two-source pixel transition, else one.
+    private static func transitionSlotCount(for clips: [Clip]) -> Int {
+        let needsSlots = clips.contains { clip in
+            guard let transition = clip.transition else { return false }
+            return transition.duration > 0 && transition.type.requiresTwoSourcePixelProcessing
+        }
+        return needsSlots ? 2 : 1
     }
 
     private func insertAudioTrack(
@@ -569,7 +735,8 @@ final class IOSExportEngine {
         mediaType: AVMediaType,
         from asset: AVURLAsset,
         into compositionTrack: AVMutableCompositionTrack,
-        cursor: inout CMTime
+        cursor: inout CMTime,
+        timelineStartOverride: TimeInterval? = nil
     ) async throws {
         // Step 7: handle reverse by substituting a pre-rendered reversed asset
         // (same pattern as macOS ExportEngine). The reversed asset's time 0
@@ -601,7 +768,9 @@ final class IOSExportEngine {
             )
         }
 
-        let timelineStart = cmTime(clip.timelineRange.start)
+        // BUG-IOS-09: transition back-timing shifts the insertion earlier than
+        // the model timeline position; the caller passes the adjusted start.
+        let timelineStart = cmTime(timelineStartOverride ?? clip.timelineRange.start)
         guard CMTimeCompare(timelineStart, cursor) >= 0 else {
             return
         }

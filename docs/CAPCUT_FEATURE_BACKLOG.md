@@ -271,9 +271,11 @@
 - 등록: `IOSExportEngine`이 `.kind == .video`만 필터링(228·268·414 3곳) — 타임라인은 `.image` 클립을 만들지만 사진 전용 프로젝트는 export 실패(`noExportableMedia`)·프리뷰 공백. Mac은 `mediaAsset.kind == .image` 기반 `ImageVideoRenderService` 사전 렌더로 처리(ExportEngine.swift:353-368).
 - 수정: `ImageVideoRenderService`를 Core(`Sources/MovieCutCore/Rendering/`)로 이동해 양 플랫폼 공유 + `makeRenderPlan` 트랙 삽입에 이미지 사전 렌더 분기(캔버스 크기·Ken Burns 전달, Mac 패리티) + 임시 세그먼트 수명 관리(직전 플랜 세그먼트 정리). 검증: PNG(청)·HEIC(녹) 플랜 렌더, EXIF orientation 6 upright(상=적/하=청), **사진 전용 프로젝트 export E2E(AC6)** — `IOSImageClipPipelineTests` 4종. iOS 35/35.
 
-### BUG-IOS-09 (P1) — iOS 전환이 렌더 instruction에 전달되지 않음 — **등록(2026-08-26)**
+### BUG-IOS-09 (P1) — iOS 전환이 렌더 instruction에 전달되지 않음 — **수정 완료(2026-08-26)**
 
-- `clip.transition`은 프로젝트에 저장되나 `transitionEffects` 생성 경로 부재(항상 빈 배열 — `CustomCompositionInstruction` 기본값). Mac `makeTransitionEffects`(ExportEngine.swift:831-882) + overlap back-timing(397-404) 포팅 대상. 진행도 0/1 지점 양쪽 소스 픽셀 단언 테스트 수반.
+- 등록: `clip.transition`은 프로젝트에 저장되나 `transitionEffects` 생성 경로 부재(항상 빈 배열 — `CustomCompositionInstruction` 기본값).
+- 수정(2026-08-26): Mac `makeTransitionEffects`(ExportEngine 831-882) + overlap back-timing(397-404) 포팅. 구조: 전환 보유 트랙은 비디오·오디오 **2 슬롯 교차 배치**(컴포지터가 트랙별 소스 프레임을 읽으므로 2-소스 전환에 필수) + 수신 클립 백타이밍(전환 길이만큼 조기 시작, 음성 포함 — 슬롯이라 충돌 없음). 효과/경계는 조정된 시간을 따르고 합성 길이가 실제 길이(중첩 축소 반영)에서 옴. 전환 없는 트랙은 기존 단일 트랙 레이아웃 그대로(byte-identity 보존). 컴포지터의 2-소스 전환 브랜치(기존 비활성 코드)가 활성화 — 공유 `TransitionPixelProcessor`로 전 유형 렌더.
+- 검증: `IOSTransitionPipelineTests` 3종 — 구조(2슬롯·3.4s 중첩 길이·전환 1건)·전환 없는 트랙 단일 유지·**플랜 프레임 실측(창 전 순수 적 → 중간 혼합 → 창 후 순수 청)**. iOS 38/38.
 
 ### BUG-IOS-10 (P1) — iOS 볼륨·페이드가 출력·프리뷰에 미반영 — **등록(2026-08-26)**
 

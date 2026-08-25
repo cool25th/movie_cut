@@ -18,10 +18,16 @@ struct IOSColorCorrectionParityStaticContractTests {
         #expect(source.contains("ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)"))
     }
 
-    @Test("iOS preview delegates color correction to the shared processor")
+    @Test("iOS preview delegates color correction to the shared render plan")
     func previewDelegates() throws {
+        // RENDER-01: the preview no longer post-filters frames itself — it
+        // consumes the SAME render plan as the export (whose compositor
+        // delegates to the shared processor). Pin the delegation indirectly:
+        // the preview builds its frames through the plan's videoComposition.
         let source = try source("App/MovieCutiOS/Views/PreviewView.swift")
-        #expect(source.contains("ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)"))
+        #expect(source.contains("makeRenderPlan(for: project)"))
+        #expect(source.contains("generator.videoComposition = plan.videoComposition"))
+        #expect(!source.contains("applyFilterPipeline"))
     }
 
     @Test("iOS no longer hardcodes the divergent inline warmth formula")

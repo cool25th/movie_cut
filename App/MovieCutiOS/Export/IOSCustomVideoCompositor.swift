@@ -202,13 +202,19 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     at: request.compositionTime
                 )
                 let outgoingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                    to: Self.fittedToCanvas(
+                        RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: outgoingEffect,
                     instruction: instruction,
                     request: request
                 )
                 let incomingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                    to: Self.fittedToCanvas(
+                        RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: incomingEffect,
                     instruction: instruction,
                     request: request
@@ -246,7 +252,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 return
             }
             
-            var image = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            // RENDER-01 / BUG-06 parity with the Mac compositor: aspect-fit
+            // + center every source into the render canvas BEFORE effects —
+            // a mismatched aspect previously rendered 1:1 at the corner.
+            var image = Self.fittedToCanvas(
+                RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                canvasSize: request.renderContext.size
+            )
             
             if let instruction {
                 let effect = instruction.effect(for: trackID, at: request.compositionTime)
@@ -425,7 +437,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 continue
             }
 
-            var layerImage = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            var layerImage = Self.fittedToCanvas(
+                RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                canvasSize: request.renderContext.size
+            )
             layerImage = applyClipEffects(
                 to: layerImage,
                 effect: effect,
@@ -445,6 +460,27 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         } else {
             return BlendPixelProcessor.apply(primaryImage, over: backdrop, mode: primaryBlendMode)
         }
+    }
+
+    /// Aspect-fits and centers a source frame into the render canvas
+    /// (Mac-compositor parity; see the Mac BUG-06 fix for the narrative).
+    static func fittedToCanvas(_ image: CIImage, canvasSize: CGSize) -> CIImage {
+        let extent = image.extent
+        guard !extent.isEmpty,
+              extent.width > 0, extent.height > 0,
+              canvasSize.width > 0, canvasSize.height > 0 else { return image }
+        let scale = min(
+            canvasSize.width / extent.width,
+            canvasSize.height / extent.height
+        )
+        let scaledWidth = extent.width * scale
+        let scaledHeight = extent.height * scale
+        let dx = (canvasSize.width - scaledWidth) / 2 - extent.minX * scale
+        let dy = (canvasSize.height - scaledHeight) / 2 - extent.minY * scale
+        return image
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: dx, y: dy))
+            .cropped(to: CGRect(origin: .zero, size: canvasSize))
     }
 
     private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {

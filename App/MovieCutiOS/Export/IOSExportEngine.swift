@@ -15,6 +15,41 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
 
+    /// RENDER-01: the single render plan BOTH the preview and the export
+    /// consume — one composition (durations, speed, ramps, freeze, reverse)
+    /// and one videoComposition (per-clip effects through the custom
+    /// compositor). The preview used to build its own simpler composition and
+    /// post-filter single-clip frames, so ramps, reverse, masks, blend modes,
+    /// multi-track compositing, text, and stickers never matched the export.
+    struct IOSRenderPlan {
+        let composition: AVMutableComposition
+        let videoComposition: AVVideoComposition?
+    }
+
+    /// Builds the shared render plan. Throws when the project has no
+    /// exportable media (preview callers treat that as "nothing to play").
+    func makeRenderPlan(for project: Project) async throws -> IOSRenderPlan {
+        let composition = try await makeComposition(for: project)
+        // A video track whose sources carry no embedded audio leaves an
+        // EMPTY audio composition track — the export session fails with
+        // AVErrorOperationNotSupported for media-less tracks (caught by
+        // the output golden tests with a video-only fixture). A fresh
+        // empty track's timeRange is INVALID (not zero), so validity is
+        // part of the predicate.
+        for track in composition.tracks
+        where !track.timeRange.isValid || track.timeRange.duration <= .zero {
+            try? composition.removeTrack(track)
+        }
+        guard !composition.tracks.isEmpty else {
+            throw IOSExportEngineError.noExportableMedia
+        }
+
+        let videoComposition = needsCustomCompositor(for: project)
+            ? makeVideoComposition(for: project)
+            : nil
+        return IOSRenderPlan(composition: composition, videoComposition: videoComposition)
+    }
+
     @discardableResult
     func exportProject(_ project: Project) async throws -> URL {
         guard !isExporting else {
@@ -26,22 +61,9 @@ final class IOSExportEngine {
         lastExportURL = nil
 
         do {
-            let composition = try await makeComposition(for: project)
-            // A video track whose sources carry no embedded audio leaves an
-            // EMPTY audio composition track — the export session fails with
-            // AVErrorOperationNotSupported for media-less tracks (caught by
-            // the output golden tests with a video-only fixture). A fresh
-            // empty track's timeRange is INVALID (not zero), so validity is
-            // part of the predicate.
-            for track in composition.tracks
-            where !track.timeRange.isValid || track.timeRange.duration <= .zero {
-                try? composition.removeTrack(track)
-            }
-            guard !composition.tracks.isEmpty else {
-                throw IOSExportEngineError.noExportableMedia
-            }
-
-            let shouldUseCustomCompositor = needsCustomCompositor(for: project)
+            let plan = try await makeRenderPlan(for: project)
+            let composition = plan.composition
+            let shouldUseCustomCompositor = plan.videoComposition != nil
             guard let exportSession = AVAssetExportSession(
                 asset: composition,
                 presetName: AVAssetExportPresetHighestQuality
@@ -58,8 +80,8 @@ final class IOSExportEngine {
             exportSession.outputURL = outputURL
             exportSession.outputFileType = .mov
             exportSession.shouldOptimizeForNetworkUse = true
-            if shouldUseCustomCompositor {
-                exportSession.videoComposition = makeVideoComposition(for: project)
+            if let videoComposition = plan.videoComposition {
+                exportSession.videoComposition = videoComposition
             }
             activeExportSession = exportSession
             startProgressPolling()

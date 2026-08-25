@@ -80,7 +80,7 @@ struct PreviewView: View {
             rebuildComposition()
         }
         .onChange(of: viewModel.selectedClipId) { _, _ in
-            refreshFilteredFrame(at: viewModel.playheadTime, force: true)
+            refreshCompositedFrame(at: viewModel.playheadTime, force: true)
         }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
@@ -96,39 +96,54 @@ struct PreviewView: View {
         }
     }
 
+    /// RENDER-01: the preview consumes the SAME render plan as the export
+    /// (one composition for durations/speed/ramps/freeze/reverse, one
+    /// videoComposition for per-clip effects through the custom compositor).
+    /// The previous preview built its own simpler composition and post-
+    /// filtered single-clip frames, so ramps, reverse, masks, blend modes,
+    /// multi-track compositing, text, and stickers never matched the export.
     private func rebuildComposition() {
         removeTimeObserver()
         player.pause()
         imageGenerator?.cancelAllCGImageGeneration()
-        clearFilteredFrame()
+        clearCompositedFrame()
 
-        let composition = AVMutableComposition()
-        let project = viewModel.currentProject
-        hasPlayableMedia = IOSPreviewCompositionBuilder.populate(composition, from: project)
+        Task { @MainActor in
+            let project = viewModel.currentProject
+            let plan = try? await renderPlanEngine.makeRenderPlan(for: project)
 
-        guard hasPlayableMedia else {
-            playerItem = nil
-            imageGenerator = nil
-            player.replaceCurrentItem(with: nil)
-            viewModel.isPlaying = false
-            return
+            guard let plan, !plan.composition.tracks.isEmpty else {
+                hasPlayableMedia = false
+                playerItem = nil
+                imageGenerator = nil
+                player.replaceCurrentItem(with: nil)
+                viewModel.isPlaying = false
+                return
+            }
+
+            hasPlayableMedia = true
+            let item = AVPlayerItem(asset: plan.composition)
+            item.videoComposition = plan.videoComposition
+
+            let generator = AVAssetImageGenerator(asset: plan.composition)
+            generator.videoComposition = plan.videoComposition
+            generator.appliesPreferredTrackTransform = true
+            generator.requestedTimeToleranceBefore = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
+            generator.maximumSize = CGSize(width: 1280, height: 720)
+
+            playerItem = item
+            imageGenerator = generator
+            player.replaceCurrentItem(with: item)
+            seekPlayerIfNeeded(to: viewModel.playheadTime)
+            refreshCompositedFrame(at: viewModel.playheadTime, force: true)
+            addTimeObserver()
+            syncPlayback(isPlaying: viewModel.isPlaying)
         }
-
-        let item = AVPlayerItem(asset: composition)
-        let generator = AVAssetImageGenerator(asset: composition)
-        generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-        generator.maximumSize = CGSize(width: 1280, height: 720)
-
-        playerItem = item
-        imageGenerator = generator
-        player.replaceCurrentItem(with: item)
-        seekPlayerIfNeeded(to: viewModel.playheadTime)
-        refreshFilteredFrame(at: viewModel.playheadTime, force: true)
-        addTimeObserver()
-        syncPlayback(isPlaying: viewModel.isPlaying)
     }
+
+    /// Plan-builder only — the engine is never started (no export state).
+    private let renderPlanEngine = IOSExportEngine()
 
     @discardableResult
 
@@ -139,7 +154,7 @@ struct PreviewView: View {
             guard seconds.isFinite else { return }
 
             viewModel.playheadTime = min(max(0, seconds), max(viewModel.currentProject.timeline.duration, 0))
-            refreshFilteredFrame(at: seconds)
+            refreshCompositedFrame(at: seconds)
 
             if viewModel.isPlaying,
                viewModel.currentProject.timeline.duration > 0,
@@ -185,21 +200,23 @@ struct PreviewView: View {
         let currentSeconds = player.currentTime().seconds
 
         if currentSeconds.isFinite, abs(currentSeconds - clampedTime) < 0.25 {
-            refreshFilteredFrame(at: clampedTime)
+            refreshCompositedFrame(at: clampedTime)
             return
         }
 
         player.seek(to: cmTime(clampedTime), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
             DispatchQueue.main.async {
-                refreshFilteredFrame(at: clampedTime, force: true)
+                refreshCompositedFrame(at: clampedTime, force: true)
             }
         }
     }
 
-    private func refreshFilteredFrame(at time: TimeInterval, force: Bool = false) {
-        guard let generator = imageGenerator,
-              let clip = filteredClip(at: time) else {
-            clearFilteredFrame()
+    /// The generator carries the render plan's videoComposition, so its
+    /// output is the FULLY composited frame (every clip, effect, transform,
+    /// text, sticker) — identical to what the export encodes.
+    private func refreshCompositedFrame(at time: TimeInterval, force: Bool = false) {
+        guard let generator = imageGenerator else {
+            clearCompositedFrame()
             return
         }
 
@@ -210,19 +227,22 @@ struct PreviewView: View {
 
         frameRequestID += 1
         let requestID = frameRequestID
-        let context = ciContext
         let frameTime = cmTime(time)
         isRenderingFilteredFrame = true
 
-        // AVAssetImageGenerator and CIContext are not Sendable; wrap them so the
-        // concurrent closure compiles under Swift 6. Each render task is
-        // serialised by isRenderingFilteredFrame and requestID guarding.
+        // AVAssetImageGenerator is not Sendable; wrap it so the concurrent
+        // closure compiles under Swift 6. Each render task is serialised by
+        // isRenderingFilteredFrame and requestID guarding.
         struct UncheckedSendable<T>: @unchecked Sendable { let value: T }
         let genBox = UncheckedSendable(value: generator)
-        let ctxBox = UncheckedSendable(value: context)
 
         DispatchQueue.global(qos: .userInteractive).async {
-            let uiImage = Self.makeFilteredFrame(generator: genBox.value, time: frameTime, clip: clip, context: ctxBox.value)
+            let uiImage: UIImage?
+            if let cgImage = try? genBox.value.copyCGImage(at: frameTime, actualTime: nil) {
+                uiImage = UIImage(cgImage: cgImage)
+            } else {
+                uiImage = nil
+            }
             DispatchQueue.main.async {
                 guard requestID == frameRequestID else { return }
                 filteredFrame = uiImage
@@ -232,26 +252,11 @@ struct PreviewView: View {
         }
     }
 
-    private func clearFilteredFrame() {
+    private func clearCompositedFrame() {
         frameRequestID += 1
         filteredFrame = nil
         lastRenderedFrameTime = nil
         isRenderingFilteredFrame = false
-    }
-
-    private func filteredClip(at time: TimeInterval) -> Clip? {
-        if let selected = viewModel.selectedClip,
-           selected.kind == .video,
-           selected.timelineRange.contains(time),
-           selected.requiresFilteredPreview {
-            return selected
-        }
-
-        return viewModel.currentProject.timeline.tracks
-            .filter { $0.kind == .video && !$0.isHidden }
-            .sorted { $0.zIndex > $1.zIndex }
-            .flatMap(\.clips)
-            .first { $0.kind == .video && $0.timelineRange.contains(time) && $0.requiresFilteredPreview }
     }
 
     private func cmTime(_ seconds: TimeInterval) -> CMTime {
@@ -264,90 +269,6 @@ struct PreviewView: View {
     }
 }
 
-private extension PreviewView {
-    static func makeFilteredFrame(
-        generator: AVAssetImageGenerator,
-        time: CMTime,
-        clip: Clip,
-        context: CIContext
-    ) -> UIImage? {
-        guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else { return nil }
-        let input = CIImage(cgImage: cgImage)
-        let output = applyFilterPipeline(to: input, clip: clip).cropped(to: input.extent)
-        guard let rendered = context.createCGImage(output, from: input.extent) else { return nil }
-        return UIImage(cgImage: rendered)
-    }
-
-    static func applyFilterPipeline(to image: CIImage, clip: Clip) -> CIImage {
-        var result = image
-        if let correction = clip.colorCorrection {
-            result = apply(colorCorrection: correction, to: result)
-        }
-        if let grade = clip.colorGrade {
-            result = ColorGradePixelProcessor.apply(grade, to: result)
-        }
-        for effect in clip.effects {
-            result = apply(effect: effect, to: result)
-        }
-        return result
-    }
-
-    static func apply(colorCorrection: ColorCorrection, to image: CIImage) -> CIImage {
-        // Delegate to the shared Core processor so the preview matches export and
-        // Mac. The previous inline warmth used the opposite sign (6500 + warmth)
-        // from the Core processor (6500 - warmth), so the slider ran backwards.
-        ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
-    }
-
-    static func apply(effect: Effect, to image: CIImage) -> CIImage {
-        switch effect.type {
-        case .brightness:
-            return colorControls(image, brightness: effect.parameters["amount"] ?? 0.1, contrast: 1, saturation: 1)
-        case .contrast:
-            return colorControls(image, brightness: 0, contrast: effect.parameters["amount"] ?? 1.1, saturation: 1)
-        case .saturation:
-            return colorControls(image, brightness: 0, contrast: 1, saturation: effect.parameters["amount"] ?? 1.2)
-        case .temperature:
-            let neutral = CIVector(x: effect.parameters["neutralX"] ?? 6500, y: effect.parameters["neutralY"] ?? 0)
-            let target = CIVector(x: effect.parameters["targetX"] ?? 7000, y: effect.parameters["targetY"] ?? 0)
-            return applyFilter("CITemperatureAndTint", to: image, parameters: ["inputNeutral": neutral, "inputTargetNeutral": target])
-        case .exposure:
-            return applyFilter("CIExposureAdjust", to: image, parameters: [kCIInputEVKey: effect.parameters["ev"] ?? 0.5])
-        case .grayscale:
-            return applyFilter("CIPhotoEffectMono", to: image)
-        case .sepia:
-            return applyFilter("CISepiaTone", to: image, parameters: [kCIInputIntensityKey: effect.parameters["intensity"] ?? 0.9])
-        case .blur:
-            return applyFilter("CIGaussianBlur", to: image, parameters: [kCIInputRadiusKey: effect.parameters["radius"] ?? 5])
-                .cropped(to: image.extent)
-        case .styleTransfer:
-            return applyFilter("CIPhotoEffectTransfer", to: image)
-        case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT, .externalLUT:
-            return VisualEffectPixelProcessor.apply([effect], to: image)
-        case .fadeIn, .fadeOut, .crossDissolve:
-            return image
-        }
-    }
-
-    static func colorControls(_ image: CIImage, brightness: Double, contrast: Double, saturation: Double) -> CIImage {
-        applyFilter(
-            "CIColorControls",
-            to: image,
-            parameters: [
-                kCIInputBrightnessKey: brightness,
-                kCIInputContrastKey: contrast,
-                kCIInputSaturationKey: saturation
-            ]
-        )
-    }
-
-    static func applyFilter(_ name: String, to image: CIImage, parameters: [String: Any] = [:]) -> CIImage {
-        guard let filter = CIFilter(name: name) else { return image }
-        filter.setValue(image, forKey: kCIInputImageKey)
-        parameters.forEach { filter.setValue($0.value, forKey: $0.key) }
-        return filter.outputImage ?? image
-    }
-}
 
 private extension Clip {
     var requiresFilteredPreview: Bool {

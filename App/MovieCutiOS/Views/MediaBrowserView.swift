@@ -46,24 +46,10 @@ struct MediaBrowserView: View {
     }
 
     private func importItem(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-
-        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "mov"
-        let folderURL = FileManager.default.temporaryDirectory.appendingPathComponent("MovieCutiOSImports")
-        let fileURL = folderURL.appendingPathComponent("\(UUID().uuidString).\(fileExtension)")
-
-        do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
-            await viewModel.importMedia(from: fileURL, kind: mediaKind(for: fileExtension))
-        } catch {
-            return
-        }
-    }
-
-    private func mediaKind(for fileExtension: String) -> MediaKind {
-        let imageExtensions = ["heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
-        return imageExtensions.contains(fileExtension.lowercased()) ? .image : .video
+        // BUG-IOS-06: routes through the single shared file-based importer —
+        // this view's private copy loaded the ENTIRE asset into memory and
+        // swallowed failures.
+        await viewModel.importFromPhotosPicker(item)
     }
 
     private func durationText(_ duration: TimeInterval?) -> String {

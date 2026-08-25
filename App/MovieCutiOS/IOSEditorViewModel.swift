@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import MovieCutCore
+import PhotosUI
+import SwiftUI
 
 @MainActor
 @Observable
@@ -305,11 +307,11 @@ final class IOSEditorViewModel {
     func setTransition(_ type: TransitionType) async {
         guard let selectedClipId else { return }
 
-        let transition: Transition?
+        let transition: MovieCutCore.Transition?
         if type == .none {
             transition = nil
         } else {
-            transition = Transition(type: type, duration: selectedClip?.transition?.duration ?? 0.5)
+            transition = MovieCutCore.Transition(type: type, duration: selectedClip?.transition?.duration ?? 0.5)
         }
 
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
@@ -431,7 +433,21 @@ final class IOSEditorViewModel {
     /// Restores the crash-recovery autosave at launch, when present. Call
     /// once from the root view's `task` before user interaction.
     func restoreAutosaveIfAvailable() async {
-        guard let recovered = await projectStore.loadAutosaveIfAvailable() else { return }
+        guard let recovered = await projectStore.loadAutosaveIfAvailable() else {
+            // AUTOSAVE-02: a recovery file that existed but could not be
+            // decoded is surfaced (the store removed the damaged file; the
+            // user should know their recovery was lost, not wonder).
+            if let failure = await projectStore.lastAutosaveLoadFailure {
+                lastErrorMessage = String(
+                    format: NSLocalizedString(
+                        "A damaged recovery file was found and removed: %@",
+                        comment: "Shown when the crash-recovery file could not be decoded"
+                    ),
+                    failure.userMessage
+                )
+            }
+            return
+        }
         let project = Self.defaultProjectIfEmpty(recovered)
         session = EditorSession(project: project)
         currentProject = project
@@ -444,6 +460,61 @@ final class IOSEditorViewModel {
     /// Clears the recovery file (clean quit semantics).
     func clearRecoveryAutosave() async {
         await projectStore.clearAutosave()
+    }
+
+    /// BUG-IOS-06: the ONE file-based photo/video import path. Both picker
+    /// surfaces (the top bar and the media browser) previously each had their
+    /// own copy — the browser's loaded the ENTIRE asset into memory
+    /// (`loadTransferable(Data.self)` — a 4K video could OOM) and swallowed
+    /// every failure. Requests a FILE URL, streams a 1 MiB-buffered copy into
+    /// the managed imports directory, imports through the validated probe,
+    /// and adds the clip to the timeline. Failures surface through
+    /// `lastErrorMessage`.
+    func importFromPhotosPicker(_ item: PhotosPickerItem) async {
+        guard let stagedURL = try? await item.loadTransferable(type: URL.self) else {
+            lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+            return
+        }
+
+        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
+            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
+        let folderURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
+        let fileURL = folderURL
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(fileExtension)
+
+        do {
+            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
+            await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
+            if let importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
+                await addClipToTimeline(asset: importedAsset)
+            }
+        } catch {
+            lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
+        }
+    }
+
+    /// Streams a file copy in bounded chunks so a large 4K video never has to
+    /// fit in memory.
+    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
+        let chunkSize = 1024 * 1024
+        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        let input = try FileHandle(forReadingFrom: source)
+        let output = try FileHandle(forWritingTo: destination)
+        defer {
+            try? input.closeFile()
+            try? output.closeFile()
+        }
+        while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
+            try output.write(contentsOf: chunk)
+        }
+    }
+
+    static func mediaKind(for fileExtension: String) -> MediaKind {
+        let imageExtensions = ["heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
+        return imageExtensions.contains(fileExtension.lowercased()) ? .image : .video
     }
 
     /// UX-REC-02: discard the silently-restored recovery and start fresh.
@@ -461,15 +532,37 @@ final class IOSEditorViewModel {
         await clearRecoveryAutosave()
     }
 
+    /// AUTOSAVE-02: serialized autosave coordinator. The old fire-and-forget
+    /// Task per commit had NO ordering guarantee — under rapid edits a STALE
+    /// snapshot could land last and win. Every save is enqueued onto one
+    /// serial worker that always writes the LATEST snapshot; per-save state
+    /// updates (success clears the warning, failure sets it) only apply when
+    /// that save was still the newest — a newer edit supersedes them.
+    @ObservationIgnored private var autosaveGeneration = 0
+    @ObservationIgnored private var autosaveWorker: Task<Void, Never>?
+
     private func scheduleAutosave() {
+        autosaveGeneration &+= 1
+        let generation = autosaveGeneration
         let snapshot = currentProject
-        Task { [projectStore, weak self] in
+
+        autosaveWorker?.cancel()
+        autosaveWorker = Task { [projectStore, weak self] in
+            // Debounce: coalesce bursts of commits into one write.
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
             do {
                 try await projectStore.saveAutosave(snapshot)
-                await MainActor.run { self?.autosaveSaveSucceeded() }
+                await MainActor.run {
+                    guard let self, self.autosaveGeneration == generation else { return }
+                    self.autosaveSaveSucceeded()
+                }
             } catch {
                 let classified = FileOperationError.classify(error)
-                await MainActor.run { self?.autosaveSaveFailed(classified) }
+                await MainActor.run {
+                    guard let self, self.autosaveGeneration == generation else { return }
+                    self.autosaveSaveFailed(classified)
+                }
             }
         }
     }

@@ -12,6 +12,16 @@
 ### 다음 회차 — LOOP_STATE 우선순위 그대로
 ① **BUG-IOS-06** 공통 파일 기반 임포터 통합 → ② AUTOSAVE-02 직렬화+UI → ③ MACUI-01 러너 복구·CI 차단화 → ④ BUG-07 비대칭 픽스처 회전 실측·G-27 실기기 2종. PARITY-TOL-01 승인 대기 유지.
 
+## 2026-08-25 세션 (BUG-IOS-06·AUTOSAVE-02 수정, MACUI-01 진단)
+
+- **BUG-IOS-06**: `IOSEditorViewModel.importFromPhotosPicker(_:)` 단일 공유 임포터 — 상단 피커·MediaBrowserView 모두 호출, 뷰 로컬 Data 적재 복사 폐지.
+- **AUTOSAVE-02**: 직렬 coordinator(세대 번호·150ms 디바운스·최신 스냅샷만 기록·세대 일치 시에만 상태 갱신) + 상단 주황 실패 배너(en/ko) + `lastAutosaveLoadFailure` 소비(손상 복구 파일 제거 안내).
+- **MACUI-01 진단**: 단일 최소 테스트도 러너가 "hung before establishing connection" — stale 정리·양쪽 부호화 모드·크래시 리포트 확인 전부 시도, 제품 결함 아닌 머신 환경(TCC/데몬) 판정. **사용자 조치**: 접근성·개발자 도구 권한 또는 재부팅.
+- iOS 29/29·게이트 5/5·지역화 양 플랫폼 PASS.
+
+### 다음 회차
+BUG-07(회전 비대칭 재실측) → RENDER-02(P2) → G-27 실기기·MACUI-01(사용자 대기). PARITY-TOL-01 승인 대기.
+
 ## 2026-08-25 세션 (외부 리뷰 반영 — iOS ko 유실 발견·재적용, §1.11 등록, 계획 재편)
 
 - **리뷰 검증**: BUG-06 "REG 통과" 주장은 낡음(이미 해결·게이트 승격). **iOS ko 106 미커밋은 사실** — fbf3149 커밋이 Mac 카탈로그만 담음(병렬 경합 유실), 커밋 메시지가 양쪽이라 주장해 기록 오류였음. iOS 프리뷰/익스포트 이중 엔진·캔버스 게이트 부재·MediaBrowser Data 임포트·automsave UI 부재·Mac UI 러너 kill 전부 코드로 확인.

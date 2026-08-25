@@ -233,17 +233,18 @@
 
 - 수정 완료: `makeRenderPlan`이 **상시** videoComposition을 부착(RENDER-01 구조 위에서 자연 해결) — renderSize가 캔버스에서 오므로 클립 효과 없는 프로젝트도 캔버스 비율·배경이 출력·프리뷰에 보장됨. 검증: `IOSCanvasRatioGoldenTests` 4종(9:16→1080×1920·1:1→1080×1080 실측, plan renderSize, 파란 배경 레터박스 가시성+중앙 레드 콘텐츠). iOS 29/29·게이트 5/5·Mac 38/38.
 
-### BUG-IOS-06 재개방 (P1) — MediaBrowserView 경로 잔여
+### BUG-IOS-06 재개방 (P1) — MediaBrowserView 경로 잔여 — **수정 완료(2026-08-25)**
 
-- 상단 PhotosPicker는 파일 기반 전환 완료. 실제 연결된 `MediaBrowserView.swift:48`은 여전히 `loadTransferable(Data.self)` + `try?` 무음. 두 경로를 공통 파일 기반 임포터 서비스로 통합해 재발 방지.
+- 수정 완료: `IOSEditorViewModel.importFromPhotosPicker(_:)` 공유 임포터로 통합 — 파일 URL 전송 + 1MiB 버퍼 복사 + 검증 probe + 타임라인 배치 + 오류 표면화. 상단 피커·MediaBrowserView 모두 이 단일 경로 호출(뷰 로컬 복사 전면 폐지, Data 적재 재발 구조적 차단).
 
-### AUTOSAVE-02 (P1) — iOS autosave 실패 미표시·비직렬 저장
+### AUTOSAVE-02 (P1) — iOS autosave 실패 미표시·비직렬 저장 — **수정 완료(2026-08-25)**
 
-- `IOSEditorViewModel.autosaveFailureMessage`을 표시하는 iOS UI 없음. `lastAutosaveLoadFailure`(손상 복구 파일)도 iOS 미소비. `scheduleAutosave`가 편집마다 순서 미보장 Task 생성 — 빠른 연속 편집에서 오래된 스냅샷이 마지막에 저장될 위험. 수정: 직렬 autosave coordinator(세대 번호·debounce/flush) + 실패·손상 복구 UI.
+- 수정 완료: ① 직렬 coordinator — 편집마다 세대 번호 증가, 단일 worker Task가 150ms 디바운스 후 **최신 스냅샷만** 기록(이전 worker 취소, 완료/실패 상태 갱신은 해당 세대가 최신일 때만 적용 — 오래된 결과가 새 상태 덮어쓰기 차단) ② 실패 배너 — `autosaveFailureMessage` 상단 주황 캡슐+접근성 라벨(en/ko) ③ 손상 복구 파일 — `lastAutosaveLoadFailure` 소비, 제거 사실+원인 안내.
 
-### MACUI-01 (P1, 인프라) — Mac UI 테스트 러너 부트스트랩 실패
+### MACUI-01 (P1, 인프라) — Mac UI 테스트 러너 부트스트랩 실패 — **진단 완료·사용자 조치 대기**
 
-- 러너가 테스트 시작 전 signal kill로 종료(최소 앱 실행 테스트도 동일). 13개 Mac UI 시나리오는 "통과"가 아니라 **미실행**. CI의 Mac 앱 테스트 best-effort와 동일 인프라 문제 의심. 복구 후 CI 차단화(기존 결정 유지).
+- 진단(2026-08-25): 최소 단일 테스트도 `MovieCutMacUITests-Runner (pid) encountered an error (The test runner hung before establishing connection.)`로 일관 실패. 재현 조건 전부 시도: ① stale 프로세스/러너 번들 제거 후 재시도 ② 부호화 무효화/기본 ad-hoc 양쪽 ③ 크래시 리포트 없음(러너 자체는 크래시하지 않고 XPC 연결 수립 전 교착). **제품 결함 아닌 머신 환경 문제로 판정** — macOS 26.5에서 xcodebuild/XCTest 러너의 TCC(접근성/개발자 도구) 권한 또는 러너 데몬 상태 의심.
+- **사용자 조치**: 시스템 설정 → 개인정보 보호 및 보안 → 접근성·개발자 도구에 터미널/xcodebuild 추가(또는 재부팅 후 재시도). 복구 확인 후 CI 차단화(기존 결정 유지).
 
 ---
 

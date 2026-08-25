@@ -659,6 +659,23 @@
         }
       }
     },
+    "A damaged recovery file was found and removed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A damaged recovery file was found and removed: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "손상된 복구 파일을 발견해 제거했습니다: %@"
+          }
+        }
+      }
+    },
     "A proxy is ready. Turn on proxy playback to use it.": {
       "localizations": {
         "en": {
@@ -1328,6 +1345,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "자동 자막 및 SRT"
+          }
+        }
+      }
+    },
+    "Autosave failure warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autosave failure warning"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 저장 실패 경고"
           }
         }
       }

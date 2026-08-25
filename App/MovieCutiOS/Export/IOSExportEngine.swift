@@ -14,6 +14,8 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
+    /// G-15: temp segments backing image clips in the CURRENT render plan.
+    @ObservationIgnored private var imageRenderURLs: [URL] = []
 
     /// RENDER-01: the single render plan BOTH the preview and the export
     /// consume — one composition (durations, speed, ramps, freeze, reverse)
@@ -29,6 +31,11 @@ final class IOSExportEngine {
     /// Builds the shared render plan. Throws when the project has no
     /// exportable media (preview callers treat that as "nothing to play").
     func makeRenderPlan(for project: Project) async throws -> IOSRenderPlan {
+        // G-15: image clips pre-render into temp video segments. Drop the
+        // PREVIOUS plan's segments first so repeated preview rebuilds don't
+        // accumulate — the newest plan owns the live set (plans start on the
+        // main actor, so a segment list only ever contains finished plans).
+        removeTemporaryImageRenders()
         let composition = try await makeComposition(for: project)
         // A video track whose sources carry no embedded audio leaves an
         // EMPTY audio composition track — the export session fails with
@@ -228,7 +235,7 @@ final class IOSExportEngine {
         for timelineTrack in sortedTracks {
             switch timelineTrack.kind {
             case .video:
-                let playableClips = timelineTrack.clips.filter { $0.kind == .video }
+                let playableClips = timelineTrack.clips.filter { $0.kind == .video || $0.kind == .image }
                 guard !playableClips.isEmpty else { continue }
 
                 if !timelineTrack.isHidden,
@@ -268,7 +275,7 @@ final class IOSExportEngine {
                 videoTrackIDs.append(trackID)
 
                 for clip in timelineTrack.clips
-                    .filter({ $0.kind == .video && $0.isAdjustmentLayer == false })
+                    .filter({ ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false })
                     .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
                     let timeRange = CMTimeRange(
                         start: cmTime(clip.timelineRange.start),
@@ -424,13 +431,32 @@ final class IOSExportEngine {
         StickerDetection.stickerEmoji(from: textContent)
     }
 
+    /// G-15: temp segment backing an image clip in the current render plan.
+    private func temporaryImageRenderURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSImage-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
+    }
+
+    /// Deletes the temp segments from the PREVIOUS plan (see makeRenderPlan).
+    private func removeTemporaryImageRenders() {
+        let fileManager = FileManager.default
+        for url in imageRenderURLs where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
+        imageRenderURLs.removeAll()
+    }
+
     private func insertVideoTrack(
         _ timelineTrack: Track,
         from project: Project,
         into composition: AVMutableComposition
     ) async throws {
+        // G-15: image clips ride the video pipeline through a pre-rendered
+        // segment (Mac ExportEngine parity) — filtering to .video only made
+        // photo-only projects export nothing and previews empty.
         let playableClips = timelineTrack.clips
-            .filter { $0.kind == .video }
+            .filter { $0.kind == .video || $0.kind == .image }
             .sorted { $0.timelineRange.start < $1.timelineRange.start }
 
         guard !playableClips.isEmpty else { return }
@@ -454,7 +480,29 @@ final class IOSExportEngine {
                 let mediaAsset = project.mediaLibrary.assets[assetId]
             else { continue }
 
-            let asset = AVURLAsset(url: mediaAsset.originalURL)
+            // G-15 (Mac ExportEngine parity): an image asset renders into a
+            // temp H.264 segment at the canvas size, then inserts like any
+            // video. EXIF orientation is baked upright by the shared service.
+            let asset: AVURLAsset
+            if mediaAsset.kind == .image {
+                let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
+                let canvasSize = project.canvas.size
+                let renderSize = canvasSize.width > 0 && canvasSize.height > 0
+                    ? canvasSize
+                    : CGSize(width: 1920, height: 1080)
+                let imageVideoURL = temporaryImageRenderURL(for: clip)
+                try await ImageVideoRenderService().render(
+                    imageURL: mediaAsset.originalURL,
+                    duration: renderDuration,
+                    renderSize: renderSize,
+                    outputURL: imageVideoURL,
+                    kenBurnsEffect: clip.kenBurnsEffect
+                )
+                imageRenderURLs.append(imageVideoURL)
+                asset = AVURLAsset(url: imageVideoURL)
+            } else {
+                asset = AVURLAsset(url: mediaAsset.originalURL)
+            }
 
             if let compositionVideoTrack, !timelineTrack.isHidden {
                 try await insertClip(

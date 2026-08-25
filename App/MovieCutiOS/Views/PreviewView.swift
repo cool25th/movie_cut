@@ -124,6 +124,9 @@ struct PreviewView: View {
             hasPlayableMedia = true
             let item = AVPlayerItem(asset: plan.composition)
             item.videoComposition = plan.videoComposition
+            // BUG-IOS-10: volume/fade ramps apply to preview playback too —
+            // the same audioMix the export session consumes.
+            item.audioMix = plan.audioMix
 
             let generator = AVAssetImageGenerator(asset: plan.composition)
             generator.videoComposition = plan.videoComposition

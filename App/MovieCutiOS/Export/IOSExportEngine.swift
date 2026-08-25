@@ -26,6 +26,9 @@ final class IOSExportEngine {
     struct IOSRenderPlan {
         let composition: AVMutableComposition
         let videoComposition: AVVideoComposition?
+        /// BUG-IOS-10: volume/fade ramps for BOTH the preview player and the
+        /// export session. Nil when no clip carries audio edits.
+        let audioMix: AVMutableAudioMix?
     }
 
     /// Builds the shared render plan. Throws when the project has no
@@ -57,7 +60,14 @@ final class IOSExportEngine {
         // source's natural size, silently ignoring the ratio. The compositor
         // also carries canvas backgrounds, so both are now guaranteed.
         let videoComposition = makeVideoComposition(for: project, composition: composition)
-        return IOSRenderPlan(composition: composition, videoComposition: videoComposition)
+        // BUG-IOS-10: audio edits ride the same plan the preview consumes.
+        let audioMix = makeAudioMix(from: audioMixEntries, composition: composition)
+        audioMixEntries.removeAll()
+        return IOSRenderPlan(
+            composition: composition,
+            videoComposition: videoComposition,
+            audioMix: audioMix
+        )
     }
 
     @discardableResult
@@ -93,6 +103,8 @@ final class IOSExportEngine {
             if let videoComposition = plan.videoComposition {
                 exportSession.videoComposition = videoComposition
             }
+            // BUG-IOS-10: volume/fades reach the exported file.
+            exportSession.audioMix = plan.audioMix
             activeExportSession = exportSession
             startProgressPolling()
 
@@ -730,6 +742,22 @@ final class IOSExportEngine {
         }
     }
 
+    /// Per-clip audio placement captured during insertion (BUG-IOS-10): the
+    /// audioMix must follow the REAL placed span (speed-scaled, back-timed),
+    /// not the model timelineRange.
+    private struct AudioMixEntry {
+        let trackID: CMPersistentTrackID
+        let start: CMTime
+        let duration: CMTime
+        let volume: Double
+        let fadeInDuration: TimeInterval
+        let fadeOutDuration: TimeInterval
+    }
+
+    /// BUG-IOS-10: audio placements collected while building the composition.
+    @ObservationIgnored private var audioMixEntries: [AudioMixEntry] = []
+
+    @discardableResult
     private func insertClip(
         _ clip: Clip,
         mediaType: AVMediaType,
@@ -737,7 +765,7 @@ final class IOSExportEngine {
         into compositionTrack: AVMutableCompositionTrack,
         cursor: inout CMTime,
         timelineStartOverride: TimeInterval? = nil
-    ) async throws {
+    ) async throws -> CMTime {
         // Step 7: handle reverse by substituting a pre-rendered reversed asset
         // (same pattern as macOS ExportEngine). The reversed asset's time 0
         // corresponds to the original sourceRange.end.
@@ -754,11 +782,11 @@ final class IOSExportEngine {
         }
 
         guard let sourceTrack = try await effectiveAsset.loadTracks(withMediaType: mediaType).first else {
-            return
+            return .zero
         }
 
         guard var sourceTimeRange = sourceTimeRange(for: clip) else {
-            return
+            return .zero
         }
         if clip.isReversed {
             // Reversed asset starts at 0; remap the source range.
@@ -772,7 +800,7 @@ final class IOSExportEngine {
         // the model timeline position; the caller passes the adjusted start.
         let timelineStart = cmTime(timelineStartOverride ?? clip.timelineRange.start)
         guard CMTimeCompare(timelineStart, cursor) >= 0 else {
-            return
+            return .zero
         }
 
         if CMTimeCompare(cursor, timelineStart) < 0 {
@@ -780,6 +808,8 @@ final class IOSExportEngine {
             compositionTrack.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: gap))
             cursor = timelineStart
         }
+
+        let placedStart = cursor
 
         if mediaType == .video, compositionTrack.preferredTransform == .identity {
             compositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
@@ -801,7 +831,11 @@ final class IOSExportEngine {
             let insertedWindow = CMTimeRange(start: cursor, duration: minimalSource.duration)
             compositionTrack.scaleTimeRange(insertedWindow, toDuration: cmTime(clip.timelineRange.duration))
             cursor = CMTimeAdd(cursor, cmTime(clip.timelineRange.duration))
-            return
+            recordAudioMixEntry(
+                for: clip, mediaType: mediaType, trackID: compositionTrack.trackID,
+                start: placedStart, duration: CMTimeSubtract(cursor, placedStart)
+            )
+            return CMTimeSubtract(cursor, placedStart)
         }
 
         try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: cursor)
@@ -825,6 +859,92 @@ final class IOSExportEngine {
             // Speed ramp: scale per-segment using the ramp curve (macOS pattern).
             cursor = try await applySpeedRamp(clip, sourceTrack: sourceTrack, sourceTimeRange: sourceTimeRange, into: compositionTrack, cursor: cursor)
         }
+
+        recordAudioMixEntry(
+            for: clip, mediaType: mediaType, trackID: compositionTrack.trackID,
+            start: placedStart, duration: CMTimeSubtract(cursor, placedStart)
+        )
+        return CMTimeSubtract(cursor, placedStart)
+    }
+
+    /// BUG-IOS-10: remembers an audio placement for the render plan's
+    /// audioMix (volume + fade ramps), following the real placed span.
+    private func recordAudioMixEntry(
+        for clip: Clip,
+        mediaType: AVMediaType,
+        trackID: CMPersistentTrackID,
+        start: CMTime,
+        duration: CMTime
+    ) {
+        guard mediaType == .audio, duration > .zero else { return }
+        audioMixEntries.append(
+            AudioMixEntry(
+                trackID: trackID,
+                start: start,
+                duration: duration,
+                volume: clip.volume,
+                fadeInDuration: clip.fadeInDuration,
+                fadeOutDuration: clip.fadeOutDuration
+            )
+        )
+    }
+
+    /// BUG-IOS-10 (Mac PlaybackEngine.applyAudioVolumeAndFades parity): one
+    /// input-parameters object per composition audio track, with the clips'
+    /// base volume plus fade-in/fade-out ramps. Nil when no clip carries
+    /// audio edits — the untouched mix stays exactly as before.
+    private func makeAudioMix(from entries: [AudioMixEntry], composition: AVMutableComposition) -> AVMutableAudioMix? {
+        let audibleEntries = entries.filter { entry in
+            entry.volume != 1 || entry.fadeInDuration > 0 || entry.fadeOutDuration > 0
+        }
+        guard !audibleEntries.isEmpty else { return nil }
+
+        var parametersByTrack: [CMPersistentTrackID: AVMutableAudioMixInputParameters] = [:]
+        for entry in audibleEntries {
+            let parameters: AVMutableAudioMixInputParameters
+            if let existing = parametersByTrack[entry.trackID] {
+                parameters = existing
+            } else {
+                guard let track = composition.track(withTrackID: entry.trackID) else { continue }
+                parameters = AVMutableAudioMixInputParameters(track: track)
+                parametersByTrack[entry.trackID] = parameters
+            }
+
+            let volume = Float(min(max(entry.volume, 0), 2))
+            parameters.setVolume(volume, at: entry.start)
+
+            guard entry.duration.seconds.isFinite, entry.duration.seconds > 0 else { continue }
+
+            // Fades clamp to the placed span; when both would overlap they
+            // share it evenly so neither ramp window is undefined.
+            var fadeIn = min(entry.fadeInDuration, entry.duration.seconds)
+            var fadeOut = min(entry.fadeOutDuration, entry.duration.seconds)
+            if fadeIn + fadeOut > entry.duration.seconds {
+                fadeIn = entry.duration.seconds / 2
+                fadeOut = entry.duration.seconds / 2
+            }
+
+            if fadeIn > 0 {
+                parameters.setVolumeRamp(
+                    fromStartVolume: 0,
+                    toEndVolume: volume,
+                    timeRange: CMTimeRange(start: entry.start, duration: cmTime(fadeIn))
+                )
+            }
+            if fadeOut > 0 {
+                let fadeOutStart = CMTimeAdd(entry.start, cmTime(entry.duration.seconds - fadeOut))
+                parameters.setVolumeRamp(
+                    fromStartVolume: volume,
+                    toEndVolume: 0,
+                    timeRange: CMTimeRange(start: fadeOutStart, duration: cmTime(fadeOut))
+                )
+            }
+        }
+
+        guard !parametersByTrack.isEmpty else { return nil }
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = Array(parametersByTrack.values)
+        return mix
     }
 
     /// Renders a reversed copy of the clip's source range (video only).

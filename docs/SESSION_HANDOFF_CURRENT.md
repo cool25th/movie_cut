@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-26 세션 (루프 회차 — SURV-01 2차 완료, 중단 WIP 인계 마무리)
+
+- **경위**: 4시간 루프 회차가 06:05경 증분 중간에 중단되며 미커밋 WIP 6파일을 남김(상대 참조 필드·재결합·relink UI·정리 정책의 정합적 구현). 후속 수동 회차가 프로토콜 0로 인수 — 타 세션 부재 확인(타임스탬프 2시간 경과·실행 중 프로세스 없음) 후 diff 전수 검토·의존성 확인 후 검증 마무리.
+- **SURV-01 2차 내용**: ①`MediaAsset.managedImportPath`(상대 참조, Codable 하위호환) ②`ProjectStore.rebaseManagedImports` — 복구 로드 시 죽은 절대경로(재설치·기기 복원으로 컨테이너 경로 변경)를 상대 참조 → 레거시 `/MovieCut/Imports/<projectId>/<file>` 접미사 매칭 순으로 재결합 ③relink UI — 결측 배너 + fileImporter, 교체본을 관리 루트로 복사해 **자산 UUID를 유지한 채 재결합**(클립 참조 보존, Mac `relinkMedia` 패리티) ④`cleanupOrphanedImports` — 미참조 프로젝트 디렉터리 7일 유예 후 정리.
+- **검증(전부 실측)**: `IOSMediaSurvivabilityTests` 6/6(상대/레거시 재결합·relink E2E·정리 정책 4종 신설) · iOS 47/47(12스위트) · verify_gate 5/5(Core 1,413·207스위트). 로컬라이제이션 키(신규 3)·Hangul 리터럴 검사 PASS.
+- **함정 기록**: 루프 회차의 중단 잔존 WIP는 프로토콜 0(검증 후 커밋)으로 회수 가능하나, 인수 전 반드시 (a)타임스탬프 경과 확인 (b)실행 중 빌드 프로세스 부재 확인 (c)diff 전수 검토를 거칠 것 — 이번 케이스의 3원칙.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **RENDER-02** — iOS 태그된 라이터 마이그레이션(색 파리티 26 밴드 근본 해법). ② 이후 백로그 "진행중/후속" 자율 항목. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01(TCC/재부팅)·PARITY-TOL-01(승인).
+
 ## 2026-08-26 세션 (외부 리뷰 반영 — Phase 0~3 완료: 게이트 복구·P0 출력 정확성 5건·P1 생존성 6건·CI 승격)
 
 - **리뷰 검증**: 사용자 제공 리뷰 8건 전부 코드 대조로 확정(탐색 3패스+직접 열독), 백로그 §1.12에 GATE-01·BUG-08·BUG-IOS-08·G-15 AC6·BUG-IOS-09·BUG-IOS-10·STICKER-01·SURV-01·RACE-01·L10N-01 등록.

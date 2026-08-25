@@ -294,6 +294,7 @@
 
 - `IOSEditorViewModel.swift:481-489`가 PhotosPicker 파일을 `temporaryDirectory/MovieCutiOSImports`에 복사 후 절대경로 저장 — OS가 임시 파일 정리 시 복구 프로젝트만 남고 원본 소멸(CA-03 미디어 생존성 감사의 iOS 누락 영역). Application Support managed-imports 영역·상대 참조·missing-media preflight·relink 정책 필요. 부수: autosave background 진입 즉시 flush 부재(150ms 디바운스만) + 고정 sleep 기반 플래키 테스트(IOSPersistenceTests 200ms sleep) → 폴링 전환.
 - 1차 수정(2026-08-26): Core `ProjectStore.defaultImportsDirectory()`(App Support/MovieCut/Imports) + 프로젝트별 하위 디렉터리 복사(`stagedImportDestination`) + 복구 시 결측 원본 표면화(relink UI는 후속). 부수 해소: scenePhase background 즉시 flush + 플래키 테스트 폴링 전환(f184401) + `IOSMediaSurvivabilityTests` 2종. 잔여: 상대 경로 참조·relink UI·정리 정책.
+- **2차 완료(2026-08-26, 루프 회차 — 중단 인계 후 마무리)**: ①`MediaAsset.managedImportPath`(상대 참조 — Codable 하위호환) ②`ProjectStore.rebaseManagedImports`(복구 로드 시 죽은 절대경로를 상대 참조→레거시 접미사 매칭 순 재결합, 컨테이너 경로 변경 생존) ③relink UI(결측 배너+fileImporter → `relinkMedia` — 자산 UUID 유지해 클립 참조 보존, 교체본 관리 루트로 복사) ④`cleanupOrphanedImports`(미참조+7일 유예 정리 정책). 검증: `IOSMediaSurvivabilityTests` 6종(상대/레거시 재결합·relink E2E·정리 정책) + iOS 47/47 + 게이트 5/5.
 
 ### RACE-01 (P1) — iOS 프리뷰 재생성 stale-result 경합 + 중복 오버레이 — **수정 완료(2026-08-26)**
 

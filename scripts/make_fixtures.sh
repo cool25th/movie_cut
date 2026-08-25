@@ -29,6 +29,12 @@ echo "Generating fixtures into $OUT"
 ffmpeg -y -loglevel error -f lavfi -i "color=c=red:s=320x240:r=30" \
   -t 2 "${COMMON_V[@]}" "$OUT/solid_red_320x240_2s_30fps.mp4"
 
+# 1c) Solid blue video — the distinct-color counterpart of solid red for
+# multi-track compositing tests (BUG-08): top/bottom tracks must use
+# DIFFERENT colors, otherwise a dropped lower layer is undetectable.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=320x240:r=30" \
+  -t 2 "${COMMON_V[@]}" "$OUT/solid_blue_320x240_2s_30fps.mp4"
+
 # 1b) Solid red video with a 440Hz mono audio stream — same video envelope as
 # the import fixture, but with deterministic audio for Extract Audio E2E.
 ffmpeg -y -loglevel error \
@@ -94,6 +100,14 @@ ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=1000:sample_rate=44100" \
 # 4) Solid blue still — image import, 64x64 PNG.
 ffmpeg -y -loglevel error -f lavfi -i "color=c=blue:s=64x64" \
   -frames:v 1 -map_metadata -1 -fflags +bitexact "$OUT/swatch_blue_64x64.png"
+
+# 4b) HEIC + EXIF-oriented image fixtures (G-15 AC5) — ffmpeg cannot encode
+# HEIC and cannot write a display orientation tag; ImageIO can. Guarded like
+# the CA-04 set so re-running the full script does not churn committed bytes.
+# See scripts/make_image_fixtures.swift.
+if [ ! -f "$OUT/swatch_green_64x64.heic" ] || [ ! -f "$OUT/exif_orient6_asym_320x240.jpg" ]; then
+  swift scripts/make_image_fixtures.swift "$OUT"
+fi
 
 # 5) Color-space matrix — minimal 1080p clips for import-side resolution/parity
 # coverage. Deliberately SHORT (1s) and solid-color so they stay small, but real

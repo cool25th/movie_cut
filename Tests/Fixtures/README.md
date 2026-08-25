@@ -7,11 +7,14 @@ depend on `ffmpeg` at run time. Resolved in tests via `MediaFixtures`
 | File | Properties | Used for |
 |---|---|---|
 | `solid_red_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | video import / metadata probe / timeline clip |
+| `solid_blue_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | distinct-color counterpart of solid red — multi-track compositing tests (BUG-08) must use different colors per layer so a dropped lower track is detectable |
 | `solid_red_tone_320x240_2s_30fps.mp4` | h264+aac, 320×240, 30fps, 44100Hz mono, 2.0s | extract-audio E2E |
 | `bars_320x240_3s_30fps.mp4` | h264, 320×240, 30fps, 3.0s | distinguishable second video clip |
 | `moving_subject_320x240_2s_30fps.mp4` | h264, 320×240, 30fps, 2.0s | Vision motion tracking IoU verification |
 | `tone_440hz_2s_mono.wav` | pcm_s16le, 44100Hz, mono, 2.0s | audio import / ducking / beat analysis |
 | `swatch_blue_64x64.png` | PNG, 64×64 | image import |
+| `swatch_green_64x64.heic` | HEIC, 64×64, solid green | HEIC format coverage for the image clip pipeline (G-15) |
+| `exif_orient6_asym_320x240.jpg` | JPEG, 320×240, left=red/right=blue, EXIF orientation 6 (Rotate 90 CW) | upright-render verification for EXIF-oriented images (G-15 AC5): a correct renderer displays red on top, same semantics as `ca04_rotated_asym` +90° |
 | `cg_codable_parity.moviecut` | project JSON with mask + brushPoints, text clip + shadowOffset, card document | CGPoint/CGSize persistence parity — locks the on-disk array form (`[x, y]`) produced by CoreGraphics' native Codable across conformance changes |
 | `timeline_accessibility_bootstrap.moviecut` | project JSON, no card document, fixed track UUIDs: video `Video 1`, video `Video 2`, audio `Audio 1`, zero clips | `MOVIECUT_BOOTSTRAP_PROJECT` source for `TimelineAccessibilityLabelUITests`. Two video tracks so the non-first video track reaches the generic track-header accessibility label; fixed UUIDs let the test address one specific lane instead of relying on ordering |
 | `timeline_localization_bootstrap.moviecut` | project JSON, no card document, fixed track UUIDs: video `Video 1` (1 clip), video `Video 2` (empty), audio `Audio 1` (1 clip), text `Text 1` (1 clip), one standard + one beat marker, no media assets | `MOVIECUT_BOOTSTRAP_PROJECT` source for `LocalizedAccessibilityLabelUITests`. Clips are present but reference no asset, which is enough to publish clip, trim-handle, and marker accessibility labels — the elements requirement 1 cites — without baking machine-specific media paths into the fixture. All strings are ASCII so any Hangul the sweep finds comes from the app's localization, not from project data |

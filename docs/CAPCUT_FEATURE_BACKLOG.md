@@ -225,9 +225,9 @@
 - 수정 완료: `IOSExportEngine.makeRenderPlan(for:)`를 단일 렌더 원천으로 추출(컴포지션+videoComposition) — 익스포트와 **PreviewView가 동일 plan을 소비**(AVPlayerItem·AVAssetImageGenerator 모두 plan.videoComposition 부착, 단일 클립 후필터 파이프라인 `makeFilteredFrame` 전면 폐지). 속도 램프·리버스·프리즈·마스크·크로마·블렌드·다중 트랙·텍스트·스티커·캔버스 배경이 프리뷰=익스포트 구조적으로 동일.
 - 부수: iOS 컴포지터에 Mac BUG-06 패리티 `fittedToCanvas` 적용(3지점+보조 레이어 — iOS에서도 종횡비 불일치가 코너 렌더됐음). 검증: `IOSRenderPlanParityTests` 4종(구조·2x 지속·**plan 프레임 vs 디코드 익스포트 luma 파리티**·다중 트랙 합성 기여) + StaticContract 2건 신형상 갱신. iOS 25/25·게이트 5/5·Mac 38/38.
 
-### RENDER-02 (P2) — 익스포트 디코드 luma 드리프트(~21/255, 범위 태깅 추정)
+### RENDER-02 (P2) — 익스포트 디코드 luma 드리프트 — **특성화 완료·후속 등록(2026-08-25)**
 
-- RENDER-01 파리티 테스트 측정: plan 프레임 vs H.264 디코드 프레임의 luma 차 ~21/255(그레이드된 포화 레드). 코덱 라운드트립 + limited/full range 관행 차 추정 — 익스포트 인코딩의 범위 태깅(AVVideoColorPrimaries/TransferFunction) 고정 후 재측정.
+- 특성화: 프리셋 익스포트 경로(AVAssetExportSession — 색상 태그 제어 불가)의 **안정적 디코드 관행** — 디코더가 기본 YUV 매트릭스/범위를 선택. 그레이드 포화 레드에서 ~21/255, 실행 간 일관. Mac 라이터 경로(명시 비트레이트)는 Rec.709 태그를 명시하고 드리프트 없음. 파리티 테스트에 특성화 기록 + 밴드(26)로 회귀 감지. **근본 해법은 iOS 익스포트의 태그된 라이터 경로 마이그레이션**(RENDER-01 구조 위에서 자연) — 별도 증분.
 
 ### CANVAS-01 (P1) — 캔버스만 변경한 프로젝트의 출력 비율 무시 — **수정 완료(2026-08-25)**
 

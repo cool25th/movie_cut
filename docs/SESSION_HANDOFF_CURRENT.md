@@ -3,6 +3,18 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-26 세션 (외부 리뷰 반영 — Phase 0~3 완료: 게이트 복구·P0 출력 정확성 5건·P1 생존성 6건·CI 승격)
+
+- **리뷰 검증**: 사용자 제공 리뷰 8건 전부 코드 대조로 확정(탐색 3패스+직접 열독), 백로그 §1.12에 GATE-01·BUG-08·BUG-IOS-08·G-15 AC6·BUG-IOS-09·BUG-IOS-10·STICKER-01·SURV-01·RACE-01·L10N-01 등록.
+- **Phase 0(게이트)**: `AudioComponentFindNext` 프로브 제거(전체 스위트 병렬 오디오 부하에서 교착 — 08-26 게이트 FAIL 직접 원인) + verify_gate 와치독 타임아웃(기본 900s)·tee 스트리밍. 2553919.
+- **Phase 1(P0 출력 정확성, 전부 픽셀 실측)**: ①BUG-08 멀티트랙 — **이중 결함 판명**: pixel-identity 게이트 제거(Mac+iOS) + iOS `includeIdentitySource` 누락(항등 클립 효과 미생성 — 게이트만 고쳐선 안 고쳐짐). 이색 픽스처(solid_red/solid_blue)로 opacity·마스크 오버레이 하단 기여 단언. 8702109. ②BUG-IOS-08 회전 — 효과에 sourcePreferredTransform 전달+컴포지터 3경로 `orientedForDisplay` 포팅; 비대칭 픽스처로 플랜 프레임+출력 디코드(autorotate) 양 다리 upright — 이중 회전 차단. ③G-15 AC5+AC6 — `ImageVideoRenderService` Core 이동(양플랫폼 공유), 이미지 사전 렌더 분기; PNG·HEIC·EXIF upright·사진 전용 export E2E. e99ac37. ④BUG-IOS-09 전환 — 2슬롯 트랙 교차+백타이밍+`makeTransitionEffects` 포팅(전환 없는 트랙은 단일 레이아웃·byte-identity 유지); 플랜 프레임에서 순수 적→혼합→순수 청 실측. 03359cb. ⑤BUG-IOS-10 오디오 — 렌더 계획에 audioMix(배치 구간 기반 램프), 프리뷰·출력 양쪽; 리더 경로+출력 파일 RMS 실측. 43a20d7.
+- **Phase 2(P1 생존성/안정성)**: RACE-01(프리뷰 세대 토큰+15fps CPU 오버레이 전면 제거)·STICKER-01(addSticker Mac 패리티)·autosave scenePhase 즉시 flush+플래키 테스트 폴링 전환(f184401) · L10N-01(한글 리터럴 31곳→카탈로그+18키 등록+`verify_no_hangul_literals.py` CI 차단, 4d881cb) · G-27 하니스 `makeRenderPlan` 구동 전환+레거시 `IOSPreviewCompositionBuilder` 삭제(012c10e) · SURV-01 1차(App Support/MovieCut/Imports 관리 루트+복구 시 결측 원본 표면화, a5474df — relink UI·상대경로 참조는 후속).
+- **Phase 3**: Mac 전체 유닛테스트 CI 차단 승격(44/44 반복 안정 확인 후 continue-on-error 제거) · 백로그 §0.5에 범위 경계 명문화("FCP급"은 선택 영역 한정 — 멀티캠·Auditions·플러그인 생태계 등 명시적 비목표).
+- **검증**: 최종 게이트 PASS(Core 1,413/207스위트·Mac/iOS 빌드·lint 5/5) · iOS 43/43(12스위트, 신설 5스위트) · Mac 44/44. 잔여 사용자 대기: G-27 실기기 2종·MACUI-01 TCC·PARITY-TOL-01 승인·RENDER-02 태그된 라이터(별도 증분).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① SURV-01 2차(상대 경로 참조·relink UI·정리 정책) ② G-27 실기기 2종(사용자 잠금 해제 대기)·MACUI-01(사용자 TCC 조치 대기) ③ RENDER-02(iOS 태그된 라이터 — 색 패리티 26 밴드 근본 해법). PARITY-TOL-01 승인 대기 유지.
+
 ## 2026-08-25 세션 (BUG-07 해결 — 회전 메타데이터 3경로 평행 수정·매트릭스 방향 어설션 승격)
 
 - **실측 판정**: 비대칭(좌=적/우=청) 회전 픽스처 신설(`ca04_rotated_asym_320x240_2s_90deg.mp4`, AVAssetWriter 생성기 확장) — BUG-07은 **실제 결함**: 회전된 표시 크기(240×320)로 핏 스케일만 계산하고 픽셀은 옆으로 누운 채 1080×810 상단 고정 렌더(BUG-06 핏 수정과의 상호작용). ffmpeg autorotate 기준값: 바로 세우면 **상=적/하=청**.

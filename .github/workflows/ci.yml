@@ -56,15 +56,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             test
 
-      - name: Run Mac app unit tests (best-effort)
-        continue-on-error: true
+      # Phase 3 (review 2026-08-26): the full Mac hosted suite is now
+      # BLOCKING. It ran clean across the BUG-08 compositor change and the
+      # multitrack pixel suites (44/44 locally, repeatedly); the historical
+      # best-effort treatment was for host-bootstrap flakes that have not
+      # recurred. Demote back to continue-on-error only if a runner-specific
+      # flake is demonstrated.
+      - name: Run Mac app unit tests (blocking)
         run: |
           xcodebuild -project MovieCut.xcodeproj \
             -scheme MovieCutMac \
             -destination 'platform=macOS' \
             -only-testing:MovieCutMacTests \
             CODE_SIGNING_ALLOWED=NO \
-            test || true
+            test
 
       - name: Build iOS app (generic, blocking)
         run: |

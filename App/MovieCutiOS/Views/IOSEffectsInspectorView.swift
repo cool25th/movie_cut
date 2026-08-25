@@ -54,11 +54,11 @@ struct IOSEffectsInspectorView: View {
 
     private var clipInfoSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("클립 정보")
+            Text("Clip Info")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Text("타입")
+                Text("Type")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -66,7 +66,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("길이")
+                Text("Duration")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -78,7 +78,7 @@ struct IOSEffectsInspectorView: View {
 
     private var transformSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("변형")
+            Text("Transform")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
@@ -98,7 +98,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("배율")
+                Text("Scale")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -106,7 +106,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("회전")
+                Text("Rotation")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -119,7 +119,7 @@ struct IOSEffectsInspectorView: View {
     private var opacitySection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(verbatim: opacityTitle)
+                Text(opacityTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -139,7 +139,7 @@ struct IOSEffectsInspectorView: View {
     private var speedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(verbatim: speedTitle)
+                Text(speedTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -158,8 +158,8 @@ struct IOSEffectsInspectorView: View {
 
     // MARK: - Effects Section
 
-    private var opacityTitle: String { "불투명도" }
-    private var speedTitle: String { "속도" }
+    private var opacityTitle: String { "Opacity" }
+    private var speedTitle: String { "Speed" }
 
     private var effectsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -175,11 +175,11 @@ struct IOSEffectsInspectorView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("색 보정")
+                Text("Color Correction")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("초기화") {
+                Button("Reset") {
                     Task { await viewModel.updateSelectedColorCorrection(nil) }
                 }
                 .font(.caption)
@@ -187,11 +187,11 @@ struct IOSEffectsInspectorView: View {
                 .disabled(clip.colorCorrection == nil)
             }
 
-            inspectorSlider(title: "밝기", value: cc.brightness, range: -1...1, binding: colorCorrectionBinding(keyPath: \.brightness))
-            inspectorSlider(title: "대비", value: cc.contrast, range: 0...2, binding: colorCorrectionBinding(keyPath: \.contrast))
-            inspectorSlider(title: "채도", value: cc.saturation, range: 0...2, binding: colorCorrectionBinding(keyPath: \.saturation))
-            inspectorSlider(title: "색온도", value: cc.warmth, range: -1...1, binding: colorCorrectionBinding(keyPath: \.warmth))
-            inspectorSlider(title: "색조", value: cc.tint, range: -1...1, binding: colorCorrectionBinding(keyPath: \.tint))
+            inspectorSlider(title: "Brightness", value: cc.brightness, range: -1...1, binding: colorCorrectionBinding(keyPath: \.brightness))
+            inspectorSlider(title: "Contrast", value: cc.contrast, range: 0...2, binding: colorCorrectionBinding(keyPath: \.contrast))
+            inspectorSlider(title: "Saturation", value: cc.saturation, range: 0...2, binding: colorCorrectionBinding(keyPath: \.saturation))
+            inspectorSlider(title: "Temperature", value: cc.warmth, range: -1...1, binding: colorCorrectionBinding(keyPath: \.warmth))
+            inspectorSlider(title: "Tint", value: cc.tint, range: -1...1, binding: colorCorrectionBinding(keyPath: \.tint))
         }
     }
 
@@ -200,11 +200,11 @@ struct IOSEffectsInspectorView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("컬러 그레이드")
+                Text("Color Grade")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("초기화") {
+                Button("Reset") {
                     Task { await viewModel.updateSelectedColorGrade(nil) }
                 }
                 .font(.caption)
@@ -212,19 +212,19 @@ struct IOSEffectsInspectorView: View {
                 .disabled(clip.colorGrade == nil)
             }
 
-            Text("리프트 · 그림자")
+            Text("Lift · Shadows")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "R", value: grade.lift.red, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.red))
             inspectorSlider(title: "G", value: grade.lift.green, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.green))
             inspectorSlider(title: "B", value: grade.lift.blue, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.blue))
 
-            Text("감마 · 중간톤")
+            Text("Gamma · Midtones")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            inspectorSlider(title: "감마", value: grade.gamma, range: 0.2...2.0, binding: colorGradeBinding(keyPath: \.gamma))
+            inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2...2.0, binding: colorGradeBinding(keyPath: \.gamma))
 
-            Text("게인 · 하이라이트")
+            Text("Gain · Highlights")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "R", value: grade.gain.red, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.red))
@@ -235,22 +235,22 @@ struct IOSEffectsInspectorView: View {
 
     private var maskSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("마스크")
+            Text("Mask")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
             if let mask = clip.mask {
                 HStack {
-                    Text("형태")
+                    Text("Shape")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(mask.shape.displayName)
                         .font(.caption)
                 }
-                inspectorSlider(title: "페더", value: mask.feather, range: 0...1, binding: maskFeatherBinding())
+                inspectorSlider(title: "Feather", value: mask.feather, range: 0...1, binding: maskFeatherBinding())
             } else {
-                Text("마스크 없음")
+                Text("No Mask")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -260,7 +260,7 @@ struct IOSEffectsInspectorView: View {
     private var effectsListSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("이펙트")
+                Text("Effects")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -275,7 +275,7 @@ struct IOSEffectsInspectorView: View {
             }
 
             if clip.effects.isEmpty {
-                Text("이펙트 없음")
+                Text("No Effects")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -312,7 +312,7 @@ struct IOSEffectsInspectorView: View {
     private var volumeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("볼륨")
+                Text("Volume")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -329,13 +329,13 @@ struct IOSEffectsInspectorView: View {
 
     private var fadeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("페이드")
+            Text("Fade")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("페이드 인")
+                    Text("Fade In")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -351,7 +351,7 @@ struct IOSEffectsInspectorView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("페이드 아웃")
+                    Text("Fade Out")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

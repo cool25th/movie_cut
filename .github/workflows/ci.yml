@@ -126,6 +126,10 @@ jobs:
             --catalog App/MovieCutMac/Localizable.xcstrings --source-root App/MovieCutMac
           python3 scripts/verify_localization_keys.py \
             --catalog App/MovieCutiOS/Localizable.xcstrings --source-root App/MovieCutiOS
+          # L10N-01 (review 2026-08-26): no hardcoded Hangul string literals
+          # in the iOS app sources — they bypass the catalog and show Korean
+          # in every environment.
+          python3 scripts/verify_no_hangul_literals.py
           # Every key in BOTH catalogs must carry an en AND ko translation —
           # a Mac-only fill once slipped through when the iOS catalog change
           # was lost to a concurrent-write race (external review finding).

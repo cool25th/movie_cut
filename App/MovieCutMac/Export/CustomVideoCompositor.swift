@@ -431,13 +431,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     /// opacity and blending are both reflected. Finally the primary is laid on
     /// top using its own blend mode.
     ///
-    /// **Pixel-identity gate (Requirement 4.3).** This step is skipped entirely
-    /// — returning `primaryImage` untouched — unless at least one active clip
-    /// (the primary included) carries a non-`.normal` blend mode. A project
-    /// that never sets a blend mode therefore renders byte-identically to
-    /// before this feature existed, including the pre-existing single-track
-    /// custom-compositor behavior. The multi-track layering only engages when
-    /// blending is actually requested.
+    /// **Pixel-identity gate (Requirement 4.3, revised for BUG-08).** The
+    /// frame is returned untouched only when NO other source track is active
+    /// beneath the primary — single-active-track frames stay byte-identical
+    /// to the pre-feature renderer. When a second track IS active, source-over
+    /// layering always runs: a `.normal` top clip with opacity < 1, a mask,
+    /// or a crop leaves canvas regions where the track beneath must show
+    /// through, so layering can no longer be gated on blend modes alone
+    /// (the 2026-08-26 review's dropped-overlay defect, Mac+iOS parity).
     private func layerActiveTracks(
         over primaryImage: CIImage,
         primaryEffect: CustomCompositionClipEffect?,
@@ -451,22 +452,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 && CMTimeRangeContainsTime(effect.timeRange, time: request.compositionTime)
         }
 
-        // Pixel-identity gate: if no active clip (primary included) uses a blend
-        // mode, the frame is returned as-is so exports are unchanged for
-        // `.normal`-only projects (Requirement 4.3).
-        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
-        let needsBlending = primaryBlendMode != .normal
-            || activeEffects.contains { $0.blendMode != .normal }
-        guard needsBlending else {
-            return primaryImage
-        }
-
-        // No other active track beneath the primary: there is nothing to blend
-        // against, so the primary frame is returned as-is. The canvas background
-        // is composited separately afterwards by CanvasBackgroundPixelProcessor.
+        // Pixel-identity passthrough: no other active track beneath the
+        // primary means there is nothing to layer — the frame returns as-is
+        // (single-track byte identity, the original Requirement 4.3 concern).
         guard !activeEffects.isEmpty else {
             return primaryImage
         }
+
+        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
 
         // `clipEffects` is ordered bottom-to-top by z-order (matching the
         // layer-instruction construction in the engines). Build the backdrop by

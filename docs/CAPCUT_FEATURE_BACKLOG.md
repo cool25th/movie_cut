@@ -255,15 +255,16 @@
 - 원인: `CriticalHighCommandTests.testInitSucceeds`의 `AudioComponentFindNext`(오디오 컴포넌트 레지스트리 동기 조회)가 전체 Core 스위트의 AVAudioEngine-heavy 병렬 스위트와 만나 교착(08-26 게이트 FAIL 직접 원인 — 로그에서 해당 테스트 시작 후 종료 없음). `AudioEqualizerService.init`는 AVAudioEngine+AVAudioUnitEQ 생성뿐이라 프로브가 보호하는 것 없음.
 - 수정: 프로브 제거(init 자체만 단언) + `verify_gate.sh` step 2에 와치독 타임아웃(기본 900s, `SWIFT_TEST_TIMEOUT_S` 오버라이드)·tee 스트리밍(command substitution 버퍼링 폐지).
 
-### BUG-08 (P0) — normal 멀티트랙 합성이 하위 트랙을 무시 (Mac·iOS 공통) — **등록(2026-08-26)**
+### BUG-08 (P0) — normal 멀티트랙 합성이 하위 트랙을 무시 (Mac·iOS 공통) — **수정 완료(2026-08-26)**
 
-- Mac `CustomVideoCompositor.swift:457-462`(요구사항 4.3 pixel-identity 게이트)와 iOS `IOSCustomVideoCompositor.swift:423-48`(복제본) 모두: 활성 클립 전부 normal blend면 `layerActiveTracks`가 primary만 반환. 상단 클립 opacity<1·mask·crop 오버레이에서 하단 트랙이 사라지고 캔버스 배경이 보임. 기존 iOS 다중 트랙 테스트는 상·하단 같은 빨강 픽스처(`solid_red` 2회)로 이 결함을 구분하지 못함.
-- 수정 방침: 게이트 제거 — 이미 존재하는 `guard !activeEffects.isEmpty`만 남겨 **단일 트랙 byte-identity는 보존**, 다중 트랙 동시 활성 시 항상 source-over(합성 루프 자체는 이미 구현돼 있음). 양 플랫폼 동시 수정 + 이색(solid_red/solid_blue) 픽스처 테스트 신설.
+- 등록: Mac `CustomVideoCompositor.swift:457-462`(요구사항 4.3 pixel-identity 게이트)와 iOS `IOSCustomVideoCompositor.swift:423-428`(복제본) 모두: 활성 클립 전부 normal blend면 `layerActiveTracks`가 primary만 반환. 상단 클립 opacity<1·mask·crop 오버레이에서 하단 트랙이 사라지고 캔버스 배경이 보임. 기존 iOS 다중 트랙 테스트는 상·하단 같은 빨강 픽스처로 이 결함을 구분하지 못함.
+- **실측으로 밝혀진 제2의 결함(iOS)**: `CustomCompositionClipEffect.init?`이 시각 편집 없는 항등 클립에서 nil을 반환 — iOS 엔진이 `includeIdentitySource`를 전달하지 않아 **편집 없는 기본(하단) 트랙의 효과가 아예 생성되지 않았음**. Mac은 code-review #7 시절부터 동 플래그를 전달(ExportEngine.swift:811). 게이트 제거만으로는 부족하고 이 플래그가 진짜 복구였음.
+- 수정(2026-08-26): ①양 플랫폼 게이트 제거 — `guard !activeEffects.isEmpty`만 남겨 단일 트랙 byte-identity 보존 ②iOS 엔진 `includeIdentitySource: true` 전달. 검증: 이색 픽스처(solid_red/solid_blue)로 opacity 0.5 오버레이·ellipse 마스크 오버레이에서 하단 청색 기여 단언 — iOS `IOSRenderPlanParityTests`(플랜 프레임 실측) 2종 + Mac `MultitrackNormalBlendPixelTests`(실 컴포지터 구동) 2종 신설. iOS 31/31·Mac 44/44·게이트 5/5.
 
-### BUG-IOS-08 (P0) — iOS 렌더 계획이 회전 메타데이터를 잃음 — **등록(2026-08-26)**
+### BUG-IOS-08 (P0) — iOS 렌더 계획이 회전 메타데이터를 잃음 — **수정 완료(2026-08-26)**
 
-- `IOSExportEngine.swift:275-293`·`313-330`의 `CustomCompositionClipEffect` 생성이 `sourcePreferredTransform` 미전달(Core 초기화자 identity 기본값) + iOS 컴포지터에 `orientedForDisplay` 부재(primary 258-261·보조 트랙 440-443 모두 무회전 핏). Mac BUG-07 수정(3835f5a)의 iOS 대응 누락 — 휴대폰 세로 영상이 눕거나 잘못 맞춰짐.
-- 수정 방침: Mac `ExportEngine`/`CustomVideoCompositor` 패턴 포팅(이중 회전 방지 정합 포함) + 비대칭 회전 픽스처(`ca04_rotated_asym`) iOS 픽셀 테스트 + `rec709_720p_portrait` 세로 E2E.
+- 등록: `IOSExportEngine.swift`의 `CustomCompositionClipEffect` 생성이 `sourcePreferredTransform` 미전달(Core 초기화자 identity 기본값) + iOS 컴포지터에 `orientedForDisplay` 부재(primary·보조 트랙·전환 3경로 모두 무회전 핏). Mac BUG-07 수정(3835f5a)의 iOS 대응 누락.
+- 수정(2026-08-26): `makeVideoComposition`이 합성을 받아 트랙 pt를 효과에 전달 + 컴포지터 3경로에 `orientedForDisplay` 래핑(Mac 657-678 포팅). 검증: `ca04_rotated_asym` 비대칭 픽스처로 **플랜 프레임(프리뷰 경로) + 실제 출력 파일 디코드(autorotate 플레이어 관점) 양 다리**에서 상=적/하=청 upright 단언 — 이중 회전도 함께 차단. iOS 31/31.
 
 ### G-15 AC6 (P0) — iOS 이미지 클립이 렌더 입력에서 누락 — **등록(2026-08-26, 기존 진행중 항목 재확인)**
 

@@ -49,7 +49,7 @@ final class IOSExportEngine {
         // change was the canvas (16:9 source → 9:16/1:1) exported at the
         // source's natural size, silently ignoring the ratio. The compositor
         // also carries canvas backgrounds, so both are now guaranteed.
-        let videoComposition = makeVideoComposition(for: project)
+        let videoComposition = makeVideoComposition(for: project, composition: composition)
         return IOSRenderPlan(composition: composition, videoComposition: videoComposition)
     }
 
@@ -193,7 +193,10 @@ final class IOSExportEngine {
         return !track.isSolo
     }
 
-    private func makeVideoComposition(for project: Project) -> AVVideoComposition {
+    private func makeVideoComposition(
+        for project: Project,
+        composition: AVMutableComposition
+    ) -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
         // G-03: the timeline's adjustment clips (bottom-track-first).
         let adjustmentVideoTracks = project.timeline.tracks.filter { $0.kind == .video }
@@ -272,6 +275,20 @@ final class IOSExportEngine {
                         duration: cmTime(clip.timelineRange.duration)
                     )
 
+                    // BUG-IOS-08: composition source frames arrive in STORAGE
+                    // orientation — the compositor orients them upright via
+                    // this transform before the canvas fit (Mac BUG-07 parity;
+                    // the composition track carries the same pt only as output
+                    // metadata for external players).
+                    let sourcePreferredTransform = composition.track(
+                        withTrackID: trackID
+                    )?.preferredTransform ?? .identity
+
+                    // BUG-08: a plain clip with no visual edits must still
+                    // produce an effect — without it the track never joins
+                    // `instruction.clipEffects` and the compositor drops the
+                    // layer beneath an overlay (Mac has passed the same flag
+                    // since its code-review #7; iOS was missing it).
                     guard let clipEffect = CustomCompositionClipEffect(
                         trackID: trackID,
                         timeRange: timeRange,
@@ -289,7 +306,9 @@ final class IOSExportEngine {
                         isBackgroundRemoved: clip.isBackgroundRemoved,
                         blendMode: clip.blendMode,
                         cropRect: clip.cropRect,
-                        stabilization: clip.stabilization
+                        stabilization: clip.stabilization,
+                        sourcePreferredTransform: sourcePreferredTransform,
+                        includeIdentitySource: true
                     ) else {
                         continue
                     }

@@ -58,6 +58,7 @@
 		7A1C9E24F0B3D58300000001 /* LUTExportBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58300000002 /* LUTExportBehaviorTests.swift */; };
 		7A1C9E24F0B3D58400000001 /* AutosaveFailureSurfacingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58400000002 /* AutosaveFailureSurfacingTests.swift */; };
 		7B07A1C9E24F0B3D59000001 /* RotatedOrientationPixelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B07A1C9E24F0B3D59000002 /* RotatedOrientationPixelTests.swift */; };
+		7B07A1C9E24F0B3D59000003 /* MultitrackNormalBlendPixelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B07A1C9E24F0B3D59000004 /* MultitrackNormalBlendPixelTests.swift */; };
 		7A1C9E24F0B3D58500000001 /* ExportMediaPreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58500000002 /* ExportMediaPreflightTests.swift */; };
 		7A1C9E24F0B3D58200000001 /* MasterAudioFreshnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C9E24F0B3D58200000002 /* MasterAudioFreshnessTests.swift */; };
 		276EBD2E2C53701A6F89405F /* R401InspectorContextStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0D9E4FD1959F3F95159BDB /* R401InspectorContextStaticContractTests.swift */; };
@@ -363,6 +364,7 @@
 		7A1C9E24F0B3D58300000002 /* LUTExportBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTExportBehaviorTests.swift; sourceTree = "<group>"; };
 		7A1C9E24F0B3D58400000002 /* AutosaveFailureSurfacingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutosaveFailureSurfacingTests.swift; sourceTree = "<group>"; };
 		7B07A1C9E24F0B3D59000002 /* RotatedOrientationPixelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotatedOrientationPixelTests.swift; sourceTree = "<group>"; };
+		7B07A1C9E24F0B3D59000004 /* MultitrackNormalBlendPixelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultitrackNormalBlendPixelTests.swift; sourceTree = "<group>"; };
 		7A1C9E24F0B3D58500000002 /* ExportMediaPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportMediaPreflightTests.swift; sourceTree = "<group>"; };
 		7A1C9E24F0B3D58200000002 /* MasterAudioFreshnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterAudioFreshnessTests.swift; sourceTree = "<group>"; };
 		0564F34954EC59F83E73AC6D /* EffectBrowserKPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectBrowserKPITests.swift; sourceTree = "<group>"; };
@@ -1234,6 +1236,7 @@
 				7A1C9E24F0B3D58300000002 /* LUTExportBehaviorTests.swift */,
 				7A1C9E24F0B3D58400000002 /* AutosaveFailureSurfacingTests.swift */,
 				7B07A1C9E24F0B3D59000002 /* RotatedOrientationPixelTests.swift */,
+				7B07A1C9E24F0B3D59000004 /* MultitrackNormalBlendPixelTests.swift */,
 				7A1C9E24F0B3D58500000002 /* ExportMediaPreflightTests.swift */,
 			);
 			name = MovieCutMacTests;
@@ -1657,6 +1660,7 @@
 				7A1C9E24F0B3D58300000001 /* LUTExportBehaviorTests.swift in Sources */,
 				7A1C9E24F0B3D58400000001 /* AutosaveFailureSurfacingTests.swift in Sources */,
 				7B07A1C9E24F0B3D59000001 /* RotatedOrientationPixelTests.swift in Sources */,
+				7B07A1C9E24F0B3D59000003 /* MultitrackNormalBlendPixelTests.swift in Sources */,
 				7A1C9E24F0B3D58500000001 /* ExportMediaPreflightTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -29,6 +29,17 @@ public actor ProjectStore {
             .appendingPathComponent("MovieCut", isDirectory: true)
     }
 
+    /// SURV-01 (review 2026-08-26): the managed media-imports root —
+    /// Application Support is never OS-purged (unlike temporaryDirectory), so
+    /// imported originals survive alongside the recovery project that
+    /// references them. iOS copies photo-picker imports beneath this root;
+    /// Mac keeps its bookmark-based originals.
+    public static func defaultImportsDirectory() -> URL? {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("MovieCut/Imports", isDirectory: true)
+    }
+
     private var autosaveURL: URL? {
         autosaveDirectory?.appendingPathComponent("recovery.moviecut")
     }

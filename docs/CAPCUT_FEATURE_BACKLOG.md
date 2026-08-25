@@ -283,21 +283,25 @@
 - 수정(2026-08-26): 렌더 계획에 `audioMix` 추가 — 삽입 시점에 실제 배치 구간(속도 스케일·백타이밍 반영)을 수집해 클립 볼륨+fade in/out 램프 구성(Mac `applyAudioVolumeAndFades` 패리티, 램프는 배치 구간에 클램프·겹치면 균분). 편집 없는 프로젝트는 mix nil(무변경). `AVPlayerItem.audioMix`(프리뷰)·`AVAssetExportSession.audioMix`(출력) 양쪽 부착.
 - 검증: `IOSAudioMixPipelineTests` 3종 — 믹스 적용 리더 경로(플레이어/출력이 소비하는 동일 경로)에서 head/tail RMS < plateau 40% 실측, 편집 없으면 nil, **실제 출력 파일**에서 페이드 인/아웃 감쇠 실측. iOS 41/41.
 
-### STICKER-01 (P1) — iOS 스티커 선택 콜백이 입력을 버림 — **등록(2026-08-26)**
+### STICKER-01 (P1) — iOS 스티커 선택 콜백이 입력을 버림 — **수정 완료(2026-08-26)**
 
 - `iOSContentView.swift:287` `onSelect: { _ in }` — 피커는 dismiss하지만 클립이 생성되지 않음. Mac `EditorViewModel.addSticker`(1951-1995) 패턴으로 `ensureTrack(.text)` + `AddClipCommand` + `TextClipContent(contentKind: .sticker)` 발행(emoji 우선).
+- 수정(2026-08-26): `addSticker(_:)` 구현(Mac 패리티 — emoji 우선, 공유 `CanvasGeometry.defaultStickerPlacement` 배치, popIn 애니메이션) + 피커 콜백 연결. 커밋 f184401.
 
-### SURV-01 (P1) — iOS 임포트 미디어가 임시 디렉터리에 저장 — **등록(2026-08-26)**
+### SURV-01 (P1) — iOS 임포트 미디어가 임시 디렉터리에 저장 — **1차 완료(2026-08-26)**
 
 - `IOSEditorViewModel.swift:481-489`가 PhotosPicker 파일을 `temporaryDirectory/MovieCutiOSImports`에 복사 후 절대경로 저장 — OS가 임시 파일 정리 시 복구 프로젝트만 남고 원본 소멸(CA-03 미디어 생존성 감사의 iOS 누락 영역). Application Support managed-imports 영역·상대 참조·missing-media preflight·relink 정책 필요. 부수: autosave background 진입 즉시 flush 부재(150ms 디바운스만) + 고정 sleep 기반 플래키 테스트(IOSPersistenceTests 200ms sleep) → 폴링 전환.
+- 1차 수정(2026-08-26): Core `ProjectStore.defaultImportsDirectory()`(App Support/MovieCut/Imports) + 프로젝트별 하위 디렉터리 복사(`stagedImportDestination`) + 복구 시 결측 원본 표면화(relink UI는 후속). 부수 해소: scenePhase background 즉시 flush + 플래키 테스트 폴링 전환(f184401) + `IOSMediaSurvivabilityTests` 2종. 잔여: 상대 경로 참조·relink UI·정리 정책.
 
-### RACE-01 (P1) — iOS 프리뷰 재생성 stale-result 경합 + 중복 오버레이 — **등록(2026-08-26)**
+### RACE-01 (P1) — iOS 프리뷰 재생성 stale-result 경합 + 중복 오버레이 — **수정 완료(2026-08-26)**
 
 - `PreviewView.swift:111-142`: rebuild마다 추적 안 되는 Task 생성(취소·세대 검사 부족) — 느린 이전 빌드가 나중에 끝나면 stale AVPlayerItem 설치. + AVPlayer가 이미 videoComposition을 렌더하는데 최대 15fps `copyCGImage` 오버레이를 얹어 재생 프레임률·전력 손해(중복 렌더). Mac `PlaybackEngine` 세대 토큰 패턴(164-168·216-236) 이식 + 오버레이 경로 제거.
+- 수정(2026-08-26): 세대 토큰+빌드 Task 추적·취소(Mac 패리티) + 15fps CPU 오버레이 전면 제거(플레이어가 플랜의 videoComposition을 직접 렌더 — 스크럽도 seek 타깃 프레임으로 해결). 커밋 f184401.
 
-### L10N-01 (P1) — iOS 효과 인스펙터 한국어 하드코딩 31곳 — **등록(2026-08-26)**
+### L10N-01 (P1) — iOS 효과 인스펙터 한국어 하드코딩 31곳 — **수정 완료(2026-08-26)**
 
 - `IOSEffectsInspectorView.swift` 57-354의 한글 리터럴 31곳이 카탈로그 키를 우회(source language en인데 영어 환경에서도 한국어 표시). 카탈로그에 이미 대응 키 다수 존재 — 영어 키 교체 + 부족 키 등록 + Swift 소스 Hangul 리터럴 차단 CI 검사. 함께: G-27 시뮬레이터 하니스가 공유 렌더 계획(`IOSExportEngine.makeRenderPlan`)이 아닌 레거시 `IOSPreviewCompositionBuilder` 사용(드리프트 위험) → 하니스 교체 후 레거시 빌더 삭제.
+- 수정(2026-08-26): 31곳 영어 키 교체(verbatim 2건 포함) + 카탈로그 18키 등록 + `scripts/verify_no_hangul_literals.py` CI 차단 도입(4d881cb). G-27 하니스는 `makeRenderPlan` 구동으로 교체 + 레거시 빌더 삭제(012c10e).
 
 ---
 

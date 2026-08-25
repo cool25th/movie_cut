@@ -18,6 +18,9 @@ final class IOSEditorViewModel {
 
     private var session: EditorSession
     private let projectStore: ProjectStore
+    /// SURV-01 (리뷰 2026-08-26): 관리 임포트 루트 — Application Support는
+    /// OS가 정리하지 않으므로 복구 프로젝트가 참조하는 원본이 살아남는다.
+    private let importsRootDirectory: URL?
     private var sfxURLResolver: [String: URL]
 
     /// BUG-IOS-02: crash-recovery autosave state. Committed edits persist to
@@ -29,7 +32,9 @@ final class IOSEditorViewModel {
 
     /// - Parameter autosaveDirectory: test seam — routes the crash-recovery
     ///   autosave to an explicit directory. nil uses the production location.
-    init(autosaveDirectory: URL? = nil) {
+    /// - Parameter importsDirectory: SURV-01 test seam — routes managed media
+    ///   imports to an explicit root. nil uses the production location.
+    init(autosaveDirectory: URL? = nil, importsDirectory: URL? = nil) {
         // BUG-IOS-02: every launch used to start from a fresh project — work
         // was lost on termination or OS eviction. Restore the crash-recovery
         //   autosave when one exists (same Core ProjectStore contract as Mac).
@@ -40,6 +45,7 @@ final class IOSEditorViewModel {
         isPlaying = false
         session = EditorSession(project: project)
         projectStore = autosaveDirectory.map { ProjectStore(autosaveDirectory: $0) } ?? ProjectStore()
+        importsRootDirectory = importsDirectory ?? ProjectStore.defaultImportsDirectory()
         sfxURLResolver = Self.makeSFXURLResolver()
         templateStore = TemplateStore()
         for bundle in TemplateStore.builtInTemplates() {
@@ -455,6 +461,15 @@ final class IOSEditorViewModel {
         playheadTime = 0
         isPlaying = false
         recoveredUnsavedWork = true
+
+        // SURV-01 (리뷰 2026-08-26): 복구 프로젝트가 참조하는 원본 중 이
+        // 기기에 없는 파일은 표면화 — 조용히 빈 클립으로 재생되는 대신
+        // 사용자에게 재임포트를 안내한다(relink UI는 후속 증분).
+        let missingMedia = project.mediaLibrary.assets.values
+            .filter { !FileManager.default.fileExists(atPath: $0.originalURL.path) }
+        if !missingMedia.isEmpty {
+            lastErrorMessage = "\(missingMedia.count) imported media file(s) are missing from this device. Re-import them to restore those clips."
+        }
     }
 
     /// Clears the recovery file (clean quit semantics).
@@ -478,14 +493,16 @@ final class IOSEditorViewModel {
 
         let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
             ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
-        let folderURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
-        let fileURL = folderURL
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(fileExtension)
+        // SURV-01 (리뷰 2026-08-26): 임시 디렉터리 대신 관리 Imports 영역
+        // (Application Support/MovieCut/Imports/<projectId>/)으로 복사 —
+        // OS가 임시 파일을 정리하면 복구 프로젝트만 남고 원본이 사라졌다.
+        let fileURL = stagedImportDestination(fileExtension: fileExtension)
 
         do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try Self.copyFileBuffered(from: stagedURL, to: fileURL)
             await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
             if let importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
@@ -494,6 +511,18 @@ final class IOSEditorViewModel {
         } catch {
             lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
         }
+    }
+
+    /// SURV-01: 관리 임포트 복사 목적지 — 프로젝트별 하위 디렉터리 안의
+    /// 고유 파일명. App Support를 쓸 수 없는 극단적 환경은 임시 폴더로
+    /// 폴백(기존 동작).
+    func stagedImportDestination(fileExtension: String) -> URL {
+        let root = importsRootDirectory ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
+        return root
+            .appendingPathComponent(currentProject.id.uuidString, isDirectory: true)
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(fileExtension)
     }
 
     /// Streams a file copy in bounded chunks so a large 4K video never has to

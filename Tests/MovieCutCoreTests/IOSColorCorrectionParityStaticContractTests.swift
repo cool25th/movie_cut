@@ -23,10 +23,11 @@ struct IOSColorCorrectionParityStaticContractTests {
         // RENDER-01: the preview no longer post-filters frames itself — it
         // consumes the SAME render plan as the export (whose compositor
         // delegates to the shared processor). Pin the delegation indirectly:
-        // the preview builds its frames through the plan's videoComposition.
+        // the plan's videoComposition rides the AVPlayerItem itself (RACE-01
+        // removed the redundant overlay generator that carried it before).
         let source = try source("App/MovieCutiOS/Views/PreviewView.swift")
         #expect(source.contains("makeRenderPlan(for: project)"))
-        #expect(source.contains("generator.videoComposition = plan.videoComposition"))
+        #expect(source.contains("item.videoComposition = plan.videoComposition"))
         #expect(!source.contains("applyFilterPipeline"))
     }
 

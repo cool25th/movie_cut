@@ -572,6 +572,29 @@ final class IOSEditorViewModel {
         autosaveFailureMessage = nil
     }
 
+    /// 리뷰 2026-08-26 (Phase 2): scenePhase background 진입 시 즉시 flush —
+    /// 150ms 디바운스는 서스펜션 중 절대 발화하지 않으므로, 대기 중인 편집이
+    /// OS eviction에서 실종된다. 디바운스를 취소하고 최신 스냅샷을 바로 기록.
+    func flushAutosave() async {
+        guard autosaveWorker != nil else { return }
+        autosaveWorker?.cancel()
+        autosaveWorker = nil
+        autosaveGeneration &+= 1
+        let generation = autosaveGeneration
+        let snapshot = currentProject
+        do {
+            try await projectStore.saveAutosave(snapshot)
+            if autosaveGeneration == generation {
+                autosaveSaveSucceeded()
+            }
+        } catch {
+            let classified = FileOperationError.classify(error)
+            if autosaveGeneration == generation {
+                autosaveSaveFailed(classified)
+            }
+        }
+    }
+
     private func autosaveSaveFailed(_ failure: FileOperationError) {
         autosaveFailureMessage = failure.userMessage
     }
@@ -743,6 +766,68 @@ final class IOSEditorViewModel {
         } catch {
             self.lastErrorMessage = error.localizedDescription
             return
+        }
+    }
+
+    /// STICKER-01 (리뷰 2026-08-26): iOS 스티커 선택이 입력을 버리지 않고
+    /// 타임라인에 스티커 클립을 추가한다. Mac addSticker 패리티 — emoji
+    /// 스티커 우선(이미지 지원 스티커는 Mac 전용 StickerImageProvider 포트
+    /// 전까지 미지원).
+    func addSticker(_ sticker: StickerAsset) async {
+        let stickerText = sticker.emoji ?? sticker.name
+        guard !stickerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        do {
+            let snapshot = await session.snapshot()
+            let track: Track
+            if let existingTrack = snapshot.timeline.tracks.first(where: { $0.kind == .text }) {
+                track = existingTrack
+            } else {
+                let textTrack = Track(
+                    kind: .text,
+                    name: "Text",
+                    zIndex: snapshot.timeline.tracks.count
+                )
+                try await session.dispatch(CreateTrackCommand(track: textTrack))
+                track = textTrack
+            }
+
+            let duration: TimeInterval = 3
+            let canvasSize = currentProject.canvas.size
+            let placement = CanvasGeometry.defaultStickerPlacement(for: sticker)
+            let stickerPosition = CGPoint(
+                x: canvasSize.width * placement.xRatio,
+                y: canvasSize.height * placement.yRatio
+            )
+            let content = TextClipContent(
+                text: stickerText,
+                fontFamily: "Apple Color Emoji",
+                fontSize: max(84, min(Double(canvasSize.width), Double(canvasSize.height)) * placement.fontScale),
+                fontColor: "#FFFFFF",
+                alignment: .center,
+                position: stickerPosition,
+                animation: TextAnimation(preset: .popIn, duration: 0.25),
+                contentKind: .sticker,
+                stickerAssetID: sticker.id,
+                stickerImageURL: nil
+            )
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration),
+                transform: ClipTransform(
+                    position: stickerPosition,
+                    scale: CGSize(width: placement.transformScale, height: placement.transformScale)
+                ),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
         }
     }
 

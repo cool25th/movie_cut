@@ -6,6 +6,9 @@ import SwiftUI
 
 struct IOSContentView: View {
     @State private var viewModel = IOSEditorViewModel()
+    // 리뷰 2026-08-26 (Phase 2): background 진입 시 즉시 autosave flush —
+    // 디바운스 대기 중 서스펜션되면 편집이 실종된다.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedPhotosItem: PhotosPickerItem?
     @State private var isMediaBrowserPresented = false
     @State private var isInspectorPresented = false
@@ -73,6 +76,14 @@ struct IOSContentView: View {
             }
             .navigationTitle(viewModel.currentProject.name)
             .navigationBarTitleDisplayMode(.inline)
+            // 리뷰 2026-08-26 (Phase 2): leaving the foreground must flush the
+            // pending autosave immediately — the debounce never fires while
+            // suspended.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background || phase == .inactive {
+                    Task { await viewModel.flushAutosave() }
+                }
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button {
@@ -284,7 +295,11 @@ struct IOSContentView: View {
     @ViewBuilder
     private var stickerPickerSheet: some View {
         NavigationStack {
-            IOSStickerPickerView(viewModel: viewModel, onSelect: { _ in })
+            // STICKER-01 (리뷰 2026-08-26): the selection used to be discarded
+            // (`onSelect: { _ in }`) — it now lands on the timeline.
+            IOSStickerPickerView(viewModel: viewModel, onSelect: { sticker in
+                Task { await viewModel.addSticker(sticker) }
+            })
                 .navigationTitle("Stickers")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }

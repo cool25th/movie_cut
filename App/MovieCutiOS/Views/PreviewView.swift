@@ -1,7 +1,5 @@
 #if os(iOS)
 import AVFoundation
-import CoreImage
-import Metal
 import MovieCutCore
 import SwiftUI
 
@@ -9,14 +7,14 @@ struct PreviewView: View {
     @Bindable var viewModel: IOSEditorViewModel
     @State private var player = AVPlayer()
     @State private var playerItem: AVPlayerItem?
-    @State private var imageGenerator: AVAssetImageGenerator?
     @State private var timeObserverToken: Any?
     @State private var hasPlayableMedia = false
-    @State private var ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
-    @State private var filteredFrame: UIImage?
-    @State private var lastRenderedFrameTime: TimeInterval?
-    @State private var frameRequestID = 0
-    @State private var isRenderingFilteredFrame = false
+    // RACE-01 (리뷰 2026-08-26): 재생성 경합 방지 — 빌드 Task를 추적·취소하고
+    // 세대 토큰으로 stale 설치를 차단한다. 느린 이전 빌드(reverse·대형
+    // asset 로딩)가 나중에 끝나 최신 AVPlayerItem을 덮어쓰던 결함(Mac
+    // PlaybackEngine 164-168·216-236 패리티).
+    @State private var compositionBuildTask: Task<Void, Never>?
+    @State private var compositionGeneration = 0
 
     var body: some View {
         VStack(spacing: 8) {
@@ -25,14 +23,11 @@ struct PreviewView: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                if let filteredFrame {
-                    Image(uiImage: filteredFrame)
-                        .resizable()
-                        .scaledToFit()
-                        .aspectRatio(16 / 9, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .allowsHitTesting(false)
-                }
+                // RACE-01: the up-to-15fps copyCGImage overlay is REMOVED —
+                // the player already renders the plan's videoComposition
+                // (every clip, effect, mask, transition, sticker) through the
+                // custom compositor; the overlay duplicated that work on the
+                // CPU and cost playback frame rate and power.
 
                 if !hasPlayableMedia {
                     RoundedRectangle(cornerRadius: 8)
@@ -68,19 +63,14 @@ struct PreviewView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .onAppear {
-            configureCIContext()
             rebuildComposition()
         }
         .onDisappear {
             removeTimeObserver()
             player.pause()
-            imageGenerator?.cancelAllCGImageGeneration()
         }
         .onChange(of: viewModel.currentProject.timeline) { _, _ in
             rebuildComposition()
-        }
-        .onChange(of: viewModel.selectedClipId) { _, _ in
-            refreshCompositedFrame(at: viewModel.playheadTime, force: true)
         }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
@@ -90,32 +80,33 @@ struct PreviewView: View {
         }
     }
 
-    private func configureCIContext() {
-        if let device = MTLCreateSystemDefaultDevice() {
-            ciContext = CIContext(mtlDevice: device, options: RenderColorConfiguration.contextOptions)
-        }
-    }
-
     /// RENDER-01: the preview consumes the SAME render plan as the export
     /// (one composition for durations/speed/ramps/freeze/reverse, one
-    /// videoComposition for per-clip effects through the custom compositor).
-    /// The previous preview built its own simpler composition and post-
-    /// filtered single-clip frames, so ramps, reverse, masks, blend modes,
-    /// multi-track compositing, text, and stickers never matched the export.
+    /// videoComposition for per-clip effects through the custom compositor,
+    /// one audioMix for volume/fades). The previous preview built its own
+    /// simpler composition and post-filtered single-clip frames, so ramps,
+    /// reverse, masks, blend modes, multi-track compositing, text, and
+    /// stickers never matched the export.
     private func rebuildComposition() {
         removeTimeObserver()
         player.pause()
-        imageGenerator?.cancelAllCGImageGeneration()
-        clearCompositedFrame()
 
-        Task { @MainActor in
+        compositionBuildTask?.cancel()
+        compositionGeneration &+= 1
+        let requestedGeneration = compositionGeneration
+        compositionBuildTask = Task { @MainActor in
             let project = viewModel.currentProject
             let plan = try? await renderPlanEngine.makeRenderPlan(for: project)
+
+            // A newer rebuild superseded this one — never install stale
+            // state, on EITHER the success or the empty-media path.
+            guard !Task.isCancelled, requestedGeneration == compositionGeneration else {
+                return
+            }
 
             guard let plan, !plan.composition.tracks.isEmpty else {
                 hasPlayableMedia = false
                 playerItem = nil
-                imageGenerator = nil
                 player.replaceCurrentItem(with: nil)
                 viewModel.isPlaying = false
                 return
@@ -128,18 +119,9 @@ struct PreviewView: View {
             // the same audioMix the export session consumes.
             item.audioMix = plan.audioMix
 
-            let generator = AVAssetImageGenerator(asset: plan.composition)
-            generator.videoComposition = plan.videoComposition
-            generator.appliesPreferredTrackTransform = true
-            generator.requestedTimeToleranceBefore = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-            generator.maximumSize = CGSize(width: 1280, height: 720)
-
             playerItem = item
-            imageGenerator = generator
             player.replaceCurrentItem(with: item)
             seekPlayerIfNeeded(to: viewModel.playheadTime)
-            refreshCompositedFrame(at: viewModel.playheadTime, force: true)
             addTimeObserver()
             syncPlayback(isPlaying: viewModel.isPlaying)
         }
@@ -157,7 +139,6 @@ struct PreviewView: View {
             guard seconds.isFinite else { return }
 
             viewModel.playheadTime = min(max(0, seconds), max(viewModel.currentProject.timeline.duration, 0))
-            refreshCompositedFrame(at: seconds)
 
             if viewModel.isPlaying,
                viewModel.currentProject.timeline.duration > 0,
@@ -203,63 +184,16 @@ struct PreviewView: View {
         let currentSeconds = player.currentTime().seconds
 
         if currentSeconds.isFinite, abs(currentSeconds - clampedTime) < 0.25 {
-            refreshCompositedFrame(at: clampedTime)
             return
         }
 
-        player.seek(to: cmTime(clampedTime), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-            DispatchQueue.main.async {
-                refreshCompositedFrame(at: clampedTime, force: true)
-            }
-        }
-    }
-
-    /// The generator carries the render plan's videoComposition, so its
-    /// output is the FULLY composited frame (every clip, effect, transform,
-    /// text, sticker) — identical to what the export encodes.
-    private func refreshCompositedFrame(at time: TimeInterval, force: Bool = false) {
-        guard let generator = imageGenerator else {
-            clearCompositedFrame()
-            return
-        }
-
-        if !force, let lastRenderedFrameTime, abs(lastRenderedFrameTime - time) < 1.0 / 15.0 {
-            return
-        }
-        guard force || !isRenderingFilteredFrame else { return }
-
-        frameRequestID += 1
-        let requestID = frameRequestID
-        let frameTime = cmTime(time)
-        isRenderingFilteredFrame = true
-
-        // AVAssetImageGenerator is not Sendable; wrap it so the concurrent
-        // closure compiles under Swift 6. Each render task is serialised by
-        // isRenderingFilteredFrame and requestID guarding.
-        struct UncheckedSendable<T>: @unchecked Sendable { let value: T }
-        let genBox = UncheckedSendable(value: generator)
-
-        DispatchQueue.global(qos: .userInteractive).async {
-            let uiImage: UIImage?
-            if let cgImage = try? genBox.value.copyCGImage(at: frameTime, actualTime: nil) {
-                uiImage = UIImage(cgImage: cgImage)
-            } else {
-                uiImage = nil
-            }
-            DispatchQueue.main.async {
-                guard requestID == frameRequestID else { return }
-                filteredFrame = uiImage
-                lastRenderedFrameTime = time
-                isRenderingFilteredFrame = false
-            }
-        }
-    }
-
-    private func clearCompositedFrame() {
-        frameRequestID += 1
-        filteredFrame = nil
-        lastRenderedFrameTime = nil
-        isRenderingFilteredFrame = false
+        // The player layer renders the composited frame at the seek target —
+        // the scrub preview needs no separate frame copy (RACE-01 cleanup).
+        player.seek(
+            to: cmTime(clampedTime),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
     }
 
     private func cmTime(_ seconds: TimeInterval) -> CMTime {
@@ -269,13 +203,6 @@ struct PreviewView: View {
     private func timeString(_ time: TimeInterval) -> String {
         let totalSeconds = Int(max(0, time.isFinite ? time : 0).rounded(.down))
         return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
-    }
-}
-
-
-private extension Clip {
-    var requiresFilteredPreview: Bool {
-        colorCorrection != nil || colorGrade != nil || !effects.isEmpty
     }
 }
 

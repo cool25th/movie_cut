@@ -48,7 +48,14 @@ struct IOSPersistenceTests {
         #expect(first.lastErrorMessage == nil, "import failed: \(first.lastErrorMessage ?? "")")
         #expect(first.currentProject.mediaLibrary.assets.count == 1)
         await until { first.currentProject.mediaLibrary.assets.count == 1 }
-        try await Task.sleep(nanoseconds: 200_000_000) // allow the autosave task to write
+        // Poll for the recovery file instead of a fixed sleep — under
+        // full-suite load the 150ms debounce + disk write can exceed any
+        // fixed budget (the 2026-08-26 review's flake: passes standalone,
+        // fails loaded). 500 × ~2ms covers seconds of scheduling delay.
+        let recoveryURL = dir.appendingPathComponent("recovery.moviecut")
+        await until { FileManager.default.fileExists(atPath: recoveryURL.path) }
+        #expect(FileManager.default.fileExists(atPath: recoveryURL.path),
+                "the autosave must have written the recovery file")
 
         // Session 2 (fresh VM — a relaunch): the recovery file restores the work.
         let second = IOSEditorViewModel(autosaveDirectory: dir)

@@ -229,10 +229,9 @@
 
 - RENDER-01 파리티 테스트 측정: plan 프레임 vs H.264 디코드 프레임의 luma 차 ~21/255(그레이드된 포화 레드). 코덱 라운드트립 + limited/full range 관행 차 추정 — 익스포트 인코딩의 범위 태깅(AVVideoColorPrimaries/TransferFunction) 고정 후 재측정.
 
-### CANVAS-01 (P1) — 캔버스만 변경한 프로젝트의 출력 비율 무시 가능
+### CANVAS-01 (P1) — 캔버스만 변경한 프로젝트의 출력 비율 무시 — **수정 완료(2026-08-25)**
 
-- 위치: `IOSExportEngine.swift:44`(클립 효과 있을 때만 videoComposition 부착) + 합성 게이트에 캔버스·배경 검사 부재. 16:9 원본을 9:16/1:1 캔버스로만 바꾼 프로젝트가 원본 해상도로 출력될 수 있음. 캔버스 비율별 실제 출력 크기 골든 테스트 없음.
-- 수정: 캔버스·배경 변경 시 항상 composition 반영 + 비율별 출력 크기 골든.
+- 수정 완료: `makeRenderPlan`이 **상시** videoComposition을 부착(RENDER-01 구조 위에서 자연 해결) — renderSize가 캔버스에서 오므로 클립 효과 없는 프로젝트도 캔버스 비율·배경이 출력·프리뷰에 보장됨. 검증: `IOSCanvasRatioGoldenTests` 4종(9:16→1080×1920·1:1→1080×1080 실측, plan renderSize, 파란 배경 레터박스 가시성+중앙 레드 콘텐츠). iOS 29/29·게이트 5/5·Mac 38/38.
 
 ### BUG-IOS-06 재개방 (P1) — MediaBrowserView 경로 잔여
 

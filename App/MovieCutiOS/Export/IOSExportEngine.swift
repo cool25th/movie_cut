@@ -44,9 +44,12 @@ final class IOSExportEngine {
             throw IOSExportEngineError.noExportableMedia
         }
 
-        let videoComposition = needsCustomCompositor(for: project)
-            ? makeVideoComposition(for: project)
-            : nil
+        // CANVAS-01: the videoComposition is ALWAYS attached. Its renderSize
+        // comes from the project canvas — without it, a project whose only
+        // change was the canvas (16:9 source → 9:16/1:1) exported at the
+        // source's natural size, silently ignoring the ratio. The compositor
+        // also carries canvas backgrounds, so both are now guaranteed.
+        let videoComposition = makeVideoComposition(for: project)
         return IOSRenderPlan(composition: composition, videoComposition: videoComposition)
     }
 

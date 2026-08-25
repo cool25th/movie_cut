@@ -246,6 +246,54 @@
 - 진단(2026-08-25): 최소 단일 테스트도 `MovieCutMacUITests-Runner (pid) encountered an error (The test runner hung before establishing connection.)`로 일관 실패. 재현 조건 전부 시도: ① stale 프로세스/러너 번들 제거 후 재시도 ② 부호화 무효화/기본 ad-hoc 양쪽 ③ 크래시 리포트 없음(러너 자체는 크래시하지 않고 XPC 연결 수립 전 교착). **제품 결함 아닌 머신 환경 문제로 판정** — macOS 26.5에서 xcodebuild/XCTest 러너의 TCC(접근성/개발자 도구) 권한 또는 러너 데몬 상태 의심.
 - **사용자 조치**: 시스템 설정 → 개인정보 보호 및 보안 → 접근성·개발자 도구에 터미널/xcodebuild 추가(또는 재부팅 후 재시도). 복구 확인 후 CI 차단화(기존 결정 유지).
 
+## 1.12 외부 리뷰(2026-08-26) 검증 등록 — 출력 정확성·생존성 (실사 확정)
+
+> 원천: 사용자 제공 리뷰(최근 10커밋 점검). 8건 주장 전부 코드 대조로 확정(3개 탐색 패스 + 직접 열독). 반영계획 승인: Phase 0(게이트 복구) → 1(P0 출력 정확성) → 2(P1 생존성) → 3(게이트 강화·전략 문서).
+
+### GATE-01 (P0 인프라) — swift test 교착 시 게이트 무기한 대기 — **수정 완료(2026-08-26)**
+
+- 원인: `CriticalHighCommandTests.testInitSucceeds`의 `AudioComponentFindNext`(오디오 컴포넌트 레지스트리 동기 조회)가 전체 Core 스위트의 AVAudioEngine-heavy 병렬 스위트와 만나 교착(08-26 게이트 FAIL 직접 원인 — 로그에서 해당 테스트 시작 후 종료 없음). `AudioEqualizerService.init`는 AVAudioEngine+AVAudioUnitEQ 생성뿐이라 프로브가 보호하는 것 없음.
+- 수정: 프로브 제거(init 자체만 단언) + `verify_gate.sh` step 2에 와치독 타임아웃(기본 900s, `SWIFT_TEST_TIMEOUT_S` 오버라이드)·tee 스트리밍(command substitution 버퍼링 폐지).
+
+### BUG-08 (P0) — normal 멀티트랙 합성이 하위 트랙을 무시 (Mac·iOS 공통) — **등록(2026-08-26)**
+
+- Mac `CustomVideoCompositor.swift:457-462`(요구사항 4.3 pixel-identity 게이트)와 iOS `IOSCustomVideoCompositor.swift:423-48`(복제본) 모두: 활성 클립 전부 normal blend면 `layerActiveTracks`가 primary만 반환. 상단 클립 opacity<1·mask·crop 오버레이에서 하단 트랙이 사라지고 캔버스 배경이 보임. 기존 iOS 다중 트랙 테스트는 상·하단 같은 빨강 픽스처(`solid_red` 2회)로 이 결함을 구분하지 못함.
+- 수정 방침: 게이트 제거 — 이미 존재하는 `guard !activeEffects.isEmpty`만 남겨 **단일 트랙 byte-identity는 보존**, 다중 트랙 동시 활성 시 항상 source-over(합성 루프 자체는 이미 구현돼 있음). 양 플랫폼 동시 수정 + 이색(solid_red/solid_blue) 픽스처 테스트 신설.
+
+### BUG-IOS-08 (P0) — iOS 렌더 계획이 회전 메타데이터를 잃음 — **등록(2026-08-26)**
+
+- `IOSExportEngine.swift:275-293`·`313-330`의 `CustomCompositionClipEffect` 생성이 `sourcePreferredTransform` 미전달(Core 초기화자 identity 기본값) + iOS 컴포지터에 `orientedForDisplay` 부재(primary 258-261·보조 트랙 440-443 모두 무회전 핏). Mac BUG-07 수정(3835f5a)의 iOS 대응 누락 — 휴대폰 세로 영상이 눕거나 잘못 맞춰짐.
+- 수정 방침: Mac `ExportEngine`/`CustomVideoCompositor` 패턴 포팅(이중 회전 방지 정합 포함) + 비대칭 회전 픽스처(`ca04_rotated_asym`) iOS 픽셀 테스트 + `rec709_720p_portrait` 세로 E2E.
+
+### G-15 AC6 (P0) — iOS 이미지 클립이 렌더 입력에서 누락 — **등록(2026-08-26, 기존 진행중 항목 재확인)**
+
+- `IOSExportEngine`이 `.kind == .video`만 필터링(228·268·414 3곳) — 타임라인은 `.image` 클립을 만들지만 사진 전용 프로젝트는 export 실패(`noExportableMedia`)·프리뷰 공백. Mac은 `mediaAsset.kind == .image` 기반 `ImageVideoRenderService` 사전 렌더로 처리(ExportEngine.swift:353-368).
+- 수정 방침: `ImageVideoRenderService` Core 이동 후 공유 + `makeRenderPlan` 트랙 삽입에 이미지 세그먼트 경로 + PNG/HEIC/EXIF 골든 + 사진 전용 E2E = **AC6 완료**.
+
+### BUG-IOS-09 (P1) — iOS 전환이 렌더 instruction에 전달되지 않음 — **등록(2026-08-26)**
+
+- `clip.transition`은 프로젝트에 저장되나 `transitionEffects` 생성 경로 부재(항상 빈 배열 — `CustomCompositionInstruction` 기본값). Mac `makeTransitionEffects`(ExportEngine.swift:831-882) + overlap back-timing(397-404) 포팅 대상. 진행도 0/1 지점 양쪽 소스 픽셀 단언 테스트 수반.
+
+### BUG-IOS-10 (P1) — iOS 볼륨·페이드가 출력·프리뷰에 미반영 — **등록(2026-08-26)**
+
+- `AVMutableAudioMix`·volume ramp가 iOS 전무(UI만 존재, 프리뷰도 원본 오디오 그대로). 렌더 계획에 audioMix 생성(Mac `applyAudioVolumeAndFades` 참조) + `AVPlayerItem.audioMix`·`AVAssetExportSession.audioMix` 양쪽 부착. ramp 파라미터 단위 테스트 + RMS fade 단언 수반.
+
+### STICKER-01 (P1) — iOS 스티커 선택 콜백이 입력을 버림 — **등록(2026-08-26)**
+
+- `iOSContentView.swift:287` `onSelect: { _ in }` — 피커는 dismiss하지만 클립이 생성되지 않음. Mac `EditorViewModel.addSticker`(1951-1995) 패턴으로 `ensureTrack(.text)` + `AddClipCommand` + `TextClipContent(contentKind: .sticker)` 발행(emoji 우선).
+
+### SURV-01 (P1) — iOS 임포트 미디어가 임시 디렉터리에 저장 — **등록(2026-08-26)**
+
+- `IOSEditorViewModel.swift:481-489`가 PhotosPicker 파일을 `temporaryDirectory/MovieCutiOSImports`에 복사 후 절대경로 저장 — OS가 임시 파일 정리 시 복구 프로젝트만 남고 원본 소멸(CA-03 미디어 생존성 감사의 iOS 누락 영역). Application Support managed-imports 영역·상대 참조·missing-media preflight·relink 정책 필요. 부수: autosave background 진입 즉시 flush 부재(150ms 디바운스만) + 고정 sleep 기반 플래키 테스트(IOSPersistenceTests 200ms sleep) → 폴링 전환.
+
+### RACE-01 (P1) — iOS 프리뷰 재생성 stale-result 경합 + 중복 오버레이 — **등록(2026-08-26)**
+
+- `PreviewView.swift:111-142`: rebuild마다 추적 안 되는 Task 생성(취소·세대 검사 부족) — 느린 이전 빌드가 나중에 끝나면 stale AVPlayerItem 설치. + AVPlayer가 이미 videoComposition을 렌더하는데 최대 15fps `copyCGImage` 오버레이를 얹어 재생 프레임률·전력 손해(중복 렌더). Mac `PlaybackEngine` 세대 토큰 패턴(164-168·216-236) 이식 + 오버레이 경로 제거.
+
+### L10N-01 (P1) — iOS 효과 인스펙터 한국어 하드코딩 31곳 — **등록(2026-08-26)**
+
+- `IOSEffectsInspectorView.swift` 57-354의 한글 리터럴 31곳이 카탈로그 키를 우회(source language en인데 영어 환경에서도 한국어 표시). 카탈로그에 이미 대응 키 다수 존재 — 영어 키 교체 + 부족 키 등록 + Swift 소스 Hangul 리터럴 차단 CI 검사. 함께: G-27 시뮬레이터 하니스가 공유 렌더 계획(`IOSExportEngine.makeRenderPlan`)이 아닌 레거시 `IOSPreviewCompositionBuilder` 사용(드리프트 위험) → 하니스 교체 후 레거시 빌더 삭제.
+
 ---
 
 ## 2. 갭 분석 V6 현실 점검 (중요)

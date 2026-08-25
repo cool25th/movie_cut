@@ -4,10 +4,6 @@ import Foundation
 import Testing
 @testable import MovieCutCore
 
-#if canImport(AudioToolbox)
-import AudioToolbox
-#endif
-
 @MainActor
 
 @Suite("Critical/high commands and providers")
@@ -82,11 +78,11 @@ struct CriticalHighCommandTests {
 
     @Test("Audio equalizer service initializes")
     func testInitSucceeds() {
-        guard isAudioEqualizerRuntimeAvailable() else {
-            #expect(AudioEqualizerService.self == AudioEqualizerService.self)
-            return
-        }
-
+        // No AudioToolbox component-registry probe here: AudioComponentFindNext
+        // is a blocking cross-process lookup that can stall when the full Core
+        // suite runs its AVAudioEngine-heavy suites in parallel (observed gate
+        // hang, 2026-08-26). AudioEqualizerService.init only constructs
+        // AVAudioEngine + AVAudioUnitEQ, so the init itself is the contract.
         let service = AudioEqualizerService()
 
         #expect(type(of: service) == AudioEqualizerService.self)
@@ -133,20 +129,4 @@ private func makeMask(shape: MaskShape) -> Mask {
         position: CGPoint(x: 0.5, y: 0.5),
         size: CGSize(width: 0.5, height: 0.5)
     )
-}
-
-private func isAudioEqualizerRuntimeAvailable() -> Bool {
-    #if canImport(AudioToolbox)
-    var description = AudioComponentDescription(
-        componentType: kAudioUnitType_Effect,
-        componentSubType: kAudioUnitSubType_NBandEQ,
-        componentManufacturer: kAudioUnitManufacturer_Apple,
-        componentFlags: 0,
-        componentFlagsMask: 0
-    )
-
-    return AudioComponentFindNext(nil, &description) != nil
-    #else
-    return true
-    #endif
 }

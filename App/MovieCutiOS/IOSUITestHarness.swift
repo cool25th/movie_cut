@@ -107,14 +107,20 @@ enum IOSUITestHarness {
         }
         report("g27_import imported_clips=\(importedClips)", runID: runID)
 
-        // 2. PREVIEW — the SAME composition the app's PreviewView builds,
-        // plus one rendered frame through AVAssetImageGenerator.
-        let composition = AVMutableComposition()
-        let hasPlayableMedia = IOSPreviewCompositionBuilder.populate(composition, from: viewModel.currentProject)
-        let duration = composition.duration.seconds.isFinite ? composition.duration.seconds : 0
+        // 2. PREVIEW — the SAME render plan the app's PreviewView consumes
+        // (리뷰 2026-08-26 / G-27): IOSExportEngine.makeRenderPlan is the
+        // single preview/export source (composition + videoComposition +
+        // audioMix); the frame renders through the plan exactly like
+        // PreviewView's generator. The legacy IOSPreviewCompositionBuilder
+        // drifted from this path (no text/effects/canvas handling) and is
+        // deleted.
+        let plan = try await IOSExportEngine().makeRenderPlan(for: viewModel.currentProject)
+        let duration = plan.composition.duration.seconds.isFinite ? plan.composition.duration.seconds : 0
+        let hasPlayableMedia = !plan.composition.tracks.isEmpty && duration > 0
         var frameRendered = false
-        if hasPlayableMedia, duration > 0 {
-            let generator = AVAssetImageGenerator(asset: composition)
+        if hasPlayableMedia {
+            let generator = AVAssetImageGenerator(asset: plan.composition)
+            generator.videoComposition = plan.videoComposition
             generator.appliesPreferredTrackTransform = true
             generator.requestedTimeToleranceBefore = .zero
             generator.requestedTimeToleranceAfter = .zero

@@ -839,7 +839,15 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         }
 
                         if videoCompositionTrack.segments.isEmpty {
-                            videoCompositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+                            // BUG-07: do NOT carry the source's rotation onto
+                            // the composition track. AVPlayer applies a track
+                            // preferredTransform IN ADDITION to the video
+                            // composition's layer instructions, so forwarding
+                            // it double-rotates the preview. The rotation
+                            // composes into the layer-instruction base fit
+                            // (and the custom compositor's orientation) — the
+                            // same single source the export path uses.
+                            videoCompositionTrack.preferredTransform = .identity
                         }
 
                         let effectiveSourceTrack = sourceTrack
@@ -906,29 +914,27 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         // source into the canvas; the preview instruction must
                         // carry the same base fit or preview and export drift
                         // (and mismatched aspects previewed 1:1 at the corner).
-                        let displaySize: CGSize = sourceSize.applying(preferredTransform)
-                        let absWidth: CGFloat = abs(displaySize.width)
-                        let absHeight: CGFloat = abs(displaySize.height)
+                        // BUG-07: rotation metadata composes UNDER the fit —
+                        // identity transforms reduce to the previous math.
                         let canvas: CGSize = project.timeline.canvasSize
-                        var previewFit: CGAffineTransform = .identity
-                        if absWidth > 0, absHeight > 0 {
-                            let fitScaleW: CGFloat = canvas.width / absWidth
-                            let fitScaleH: CGFloat = canvas.height / absHeight
-                            let fitScale: CGFloat = min(fitScaleW, fitScaleH)
-                            let scaledW: CGFloat = absWidth * fitScale
-                            let scaledH: CGFloat = absHeight * fitScale
-                            let tx: CGFloat = (canvas.width - scaledW) / 2
-                            let ty: CGFloat = (canvas.height - scaledH) / 2
-                            previewFit = CGAffineTransform(translationX: tx, y: ty)
-                                .scaledBy(x: fitScale, y: fitScale)
-                        }
+                        let previewFit = ExportEngine.rotationAwareFitTransform(
+                            storageSize: sourceSize,
+                            preferredTransform: preferredTransform,
+                            canvasSize: canvas
+                        )
                         videoClipInstructions.append(PlaybackClipInstructionMetadata(
                             timelineTrackID: track.id,
                             trackID: videoCompositionTrack.trackID,
                             timeRange: CMTimeRange(start: destinationTime, duration: targetDuration),
+                            // BUG-07: the rotation metadata lives in previewFit
+                            // (rotation-aware base fit). The user transform's
+                            // sourceFrame anchor must NOT carry it too — the
+                            // anchor's base IS the preferredTransform, so an
+                            // "identity" clip on a rotated source would compose
+                            // fit-then-rotation instead of rotation-then-fit.
                             transform: previewFit.concatenating(
                                 clip.transform.affineTransform(
-                                    for: .sourceFrame(preferredTransform: preferredTransform, size: sourceSize)
+                                    for: .sourceFrame(preferredTransform: .identity, size: sourceSize)
                                 )
                             ),
                             clipTransform: clip.transform,
@@ -945,7 +951,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             isBackgroundRemoved: clip.isBackgroundRemoved,
                             blendMode: clip.blendMode,
                             cropRect: clip.cropRect,
-                            stabilization: clip.stabilization
+                            stabilization: clip.stabilization,
+                            sourcePreferredTransform: preferredTransform
                         ))
                     }
 
@@ -1437,7 +1444,8 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                                 isBackgroundRemoved: clipInstruction.isBackgroundRemoved,
                                 blendMode: clipInstruction.blendMode,
                                 cropRect: clipInstruction.cropRect,
-                                stabilization: clipInstruction.stabilization
+                                stabilization: clipInstruction.stabilization,
+                                sourcePreferredTransform: clipInstruction.sourcePreferredTransform
                             )
                         } + textOverlayClipEffects,
                         transitionEffects: transitionEffects,
@@ -1893,6 +1901,10 @@ private struct PlaybackClipInstructionMetadata {
     var blendMode: BlendMode = .normal
     var cropRect: NormalizedRect? = nil
     var stabilization: StabilizationPlan? = nil
+    /// BUG-07: the source track's rotation metadata, carried for the custom
+    /// compositor (the plain path folds it into `transform` via the
+    /// rotation-aware base fit).
+    var sourcePreferredTransform: CGAffineTransform = .identity
 }
 
 private enum PlaybackPreviewAudioError: LocalizedError {

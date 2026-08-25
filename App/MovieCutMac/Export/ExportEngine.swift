@@ -536,6 +536,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             }
                             return nil
                         }(),
+                        sourceStorageSize: (try? await effectiveSourceTrack.load(.naturalSize)),
+                        sourcePreferredTransform: (try? await effectiveSourceTrack.load(.preferredTransform)) ?? .identity,
                         stabilization: clip.stabilization
                     ))
                 }
@@ -664,10 +666,23 @@ final class ExportEngine: FlattenedTimelineConsumer {
             // exported as a corner sliver over black. Aspect-fit + center is
             // now the BASE transform for every clip; the user transform
             // composes on top.
-            let baseFit = Self.aspectFitTransform(
-                sourceSize: clip.sourceNaturalSize ?? resolvedSize,
-                canvasSize: resolvedSize
-            )
+            // BUG-07: for sources carrying rotation metadata the fit scale
+            // must come from the DISPLAY size while the rotation itself
+            // composes under the fit — otherwise the pixels stay sideways at
+            // the rotated size's scale.
+            let baseFit: CGAffineTransform
+            if let storageSize = clip.sourceStorageSize {
+                baseFit = Self.rotationAwareFitTransform(
+                    storageSize: storageSize,
+                    preferredTransform: clip.sourcePreferredTransform,
+                    canvasSize: resolvedSize
+                )
+            } else {
+                baseFit = Self.aspectFitTransform(
+                    sourceSize: clip.sourceNaturalSize ?? resolvedSize,
+                    canvasSize: resolvedSize
+                )
+            }
             if !clip.transform.isIdentity {
                 layerInstruction.setTransform(
                     clip.transform.affineTransform(for: .canvas(size: resolvedSize))
@@ -792,6 +807,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             blendMode: clip.blendMode,
                             cropRect: clip.cropRect,
                             stabilization: clip.stabilization,
+                            sourcePreferredTransform: clip.sourcePreferredTransform,
                             includeIdentitySource: clip.trackID != kCMPersistentTrackID_Invalid
                         )
                     },
@@ -2323,6 +2339,38 @@ extension ExportEngine {
         return CGAffineTransform(translationX: dx, y: dy)
             .scaledBy(x: scale, y: scale)
     }
+
+    /// BUG-07: base fit for sources with rotation metadata. The fit scale is
+    /// computed from the DISPLAY size (storage size through the preferred
+    /// transform), and the transform itself composes UNDER the fit so storage
+    /// pixels land upright and centered. Reduces exactly to
+    /// `aspectFitTransform(sourceSize: storageSize, …)` for an identity
+    /// transform — unrotated projects are unchanged.
+    static func rotationAwareFitTransform(
+        storageSize: CGSize,
+        preferredTransform: CGAffineTransform,
+        canvasSize: CGSize
+    ) -> CGAffineTransform {
+        let displaySize = CGSize(
+            width: abs(storageSize.applying(preferredTransform).width),
+            height: abs(storageSize.applying(preferredTransform).height)
+        )
+        guard displaySize.width > 0, displaySize.height > 0,
+              canvasSize.width > 0, canvasSize.height > 0 else { return .identity }
+        let scale = min(
+            canvasSize.width / displaySize.width,
+            canvasSize.height / displaySize.height
+        )
+        let dx = (canvasSize.width - displaySize.width * scale) / 2
+        let dy = (canvasSize.height - displaySize.height * scale) / 2
+        // CGAffineTransform.concatenating applies SELF first, the argument
+        // second (t1.concatenating(t2) == t2 ∘ t1 in point order) — the
+        // rotation must run FIRST, so it sits on the left of the chain.
+        return preferredTransform.concatenating(
+            CGAffineTransform(translationX: dx, y: dy)
+                .scaledBy(x: scale, y: scale)
+        )
+    }
 }
 
 private struct ExportClipInstructionMetadata {
@@ -2354,6 +2402,10 @@ private struct ExportClipInstructionMetadata {
     /// The source's natural pixel size (from the asset metadata) — drives
     /// the aspect-fit base transform (BUG-06).
     var sourceNaturalSize: CGSize? = nil
+    /// BUG-07: storage (pre-rotation) dimensions and the source track's
+    /// rotation metadata — together they compose an upright base fit.
+    var sourceStorageSize: CGSize? = nil
+    var sourcePreferredTransform: CGAffineTransform = .identity
     var stabilization: StabilizationPlan? = nil
 
     var usesOpticalFlowSlowMotion: Bool {

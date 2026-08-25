@@ -303,7 +303,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 )
                 let outgoingImage = self.applyClipEffects(
                     to: Self.fittedToCanvas(
-                        RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                        Self.orientedForDisplay(
+                            RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                            preferredTransform: outgoingEffect?.sourcePreferredTransform ?? .identity
+                        ),
                         canvasSize: request.renderContext.size
                     ),
                     effect: outgoingEffect,
@@ -312,7 +315,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 )
                 let incomingImage = self.applyClipEffects(
                     to: Self.fittedToCanvas(
-                        RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                        Self.orientedForDisplay(
+                            RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                            preferredTransform: incomingEffect?.sourcePreferredTransform ?? .identity
+                        ),
                         canvasSize: request.renderContext.size
                     ),
                     effect: incomingEffect,
@@ -358,13 +364,18 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             // e.g. 320×240 in 1920×1080 → 124→4.6). Aspect-fit + center every
             // source into the render canvas BEFORE effects/overlays so the
             // composited frame IS the canvas.
+            // BUG-07: composition source frames arrive in STORAGE orientation
+            // — orient them with the track's rotation metadata before the fit.
+            let effect = instruction?.effect(for: trackID, at: request.compositionTime)
             var image = Self.fittedToCanvas(
-                RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                Self.orientedForDisplay(
+                    RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                    preferredTransform: effect?.sourcePreferredTransform ?? .identity
+                ),
                 canvasSize: request.renderContext.size
             )
 
             if let instruction {
-                let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 image = self.applyClipEffects(
                     to: image,
                     effect: effect,
@@ -641,6 +652,29 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             .transformed(by: CGAffineTransform(translationX: dx, y: dy))
             .cropped(to: CGRect(origin: .zero, size: canvasSize))
+    }
+
+    /// BUG-07: orients a storage-oriented source frame upright using the
+    /// track's rotation metadata. Cardinal rotations (the only kind cameras
+    /// write) map to CIImage orientations, which handle the Quartz y-up
+    /// bookkeeping; non-cardinal transforms are left untouched (v1 contract).
+    static func orientedForDisplay(
+        _ image: CIImage,
+        preferredTransform: CGAffineTransform
+    ) -> CIImage {
+        guard preferredTransform != .identity else { return image }
+        let angle = atan2(preferredTransform.b, preferredTransform.a)
+        let orientation: CGImagePropertyOrientation
+        if abs(angle - .pi / 2) < 0.01 {
+            orientation = .right
+        } else if abs(angle + .pi / 2) < 0.01 {
+            orientation = .left
+        } else if abs(abs(angle) - .pi) < 0.01 {
+            orientation = .down
+        } else {
+            return image
+        }
+        return image.oriented(orientation)
     }
 
     private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {

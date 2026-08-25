@@ -32,6 +32,11 @@ public struct CustomCompositionClipEffect: Sendable {
     /// warps each frame before the rest of the clip chain (the camera-path
     /// correction must see the raw decoded frame).
     public let stabilization: StabilizationPlan?
+    /// BUG-07: the source track's rotation metadata. Composition source
+    /// frames arrive in storage orientation, so the compositor orients them
+    /// with this transform before the canvas fit. Identity for unrotated
+    /// sources; does not by itself trigger the custom compositor.
+    public let sourcePreferredTransform: CGAffineTransform
 
     public init?(
         trackID: CMPersistentTrackID,
@@ -55,6 +60,7 @@ public struct CustomCompositionClipEffect: Sendable {
         blendMode: BlendMode = .normal,
         cropRect: NormalizedRect? = nil,
         stabilization: StabilizationPlan? = nil,
+        sourcePreferredTransform: CGAffineTransform = .identity,
         includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
@@ -98,6 +104,7 @@ public struct CustomCompositionClipEffect: Sendable {
         self.blendMode = blendMode
         self.cropRect = cropRect
         self.stabilization = stabilization
+        self.sourcePreferredTransform = sourcePreferredTransform
     }
 
     public var hasStickerOverlay: Bool {

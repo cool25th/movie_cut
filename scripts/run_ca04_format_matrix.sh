@@ -15,7 +15,7 @@ cd "$ROOT"
 
 FIXDIR="$ROOT/Tests/Fixtures"
 for f in ca04_vfr_320x240_5s.mp4 ca04_tenbit_320x240_2s.mov \
-         ca04_rotated_320x240_2s_90deg.mp4 ca04_bt2020pq_320x240_2s.mp4 \
+         ca04_rotated_asym_320x240_2s_90deg.mp4 ca04_bt2020pq_320x240_2s.mp4 \
          rec709_1080p_1s_24fps.mp4 solid_red_tone_320x240_2s_30fps.mp4; do
   [ -s "$FIXDIR/$f" ] || { echo "missing fixture $f; run scripts/make_fixtures.sh" >&2; exit 1; }
 done
@@ -42,7 +42,6 @@ bad() { echo "[$1] FAIL: $2" >&2; fail=1; }
 # increments. An unregistered failure still fails.
 registered() {
   case "$1" in
-    rotated) echo "BUG-07";;
     *) echo "";;
   esac
 }
@@ -126,17 +125,45 @@ if [ -s "$WORK/tenbit_export.mp4" ]; then
 fi
 
 echo "=== 3. Rotation metadata → upright export ==="
-run_one rotated "$FIXDIR/ca04_rotated_320x240_2s_90deg.mp4" 2.0 0.12
+run_one rotated "$FIXDIR/ca04_rotated_asym_320x240_2s_90deg.mp4" 2.0 0.12
 if [ -s "$WORK/rotated_export.mp4" ]; then
-  w="$(json "$WORK/rotated_export.mp4" v:0 stream=width)"
-  h="$(json "$WORK/rotated_export.mp4" v:0 stream=height)"
-  rot="$(ffprobe -v quiet -select_streams v:0 -show_entries stream_side_data=rotation -of csv=p=0 "$WORK/rotated_export.mp4")"
-  note rotated "output ${w}x${h} side_rotation='${rot}' (input 320x240 +90° metadata)"
-  # The composition path applies preferredTransform; the export should be
-  # upright (portrait 240x320) OR carry the rotation tag forward — either
-  # preserves content orientation; neither = silently sideways.
-  if [ "${rot}" = "" ] || [ "${rot}" = "0" ] || [ "${rot}" = "N/A" ]; then
-    [ "$w" = "240" ] && [ "$h" = "320" ] || reg rotated "rotation dropped: ${w}x${h} with no side data"
+  # BUG-07 fixed (2026-08-25): the asymmetric fixture (left=red, right=blue
+  # in storage orientation) makes orientation MEASURABLE. Upright handling
+  # pillarboxes the 240×320 display content into the 16:9 canvas at
+  # 810×1080 centered (x=555): top half red, bottom half blue, black side
+  # margins. Any sideways/missing rotation fails loudly.
+  ffmpeg -loglevel error -ss 1.0 -i "$WORK/rotated_export.mp4" -frames:v 1 \
+    -f rawvideo -pix_fmt rgb24 "$WORK/rotated_frame.rgb" 2>/dev/null
+  if ! python3 - "$WORK/rotated_frame.rgb" <<'PYEOF'
+import sys
+buf = open(sys.argv[1], 'rb').read()
+W, H = 1920, 1080
+def region(x, y, w, h):
+    px = [buf[(r*W+c)*3:(r*W+c)*3+3] for r in range(y, y+h, 4) for c in range(x, x+w, 4)]
+    n = len(px)
+    return (sum(p[0] for p in px)/n, sum(p[1] for p in px)/n, sum(p[2] for p in px)/n)
+checks = {
+    "content_top_is_red":   region(600, 100, 600, 380),
+    "content_bottom_is_blue": region(1150, 620, 160, 380),
+    "left_margin_black":    region(200, 400, 200, 280),
+    "right_margin_black":   region(1500, 400, 200, 280),
+}
+failed = []
+r, g, b = checks["content_top_is_red"]
+if not (r > 140 and b < 90): failed.append(f"content_top_is_red (R={r:.0f},B={b:.0f})")
+r, g, b = checks["content_bottom_is_blue"]
+if not (b > 140 and r < 90): failed.append(f"content_bottom_is_blue (R={r:.0f},B={b:.0f})")
+for name in ("left_margin_black", "right_margin_black"):
+    r, g, b = checks[name]
+    if max(r, g, b) >= 40: failed.append(f"{name} (R={r:.0f},G={g:.0f},B={b:.0f})")
+print(f"[rotated] orientation: top(R,B)=({checks['content_top_is_red'][0]:.0f},{checks['content_top_is_red'][2]:.0f}) "
+      f"bottom(R,B)=({checks['content_bottom_is_blue'][0]:.0f},{checks['content_bottom_is_blue'][2]:.0f})")
+if failed:
+    print(f"[rotated] FAIL: orientation checks failed: {', '.join(failed)}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+  then
+    bad rotated "rotation metadata not applied upright (see orientation check above)"
   fi
 fi
 

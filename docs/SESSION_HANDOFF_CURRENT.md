@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-25 세션 (BUG-07 해결 — 회전 메타데이터 3경로 평행 수정·매트릭스 방향 어설션 승격)
+
+- **실측 판정**: 비대칭(좌=적/우=청) 회전 픽스처 신설(`ca04_rotated_asym_320x240_2s_90deg.mp4`, AVAssetWriter 생성기 확장) — BUG-07은 **실제 결함**: 회전된 표시 크기(240×320)로 핏 스케일만 계산하고 픽셀은 옆으로 누운 채 1080×810 상단 고정 렌더(BUG-06 핏 수정과의 상호작용). ffmpeg autorotate 기준값: 바로 세우면 **상=적/하=청**.
+- **3경로 수정**: ① 평문 출력 `ExportEngine.rotationAwareFitTransform` — 회전→핏 순 결합(**`concatenating`은 self-먼저·인자-나중 적용임을 실증 판명** — 순서 틀리면 콘텐츠가 캔버스 밖으로 감) ② 프리뷰 동일 결합 + **유저 변환 `.sourceFrame` 앵커에서 pt 제거**(앵커의 base가 pt 자체라 이중 적용 — "항등" 클립도 pt를 실음) + 컴포지션 트랙 pt identity 통일 ③ 커스텀 컴포지터 `orientedForDisplay`(±90°/180° → CIImage 오리엔테이션, `CustomCompositionClipEffect.sourcePreferredTransform` 플러밍 — 엔진·프리뷰 양쪽).
+- **검증(전부 실측)**: 엑스포트+프리뷰 프레임 픽셀 측정 모두 **상=적(R237)/하=청(B235)·마진 흑색 PASS** · 오리엔테이션 유닛 4종 신설(±90°·180°·항등 — 픽셀 렌더 측정, Mac 42/42) · **CA-04 매트릭스 PASS — rotated 시나리오 방향 어설션 승격, BUG-07 REG 소멸** · verify_gate 1,413·5/5.
+- **범위 외 기록**: `layerActiveTracks` 보조 블렌드 트랙은 캔버스 핏 없이 자연 크기(BUG-06 잔존 별도 결함 가능성) — 회전+전환 조합·iOS 회전 경로(RENDER-01 통합 후에도 pt 미결합 가능)도 후속 관찰 대상. ExportEngine:388(트랙 pt 설정)은 엑스포트 렌더 결과와 무관임을 실험 확인 — 유지.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① RENDER-02(P2) 범위 태깅 ② G-27 실기기 2종(사용자 잠금 해제 대기)·MACUI-01(사용자 TCC 조치 대기) ③ 잔여 소형(A11Y-01·UX-REC-01/02 등). PARITY-TOL-01 승인 대기 유지.
+
 ## 2026-08-25 세션 (BUG-06 사후 독립 검증 — REG 소멸·회귀 없음 확인, 문서 세션)
 
 - **검증(전부 HEAD=62a0ba2 실측)**: tenbit 익스포트 **4회 연속 결정적**(bytes=922751 동일·전체 평균 92.6 — 필러박스 콘텐츠 75% 수학 부합)·t=1.0 프레임 시각 확인(전면 밝은 테스트 패턴)·**CA-04 매트릭스 PASS**(콘텐츠 영역 luma 123.5 vs 소스 124.4 Δ0.9 — **BUG-06 REG 소멸**, tenbit은 ±6 어설션 정식 가드로 상시화)·**G-24 게이트 PASS**(ratio 0.357·severe wobble 0·bypass 0 — RENDER-01/CANVAS-01 렌더 통합의 회귀 없음).

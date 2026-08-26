@@ -22,6 +22,14 @@ public actor EditorSession {
         redoStack.removeAll()
     }
 
+    /// U-08 AC③: the number of commands dispatched this session — each
+    /// user-facing action (button click, menu item, drag-commit) routes
+    /// through `dispatch`, so this count approximates the interaction step
+    /// count for UX metrics (see docs/UI_METRICS.md).
+    public var commandCount: Int {
+        undoStack.count
+    }
+
     /// Returns a value snapshot of the current project.
     public func snapshot() async -> Project {
         project

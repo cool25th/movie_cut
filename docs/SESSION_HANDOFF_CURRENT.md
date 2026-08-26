@@ -3,6 +3,15 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-26 세션 (U-08 착수 → 환경 차단 판정 — System Events AX 창 쿼리 머신 전체 불가)
+
+- **실측**: `ui_regression.sh` 4상태(import_only·populated_editor·with_color_grade·with_mask) 전부 **WINDOW_COUNT_0** — 앱 자체는 정상 기동(하니스 임포트·CoreMedia 첫 프레임 재생 로그 확인)하나 osascript System Events가 창을 0개로 카운트.
+- **원인 판정(제품 아님)**: 보장된 창을 가진 TextEdit 프로브에서도 `count of windows` = 0(프로세스 목록은 정상) — **AX 창 쿼리가 머신 전체에서 불가**. MACUI-01(러너 "hung before establishing connection")과 동일 접근성/TCC 클래스. 골든 4종 자체는 이미 커밋돼 있으므로(5945243 등), U-08 잔여는 ①4상태 회귀 PASS 실측 ②클릭수 metric(AX 구동 필요) — 둘 다 이 환경이 복구돼야만 측정 가능.
+- **조치**: 게이트 규율(원인 명확한 실패는 재시도 없이 중단·보고)에 따라 U-08을 사용자 조치 대기로 이동, 다음 자율 증분은 **G-02 Inc 6**으로 큐 정리(f31e326). **사용자 조치**: 시스템 설정 → 개인정보 보호 → 접근성에서 터미널/osascript 호스트에 권한 부여(또는 재부팅) — MACUI-01 조치와 동일.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **G-02 Inc 6**(커브 에디터 UI — Mac 인스펙터 내 커브 편집 컨트롤) ② G-01 Inc 2~4. **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 잔여(TCC 접근성/재부팅)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
 ## 2026-08-26 세션 (G-15 AC7 완료 — 대형 이미지 다운스케일 검증)
 
 - **G-15 AC7**: 24MP(6000x4000) 비대칭 PNG 소스가 `kCGImageSourceThumbnailMaxPixelSize`를 통해 **캔버스 해상도 상한으로 다운스케일**됨을 3종 테스트로 고착: ①1080p 캔버스에서 출력 트랙 1920x1080(원본 6000x4000 아님) ②4K 캔버스에서 3840x2160 ③Ken Burns 2x 줌에서도 출력은 캔버스 크기 유지(로드 상한 = 캔버스장변 × 최대줌 = 3840px — 원본 6000px보다 작음).

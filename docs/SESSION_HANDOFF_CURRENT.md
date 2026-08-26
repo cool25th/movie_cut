@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-26 세션 (G-02 Inc 6 완료 — 톤 커브 에디터 UI·커브 단독 파리티)
+
+- **ColorCurvesView 신규**(Mac 인스펙터, HSL 밴드 하위): 마스터/R/G/B 채널 4종 드래그 캔버스 — 커브는 렌더러가 소비하는 동일 `CurveEvaluator`로 샘플링(보이는 곡선=렌더 곡선), 끝점 (0,0)/(1,1) 고정·내부 점 드래그(x를 이웃 사이로 클램프해 단조 유지), Add Point(최대 폭 구간 중점 — 결정적·포인터 없이 접근 가능)·Remove·채널 리셋. **커밋 규율(Inc 5 동일)**: 드래그 중 로컬 드래프트, 제스처 종료 시 4채널 전체 단일 커맨드(undo 1-step/gesture), 전 채널 identity면 nil 커밋(미그레이션 JSON 바이트 안정). 스키마 무변경.
+- **파리티 #16 `curves_only` 신설**(하니스 `MOVIECUT_UITEST_CURVES=1` — 마스터 S-커브+레드 리프트, 3-way·밴드 없음): 밴드 체인(#15)과 커브 체인의 독립 분리 — **실측 PASS MAD 0.43**(허용치 2.0, t=0.5/1.5 양 지점). VERIFICATION_STANDARD 표 16번으로 등록(기존 16/17은 17/18로 이동).
+- **테스트**: `ColorCurvesEditorCommitTests` 3종(identity→nil 매핑·4채널 전체 커밋·커밋 점의 평가기 단조성) — Mac 유닛 48/48. 게이트 **PASS**(Core 1,416·208스위트·Mac/iOS 빌드·lint 5/5).
+- **잔여 기록**: iOS 커브 편집 UI 미연결(값 통과만 존재 — 후속 관찰). ui_regression 골든은 인스펙터 UI 변경으로 의도 드리프트 예상 — AX 환경 차단(U-08 회차 판정)으로 갱신 불가, 환경 복구 시 with_color_grade 상태 골든 갱신 필요.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **G-01 잔여 Inc 점검 후 착수**(v1.6 체인 — Inc2 카라오케·Inc3 스타일 6종은 완료 이력이므로 백로그에서 실제 잔여 Inc를 먼저 확인) ② 이후 백로그 점검. **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
 ## 2026-08-26 세션 (U-08 착수 → 환경 차단 판정 — System Events AX 창 쿼리 머신 전체 불가)
 
 - **실측**: `ui_regression.sh` 4상태(import_only·populated_editor·with_color_grade·with_mask) 전부 **WINDOW_COUNT_0** — 앱 자체는 정상 기동(하니스 임포트·CoreMedia 첫 프레임 재생 로그 확인)하나 osascript System Events가 창을 0개로 카운트.

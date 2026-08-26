@@ -132,25 +132,20 @@ struct IOSRenderPlanParityTests {
         let preview = Self.meanRGB(of: previewFrame)
         let exported = Self.meanRGB(of: exportFrame)
         // Luma comparison: the same composited pixels feed the encoder, so the
-        // remaining delta is decode-side only — codec roundtrip plus the
-        // H.264 limited-vs-full range convention on decode (measured ~21/255
-        // on graded saturated red; registered as RENDER-02 follow-up to pin
-        // the encode range tagging).
+        // remaining delta is decode-side only — now codec-roundtrip residue
+        // since the writer tags the range/matrix explicitly (RENDER-02).
         let previewY = 0.299 * preview.r + 0.587 * preview.g + 0.114 * preview.b
         let exportedY = 0.299 * exported.r + 0.587 * exported.g + 0.114 * exported.b
-        // RENDER-02 characterization: the drift is a STABLE decode-side
-        // convention of the preset export path (AVAssetExportSession tags
-        // nothing; the decoder picks a default YUV matrix/range). Measured
-        // ~21/255 on graded saturated red, consistent across runs. The
-        // writer path (Mac explicit-bitrate) tags Rec.709 explicitly and
-        // does not drift — migrating the iOS export onto a tagged writer
-        // removes this band entirely (follow-up registered).
+        // RENDER-02 RESOLVED (2026-08-26): the export drives an AVAssetWriter
+        // with the planner's output settings — SDR H.264 tagged explicitly
+        // Rec.709. The old preset path (AVAssetExportSession, no tag control)
+        // drifted ~21/255 because the decoder picked its default YUV
+        // matrix/range; the tagged writer collapses that to codec-roundtrip
+        // residue (measured 3.09). If the tagging ever regresses, the drift
+        // returns to ~21 and fails this tight band immediately.
         let drift = previewY - exportedY
-        #expect(abs(drift) < 26,
-                "luma drift \(drift) between preview-plan frame and decoded export (stable decode convention, see RENDER-02): \(preview) vs \(exported)")
-        // The drift must be STABLE, not growing — if it exceeds the known
-        // band, the convention changed (a real regression).
-        #expect(abs(drift) < 26, "RENDER-02 drift band exceeded")
+        #expect(abs(drift) < 8,
+                "luma drift \(drift) must stay near codec-roundtrip residue (~3, measured 2026-08-26): \(preview) vs \(exported)")
         // And the grade actually applied on BOTH legs (not raw red).
         #expect(preview.r > 180 && exported.r > 180,
                 "the brightness lift must show on both legs: \(preview) / \(exported)")

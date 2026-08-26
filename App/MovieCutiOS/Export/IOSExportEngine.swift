@@ -14,8 +14,14 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
+    // RENDER-02: the tagged-writer export's live reader/writer (cancellation).
+    @ObservationIgnored private var activeReaders: [AVAssetReader] = []
+    @ObservationIgnored private var activeWriter: AVAssetWriter?
     /// G-15: temp segments backing image clips in the CURRENT render plan.
     @ObservationIgnored private var imageRenderURLs: [URL] = []
+    /// RENDER-02: resolves writer output settings — SDR H.264 tagged
+    /// explicitly Rec.709 (the root fix for the preset-path decode drift).
+    @ObservationIgnored private let exportPlanner = ExportPlanner()
 
     /// RENDER-01: the single render plan BOTH the preview and the export
     /// consume — one composition (durations, speed, ramps, freeze, reverse)
@@ -83,45 +89,246 @@ final class IOSExportEngine {
         do {
             let plan = try await makeRenderPlan(for: project)
             let composition = plan.composition
-            let shouldUseCustomCompositor = plan.videoComposition != nil
-            guard let exportSession = AVAssetExportSession(
-                asset: composition,
-                presetName: AVAssetExportPresetHighestQuality
-            ) else {
+
+            // RENDER-02: the export drives an AVAssetWriter with the planner's
+            // resolved output settings instead of AVAssetExportSession's
+            // preset. The preset path cannot control color tags — the decoder
+            // then picked its default YUV matrix/range and the exported file
+            // drifted ~21/255 luma from the preview (band-guarded at 26). The
+            // planner tags SDR H.264 explicitly Rec.709, which the
+            // end-to-end sRGB/Rec.709 pipeline already is (Mac parity).
+            let resolvedPlan = exportPlanner.plan(
+                settings: project.exportSettings,
+                canvas: project.canvas,
+                mediaKind: .video
+            )
+            guard let videoOutputSettings = exportPlanner.assetWriterVideoOutputSettings(for: resolvedPlan),
+                  let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: resolvedPlan) else {
                 throw IOSExportEngineError.exportSessionCreationFailed
             }
-
-            guard exportSession.supportedFileTypes.contains(.mov) else {
-                throw IOSExportEngineError.unsupportedOutputType
-            }
+            // The reader converts audio to the WRITER's resolved format. The
+            // composition's native audio (e.g. 44.1kHz mono) fed straight
+            // into a 48kHz stereo AAC input smeared the fade ramps across
+            // ~2.5× their window (measured 2026-08-26); converting on the
+            // reader side keeps the encoder on a matched stream.
+            let audioSampleRate = audioOutputSettings[AVSampleRateKey] as? Int ?? 48_000
+            let audioChannelCount = audioOutputSettings[AVNumberOfChannelsKey] as? Int ?? 2
 
             let outputURL = try makeOutputURL()
             activeOutputURL = outputURL
-            exportSession.outputURL = outputURL
-            exportSession.outputFileType = .mov
-            exportSession.shouldOptimizeForNetworkUse = true
-            if let videoComposition = plan.videoComposition {
-                exportSession.videoComposition = videoComposition
-            }
-            // BUG-IOS-10: volume/fades reach the exported file.
-            exportSession.audioMix = plan.audioMix
-            activeExportSession = exportSession
-            startProgressPolling()
 
-            try await AVExportCompatibility.export(.init(exportSession), to: outputURL, as: .mov)
+            let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
+            writer.shouldOptimizeForNetworkUse = true
+            // Separate readers per modality (W4-defect parity, Mac
+            // code-review #3): one reader mixing a videoComposition output
+            // with an audioMix output over the same composition can park
+            // forever (measured on iOS 2026-08-26 — the audio-fade export
+            // hung). The audio side reads its OWN dumped asset (below).
+            let videoReader = try AVAssetReader(asset: composition)
+            let audioReader = try AVAssetReader(asset: composition)
+
+            // Video leg: the SAME videoComposition the preview renders with
+            // (RENDER-01/CANVAS-01 — always attached, canvas-sized).
+            let videoTracks = composition.tracks(withMediaType: .video)
+            var videoReaderOutput: AVAssetReaderVideoCompositionOutput?
+            var writerVideoInput: AVAssetWriterInput?
+            if !videoTracks.isEmpty {
+                let readerOutput = AVAssetReaderVideoCompositionOutput(
+                    videoTracks: videoTracks,
+                    videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                )
+                readerOutput.alwaysCopiesSampleData = false
+                readerOutput.videoComposition = plan.videoComposition
+                guard videoReader.canAdd(readerOutput) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                videoReader.add(readerOutput)
+                videoReaderOutput = readerOutput
+
+                let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoOutputSettings)
+                input.expectsMediaDataInRealTime = false
+                guard writer.canAdd(input) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                writer.add(input)
+                writerVideoInput = input
+            }
+
+            // Audio leg: the composition's inline audio through the plan's
+            // audioMix (BUG-IOS-10 — volume/fades bake into the file), on its
+            // own reader with the writer's resolved format so the AAC input
+            // receives a matched stream.
+            let audioTracks = composition.tracks(withMediaType: .audio)
+            var audioReaderOutput: AVAssetReaderAudioMixOutput?
+            var writerAudioInput: AVAssetWriterInput?
+            if !audioTracks.isEmpty {
+                let output = AVAssetReaderAudioMixOutput(
+                    audioTracks: audioTracks,
+                    audioSettings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM,
+                        AVLinearPCMBitDepthKey: 16,
+                        AVLinearPCMIsFloatKey: false,
+                        AVLinearPCMIsBigEndianKey: false,
+                        AVLinearPCMIsNonInterleaved: false,
+                        AVSampleRateKey: audioSampleRate,
+                        AVNumberOfChannelsKey: audioChannelCount
+                    ]
+                )
+                output.audioMix = plan.audioMix
+                guard audioReader.canAdd(output) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                audioReader.add(output)
+                audioReaderOutput = output
+
+                let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
+                input.expectsMediaDataInRealTime = false
+                guard writer.canAdd(input) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                writer.add(input)
+                writerAudioInput = input
+            }
+
+            guard videoReader.startReading() else {
+                throw videoReader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            guard audioReader.startReading() else {
+                throw audioReader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            guard writer.startWriting() else {
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            writer.startSession(atSourceTime: .zero)
+
+            activeReaders = [videoReader, audioReader]
+            activeWriter = writer
+
+            let totalDuration = max(composition.duration.seconds, 1.0 / 600.0)
+            // Both pumps run CONCURRENTLY. With an audio writer input
+            // present, pumping video ALONE first stalls the video queue
+            // (measured 2026-08-26 on simulator: video-pump completion never
+            // fired while an audio input existed; no-audio and muted exports
+            // were clean; concurrent pumping completes both in seconds).
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                if let writerVideoInput, let videoReaderOutput {
+                    let videoOutput = SendableBox(value: videoReaderOutput as AVAssetReaderOutput)
+                    let videoInput = SendableBox(value: writerVideoInput)
+                    group.addTask {
+                        try await self.pumpSamples(
+                            output: videoOutput,
+                            input: videoInput,
+                            totalDuration: totalDuration
+                        )
+                    }
+                }
+                if let writerAudioInput, let audioReaderOutput {
+                    let audioOutputBox = SendableBox(value: audioReaderOutput as AVAssetReaderOutput)
+                    let audioInputBox = SendableBox(value: writerAudioInput)
+                    group.addTask {
+                        try await self.pumpSamples(
+                            output: audioOutputBox,
+                            input: audioInputBox,
+                            totalDuration: nil
+                        )
+                    }
+                }
+            }
+
+            for reader in activeReaders where reader.status == .failed {
+                throw reader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+
+            await Self.finishWriting(SendableBox(value: writer))
+            switch writer.status {
+            case .completed:
+                break
+            case .cancelled:
+                throw CancellationError()
+            default:
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+
             exportProgress = 1
             lastExportURL = outputURL
             finishExport()
-            activeOutputURL = nil
+            activeReaders.removeAll()
+            activeWriter = nil
             return outputURL
         } catch {
             removePartialOutput()
             finishExport()
+            activeReaders.removeAll()
+            activeWriter = nil
             throw error
         }
     }
 
+    /// Streams sample buffers from a reader output into a writer input,
+    /// driving the writer's pull model (Mac ExportEngine.pumpSamples parity).
+    /// `totalDuration` non-nil → progress reports by presentation time.
+    private nonisolated func pumpSamples(
+        output: SendableBox<AVAssetReaderOutput>,
+        input: SendableBox<AVAssetWriterInput>,
+        totalDuration: Double?
+    ) async throws {
+        let queue = DispatchQueue(label: "moviecut.ios.export.writer")
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
+                let writerInput = input.value
+                let readerOutput = output.value
+                while writerInput.isReadyForMoreMediaData {
+                    guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
+                        writerInput.markAsFinished()
+                        continuation.resume(returning: ())
+                        return
+                    }
+
+                    if let totalDuration, totalDuration > 0 {
+                        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                        if presentationTime.isFinite {
+                            let progress = min(max(presentationTime / totalDuration, 0), 1)
+                            Task { @MainActor [weak self] in
+                                self?.exportProgress = progress
+                            }
+                        }
+                    }
+
+                    if !writerInput.append(sampleBuffer) {
+                        continuation.resume(throwing: IOSExportEngineError.exportSessionCreationFailed)
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    /// Awaits an AVAssetWriter's completion handler off the main actor.
+    private static nonisolated func finishWriting(_ writer: SendableBox<AVAssetWriter>) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writer.value.finishWriting {
+                continuation.resume(returning: ())
+            }
+        }
+    }
+
+    /// Reader outputs and writer inputs are not Sendable; the pump owns them
+    /// for the transfer's duration and serializes access through the writer's
+    /// request queue.
+    private struct SendableBox<T>: @unchecked Sendable {
+        let value: T
+    }
+
     func cancelExport() {
+        // RENDER-02: the tagged-writer export cancels through its reader and
+        // writer; the in-flight export call then fails into the catch path,
+        // which removes the partial output (idempotent).
+        for reader in activeReaders {
+            reader.cancelReading()
+        }
+        activeReaders.removeAll()
+        activeWriter?.cancelWriting()
+        activeWriter = nil
         activeExportSession?.cancelExport()
         progressTask?.cancel()
         progressTask = nil
@@ -130,9 +337,7 @@ final class IOSExportEngine {
         lastExportURL = nil
         isExporting = false
         // UX-REC-01: a cancelled export leaves a truncated .mov at the output
-        // — remove it so the user never shares a broken artifact. The
-        // in-flight export call also fails into the catch path, which removes
-        // again (idempotent).
+        // — remove it so the user never shares a broken artifact.
         removePartialOutput()
     }
 
@@ -1059,25 +1264,11 @@ final class IOSExportEngine {
         return outputURL
     }
 
-    private func startProgressPolling() {
-        progressTask?.cancel()
-        progressTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-
-                if let activeExportSession {
-                    exportProgress = Double(activeExportSession.progress)
-                }
-
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-        }
-    }
-
     private func finishExport() {
         progressTask?.cancel()
         progressTask = nil
         activeExportSession = nil
+        activeOutputURL = nil
         isExporting = false
     }
 

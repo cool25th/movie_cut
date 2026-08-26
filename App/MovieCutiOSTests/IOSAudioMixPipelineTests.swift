@@ -97,11 +97,13 @@ struct IOSAudioMixPipelineTests {
 
         var samples: [Float] = []
         var sampleRate = 44_100.0
+        var channelCount = 1
         while let copy = output.copyNextSampleBuffer() {
             if samples.isEmpty,
                let format = CMSampleBufferGetFormatDescription(copy),
                let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format) {
                 sampleRate = asbd.pointee.mSampleRate
+                channelCount = max(1, Int(asbd.pointee.mChannelsPerFrame))
             }
 
             var list = AudioBufferList()
@@ -118,11 +120,22 @@ struct IOSAudioMixPipelineTests {
             ) == noErr else {
                 continue
             }
-            // Interleaved float settings → a single buffer holds all channels.
+            // Interleaved float settings → ONE buffer holds all channels per
+            // frame. mDataByteSize/4 counts SAMPLES (frames × channels); a
+            // stereo stream read that way doubles the timeline and interleaves
+            // L/R as consecutive time — channel 0 at stride `channelCount`
+            // keeps the mono-equivalent timeline (measurement bug that faked
+            // the RENDER-02 "fade smearing": preset exports were 44.1kHz mono
+            // so it stayed hidden until the writer produced 48kHz stereo).
             let audioBuffer = UnsafeMutableAudioBufferListPointer(&list)[0]
-            let frameCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Float>.size
-            if let data = audioBuffer.mData?.assumingMemoryBound(to: Float.self), frameCount > 0 {
-                samples.append(contentsOf: UnsafeBufferPointer(start: data, count: frameCount))
+            let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Float>.size
+            if let data = audioBuffer.mData?.assumingMemoryBound(to: Float.self), sampleCount > 0 {
+                let monoCount = sampleCount / channelCount
+                var mono = [Float](repeating: 0, count: monoCount)
+                for frame in 0..<monoCount {
+                    mono[frame] = data[frame * channelCount]
+                }
+                samples.append(contentsOf: mono)
             }
         }
 

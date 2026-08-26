@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-27 세션 (중단 WIP 인수 — ProjectStore ENOSPC fail-closed + ui_regression 무음 PASS 폐쇄)
+
+- **인수 경위(LI-003 3원칙)**: 타 세션 WIP 4파일 발견(ProjectStore·ENOSPC 테스트 신규·ui_regression·static contract) — 타임스탬프 1시간 40분 경과·실행 중 빌드 프로세스 없음·diff 전수 검토(일관된 단일 증분 판정) 후 프로토콜 0로 검증 마무리·커밋(49b7f87).
+- **내용**: ①`ProjectStore` 저장 흐름의 파일 I/O를 `ProjectFileWriting` 심으로 분리(생산 동작 불변) — temp 쓰기 실패 시 `FileOperationError.classify`(ENOSPC→.diskFull)로 표면화·temp 잔여 정리·커밋 미도달. ②`ProjectStoreENOSPCIntegrationTests` — 주입된 ENOSPC에서 기존 목적지 SHA256 바이트 동일 보존·커밋 0회·temp 잔여 0·.diskFull 분류 단언. ③`ui_regression.sh` — "캡처 없음/골든 없음"이 SKIP(무음 통과)이던 것을 FAIL로, 전체 실행은 캡처∪커밋 골든 합집합 검사(한쪽에만 있는 파일이 조용히 사라지는 것 차단), static contract로 고착.
+- **검증**: 신규 스위트 3테스트 PASS + verify_gate 5/5(Core 1,416·Mac/iOS 빌드·lint).
+- **주의**: ui_regression의 FAIL 강화로 AX 환경 차단 중 전체 회귀 실행은 (의도적으로) 실패함 — 환경 복구 전까지 회귀 PASS 실측은 U-08 잔여 상태 유지.
+
+### 다음 회차 — CA 큐 잔여 자율 행
+① **CA-08**(iOS 자막 스타일 6종·카라오케 이식 — 방향 문서 2단계 일치) ② CA-12(A/B 벤치마크 하니스) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
 ## 2026-08-27 세션 (CA-01 완료 — 오프라인 차단·캡처 실측, MC-02 ②③ 갱신)
 
 - **`scripts/run_ca01_offline_gate.sh` 신설·실측 PASS**: **Mac 다리** — sandbox-exec `(deny network*)` 프로파일(루프백 접속 거부 프로브로 프로파일 유효성 선입증 — 무효 프로파일의 공회전 PASS 차단) 하에서 파리티 하니스(임포트→프리뷰 덤프→출력) 완주(8,283바이트·2.0s 출력) + **sandboxd 네트워크 위반 0건**(시도조차 없음). **iOS 다리** — 시뮬레이터에서 G-27 전체 하니스(임포트→프리뷰→출력→오디오 라우팅→저장) 구동 중 `lsof -i -p` 폴링으로 소켓 캡처 — **최대 0개/36 샘플**.

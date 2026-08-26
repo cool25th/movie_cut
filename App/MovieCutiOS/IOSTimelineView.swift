@@ -10,9 +10,15 @@ struct IOSTimelineView: View {
     @State private var draggedClipId: UUID?
     @State private var dragInitialStartTime: TimeInterval?
     @GestureState private var dragTranslation: CGFloat = 0
+    // CA-19: the active snap target during a drag — drives the alignment
+    // guide line (Mac TimelineView parity).
+    @State private var snapGuideTime: TimeInterval? = nil
 
     private let secondsWidth: CGFloat = 38
     private let trackHeaderWidth: CGFloat = 76
+    /// CA-19: snap radius in points — a drag within this distance of a snap
+    /// target (other clips' edges, playhead, zero) locks to it.
+    private let snapRadius: CGFloat = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,6 +34,24 @@ struct IOSTimelineView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 16)
+                .overlay(alignment: .leading) {
+                    // CA-19: the alignment guide — a vertical line at the
+                    // active snap target, spanning all track lanes. The
+                    // user SEES what the clip aligned to, not just feels the
+                    // snap (Mac parity).
+                    if let guideTime = snapGuideTime, draggedClipId != nil {
+                        let x = CGFloat(guideTime) * secondsWidth
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(0.6))
+                            .frame(width: 1.5)
+                            .frame(maxHeight: .infinity)
+                            .offset(x: x + 14)  // + horizontal padding
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.1), value: snapGuideTime)
             }
         }
     }
@@ -167,7 +191,11 @@ struct IOSTimelineView: View {
             }
             .onEnded { value in
                 let initialStart = dragInitialStartTime ?? clip.timelineRange.start
-                let newStart = max(0, initialStart + Double(value.translation.width / secondsWidth))
+                let rawStart = max(0, initialStart + Double(value.translation.width / secondsWidth))
+                // CA-19: snap the final position to nearby targets (other
+                // clips' edges, playhead, zero) — the same guide set the Mac
+                // timeline snaps to.
+                let newStart = snappedTime(rawStart, excluding: clip.id)
 
                 Task {
                     await viewModel.moveClip(clipId: clip.id, newStart: newStart)
@@ -176,7 +204,37 @@ struct IOSTimelineView: View {
                 dragOffset = 0
                 draggedClipId = nil
                 dragInitialStartTime = nil
+                snapGuideTime = nil
             }
+    }
+
+    /// CA-19: returns the nearest snap point within the threshold, or the
+    /// raw time when no target is close enough. Snap targets are other
+    /// clips' start/end edges, the playhead, and zero — the same set the
+    /// Mac timeline uses. Also records the active snap target for the
+    /// alignment guide.
+    private func snappedTime(_ rawTime: Double, excluding clipId: UUID) -> Double {
+        let snapPoints = viewModel.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .filter { $0.id != clipId }
+            .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
+            + [viewModel.playheadTime, 0.0]
+
+        let threshold = Double(snapRadius / secondsWidth)
+        var nearest: (point: Double, distance: Double)?
+        for point in snapPoints {
+            let distance = abs(rawTime - point)
+            if distance < threshold && (nearest == nil || distance < nearest!.distance) {
+                nearest = (point, distance)
+            }
+        }
+
+        if let nearest {
+            snapGuideTime = nearest.point
+            return nearest.point
+        }
+        snapGuideTime = nil
+        return rawTime
     }
 
     private func clipSegments(for track: Track) -> [TimelineClipSegment] {

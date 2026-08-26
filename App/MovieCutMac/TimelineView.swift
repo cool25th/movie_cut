@@ -28,6 +28,9 @@ struct TimelineView: View {
     @State private var isRulerScrubbing = false
     @State private var isPlayheadScrubbing = false
     @State private var playheadDragStartTime: TimeInterval = 0
+    /// CA-19: the snap target the dragged clip is currently aligned to
+    /// (nil when the drag has no active snap). Drives the alignment guide.
+    @State private var snapGuideTime: TimeInterval? = nil
 
     private let trackHeight: CGFloat = 50
     private let rulerHeight: CGFloat = 24
@@ -122,6 +125,9 @@ struct TimelineView: View {
                         }
                     }
                     .background(MovieCutTheme.timelineBackground)
+                    .overlay {
+                        snapAlignmentGuide
+                    }
                 }
                 .coordinateSpace(name: TimelineFilmstripCoordinateSpace.viewport)
                 .background(timelineScrollViewportWidthReader)
@@ -1565,7 +1571,7 @@ struct TimelineView: View {
                 guard clipBodyDragMode == .move,
                       let initialRange = dragInitialTimelineRange else { return }
                 let rawStart = max(0, initialRange.start + Double(value.translation.width) / pixelsPerSecond)
-                let newStart = max(0, snappedTime(rawStart, allClips: allClips(excluding: clip.id)))
+                let newStart = max(0, snappedTimeWithGuide(rawStart, allClips: allClips(excluding: clip.id)))
 
                 updateClip(
                     clip.id,
@@ -1703,6 +1709,7 @@ struct TimelineView: View {
         clipBodyDragMode = nil
         dragInitialTimelineRange = nil
         dragInitialSourceRange = nil
+        snapGuideTime = nil
     }
 
     private func commitMove(for clipId: UUID) {
@@ -1769,17 +1776,54 @@ struct TimelineView: View {
         track.clipsForLayerDisplay
     }
 
-    private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
+    /// Snaps a raw time to the nearest clip boundary, marker, playhead, or
+    /// zero — CA-19: also records the snap target for the alignment guide.
+    @discardableResult
+    private func snappedTimeWithGuide(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
         let snapPoints = allClips.flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
             + sortedMarkers.map(\.time)
             + [viewModel.playheadTime, 0.0]
         let thresholdTime = threshold / pixelsPerSecond
+        var nearest: (point: Double, distance: Double)?
         for point in snapPoints {
-            if abs(rawTime - point) < thresholdTime {
-                return point
+            let distance = abs(rawTime - point)
+            if distance < thresholdTime && (nearest == nil || distance < nearest!.distance) {
+                nearest = (point, distance)
             }
         }
+        if let nearest {
+            snapGuideTime = nearest.point
+            return nearest.point
+        }
+        snapGuideTime = nil
         return rawTime
+    }
+
+    /// The CA-19 alignment guide — a vertical line at the active snap target,
+    /// spanning the ruler and all track lanes. Professional NLE feedback:
+    /// the user SEES what the clip aligned to, not just feels the snap.
+    @ViewBuilder
+    private var snapAlignmentGuide: some View {
+        if let guideTime = snapGuideTime, isDragging {
+            let x = CGFloat(guideTime) * CGFloat(pixelsPerSecond)
+            Rectangle()
+                .fill(Color.accentColor.opacity(0.6))
+                .frame(width: 1.5)
+                .frame(maxHeight: .infinity)
+                .position(x: x, y: 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Snap without guide tracking — trim gestures snap to the same targets
+    /// but don't drive the alignment guide (they manage their own visual
+    /// feedback through the clip's own edges).
+    private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
+        let savedGuide = snapGuideTime
+        let result = snappedTimeWithGuide(rawTime, allClips: allClips, threshold: threshold)
+        snapGuideTime = savedGuide
+        return result
     }
 
     private func colorForClip(clip: Clip, trackKind: TrackKind, selected: Bool) -> Color {

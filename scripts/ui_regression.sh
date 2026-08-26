@@ -80,8 +80,8 @@ compare_state() {
   local golden="$GOLDEN_DIR/golden_${state}.png"
 
   if [[ ! -s "$raw" ]]; then
-    echo "  ${state}: SKIP (no capture; capture may have failed for this state)"
-    return 0
+    echo "  ${state}: FAIL (no capture; capture may have failed for this state)"
+    return 1
   fi
 
   # Normalize before hashing so display-size changes don't churn goldens.
@@ -94,8 +94,8 @@ compare_state() {
   fi
 
   if [[ ! -s "$golden" ]]; then
-    echo "  ${state}: SKIP (no committed golden; run with --update-golden to create golden_${state}.png)"
-    return 0
+    echo "  ${state}: FAIL (no committed golden; run with --update-golden to create golden_${state}.png)"
+    return 1
   fi
 
   python3 - "$normalized" "$golden" "$THRESHOLD" "$REPORT" "$state" <<'PY'
@@ -135,7 +135,9 @@ if distance > threshold:
 PY
 }
 
-# Build the list of states to compare: the captured raw files define the set.
+# Build the list of states to compare. A targeted run checks exactly its
+# requested state. A normal all-state run checks the union of captures and
+# committed goldens so a missing file on either side cannot silently disappear.
 shopt -s nullglob
 states=()
 for raw in "$OUT_DIR"/moviecut_*_raw.png; do
@@ -145,6 +147,16 @@ for raw in "$OUT_DIR"/moviecut_*_raw.png; do
   state="${state%_raw.png}"            # <state>
   states+=("$state")
 done
+if [[ -n "$STATE_ARG" ]]; then
+  states=("$STATE_ARG")
+elif [[ "$UPDATE_GOLDEN" != "1" ]]; then
+  for golden in "$GOLDEN_DIR"/golden_*.png; do
+    base="$(basename "$golden")"
+    state="${base#golden_}"
+    state="${state%.png}"
+    [[ " ${states[*]} " == *" $state "* ]] || states+=("$state")
+  done
+fi
 shopt -u nullglob
 
 if [[ ${#states[@]} -eq 0 ]]; then
@@ -159,14 +171,15 @@ for s in "${states[@]}"; do
   compare_state "$s" || fail=1
 done
 
+if [[ "$fail" -ne 0 ]]; then
+  echo "=> UI REGRESSION FAILED (see FAIL rows above)" >&2
+  exit 1
+fi
+
 if [[ "$UPDATE_GOLDEN" == "1" ]]; then
   echo "" && echo "UI regression goldens updated (review and commit Tests/UIEvidence/)"
   exit 0
 fi
 
 echo "" && echo "report=$REPORT"
-if [[ "$fail" -ne 0 ]]; then
-  echo "=> UI REGRESSION FAILED (see FAIL rows above)" >&2
-  exit 1
-fi
 echo "=> UI REGRESSION PASS"

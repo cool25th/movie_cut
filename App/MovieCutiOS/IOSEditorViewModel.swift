@@ -843,6 +843,25 @@ final class IOSEditorViewModel {
         }
     }
 
+    /// CA-08: applies a built-in subtitle style preset to the SELECTED text
+    /// clip (Mac `applySubtitleStylePreset` parity). The preset configures
+    /// font/color/stroke/background/position/karaoke highlight in one tap —
+    /// text, word timings, karaoke flag, and animation stay with the clip.
+    func applySubtitleStylePreset(_ preset: SubtitleStylePreset) async {
+        guard let selectedClipId,
+              let clip = currentProject.timeline.tracks
+                  .flatMap(\.clips)
+                  .first(where: { $0.id == selectedClipId }),
+              var textContent = clip.textContent else {
+            lastErrorMessage = "Select a text clip before applying a style preset."
+            return
+        }
+
+        let canvasSize = currentProject.canvas.size
+        textContent = preset.applying(to: textContent, canvasSize: canvasSize)
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
+    }
+
     func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }

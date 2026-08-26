@@ -50,7 +50,7 @@
 | CA-05 | 실패·복구 UX 매트릭스(15 실패 시나리오 × 무손실/원인/재시도/이어하기/임시파일) | P0 | **완료(2026-08-24)** — `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md`: 15 시나리오 × 5축 파일:라인 근거. 13/15 완전 충족(CA-03 감사·외부 리뷰 반영이 전제). 신규 등록: UX-REC-01(P2 iOS 부분출력 잔존)·UX-REC-02(P2 iOS 복구 무음 채택) — §1.9 | 매트릭스 + 결함 우선순위화 (완료) |
 | CA-06 | 접근성 핵심 경로 매트릭스(임포트→편집→출력, VoiceOver 등) | P0 | **완료(2026-08-24)** — `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md`: Mac 핵심 경로 VoiceOver·키보드 전 충족(UX-08 계약+43 단축키). **iOS 차단 발견: A11Y-01(P1) 인스펙터 하위 뷰 5종 라벨 0건** + A11Y-02(P2)·A11Y-03(P3) — §1.10. 인스펙터 Picker 라벨 접힘은 이번에 수정 | 매트릭스 + 차단 결함 등록 (완료) |
 | CA-07 | 가격·판매 단위 결정(모델 선택·Universal Purchase) | P0 | **모델 확정(Q2: 일회성+유료 메이저 업데이트) — 구체 가격은 사용자 전용 유지** | 결정 기록 → REQUIREMENTS §13 반영 |
-| CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **즉시(방향 문서 2단계 "카라오케 스타일 편집"과 일치)** | iOS 파리티 시나리오 + 실기기 검증 |
+| CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **완료(2026-08-26)** — `IOSEditorViewModel.applySubtitleStylePreset`(Mac 패리티·SetClipPropertyCommand) + 인스펙터 "Subtitle Style" 섹션: Core `SubtitleStylePresets.builtins` 6종(Clean White/Bold Box/Yellow Pop/Shadow Soft/Mint Outline/Classic Serif) 수평 칩 + 색상 미리보기 원형 + 원탭 적용(undo 1-step). 카라오케 렌더링은 Core TextOverlayPixelProcessor가 이미 처리 | iOS 파리티 + 실기기 검증 |
 | CA-09/10 | N1-A 대사 검색 / N1-B 텍스트 기반 구간 선택 | P1 | 승인 대기(Q11 일괄 승인) | 검색 성공률·구간 이동 정확도 측정 |
 | CA-11 | N2 제안형 오토스타일 MVP(제안→미리보기→적용→undo — 자동화 4원칙 전항) | P1 | 승인 대기(기존 'N2 등록' 대기와 동일 건) | COMPETITIVE_ANALYSIS §1.5 원칙 전항 + 동일 입력 재현성 |
 | CA-12 | 경쟁사 A/B 벤치마크 하니스(조건 필드·12 fixture·PSNR/SSIM+블라인드) | P1 | **즉시 실행 가능(측정 인프라 — 방향 문서 4단계 게이트의 전진 구축)** | 하니스 + 기준 수치 최초 기록 |

@@ -4,6 +4,21 @@ import MovieCutCore
 import PhotosUI
 import SwiftUI
 
+/// CA-17: subtitle sidecar export formats — the same pair the Mac offers.
+enum SubtitleExportFormat: String, CaseIterable, Identifiable {
+    case srt = "srt"
+    case vtt = "vtt"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .srt: "SubRip (.srt)"
+        case .vtt: "WebVTT (.vtt)"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class IOSEditorViewModel {
@@ -15,6 +30,8 @@ final class IOSEditorViewModel {
     var exportEngine: IOSExportEngine = IOSExportEngine()
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
     var templateStore: TemplateStore
+    // CA-17: subtitle export state — SRT/VTT written from timeline text clips.
+    var lastSubtitleExportURL: URL? = nil
 
     private var session: EditorSession
     private let projectStore: ProjectStore
@@ -930,6 +947,63 @@ final class IOSEditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// CA-17: exports timeline text clips as a subtitle sidecar file
+    /// (SRT or VTT). Uses the same `SubtitleDocument` serializer the Mac
+    /// consumes, so the output is byte-identical across platforms.
+    /// Returns the written file URL, or nil when no text clips exist.
+    @discardableResult
+    func exportSubtitles(format: SubtitleExportFormat) -> URL? {
+        let segments = timelineSubtitleSegments()
+        guard !segments.isEmpty else {
+            lastErrorMessage = "There are no text clips to export as subtitles."
+            lastSubtitleExportURL = nil
+            return nil
+        }
+
+        let content: String
+        switch format {
+        case .srt:
+            content = SubtitleDocument.srtString(from: segments)
+        case .vtt:
+            content = SubtitleDocument.vttString(from: segments)
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCut-Subtitles")
+            .appendingPathExtension(format.rawValue)
+
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            lastSubtitleExportURL = url
+            lastErrorMessage = nil
+            return url
+        } catch {
+            lastErrorMessage = "Failed to write subtitles: \(error.localizedDescription)"
+            lastSubtitleExportURL = nil
+            return nil
+        }
+    }
+
+    /// CA-17: the subtitle segment set derived from timeline TEXT-track
+    /// clips (stickers excluded) — the same derivation the Mac export uses.
+    private func timelineSubtitleSegments() -> [TranscriptionSegment] {
+        currentProject.timeline.tracks
+            .filter { $0.kind == .text }
+            .flatMap(\.clips)
+            .compactMap { clip in
+                guard let content = clip.textContent, content.contentKind != .sticker else {
+                    return nil
+                }
+                return TranscriptionSegment(
+                    text: content.text,
+                    startTime: clip.timelineRange.start,
+                    endTime: clip.timelineRange.end,
+                    confidence: 1.0
+                )
+            }
+            .sorted { $0.startTime < $1.startTime }
     }
 
     func moveClip(clipId: UUID, newStart: TimeInterval) async {

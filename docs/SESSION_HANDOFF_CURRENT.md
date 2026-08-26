@@ -3,6 +3,20 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-27 세션 (CA 소형~중형 4건 + iOS 커브 UI + 후속 관찰 상환 — 직렬 세션)
+
+- **CA-08(iOS 자막 스타일 6종, 7ca8949)**: Core `SubtitleStylePresets.builtins` 6종(Clean White·Bold Box·Yellow Pop·Shadow Soft·Mint Outline·Classic Serif)을 iOS 인스펙터 "Subtitle Style" 섹션에서 원탭 적용 — `applySubtitleStylePreset`(Mac 패리티) + 수평 칩(색상 미리보기 원형·스트로크 테두리). 렌더링 변경 불필요(TextOverlayPixelProcessor 공유).
+- **CA-17(iOS 자막 export SRT/VTT, b03c62b)**: `exportSubtitles(format:)` — 텍스트 트랙 클립을 Core `SubtitleDocument`로 직렬화(Mac 바이트 동일) + 하단 툴바 "Subtitles" → confirmationDialog(SRT/VTT) → 상단 ShareLink.
+- **CA-19(iOS 타임라인 스냅+가이드, fa11902)**: 드래그 종료 시 다른 클립 가장자리·플레이헤드·0에 스냅(14pt 반경) + 액센트 가이드라인(Mac 패리티). 부수: Mac trim `snappedTime` 빌드 오류 수정.
+- **CA-22 1차(프록시 자동 생성, a789b58)**: `PlaybackSettings.autoGenerateProxyOnImport`(기본 true·Codable 하위호환) + 비디오 임포트 후 fire-and-forget 백그라운드 Task(중복 방지·thermal critical 스킵).
+- **iOS 커브 편집 UI(5e5e36b)**: 효과 인스펙터 Color Grade에 Tone Curves 추가 — 4채널 피커 + CurveEvaluator 미니 프리뷰(Canvas) + 6종 프리셋 칩(Linear/S-Curve/Fade Up/Fade Down/Boost/Reduce).
+- **후속 관찰 2건 상환(6499efc)**: Mac 하위 트랙 orientedForDisplay+fittedToCanvas(iOS 패리티) + 회전×전환 upright 실측.
+- **검증**: iOS 48/48·Mac 48/48·Core 1,417·verify_gate 5/5.
+- **병렬 세션(4시간 루프)**: CA-01(오프라인 차단 — sandbox 네트워크 거부 하 E2E·MC-02 ②③✅)·ENOSPC fail-closed 저장·ui_regression 무음 PASS 폐쇄(49b7f87)·iOS 커브 UI 연결.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **CA-12**(경쟁사 A/B 벤치마크 하니스 — PSNR/SSIM+블라인드·중형) ② CA-22 2차(프록시 설정 UI·취소·재개) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인).
+
 ## 2026-08-27 세션 (중단 WIP 인수 — ProjectStore ENOSPC fail-closed + ui_regression 무음 PASS 폐쇄)
 
 - **인수 경위(LI-003 3원칙)**: 타 세션 WIP 4파일 발견(ProjectStore·ENOSPC 테스트 신규·ui_regression·static contract) — 타임스탬프 1시간 40분 경과·실행 중 빌드 프로세스 없음·diff 전수 검토(일관된 단일 증분 판정) 후 프로토콜 0로 검증 마무리·커밋(49b7f87).

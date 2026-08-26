@@ -230,7 +230,194 @@ struct IOSEffectsInspectorView: View {
             inspectorSlider(title: "R", value: grade.gain.red, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.red))
             inspectorSlider(title: "G", value: grade.gain.green, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.green))
             inspectorSlider(title: "B", value: grade.gain.blue, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.blue))
+
+            toneCurvesSection(grade: grade)
         }
+    }
+
+    // MARK: - Tone Curves (iOS curve editing — Mac Inc 6 parity, touch-first)
+
+    private enum CurveChannel: String, CaseIterable, Identifiable {
+        case master, red, green, blue
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .master: "Master"
+            case .red: "Red"
+            case .green: "Green"
+            case .blue: "Blue"
+            }
+        }
+    }
+
+    @State private var selectedCurveChannel: CurveChannel = .master
+
+    /// Common curve shapes as presets — the touch-first alternative to the
+    /// Mac's draggable canvas. Each preset produces 3 control points
+    /// (endpoints + a midpoint at x=0.5).
+    private enum CurvePreset: String, CaseIterable, Identifiable {
+        case linear = "Linear"
+        case sCurve = "S-Curve"
+        case fadeUp = "Fade Up"
+        case fadeDown = "Fade Down"
+        case boost = "Boost"
+        case reduce = "Reduce"
+        var id: String { rawValue }
+
+        /// The midpoint's y value for this preset.
+        var midpointY: Double {
+            switch self {
+            case .linear: 0.5
+            case .sCurve: 0.5   // S-shape handled by a 3-point arrangement
+            case .fadeUp: 0.65
+            case .fadeDown: 0.35
+            case .boost: 0.55
+            case .reduce: 0.45
+            }
+        }
+
+        func points() -> [CurvePoint] {
+            let mid = midpointY
+            switch self {
+            case .linear:
+                return ColorCurves.identityPoints
+            case .sCurve:
+                // An S: shadows darken, highlights brighten
+                return [
+                    CurvePoint(x: 0, y: 0),
+                    CurvePoint(x: 0.25, y: 0.15),
+                    CurvePoint(x: 0.75, y: 0.85),
+                    CurvePoint(x: 1, y: 1),
+                ]
+            default:
+                return [
+                    CurvePoint(x: 0, y: 0),
+                    CurvePoint(x: 0.5, y: mid),
+                    CurvePoint(x: 1, y: 1),
+                ]
+            }
+        }
+    }
+
+    private func toneCurvesSection(grade: ColorGrade) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Tone Curves")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Picker("Channel", selection: $selectedCurveChannel) {
+                ForEach(CurveChannel.allCases) { channel in
+                    Text(channel.displayName).tag(channel)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            // Mini curve preview — sampled through the SAME evaluator the
+            // renderer consumes, so what you see is what renders.
+            curvePreview(for: selectedCurveChannel, in: grade)
+                .frame(height: 80)
+                .aspectRatio(1.6, contentMode: .fit)
+
+            // Preset chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(CurvePreset.allCases) { preset in
+                        presetChip(preset, for: selectedCurveChannel, in: grade)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A small curve visualization sampled through CurveEvaluator.
+    private func curvePreview(for channel: CurveChannel, in grade: ColorGrade) -> some View {
+        let curves = grade.curves ?? .identity
+        let points: [CurvePoint]
+        switch channel {
+        case .master: points = curves.master
+        case .red: points = curves.red
+        case .green: points = curves.green
+        case .blue: points = curves.blue
+        }
+
+        return Canvas { context, size in
+            // Identity diagonal reference
+            var diagonal = Path()
+            diagonal.move(to: .zero)
+            diagonal.addLine(to: CGPoint(x: size.width, y: size.height))
+            context.stroke(diagonal, with: .color(.secondary.opacity(0.3)), style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+
+            // The curve
+            var path = Path()
+            let samples = 48
+            for index in 0...samples {
+                let x = Double(index) / Double(samples)
+                let y = CurveEvaluator.evaluate(points: points, at: x)
+                let point = CGPoint(x: size.width * x, y: size.height * (1 - y))
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            context.stroke(path, with: .color(.accentColor), lineWidth: 2)
+        }
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel("Tone curve preview, \(channel.displayName)")
+        .accessibilityValue(
+            points == ColorCurves.identityPoints ? "Identity" : "\(points.count - 2) control points"
+        )
+    }
+
+    private func presetChip(_ preset: CurvePreset, for channel: CurveChannel, in grade: ColorGrade) -> some View {
+        let curves = grade.curves ?? .identity
+        let channelPoints: [CurvePoint]
+        switch channel {
+        case .master: channelPoints = curves.master
+        case .red: channelPoints = curves.red
+        case .green: channelPoints = curves.green
+        case .blue: channelPoints = curves.blue
+        }
+        let isActive = channelPoints.map { CurvePoint(x: $0.x, y: $0.y) } == preset.points().map { CurvePoint(x: $0.x, y: $0.y) }
+
+        return Button(preset.rawValue) {
+            applyCurvePreset(preset, to: channel, in: grade)
+        }
+        .font(.caption2.weight(isActive ? .semibold : .regular))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background {
+            if isActive {
+                Capsule().fill(Color.accentColor.opacity(0.2))
+            } else {
+                Capsule().fill(.quaternary)
+            }
+        }
+        .accessibilityLabel("\(preset.rawValue) curve preset")
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Applies a curve preset to the selected channel, preserving the other
+    /// channels. All-identity → nil commit keeps JSON byte-stable.
+    private func applyCurvePreset(_ preset: CurvePreset, to channel: CurveChannel, in grade: ColorGrade) {
+        var curves = grade.curves ?? .identity
+        let points = preset.points()
+        switch channel {
+        case .master: curves.master = points
+        case .red: curves.red = points
+        case .green: curves.green = points
+        case .blue: curves.blue = points
+        }
+
+        let updated = ColorGrade(
+            lift: grade.lift,
+            gamma: grade.gamma,
+            gain: grade.gain,
+            hslBands: grade.hslBands,
+            curves: curves.isIdentity ? nil : curves
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
     }
 
     private var maskSection: some View {

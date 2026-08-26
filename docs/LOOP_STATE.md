@@ -1,8 +1,8 @@
 상태: RUN
-현재 증분: 완료 = **G-02 Inc 6 — 톤 커브 에디터 UI(Mac)** — `ColorCurvesView` 채널 4종(마스터/R/G/B) 드래그 캔버스(렌더러와 동일 `CurveEvaluator` 샘플링·끝점 고정·x 단조 클램프·결정적 Add/Remove), 제스처 종료 시 4채널 단일 커맨드(undo 1-step/gesture)·identity→nil 커밋. **파리티 #16 `curves_only` 신설 실측 PASS(MAD 0.43)** — 밴드(#15)·커브 체인 독립 분리. Mac 유닛 48/48(커밋 매핑 3종 신설)·게이트 5/5(Core 1,416·208스위트). iOS 커브 편집 UI는 미연결(후속 관찰). ui_regression 골든 의도 드리프트 예상(AX 차단으로 갱신 불가 — 복구 시 with_color_grade 갱신).
-다음 증분(우선순위): **v1.6 체인 자율 항목 전부 소진 확인(2026-08-26 G-01 점검 완료)** — G-01 Inc2+(카라오케·스타일 6종)은 2026-08-22 갱신으로 이미 완료, `wordTimings` dead-value도 해소(`TextOverlayPixelProcessor:375`가 karaokeEnabled+wordTimings 소비). 체인 정리: G-15 AC5-7✅·U-08 코드수준✅·G-02 Inc5-6✅·G-01 Inc2+✅. **자율 실행 가능 항목 없음** — 이후 회차는 게이트 확인 후 보고로 마침. 신규 자율 후보는 외부 리뷰/감사 등록 시에만 추가. **대기(사용자)**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인 — 코어 파리티 대기 중).
+현재 증분: 완료 = **CA-01(P0) — 오프라인 차단·캡처 실측** — `run_ca01_offline_gate.sh` 신설·PASS: Mac은 sandbox-exec 네트워크 전면 거부(루프백 프로브로 프로파일 유효성 선입증) 하에서 파리티 하니스(임포트→프리뷰→출력) 완주 + **sandboxd 네트워크 위반 0건**, iOS는 시뮬레이터 G-27 전체 하니스 동안 **lsof 소켓 0개/36샘플** — 증거원장 **MC-02 ②③ ✅ 갱신**. set -e 함정 3건 고착(showBuildSettings 치환·`&&` 할당 행·**lsof exit 1 역설 — 기대 상태가 정상 종료 유발**). 게이트 5/5(Core 1,416). 이전: G-02 Inc 6 톤 커브 에디터(파리티 #16 MAD 0.43)·iOS 커브 UI 상환·CA-19·CA-22 1차·CA-17(병렬 세션).
+다음 증분(우선순위): CA 큐 잔여 자율 행 — ① **CA-08**(iOS 자막 스타일 6종·카라오케 이식 — 방향 문서 2단계 일치) ② CA-12(A/B 벤치마크 하니스) ③ CA-14/15(소형). v1.6 체인·§1.12 리뷰 파생·후속 관찰 전부 소진. **대기(사용자)**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인).
 **기존 결함 기록**: 자체 측정 게이트 5/5(1,416)·Mac 유닛 48/48·iOS 48/48. 실기기 검증 미실행. **병렬 세션 경합 주의**: pbxproj 손상 2회·LOOP_STATE 덮어쓰기 1회·중단 회차 WIP 1회(프로토콜 0 해결·LI-003) — 커밋 직전 git status/diff --stat 확인 유지.
-**범위 외 발견(후속 관찰)**: ~~iOS 커브 편집 UI 미연결~~ **상환(2026-08-26)** — iOS 효과 인스펙터의 Color Grade 섹션에 Tone Curves 추가: 4채널(Master/R/G/B) 세그먼트 피커 + CurveEvaluator 실측 견인 미니 프리뷰(Canvas) + 6종 프리셋 칩(Linear/S-Curve/Fade Up/Fade Down/Boost/Reduce)·identity→nil 커밋. ui_regression 골든 의도 드리프트(AX 복구 시 갱신). **CA-19 iOS 스냅+가이드 완료(2026-08-26)** — 드래그 종료 시 클립 가장자리·플레이헤드·0 스냅 + 액센트 가이드라인. 부수: Mac trim `snappedTime` 빌드 오류 수정.
+**범위 외 발견(후속 관찰)**: ui_regression 골든 의도 드리프트(AX 복구 시 갱신).
 대기 결정 사항: **PARITY-TOL-01**(허용치 vs 픽스처 ≥720p 재생성 — 권고 (a))·G-27 실기기 2종 연결+잠금 해제·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·CA-07 가격(사용자 전용)·CA-11·CA-13·CA-16(P2).
 마지막 커밋: (이 세션 증분·docs 커밋 — git log 참조)
-갱신: 2026-08-26 22:30
+갱신: 2026-08-27 00:35

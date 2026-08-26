@@ -260,6 +260,10 @@ struct InspectorEffectsSection: View {
             ColorHSLBandsView(bands: grade.hslBands) { bands in
                 updateColorGradeHSLBands(bands)
             }
+
+            ColorCurvesView(curves: grade.curves) { curves in
+                updateColorGradeCurves(curves)
+            }
         }
         .task(id: clip.id) {
             viewModel.refreshScopes()
@@ -301,6 +305,21 @@ struct InspectorEffectsSection: View {
             gain: grade.gain,
             hslBands: bands,
             curves: grade.curves
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
+    }
+
+    /// G-02 Inc 6: commits the curve editor's full channel set through the
+    /// same single command path, preserving the 3-way values and HSL bands.
+    /// Passing nil (every channel identity) keeps ungraded JSON clean.
+    private func updateColorGradeCurves(_ curves: ColorCurves?) {
+        let grade = clip.colorGrade ?? ColorGrade()
+        let updated = ColorGrade(
+            lift: grade.lift,
+            gamma: grade.gamma,
+            gain: grade.gain,
+            hslBands: grade.hslBands,
+            curves: curves
         )
         Task { await viewModel.updateSelectedColorGrade(updated) }
     }

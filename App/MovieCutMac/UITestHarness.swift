@@ -4383,6 +4383,25 @@ extension EditorViewModel {
                 )
             )
         }
+        // 8a1. G-02 Inc 6 curves-ONLY grade (master S-curve + red lift, no
+        //      3-way change, no HSL bands) — isolates the channel/master
+        //      curve chain the tone-curve editor commits, apart from the band
+        //      chain scenario 8a exercises.
+        if environment["MOVIECUT_UITEST_CURVES"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(
+                    curves: ColorCurves(
+                        master: [
+                            CurvePoint(x: 0.25, y: 0.15),
+                            CurvePoint(x: 0.75, y: 0.85)
+                        ],
+                        red: [
+                            CurvePoint(x: 0.5, y: 0.7)
+                        ]
+                    )
+                )
+            )
+        }
         // 8a2. Optical-flow slow-mo on the selected clip — parity mirror of the
         //     generic harness gate. Pair with SPEED_RATE to observe frame
         //     interpolation in preview+export.

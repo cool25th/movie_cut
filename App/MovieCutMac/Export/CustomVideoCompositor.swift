@@ -472,7 +472,16 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 continue
             }
 
-            var layerImage = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            // BUG-06/BUG-07 residuals (2026-08-26, 후속 관찰 상환): the lower
+            // layer needs the SAME orientation + canvas fit the primary gets —
+            // raw storage frames here rendered sideways at natural size.
+            var layerImage = Self.fittedToCanvas(
+                Self.orientedForDisplay(
+                    RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                    preferredTransform: effect.sourcePreferredTransform
+                ),
+                canvasSize: request.renderContext.size
+            )
             layerImage = applyClipEffects(
                 to: layerImage,
                 effect: effect,

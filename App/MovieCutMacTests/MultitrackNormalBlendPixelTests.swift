@@ -25,11 +25,21 @@ struct MultitrackNormalBlendPixelTests {
     private struct TrackSpec {
         let fixture: String
         let opacity: Double
+        let preferredTransform: CGAffineTransform
+
+        init(fixture: String, opacity: Double = 1, preferredTransform: CGAffineTransform = .identity) {
+            self.fixture = fixture
+            self.opacity = opacity
+            self.preferredTransform = preferredTransform
+        }
     }
 
     /// Inserts one composition track per spec (in order) and attaches a
     /// single 0–2s instruction carrying one clip effect per track.
-    private func buildComposition(_ specs: [TrackSpec]) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition) {
+    private func buildComposition(
+        _ specs: [TrackSpec],
+        renderSize: CGSize = CGSize(width: 320, height: 240)
+    ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition) {
         let composition = AVMutableComposition()
         let range = CMTimeRange(start: .zero, duration: CMTime(seconds: 2, preferredTimescale: 600))
 
@@ -52,6 +62,7 @@ struct MultitrackNormalBlendPixelTests {
                 opacity: spec.opacity,
                 colorCorrection: nil,
                 mask: nil,
+                sourcePreferredTransform: spec.preferredTransform,
                 includeIdentitySource: true
             )))
         }
@@ -63,7 +74,7 @@ struct MultitrackNormalBlendPixelTests {
         )
 
         let videoComposition = AVMutableVideoComposition()
-        videoComposition.renderSize = CGSize(width: 320, height: 240)
+        videoComposition.renderSize = renderSize
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.customVideoCompositorClass = CustomVideoCompositor.self
         videoComposition.instructions = [instruction]
@@ -131,5 +142,71 @@ struct MultitrackNormalBlendPixelTests {
         )
         #expect(mean.b > 180, "solid blue must render as blue, got \(mean)")
         #expect(mean.r < 60, "solid blue must not bleed red, got \(mean)")
+    }
+
+    /// 후속 관찰 상환 (2026-08-26): the Mac lower-track layer path was missing
+    /// BOTH the orientation and the canvas fit — a rotated track beneath an
+    /// overlay rendered sideways at natural size. This drives the REAL
+    /// compositor with the asymmetric rotated fixture (storage 320x240 + 90°
+    /// display matrix, upright = red top / blue bottom) as the BASE layer
+    /// under a 30%-opacity red overlay on a portrait 240x320 canvas.
+    @Test("rotated lower track renders oriented and fitted beneath an overlay (후속 관찰 a)")
+    func rotatedLowerTrackOrientsAndFits() async throws {
+        // The exact +90 transform the ca04 fixture generator writes.
+        let rotation = CGAffineTransform(translationX: 240, y: 0).rotated(by: .pi / 2)
+        let built = try await buildComposition(
+            [
+                TrackSpec(
+                    fixture: "ca04_rotated_asym_320x240_2s_90deg.mp4",
+                    opacity: 1,
+                    preferredTransform: rotation
+                ),
+                TrackSpec(fixture: "solid_red_320x240_2s_30fps.mp4", opacity: 0.3),
+            ],
+            renderSize: CGSize(width: 240, height: 320)
+        )
+
+        let generator = AVAssetImageGenerator(asset: built.composition)
+        generator.videoComposition = built.videoComposition
+        generator.maximumSize = CGSize(width: 240, height: 320)
+        let frame = try #require(
+            try generator.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil)
+        )
+
+        // Band means over a portrait frame (asymmetric content: upright = RED
+        // top / BLUE bottom; a 30% red overlay shifts every band by the same
+        // constant, so the ORIENTATION signal is the R-vs-B ordering).
+        let width = 24, height = 32
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(frame, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = try #require(context.data?.bindMemory(to: UInt8.self, capacity: width * height * 4))
+
+        func bandMean(_ rows: Range<Int>) -> (r: Double, b: Double) {
+            var r = 0.0, b = 0.0
+            for row in rows {
+                for column in 0..<width {
+                    let offset = (row * width + column) * 4
+                    r += Double(pixels[offset])
+                    b += Double(pixels[offset + 2])
+                }
+            }
+            let count = Double(rows.count * width)
+            return (r / count, b / count)
+        }
+
+        let top = bandMean(4..<13)
+        let bottom = bandMean(19..<28)
+
+        // Upright (fixed): top band = red beneath + red overlay → R dominates.
+        // Sideways (defect): the red half covers only the LEFT ~third at
+        // natural size, so both bands read as mostly canvas/overlay → weak.
+        #expect(top.r - top.b > 40,
+                "rotated lower track must render UPRIGHT (red on top), got top=\(top)")
+        #expect(bottom.b - bottom.r > 20,
+                "rotated lower track must render UPRIGHT (blue on bottom), got bottom=\(bottom)")
     }
 }

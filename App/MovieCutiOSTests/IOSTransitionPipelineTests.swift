@@ -143,4 +143,87 @@ struct IOSTransitionPipelineTests {
         let after = try await Self.meanFrameRGB(of: project, at: 2.5)
         #expect(after.b > 180 && after.r < 70, "after the window the frame must be pure blue, got \(after)")
     }
+
+    /// 후속 관찰 상환 (2026-08-26): rotation × transition combination. The
+    /// compositor's two-source branch orients each leg through the effect's
+    /// sourcePreferredTransform — a rotated outgoing source must enter the
+    /// blend UPRIGHT, not sideways.
+    @Test("rotated outgoing source transitions upright (후속 관찰 b)")
+    func rotatedOutgoingTransitionsUpright() async throws {
+        let rotatedId = UUID(), blueId = UUID()
+        let rotated = MediaAsset(originalURL: Self.fixtureURL("ca04_rotated_asym_320x240_2s_90deg.mp4"), kind: .video, duration: 2)
+        let blue = MediaAsset(originalURL: Self.fixtureURL("solid_blue_320x240_2s_30fps.mp4"), kind: .video, duration: 2)
+
+        var rotatedClip = Clip(
+            assetId: rotatedId,
+            kind: .video,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineRange: TimeRange(start: 0, duration: 2)
+        )
+        rotatedClip.transition = Transition(type: .crossDissolve, duration: 0.6)
+        let blueClip = Clip(
+            assetId: blueId,
+            kind: .video,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineRange: TimeRange(start: 2, duration: 2)
+        )
+
+        var project = Project(
+            name: "rotated-transition",
+            mediaLibrary: MediaLibrary(assets: [rotatedId: rotated, blueId: blue]),
+            timeline: Timeline(canvasSize: CGSize(width: 240, height: 320), tracks: [
+                Track(kind: .video, name: "V1", zIndex: 0, clips: [rotatedClip, blueClip])
+            ])
+        )
+        project.canvas = CanvasPreset(aspectRatio: .custom, customWidth: 240, customHeight: 320)
+
+        // BEFORE the transition window: the rotated clip must already render
+        // upright through the normal path (BUG-IOS-08 covers the single-track
+        // case; this pins it in the transition-carrying track shape).
+        let before = try await Self.meanFrameRGB(of: project, at: 0.5)
+        #expect(before.r > 90 && before.b > 90,
+                "upright asymmetric content shows both halves, got \(before)")
+
+        // Band measurement before the window: red on top / blue on bottom.
+        let plan = try await IOSExportEngine().makeRenderPlan(for: project)
+        let videoComposition = try #require(plan.videoComposition)
+        let generator = AVAssetImageGenerator(asset: plan.composition)
+        generator.videoComposition = videoComposition
+        generator.maximumSize = CGSize(width: 240, height: 320)
+        let frame = try #require(
+            try generator.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil)
+        )
+
+        let width = 24, height = 32
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(frame, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = try #require(context.data?.bindMemory(to: UInt8.self, capacity: width * height * 4))
+
+        func bandMean(_ rows: Range<Int>) -> (r: Double, b: Double) {
+            var r = 0.0, b = 0.0
+            for row in rows {
+                for column in 0..<width {
+                    let offset = (row * width + column) * 4
+                    r += Double(pixels[offset])
+                    b += Double(pixels[offset + 2])
+                }
+            }
+            let count = Double(rows.count * width)
+            return (r / count, b / count)
+        }
+
+        let top = bandMean(4..<13)
+        let bottom = bandMean(19..<28)
+        #expect(top.r - top.b > 40, "rotated outgoing must be upright pre-transition (red top), got \(top)")
+        #expect(bottom.b - bottom.r > 20, "rotated outgoing must be upright pre-transition (blue bottom), got \(bottom)")
+
+        // AFTER the window: pure blue incoming (letterboxed into the portrait
+        // canvas — 320x240 source fits 240x180 of 320 → mean b ≈ 130-140).
+        let after = try await Self.meanFrameRGB(of: project, at: 2.5)
+        #expect(after.b > 100 && after.r < 50, "after the window the incoming blue must dominate, got \(after)")
+    }
 }

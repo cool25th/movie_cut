@@ -1531,11 +1531,45 @@ final class EditorViewModel {
                 let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 selectedAssetId = asset.id
+                // CA-22: kick off background proxy generation for video
+                // imports when the user hasn't disabled it and thermal state
+                // permits. Fire-and-forget — the import returns immediately.
+                scheduleAutoProxyGeneration(for: asset)
             }
             try await refreshFromSession()
             reportMediaLibraryDropSuccess(count: urls.count)
         } catch {
             setDropError(error.localizedDescription)
+        }
+    }
+
+    /// CA-22: assets with in-flight auto proxy generations — prevents
+    /// duplicate work when the same asset is imported twice.
+    @ObservationIgnored
+    private var autoProxyInFlight: Set<UUID> = []
+
+    /// CA-22: schedules a background proxy generation for a newly imported
+    /// video asset. Checks the user's `autoGenerateProxyOnImport` setting and
+    /// the thermal state (critical → skip); the fire-and-forget Task means
+    /// the import flow never blocks on transcoding.
+    private func scheduleAutoProxyGeneration(for asset: MediaAsset) {
+        guard asset.kind == .video,
+              asset.proxy == nil,
+              currentProject.playbackSettings.autoGenerateProxyOnImport,
+              !autoProxyInFlight.contains(asset.id)
+        else { return }
+
+        // Critical thermal: generating a proxy now risks a thermal shutdown
+        // mid-encode. The user can still generate manually after cooling.
+        guard !ThermalState.current.shouldBlockExport else { return }
+
+        autoProxyInFlight.insert(asset.id)
+        let assetId = asset.id
+        Task { [weak self] in
+            await self?.generateProxy(for: assetId)
+            await MainActor.run {
+                self?.autoProxyInFlight.remove(assetId)
+            }
         }
     }
 

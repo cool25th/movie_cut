@@ -4258,10 +4258,13 @@ extension EditorViewModel {
     /// is independent so the 8 handoff scenarios are driven by combining env
     /// vars in the shell script.
     private func applyParityScenarioEdits(environment: [String: String]) async throws {
-        // 0. Ducking + chroma key (CA-12 A/B benchmark fixtures ⑦⑨) — the
-        //    generic dispatch exposes these gates, but the parity path never
-        //    reaches it (it terminates the app first), so mirror them here to
-        //    keep both entry points able to drive the same projects.
+        // Ducking + chroma key (CA-12 A/B benchmark fixtures ⑦⑨) — the
+        // generic dispatch exposes these gates, but the parity path never
+        // reaches it (it terminates the app first), so mirror them here to
+        // keep both entry points able to drive the same projects. NOTE: the
+        // ducking gate currently parks the parity path (BUG-CA12-01, §1.13) —
+        // mirrored anyway so the defect stays reproducible in one command
+        // until its root cause is fixed.
         if let bgmPath = environment["MOVIECUT_UITEST_DUCKING_BGM"],
            let voicePath = environment["MOVIECUT_UITEST_DUCKING_VOICE"],
            !bgmPath.isEmpty, !voicePath.isEmpty {

@@ -315,17 +315,19 @@
 
 > 원천: CA-12 첫 기준 수치 실측 중 하니스가 포획(`docs/CA12_AB_BENCHMARK_20260827.md` §6). 둘 다 기존 도구 교차검증으로 확정.
 
-### BUG-CA12-01 (P2 인프라) — 파리티 하니스×덕킹 조합의 태스크 파킹 — 미수정
+### BUG-CA12-01 (P2 인프라) — 파리티 하니스×덕킹 조합의 태스크 파킹 — 미수정(조사 심화됨)
 
-- 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴·`sample`로 continuation 파킹 확인). **결정론 재현 2회 동일**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
-- 범위 한정: 일반 경로(비-파리티) 덕킹 E2E는 run_e2e_export.sh에서 통과 중 → 사용자 경로 결함이 아니라 하니스 경로 한정. CHROMA_KEY 게이트는 ab07 정상 통과(무관). 영향: CA-12 fixture ⑨(덕킹+마스터체인)의 A측 수치 공백.
-- 최소화·수정은 별도 증분(파킹 지점은 `applyParityScenarioEdits` 복귀 후 composition 재구성 창 — `waitForCompositionReady` 진입부).
+- 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴). **결정론 재현**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
+- **조사 결과(2026-08-27 심화)**: ①파킹은 composition 재구성 이후 **첫 필수 서스펜션 지점마다 이동** — 순서 재배열(덕킹을 비억제 창에서 먼저 실행)로 composition_ready까지는 통과하지만 스냅샷 대기 루프에서 동일 파킹(→재배열은 폐기). ②`Task.sleep`·`Task.yield` 모두 재개 안 됨(시계 문제 아님). ③**`DispatchQueue.main.async` 블록도 전달 안 됨(GCD 레벨)** — 반면 앱 활성화 등 런루프 이벤트는 계속 처리됨(메인 런루프 모드 kCFRunLoopDefaultMode 정상·lldb 확인). ④전역 협력 풀은 생존(detached 하트비트 1틱 기록) — 이후 MainActor.run 홉에서 정지. ⑤덕킹 **램프 적용(APPLY)과 무관**(오디오 트랙 존재 자체가 트리거)·크로마키 게이트는 무관·일반 경로 덕킹 E2E는 통과. 종합: **메인 디스패치 큐의 전달이 영구 정지하는 OS/AVFoundation 계열 결함**(W4 ProRes 교찰의 "once-continuation 파킹(Apple측)"과 같은 부류로 추정) — 루프 내 도구로는 근본 원인 특정 불가.
+- 부산물(유지): `snapshotFrame`의 seek completion 누수 방어 와치독(2s 경합·1회 재개 보장 — AVPlayer 공식 문서상 완전 핸들러 미보장 클래스). 파리티 스윕 13/13 무회귀 확인.
+- 잔여: 재현은 1커맨드로 고정됨(ab09). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
 
-### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정
+### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정(메커니즘 확정·G-29 연계)
 
-- 증상: `ca04_bt2020pq` 소스 패스스루에서 프리뷰 PNG 대비 출력 PSNR 15.1dB·ΔE mean 10.98. **기존 파리티 비교기 교차 FAIL(MAD 11.26 vs 허용 2.0)** — CA-12 pair 메트릭 정합성 확인 완료.
-- 맥락: CA-04 매트릭스는 출력 태그(bt709 재태그·ffprobe)만 확인했고 픽셀 파리티는 미측정. G-29의 RenderColorConfiguration 수정(08-17)이 HDR 태그 소스까지 커버하지 않는 것으로 보임 — 색 해석 경로 감사 필요(우선순위는 감사 후 판정).
-- 참고: VFR 소스(ab11)의 timestamp 매칭 편차(MAD 78)는 결함이 아니라 VFR→CFR 재표본화의 측정 정의 한계로 기록됨(CA12 문서 §6 발견 2·6).
+- 증상: `ca04_bt2020pq` 소스 패스스루에서 프리뷰 PNG 대비 출력 PSNR 15.1dB·ΔE mean 10.98. 기존 파리티 비교기 교차 FAIL(MAD 11.26 vs 허용 2.0) — CA-12 pair 메트릭 정합성 확인 완료.
+- **메커니즘 확정(2026-08-27)**: 대부분 밴드는 일치(Δ≤2)하나 **고채도 시안 밴드만 프리뷰에서 핑크로 뒤집힘** — 프리뷰(plain 경로·플레이어 다리)는 AVFoundation이 HDR 태그 소스를 SDR 렌더 표면에 맞춰 변환하며 그 변환이 범위 밖 색을 뒤집는 것. 출력은 원시 재해석(bt2020 매트릭스 RGB 그대로 — CA-04가 검증한 v1 SDR 계약·소스 프레임과 MAD 2.49로 충실).
+- **시도·부정된 수정 2건**: ①스냅샷 최종 변환의 작업공간 고정(`RenderColorConfiguration.sourceImage`) — 버퍼가 이미 변환돼 도착해 효과 없음(측정 MAD 11.13→11.07 노이즈). ②합성 색 삼중항 Rec.709 명시(player+reader 양 다리) — reader 다리는 삼중항을 색 변환에 소비하지 않아 효과 없음(11.07). 둘 다 폐기(측정 증거 없는 배선 금지 원칙). ①의 스냅샷 고정은 후속 HDR 파이프라인을 위한 원칙적 핀으로만 유지(주석에 행동 중립 명시).
+- 본수정 방향: 양 다리가 동일 해석을 하도록 **HDR 인입 형식을 수용하는 컴포지터 + 공유 변환** 필요 — G-29(HDR-ready 파이프라인, 3단계)의 입력 요구사항으로 이관. 혼합(HDR+SDR) 소스 프로젝트의 처리 정책도 함께 설계 대상.
 
 ---
 

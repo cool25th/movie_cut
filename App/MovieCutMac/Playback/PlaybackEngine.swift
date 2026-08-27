@@ -330,13 +330,34 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
         currentTime = targetTime
         let itemTime = CMTime(seconds: targetTime, preferredTimescale: 600)
+        // BUG-CA12-01 (second park): AVPlayer does NOT guarantee the seek
+        // completion handler fires — an interrupted seek (e.g. the racing
+        // restorePlaybackAfterRebuild seek) drops it, which leaked this
+        // continuation forever and parked the parity harness at its first
+        // snapshot. Race the handler with a watchdog and resume exactly once
+        // whichever fires first; a late handler resume is a no-op.
+        final class ResumeOnce: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func run(_ body: () -> Void) {
+                lock.lock(); defer { lock.unlock() }
+                guard !done else { return }
+                done = true
+                body()
+            }
+        }
+        let resumeOnce = ResumeOnce()
         await withCheckedContinuation { continuation in
             player.seek(
                 to: itemTime,
                 toleranceBefore: .zero,
                 toleranceAfter: .zero
             ) { _ in
-                continuation.resume()
+                resumeOnce.run { continuation.resume() }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                resumeOnce.run { continuation.resume() }
             }
         }
 
@@ -387,7 +408,17 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     }
 
     private static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        // Interpret the snapshot buffer as the pinned working space, not the
+        // buffer's own ICC tag — the same input override every compositor
+        // input uses (RenderColorConfiguration.sourceImage), applied to the
+        // snapshot last mile so this surface can never introduce a color
+        // interpretation the render pipeline doesn't. (BUG-CA12-02 note: for
+        // HDR-tagged sources the plain-path player leg already delivers
+        // engine-converted SDR values here, so this pin is behavior-neutral
+        // today — measured 2026-08-27 — and exists to keep the snapshot from
+        // adding a SECOND conversion when the HDR pipeline starts handing
+        // raw tagged buffers through.)
+        let ciImage = RenderColorConfiguration.sourceImage(from: pixelBuffer)
         let context = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
         return context.createCGImage(ciImage, from: ciImage.extent)
     }

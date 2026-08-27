@@ -53,7 +53,7 @@
 | CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **완료(2026-08-26)** — `IOSEditorViewModel.applySubtitleStylePreset`(Mac 패리티·SetClipPropertyCommand) + 인스펙터 "Subtitle Style" 섹션: Core `SubtitleStylePresets.builtins` 6종(Clean White/Bold Box/Yellow Pop/Shadow Soft/Mint Outline/Classic Serif) 수평 칩 + 색상 미리보기 원형 + 원탭 적용(undo 1-step). 카라오케 렌더링은 Core TextOverlayPixelProcessor가 이미 처리 | iOS 파리티 + 실기기 검증 |
 | CA-09/10 | N1-A 대사 검색 / N1-B 텍스트 기반 구간 선택 | P1 | 승인 대기(Q11 일괄 승인) | 검색 성공률·구간 이동 정확도 측정 |
 | CA-11 | N2 제안형 오토스타일 MVP(제안→미리보기→적용→undo — 자동화 4원칙 전항) | P1 | 승인 대기(기존 'N2 등록' 대기와 동일 건) | COMPETITIVE_ANALYSIS §1.5 원칙 전항 + 동일 입력 재현성 |
-| CA-12 | 경쟁사 A/B 벤치마크 하니스(조건 필드·12 fixture·PSNR/SSIM+블라인드) | P1 | **즉시 실행 가능(측정 인프라 — 방향 문서 4단계 게이트의 전진 구축)** | 하니스 + 기준 수치 최초 기록 |
+| CA-12 | 경쟁사 A/B 벤치마크 하니스(조건 필드·12 fixture·PSNR/SSIM+블라인드) | P1 | **완료(2026-08-27)** — `ab_benchmark_metrics.py`(single/pair/blind/self-test 15종 — PSNR·SSIM·ΔE·banding·clipping·VFR·sync·loudness) + `make_ab_fixtures.sh`(12 fixture·SHA-256 핀=세트 버전 관리) + `run_ca12_ab_benchmark.sh`(§1.4 조건 필드·실앱 구동·RTF/RSS·baseline.json) + 하니스 게이트 CHROMA_KEY·export_wall_s. **첫 기준 수치 11/12 fixture 실측 기록**(`CA12_AB_BENCHMARK_20260827.md` — 30분 RTF 0.299·2시간 RTF 0.348·A/V Δ0.000s·peakRSS 5,054MB 등). 발견 등록: §1.13 BUG-CA12-01(파리티×덕킹 파킹)·BUG-CA12-02(HDR 파리티 위반) | 하니스 + 기준 수치 최초 기록 (완료 — B측 블라인드 평가는 경쟁사 출력 확보 시) |
 | CA-13 | 폰트 패키징 정책(N5 — 라이선스 경고·프로젝트 포함·PostScript 충돌) | P1 | 승인 대기(라이선스 검토 선행) | 정책 문서 + 구현 |
 | CA-14/15 | 비트 감지 iOS UI / 현지화·텍스트 품질 감사 | P1 | 즉시(소형 — G-09 Inc3 이후 슬롯) | 파리티/감사 보고 |
 | CA-16 | [P2 묶음] N1-C/D·매치컬러·애니메이션 스티커·보이스 체인저·업로드 보조·iOS 프록시·배치 export·**Auditions 테이크 비교(2026-08-23 v4 보류 편입 — 중간 규모·FCP 고유 패러다임, 베타 반응 후)** — 벡터스코프 제거(2026-08-23: 이미 구현 `InspectorEffectsSection.swift:200`) | P2 | 베타 반응 후 | 각 항목 DoD |
@@ -70,7 +70,7 @@
 | CA-27 | Timecode 직접 입력 — `PreviewPanel` 표시 전용이었음(2026-08-23 확인). 키보드 완결성·정밀 탐색(Q6 핵심 경로 정합) | 소형 | **완료(2026-08-23)** — Core `TimecodeParser`(SS·MM:SS·MM:SS:FF·HH:MM:SS:FF, 무효 입력 nil 명시적 실패)+유닛테스트 6건(Exact)+현재 시간 배지 편집 필드화(제출·포커스 상실 시 seek, 무효 입력 상태 메시지·원복)+VoiceOver 라벨+표시 fps를 프로젝트 프레임레이트로 정통화(기존 30 고정 오류)+StaticContract 2건 갱신·ko 문자열 3건 추가 | 게이트 5단계 통과(1,351 테스트) |
 | CA-28 | RGB 파레이드 스코프 — `parade` 0건(2026-08-23 확인, 벡터스코프는 존재). `ScopeViews` 확장 소형 | 소형 | **완료(2026-08-24)** — Core `ScopeAnalyzer.rgbParade`(lumaWaveform과 동일 빈ning 계약의 R/G/B 채널별 파형)+골든 테스트 4건(채널 분리·x 램프 추적·혼합 픽셀 독립 빈ning·퇴화 가드, Exact)+Mac `RGBParadeView`(R/G/B 패널, WaveformView와 동일 렌더링 계약)+인스펙터 노출(그레이딩 패널 waveform/vectorscope 행 아래)+접근성 라벨/값(영어 키+en/ko). 기존 스코프(histogram·waveform·vectorscope) 무변경·회귀 없음 | 게이트 5단계 통과 |
 
-**실행 규칙**: CA-01·02·03·04·05·06·08·12·14·15·17·19·22·24·26·27는 즉시 실행(03~06은 2026-08-24 방향 문서 §3 v1.1 반영으로 자격 확보), CA-28 완료, CA-18·21은 측정 단계만, CA-20·23·25는 등록 완료(실행 조건 도달 시), 나머지는 승인 대기. AI 음성(TTS 보이스 확장)은 **등록 보류(2026-08-23 승인 — 베타 반응 후 재상정)**. 루프 회차 보고에는 '승인 대기' 항목을 항상 나열한다.
+**실행 규칙**: CA-02·04·05·06·08·12·24·26·27·28 완료, CA-01 완료, CA-14·15·17·19·22 잔여 즉시 실행 가능, CA-18·21은 측정 단계만, CA-20·23·25는 등록 완료(실행 조건 도달 시), 나머지는 승인 대기. AI 음성(TTS 보이스 확장)은 **등록 보류(2026-08-23 승인 — 베타 반응 후 재상정)**. 루프 회차 보고에는 '승인 대기' 항목을 항상 나열한다.
 
 ---
 
@@ -308,6 +308,24 @@
 
 - `IOSEffectsInspectorView.swift` 57-354의 한글 리터럴 31곳이 카탈로그 키를 우회(source language en인데 영어 환경에서도 한국어 표시). 카탈로그에 이미 대응 키 다수 존재 — 영어 키 교체 + 부족 키 등록 + Swift 소스 Hangul 리터럴 차단 CI 검사. 함께: G-27 시뮬레이터 하니스가 공유 렌더 계획(`IOSExportEngine.makeRenderPlan`)이 아닌 레거시 `IOSPreviewCompositionBuilder` 사용(드리프트 위험) → 하니스 교체 후 레거시 빌더 삭제.
 - 수정(2026-08-26): 31곳 영어 키 교체(verbatim 2건 포함) + 카탈로그 18키 등록 + `scripts/verify_no_hangul_literals.py` CI 차단 도입(4d881cb). G-27 하니스는 `makeRenderPlan` 구동으로 교체 + 레거시 빌더 삭제(012c10e).
+
+---
+
+## 1.13 CA-12 벤치마크 하니스 발견 결함 (2026-08-27 등록)
+
+> 원천: CA-12 첫 기준 수치 실측 중 하니스가 포획(`docs/CA12_AB_BENCHMARK_20260827.md` §6). 둘 다 기존 도구 교차검증으로 확정.
+
+### BUG-CA12-01 (P2 인프라) — 파리티 하니스×덕킹 조합의 태스크 파킹 — 미수정
+
+- 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴·`sample`로 continuation 파킹 확인). **결정론 재현 2회 동일**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
+- 범위 한정: 일반 경로(비-파리티) 덕킹 E2E는 run_e2e_export.sh에서 통과 중 → 사용자 경로 결함이 아니라 하니스 경로 한정. CHROMA_KEY 게이트는 ab07 정상 통과(무관). 영향: CA-12 fixture ⑨(덕킹+마스터체인)의 A측 수치 공백.
+- 최소화·수정은 별도 증분(파킹 지점은 `applyParityScenarioEdits` 복귀 후 composition 재구성 창 — `waitForCompositionReady` 진입부).
+
+### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정
+
+- 증상: `ca04_bt2020pq` 소스 패스스루에서 프리뷰 PNG 대비 출력 PSNR 15.1dB·ΔE mean 10.98. **기존 파리티 비교기 교차 FAIL(MAD 11.26 vs 허용 2.0)** — CA-12 pair 메트릭 정합성 확인 완료.
+- 맥락: CA-04 매트릭스는 출력 태그(bt709 재태그·ffprobe)만 확인했고 픽셀 파리티는 미측정. G-29의 RenderColorConfiguration 수정(08-17)이 HDR 태그 소스까지 커버하지 않는 것으로 보임 — 색 해석 경로 감사 필요(우선순위는 감사 후 판정).
+- 참고: VFR 소스(ab11)의 timestamp 매칭 편차(MAD 78)는 결함이 아니라 VFR→CFR 재표본화의 측정 정의 한계로 기록됨(CA12 문서 §6 발견 2·6).
 
 ---
 

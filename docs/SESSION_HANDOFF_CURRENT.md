@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-27 세션 (CA-12 완료 — 경쟁사 A/B 벤치마크 하니스 + 기준 수치 최초 기록)
+
+- **환경 사건**: 세션 시작 시 데이터 볼륨 **100%(가용 163MB)** — CA-12 픽스처 생성 불가 상태. 재생 가능 캐시만 정리(/tmp 세션 임시 434MB·Xcode DerivedData 2곳 908MB·xcresult 176MB ≈ 1.5GB — 사용자 데이터 무손상)로 회복, 이후 purgeable 정산으로 27Gi까지 안정. 부수: 7.5GB ab12 출력은 메트릭 기록 후 러너가 자동 프루닝(13Gi 유지). **데이터 볼륨 용량은 사용자 관리 필요**.
+- **하니스 3종**: ①`scripts/ab_benchmark_metrics.py` — `single`(절대 지표: 코덱/색태그/chroma·비트레이트·키프레임·CFR/VFR·클리핑/크러시/banding·LUFS/true-peak·A/V sync) `pair`(무손실 프리뷰 PNG 참조 대비 PSNR 전역/프레임·block SSIM·MAD p95/max·CIE76 ΔE) `blind`(시드 랜덤화 투표+채점 왕복) `self-test` **15/15 PASS**(해석값 고정). ②`scripts/make_ab_fixtures.sh` — Part 5 §3의 12 대표 fixture 결정적 생성(장편 2종은 축소 스케일 명시)+SHA-256 핀 테이블=세트 버전 관리+manifest.json. ③`scripts/run_ca12_ab_benchmark.sh` — §1.4 조건 필드 전항 기록·실앱 구동(RSS 폴링·와치독)·RTF(encode 구간 격리 시계)·baseline.json·블라인드 A측 스테이징+거대 출력 프루닝.
+- **하니스 게이트(Swift)**: `MOVIECUT_UITEST_CHROMA_KEY=1`(실제 SetClipPropertyCommand 경로·⑦) + `export_wall_s`(일반·파리티 양 경로 — §1.4 앱 전체 vs encode 분리) + 파리티 경로 DUCKING/CHROMA_KEY 미러링(파리티는 앱 종료로 일반 플로우에 도달 못 함).
+- **첫 기준 수치(11/12 fixture 실측**, `CA12_AB_BENCHMARK_20260827.md`§5): 소형 RTF 0.24~0.44·30분 0.299(peakRSS 1,387MB)·2시간 0.348(peakRSS 5,054MB·**A/V 싱크 Δ0.000s**). 전 출력 기본 캔버스 1920x1080(4K 소스 다운스케일 — 조건 기록). 해석 규칙 발견: pair 지표는 동일 스케일 fixture 간 비교로 한정(업스케일 소스는 보간 차이가 지배).
+- **발견 등록(§1.13)**: **BUG-CA12-01**(P2 인프라) — 파리티×덕킹 조합 태스크 파킹(`scenarios_applied`에서 0% CPU 정지·결정론 재현 2회·일반 경로는 통과 — ⑨ 수치 공백). **BUG-CA12-02**(P1 후보) — HDR(BT.2020+PQ) 태그 소스 preview↔export 픽셀 발산(PSNR 15.1dB·기존 비교기 교차 FAIL MAD 11.26 vs 허용 2.0 — CA-04는 태그만 확인하고 픽셀 파리티 미측정이었음). VFR timestamp 편차(MAD 78)는 측정 정의 한계로 기록(결함 아님).
+- **검증**: self-test 15/15·블라인드 왕복·파리티 비교기 교차(ab03/ab11)·verify_gate 5/5.
+- **부수**: 러너 fixture 접두사 선택 버그 수정(ab03→ab03_hdr_10bit 매칭)·CFR 판정 B-프레임 정렬 수정·blind --tally 인자 검증 순서 수정.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **BUG-CA12-02 감사**(HDR 색 해석 경로 — P1 후보·G-29 연계) ② BUG-CA12-01 최소화(파리티×덕킹 파킹) 또는 CA-22 2차(프록시 설정 UI·취소·재개) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인)·디스크 용량(데이터 볼륨 만약 — 캐시 정리는 1회 수행됨).
+
 ## 2026-08-27 세션 (CA 소형~중형 4건 + iOS 커브 UI + 후속 관찰 상환 — 직렬 세션)
 
 - **CA-08(iOS 자막 스타일 6종, 7ca8949)**: Core `SubtitleStylePresets.builtins` 6종(Clean White·Bold Box·Yellow Pop·Shadow Soft·Mint Outline·Classic Serif)을 iOS 인스펙터 "Subtitle Style" 섹션에서 원탭 적용 — `applySubtitleStylePreset`(Mac 패리티) + 수평 칩(색상 미리보기 원형·스트로크 테두리). 렌더링 변경 불필요(TextOverlayPixelProcessor 공유).

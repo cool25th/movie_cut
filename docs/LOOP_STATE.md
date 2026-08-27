@@ -1,8 +1,8 @@
 상태: RUN
-현재 증분: 완료 = **CA 소형~중형 4건 + 루프 병렬 3건(2026-08-27)** — 병렬 세션: CA-01(오프라인 차단·캡처 — sandbox-exec 네트워크 거부 하 E2E 완주·소켓 0개·MC-02 ②③✅)·ENOSPC fail-closed 저장(49b7f87)·ui_regression 무음 PASS 폐쇄. 직렬 세션: **CA-08**(iOS 자막 스타일 6종 — Core SubtitleStylePresets 원탭 적용·인스펙터 칩·7ca8949)·**CA-17**(iOS 자막 export SRT/VTT — SubtitleDocument 공유·confirmationDialog→ShareLink·b03c62b)·**CA-19**(iOS 타임라인 스냅+가이드라인 — Mac 패리티·14pt 반경·fa11902)·**CA-22 1차**(프록시 자동 생성 — PlaybackSettings.autoGenerateProxyOnImport + 백그라운드 Task·a789b58). 부수: Mac trim snappedTime 빌드 오류 수정·iOS 커브 편집 UI(5e5e36b)·후속 관찰 2건 상환(6499efc). 게이트 5/5(Core 1,417).
-다음 증분(우선순위): **CA-12**(경쟁사 A/B 벤치마크 하니스 — PSNR/SSIM+블라인드·중형) → CA-22 2차(프록시 설정 UI·취소·재개) → CA-14/15(소형). v1.6 체인·§1.12 리뷰 파생·후속 관찰 전부 소진. **대기(사용자)**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인).
-**기존 결함 기록**: 자체 측정 게이트 5/5(1,417)·Mac 유닛 48/48·iOS 48/48. 실기기 검증 미실행. **병렬 세션 경합 주의**: pbxproj 손상 2회·LOOP_STATE 덮어쓰기 1회·중단 회차 WIP 2회(프로토콜 0 해결·LI-003) — 커밋 직전 git status/diff --stat 확인 유지.
-**범위 외 발견(후속 관찰)**: ui_regression 골든 의도 드리프트(AX 복구 시 갱신).
+현재 증분: 완료 = **CA-12(경쟁사 A/B 벤치마크 하니스 + 기준 수치 최초 기록, 2026-08-27)** — `ab_benchmark_metrics.py`(single/pair/blind·self-test 15종 PASS — PSNR·SSIM·ΔE·banding·clipping·chroma·키프레임·VFR/CFR·A/V sync·loudness/true-peak) + `make_ab_fixtures.sh`(12 대표 fixture·SHA-256 핀=세트 버전 관리) + `run_ca12_ab_benchmark.sh`(§1.4 조건 필드·실앱 구동·RTF/RSS·와치독·baseline.json·블라인드 A측 스테이징) + 하니스 CHROMA_KEY 게이트·export_wall_s(앱 전체 vs encode 분리). **첫 기준 수치 11/12 fixture 실측**(`CA12_AB_BENCHMARK_20260827.md`): 30분 RTF 0.299·2시간 RTF 0.348(peakRSS 5,054MB·A/V Δ0.000s)·소형 0.24~0.44. 발견 등록 §1.13: **BUG-CA12-01**(파리티×덕킹 파킹 — 결정론 재현·⑨ 수치 공백)·**BUG-CA12-02**(HDR 태그 소스 preview↔export 발산 — 기존 비교기 교차 FAIL MAD 11.26). 부수: 디스크 100%(163MB) → 재생 가능 캐시 1.5GB 정리로 회복(purgeable 정산 후 27Gi — 세션 중 7.5GB ab12 출력 프루닝으로 13Gi 유지).
+다음 증분(우선순위): **BUG-CA12-02 감사**(HDR 색 해석 경로 — P1 후보) → CA-22 2차(프록시 설정 UI·취소·재개) → CA-14/15(소형). **대기(사용자)**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인)·**디스크 용량 회피 지속 관찰**(데이터 볼륨 만약 — 재생 가능 캐시 정리는 1회 수행됨).
+**기존 결함 기록**: 자체 측정 게이트 5/5·Mac 유닛 48/48·iOS 48/48. 실기기 검증 미실행. **병렬 세션 경합 주의**: pbxproj 손상 2회·LOOP_STATE 덮어쓰기 1회·중단 회차 WIP 2회(프로토콜 0 해결·LI-003) — 커밋 직전 git status/diff --stat 확인 유지.
+**범위 외 발견(후속 관찰)**: ui_regression 골든 의도 드리프트(AX 복구 시 갱신)·VFR timestamp 매칭 편차(측정 정의 한계 — CA12 문서 §6).
 대기 결정 사항: **PARITY-TOL-01**(허용치 vs 픽스처 ≥720p 재생성 — 권고 (a))·G-27 실기기 2종 연결+잠금 해제·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·CA-07 가격(사용자 전용)·CA-11·CA-13·CA-16(P2).
-마지막 커밋: 7ca8949
-갱신: 2026-08-27 14:30
+마지막 커밋: 574d30a
+갱신: 2026-08-27 19:30

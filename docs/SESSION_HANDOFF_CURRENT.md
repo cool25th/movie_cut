@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-28 세션 (iOS Phase-1 잔여 UI 완료 — 리뷰 #3 전항)
+
+- **프레임 스텝**: `stepFrame(forward:)` ±1/frameRate·양단 클램프·스텝 시 일시정지 — 전송부에 backward.frame/play/forward.frame 버튼.
+- **루프 재생**: `isLooping` 토글(repeat 아이콘) — PreviewView 시간 옵저버가 끝 도달 시 0으로 시크·재생 지속(꺼져 있으면 기존 정지).
+- **트랙 관리**: 하단 툴바 "Tracks" 시트 — 비디오/오디오 트랙 추가(CreateTrackCommand)·트랙별 mute/lock(SetTrackPropertyCommand)·스와이프 삭제(RemoveTrackCommand — Core public화로 iOS 도달).
+- **프로젝트 열기/저장**: 상단 ⋯ 메뉴 — fileImporter(.moviecut) → `openProject` ReplaceProjectCommand 경로·fileExporter(MovieCutProjectDocument — ProjectStore와 동일 코덱: ISO8601·pretty·sortedKeys) → `saveProject`. 양 플랫폼 왕복 호환.
+- **출력 프리셋**: Export Settings 시트 — 해상도(720p/1080p/4K)·컨테이너 버튼 행(IOSExportOptionRow 제네릭 — 인라인 Picker 체인이 타입체커 타임아웃이라 분리). 부수: ExportResolution에 displayName·CaseIterable 추가.
+- **함정 기록**: 5단계 빌드 오류의 진범은 전부 ExportResolution.displayName 부재 폭포였음 — 겉보기 오류(Picker 오버로드·타입체크 타임아웃)는 전부 그 하위 증상.
+- **검증**: IOSPhase1SurfacesTests 6/6(스텝 수학·클램프·루프·트랙 명령 왕복·저장/열기 복원·손상 파일 명시 오류·프리셋 비간섭)·verify_gate 5/5.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① 실기기 2종(사용자 대기 — Phase 1 마지막 조건) ② G-29(HDR 파이프라인·BUG-CA12-02 입력 요구)·블라인드 A/B·장편 soak ③ EditorViewModel 경계 분리 지속·BUG-CA12-01 에스컬레이션.
+
 ## 2026-08-28 세션 (PARITY-TOL-01(a) 해결 — 캔버스 정합 픽스처·핵심 파리티 18/18·스윕 13/13 @2.0)
 
 - **실행(리뷰 권고 (a)·승인)**: 파리티 픽스처를 1440x1080 4:3(기본 1920x1080 캔버스에서 1:1 픽셀 매핑·필러박스)으로 교체 — solid_red·bars·moving_subject(좌표 전부 ×4.5 쌍둥이) 재생성·커밋. 허용치는 무변경(MAD ≤ 2.0 유지).

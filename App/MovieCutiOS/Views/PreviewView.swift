@@ -41,6 +41,18 @@ struct PreviewView: View {
             .aspectRatio(16 / 9, contentMode: .fit)
 
             HStack(spacing: 16) {
+                // Phase-1 (review #3): frame stepping at the project rate.
+                Button {
+                    viewModel.stepFrame(forward: false)
+                } label: {
+                    Image(systemName: "backward.frame")
+                        .font(.body)
+                        .frame(width: 34, height: 36)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasPlayableMedia)
+                .accessibilityLabel("Previous frame")
+
                 Button {
                     togglePlayback()
                 } label: {
@@ -51,6 +63,31 @@ struct PreviewView: View {
                 .buttonStyle(.plain)
                 .disabled(!hasPlayableMedia)
                 .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
+
+                Button {
+                    viewModel.stepFrame(forward: true)
+                } label: {
+                    Image(systemName: "forward.frame")
+                        .font(.body)
+                        .frame(width: 34, height: 36)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasPlayableMedia)
+                .accessibilityLabel("Next frame")
+
+                // Phase-1 (review #3): loop playback toggle.
+                Button {
+                    viewModel.isLooping.toggle()
+                } label: {
+                    Image(systemName: viewModel.isLooping ? "repeat" : "repeat")
+                        .font(.body)
+                        .frame(width: 34, height: 36)
+                        .foregroundStyle(viewModel.isLooping ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasPlayableMedia)
+                .accessibilityLabel("Loop playback")
+                .accessibilityValue(viewModel.isLooping ? "On" : "Off")
 
                 Text("\(timeString(viewModel.playheadTime)) / \(timeString(viewModel.currentProject.timeline.duration))")
                     .font(.caption.monospacedDigit())
@@ -143,8 +180,15 @@ struct PreviewView: View {
             if viewModel.isPlaying,
                viewModel.currentProject.timeline.duration > 0,
                seconds >= viewModel.currentProject.timeline.duration {
-                player.pause()
-                viewModel.isPlaying = false
+                if viewModel.isLooping {
+                    // Phase-1 (review #3): loop playback restarts at zero.
+                    player.seek(to: .zero)
+                    viewModel.playheadTime = 0
+                    player.play()
+                } else {
+                    player.pause()
+                    viewModel.isPlaying = false
+                }
             }
         }
     }

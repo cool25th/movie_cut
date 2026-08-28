@@ -114,10 +114,23 @@ final class IOSExportEngine {
             let audioSampleRate = audioOutputSettings[AVSampleRateKey] as? Int ?? 48_000
             let audioChannelCount = audioOutputSettings[AVNumberOfChannelsKey] as? Int ?? 2
 
-            let outputURL = try makeOutputURL()
+            // Review P0: honor the planner's resolved container (the Phase-1
+            // contract is MP4/H.264; ProRes profiles force .mov upstream in
+            // ExportPlanner). The URL extension and the writer's file type
+            // must both derive from the SAME resolved value, or the file
+            // extension lies about the container.
+            // ResolvedExportPlan carries the container via its fileExtension
+            // (the extension IS the rawValue), so the reverse mapping is exact.
+            let resolvedContainer = ExportContainerFormat(rawValue: resolvedPlan.fileExtension) ?? .mov
+            let outputURL = try makeOutputURL(fileExtension: resolvedContainer.fileExtension)
             activeOutputURL = outputURL
 
-            let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
+            let writerFileType: AVFileType
+            switch resolvedContainer {
+            case .mp4, .m4v: writerFileType = .mp4
+            case .mov: writerFileType = .mov
+            }
+            let writer = try AVAssetWriter(outputURL: outputURL, fileType: writerFileType)
             writer.shouldOptimizeForNetworkUse = true
             // Separate readers per modality (W4-defect parity, Mac
             // code-review #3): one reader mixing a videoComposition output
@@ -1248,14 +1261,14 @@ final class IOSExportEngine {
         )
     }
 
-    private func makeOutputURL() throws -> URL {
+    private func makeOutputURL(fileExtension: String) throws -> URL {
         let folderURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutiOSExports", isDirectory: true)
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
 
         let outputURL = folderURL
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("mov")
+            .appendingPathExtension(fileExtension)
 
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)

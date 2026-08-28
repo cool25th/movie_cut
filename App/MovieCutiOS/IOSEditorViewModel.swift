@@ -865,7 +865,13 @@ final class IOSEditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
     }
 
-    func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
+    func addTextClip(
+        text: String,
+        fontName: String,
+        fontSize: Double,
+        color: String,
+        backgroundColor: String? = nil
+    ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -885,12 +891,17 @@ final class IOSEditorViewModel {
             }
 
             let duration: TimeInterval = 5
-            let content = TextClipContent(
+            var content = TextClipContent(
                 text: trimmedText,
                 fontFamily: fontName,
                 fontSize: fontSize,
                 fontColor: color
             )
+            // Review P1: the sheet's Background Color picker value was
+            // dropped here — persist what the user actually sees.
+            if let backgroundColor {
+                content.backgroundColor = backgroundColor
+            }
             let clip = Clip(
                 assetId: nil,
                 kind: .text,
@@ -1132,6 +1143,19 @@ final class IOSEditorViewModel {
         // EditorSession, so the next dispatch or undo reverted it.
         do {
             try await session.dispatch(SetProjectCanvasCommand(canvas: preset))
+            // Review P1: the Frame Rate picker lives on this sheet but only
+            // moved the canvas/timeline rate — IOSExportEngine reads
+            // project.exportSettings.frameRate, so the selected rate never
+            // reached the output. Keep the export frame rate in lockstep
+            // with the canvas selection from this surface.
+            let snapshot = await session.snapshot()
+            var exportSettings = snapshot.exportSettings
+            if exportSettings.frameRate != preset.frameRate {
+                exportSettings.frameRate = preset.frameRate
+                try await session.dispatch(
+                    SetProjectExportSettingsCommand(exportSettings: exportSettings)
+                )
+            }
             await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -1195,6 +1219,51 @@ final class IOSEditorViewModel {
             fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
             fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
         ))
+    }
+
+    // MARK: - Playhead trim (review P0 — the Trim toolbar button was a no-op)
+
+    /// Trims the selected clip's START to the playhead (Mac
+    /// trimSelectedClipEndToPlayhead's sibling): the clip begins playing at
+    /// the playhead, keeping its end fixed. Routes through the same
+    /// `trimClip` engine math (source range follows the timeline delta).
+    func trimSelectedClipStartToPlayhead() async {
+        guard let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to trim."
+            return
+        }
+        let playhead = playheadTime
+        guard playhead > clip.timelineRange.start + 0.05,
+              playhead < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its start."
+            return
+        }
+        let delta = playhead - clip.timelineRange.start
+        await trimClip(
+            clipId: clip.id,
+            newStart: playhead,
+            newDuration: clip.timelineRange.duration - delta
+        )
+    }
+
+    /// Trims the selected clip's END to the playhead: the clip stops at the
+    /// playhead, keeping its start fixed.
+    func trimSelectedClipEndToPlayhead() async {
+        guard let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to trim."
+            return
+        }
+        let playhead = playheadTime
+        guard playhead > clip.timelineRange.start + 0.05,
+              playhead < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its end."
+            return
+        }
+        await trimClip(
+            clipId: clip.id,
+            newStart: clip.timelineRange.start,
+            newDuration: playhead - clip.timelineRange.start
+        )
     }
 
     // MARK: - Beat detection (CA-14, Mac detectBeats parity)

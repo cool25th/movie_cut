@@ -37,6 +37,8 @@ struct IOSContentView: View {
     @State private var isVoiceoverPresented = false
     // CA-14: beat detection action sheet (Detect / Clear) — Mac parity entry.
     @State private var isBeatActionPresented = false
+    // Review P0: the Trim entry was a no-op closure — real playhead trims.
+    @State private var isTrimActionPresented = false
     @State private var isAutoSubtitlesPresented = false
     @State private var isAutoAssistantPresented = false
     @State private var isTemplatePickerPresented = false
@@ -315,6 +317,23 @@ struct IOSContentView: View {
             // CA-14: Detect/Clear beat markers on the selected clip. Clear
             // stays available whenever beat markers exist even if the
             // current selection cannot run a new detection.
+            // Review P0: playhead-relative trims on the selected clip — the
+            // engine math existed but no UI reached it.
+            .confirmationDialog(
+                "Trim Clip",
+                isPresented: $isTrimActionPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Trim Start to Playhead") {
+                    Task { await viewModel.trimSelectedClipStartToPlayhead() }
+                }
+                Button("Trim End to Playhead") {
+                    Task { await viewModel.trimSelectedClipEndToPlayhead() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Moves the selected clip's start or end to the playhead. Undo reverts the whole trim.")
+            }
             .confirmationDialog(
                 "Beat Markers",
                 isPresented: $isBeatActionPresented,
@@ -702,7 +721,7 @@ struct IOSContentView: View {
                 .disabled(viewModel.selectedClipId == nil)
 
                 toolbarButton(title: "Trim", systemImage: "crop") {
-                    // Trim handle is inline in timeline
+                    isTrimActionPresented = true
                 }
                 .disabled(viewModel.selectedClipId == nil)
 

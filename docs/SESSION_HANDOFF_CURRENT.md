@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-28 세션 (외부 리뷰 반영 — P0/P1/P2 전량 수정·W 워크플로 판정·Phase 1 정직 재판정)
+
+- **리뷰 검증**: 7건 주장 전부 코드로 확인(판정 희석·트림 no-op·컨테이너 고정·fps 미반영·배경색 폐기·watchdog 누수·문서 부정합).
+- **P0 ①②+P2**: W 판정을 워크플로 단위로(필수 단계 전부+출력물 성공 시에만 PASS) + watchdog 고아 sleep 수습 → **W 5/5 워크플로 재실측 PASS(W4 ProRes 포함 — 리뷰의 타임아웃은 재현 안 됨·고아 sleep 파이프류로 판정)**·스크립트 즉시 종료.
+- **P0 ③④**: iOS 트림 다이얼로그(플레이헤드 기준 앞/뒤 — TrimClipCommand 실경로·범위 외 명시 오류) + 출력 컨테이너 planner 해석(mp4 기본·URL/fileType 동일 소스).
+- **P1 ⑤⑥**: 캔버스 fps → export 설정 동기화(SetProjectExportSettingsCommand)·텍스트 배경색 저장(TextClipContent.backgroundColor).
+- **검증**: iOS 신규 5/5(컨테이너 mp4 실측·트림 수축·오류·배경색·fps 동기)·verify_gate 5/5.
+- **Phase 1 재판정(리뷰 수용)**: 6/7 표기 철회 — 확실 4/7 + W 5/5로 **5/7**. 잔여: 픽셀 파리티(PARITY-TOL-01 — 리뷰 권고 (a)≥720p 재생성으로 **실행 승인됨·다음 증분**)·실기기 2종(사용자). 경쟁분석 낡은 iOS 행(M1 전환·M2 autosave·M4 오디오 해결·M3 출력 축소) 정정.
+- **리뷰 잔여 지시(다음 큐)**: PARITY-TOL-01(a) 실행 → iOS Phase-1 잔여 UI(프레임 스텝·루프·트랙 관리·프로젝트 열기/저장·출력 프리셋 UI — 리뷰 #3) → 실기기 → 상태 원장 갱신(본 세션 수행) → G-29·블라인드 A/B·장편 soak(리뷰 #6)·EditorViewModel 경계 분리 지속(#7).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **PARITY-TOL-01(a)**: ≥720p 캔버스 정합 픽스처 재생성 + 18/18 재검증(연동 골든 해시·스크립트 정합 포함 — 대형 증분) ② iOS Phase-1 잔여 UI(P0 목록) ③ 실기기 2종(사용자 대기 불변).
+
 ## 2026-08-28 세션 (A11Y-03 + CA-19 — 자율 소형 큐 소진)
 
 - **A11Y-03(P3) 수정**: 빈 라이브러리의 스켈리톤 6장(로딩/깨진 자산처럼 보임) → 단일 빈 상태 안내 카드("Your library is empty"+임포트 안내·en/ko 카탈로그 등록·VO 가시·`square.grid.2x2` 아이콘). StaticContract 3종(Phase21·P0Browser·Phase24)을 새 구조로 갱신 + 스켈리톤 복귀 금지 부정 단언. 계약이 금지한 온보딩 아이콘(`photo.on.rectangle.angled`) 재사용을 피한 경위 주석.

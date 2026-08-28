@@ -111,4 +111,20 @@ struct TimecodeParserTests {
         // Zero frame rate cannot interpret frame fields at all.
         #expect(TimecodeParser.seconds(from: "1:30", frameRate: 0) == nil)
     }
+
+    @Test("ruler labels adapt to long-form scales (CA-19)")
+    func rulerLabelScales() {
+        // Tick-style seconds under a minute.
+        #expect(TimecodeParser.rulerLabel(forSeconds: 0) == "0s")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 10) == "10s")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 59) == "59s")
+        // Minute scale zero-pads seconds.
+        #expect(TimecodeParser.rulerLabel(forSeconds: 60) == "1:00")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 95) == "1:35")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 600) == "10:00")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 3599) == "59:59")
+        // Hour scale.
+        #expect(TimecodeParser.rulerLabel(forSeconds: 3600) == "1:00:00")
+        #expect(TimecodeParser.rulerLabel(forSeconds: 7325) == "2:02:05")
+    }
 }

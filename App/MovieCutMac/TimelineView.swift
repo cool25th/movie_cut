@@ -692,7 +692,9 @@ struct TimelineView: View {
                         )
 
                         if isMajor {
-                            let text = Text("\(Int(time))s")
+                            // CA-19: adaptive ruler labels (5s / 1:30 / 1:00:00)
+                            // — long-form timelines read naturally.
+                            let text = Text(TimecodeParser.rulerLabel(forSeconds: Int(time)))
                                 .font(MovieCutTypography.micro)
                                 .foregroundStyle(MovieCutTheme.mutedText)
                             context.draw(text, at: CGPoint(x: x + 4, y: 8))

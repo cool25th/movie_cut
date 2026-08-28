@@ -47,6 +47,24 @@ ffmpeg -y -loglevel error \
 ffmpeg -y -loglevel error -f lavfi -i "testsrc2=s=320x240:r=30" \
   -t 3 "${COMMON_V[@]}" "$OUT/bars_320x240_3s_30fps.mp4"
 
+# --- PARITY-TOL-01(a): canvas-matched >=720p parity fixtures (2026-08-28) ---
+# The BUG-06 aspect-fit fix means sub-720p sources now resample to the default
+# 1920x1080 canvas on BOTH render legs; the plain-path legs resample through
+# different scalers, which pushed hard-edge fixtures past the MAD <= 2.0
+# contract. 1440x1080 is 4:3 (same aspect family as the 320x240 originals) at
+# exactly the canvas HEIGHT, so the fit is a 1:1 pixel map with pillarbox —
+# no resample on either leg. Same content, duration, and frame rate as the
+# originals so scenario timings are unchanged.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=red:s=1440x1080:r=30" \
+  -t 2 "${COMMON_V[@]}" "$OUT/solid_red_1440x1080_2s_30fps.mp4"
+# smptebars (flat color fields) rather than testsrc2: at 1440x1080 the
+# testsrc2 fine checkerboards carry per-pixel detail the H.264 encode shifts
+# ~3 MAD against the lossless preview — codec noise (Perceptual grade), not a
+# render divergence. The parity fixture's job is a distinguishable second
+# clip, so flat bars keep the Tolerance gate about rendering, not encoding.
+ffmpeg -y -loglevel error -f lavfi -i "smptebars=s=1440x1080:r=30" \
+  -t 3 "${COMMON_V[@]}" "$OUT/bars_1440x1080_3s_30fps.mp4"
+
 # 2b) Moving high-contrast subject — black background with a textured white box
 # moving left-to-right for Vision motion-tracking IoU verification.
 ffmpeg -y -loglevel error \
@@ -54,6 +72,15 @@ ffmpeg -y -loglevel error \
   -f lavfi -i "color=c=white:s=72x64:r=30:d=2" \
   -filter_complex "[1:v]drawbox=x=8:y=8:w=56:h=48:color=black@1:t=4,drawbox=x=30:y=0:w=12:h=64:color=black@1:t=fill,drawbox=x=0:y=24:w=72:h=8:color=black@1:t=fill,drawbox=x=4:y=4:w=12:h=12:color=white@1:t=fill,drawbox=x=56:y=48:w=12:h=12:color=white@1:t=fill[obj];[0:v][obj]overlay=x='32+80*t':y=88:eval=frame" \
   -t 2 "${COMMON_V[@]}" "$OUT/moving_subject_320x240_2s_30fps.mp4"
+
+# PARITY-TOL-01(a): the 1440x1080 twin of the moving subject (all drawbox and
+# overlay coordinates are the 320x240 values x4.5) — same normalized geometry,
+# so the harness gate's fractional initial rect tracks the identical subject.
+ffmpeg -y -loglevel error \
+  -f lavfi -i "color=c=black:s=1440x1080:r=30:d=2" \
+  -f lavfi -i "color=c=white:s=324x288:r=30:d=2" \
+  -filter_complex "[1:v]drawbox=x=36:y=36:w=252:h=216:color=black@1:t=4,drawbox=x=135:y=0:w=54:h=288:color=black@1:t=fill,drawbox=x=0:y=108:w=324:h=36:color=black@1:t=fill,drawbox=x=18:y=18:w=54:h=54:color=white@1:t=fill,drawbox=x=252:y=216:w=54:h=54:color=white@1:t=fill[obj];[0:v][obj]overlay=x='144+360*t':y=396:eval=frame" \
+  -t 2 "${COMMON_V[@]}" "$OUT/moving_subject_1440x1080_2s_30fps.mp4"
 
 # 2c) Moving subject behind an occluding wall — same textured box and
 # trajectory, 3s clip, with a mid-gray full-height wall at x=120..216 drawn ON

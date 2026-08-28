@@ -145,6 +145,13 @@ public struct ProxyGenerationPlan: Sendable, Equatable {
 }
 
 /// Lightweight proxy planning and best-effort AVFoundation transcoding.
+/// Minimal unchecked-Sendable wrapper — the cancellation handler closure is
+/// @Sendable, and AVFoundation's export session is safe to cancel from any
+/// thread despite lacking the annotation.
+private struct SendableBox<T>: @unchecked Sendable {
+    let value: T
+}
+
 public enum ProxyGenerator {
     public static let defaultMaxDimension: CGFloat = 960
 
@@ -204,6 +211,11 @@ public enum ProxyGenerator {
             return nil
         }
 
+        // CA-22 2차: honour cooperative cancellation. A task cancelled before
+        // the encode starts must not touch the target file at all — this is
+        // also the deterministic seam the cancel unit test drives.
+        try Task.checkCancellation()
+
         try FileManager.default.createDirectory(
             at: plan.targetURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -235,8 +247,22 @@ public enum ProxyGenerator {
         }
 
         do {
-            try await AVExportCompatibility.export(.init(exportSession), to: plan.targetURL, as: .mp4)
+            // CA-22 2차: cancel the AVFoundation session when the surrounding
+            // task is cancelled — `export` alone does not observe Swift
+            // cancellation, so without this hook an abandoned generation would
+            // keep encoding (and a cancelled caller would await forever).
+            // `cancelExport` is safe to call from any thread, but the class
+            // isn't annotated Sendable, so hop through an unchecked box for
+            // the @Sendable onCancel closure.
+            let sessionBox = SendableBox(value: exportSession)
+            try await withTaskCancellationHandler {
+                try await AVExportCompatibility.export(.init(exportSession), to: plan.targetURL, as: .mp4)
+            } onCancel: {
+                sessionBox.value.cancelExport()
+            }
         } catch {
+            // A cancelled export leaves a partial file — remove it so a later
+            // resume/generation does not mistake it for a ready proxy.
             try? FileManager.default.removeItem(at: plan.targetURL)
             throw error
         }

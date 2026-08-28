@@ -147,6 +147,12 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_CHROMA_KEY=1` — applies the deterministic greenScreen chroma-key default to
     ///   the selected clip through the real command path (CA-12 A/B benchmark fixture ⑦).
+    /// - `MOVIECUT_UITEST_AUTO_PROXY=1` — opts the run into background proxy auto-generation (the
+    ///   harness suppresses it otherwise for gate determinism), waits for in-flight generations to
+    ///   settle, and reports `auto_proxy_idle/assets/missing/cancelled` in the status line (CA-22 2차).
+    /// - `MOVIECUT_UITEST_AUTO_PROXY_MODE=off|on` — sets `autoGenerateProxyOnImport` BEFORE imports.
+    /// - `MOVIECUT_UITEST_AUTO_PROXY_CANCEL=1` — cancels in-flight generations after import.
+    /// - `MOVIECUT_UITEST_AUTO_PROXY_RESUME=1` — generates proxies for assets still missing one.
     /// - `MOVIECUT_UITEST_SCRUB=<seconds>` — scrubs through the ruler-coordinate transport path.
     /// - `MOVIECUT_UITEST_PROXY_BADGE=1` — generates a proxy for the first video asset and reports
     ///   the timeline badge state. Pair with `MOVIECUT_UITEST_PROXY_PLAYBACK=1` to check the active state,
@@ -242,6 +248,11 @@ extension EditorViewModel {
             .map(uiTestImportURLs(from:)).map(containerizeImportURLs) ?? []
         let extraImportURLs = env["MOVIECUT_UITEST_IMPORT_EXTRA"]
             .map(uiTestImportExtraURLs(from:)).map(containerizeImportURLs) ?? []
+        // CA-22 2차: apply the auto-proxy mode BEFORE the imports so the
+        // "off" leg proves no generation was even scheduled.
+        if let rawMode = env["MOVIECUT_UITEST_AUTO_PROXY_MODE"], !rawMode.isEmpty {
+            await updatePlaybackSettings(autoGenerateProxyOnImport: rawMode == "on")
+        }
         if filmstripPerformanceScenario != nil {
             if !primaryImportURLs.isEmpty {
                 await importMediaAndAddToTimeline(
@@ -262,6 +273,31 @@ extension EditorViewModel {
                     startTime: currentProject.timeline.duration
                 )
             }
+        }
+
+        // CA-22 2차: auto-proxy cancel/resume control and a bounded settle
+        // wait, so the gate can assert the full background-generation story:
+        // off (nothing scheduled), on (generated), cancelled (discarded +
+        // counted), resumed (missing proxies filled).
+        var autoProxySuffix = ""
+        if env["MOVIECUT_UITEST_AUTO_PROXY"] == "1" {
+            if env["MOVIECUT_UITEST_AUTO_PROXY_CANCEL"] == "1" {
+                cancelAutoProxyGeneration()
+            }
+            if env["MOVIECUT_UITEST_AUTO_PROXY_RESUME"] == "1" {
+                await resumeMissingProxies()
+            }
+            let idleDeadline = Date().addingTimeInterval(240)
+            while !autoProxyGenerating.isEmpty && Date() < idleDeadline {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            let assetsWithProxy = currentProject.mediaLibrary.assets.values
+                .filter { $0.proxy != nil }
+                .count
+            autoProxySuffix = " auto_proxy_idle=\(autoProxyGenerating.isEmpty ? 1 : 0)" +
+                " auto_proxy_assets=\(assetsWithProxy)" +
+                " auto_proxy_missing=\(videoAssetsMissingProxy)" +
+                " auto_proxy_cancelled=\(autoProxyCancelledCount)"
         }
 
         if let filmstripPerformanceScenario {
@@ -778,7 +814,7 @@ extension EditorViewModel {
         await flushAutosave()
 
         let clipCount = currentProject.timeline.tracks.reduce(0) { $0 + $1.clips.count }
-        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(adjustmentLayerSuffix)\(exportPostcheckSuffix)\(exportWallSuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
+        let status = "UITEST_DONE clips=\(clipCount) error=\(lastErrorMessage ?? "none")\(proxyBadgeSuffix)\(scrubSuffix)\(clipboardSuffix)\(filmstripSuffix)\(timelineFilmstripSuffix)\(filmstripPerformanceSuffix)\(motionTrackingSuffix)\(motionTrackingReopenSuffix)\(extractAudioSuffix)\(vocalSeparationSuffix)\(benchSuffix)\(scopeSuffix)\(autoWBSuffix)\(textAnimationSuffix)\(textTemplateSuffix)\(chapterSuffix)\(soloSuffix)\(audioGraphNulltestSuffix)\(masterMeterSuffix)\(adjustmentLayerSuffix)\(exportPostcheckSuffix)\(exportWallSuffix)\(autoProxySuffix)\(containerArtifactSuffix())\(timelineSummarySuffix())"
         lastStatusMessage = status
 
         // Headless verification path: when the harness is driven by launching the

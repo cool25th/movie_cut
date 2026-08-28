@@ -121,6 +121,13 @@ extension EditorViewModel {
             try await refreshFromSession()
             lastErrorMessage = nil
             lastStatusMessage = "Proxy ready for \(asset.originalURL.lastPathComponent)."
+        } catch is CancellationError {
+            // CA-22 2차: a cancelled generation is not a failure — the partial
+            // file is already removed by the generator, so report and leave
+            // the asset resumable.
+            autoProxyCancelledCount += 1
+            lastErrorMessage = nil
+            lastStatusMessage = "Proxy generation cancelled for \(asset.originalURL.lastPathComponent)."
         } catch {
             lastErrorMessage = "Proxy generation failed: \(error.localizedDescription)"
             lastStatusMessage = nil

@@ -3,6 +3,18 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-27 세션 (CA-22 2차 완료 — 프록시 설정 UI·진행 취소·재개)
+
+- **설정 토글**: 인스펙터 Playback 섹션에 "Auto-generate proxy on import" 체크박스(`updatePlaybackSettings` 신규 파라미터) — 프록시 설정 3종(재생 사용·thermal 자동·해상도)과 한 블록.
+- **취소**: `cancelAutoProxyGeneration()` — 관찰 가능 `autoProxyGenerating` 집합 + 태스크 핸들 저장. Core `ProxyGenerator.generateProxy`는 `withTaskCancellationHandler`+`cancelExport`로 **인코딩 중 취소**를 지원하고 부분 파일을 정리(취소≠실패 구분 — `autoProxyCancelledCount`).
+- **재개**: `resumeMissingProxies()` — 프록시 없는 전 비디오 자산 일괄 생성(취소분+thermal 스킵분 모두). 진행 중/취소 중 태스크 완료를 먼저 대기해 cancel→resume 경쟁 차단. thermal critical은 안내 후 거부.
+- **1차 갭 수습**: 자동 생성이 미디어 라이브러리 임포트에만 연결돼 있었음 → **타임라인 임포트(주 사용자 경로)에도 연결**. 하니스(MOVIECUT_UITEST) 실행은 기본 억제(CA-22 게이트만 옵트인)로 기존 게이트 결정성 보존 — 파리티 스윕 13/13 무회귀로 확인.
+- **검증**: `scripts/run_ca22_proxy_gate.sh` **4 leg 12/12 PASS** — A off→미스케줄·B on→백그라운드 생성 완료·C 90s fixture 인코딩 중 취소(cancelled=1·프록시 0)·D 취소→재개 완주(cancelled=1·프록시 1). Core 유닛 3종(취소 거부 결정적 seam·레디 파일 단축·설정 왕복). 게이트 5/5(Core 1,420).
+- **부수**: 게이트 스크립트 set -e 함정 2건(PASS 판정 후 `[ ] && FAIL=1` 반환값 1로 조용히 사망·field 파이프라인) — `return 0`/`|| echo`로 수습. DerivedData Debug 산출물이 세션 중 1회 원인 불명 소실(재빌드로 회복 — 재발 시 관찰).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **CA-14/15**(소형) ② 이후 백로그 점검. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량.
+
 ## 2026-08-27 세션 (BUG-CA12-01·02 결함 조사 — 메커니즘 확정·근본 수정은 각각 상위 이관)
 
 - **BUG-CA12-02(HDR 파리티, P1 후보)**: 픽셀 특성화로 범인 특정 — 대부분 밴드 Δ≤2·**고채도 시안 밴드만 프리뷰에서 핑크**. 프리뷰(plain 경로·플레이어 다리)는 AVFoundation이 HDR 태그 소스를 SDR 렌더 표면에 맞춰 변환하며 범위 밖 색을 뒤집음. 출력은 원시 재해석(소스 프레임과 MAD 2.49 충실 — CA-04 v1 계약). **수정 시도 2건 모두 측정 무효로 폐지**: ①스냅샷 최종 변환 작업공간 핀(버퍼가 이미 변환돼 도착 — MAD 11.13→11.07) ②합성 색 삼중항 709 명시(reader 다리는 소비 안 함 — 11.07). 측정 증거 없는 배선 금지 원칙으로 둘 다 revert. **본수정 = HDR 인입 형식 수용 컴포지터 + 공유 변환 → G-29(3단계) 이관**. 스냅샷 핀은 행동 중립 주석과 함께 원칙적 핀으로만 유지.

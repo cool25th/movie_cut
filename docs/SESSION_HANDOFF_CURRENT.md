@@ -10,7 +10,17 @@
 - **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
 - **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
 
-### 2026-08-29 세션 (경계 분리 부채 증분 — F-12R 순수 이동 + 분해 한계 발견·soak 환경 차단 판정)
+### 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
+
+- **soak 2run 재차단**: voiceagent 활성(어댑터 구성만 교체 — diarization-adapter)·로드 29+ — 사용자 워크플로 존중, 조용한 기기 대기 유지. G-29(3단계 기간 위반)·블라인드 A/B(2단계+사람 패널)도 자율 부적 판정.
+- **전회차 "분해 한계" 해제 증분(8919f3c)**: 공유 file-private 헬퍼 4종(`sourceClipAndAsset`·`timelineMapping`·`recordAnalysisResult`+`clipDescription`·`isTranscribable`)을 `EditorViewModel+AnalysisSupport.swift`로 이동, 공유 4종은 private→internal 승격(**동일 타깃 가시성 확대만 — 스코프·공개 표면·호출부 불변**, A류 경계 정리 성격으로 큐 운영자 승인 하 실행). `ensureDefaultTracks` 동일 승격. F-20 하이라이트 메서드(+shift)가 `EditorViewModel+AutoHighlights.swift`로 뒤따름 — 본체 **5,443→5,206줄**. `HighlightsStaticContract` 소스 경로만 새 파일로 추적(기대치 5종 불변).
+- **함정**: ①pbxproj 등록을 취약한 문자열 조립으로 생성 → 그룹/페이즈 줄 끝 `;` 파손으로 **프로젝트 자체가 안 읽힘**(무수정 stash 프로브로 판별·이분법으로 격리·정정 재적용) ②Core 1,425 중 4 issue = 하이라이트 소스 계약 1개 테스트의 기대치 4건(경로 갱신으로 해소).
+- **검증**: Core 1,425/211스위트 PASS·Mac 48/48·verify_gate 5/5. 잔여 분해 후보: F-17 TTS(ensureTrack·audioDuration·sanitizedDuration·minimumVoiceoverDuration 승격 필요)·F-13 자막·F-19 리프레임 등 — 동일 패턴으로 진행 가능.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① soak 2run(조용한 기기 — 사용자 voiceagent 일시중지 후) ② 실기기 2종(사용자) ③ 경계 분리 3차(위 잔여)·G-29(3단계 도달 시)·블라인드 A/B·BUG-CA12-01 에스컬레이션.
+
+## 2026-08-29 세션 (경계 분리 부채 증분 — F-12R 순수 이동 + 분해 한계 발견·soak 환경 차단 판정)
 
 - **soak 2run 확증: 환경 차단 판정** — 사용자 voiceagent 어댑터 3종(VoiceAgentApp·parakeet·senseVoice)이 여전히 활성 + 로드 28~36으로 측정 타당성 훼손. 사용자 프로세스 무손상 원칙으로 개입 불가 — **조용한 기기 확보(voiceagent 일시중지) 후 1커맨드**(`run_longform_soak.sh`) 대기 유지.
 - **부채 증분(리뷰 #7·§6 부채 원칙·P0-C "경계 분리 착수")**: F-12R 사용자 텍스트 스타일 프리셋 45줄을 `EditorViewModel+TextStylePresets.swift`로 **순수 이동**(메서드 5종+섹션 전용 private 헬퍼 — 저장 속성은 본체 유지, +Media 선례 패턴). 본체 5,486→5,443줄.

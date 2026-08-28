@@ -10,7 +10,17 @@
 - **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
 - **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
 
+### 2026-08-29 세션 (경계 분리 부채 증분 — F-12R 순수 이동 + 분해 한계 발견·soak 환경 차단 판정)
+
+- **soak 2run 확증: 환경 차단 판정** — 사용자 voiceagent 어댑터 3종(VoiceAgentApp·parakeet·senseVoice)이 여전히 활성 + 로드 28~36으로 측정 타당성 훼손. 사용자 프로세스 무손상 원칙으로 개입 불가 — **조용한 기기 확보(voiceagent 일시중지) 후 1커맨드**(`run_longform_soak.sh`) 대기 유지.
+- **부채 증분(리뷰 #7·§6 부채 원칙·P0-C "경계 분리 착수")**: F-12R 사용자 텍스트 스타일 프리셋 45줄을 `EditorViewModel+TextStylePresets.swift`로 **순수 이동**(메서드 5종+섹션 전용 private 헬퍼 — 저장 속성은 본체 유지, +Media 선례 패턴). 본체 5,486→5,443줄.
+- **분해 한계 발견(중요)**: 잔여 섹션(F-17 TTS·F-19 리프레임·F-20 하이라이트·F-13 자막·스코프 등)은 전부 공유 file-private 헬퍼에 얽힘 — `sourceClipAndAsset`(15호출)·`timelineMapping`(15)·`recordAnalysisResult`(10)·`ensureTrack`·`audioDuration`·`sanitizedDuration`·`minimumVoiceoverDuration`. **순수 이동 분해는 자연 한계 도달** — 추가 분해는 이 헬퍼들의 internal 승격(또는 공유 extension 이동)을 수반하며, +Media 헤더의 규율상 "별도 승인된 변경"으로 큐 운영자/사용자 판단 대상.
+- **검증**: Mac 유닛 48/48·verify_gate 5/5.
+
 ### 다음 회차 — LOOP_STATE 우선순위
+① soak 2run(조용한 기기 — 사용자 voiceagent 일시중지 후) ② 실기기 2종(사용자) ③ 경계 분리 계속(승격 리팩터 승인 여부 판단 포함)·G-29·블라인드 A/B·BUG-CA12-01 에스컬레이션.
+
+## 다음 회차 — LOOP_STATE 우선순위
 ① **soak 2run 확증**(위 조건 — 사용자 환경 협조 필요: voiceagent 일시중지·디스크) ② 실기기 2종(사용자 대기 — Phase 1 마지막) ③ G-29·블라인드 A/B·EditorViewModel 경계 분리·BUG-CA12-01 에스컬레이션.
 
 ## 2026-08-28 세션 (iOS Phase-1 잔여 UI 완료 — 리뷰 #3 전항)

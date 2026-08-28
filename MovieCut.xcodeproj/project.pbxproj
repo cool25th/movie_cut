@@ -223,6 +223,8 @@
 		A356FBDD1CA3A79CAE211737 /* VideoPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7BC27D8B13AFE2F7421C85 /* VideoPreviewView.swift */; };
 		A417E45BBA0311B7561A14C5 /* IOSExportEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B5634894D7C2C7B03586820 /* IOSExportEngine.swift */; };
 		A45CAF750A98E54049804278 /* EditorViewModel+VocalSeparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBEEC5DBE41C0E1EF0BC258 /* EditorViewModel+VocalSeparation.swift */; };
+		CC04C2E3B9D5F1A70001 /* EditorViewModel+AnalysisSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04C2E3B9D5F1A70002 /* EditorViewModel+AnalysisSupport.swift */; };
+		CC04C2E3B9D5F1A70003 /* EditorViewModel+AutoHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04C2E3B9D5F1A70004 /* EditorViewModel+AutoHighlights.swift */; };
 		CC03B1F2A8D4E7C20001 /* EditorViewModel+TextStylePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC03B1F2A8D4E7C20002 /* EditorViewModel+TextStylePresets.swift */; };
 		A4E1C1AEB9E0030A4D98041E /* ReplaceProjectCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73051F5995B48B05B9F2FF0B /* ReplaceProjectCommandTests.swift */; };
 		A5023E6E34F2C2141D2F15C7 /* MasterAudioInspectorStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03E564393F7383E65B88166 /* MasterAudioInspectorStaticContractTests.swift */; };
@@ -484,6 +486,8 @@
 		59D27A5CA4A7F053767AEA71 /* SplitClipCommandSpeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitClipCommandSpeedTests.swift; sourceTree = "<group>"; };
 		5BA251F4BE10E349135704E3 /* ChromaKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyView.swift; sourceTree = "<group>"; };
 		5CBEEC5DBE41C0E1EF0BC258 /* EditorViewModel+VocalSeparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+VocalSeparation.swift"; sourceTree = "<group>"; };
+		CC04C2E3B9D5F1A70002 /* EditorViewModel+AnalysisSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+AnalysisSupport.swift"; sourceTree = "<group>"; };
+		CC04C2E3B9D5F1A70004 /* EditorViewModel+AutoHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+AutoHighlights.swift"; sourceTree = "<group>"; };
 		CC03B1F2A8D4E7C20002 /* EditorViewModel+TextStylePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+TextStylePresets.swift"; sourceTree = "<group>"; };
 		5D899CB46CBAE25A81BDAB6E /* UIUXAccessibilityRegressionStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIUXAccessibilityRegressionStaticContractTests.swift; sourceTree = "<group>"; };
 		5DBE082ABBAE5A68B715D575 /* StyledCaptionWordTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyledCaptionWordTimingTests.swift; sourceTree = "<group>"; };
@@ -1050,6 +1054,8 @@
 				244F372F5786A4A83EE3AA62 /* EditorViewModel+TimelineEditing.swift */,
 				C0CD2AAEF17FCF022A7BED3D /* EditorViewModel+Transport.swift */,
 				5CBEEC5DBE41C0E1EF0BC258 /* EditorViewModel+VocalSeparation.swift */,
+				CC04C2E3B9D5F1A70002 /* EditorViewModel+AnalysisSupport.swift */,
+				CC04C2E3B9D5F1A70004 /* EditorViewModel+AutoHighlights.swift */,
 				CC03B1F2A8D4E7C20002 /* EditorViewModel+TextStylePresets.swift */,
 				CFB36ACE204F1744AFBB0DFF /* Info.plist */,
 				E1AA1F3C0FE3E6F86EA86740 /* InspectorPanel.swift */,
@@ -1755,6 +1761,8 @@
 				183E7858F1C8770A28E7ADAE /* EditorViewModel+TimelineEditing.swift in Sources */,
 				DBF22AEB05458958C0EB1AEB /* EditorViewModel+Transport.swift in Sources */,
 				A45CAF750A98E54049804278 /* EditorViewModel+VocalSeparation.swift in Sources */,
+				CC04C2E3B9D5F1A70001 /* EditorViewModel+AnalysisSupport.swift in Sources */,
+				CC04C2E3B9D5F1A70003 /* EditorViewModel+AutoHighlights.swift in Sources */,
 				CC03B1F2A8D4E7C20001 /* EditorViewModel+TextStylePresets.swift in Sources */,
 				3A4E09636082C49A801FC3F3 /* EditorViewModel.swift in Sources */,
 				218DFE934129B438DD7C52D9 /* EffectBrowserPreviewRenderer.swift in Sources */,

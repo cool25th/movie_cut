@@ -3862,171 +3862,11 @@ final class EditorViewModel {
     }
 
     // MARK: - Auto highlights (F-20)
+    // Methods live in EditorViewModel+AutoHighlights.swift (boundary
+    // decomposition). Stored state stays here.
 
     /// Scored highlight candidates for the selected clip (empty = none).
     var highlightCandidates: [HighlightCandidate] = []
-
-    var canDetectHighlights: Bool {
-        guard let clip = selectedClip else { return false }
-        return clip.kind == .video || clip.kind == .audio
-    }
-
-    /// Runs the silence, scene, and beat providers on the selected clip and
-    /// scores highlight candidates by combining their outputs (F-20).
-    func detectHighlights() async {
-        guard let clipId = selectedClipId, canDetectHighlights else {
-            lastErrorMessage = "Select a video or audio clip to find highlights."
-            return
-        }
-
-        lastErrorMessage = nil
-        lastStatusMessage = "Scoring highlights..."
-
-        do {
-            let snapshot = await session.snapshot()
-            let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
-
-            // Silence (speech density) — already source-time ranges mapped to timeline.
-            let silenceProvider = SilenceDetectionProvider()
-            let silenceResult = try await silenceProvider.analyze(asset: asset, in: snapshot)
-            let silenceTimeline: [TimeRange] = silenceResult.suggestions.flatMap { suggestion -> [TimeRange] in
-                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
-                return ranges.compactMap { timelineMapping(for: $0, in: clip)?.timelineRange }
-            }
-
-            // Scene changes (visual activity) — video only.
-            var sceneTimeline: [TimeInterval] = []
-            if asset.kind == .video {
-                let sceneProvider = SceneChangeProvider()
-                let sceneResult = try await sceneProvider.analyze(asset: asset, in: snapshot)
-                sceneTimeline = sceneResult.suggestions.flatMap { suggestion -> [TimeInterval] in
-                    guard case .sceneChanges(let times) = suggestion else { return [] }
-                    return times.compactMap {
-                        timelineMapping(for: TimeRange(start: $0, duration: .ulpOfOne), in: clip)?.timelineRange.start
-                    }
-                }
-            }
-
-            // Beats (audio energy proxy).
-            let beatProvider = BeatDetectionProvider()
-            let beatSourceTimes = try await beatProvider.analyze(asset: asset)
-            let beatTimeline: [TimeInterval] = beatSourceTimes.compactMap {
-                timelineMapping(for: TimeRange(start: $0, duration: .ulpOfOne), in: clip)?.timelineRange.start
-            }
-
-            let candidates = HighlightScorer.scoreHighlights(
-                duration: clip.timelineRange.duration,
-                silenceRanges: silenceTimeline.map { shift($0, by: -clip.timelineRange.start) },
-                sceneChangeTimes: sceneTimeline.map { $0 - clip.timelineRange.start },
-                energyMarkers: beatTimeline.map { $0 - clip.timelineRange.start }
-            ).map { candidate in
-                var shifted = candidate
-                shifted.range = shift(candidate.range, by: clip.timelineRange.start)
-                return shifted
-            }
-
-            highlightCandidates = candidates
-            recordAnalysisResult(
-                action: "Highlights",
-                count: candidates.count,
-                message: candidates.isEmpty
-                    ? "No highlight candidates found."
-                    : "Found \(candidates.count) highlight candidate(s).",
-                clipId: clipId
-            )
-            lastStatusMessage = candidates.isEmpty
-                ? "No highlight candidates found."
-                : "Found \(candidates.count) highlight candidate(s). Create a sequence from one below."
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = error.localizedDescription
-        }
-    }
-
-    func clearHighlights() {
-        highlightCandidates = []
-    }
-
-    /// Creates a new project/sequence containing only the candidate window of
-    /// the selected clip's source media (F-20).
-    func createSequenceFromHighlight(_ candidate: HighlightCandidate) async {
-        guard let clipId = selectedClipId else { return }
-
-        do {
-            let snapshot = await session.snapshot()
-            let (clip, asset) = try sourceClipAndAsset(for: clipId, in: snapshot)
-
-            // Map the timeline-space candidate window back to source time
-            // through the canonical mapping (Step 3). The ratio fallback only
-            // runs if the clip's ranges are degenerate.
-            let sourceStart: TimeInterval
-            let sourceDuration: TimeInterval
-            if let mapping = clip.makeTimeMapping() {
-                sourceStart = mapping.sourceTime(forTimelineTime: candidate.range.start)
-                let sourceEnd = mapping.sourceTime(forTimelineTime: candidate.range.end)
-                sourceDuration = max(0, sourceEnd - sourceStart)
-            } else {
-                let timelineDuration = max(clip.timelineRange.duration, .leastNonzeroMagnitude)
-                let ratio = clip.sourceRange.duration / timelineDuration
-                let localStart = candidate.range.start - clip.timelineRange.start
-                sourceStart = clip.sourceRange.start + max(0, localStart) * ratio
-                sourceDuration = candidate.range.duration * ratio
-            }
-
-            var newProject = Project(name: "Highlight")
-            newProject.canvas = snapshot.canvas
-            newProject.exportSettings = snapshot.exportSettings
-            newProject = Self.ensureDefaultTracks(in: newProject)
-
-            let highlightClip = Clip(
-                assetId: asset.id,
-                kind: clip.kind,
-                sourceRange: TimeRange(start: sourceStart, duration: sourceDuration),
-                timelineRange: TimeRange(start: 0, duration: candidate.range.duration)
-            )
-
-            var importedLibrary = newProject.mediaLibrary
-            importedLibrary.assets[asset.id] = asset
-            newProject.mediaLibrary = importedLibrary
-
-            let trackKind: TrackKind = clip.kind == .audio ? .audio : .video
-            if let trackIndex = newProject.timeline.tracks.firstIndex(where: { $0.kind == trackKind }) {
-                newProject.timeline.tracks[trackIndex].clips.append(highlightClip)
-            } else {
-                var track = Track(kind: trackKind, name: trackKind == .audio ? "Audio 1" : "Video 1")
-                track.clips = [highlightClip]
-                newProject.timeline.tracks.append(track)
-            }
-
-            // Route through the command path instead of replacing the session:
-            // ReplaceProjectCommand swaps the project wholesale while pushing
-            // the previous project onto the undo stack, so Cmd+Z restores the
-            // pre-highlight project. Replacing the session here used to destroy
-            // the undo stack entirely.
-            try await session.dispatch(ReplaceProjectCommand(
-                project: newProject,
-                previousProject: snapshot
-            ))
-            try await refreshFromSession()
-            selectedClipId = highlightClip.id
-            selectedAssetId = asset.id
-            playbackEngine.clear()
-            playheadTime = 0
-            highlightCandidates = []
-            lastErrorMessage = nil
-            lastStatusMessage = String(
-                format: "Created a %.0fs highlight sequence.",
-                candidate.range.duration
-            )
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func shift(_ range: TimeRange, by delta: TimeInterval) -> TimeRange {
-        TimeRange(start: range.start + delta, duration: range.duration)
-    }
 
     // MARK: - Assistant (F-21)
 
@@ -4296,38 +4136,8 @@ final class EditorViewModel {
         return settings
     }
 
-    private func recordAnalysisResult(
-        action: String,
-        count: Int?,
-        message: String,
-        clipId: UUID?
-    ) {
-        let item = AnalysisHistoryItem(
-            action: action,
-            count: count,
-            clipDescription: clipDescription(for: clipId),
-            message: message,
-            timestamp: Date()
-        )
-
-        recentAnalysisResults.insert(item, at: 0)
-        if recentAnalysisResults.count > 8 {
-            recentAnalysisResults.removeSubrange(8...)
-        }
-    }
-
-    private func clipDescription(for clipId: UUID?) -> String? {
-        guard let clipId else { return nil }
-
-        for track in currentProject.timeline.tracks {
-            if let clipIndex = track.clips.firstIndex(where: { $0.id == clipId }) {
-                let trackName = track.name.isEmpty ? track.kind.rawValue.capitalized : track.name
-                return "\(trackName) clip \(clipIndex + 1)"
-            }
-        }
-
-        return nil
-    }
+    // recordAnalysisResult + clipDescription live in
+    // EditorViewModel+AnalysisSupport.swift (shared analysis boundary).
 
     private func reportQuickToolSuccess(_ message: String) {
         quickToolProgressMessage = nil
@@ -4477,25 +4287,6 @@ final class EditorViewModel {
         textContent.fontFamily == "Apple Color Emoji"
     }
 
-    private func sourceClipAndAsset(for clipId: UUID, in project: Project) throws -> (clip: Clip, asset: MediaAsset) {
-        for track in project.timeline.tracks {
-            if let clip = track.clips.first(where: { $0.id == clipId }) {
-                guard let assetId = clip.assetId else {
-                    throw EditorCommandError.invalidCommand("Selected clip has no source media.")
-                }
-                guard let asset = project.mediaLibrary.assets[assetId] else {
-                    throw EditorCommandError.assetNotFound(assetId)
-                }
-                guard Self.isTranscribable(asset) else {
-                    throw EditorCommandError.invalidCommand("Select an audio or video clip.")
-                }
-                return (clip, asset)
-            }
-        }
-
-        throw EditorCommandError.clipNotFound(clipId)
-    }
-
     private func selectedSubtitleSource(in project: Project) throws -> (clip: Clip?, asset: MediaAsset) {
         if let selectedClipId {
             let source = try sourceClipAndAsset(for: selectedClipId, in: project)
@@ -4511,10 +4302,6 @@ final class EditorViewModel {
         }
 
         throw EditorCommandError.invalidCommand("Select an audio or video clip to generate subtitles.")
-    }
-
-    private static func isTranscribable(_ asset: MediaAsset) -> Bool {
-        asset.kind == .audio || asset.kind == .video
     }
 
     private func subtitleClips(from result: TranscriptionResult, alignedTo clip: Clip) -> [Clip] {
@@ -4600,36 +4387,6 @@ final class EditorViewModel {
                 return count
             }
         }
-    }
-
-    private func timelineMapping(
-        for sourceRange: TimeRange,
-        in clip: Clip
-    ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
-        guard
-            sourceRange.start.isFinite,
-            sourceRange.duration.isFinite,
-            sourceRange.duration > 0
-        else {
-            return nil
-        }
-
-        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
-        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
-        guard sourceEnd > sourceStart else { return nil }
-
-        // Map the source range to the timeline through the canonical mapping so
-        // subtitle/auto-assistant windows land at the right timeline position
-        // for any rate or speed ramp (Step 3).
-        guard let mapping = clip.makeTimeMapping() else { return nil }
-        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
-        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
-        guard timelineEnd > timelineStart else { return nil }
-
-        return (
-            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
-            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
-        )
     }
 
     /// Rebuilds the preview composition from the current project so the main
@@ -5157,7 +4914,9 @@ final class EditorViewModel {
         }
     }
 
-    private static func ensureDefaultTracks(in project: Project) -> Project {
+    // Internal (was private) so the decomposition extension files can share
+    // it — same-target visibility widening only, see +AnalysisSupport.swift.
+    static func ensureDefaultTracks(in project: Project) -> Project {
         var project = project
         if project.timeline.tracks.isEmpty {
             project.timeline.tracks = [

@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-28 세션 (장편 soak 게이트 구축 — 유효 1차 실측·환경 오염으로 2run 확증 연기)
+
+- **게이트 신설**: `scripts/run_longform_soak.sh` — 30분 fixture(ab04) N회 연속 실앱 출력으로 ①와치독 내 완주 ②**RSS 증가 ≤15%**(누수 가드) ③길이·A/V 시작 Δ ≤1프레임 ④**실행 간 프레임 해시 9표본 동일**(결정성) ⑤열·전원 조건 기록. 실행 간 열 상태 기록·와치독 2400s(지속 부하 현실화 — 1차 시도에서 run2가 1500s 초과한 경위 주석).
+- **유효 실측(오염 전, 1차 시도 run1)**: wall 872.6s(RTF 0.485)·peak RSS **1,574MB**·길이 1800.000000s 정확·**A/V 시작 Δ 0.000000** — 30분 장편 단일 실행 안정성 실증(CA-12 2시간 단일 실행 증거와 병기).
+- **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
+- **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **soak 2run 확증**(위 조건 — 사용자 환경 협조 필요: voiceagent 일시중지·디스크) ② 실기기 2종(사용자 대기 — Phase 1 마지막) ③ G-29·블라인드 A/B·EditorViewModel 경계 분리·BUG-CA12-01 에스컬레이션.
+
 ## 2026-08-28 세션 (iOS Phase-1 잔여 UI 완료 — 리뷰 #3 전항)
 
 - **프레임 스텝**: `stepFrame(forward:)` ±1/frameRate·양단 클램프·스텝 시 일시정지 — 전송부에 backward.frame/play/forward.frame 버튼.

@@ -27,6 +27,9 @@ final class IOSEditorViewModel {
     var playheadTime: TimeInterval
     var isPlaying: Bool
     var lastErrorMessage: String? = nil
+    /// CA-14: transient success feedback (beat-marker outcomes) — mirrors the
+    /// Mac status line; the timeline's beat ticks are the primary visual.
+    var lastStatusMessage: String? = nil
     var exportEngine: IOSExportEngine = IOSExportEngine()
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
     var templateStore: TemplateStore
@@ -1192,5 +1195,122 @@ final class IOSEditorViewModel {
             fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
             fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
         ))
+    }
+
+    // MARK: - Beat detection (CA-14, Mac detectBeats parity)
+
+    /// True when the selection can run beat detection (audio or video clip).
+    var canDetectBeats: Bool {
+        guard let selectedClip else { return false }
+        return selectedClip.kind == .audio || selectedClip.kind == .video
+    }
+
+    /// True when the timeline carries generated beat markers (Clear enabled).
+    var hasBeatMarkers: Bool {
+        currentProject.markers.contains { $0.kind == .beat }
+    }
+
+    /// CA-14: detects beats in the selected audio/video clip and adds beat
+    /// markers (Mac `detectBeats` parity) — the shared Core
+    /// `BeatDetectionProvider` analyzes the asset, source beat times map to
+    /// the timeline through the clip's canonical mapping (rates and ramps
+    /// included), and `AddMarkersCommand` lands them as one undoable step.
+    func detectBeats() async {
+        guard let selectedClipId else {
+            lastErrorMessage = "Select a music clip to detect beats."
+            return
+        }
+
+        do {
+            let snapshot = await session.snapshot()
+            let (clip, asset) = try beatSourceClipAndAsset(for: selectedClipId, in: snapshot)
+            guard clip.kind == .audio || clip.kind == .video else {
+                lastErrorMessage = "Beat detection needs an audio or video clip selection."
+                return
+            }
+
+            lastErrorMessage = nil
+            let provider = BeatDetectionProvider()
+            let beatTimes = try await provider.analyze(asset: asset)
+            let timelineBeats: [TimeInterval] = beatTimes.compactMap { time in
+                beatTimelineMapping(
+                    for: TimeRange(start: time, duration: .ulpOfOne),
+                    in: clip
+                )?.timelineRange.start
+            }
+
+            guard !timelineBeats.isEmpty else {
+                lastErrorMessage = nil
+                lastStatusMessage = "No beats detected in the selected clip."
+                return
+            }
+
+            let markers = timelineBeats.enumerated().map { index, time in
+                Marker(time: time, name: "Beat \(index + 1)", color: "FF9F0A", kind: .beat)
+            }
+            try await session.dispatch(AddMarkersCommand(markers: markers))
+            await refreshFromSession()
+
+            let bpmText = BeatDetectionProvider.estimatedBPM(from: beatTimes)
+                .map { String(format: " (~%.0f BPM)", $0) } ?? ""
+            lastStatusMessage = "Added \(markers.count) beat markers\(bpmText)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// CA-14: removes every generated beat marker in one undoable step
+    /// (Mac `clearBeatMarkers` parity).
+    func clearBeatMarkers() async {
+        guard hasBeatMarkers else { return }
+        await apply(RemoveMarkersCommand(kind: .beat))
+        lastStatusMessage = "Removed all beat markers."
+    }
+
+    /// Resolves the selected clip and its source asset for beat analysis.
+    private func beatSourceClipAndAsset(for clipId: UUID, in project: Project) throws -> (clip: Clip, asset: MediaAsset) {
+        for track in project.timeline.tracks {
+            if let clip = track.clips.first(where: { $0.id == clipId }) {
+                guard let assetId = clip.assetId else {
+                    throw EditorCommandError.invalidCommand("Selected clip has no source media.")
+                }
+                guard let asset = project.mediaLibrary.assets[assetId] else {
+                    throw EditorCommandError.assetNotFound(assetId)
+                }
+                return (clip, asset)
+            }
+        }
+        throw EditorCommandError.clipNotFound(clipId)
+    }
+
+    /// Maps a source-time window to the timeline through the clip's canonical
+    /// mapping — the same math the Mac beat path uses so rate/ramp projects
+    /// land beats at identical positions on both platforms.
+    private func beatTimelineMapping(
+        for sourceRange: TimeRange,
+        in clip: Clip
+    ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
+        guard
+            sourceRange.start.isFinite,
+            sourceRange.duration.isFinite,
+            sourceRange.duration > 0
+        else {
+            return nil
+        }
+
+        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
+        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
+        guard sourceEnd > sourceStart else { return nil }
+
+        guard let mapping = clip.makeTimeMapping() else { return nil }
+        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
+        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
+        guard timelineEnd > timelineStart else { return nil }
+
+        return (
+            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
+            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
+        )
     }
 }

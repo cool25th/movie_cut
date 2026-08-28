@@ -53,6 +53,37 @@ struct IOSTimelineView: View {
                 }
                 .animation(.easeInOut(duration: 0.1), value: snapGuideTime)
             }
+            .overlay(alignment: .topLeading) {
+                // CA-14: generated beat markers render as compact ticks along
+                // the top of the track lanes (Mac renders them in the ruler;
+                // iOS has no ruler strip, so the lane-top band is the surface).
+                // A full flag per beat would flood the view on real music
+                // tracks — same compact-tick rationale as the Mac ruler.
+                beatTickOverlay
+            }
+        }
+    }
+
+    /// CA-14: one 2pt orange tick per beat marker at its timeline position.
+    /// Decorative-by-design: taps land on the clips below (2pt targets are
+    /// hostile to touch), and the beat COUNT is surfaced by the detect/clear
+    /// status instead. VoiceOver therefore hides the ticks; discoverability
+    /// comes from the toolbar action that created them.
+    @ViewBuilder
+    private var beatTickOverlay: some View {
+        let beats = viewModel.currentProject.markers.filter { $0.kind == .beat }
+        if !beats.isEmpty {
+            HStack(spacing: 0) {
+                ForEach(beats) { marker in
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.85))
+                        .frame(width: 2, height: 12)
+                        .offset(x: CGFloat(marker.time) * secondsWidth + 14)  // + horizontal padding
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 
@@ -214,10 +245,14 @@ struct IOSTimelineView: View {
     /// Mac timeline uses. Also records the active snap target for the
     /// alignment guide.
     private func snappedTime(_ rawTime: Double, excluding clipId: UUID) -> Double {
+        // CA-14: markers (beat markers included) are snap targets too — the
+        // same guide set the Mac timeline snaps to, so beats generated on
+        // either platform guide drags identically.
         let snapPoints = viewModel.currentProject.timeline.tracks
             .flatMap(\.clips)
             .filter { $0.id != clipId }
             .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
+            + viewModel.currentProject.markers.map(\.time)
             + [viewModel.playheadTime, 0.0]
 
         let threshold = Double(snapRadius / secondsWidth)

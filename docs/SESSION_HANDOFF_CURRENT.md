@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-28 세션 (CA-14/15 완료 — 비트 감지 iOS UI·현지화·텍스트 품질 감사)
+
+- **CA-14(iOS 비트 감지, Mac 패리티)**: ①`IOSEditorViewModel.detectBeats/clearBeatMarkers/canDetectBeats/hasBeatMarkers` + `lastStatusMessage` — Core `BeatDetectionProvider` 공유·canonical 매핑(속도/램프 포함)·`AddMarkersCommand` 단일 undo·BPM 상태. ②하단 툴바 "Beats" 버튼 → confirmationDialog(Detect/Clear — 선택 게이트). ③타임라인 비트 틱 오버레이(레인 상단 2pt 주황·장식용 — 터치 타깃 문제로 비인터랙티브·VO 숨김, 개수는 상태로 안내). ④**스냅 대상에 마커 포함**(Mac은 포함·iOS는 빠져 있던 파리티 갭 수습). ⑤`IOSBeatDetectionTests` 2/2 — 실제 클릭트랙 WAV(120BPM 8클릭)를 AVAudioFile로 합성→임포트→선택→감지→마커≥6·클립 범위 내→정리·무선택 명시 오류.
+- **CA-15(현지화·텍스트 품질 감사)**: `CA15_LOCALIZATION_TEXT_QUALITY_MATRIX_20260828.md` — 축 10종(카탈로그/CJK/emoji·결합/RTL/줄바꿈/세로텍스트/숫자·시간/파일명/단축키/측정) 판정: **7종 충족(4종 실측)·1종 범위 외·2종 관찰 — 신규 결함 0건**. 실측 프로브 `MultilingualTextRenderTests` 4/4 PASS(공유 TextOverlayPixelProcessor 경로 잉크 커버리지 — 폰트 캐스케이드 가정 아닌 픽셀 증거)가 상시 게이트에 편입되어 다국어 렌더 회귀 차단.
+- **검증**: iOS 시뮬레이터 테스트 2/2(TEST SUCCEEDED)·Core 프로브 4/4·verify_gate 5/5.
+- **부수**: 테스트 게이팅 단언 순서 수정(addClipToTimeline 자동 선택 반영).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① 백로그 잔여 자율 소형 점검(CA-17 실제 플레이어 로드 확인=수동/D·CA-19 밀도 감사 보고 등) ② 방향 문서 게이트 대조·자율 큐 소진 시 보고. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량 관리.
+
 ## 2026-08-27 세션 (CA-22 2차 완료 — 프록시 설정 UI·진행 취소·재개)
 
 - **설정 토글**: 인스펙터 Playback 섹션에 "Auto-generate proxy on import" 체크박스(`updatePlaybackSettings` 신규 파라미터) — 프록시 설정 3종(재생 사용·thermal 자동·해상도)과 한 블록.

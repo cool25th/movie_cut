@@ -35,6 +35,8 @@ struct IOSContentView: View {
     @State private var isMusicLibraryPresented = false
     @State private var isSFXPickerPresented = false
     @State private var isVoiceoverPresented = false
+    // CA-14: beat detection action sheet (Detect / Clear) — Mac parity entry.
+    @State private var isBeatActionPresented = false
     @State private var isAutoSubtitlesPresented = false
     @State private var isAutoAssistantPresented = false
     @State private var isTemplatePickerPresented = false
@@ -309,6 +311,26 @@ struct IOSContentView: View {
             }
             .sheet(isPresented: $isSFXPickerPresented) {
                 sfxPickerSheet
+            }
+            // CA-14: Detect/Clear beat markers on the selected clip. Clear
+            // stays available whenever beat markers exist even if the
+            // current selection cannot run a new detection.
+            .confirmationDialog(
+                "Beat Markers",
+                isPresented: $isBeatActionPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Detect Beats") {
+                    Task { await viewModel.detectBeats() }
+                }
+                if viewModel.hasBeatMarkers {
+                    Button("Clear Beat Markers", role: .destructive) {
+                        Task { await viewModel.clearBeatMarkers() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Adds beat markers to the selected audio or video clip. Clips snap to beats while dragging.")
             }
             .sheet(isPresented: $isVoiceoverPresented) {
                 voiceoverSheet
@@ -624,6 +646,13 @@ struct IOSContentView: View {
                 toolbarButton(title: "Voice", systemImage: "mic") {
                     isVoiceoverPresented = true
                 }
+
+                // CA-14: beat detection on the selected audio/video clip —
+                // markers become drag snap targets (Mac parity).
+                toolbarButton(title: "Beats", systemImage: "waveform") {
+                    isBeatActionPresented = true
+                }
+                .disabled(!viewModel.canDetectBeats)
 
                 Divider().frame(height: 28)
 

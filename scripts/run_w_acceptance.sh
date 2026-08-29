@@ -114,6 +114,14 @@ run_scenario() {
   kill "$watchdog" 2>/dev/null || true
   if [ -n "$watchdog_sleep" ]; then
     kill "$watchdog_sleep" 2>/dev/null || true
+    # SIGTERM delivery is asynchronous — give the sleep a moment to exit
+    # before the orphan assertion, or a still-dying process trips it as a
+    # false positive (measured 2026-08-29: watchdog_sleep_orphaned on a
+    # normally-completing scenario).
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$watchdog_sleep" 2>/dev/null || break
+      sleep 0.2
+    done
   fi
   wait "$watchdog" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true

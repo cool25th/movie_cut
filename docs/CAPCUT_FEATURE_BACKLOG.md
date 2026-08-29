@@ -320,7 +320,8 @@
 - 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴). **결정론 재현**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
 - **조사 결과(2026-08-27 심화)**: ①파킹은 composition 재구성 이후 **첫 필수 서스펜션 지점마다 이동** — 순서 재배열(덕킹을 비억제 창에서 먼저 실행)로 composition_ready까지는 통과하지만 스냅샷 대기 루프에서 동일 파킹(→재배열은 폐기). ②`Task.sleep`·`Task.yield` 모두 재개 안 됨(시계 문제 아님). ③**`DispatchQueue.main.async` 블록도 전달 안 됨(GCD 레벨)** — 반면 앱 활성화 등 런루프 이벤트는 계속 처리됨(메인 런루프 모드 kCFRunLoopDefaultMode 정상·lldb 확인). ④전역 협력 풀은 생존(detached 하트비트 1틱 기록) — 이후 MainActor.run 홉에서 정지. ⑤덕킹 **램프 적용(APPLY)과 무관**(오디오 트랙 존재 자체가 트리거)·크로마키 게이트는 무관·일반 경로 덕킹 E2E는 통과. 종합: **메인 디스패치 큐의 전달이 영구 정지하는 OS/AVFoundation 계열 결함**(W4 ProRes 교찰의 "once-continuation 파킹(Apple측)"과 같은 부류로 추정) — 루프 내 도구로는 근본 원인 특정 불가.
 - 부산물(유지): `snapshotFrame`의 seek completion 누수 방어 와치독(2s 경합·1회 재개 보장 — AVPlayer 공식 문서상 완전 핸들러 미보장 클래스). 파리티 스윕 13/13 무회귀 확인.
-- 잔여: 재현은 1커맨드로 고정됨(ab09). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
+- **재현 경로 추가(2026-08-29, BUG-ACC-02에서 병합 — 메인 세션)**: W1 acceptance 실덕킹 경로에서 동일 파킹 — `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 60초 실발화(say 생성)에서 메인 런루프 유휴·워커 부재·첫 스텝조차 미기록(스택 샘플 2026-08-29 — 메인 스레드 mach_msg 대기만 존재). **1커맨드 재현: `bash scripts/run_w_acceptance.sh w1`**(STRICT — ducking 스텝 `path=analysis` 직후 무출력, 러너 900초 회수). 파리티×덕킹 '조합'이 아니라 덕킹 **분석 경로 자체**가 트리거일 가능성 — 에스컬레이션 조사 범위에 SilenceDetectionProvider.analyze의 continuation 포함 권장.
+- 잔여: 재현은 1커맨드로 고정됨(ab09 + 위 acceptance w1 경로 2종). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
 
 ### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정(메커니즘 확정·G-29 연계)
 
@@ -450,11 +451,12 @@
 
 - 증상: acceptance w4(5분 마스터)에서 프리셋 export가 **4회 중 2회 bytes=0** — w4.mp4·w4-prores.mov 모두 미생성, dump.error=none(오류 무표면), **prores 스텝만 거짓 OK**(exportProResMaster가 조용히 조기 반환 — 오류 상태 전파 결함 의심). 성공 시 395MB·300.00s·A/V 0.000 정상. 실패 run elapsed ~170s(성공 ~211-242s) — 조기 사망.
 - 조사 재료: acceptance 러너가 앱 stdout/stderr를 버려 원인 불명이었음 → 러너에 `app.log` 보존·실패 시 워크디렉터리 유지·ffprobe 탐침 재시도(인코직 직후 조기 공탐 — 보존 파일 재탐침 정상)를 이미 보강. 다음 재현의 app.log로 BUG-CA12-01(메인 디스패치 정지) 계열 여부 판정. STAB-04 2차 관련.
+- **조사 상태(2026-08-29 밤, 메인 세션)**: 재현 누적 4인스턴스(루프 2/4 + idZ3QA + BUUQJL — 후자 2건 보존). **캡처 방법론 교정**: app.log(stdout)는 구조적으로 공탐 — AppLog는 OSLog로 발행되어 stdout에 안 나옴. 유효 캡처는 재현 직후 `log show --last 15m --predicate 'processImagePath CONTAINS "MovieCutMac"'` 사후 추출(병행 `log stream` 시도는 1줄만 확보 — 권한/버퍼 의심). 부수 성과: 통과 run(6ypaHX 보존분)에서 **BUG-ACC-01 수정이 300초 실스케일 확증**(w4-prores.mov·w4.mp4 모두 300.000000s·코덱 prores). 실패 run elapsed ~170s 패턴은 유지 관찰.
 
-### BUG-ACC-02 (P1) — 실제 덕킹 분석 경로가 60초 실발화에서 continuation 파킹 — 미수작
+### BUG-ACC-02 (P1) — 실제 덕킹 분석 경로가 60초 실발화에서 continuation 파킹 — **BUG-CA12-01 병합 완료(2026-08-29)**
 
 - 증상: W_STRICT의 w1에서 `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 앱 파킹 — 메인 런루프 유휴·워커 스레드 부재·w.json 미기록(첫 스텝도 디스크에 없음). 12분 관찰·스택 샘플로 확인. **BUG-CA12-01(메인 디스패치 전달 정지 계열)의 새 재현 경로** — 스모크의 하드코딩 범위 경로는 이 결함을 가림.
-- 수정 방향: BUG-CA12-01 에스컬레이션에 본 재현 경로 추가(실발화 60초 WAV + autoDuckOtherAudio로 1커맨드 재현 가능). 근본은 동일 계열로 추정.
+- 병합: 재현 경로·스택 증거가 §1.13 BUG-CA12-01 에스컬레이션 기록에 통합됨(아래 "재현 경로 추가" 불릿). 본 행은 동일 계열로 통합 관리 — 별도 수정 없이 근본 에스컬레이션(BUG-CA12-01) 해법을 따름. W1 acceptance는 이 계열 해소 전까지 RED 유지.
 
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
 

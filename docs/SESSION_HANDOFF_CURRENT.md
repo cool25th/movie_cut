@@ -11,7 +11,7 @@
 - **BUG-ACC-04 등록(P1)**: 5분 마스터 출력이 **4회 중 2회 전면 실패**(양 export 0바이트·오류 무표면·prores 스텝 거짓 OK — exportProResMaster 조기 반환). app.log 캡처가 다음 재현 판정용(BUG-CA12-01 계열 여부).
 
 ### 다음 회차 — STAB 큐
-① **BUG-ACC-02** 파킹 재현 경로 BUG-CA12-01 에스컬레이션 병합 ② STAB-04 2차(acceptance 5/5×3 — BUG-ACC-04 app.log 조사 포함) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·**CODEX P1 7건 — 04·07·08·09·10·11·17**, 04·PhotosPicker는 기존 열거 누락 보강 2026-08-29). **STAB 창구 종료 후 복귀 큐는 STABILIZATION_PLAN §3 Phase 3+ 체크리스트로 원장화됨**(리뷰 권장 2~4단계 전항 — 베타 검증 매트릭스·CapCut 속도 지표·FCP 품질 지표·경계 분해 복귀·백로그 §K 카드뉴스 G-20/21/22·U-10 연결). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+① ~~BUG-ACC-02 병합~~ 완료(2026-08-29 메인 세션 — 백로그 §1.13에 재현 경로·스택 증거 통합, 1커맨드 재현 `run_w_acceptance.sh w1` 문서화) ② STAB-04 2차(acceptance 5/5×3 — BUG-ACC-04 app.log 조사 포함) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·**CODEX P1 7건 — 04·07·08·09·10·11·17**, 04·PhotosPicker는 기존 열거 누락 보강 2026-08-29). **STAB 창구 종료 후 복귀 큐는 STABILIZATION_PLAN §3 Phase 3+ 체크리스트로 원장화됨**(리뷰 권장 2~4단계 전항 — 베타 검증 매트릭스·CapCut 속도 지표·FCP 품질 지표·경계 분해 복귀·백로그 §K 카드뉴스 G-20/21/22·U-10 연결). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
 
 ## 2026-08-29 세션 (STAB-04 1차 완료 — W 측정 양분화·실결함 3건 포착, 메인 세션 수동 3연속 회차)
 

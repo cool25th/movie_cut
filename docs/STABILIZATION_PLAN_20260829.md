@@ -16,7 +16,7 @@
 
 | ID | 우선순위 | 항목 | 주체 | 완료 기준 |
 |---|---|---|---|---|
-| STAB-01 | P1 | **watchdog 고아 sleep 재수습** — run_w_scenarios.sh 기존 "수습" 주석(L81-86)은 `kill $watchdog` **후에** `pkill -P $watchdog`를 호출: subshell 사망 시 내부 sleep이 PID 1로 재부모화되어 빈 결과. run_longform_soak.sh는 pkill -P조차 없음(최악 2400초 잔류). 정석: sleep PID 직접 기록·trap 회수, 또는 프로세스 그룹 kill | 루프 | 양 스크립트 완주 직후 고아 sleep 잔류 0 실측(pgrep) |
+| STAB-01 | P1 | **완료(2026-08-29)** — watchdog 고아 sleep 재수습 — run_w_scenarios.sh 기존 "수습" 주석(L81-86)은 `kill $watchdog` **후에** `pkill -P $watchdog`를 호출: subshell 사망 시 내부 sleep이 PID 1로 재부모화되어 빈 결과. run_longform_soak.sh는 pkill -P조차 없음(최악 2400초 잔류). 정석: sleep PID 직접 기록·trap 회수, 또는 프로세스 그룹 kill | 루프 | 양 스크립트 완주 직후 고아 sleep 잔류 0 실측(pgrep) |
 | STAB-02 | P0 | **Mac ExportEngine A/V 펌프 병렬화** — App/MovieCutMac/Export/ExportEngine.swift L1561-1578: video 펌프 완전 종료 후 audio 펌프 시작. writer 역압이 audio 진행을 요구하면 video가 영구 정지(W4 ProRes 타임아웃 클래스). **iOS RENDER-02(2026-08-26)의 태스크그룹 병렬 pump가 참조 구현** — 포팅 + 한쪽 실패 시 reader/writer 전체 취소·부분 파일 정리 + 제품 경로 취소·시간제한 | 루프 | W4 ProRes·명시적 비트레이트 경로 3회 연속 + 취소 단위테스트 + 부분파일 정리 실측 |
 | STAB-03 | P1 | **iOS 제품 결함 4건** — ① stepFrame(±1/fps≈0.033s)이 0.25s seek 임계값(PreviewView.swift L230)에 흡수 — 명시적 스텝은 임계값 우회 ② 루프/정지를 AVPlayerItemDidPlayToEndTime 알림으로(periodic observer 추정 폐지, L174-193) + observer 클로저 MainActor 격리 명시 ③ security-scoped 접근을 Task 내부에서 열고 닫기(iOSContentView.swift L361-365 — 현재 defer가 Task 예약 직후 종료) ④ fileExporter 성공 후 중복 saveProject 제거 | 루프 | iOS 테스트 + 스텝/루프는 AVPlayer 실제 프레임·시간 실측(VM 숫자만의 확인 금지) |
 | STAB-04 | P0 | **W 측정 양분화** — 현행 run_w_scenarios.sh는 2~4초 합성 픽스처·자동 덕킹 하드코딩 범위·STT 무실행 성공. ① 현행을 `run_w_smoke.sh`로 개명(빠른 회귀용) ② `run_w_acceptance.sh` 신설: W1 60초 세로 토킹헤드(STT 실측 — 헤드리스 TCC 강제 크래시 선례 2026-08-19 세션 32: 사용자 TCC 사전 승인 또는 앱 UI 경유 필요)·W4 5분 멀티트랙 마스터(그레이딩+오디오 믹스+ProRes)·W5 카드뉴스 문서 편집기 경로·덕킹 실제 감지 경로·작업시간 예산·출력 품질(길이·fps·코덱·메타데이터) 검증 | 루프+사용자 | acceptance 5/5 × 3회 연속(실제 길이·UI 경로·결과 품질 포함) |
@@ -28,7 +28,7 @@
 ## 2 사용자 대기 항목 (루프 실행 불가 — 회차 보고만)
 
 - **122 로컬 커밋 push — 완료(2026-08-29)**: 스택 PR 5본으로 분할(히스토리 재작성 없이 기존 커밋 경계에서 분할, 순서 병합): [#19](https://github.com/cool25th/movie_cut/pull/19) Core·오디오·효과+인프라 → [#20](https://github.com/cool25th/movie_cut/pull/20) 감사+결함 수정 → [#21](https://github.com/cool25th/movie_cut/pull/21) 포맷·파리티·iOS 통합 → [#22](https://github.com/cool25th/movie_cut/pull/22) CA 큐·벤치마크 → [#23](https://github.com/cool25th/movie_cut/pull/23) 리뷰 #2 반영·안정화(라이브 브랜치 — 이후 STAB 증분이 이 PR로 흘러듦). **원격 CI 결과는 이 PR들에서 관찰 가능 — STAB-06 원격 검증 창구.** 병합 순서 준수 필요.
-- **soak 2run** — 조용한 기기(voiceagent 일시중지 + 디스크 여유) 후 `bash scripts/run_longform_soak.sh 2`. STAB-01 완료 후 신뢰성 확보.
+- **soak 2run — 완료(2026-08-29, STAB-01 세션에서 달성)**: 기기가 조용해진 시점에 재수습된 watchdog 하 2런 완주 — run1 wall 803.2s/RSS 1,476MB·run2 700.5s/1,080MB·RSS 성장 0.0%·결정성 9/9·A/V Δ0.0·**GATE PASS** + 고아 sleep 잔류 0(내장 단언 7회·외부 pgrep 교차 0건).
 - **G-27 실기기 잔여 2종** — 기기 연결·잠금 해제 후 `TEAM_ID=98ZKV9N9T4 bash scripts/run_g27_device_e2e.sh`.
 - **MACUI-01·U-08** — TCC/AX 환경 복구(접근성 권한 또는 재부팅).
 - **STAB-07 MetricKit 결정** — 제안 접수 후.

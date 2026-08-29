@@ -21,7 +21,17 @@
 - **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
 - **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
 
-### 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
+### 2026-08-29 세션 (STAB-01 완료 — watchdog 고아 sleep 재수습 + soak 2run 확증 달성)
+
+- **STAB-01(양 스크립트 재수습)**: `run_w_scenarios.sh`·`run_longform_soak.sh` 모두 (sleep N; kill…) subshell watchdog를 `kill $wd`로 죽인 뒤 `pkill -P $wd`를 호출 — subshell 사망 시 내부 sleep이 launchd로 재부모화돼 **빈 결과**(구 "수습"은 무효, 시나리오당 360s·런당 2400s 고아 잔류). 정석 수정: **spawn 직후 내부 sleep PID를 pgrep -P로 기록**(subshell 생존 중·유계 재시도) → 완료 시 watchdog·sleep PID 둘 다 kill → `kill -0 $sleep` 사후 단언(생존 시 FAIL).
+- **실측**: W 스위트 5/5 완주(워크플로 29/29 스텝·내장 단언 5회 통과) + **soak 2런 완주 — run1 wall 803.2s/RSS 1,476MB·run2 700.5s/1,080MB·RSS 성장 0.0%(게이트 ≤15%)·결정성 9/9 프레임 해시·A/V Δ0.0 — LONGFORM SOAK GATE PASS**(내장 단언 2회) + **외부 교차검증: `sleep 360/2400` 고아 0건**(pgrep -x sleep→argv 정밀 매칭 — -f 패턴은 탐침 자기오탐 함정).
+- **부수 성과**: 기기가 조용해진 시점에 재수습 코드가 탑재된 채 2런이 돌아 **사용자 대기 항목이었던 soak 2run 확증을 이번에 달성** — STAB 계획서 §2·LOOP_STATE 대기 목록에서 완료 처리.
+- **검증**: verify_gate 5/5(Core 1,425·Mac/iOS 빌드·lint).
+
+### 다음 회차 — STAB Phase 0 계속
+① **STAB-02**(P0 — Mac ExportEngine A/V 펌프 병렬화, iOS RENDER-02 태스크그룹 참조 구현 포팅 + 취소·부분파일 정리) ② STAB-06(CI 분할 yaml) — Phase 0 잔여. 이후 STAB-03(iOS 4건) → Phase 2. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
 
 - **soak 2run 재차단**: voiceagent 활성(어댑터 구성만 교체 — diarization-adapter)·로드 29+ — 사용자 워크플로 존중, 조용한 기기 대기 유지. G-29(3단계 기간 위반)·블라인드 A/B(2단계+사람 패널)도 자율 부적 판정.
 - **전회차 "분해 한계" 해제 증분(8919f3c)**: 공유 file-private 헬퍼 4종(`sourceClipAndAsset`·`timelineMapping`·`recordAnalysisResult`+`clipDescription`·`isTranscribable`)을 `EditorViewModel+AnalysisSupport.swift`로 이동, 공유 4종은 private→internal 승격(**동일 타깃 가시성 확대만 — 스코프·공개 표면·호출부 불변**, A류 경계 정리 성격으로 큐 운영자 승인 하 실행). `ensureDefaultTracks` 동일 승격. F-20 하이라이트 메서드(+shift)가 `EditorViewModel+AutoHighlights.swift`로 뒤따름 — 본체 **5,443→5,206줄**. `HighlightsStaticContract` 소스 경로만 새 파일로 추적(기대치 5종 불변).

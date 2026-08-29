@@ -1,7 +1,84 @@
 # 세션 핸드오프 — 현재 (2026-08-19)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
-> 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+> 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
+
+## 2026-08-29 세션 (외부 리뷰 #2 병합 — 안정화 계획 등록, docs 전용)
+
+- **입력**: 사용자 제공 외부 종합 리뷰(2026-08-29, 판정 "후기 알파·베타 진입 전 안정화"). 핵심 주장 전부 코드 대조로 확인: Mac ExportEngine A/V 순차 펌프(ExportEngine.swift L1561-1578)·W 시나리오 2~4초 픽스처·iOS stepFrame 0.25초 seek 임계값 흡수(PreviewView.swift L230)·security scope Task 앞 조기 종료(iOSContentView.swift L361-365)·fileExporter 이중 저장·watchdog "수습" 주석의 순서 오류(kill 후 pkill -P — 재부모화된 sleep 미포획)·cross-dissolve 통합 스킵(run_core_editing_parity.sh L167-173)·freeze-frame 순서 의존 플래이크·CI 30분 제한 하 iOS 61테스트 미완주·MetricKit 요구 충돌(REQUIREMENTS §13.8 vs AppLog 미도입 정책)·122커밋 원격 미푸시.
+- **산출**: `docs/STABILIZATION_PLAN_20260829.md` 신설 — STAB-01~08 항목 원장(우선순위·실행주체·완료기준) + Phase 0~2 순서·종료기준 + 기존 기록(RENDER-02·세션 34 수습·BUG-CA12-01·PARITY-TOL-01)과의 관계 정리. 크론 프롬프트 우선순위 체인에 계획 문서 편입(무상태 유지 — 항목·상태는 문서에서만 읽음; LI-004로 기록, 사용자 병합 지시가 승인 근거).
+- **측정 분쟁 명시**: 외부 W 4/5(W4 ProRes 90초 timeout) vs 내부 W 5/5(2026-08-28 재실측) — **STAB-01·STAB-02 완료 후 동일 커맨드 3회 연속으로만 판정**(조건부 교착은 단발 실행으로 부정 불가). 그 전까지 W 보고에 측정 환경 병기. Phase 1 x/7 판정은 Phase 2 종료 시 재실측 대조까지 보류.
+- **큐 전환**: 경계 분해 잔여(F-17 TTS·F-13 자막·F-19 리프레임 — internal 승격 리팩터 승인 대상)·G-29·블라인드 A/B는 STAB 창구 종료 후 재개. soak 2run·실기기 2종(사용자 대기)은 병렬 유지.
+- **검증**: docs 전용 증분(코드 변경 없음) — 문서 경로 검증 통과. STAB-01부터 각 증분이 자체 게이트 실측으로 완료 판정.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-01** watchdog 고아 sleep 재수습(run_w_scenarios.sh 수습 로직 순서 정정 + run_longform_soak.sh 동일 패턴 적용 — STABILIZATION_PLAN §1) ② **STAB-02** Mac ExportEngine A/V 펌프 병렬화(iOS RENDER-02 태스크그룹 패턴 포팅·취소·부분파일 정리 — 완료 시 W4 ProRes 3회 연속) ③ **STAB-03** iOS 4건(프레임 스텝 임계값·루프 EndTime 알림·security scope 수명·fileExporter 이중 저장). **사용자 대기(병렬)**: ~~122커밋 push~~ 완료(2026-08-29 — 스택 PR #19~#23, 순서 병합)·soak 2run(조용한 기기)·실기기 2종·MACUI-01/U-08 TCC. **STAB 증분 커밋 후 push는 루프 금지 — 메인 세션/사용자가 스택 PR #23로 주기 반영.**
+
+## 2026-08-28 세션 (장편 soak 게이트 구축 — 유효 1차 실측·환경 오염으로 2run 확증 연기)
+
+- **게이트 신설**: `scripts/run_longform_soak.sh` — 30분 fixture(ab04) N회 연속 실앱 출력으로 ①와치독 내 완주 ②**RSS 증가 ≤15%**(누수 가드) ③길이·A/V 시작 Δ ≤1프레임 ④**실행 간 프레임 해시 9표본 동일**(결정성) ⑤열·전원 조건 기록. 실행 간 열 상태 기록·와치독 2400s(지속 부하 현실화 — 1차 시도에서 run2가 1500s 초과한 경위 주석).
+- **유효 실측(오염 전, 1차 시도 run1)**: wall 872.6s(RTF 0.485)·peak RSS **1,574MB**·길이 1800.000000s 정확·**A/V 시작 Δ 0.000000** — 30분 장편 단일 실행 안정성 실증(CA-12 2시간 단일 실행 증거와 병기).
+- **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
+- **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
+
+### 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
+
+- **soak 2run 재차단**: voiceagent 활성(어댑터 구성만 교체 — diarization-adapter)·로드 29+ — 사용자 워크플로 존중, 조용한 기기 대기 유지. G-29(3단계 기간 위반)·블라인드 A/B(2단계+사람 패널)도 자율 부적 판정.
+- **전회차 "분해 한계" 해제 증분(8919f3c)**: 공유 file-private 헬퍼 4종(`sourceClipAndAsset`·`timelineMapping`·`recordAnalysisResult`+`clipDescription`·`isTranscribable`)을 `EditorViewModel+AnalysisSupport.swift`로 이동, 공유 4종은 private→internal 승격(**동일 타깃 가시성 확대만 — 스코프·공개 표면·호출부 불변**, A류 경계 정리 성격으로 큐 운영자 승인 하 실행). `ensureDefaultTracks` 동일 승격. F-20 하이라이트 메서드(+shift)가 `EditorViewModel+AutoHighlights.swift`로 뒤따름 — 본체 **5,443→5,206줄**. `HighlightsStaticContract` 소스 경로만 새 파일로 추적(기대치 5종 불변).
+- **함정**: ①pbxproj 등록을 취약한 문자열 조립으로 생성 → 그룹/페이즈 줄 끝 `;` 파손으로 **프로젝트 자체가 안 읽힘**(무수정 stash 프로브로 판별·이분법으로 격리·정정 재적용) ②Core 1,425 중 4 issue = 하이라이트 소스 계약 1개 테스트의 기대치 4건(경로 갱신으로 해소).
+- **검증**: Core 1,425/211스위트 PASS·Mac 48/48·verify_gate 5/5. 잔여 분해 후보: F-17 TTS(ensureTrack·audioDuration·sanitizedDuration·minimumVoiceoverDuration 승격 필요)·F-13 자막·F-19 리프레임 등 — 동일 패턴으로 진행 가능.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① soak 2run(조용한 기기 — 사용자 voiceagent 일시중지 후) ② 실기기 2종(사용자) ③ 경계 분리 3차(위 잔여)·G-29(3단계 도달 시)·블라인드 A/B·BUG-CA12-01 에스컬레이션.
+
+## 2026-08-29 세션 (경계 분리 부채 증분 — F-12R 순수 이동 + 분해 한계 발견·soak 환경 차단 판정)
+
+- **soak 2run 확증: 환경 차단 판정** — 사용자 voiceagent 어댑터 3종(VoiceAgentApp·parakeet·senseVoice)이 여전히 활성 + 로드 28~36으로 측정 타당성 훼손. 사용자 프로세스 무손상 원칙으로 개입 불가 — **조용한 기기 확보(voiceagent 일시중지) 후 1커맨드**(`run_longform_soak.sh`) 대기 유지.
+- **부채 증분(리뷰 #7·§6 부채 원칙·P0-C "경계 분리 착수")**: F-12R 사용자 텍스트 스타일 프리셋 45줄을 `EditorViewModel+TextStylePresets.swift`로 **순수 이동**(메서드 5종+섹션 전용 private 헬퍼 — 저장 속성은 본체 유지, +Media 선례 패턴). 본체 5,486→5,443줄.
+- **분해 한계 발견(중요)**: 잔여 섹션(F-17 TTS·F-19 리프레임·F-20 하이라이트·F-13 자막·스코프 등)은 전부 공유 file-private 헬퍼에 얽힘 — `sourceClipAndAsset`(15호출)·`timelineMapping`(15)·`recordAnalysisResult`(10)·`ensureTrack`·`audioDuration`·`sanitizedDuration`·`minimumVoiceoverDuration`. **순수 이동 분해는 자연 한계 도달** — 추가 분해는 이 헬퍼들의 internal 승격(또는 공유 extension 이동)을 수반하며, +Media 헤더의 규율상 "별도 승인된 변경"으로 큐 운영자/사용자 판단 대상.
+- **검증**: Mac 유닛 48/48·verify_gate 5/5.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① soak 2run(조용한 기기 — 사용자 voiceagent 일시중지 후) ② 실기기 2종(사용자) ③ 경계 분리 계속(승격 리팩터 승인 여부 판단 포함)·G-29·블라인드 A/B·BUG-CA12-01 에스컬레이션.
+
+## 다음 회차 — LOOP_STATE 우선순위
+① **soak 2run 확증**(위 조건 — 사용자 환경 협조 필요: voiceagent 일시중지·디스크) ② 실기기 2종(사용자 대기 — Phase 1 마지막) ③ G-29·블라인드 A/B·EditorViewModel 경계 분리·BUG-CA12-01 에스컬레이션.
+
+## 2026-08-28 세션 (iOS Phase-1 잔여 UI 완료 — 리뷰 #3 전항)
+
+- **프레임 스텝**: `stepFrame(forward:)` ±1/frameRate·양단 클램프·스텝 시 일시정지 — 전송부에 backward.frame/play/forward.frame 버튼.
+- **루프 재생**: `isLooping` 토글(repeat 아이콘) — PreviewView 시간 옵저버가 끝 도달 시 0으로 시크·재생 지속(꺼져 있으면 기존 정지).
+- **트랙 관리**: 하단 툴바 "Tracks" 시트 — 비디오/오디오 트랙 추가(CreateTrackCommand)·트랙별 mute/lock(SetTrackPropertyCommand)·스와이프 삭제(RemoveTrackCommand — Core public화로 iOS 도달).
+- **프로젝트 열기/저장**: 상단 ⋯ 메뉴 — fileImporter(.moviecut) → `openProject` ReplaceProjectCommand 경로·fileExporter(MovieCutProjectDocument — ProjectStore와 동일 코덱: ISO8601·pretty·sortedKeys) → `saveProject`. 양 플랫폼 왕복 호환.
+- **출력 프리셋**: Export Settings 시트 — 해상도(720p/1080p/4K)·컨테이너 버튼 행(IOSExportOptionRow 제네릭 — 인라인 Picker 체인이 타입체커 타임아웃이라 분리). 부수: ExportResolution에 displayName·CaseIterable 추가.
+- **함정 기록**: 5단계 빌드 오류의 진범은 전부 ExportResolution.displayName 부재 폭포였음 — 겉보기 오류(Picker 오버로드·타입체크 타임아웃)는 전부 그 하위 증상.
+- **검증**: IOSPhase1SurfacesTests 6/6(스텝 수학·클램프·루프·트랙 명령 왕복·저장/열기 복원·손상 파일 명시 오류·프리셋 비간섭)·verify_gate 5/5.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① 실기기 2종(사용자 대기 — Phase 1 마지막 조건) ② G-29(HDR 파이프라인·BUG-CA12-02 입력 요구)·블라인드 A/B·장편 soak ③ EditorViewModel 경계 분리 지속·BUG-CA12-01 에스컬레이션.
+
+## 2026-08-28 세션 (PARITY-TOL-01(a) 해결 — 캔버스 정합 픽스처·핵심 파리티 18/18·스윕 13/13 @2.0)
+
+- **실행(리뷰 권고 (a)·승인)**: 파리티 픽스처를 1440x1080 4:3(기본 1920x1080 캔버스에서 1:1 픽셀 매핑·필러박스)으로 교체 — solid_red·bars·moving_subject(좌표 전부 ×4.5 쌍둥이) 재생성·커밋. 허용치는 무변경(MAD ≤ 2.0 유지).
+- **재실측**: 핵심 파리티 **18/18 PASS**(이전 실패 8개 전부 0.25~1.67로 회복) + 파리티 스윕 **13/13 PASS·허용치 12→2.0 강화**(신규 MAD 0.02~1.36).
+- **함정 2건 실측 고착**: ①ripple_delete는 bars=testsrc2의 1440 미세 패턴이 코덱 잡음(Perceptual 영역)으로 ~3 MAD — **평탄 smptebars**로 교체해 해소(재표본 아님·결정론 3회 확인 후 판정). ②optical_flow는 1440에서 보간 비용 4.5배로 240s 하니스 와치독 초과(2회) — 양 다리 컴포지터 상쇄 근거(320에서도 PASS)로 해당 시나리오만 320 유지.
+- **문서**: VERIFICATION_STANDARD §2 해결 기록·백로그 §1.9 PARITY-TOL-01 종결. **Phase 1 판정 갱신: 6/7 — 잔여는 실기기 2종(사용자)뿐.**
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **iOS Phase-1 잔여 UI**(프레임 스텝·루프·트랙 관리·프로젝트 열기/저장·출력 프리셋 — 리뷰 #3) ② 실기기 2종(사용자 대기) ③ G-29·블라인드 A/B·장편 soak·EditorViewModel 경계 분리 지속.
+
+## 2026-08-28 세션 (외부 리뷰 반영 — P0/P1/P2 전량 수정·W 워크플로 판정·Phase 1 정직 재판정)
+
+- **리뷰 검증**: 7건 주장 전부 코드로 확인(판정 희석·트림 no-op·컨테이너 고정·fps 미반영·배경색 폐기·watchdog 누수·문서 부정합).
+- **P0 ①②+P2**: W 판정을 워크플로 단위로(필수 단계 전부+출력물 성공 시에만 PASS) + watchdog 고아 sleep 수습 → **W 5/5 워크플로 재실측 PASS(W4 ProRes 포함 — 리뷰의 타임아웃은 재현 안 됨·고아 sleep 파이프류로 판정)**·스크립트 즉시 종료.
+- **P0 ③④**: iOS 트림 다이얼로그(플레이헤드 기준 앞/뒤 — TrimClipCommand 실경로·범위 외 명시 오류) + 출력 컨테이너 planner 해석(mp4 기본·URL/fileType 동일 소스).
+- **P1 ⑤⑥**: 캔버스 fps → export 설정 동기화(SetProjectExportSettingsCommand)·텍스트 배경색 저장(TextClipContent.backgroundColor).
+- **검증**: iOS 신규 5/5(컨테이너 mp4 실측·트림 수축·오류·배경색·fps 동기)·verify_gate 5/5.
+- **Phase 1 재판정(리뷰 수용)**: 6/7 표기 철회 — 확실 4/7 + W 5/5로 **5/7**. 잔여: 픽셀 파리티(PARITY-TOL-01 — 리뷰 권고 (a)≥720p 재생성으로 **실행 승인됨·다음 증분**)·실기기 2종(사용자). 경쟁분석 낡은 iOS 행(M1 전환·M2 autosave·M4 오디오 해결·M3 출력 축소) 정정.
+- **리뷰 잔여 지시(다음 큐)**: PARITY-TOL-01(a) 실행 → iOS Phase-1 잔여 UI(프레임 스텝·루프·트랙 관리·프로젝트 열기/저장·출력 프리셋 UI — 리뷰 #3) → 실기기 → 상태 원장 갱신(본 세션 수행) → G-29·블라인드 A/B·장편 soak(리뷰 #6)·EditorViewModel 경계 분리 지속(#7).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **PARITY-TOL-01(a)**: ≥720p 캔버스 정합 픽스처 재생성 + 18/18 재검증(연동 골든 해시·스크립트 정합 포함 — 대형 증분) ② iOS Phase-1 잔여 UI(P0 목록) ③ 실기기 2종(사용자 대기 불변).
 
 ## 2026-08-28 세션 (A11Y-03 + CA-19 — 자율 소형 큐 소진)
 

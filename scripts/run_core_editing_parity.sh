@@ -14,11 +14,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-VIDEO_A="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
-VIDEO_B="$ROOT/Tests/Fixtures/bars_320x240_3s_30fps.mp4"
+# PARITY-TOL-01(a) 2026-08-28: canvas-matched >=720p fixtures (1440x1080 is
+# 4:3 at the default canvas height, so the aspect fit is a 1:1 pixel map with
+# pillarbox — no resample on either render leg, keeping MAD <= 2.0 the honest
+# contract instead of relaxing it). Same content/duration/fps as the retired
+# 320x240 pair, so all scenario timings carry over unchanged.
+VIDEO_A="$ROOT/Tests/Fixtures/solid_red_1440x1080_2s_30fps.mp4"
+VIDEO_B="$ROOT/Tests/Fixtures/bars_1440x1080_3s_30fps.mp4"
 AUDIO="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
 IMAGE="$ROOT/Tests/Fixtures/swatch_blue_64x64.png"
-MOVING_SUBJECT="$ROOT/Tests/Fixtures/moving_subject_320x240_2s_30fps.mp4"
+MOVING_SUBJECT="$ROOT/Tests/Fixtures/moving_subject_1440x1080_2s_30fps.mp4"  # PARITY-TOL-01(a)
 for f in "$VIDEO_A" "$VIDEO_B" "$AUDIO" "$IMAGE"; do
   [ -s "$f" ] || { echo "missing fixture $f; run scripts/make_fixtures.sh" >&2; exit 1; }
 done

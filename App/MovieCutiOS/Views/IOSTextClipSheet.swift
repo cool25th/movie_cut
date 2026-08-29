@@ -54,12 +54,17 @@ struct IOSTextClipSheet: View {
                 Section {
                     Button {
                         let hexColor = colorToHex(textColor)
+                        // Review P1: the Background toggle + picker values
+                        // were collected but never persisted — pass the
+                        // chosen background color through to TextClipContent.
+                        let backgroundHex = hasBackground ? colorToHex(bgColor) : nil
                         Task {
                             await viewModel.addTextClip(
                                 text: text,
                                 fontName: fontName,
                                 fontSize: fontSize,
-                                color: hexColor
+                                color: hexColor,
+                                backgroundColor: backgroundHex
                             )
                             dismiss()
                         }

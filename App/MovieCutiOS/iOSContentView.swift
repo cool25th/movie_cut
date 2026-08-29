@@ -37,6 +37,14 @@ struct IOSContentView: View {
     @State private var isVoiceoverPresented = false
     // CA-14: beat detection action sheet (Detect / Clear) — Mac parity entry.
     @State private var isBeatActionPresented = false
+    // Review P0: the Trim entry was a no-op closure — real playhead trims.
+    @State private var isTrimActionPresented = false
+    // Phase-1 (review #3): project open/save + export settings + tracks.
+    @State private var isProjectOpenPickerPresented = false
+    @State private var isProjectSaveExporterPresented = false
+    @State private var isExportSettingsPresented = false
+    @State private var isTrackManagerPresented = false
+    @State private var projectSaveURL: URL? = nil
     @State private var isAutoSubtitlesPresented = false
     @State private var isAutoAssistantPresented = false
     @State private var isTemplatePickerPresented = false
@@ -132,6 +140,34 @@ struct IOSContentView: View {
                         Image(systemName: "slider.horizontal.3")
                     }
                     .accessibilityLabel("Inspector")
+
+                    Menu {
+                        // Phase-1 (review #3): project open/save + export
+                        // presets — the engine paths existed, no UI reached
+                        // them.
+                        Button {
+                            isProjectOpenPickerPresented = true
+                        } label: {
+                            Label("Open Project…", systemImage: "folder")
+                        }
+
+                        Button {
+                            isProjectSaveExporterPresented = true
+                        } label: {
+                            Label("Save Project", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(viewModel.currentProject.timeline.duration <= 0
+                                  && viewModel.currentProject.mediaLibrary.assets.isEmpty)
+
+                        Button {
+                            isExportSettingsPresented = true
+                        } label: {
+                            Label("Export Settings", systemImage: "switch.2")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Project and export options")
 
                     Button {
                         Task { await startExport() }
@@ -315,6 +351,56 @@ struct IOSContentView: View {
             // CA-14: Detect/Clear beat markers on the selected clip. Clear
             // stays available whenever beat markers exist even if the
             // current selection cannot run a new detection.
+            // Phase-1 (review #3): project open — the shared Core ProjectStore
+            // codec (.moviecut), wholesale replacement via ReplaceProjectCommand.
+            .fileImporter(
+                isPresented: $isProjectOpenPickerPresented,
+                allowedContentTypes: [moviecutType],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    let secured = url.startAccessingSecurityScopedResource()
+                    defer { if secured { url.stopAccessingSecurityScopedResource() } }
+                    Task { await viewModel.openProject(from: url) }
+                }
+            }
+            // Phase-1 (review #3): project save — default filename from the
+            // project name, .moviecut extension enforced by the exporter.
+            .fileExporter(
+                isPresented: $isProjectSaveExporterPresented,
+                document: MovieCutProjectDocument(project: viewModel.currentProject),
+                contentType: moviecutType,
+                defaultFilename: viewModel.currentProject.name
+            ) { result in
+                if case .success(let url) = result {
+                    Task { await viewModel.saveProject(to: url) }
+                } else if case .failure(let error) = result {
+                    viewModel.lastErrorMessage = "Could not save project: \(error.localizedDescription)"
+                }
+            }
+            .sheet(isPresented: $isExportSettingsPresented) {
+                exportSettingsSheet
+            }
+            .sheet(isPresented: $isTrackManagerPresented) {
+                trackManagerSheet
+            }
+            // Review P0: playhead-relative trims on the selected clip — the
+            // engine math existed but no UI reached it.
+            .confirmationDialog(
+                "Trim Clip",
+                isPresented: $isTrimActionPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Trim Start to Playhead") {
+                    Task { await viewModel.trimSelectedClipStartToPlayhead() }
+                }
+                Button("Trim End to Playhead") {
+                    Task { await viewModel.trimSelectedClipEndToPlayhead() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Moves the selected clip's start or end to the playhead. Undo reverts the whole trim.")
+            }
             .confirmationDialog(
                 "Beat Markers",
                 isPresented: $isBeatActionPresented,
@@ -620,6 +706,109 @@ struct IOSContentView: View {
         .background(Color(uiColor: .secondarySystemBackground))
     }
 
+    /// Phase-1 (review #3): export presets — resolution + container, applied
+    /// through SetProjectExportSettingsCommand (the engine's actual inputs).
+    @ViewBuilder
+    private var exportSettingsSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Resolution") {
+                    exportResolutionPicker
+                }
+                Section("Container") {
+                    exportContainerPicker
+                }
+            }
+            .navigationTitle("Export Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var exportResolutionPicker: some View {
+        IOSExportOptionRow(
+            options: ExportResolution.allCases,
+            current: viewModel.currentProject.exportSettings.resolution
+        ) { resolution in
+            Task { await viewModel.updateExportSettings(resolution: resolution) }
+        }
+    }
+
+    private var exportContainerPicker: some View {
+        IOSExportOptionRow(
+            options: ExportContainerFormat.allCases,
+            current: viewModel.currentProject.exportSettings.containerFormat
+        ) { format in
+            Task { await viewModel.updateExportSettings(containerFormat: format) }
+        }
+    }
+
+    /// Phase-1 (review #3): track management — add video/audio tracks, per
+    /// track mute/lock, delete. All through real Core commands (undoable).
+    @ViewBuilder
+    private var trackManagerSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        Task { await viewModel.addTrack(kind: .video) }
+                    } label: {
+                        Label("Add Video Track", systemImage: "rectangle.stack.badge.plus")
+                    }
+                    Button {
+                        Task { await viewModel.addTrack(kind: .audio) }
+                    } label: {
+                        Label("Add Audio Track", systemImage: "waveform.badge.plus")
+                    }
+                }
+                Section("Tracks") {
+                    ForEach(viewModel.currentProject.timeline.tracks) { track in
+                        HStack {
+                            Image(systemName: trackIconName(for: track.kind))
+                                .foregroundStyle(.secondary)
+                            Text(track.name)
+                                .lineLimit(1)
+                            Spacer()
+                            Button {
+                                Task { await viewModel.setTrackMuted(track.id, !track.isMuted) }
+                            } label: {
+                                Image(systemName: track.isMuted ? "speaker.slash.fill" : "speaker.wave.2")
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(track.isMuted ? "Unmute track" : "Mute track")
+                            Button {
+                                Task { await viewModel.setTrackLocked(track.id, !track.isLocked) }
+                            } label: {
+                                Image(systemName: track.isLocked ? "lock.fill" : "lock.open")
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(track.isLocked ? "Unlock track" : "Lock track")
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                Task { await viewModel.deleteTrack(track.id) }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Tracks")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
+        }
+    }
+
+    private func trackIconName(for kind: TrackKind) -> String {
+        switch kind {
+        case .video: "rectangle.on.rectangle"
+        case .audio: "waveform"
+        case .text: "textformat"
+        }
+    }
+
     private var bottomToolbar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
@@ -653,6 +842,11 @@ struct IOSContentView: View {
                     isBeatActionPresented = true
                 }
                 .disabled(!viewModel.canDetectBeats)
+
+                // Phase-1 (review #3): track management (add/mute/lock/delete).
+                toolbarButton(title: "Tracks", systemImage: "rectangle.stack") {
+                    isTrackManagerPresented = true
+                }
 
                 Divider().frame(height: 28)
 
@@ -702,7 +896,7 @@ struct IOSContentView: View {
                 .disabled(viewModel.selectedClipId == nil)
 
                 toolbarButton(title: "Trim", systemImage: "crop") {
-                    // Trim handle is inline in timeline
+                    isTrimActionPresented = true
                 }
                 .disabled(viewModel.selectedClipId == nil)
 
@@ -857,6 +1051,71 @@ private struct DismissButton: View {
         Button("Done") { dismiss() }
     }
 }
+
+/// Phase-1 (review #3): a bordered option row for the export settings sheet
+/// (resolution / container). A standalone generic view keeps the big content
+/// view's type-checking flat — inline modifier chains timed out the checker.
+private struct IOSExportOptionRow<Option: Hashable>: View {
+    let options: [Option]
+    let current: Option
+    let onSelect: (Option) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(options, id: \.self) { option in
+                Button(label(for: option)) {
+                    onSelect(option)
+                }
+                .buttonStyle(.bordered)
+                .tint(current == option ? .accentColor : .gray)
+                .accessibilityAddTraits(current == option ? .isSelected : [])
+            }
+        }
+    }
+
+    private func label(for option: Option) -> String {
+        if let resolution = option as? ExportResolution {
+            return resolution.displayName
+        }
+        if let format = option as? ExportContainerFormat {
+            return format.displayName
+        }
+        return String(describing: option)
+    }
+}
+
+/// Phase-1 (review #3): the `.moviecut` document the fileExporter writes.
+/// Encodes with the SAME codec discipline as ProjectStore.save (ISO8601
+/// dates, pretty-printed sorted keys) so saved files load on both platforms
+/// and round-trip through the migration chain.
+struct MovieCutProjectDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [moviecutType] }
+
+    let project: Project
+
+    init(project: Project) {
+        self.project = project
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        project = try decoder.decode(Project.self, from: data)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return FileWrapper(regularFileWithContents: try encoder.encode(project))
+    }
+}
+
+let moviecutType = UTType(filenameExtension: "moviecut") ?? .json
+
 
 #Preview {
     IOSContentView()

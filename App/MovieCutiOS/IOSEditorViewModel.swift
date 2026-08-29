@@ -865,7 +865,13 @@ final class IOSEditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
     }
 
-    func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
+    func addTextClip(
+        text: String,
+        fontName: String,
+        fontSize: Double,
+        color: String,
+        backgroundColor: String? = nil
+    ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -885,12 +891,17 @@ final class IOSEditorViewModel {
             }
 
             let duration: TimeInterval = 5
-            let content = TextClipContent(
+            var content = TextClipContent(
                 text: trimmedText,
                 fontFamily: fontName,
                 fontSize: fontSize,
                 fontColor: color
             )
+            // Review P1: the sheet's Background Color picker value was
+            // dropped here — persist what the user actually sees.
+            if let backgroundColor {
+                content.backgroundColor = backgroundColor
+            }
             let clip = Clip(
                 assetId: nil,
                 kind: .text,
@@ -1132,6 +1143,19 @@ final class IOSEditorViewModel {
         // EditorSession, so the next dispatch or undo reverted it.
         do {
             try await session.dispatch(SetProjectCanvasCommand(canvas: preset))
+            // Review P1: the Frame Rate picker lives on this sheet but only
+            // moved the canvas/timeline rate — IOSExportEngine reads
+            // project.exportSettings.frameRate, so the selected rate never
+            // reached the output. Keep the export frame rate in lockstep
+            // with the canvas selection from this surface.
+            let snapshot = await session.snapshot()
+            var exportSettings = snapshot.exportSettings
+            if exportSettings.frameRate != preset.frameRate {
+                exportSettings.frameRate = preset.frameRate
+                try await session.dispatch(
+                    SetProjectExportSettingsCommand(exportSettings: exportSettings)
+                )
+            }
             await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -1195,6 +1219,150 @@ final class IOSEditorViewModel {
             fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
             fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
         ))
+    }
+
+    // MARK: - Phase-1 transport & library surfaces (review #3)
+
+    /// Loop playback: session-level (ephemeral by design — it is a transport
+    /// intent, not project data). PreviewView restarts playback at zero when
+    /// the playhead reaches the end while this is on.
+    var isLooping = false
+
+    /// Steps the playhead one frame in either direction at the project frame
+    /// rate, clamped to the timeline span. Pause first so stepping while
+    /// playing doesn't fight the time observer.
+    func stepFrame(forward: Bool) {
+        isPlaying = false
+        let fps = currentProject.timeline.frameRate.doubleValue
+        let step = fps.isFinite && fps > 0 ? 1.0 / fps : 1.0 / 30.0
+        let duration = currentProject.timeline.duration
+        playheadTime = min(max(0, playheadTime + (forward ? step : -step)), max(0, duration))
+    }
+
+    // MARK: Track management (review #3 — create/delete/mute/lock UI)
+
+    func addTrack(kind: TrackKind) async {
+        let snapshot = await session.snapshot()
+        let track = Track(
+            kind: kind,
+            name: "\(kind == .audio ? "Audio" : "Video") \(snapshot.timeline.tracks.filter { $0.kind == kind }.count + 1)",
+            zIndex: snapshot.timeline.tracks.count
+        )
+        do {
+            try await session.dispatch(CreateTrackCommand(track: track))
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func setTrackMuted(_ trackId: Track.ID, _ isMuted: Bool) async {
+        await apply(SetTrackPropertyCommand(trackId: trackId, property: .isMuted(isMuted)))
+    }
+
+    func setTrackLocked(_ trackId: Track.ID, _ isLocked: Bool) async {
+        await apply(SetTrackPropertyCommand(trackId: trackId, property: .isLocked(isLocked)))
+    }
+
+    func deleteTrack(_ trackId: Track.ID) async {
+        guard let track = currentProject.timeline.tracks.first(where: { $0.id == trackId }) else {
+            return
+        }
+        await apply(RemoveTrackCommand(track: track))
+    }
+
+    // MARK: Project open/save (review #3 — engine existed, no UI reached it)
+
+    /// Saves the current project to a `.moviecut` file via the shared Core
+    /// `ProjectStore` (the same codec the autosave path uses).
+    func saveProject(to url: URL) async {
+        do {
+            let snapshot = await session.snapshot()
+            try await projectStore.save(snapshot, to: url)
+            lastErrorMessage = nil
+            lastStatusMessage = "Saved project to \(url.lastPathComponent)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not save project: \(error.localizedDescription)"
+        }
+    }
+
+    /// Opens a `.moviecut` file into the session — wholesale replacement
+    /// through `ReplaceProjectCommand`, the same path the template picker
+    /// uses, so undo/refresh semantics match.
+    func openProject(from url: URL) async {
+        do {
+            let project = try await projectStore.load(from: url)
+            try await session.dispatch(ReplaceProjectCommand(project: project))
+            selectedClipId = nil
+            playheadTime = 0
+            await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Opened \(url.lastPathComponent)."
+        } catch {
+            lastErrorMessage = "Could not open project: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Export presets (review #3 / M3 — resolution & container UI)
+
+    func updateExportSettings(
+        resolution: ExportResolution? = nil,
+        containerFormat: ExportContainerFormat? = nil
+    ) async {
+        var settings = currentProject.exportSettings
+        if let resolution {
+            settings.resolution = resolution
+        }
+        if let containerFormat {
+            settings.containerFormat = containerFormat
+        }
+        await apply(SetProjectExportSettingsCommand(exportSettings: settings))
+    }
+
+    // MARK: - Playhead trim (review P0 — the Trim toolbar button was a no-op)
+
+    /// Trims the selected clip's START to the playhead (Mac
+    /// trimSelectedClipEndToPlayhead's sibling): the clip begins playing at
+    /// the playhead, keeping its end fixed. Routes through the same
+    /// `trimClip` engine math (source range follows the timeline delta).
+    func trimSelectedClipStartToPlayhead() async {
+        guard let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to trim."
+            return
+        }
+        let playhead = playheadTime
+        guard playhead > clip.timelineRange.start + 0.05,
+              playhead < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its start."
+            return
+        }
+        let delta = playhead - clip.timelineRange.start
+        await trimClip(
+            clipId: clip.id,
+            newStart: playhead,
+            newDuration: clip.timelineRange.duration - delta
+        )
+    }
+
+    /// Trims the selected clip's END to the playhead: the clip stops at the
+    /// playhead, keeping its start fixed.
+    func trimSelectedClipEndToPlayhead() async {
+        guard let clip = selectedClip else {
+            lastErrorMessage = "Select a clip to trim."
+            return
+        }
+        let playhead = playheadTime
+        guard playhead > clip.timelineRange.start + 0.05,
+              playhead < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its end."
+            return
+        }
+        await trimClip(
+            clipId: clip.id,
+            newStart: clip.timelineRange.start,
+            newDuration: playhead - clip.timelineRange.start
+        )
     }
 
     // MARK: - Beat detection (CA-14, Mac detectBeats parity)

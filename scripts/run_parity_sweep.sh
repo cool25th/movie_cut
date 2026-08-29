@@ -21,14 +21,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 command -v ffprobe >/dev/null || { echo "ffprobe required" >&2; exit 1; }
 
-FIXTURE="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
+# PARITY-TOL-01(a): canvas-matched 1440x1080 fixture (1:1 aspect fit) with
+# the strict Tolerance MAD <= 2.0 — same contract as the core parity suite.
+FIXTURE="$ROOT/Tests/Fixtures/solid_red_1440x1080_2s_30fps.mp4"
 [ -f "$FIXTURE" ] || { echo "missing fixture: run scripts/make_fixtures.sh" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true' EXIT
 
 PARITY_TIMES="0.5,1.5"
-TOLERANCE=12.0
+TOLERANCE=2.0
 
 echo "Building MovieCutMac (Debug, sandbox OFF for parity sweep)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
@@ -47,6 +49,15 @@ run_scenario() {
   local name="$1"; shift
   local times="$1"; shift
   local dir="$WORK/$name"
+  # OPTICAL_FLOW carries its own fixture: the interpolation cost scales with
+  # pixels, and at 1440x1080 the run exceeds the 240s watchdog (2x measured,
+  # harness-level timeout — no parity verdict). The scenario renders through
+  # the custom compositor on BOTH legs, so the resample variance that
+  # motivated PARITY-TOL-01(a) cancels for it (it passed at 320 before);
+  # keeping the 320 fixture there preserves the scenario without touching
+  # the watchdog budget.
+  local fixture="${SCENARIO_FIXTURE:-$FIXTURE}"
+  SCENARIO_FIXTURE=""
   mkdir -p "$dir"
   local export_mp4="$dir/export.mp4"
   local preview_dir="$dir/preview"
@@ -55,7 +66,7 @@ run_scenario() {
 
   pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null || true; sleep 2
   env MOVIECUT_UITEST=1 MOVIECUT_UITEST_PARITY=1 \
-    MOVIECUT_UITEST_IMPORT="$FIXTURE" \
+    MOVIECUT_UITEST_IMPORT="$fixture" \
     MOVIECUT_UITEST_PARITY_TIMES="$times" \
     MOVIECUT_UITEST_PREVIEW_DUMP="$preview_dir" \
     MOVIECUT_UITEST_EXPORT="$export_mp4" \
@@ -95,7 +106,7 @@ run_scenario() {
   local cmp_out cmp_rc
   cmp_out="$(python3 "$ROOT/scripts/verify_preview_export_parity.py" \
     --preview-dir "$preview_dir" --export-mp4 "$export_mp4" \
-    --times "$times" --tolerance "$TOLERANCE" --size 320x240 \
+    --times "$times" --tolerance "$TOLERANCE" --size 1440x1080 \
     --expect-duration "${comp_dur:-2.0}" --frame-rate 30 2>&1)" || cmp_rc=$?
   if [ "${cmp_rc:-0}" -eq 0 ] && echo "$cmp_out" | grep -q "RESULT: PASS"; then
     printf "%-14s status=PASS detail=%s\n" "$name" \
@@ -124,7 +135,9 @@ run_scenario grade         "$PARITY_TIMES" MOVIECUT_UITEST_GRADE=1             |
 run_scenario hsl_curves    "$PARITY_TIMES" MOVIECUT_UITEST_HSL_CURVES=1        || SWEEP_FAIL=1
 run_scenario freeze        "$PARITY_TIMES" MOVIECUT_UITEST_FREEZE=1            || SWEEP_FAIL=1
 run_scenario reverse       "$PARITY_TIMES" MOVIECUT_UITEST_REVERSE=1           || SWEEP_FAIL=1
+SCENARIO_FIXTURE="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4" \
 run_scenario optical_flow  "$PARITY_TIMES" MOVIECUT_UITEST_OPTICAL_FLOW=1 MOVIECUT_UITEST_SPEED_RATE=0.5 || SWEEP_FAIL=1
+SCENARIO_FIXTURE=""
 run_scenario trim          "0.3,0.7"        MOVIECUT_UITEST_TRIM_AT=1.0        || SWEEP_FAIL=1
 run_scenario move          "$PARITY_TIMES" MOVIECUT_UITEST_MOVE_TO=1.0         || SWEEP_FAIL=1
 run_scenario mask          "$PARITY_TIMES" MOVIECUT_UITEST_MASK=1              || SWEEP_FAIL=1

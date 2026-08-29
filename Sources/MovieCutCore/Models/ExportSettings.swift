@@ -1,7 +1,7 @@
 import Foundation
 
 /// Export resolution presets.
-public enum ExportResolution: String, Codable, Sendable, Equatable, Hashable {
+public enum ExportResolution: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// 1280 by 720.
     case p720
 
@@ -10,6 +10,15 @@ public enum ExportResolution: String, Codable, Sendable, Equatable, Hashable {
 
     /// 3840 by 2160.
     case p4K
+
+    /// User-facing display name.
+    public var displayName: String {
+        switch self {
+        case .p720: return "720p"
+        case .p1080: return "1080p"
+        case .p4K: return "4K"
+        }
+    }
 }
 
 /// Export frame-rate presets.

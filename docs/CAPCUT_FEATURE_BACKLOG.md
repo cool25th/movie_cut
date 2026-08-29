@@ -192,7 +192,7 @@
 
 - BUG-06 수정으로 모든 소스가 캔버스에 aspect-fit됨(정확한 동작). 부수 효과: 서브-720p 픽스처(320×240)는 이제 양측 다리가 재표본(스케일) — 하드 엣지 픽스처(bars)에서 MAD 4~36로 2.0 허용치 초과. 수정 전 2.0 계약은 1:1 무스케일 시대 기준.
 - **권장 (a)**: 파리티 픽스처를 캔버스 정합 ≥720p(예: 1440×1080 4:3)로 재생성 → 1:1 복원·2.0 계약 유지. (b): 비디오 시나리오 허용치 12로 재조정(전용 파리티 러너와 정합).
-- 현재 상태: 코어 파리티 17 시나리오 중 12 FAIL(MAD 4~36) — 픽셀 정확성 회귀가 아니라 재표본 variance(절대 픽셀은 소스 대비 검증 완료). 사용자 결정 대기.
+- **해결(2026-08-28 — 외부 리뷰 권고 (a) 실행 승인)**: 파리티 픽스처를 캔버스 정합 1440x1080(solid_red·bars(smptebars)·moving_subject)로 교체 — MAD ≤ 2.0 유지·허용치 무변경·**핵심 파리티 18/18 재검증 PASS**(ripple·normal 등 재실측). 파리티 스윕도 동일 픽스처+2.0으로 통일. 근거: 재표본 분산은 픽스처/캔버스 스케일 불일치 소생이며 계약 희석 없이 픽스처 교체로 해소.
 
 ### 참고 (UX-REC-03) — 세션 중 스코프 철회는 열기/익스포트 게이트에서만 감지
 
@@ -328,6 +328,110 @@
 - **메커니즘 확정(2026-08-27)**: 대부분 밴드는 일치(Δ≤2)하나 **고채도 시안 밴드만 프리뷰에서 핑크로 뒤집힘** — 프리뷰(plain 경로·플레이어 다리)는 AVFoundation이 HDR 태그 소스를 SDR 렌더 표면에 맞춰 변환하며 그 변환이 범위 밖 색을 뒤집는 것. 출력은 원시 재해석(bt2020 매트릭스 RGB 그대로 — CA-04가 검증한 v1 SDR 계약·소스 프레임과 MAD 2.49로 충실).
 - **시도·부정된 수정 2건**: ①스냅샷 최종 변환의 작업공간 고정(`RenderColorConfiguration.sourceImage`) — 버퍼가 이미 변환돼 도착해 효과 없음(측정 MAD 11.13→11.07 노이즈). ②합성 색 삼중항 Rec.709 명시(player+reader 양 다리) — reader 다리는 삼중항을 색 변환에 소비하지 않아 효과 없음(11.07). 둘 다 폐기(측정 증거 없는 배선 금지 원칙). ①의 스냅샷 고정은 후속 HDR 파이프라인을 위한 원칙적 핀으로만 유지(주석에 행동 중립 명시).
 - 본수정 방향: 양 다리가 동일 해석을 하도록 **HDR 인입 형식을 수용하는 컴포지터 + 공유 변환** 필요 — G-29(HDR-ready 파이프라인, 3단계)의 입력 요구사항으로 이관. 혼합(HDR+SDR) 소스 프로젝트의 처리 정책도 함께 설계 대상.
+
+## 1.14 Codex 봇 리뷰(스택 PR) 파생 결함 (2026-08-29 등록)
+
+> 원천: 스택 PR #19~#23(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만, 기존 등록과 중복=상호 참조). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
+
+### CODEX-01 (P2) — 타임코드 표시 프레임 양자화 하방 드리프트 — 미수정
+
+- 증상: 프레임 정렬 시각에서 부동소수 오차로 곱이 정수보다 약간 작아 `Int` 절단이 이전 프레임으로 내려감 — 예: 30fps에서 `00:01:02` 입력은 `1 + 2/30`로 시크하나 표시 계산이 `1.9999999999999996`을 산출해 즉시 `00:01:01` 표시. 파서↔표시 왕복(CA-27 계약)이 다수 프레임값에서 깨짐. 위치: `App/MovieCutMac/PreviewPanel.swift` L850 부근.
+- 수정 방향: 허용 오차 양자화(반올림) 또는 유리수/정수 시간 연산으로 프레임 인덱스 유도.
+
+### CODEX-02 (P2) — LUT 재내보내기가 기존 대상 파일을 오류 보고 전에 삭제 — 미수정
+
+- 증상: 기존 대상 경로 선택 + 관리 LUT 원본 결측 또는 후속 복사 실패 시, export 오류를 보고하기 전에 사용자의 기존 파일을 제거 — 실패한 export가 이전 LUT를 파괴(데이터 손실 인접). 위치: `App/MovieCutMac/EditorViewModel.swift` L5204 부근(CA-26 경로).
+- 수정 방향: 임시 형제 파일에 기록/복사 후 새 파일 완성 뒤에만 원자적 치환 — ProjectStore ENOSPC fail-closed(2026-08-27)와 동일 패턴.
+
+### CODEX-03 (P2·A류) — verify_doc_paths 백틱 경로 누수 — 미수정
+
+- 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 `` `docs/DOES_NOT_EXIST.md` `` 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
+- 수정 방향: 닫는 백틱까지 매칭. **A류(계측 스크립트 개선) — 루프 자율 실행 가능.**
+
+### CODEX-04 (P1) — PhotosPicker URL transferable가 라이브러리 선택에서 nil 반환 가능 — 미수정 (PR #20)
+
+- 증상: `importFromPhotosPicker`가 `item.loadTransferable(type: URL.self)` 사용 — PhotosPickerItem은 일반적으로 선택 미디어를 파일 표현으로 노출하므로, 라이브러리 선택이 URL 값 전송을 지원하지 않으면 nil 반환 → 모든 사진·영상 임포트가 transferFailed로 종료 가능. iOSContentView·MediaBrowserView 양 진입점이 동일 경로. 위치: `App/MovieCutiOS/IOSEditorViewModel.swift` L529.
+- 수정 방향: `FileRepresentation` 기반 소형 `Transferable` 정의 후 수신 파일 URL 복사. **실기기 확인 필수(G-27 연계)** — 시뮬레이터 테스트는 파일 URL 경로라 이 결함을 못 잡음.
+
+### CODEX-05 (P2) — 취소 export의 부분파일 정리가 공유 activeOutputURL에 결합 — 미수정 (PR #20)
+
+- 증상: `cancelExport()`가 즉시 `isExporting=false`로 돌려 UI가 새 export를 시작할 수 있음. 새 export가 공유 `activeOutputURL`을 교체한 뒤 이전 취소 호출의 catch가 `removePartialOutput()`에 도달하면 **새 export의 출력 파일을 삭제**하고 엔진 상태를 초기화. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L335-364.
+- 수정 방향: 실패한 호출의 국소 URL 또는 export 세대(generation) 번호로 정리 결합.
+
+### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — 미수정 (PR #20)
+
+- 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
+- 수정 방향: RIFF와 동일 패턴으로 `FORM` 시그니처 추가(종류는 확장자로 판정) + 실제 AIFF 픽스처 왕복 단위테스트. 기존 지원 포맷 회귀라 P2 상단 배치.
+
+### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — 미수정 (PR #21)
+
+- 증상: `relinkMedia`는 `currentProject.mediaLibrary`만 갱신하는데 `PreviewView`는 `.onChange(of: currentProject.timeline)`(L109)에서만 렌더 플랜을 재구축 — 원본 결측 상태에서 만든 플랜의 빈/부분 `AVPlayerItem`이 그대로 남아 relink된 클립이 무관한 타임라인 편집·뷰 재생성 전까지 재생 불가. 위치: `App/MovieCutiOS/Views/PreviewView.swift` L109·`IOSEditorViewModel.swift` L570.
+- 수정 방향: mediaLibrary 변경(또는 relink 완료) 시 플랜 재구축 트리거 — SURV-01 왕복 테스트에 "relink 후 프리뷰 재생" 다리 추가로 고착.
+
+### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — 미수정 (PR #21)
+
+- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift L560-562)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정(L1032-1033) — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
+- 수정 방향: 클립 소유의 `AVAssetTrack.preferredTransform`을 클립별로 로드해 이펙트에 전달(트랙 pt는 외부 플레이어 메타데이터로만 유지) + **혼합 회전(가로+세로) 트랙 픽스처**로 upright 실측.
+
+### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — 미수정 (PR #21)
+
+- 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
+- 수정 방향: 배치와 이펙트가 동일한 클램프된 지속시간을 사용(단일 계산 함수로) + 초과 전환 픽스처로 3클립 완주·드랍 0 단언.
+
+### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — 미수정 (PR #22)
+
+- 증상: `x_is_a=False` 시 `_X.mp4`=B측·`_Y.mp4`=A측으로 구현화는 정상인데 투표표의 X열이 `_Y.mp4`(=A측)를 안내 — 평가자의 X 선호가 mapping(X↔B)에 따라 **반대 편집기로 집계**. 블라인드 비교 결과를 왜곡. 위치: `scripts/ab_benchmark_metrics.py` L485-487.
+- 수정 방향: 투표표는 항상 `<fixture>_X.mp4`를 X열에 고정(해독은 mapping 테이블이 담당) + 라벨/구현화 정합 셀프테스트. **A류(계측 스크립트) — 루프 자율 실행 가능.** B측 블라인드 평가 개시 전 필수.
+
+### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — 미수정 (PR #22)
+
+- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
+- 수정 방향: `rep_results` 전부 소비해 median/p95 산출 + 단일 rep 시 명시. **A류 — 루프 자율 실행 가능.**
+
+### CODEX-12 (P2) — 레거시 AVFoundation 취소가 취소로 분류 안 됨 — 미수정 (PR #22)
+
+- 증상: macOS 14 배포 대상의 레거시 브랜치에서 `cancelExport()` 후 `session.error`(AVFoundation 오류)가 throw되어 `catch is CancellationError`(`EditorViewModel+Media.swift` L124)를 우회 — 정상 취소가 "Proxy generation failed"로 보고되고 `autoProxyCancelledCount` 미증가. 현대 브랜치(개발기·CI macOS 15)만 게이트가 통과해 레거시 경로가 무검증.
+- 수정 방향: Task 취소 상태 또는 AV 취소 오류도 취소로 분류 + 레거시 브랜치 재현 테스트.
+
+### CODEX-13 (P2) — 수동 프록시 생성이 진행 중 가드를 우회 — 미수정 (PR #22)
+
+- 증상: 자동 생성 활성 시 미디어 카드·컨텍스트 메뉴의 수동 `generateProxy(for:)`(`EditorViewModel+Media.swift` L63-73)가 `autoProxyGenerating` 집합을 안 거침 — 동일 자산에 두 export가 같은 URL에 동시 기입 가능, `proxyInfoIfReady`의 비어있지 않은 파일=준비 완료 판정이 첫 export의 부분파일을 부착할 수 있음.
+- 수정 방향: 수동 진입도 동일 스케줄러/가드 경유 또는 추적 중 수동 비활성화.
+
+### CODEX-14 (P2) — 비트 마커 삭제가 유효 선택 없이는 도달 불가 — 미수정 (PR #22)
+
+- 증상: 소스 클립 삭제 후 마커 잔존·텍스트/이미지 클립 선택 시 `canDetectBeats=false`가 유일한 진입 버튼을 비활성화(`iOSContentView.swift` L844) — Detect/Clear 다이얼로그의 Clear가 의도(마커 존재 시 항상 가능 — L351-353 주석)와 모순되게 도달 불가. 위치: `App/MovieCutiOS/iOSContentView.swift` L844.
+- 수정 방향: `canDetectBeats || hasBeatMarkers`일 때 툴바 활성, 다이얼로그 내 Detect만 선택 게이트 + 마커 잔존(소스 삭제 후) 정리 테스트.
+
+### CODEX-15 (P2) — iOS 스냅 가이드가 드래그 중 렌더되지 않음 — 미수정 (PR #22)
+
+- 증상: `snappedTime`이 `onEnded`에서만 호출(`IOSTimelineView.swift` L223-238)되고 같은 핸들러가 `draggedClipId`·`snapGuideTime`을 즉시 해제 — SwiftUI가 새 가이드를 렌더할 기회가 없음. Mac 구현은 onChanged에서 임시 위치·가이드 계산.
+- 수정 방향: `onChanged`에서 임시 스냅 위치·가이드 계산(레이아웃 변경 없이 가이드만 표시 — 결정성 게이트 무영향 확인 후).
+
+### CODEX-16 (P2) — 비트 틱이 HStack 셀 기준 오프셋으로 누적 드리프트 — 미수정 (PR #22)
+
+- 증상: 각 틱의 오프셋이 순차 HStack 셀에서 측정(`IOSTimelineView.swift` L73-76) — 앞선 마커마다 2pt씩 표시 위치가 누적 이동(밀집 곡에서 큰 드리프프), 트랙 헤더 76pt·행 간격 미반영으로 전체가 좌측 편이. 장식용(비인터랙티브)이라 기능 영향은 없으나 시각적으로 마커 위치와 불일치.
+- 수정 방향: 공통 ZStack/canvas 좌표계에 배치 + 헤더 원점 반영.
+
+### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — 미수정 (PR #23)
+
+- 증상: `trimSelectedClipStartToPlayhead`·`trimSelectedClipEndToPlayhead`(`IOSEditorViewModel.swift` L1329·L1350)가 `trimClip`(L1074)에 위임 — 타임라인 1초=소스 1초 가정이라 2x 속도 클립을 0.5초 트림하면 실제 1.0초가 남아야 하나 0.5초만 남겨 조기 절단·갭 발생, 리버스 시작 트림도 반대 소스 엣지 이동. **iOS 전체에 ClipTrimMath 사용 0건(Mac은 4경로 사용) 실측.**
+- 수정 방향: 양 플레이헤드 동작을 `ClipTrimMath.compute` 경유로 전환(Mac 패리티) + 속도 램프·리버스 픽스처 트림 왕복 테스트.
+
+### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — 미수정 (PR #23)
+
+- 증상: 프리셋 선택이 `SetProjectCanvasCommand`(`IOSEditorViewModel.swift` L1145)와 `SetProjectExportSettingsCommand`(L1156)를 개별 dispatch — undo 1회가 exportSettings.frameRate만 복원해 캔버스·타임라인은 새 fps에 남아, 이 동기화가 막으려던 불일치가 undo로 재발.
+- 수정 방향: 단일 커맨드 원자화(또는 세션 트랜잭션) + undo 1회 전체 왕복 테스트.
+
+### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — 미수정 (PR #23)
+
+- 증상: `CreateTrackCommand.apply`가 caller가 준 z-index를 정규화 없이 append — iOS(`IOSEditorViewModel.swift` L418)·**Mac(`EditorViewModel.swift` L4510) 모두** `zIndex: tracks.count` 배정. 기본 0/1/2에서 z0 삭제 시 잔여 2트랙 상태로 다음 추가가 2로 중복 → 프리뷰·export가 zIndex 정렬만 하므로 겹침 레이어 순서가 비결정론화.
+- 수정 방향: 삭제 시 전체 재정규화 또는 max+1 배정 + 중복 z-index 0 단언 테스트(양 플랫폼).
+
+### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — 미수정 (PR #23)
+
+- 증상: `RemoveTrackCommand.apply`(`CreateTrackCommand.swift` 내 정의)가 index 제거만 하고 `ensureTrackIsEditable` 미호출 — 트랙 관리 시트의 스와이프 삭제가 잠긴 트랙과 클립 전체를 삭제(RippleDelete·SlideClip 등 다른 커맨드는 검사 사용). `Track.isLocked`의 보호 의도와 모순.
+- 수정 방향: 제거 전 잠금 거부(또는 잠금 시 UI 삭제 비활성) + 잠금 트랙 삭제 거부 테스트.
 
 ---
 

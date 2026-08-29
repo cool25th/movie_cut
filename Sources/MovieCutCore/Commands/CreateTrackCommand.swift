@@ -22,18 +22,17 @@ public struct CreateTrackCommand: EditorCommand {
 
     }
 
-struct RemoveTrackCommand: EditorCommand {
-    let id: UUID
-    let track: Track
+public struct RemoveTrackCommand: EditorCommand {
+    public let id: UUID
+    public let track: Track
 
-    init(id: UUID = UUID(), track: Track) {
+    public init(id: UUID = UUID(), track: Track) {
         self.id = id
         self.track = track
     }
 
-    func apply(to project: inout Project) throws {
+    public func apply(to project: inout Project) throws {
         let index = try project.trackIndex(for: track.id)
-        let removedTrack = project.timeline.tracks.remove(at: index)
-        let affectedClipIds = Set(removedTrack.clips.map(\.id))    }
-
+        project.timeline.tracks.remove(at: index)
     }
+}

@@ -166,7 +166,9 @@ struct HighlightsStaticContractTests {
 
     @Test("view model scores and creates a sequence from a highlight")
     func viewModelOrchestrates() throws {
-        let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
+        // Decomposition (review 2026-08-28 #7): the highlight methods moved
+        // to their own boundary file — the contract follows the code.
+        let viewModel = try source("App/MovieCutMac/EditorViewModel+AutoHighlights.swift")
         #expect(viewModel.contains("func detectHighlights"))
         #expect(viewModel.contains("HighlightScorer.scoreHighlights"))
         #expect(viewModel.contains("func createSequenceFromHighlight"))

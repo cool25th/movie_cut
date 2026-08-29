@@ -78,6 +78,12 @@ run_scenario() {
     sleep 0.5
   done
   kill "$watchdog" 2>/dev/null || true
+  # Review P2: killing the subshell orphaned its inner `sleep`, which held
+  # the stdout pipe for the full 360s and kept the script alive ~6 minutes
+  # after the last result. Reap the subshell's children (the sleep) and the
+  # subshell itself before waiting on the app.
+  pkill -P "$watchdog" 2>/dev/null || true
+  wait "$watchdog" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
 
   [ -s "$dir/w.json" ] || { echo "$scenario status=FAIL detail=no_result_json"; return 1; }
@@ -111,8 +117,15 @@ echo ""
 python3 - "$WORK/all.log" <<'PY'
 import re, sys
 
+# Review P0: the direction doc's gate is the success rate of the five
+# representative WORKFLOWS, not the average of their steps — a workflow whose
+# required deliverable failed (e.g. W4 without its ProRes output) must count
+# as a failed workflow even when its other steps passed. A workflow passes
+# only when EVERY step succeeded AND it produced its export.
 rate_fail = 0
 totals = [0, 0]
+workflows_passed = 0
+workflows_total = 0
 for line in open(sys.argv[1]):
     m = re.match(r"SUMMARY (\w+) (\d+) (\d+) (\d+)", line)
     if not m:
@@ -120,16 +133,23 @@ for line in open(sys.argv[1]):
     name, ok, total, export_bytes = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
     totals[0] += ok
     totals[1] += total
-    if export_bytes <= 0:
-        print(f"FAIL: {name} produced no export")
+    workflows_total += 1
+    steps_ok = ok == total
+    export_ok = export_bytes > 0
+    if steps_ok and export_ok:
+        workflows_passed += 1
+        print(f"WORKFLOW {name}: PASS (steps {ok}/{total}, export {export_bytes}B)")
+    else:
+        why = "no export" if not export_ok else f"steps {ok}/{total}"
+        print(f"WORKFLOW {name}: FAIL ({why})")
         rate_fail = 1
-if totals[1] == 0:
+if totals[1] == 0 or workflows_total == 0:
     print("FAIL: no steps recorded")
     sys.exit(1)
-rate = 100.0 * totals[0] / totals[1]
-print(f"W SCENARIOS: steps {totals[0]}/{totals[1]} — success rate {rate:.1f}% (gate: >= 90%)")
+rate = 100.0 * workflows_passed / workflows_total
+print(f"W SCENARIOS: workflows {workflows_passed}/{workflows_total} — success rate {rate:.1f}% (gate: >= 90%; step detail {totals[0]}/{totals[1]})")
 if rate < 90.0:
-    print("FAIL: success rate below 90%")
+    print("FAIL: workflow success rate below 90%")
     sys.exit(1)
 sys.exit(rate_fail)
 PY

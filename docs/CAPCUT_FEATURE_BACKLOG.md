@@ -331,7 +331,7 @@
 
 ## 1.14 Codex 봇 리뷰(스택 PR) 파생 결함 (2026-08-29 등록)
 
-> 원천: 스택 PR #19·#20(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
+> 원천: 스택 PR #19~#23(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만, 기존 등록과 중복=상호 참조). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
 
 ### CODEX-01 (P2) — 타임코드 표시 프레임 양자화 하방 드리프트 — 미수정
 
@@ -412,6 +412,26 @@
 
 - 증상: 각 틱의 오프셋이 순차 HStack 셀에서 측정(`IOSTimelineView.swift` L73-76) — 앞선 마커마다 2pt씩 표시 위치가 누적 이동(밀집 곡에서 큰 드리프프), 트랙 헤더 76pt·행 간격 미반영으로 전체가 좌측 편이. 장식용(비인터랙티브)이라 기능 영향은 없으나 시각적으로 마커 위치와 불일치.
 - 수정 방향: 공통 ZStack/canvas 좌표계에 배치 + 헤더 원점 반영.
+
+### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — 미수정 (PR #23)
+
+- 증상: `trimSelectedClipStartToPlayhead`·`trimSelectedClipEndToPlayhead`(`IOSEditorViewModel.swift` L1329·L1350)가 `trimClip`(L1074)에 위임 — 타임라인 1초=소스 1초 가정이라 2x 속도 클립을 0.5초 트림하면 실제 1.0초가 남아야 하나 0.5초만 남겨 조기 절단·갭 발생, 리버스 시작 트림도 반대 소스 엣지 이동. **iOS 전체에 ClipTrimMath 사용 0건(Mac은 4경로 사용) 실측.**
+- 수정 방향: 양 플레이헤드 동작을 `ClipTrimMath.compute` 경유로 전환(Mac 패리티) + 속도 램프·리버스 픽스처 트림 왕복 테스트.
+
+### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — 미수정 (PR #23)
+
+- 증상: 프리셋 선택이 `SetProjectCanvasCommand`(`IOSEditorViewModel.swift` L1145)와 `SetProjectExportSettingsCommand`(L1156)를 개별 dispatch — undo 1회가 exportSettings.frameRate만 복원해 캔버스·타임라인은 새 fps에 남아, 이 동기화가 막으려던 불일치가 undo로 재발.
+- 수정 방향: 단일 커맨드 원자화(또는 세션 트랜잭션) + undo 1회 전체 왕복 테스트.
+
+### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — 미수정 (PR #23)
+
+- 증상: `CreateTrackCommand.apply`가 caller가 준 z-index를 정규화 없이 append — iOS(`IOSEditorViewModel.swift` L418)·**Mac(`EditorViewModel.swift` L4510) 모두** `zIndex: tracks.count` 배정. 기본 0/1/2에서 z0 삭제 시 잔여 2트랙 상태로 다음 추가가 2로 중복 → 프리뷰·export가 zIndex 정렬만 하므로 겹침 레이어 순서가 비결정론화.
+- 수정 방향: 삭제 시 전체 재정규화 또는 max+1 배정 + 중복 z-index 0 단언 테스트(양 플랫폼).
+
+### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — 미수정 (PR #23)
+
+- 증상: `RemoveTrackCommand.apply`(`CreateTrackCommand.swift` 내 정의)가 index 제거만 하고 `ensureTrackIsEditable` 미호출 — 트랙 관리 시트의 스와이프 삭제가 잠긴 트랙과 클립 전체를 삭제(RippleDelete·SlideClip 등 다른 커맨드는 검사 사용). `Track.isLocked`의 보호 의도와 모순.
+- 수정 방향: 제거 전 잠금 거부(또는 잠금 시 UI 삭제 비활성) + 잠금 트랙 삭제 거부 테스트.
 
 ---
 

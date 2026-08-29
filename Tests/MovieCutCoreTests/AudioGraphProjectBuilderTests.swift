@@ -61,6 +61,53 @@ struct AudioGraphProjectBuilderTests {
 
     // MARK: - Gain mapping
 
+    @Test("an adjustment layer contributes no audio strip (BUG-ACC-01)")
+    func adjustmentLayerIsNotAudible() {
+        // The w4 acceptance shape: a 2 s video clip, a 4 s BGM overlaid at 0,
+        // and an asset-backed ADJUSTMENT layer that magnetic compaction has
+        // shoved after the visible clip ([2,6]). Before the fix the layer's
+        // borrowed assetId made it an audible strip, growing the mix's
+        // audible span to 2+4 = 6 s (measured) instead of the timeline's 4 s.
+        var adjustment = Clip(
+            assetId: asset.id,
+            kind: .video,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineRange: TimeRange(start: 2, duration: 4)
+        )
+        adjustment.isAdjustmentLayer = true
+
+        let videoClip = Clip(
+            assetId: asset.id,
+            kind: .video,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineRange: TimeRange(start: 0, duration: 2)
+        )
+        let bgmClip = Clip(
+            assetId: asset.id,
+            kind: .audio,
+            sourceRange: TimeRange(start: 0, duration: 4),
+            timelineRange: TimeRange(start: 0, duration: 4)
+        )
+
+        let plan = AudioGraphProjectBuilder.build(
+            project: project(clips: [
+                (.video, videoClip),
+                (.video, adjustment),
+                (.audio, bgmClip)
+            ])
+        )
+
+        // Exactly the video clip's embedded audio + the BGM: no third strip
+        // for the adjustment layer, and no activation reaching past 4 s.
+        #expect(plan.spec.clipStrips.count == 2,
+                "the adjustment layer must not become an audio strip; got \(plan.spec.clipStrips.count)")
+        let audibleEnd = plan.activations.values
+            .map(\.sampleRange.upperBound)
+            .max() ?? 0
+        #expect(audibleEnd <= 4 * 48_000,
+                "the audible span must end at the timeline's 4 s overlay; got \(Double(audibleEnd) / 48_000)s")
+    }
+
     @Test("volume maps to a constant dB point; zero is the silence floor")
     func volumeToGain() {
         for (volume, expectedDb) in [(1.0, 0.0), (0.5, -6.0206), (2.0, 6.0206), (0.0, AudioGraphProjectBuilder.silenceFloorDb)] {

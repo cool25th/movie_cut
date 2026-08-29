@@ -36,7 +36,12 @@ APP_BIN="$PRODUCTS_DIR/MovieCutMac.app/Contents/MacOS/MovieCutMac"
 
 WORK="$(mktemp -d /tmp/moviecut-w-acceptance.XXXXXX)"
 FIX="$WORK/fixtures"
-trap 'rm -rf "$WORK"' EXIT
+# Evidence retention: on FAILURE the workdir (exports, w.json, status) is
+# kept for diagnosis and its path printed — a failing probe with no artifact
+# to re-probe is un diagnosable (the STAB-04 prores_codec investigation hit
+# exactly that). Success still cleans up.
+KEEP_WORK=0
+trap 'if [ "$KEEP_WORK" -eq 1 ]; then echo "WORKDIR KEPT for diagnosis: $WORK" >&2; else rm -rf "$WORK"; fi' EXIT
 
 echo "Generating representative-length fixtures (say + ffmpeg)…"
 bash scripts/make_w_acceptance_fixtures.sh "$FIX" >/dev/null
@@ -77,7 +82,7 @@ run_scenario() {
     MOVIECUT_UITEST_W_BEATS="$beats" \
     MOVIECUT_UITEST_RESULT="$dir/status.txt" \
     MOVIECUT_UITEST_QUIT=1 \
-    "$APP_BIN" >/dev/null 2>&1 &
+    "$APP_BIN" >"$dir/app.log" 2>&1 &
   local pid=$!
   ( sleep "$wd_s"; kill "$pid" 2>/dev/null; pkill -x MovieCutMac 2>/dev/null; true ) &
   local watchdog=$!
@@ -130,7 +135,7 @@ for scenario in "${SCENARIOS[@]}"; do
     continue
   fi
   if ! python3 - "$WORK/$scenario" "$scenario" "$(budget_for "$scenario")" <<'PY'
-import json, subprocess, sys, glob, os
+import json, subprocess, sys, glob, os, time
 
 d, scenario, budget = sys.argv[1], sys.argv[2], float(sys.argv[3])
 dump = json.load(open(os.path.join(d, "w.json")))
@@ -146,12 +151,20 @@ for step in dump.get("steps", []):
 elapsed = dump.get("elapsedSeconds", 0)
 print(f"  elapsed={elapsed:.1f}s export_bytes={dump.get('exportBytes', 0)}")
 
-def probe(path, entries, stream=None):
+def probe(path, entries, stream=None, attempts=4):
     args = ["ffprobe", "-v", "error"]
     if stream:
         args += ["-select_streams", stream]
     args += ["-show_entries", entries, "-of", "csv=p=0", path]
-    out = subprocess.run(args, capture_output=True, text=True).stdout.strip()
+    # Post-encode settling: probing IMMEDIATELY after a 5-minute export's
+    # process exit has measured EMPTY for a stream the file demonstrably
+    # contains (re-probing the kept artifact returned it instantly). A short
+    # retry window makes the measurement deterministic instead of flaky.
+    for attempt in range(attempts):
+        out = subprocess.run(args, capture_output=True, text=True).stdout.strip()
+        if out:
+            return out.split(",")
+        time.sleep(0.5)
     return out.split(",")
 
 videos = sorted(glob.glob(os.path.join(d, "*.mp4")) + glob.glob(os.path.join(d, "*.mov")),
@@ -211,6 +224,11 @@ if elapsed > budget:
 
 if fail:
     print(f"ACCEPTANCE {scenario}: FAIL ({', '.join(fail)})")
+    # Evidence retention: signal the shell to KEEP the workdir (see trap).
+    try:
+        open(os.path.join(d, "..", "_KEEP"), "w").write("1")
+    except OSError:
+        pass
     sys.exit(1)
 print(f"ACCEPTANCE {scenario}: PASS ({elapsed:.1f}s <= {budget:.0f}s budget)")
 PY
@@ -220,4 +238,10 @@ PY
 done
 
 echo ""
-[ "$FAIL" -eq 0 ] && echo "W ACCEPTANCE PASS" || { echo "W ACCEPTANCE FAIL"; exit 1; }
+if [ -f "$WORK/_KEEP" ]; then KEEP_WORK=1; fi
+if [ "$FAIL" -eq 0 ]; then
+  echo "W ACCEPTANCE PASS"
+else
+  echo "W ACCEPTANCE FAIL"
+  exit 1
+fi

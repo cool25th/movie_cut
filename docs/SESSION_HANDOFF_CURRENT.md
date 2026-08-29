@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-29 세션 (BUG-ACC-04 2차 조사 — 팽창원 실측·진단 실장, 판정 재현 1회 남음)
+
+- **진단 실장**: nil 소스 프레임 경로(요청 시각·명령 범위·활성/소스 트랙 ID) + `makeExportPackage` 형상(컴포지션 길이·트랙별 범위·**그래프 오디오 길이**·**프로젝트 클립 원형**) 로깅 — `diagLogCompositionShape` 플래그(수정 후 제거 대상).
+- **핵심 실측(재현 6회·실패 2)**: 실패 run `composition=600s graphAudio=600s tracks=[vide:0..600 soun:0..600]` — **그래프 믹스가 300+300 순차**로 렌더되고 비디오 트랙까지 팽창. 통과 run 전부 300s·프로젝트 원형 결정적(`video:[0..300, 300..600adj] audio:[0..300]` — 조정 클립은 항상 자기 압축 [300,600]에 있으나 BUG-ACC-01 가드로 무해 확인). 평탄화 무죄(단순 통과·컴파운드 없음).
+- **잔여(3차)**: 간헐 변수 = BGM이 [0,300] 오버레이 대신 [300,600] 순차로 놓이는 것(또는 동등 audible-600). 하니스 배치 코드는 결정적으로 보임 — **다음 실패 재현의 `pkg project clips` 라인이 직접 판정**. 재현: `bash scripts/run_w_acceptance.sh w4` 반복(약 50%) + `/usr/bin/log show --last 10m --predicate 'processImagePath CONTAINS "MovieCutMac" AND eventMessage CONTAINS "pkg"' --info`.
+- 부수: 탐침 재시도 rc 기반 6×1s 보강(통과 run에서도 prores_codec 공탐 지속 — 관찰). 게이트 5/5.
+
+### 다음 회차 — STAB 큐
+① **BUG-ACC-04 3차**(실패 재현 1회로 원형 판정 → 수정) ② STAB-04 2차(acceptance 5/5×3) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
 ## 2026-08-29 세션 (BUG-ACC-01 완료 — 조정 레이어 오디오 편입 판명·w4 4s 복원 + BUG-ACC-04 등록)
 
 - **원인 판명(실측 이분법)**: 그래프 빌더·렌더러·audibleSampleEnd 전부 배치 정상 — 하니스 상태 라인 `video:0-2, audio:2-6`이 결정적 단서. **조정 레이어**(자산 ID 차용·G-03 컨테이너)가 자기 압축으로 [2,6]에 밀린 뒤 `carriesAudio` 필터를 통과해 오디오 스트립으로 편입 → audible 범위 2s+4s=6s 팽창(비디오 스트림은 export 필터로 2s 유지 — 오디오만 6s인 실측과 정합). 일반 콤마 임포트의 6s는 멀티 URL 루프의 의도적 순차 배치(결함 아님).

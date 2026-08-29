@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-29 세션 (BUG-ACC-01 완료 — 조정 레이어 오디오 편입 판명·w4 4s 복원 + BUG-ACC-04 등록)
+
+- **원인 판명(실측 이분법)**: 그래프 빌더·렌더러·audibleSampleEnd 전부 배치 정상 — 하니스 상태 라인 `video:0-2, audio:2-6`이 결정적 단서. **조정 레이어**(자산 ID 차용·G-03 컨테이너)가 자기 압축으로 [2,6]에 밀린 뒤 `carriesAudio` 필터를 통과해 오디오 스트립으로 편입 → audible 범위 2s+4s=6s 팽창(비디오 스트림은 export 필터로 2s 유지 — 오디오만 6s인 실측과 정합). 일반 콤마 임포트의 6s는 멀티 URL 루프의 의도적 순차 배치(결함 아님).
+- **수정·검증**: 빌더가 `isAdjustmentLayer` 클립 제외 + Core 유닛(w4 형태 2스트립·audible ≤4s 단언) + **스모크 w4 6.000s→4.000000s(프리셋·ProRes 양 경로)** + 스모크 W 5/5·29/29 + 게이트 5/5.
+- **acceptance 러너 보강(A류)**: 실패 시 워크디렉터리 보존(경로 출력)·ffprobe 탐침 재시도(5분 인코직 직후 조기 공탐 — 보존 파일 재탐침 즉시 정상)·앱 stdout을 `app.log`로 캡처.
+- **BUG-ACC-04 등록(P1)**: 5분 마스터 출력이 **4회 중 2회 전면 실패**(양 export 0바이트·오류 무표면·prores 스텝 거짓 OK — exportProResMaster 조기 반환). app.log 캡처가 다음 재현 판정용(BUG-CA12-01 계열 여부).
+
+### 다음 회차 — STAB 큐
+① **BUG-ACC-02** 파킹 재현 경로 BUG-CA12-01 에스컬레이션 병합 ② STAB-04 2차(acceptance 5/5×3 — BUG-ACC-04 app.log 조사 포함) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
 ## 2026-08-29 세션 (STAB-04 1차 완료 — W 측정 양분화·실결함 3건 포착, 메인 세션 수동 3연속 회차)
 
 - **STAB-04 1차**: ① `run_w_scenarios.sh` → **`run_w_smoke.sh`** 개명(헤더에 "대표 작업 게이트 아님·STT 무실행 허용·하드코딩 덕킹" 명시) ② 하니스 **`MOVIECUT_UITEST_W_STRICT=1`** 모드 — w1 세로 영상 임포트(strict 게이트 — 비게이트 시 스모크 형상 변형·파킹 실측)·**STT 미실행 시 ok=false**(`stt=user_tcc_required_for_acceptance` — 외부 리뷰 "STT 못 돌아도 성공" 폐지)·덕킹 실분석 경로(`autoDuckOtherAudio` F-14) ③ **ProRes 레이스 예산 90초 고정 → STRICT에서 `max(90, duration*2)`** — 고정 90초는 "게이트<실작업"의 사례 그 자체(300초 마스터가 RTF 정상이어도 타임아웃) ④ `make_w_acceptance_fixtures.sh`(say 실발화 60s — 문장 pauses로 덕킹 분석 유도·720x1280 세로·5분 마스터·120BPM) ⑤ `run_w_acceptance.sh`(와치독 held-PID + **앱 파킹 시 러너 직접 회수**·ffprobe 검증: 세로 기하·길이±·prores 코덱·A/V 싱크≤1프레임·시간 예산).

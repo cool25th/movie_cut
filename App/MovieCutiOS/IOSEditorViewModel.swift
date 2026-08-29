@@ -1231,12 +1231,32 @@ final class IOSEditorViewModel {
     /// Steps the playhead one frame in either direction at the project frame
     /// rate, clamped to the timeline span. Pause first so stepping while
     /// playing doesn't fight the time observer.
+    /// STAB-03①: explicit frame steps must reach the player even when the
+    /// move is smaller than PreviewView's 0.25 s observer-coalescing
+    /// threshold — each step bumps this tick so the view issues a forced,
+    /// zero-tolerance seek instead of skipping it as a sub-threshold move.
+    private(set) var frameStepTick = 0
+
     func stepFrame(forward: Bool) {
         isPlaying = false
         let fps = currentProject.timeline.frameRate.doubleValue
         let step = fps.isFinite && fps > 0 ? 1.0 / fps : 1.0 / 30.0
         let duration = currentProject.timeline.duration
         playheadTime = min(max(0, playheadTime + (forward ? step : -step)), max(0, duration))
+        frameStepTick += 1
+    }
+
+    /// STAB-03②: PreviewView forwards AVPlayerItemDidPlayToEndTime here — a
+    /// periodic time observer cannot be relied on to sample the exact end,
+    /// so loop restart / stop is decided from the deterministic end
+    /// notification. The view performs the player-side seek/resume.
+    func handlePlaybackReachedEnd() {
+        guard currentProject.timeline.duration > 0 else { return }
+        if isLooping {
+            playheadTime = 0
+        } else {
+            isPlaying = false
+        }
     }
 
     // MARK: Track management (review #3 — create/delete/mute/lock UI)

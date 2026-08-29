@@ -28,6 +28,7 @@
 ## 2 사용자 대기 항목 (루프 실행 불가 — 회차 보고만)
 
 - **122 로컬 커밋 push — 완료(2026-08-29)**: 스택 PR 5본으로 분할(히스토리 재작성 없이 기존 커밋 경계에서 분할, 순서 병합): [#19](https://github.com/cool25th/movie_cut/pull/19) Core·오디오·효과+인프라 → [#20](https://github.com/cool25th/movie_cut/pull/20) 감사+결함 수정 → [#21](https://github.com/cool25th/movie_cut/pull/21) 포맷·파리티·iOS 통합 → [#22](https://github.com/cool25th/movie_cut/pull/22) CA 큐·벤치마크 → [#23](https://github.com/cool25th/movie_cut/pull/23) 리뷰 #2 반영·안정화(라이브 브랜치 — 이후 STAB 증분이 이 PR로 흘러듦). **원격 CI 결과는 이 PR들에서 관찰 가능 — STAB-06 원격 검증 창구.** 병합 순서 준수 필요.
+- **BUG-ACC-01 완료(2026-08-29, STAB-04 후속 회차)**: 원인은 조정 레이어의 오디오 스트립 편입(빌더 가드 추가) — 스모크 w4 6.000s→4.000s 양 경로 실측·Core 유닛·스모크 W 5/5. **신규 BUG-ACC-04 등록**(5분 마스터 출력 간헐 전면 실패 2/4·오류 무표면·prores 스텝 거짓 OK — acceptance 러너 증거 보존 보강 완료, app.log로 다음 판정) — STAB-04 2차 관련.
 - **soak 2run — 완료(2026-08-29, STAB-01 세션에서 달성)**: 기기가 조용해진 시점에 재수습된 watchdog 하 2런 완주 — run1 wall 803.2s/RSS 1,476MB·run2 700.5s/1,080MB·RSS 성장 0.0%·결정성 9/9·A/V Δ0.0·**GATE PASS** + 고아 sleep 잔류 0(내장 단언 7회·외부 pgrep 교차 0건).
 - **G-27 실기기 잔여 2종** — 기기 연결·잠금 해제 후 `TEAM_ID=98ZKV9N9T4 bash scripts/run_g27_device_e2e.sh`.
 - **MACUI-01·U-08** — TCC/AX 환경 복구(접근성 권한 또는 재부팅).

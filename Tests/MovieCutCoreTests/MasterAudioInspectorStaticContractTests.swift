@@ -26,14 +26,17 @@ struct MasterAudioInspectorStaticContractTests {
             to: "private struct ProjectOverviewInspectorView"
         )
 
-        #expect(master.contains("Text(\"Master Processing\")"))
+        #expect(master.contains("Text(NSLocalizedString(\"Master Processing\", comment: \"\"))"))
         #expect(master.contains("Picker(\"Master processing\", selection: masterProcessingBinding)"))
-        #expect(master.contains("Text(\"Off\").tag(nil as MasterAudioProcessing?)"))
+        #expect(master.contains("Text(NSLocalizedString(\"Off\", comment: \"\")).tag(nil as MasterAudioProcessing?)"))
         #expect(master.contains("Text(\"SNS 좋은 소리\").tag(MasterAudioProcessing.sns as MasterAudioProcessing?)"))
         #expect(master.contains(".pickerStyle(.segmented)"))
-        #expect(master.contains(".accessibilityLabel(\"Master audio processing\")"))
+        #expect(master.contains(".accessibilityLabel(Text(NSLocalizedString(\"Master audio processing\", comment: \"\")))"))
         #expect(master.contains("viewModel.setMasterAudioProcessing(processing)"))
         #expect(!master.contains("Task { await viewModel.setMasterAudioProcessing(processing) }"))
+        // sourceLanguage=en: user-facing G-26 chrome must use English keys
+        // (the picker's preset NAME stays a locale-invariant literal).
+        #expect(master.contains("NSLocalizedString(\"SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)\", comment: \"\")"))
     }
 
     @Test("preset changes enqueue synchronously and one worker coalesces rapid selections")

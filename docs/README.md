@@ -1,55 +1,67 @@
 # MovieCut 문서 인덱스 및 개발 가이드 (Documentation Map)
 
-> **최종 갱신:** 2026-08-15  
-> **기준 커밋:** `494f14f` (검증 게이트 `GATE_PASS`)  
-> **목적:** MovieCut 프로젝트의 아키텍처, 요구사항, 검증기준, UI/UX 구조, 남은 작업을 한눈에 파악할 수 있는 단일 진입점 문서 지도입니다.
+> **최종 갱신:** 2026-08-24 (CapCut 현행 원장 5종 archive→active 승격 — /gap-audit·/surpass 자동화가 사실의 원천으로 참조)  
+> **목적:** MovieCut 프로젝트의 아키텍처, 요구사항, 검증기준, 방향, 경쟁 분석을 한눈에 파악할 수 있는 단일 진입점 문서 지도입니다.
 
 ---
 
-## 1. 5대 핵심 현역 문서 (Core Living Documents)
+## 1. 핵심 현역 문서 (Core Living Documents)
 
-개발, 검증, 설계 시 가장 먼저 참조해야 하는 5개의 현역 문서입니다:
+개발, 검증, 설계 시 가장 먼저 참조해야 하는 문서입니다:
 
 | 문서 | 설명 | 바로가기 |
 |---|---|---|
-| 🏛️ **전체 아키텍처 구조** | Core 모델, Command 패턴, 공유 PixelProcessor 합성 파이프라인, 스토리지/스키마 체인, 오디오 DSP, 플랫폼 구조 | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| 📋 **제품 요구사항 원천** | CapCut 동등 기능 및 Pro 능가 기능, 비기능 요구사항(샌드박스, 오프라인, 성능, 접근성) | [REQUIREMENTS.md](REQUIREMENTS.md) |
-| 🎯 **검증 기준 & SLO 표준** | 렌더링 파리티 판정 기준(MAD ≤ 2.0, duration 일치), 골든 픽셀 원칙, 성능 SLO, 4단계 검증 게이트 | [VERIFICATION_STANDARD.md](VERIFICATION_STANDARD.md) |
-| 🎨 **UI/UX 구조 & 디자인 규격** | Pro 다크 에디터 원칙, 정보 구조(IA), 디자인 토큰(`MovieCutTheme`), 키보드 단축키 및 제스처 맵 | [UIUX_DESIGN.md](UIUX_DESIGN.md) |
-| 📌 **남은 작업 & 로드맵** | Track A(스토어 출시), Track B(iOS 파리티), Track C(컴파운드 Inc 2/고급 편집), Track D(테스트 부채) 잔여 원장 | [REMAINING_TASKS.md](REMAINING_TASKS.md) |
+| 🧭 **개발 방향 (최종 결정)** | 12개월 고정 순서·게이트·G-23~G-29·의사결정 로그. **우선순위 분쟁 시 이 문서가 이긴다** | [DEVELOPMENT_DIRECTION_20260815.md](DEVELOPMENT_DIRECTION_20260815.md) |
+| 🏛️ **아키텍처 구조** | Core 모델, Command 패턴, 공유 PixelProcessor 합성 파이프라인, 오디오 렌더 그래프(G-25/26), 스토리지/스키마 체인, 플랫폼 구조 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| 📋 **요구사항 원천** | 제품 요구사항 + §13 전략 전환 이력(변경 이력표로 최신 관리) | [REQUIREMENTS.md](REQUIREMENTS.md) |
+| 🎯 **검증 기준 & SLO 표준** | 완료 판정 E/U/P/X/D/S, 파리티 3등급·16 시나리오, 골든 픽셀 원칙, 성능 수치 정의(RTF·seek 분해), 5단계 게이트, 경쟁 주장 수위 사다리 | [VERIFICATION_STANDARD.md](VERIFICATION_STANDARD.md) |
+| 🌐 **경쟁 분석·제품 방향 (통합)** | YT Create(모바일)·CapCut·FCP 12.3(맥 설치판) 격차 분석 + 증거 원장(Part 9) + 역량 매트릭스(Part 10) + P0/P1/P2 | [COMPETITIVE_ANALYSIS_20260822.md](COMPETITIVE_ANALYSIS_20260822.md) |
+| 📑 **기능 백로그 원장** | 작업 핸드오프. §0.5에 G-23~G-29 등록 상태 | [CAPCUT_FEATURE_BACKLOG.md](CAPCUT_FEATURE_BACKLOG.md) |
+| 📱 **플랫폼 파리티 매트릭스** | macOS vs iOS 배선 현황 및 defer 사유 | [PLATFORM_PARITY_MATRIX.md](PLATFORM_PARITY_MATRIX.md) |
+| 📐 **CapCut 능가 스펙 (현행 원장)** | G-ID/U-ID 작업 명세 — /gap-audit·/surpass 자동화의 사실의 원천 (2026-08-24 archive 승격) | [CAPCUT_SURPASS_SPEC_20260703.md](CAPCUT_SURPASS_SPEC_20260703.md) |
+| 📏 **CapCut 벤치마크 기준** | B-ID 명시적 비교 기준·채점 시트 | [CAPCUT_BENCHMARK_STANDARD.md](CAPCUT_BENCHMARK_STANDARD.md) |
+| 🔍 **최신 격차 분석 (V13)** | 기능+UI 통합 재감사 — 신규 분석은 V14+로 | [GAP_ANALYSIS_V13_FUNC_UI_20260729.md](GAP_ANALYSIS_V13_FUNC_UI_20260729.md) |
+| 🎨 **UI 설계 원칙** | UI 디자인 원칙·토큰 (U-ID 작업 시 참조) | [UI_DESIGN_PRINCIPLES.md](UI_DESIGN_PRINCIPLES.md) |
+| 🗺️ **CapCut 디자인 격차 감사** | IA 계약 배경 (U-ID 작업 시 참조) | [MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md](MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md) |
 
----
+## 2. 루프 운영 문서 (세션 상태 — 자동 갱신 대상, 수동 편집 주의)
 
-## 2. 배포, 릴리스 및 세부 참조 문서
+| 문서 | 설명 | 바로가기 |
+|---|---|---|
+| 🔁 **루프 상태** | 현재 증분·게이트 상태·대기 결정 사항(단일 진실원) | [LOOP_STATE.md](LOOP_STATE.md) |
+| 🤝 **세션 핸드오프** | 콜드 스타트 세션이 읽는 상세 인계 (983줄) | [SESSION_HANDOFF_CURRENT.md](SESSION_HANDOFF_CURRENT.md) |
+| 📱 **G-27 실기기 검증 가이드** | 3종 기기 러너 실행 절차(사용자 대기 중인 마지막 1단계 게이트) | [G27_DEVICE_VERIFICATION_GUIDE.md](G27_DEVICE_VERIFICATION_GUIDE.md) |
+| 🤖 **에이전트 프롬프트** | 마스터/루프 프롬프트(수동 운영 도구) | [AGENT_MASTER_PROMPT_20260815.md](AGENT_MASTER_PROMPT_20260815.md) · [AGENT_LOOP_PROMPT_20260816.md](AGENT_LOOP_PROMPT_20260816.md) |
+
+## 3. 배포·세부 참조 문서
 
 | 문서 | 역할 및 내용 | 바로가기 |
 |---|---|---|
-| 🚀 **Mac App Store 출시 체크리스트** | Apple Developer Team ID, App Store Connect 등록, 아카이브, 심사 제출 순서 가이드 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
-| 🧪 **TestFlight 베타 가이드** | 내부 테스터 6단계 시나리오 과제 및 정성 평가 시트 | [BETA_GUIDE.md](BETA_GUIDE.md) |
-| 📊 **성능 SLO 세부 원천** | 실측 성능 베이스라인, 메모리/4K 인코딩 배수, OSLog Signpost 계측 항목 | [PERFORMANCE_SLO.md](PERFORMANCE_SLO.md) |
-| 📱 **플랫폼 파리티 매트릭스** | macOS vs iOS 지원 현황 및 차이점 관리 매트릭스 | [PLATFORM_PARITY_MATRIX.md](PLATFORM_PARITY_MATRIX.md) |
-| 📑 **기능 백로그 원장** | 전체 기능 목록 및 마일스톤 관리 | [CAPCUT_FEATURE_BACKLOG.md](CAPCUT_FEATURE_BACKLOG.md) |
-| 🔍 **StaticContract 분류 현황** | 소스 문자열 검사 분류 및 동작 테스트 전환 대상 목록 | [STATIC_CONTRACT_TRIAGE_RESULT.md](STATIC_CONTRACT_TRIAGE_RESULT.md) |
-| 📐 **기능 개발 세부 명세** | G-ID(기능) / U-ID(UI) 개발 단위 상세 명세 | [CAPCUT_SURPASS_SPEC_20260703.md](CAPCUT_SURPASS_SPEC_20260703.md) |
+| 🎨 **UI/UX 구조 & 디자인 규격** | Pro 다크 에디터 원칙, IA, 디자인 토큰, 단축키·제스처 맵 | [UIUX_DESIGN.md](UIUX_DESIGN.md) |
+| 📊 **성능 SLO 세부 원천** | 실측 기준선·게이트 + 측정 정의(RTF·seek 분해·fixture 조건) | [PERFORMANCE_SLO.md](PERFORMANCE_SLO.md) |
+| 🔊 **오디오 렌더 그래프 사양** | G-25/26 구현 사양(이행 완료 — 확장 시에만 갱신) | [AUDIO_RENDER_GRAPH_SPEC_20260817.md](AUDIO_RENDER_GRAPH_SPEC_20260817.md) |
+| 🚀 **Mac App Store 출시 체크리스트** | Team ID·App Store Connect·아카이브·심사 순서 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+| 🧪 **TestFlight 베타 가이드** | 내부 테스터 시나리오 과제·정성 평가 시트 | [BETA_GUIDE.md](BETA_GUIDE.md) |
 
----
+## 4. 과거 기록 보관소 (`docs/archive/`)
 
-## 3. 과거 기록 보관소 (`docs/archive/`)
+완료·대체된 문서(구 격차 분석 V1~V12, 실행 계획, 검수 리뷰, 진단 프롬프트, REMAINING_TASKS 등)는 [docs/archive/](archive/)에 보관됩니다. **역사 추적 시에만 열람하세요 — 자동화·루프가 archive 문서를 현재 원장처럼 읽거나 수정하지 않습니다.** 2026-08-22 archive 이동: `REMAINING_TASKS.md`, `EXECUTION_PLAN_20260816.md`, `EXECUTION_PLAN_PHASE2_20260819.md`, `STATIC_CONTRACT_TRIAGE_RESULT.md`, `COMPETITIVE_GAP_ANALYSIS_20260816.md`, `MovieCut_Compositor_Validation_Prompt.md`, `UI_CAPTURE_DIAGNOSIS_PROMPT_20260817.md`, `EXTERNAL_RESEARCH_PLAN_REVIEW_20260815.md`. 2026-08-24 현행 원장 승격(archive→docs/): `CAPCUT_SURPASS_SPEC_20260703.md`, `CAPCUT_BENCHMARK_STANDARD.md`, `GAP_ANALYSIS_V13_FUNC_UI_20260729.md`, `UI_DESIGN_PRINCIPLES.md`, `MOVIECUT_CAPCUT_DESIGN_GAP_AUDIT_20260619.md` — 같은 문서의 active/archive 복제본은 존재하지 않는다.
 
-완료되었거나 최신 스펙/원장으로 통합 대체된 36개의 과거 작업지시서, 핸드오프, 감사 문서는 [docs/archive/](archive/) 디렉토리에 안전하게 보관되어 있습니다.
-이전 작업 히스토리를 추적해야 할 때만 열람하시기 바랍니다.
-
----
-
-## 4. 빌드 및 검증 명령 빠른 참조
+## 5. 빌드 및 검증 명령 빠른 참조
 
 ```bash
-# 1. 4단계 전체 검증 게이트 (Core 빌드 + 전체 테스트 + Mac 앱 + iOS 앱)
+# 1. 5단계 전체 검증 게이트 (swift build + 전체 swift test + Mac 빌드 + iOS generic 빌드 + high-signal lint)
 bash scripts/verify_gate.sh
 
-# 2. Core 렌더링 파리티 12종 시나리오 실행
+# 2. Core 렌더링 파리티 시나리오 실행 (17종, MAD ≤ 2.0 & duration 1프레임)
 bash scripts/run_core_editing_parity.sh
 
-# 3. Mac App Store 릴리스 빌드 & 아카이브 (Team ID 지정)
+# 3. 지연 기준선 (seek·프로젝트 열기 — 위반 차단 강제)
+bash scripts/run_latency_baseline.sh
+
+# 4. G-27 iOS 실기기 검증 러너 (가이드 참조)
+bash scripts/run_g27_simulator_e2e.sh  # 시뮬레이터 E2E
+
+# 5. Mac App Store 릴리스 빌드 & 아카이브 (Team ID 지정)
 MOVIECUT_TEAM_ID=XXXXXXXXXX bash scripts/release.sh
 ```

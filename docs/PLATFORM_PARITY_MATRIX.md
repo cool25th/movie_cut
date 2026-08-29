@@ -192,7 +192,7 @@
 
 ## 4. 다음 Inc 3 실행 순서
 
-- 1순위: iOS export/preview 구조가 Core 모델을 소비하도록 freeze frame, speed ramp, reverse를 묶어 배선한다.
+- 1순위: iOS export/preview 구조가 Core 모델을 소비하도록 freeze frame, speed ramp, reverse를 묶어 배선한다. **(2026-08-23 명문화 승인)** Inc3 각 항목의 DoD에는 preview에서 사용자가 발동 가능한 액션 표면(iOS UI)과 실기기 증거(D)를 포함한다. UI 제외 시 해당 항목은 '배선 완료·U 미노출'로 표기한다.
 - 2순위: iOS compositor를 Mac과 같은 shared helpers로 통일한다: `ChromaKeyPixelProcessor`, `TransitionPixelProcessor`, `PersonSegmentationCompositor`.
 - 3순위: iOS autosave/crash recovery lifecycle을 `ProjectStore`로 연결한다.
 - 4순위: iOS export options sheet에 platform preset/mp4 settings를 반영한다.

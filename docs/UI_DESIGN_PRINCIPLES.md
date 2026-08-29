@@ -1,7 +1,7 @@
 # MovieCut UI 디자인 원칙 (Phase 0.7)
 
 > 작성일: 2026-06-24 / 정체성: **Pro 다크 에디터** (CapCut 클론 아님).
-> 결정([로드맵](MOVIECUT_PRO_ROADMAP_20260622.md) §0): "CapCut을 Pro급으로" — CapCut의 **우수한 UX/속도/발견성은 계승**, 그 위에 **Pro 밀도·제어**를 얹는다. **"CapCut 유사도" 지표는 폐기** — 능가가 목표인데 유사도를 재는 것은 모순.
+> 결정([로드맵](archive/MOVIECUT_PRO_ROADMAP_20260622.md) §0): "CapCut을 Pro급으로" — CapCut의 **우수한 UX/속도/발견성은 계승**, 그 위에 **Pro 밀도·제어**를 얹는다. **"CapCut 유사도" 지표는 폐기** — 능가가 목표인데 유사도를 재는 것은 모순.
 
 ## 1. 측정 가능한 원칙 (지표화)
 

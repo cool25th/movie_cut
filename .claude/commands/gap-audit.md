@@ -9,7 +9,7 @@ CapCut 대비 격차를 **코드 실사 기반**으로 재도출하고, 분석 �
 
 ## 0. 이전 산출물 로드 (필수, 순서대로)
 
-1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — 현행 스펙(G-ID 기능 / U-ID UI). **스펙이 사실의 원천.**
+1. `docs/CAPCUT_SURPASS_SPEC_20260703.md` — 현행 스펙(G-ID 기능 / U-ID UI). **스펙이 사실의 원천.** (active ledger — archive/ 아님)
 2. **`docs/CAPCUT_BENCHMARK_STANDARD.md` — CapCut 수준의 명시적 기준(B-ID). 모든 비교 판정은 이 문서의 B-ID 기준 문장에 대해 ⬆/=/⬇/❌로 내린다.**
 3. 최신 `docs/GAP_ANALYSIS_V*` (버전 번호 가장 높은 것) — 직전 통합 격차 분석.
 4. `docs/CAPCUT_FEATURE_BACKLOG.md` §2.5 — 증거 기반 검증 현황.
@@ -37,7 +37,7 @@ CapCut 대비 격차를 **코드 실사 기반**으로 재도출하고, 분석 �
 
 1. **신규 분석 문서** `docs/GAP_ANALYSIS_V<N+1>_FUNC_UI_<YYYYMMDD>.md` (오늘 날짜, 직전 버전+1):
    - 델타 요약(직전 분석 이후 커밋·판정 변화) / 3분류 현황(능가·부채·열위) / 기능 G-ID 현황판 / UI 격차표(실사 근거 포함) / 개선 방향성 / 신규·변경 항목 요약 / 권장 실행 순서(병행 슬롯).
-2. **스펙 갱신** `CAPCUT_SURPASS_SPEC_20260703.md`:
+2. **스펙 갱신** `docs/CAPCUT_SURPASS_SPEC_20260703.md`:
    - 버전 bump + 변경 이력 1줄. 상태 변화 반영(완료 항목 검증 기록, 진행중 표시).
    - 신규 격차는 새 G-ID/U-ID로 **상세 명세 추가**(요구사항/현재 상태 실사/데이터 모델/구현 증분(파일 수준)/측정 가능한 AC/검증 계획/리스크 — 기존 항목과 같은 밀도).
    - 무효화된 항목은 삭제하지 말고 취소선+사유.

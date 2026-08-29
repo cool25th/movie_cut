@@ -173,7 +173,12 @@ capture_one() {
     return 1
   fi
   local preexisting_pids
-  preexisting_pids="$(pgrep -x MovieCutMac 2>/dev/null | tr '\n' ' ')"
+  # pgrep exits 1 when no instance is running (the normal case after the
+  # pkill above); with `set -euo pipefail` that status flows through the
+  # assignment and errexit kills the script BEFORE the launch — silently,
+  # because this line is only inside a `||`-disabled context on the
+  # `--state all` path. Guard so the empty-string result is not a trap.
+  preexisting_pids="$(pgrep -x MovieCutMac 2>/dev/null | tr '\n' ' ')" || true
 
   echo "Launching MovieCutMac harness state='${state}'..."
   # Launch through Launch Services (`open`), not a bare executable: the

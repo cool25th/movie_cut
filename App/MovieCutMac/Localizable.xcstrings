@@ -1,7 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "-": {},
     "#%@": {},
     "%.0f fps": {
       "extractionState": "manual",
@@ -123,24 +122,6 @@
       }
     },
     "%@": {},
-    "%@ · %.0f pt · %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · %.0f pt · %@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · %.0f pt · %@"
-          }
-        }
-      }
-    },
-    "%@ · normalized layout preview": {},
     "%@ (recommended)": {
       "localizations": {
         "en": {
@@ -278,6 +259,24 @@
         }
       }
     },
+    "%@ · %.0f pt · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %.0f pt · %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %.0f pt · %@"
+          }
+        }
+      }
+    },
+    "%@ · normalized layout preview": {},
     "%@, duration %@": {
       "extractionState": "manual",
       "localizations": {
@@ -347,13 +346,14 @@
         }
       }
     },
-    "4K (3840x2160)": {},
-    "6/12 next action: single golden export fixture before device/full-suite claims": {},
+    "-": {},
+    "1080p (1920x1080)": {},
     "24 fps": {},
     "30 fps": {},
+    "4K (3840x2160)": {},
+    "6/12 next action: single golden export fixture before device/full-suite claims": {},
     "60 fps": {},
     "720p (1280x720)": {},
-    "1080p (1920x1080)": {},
     "A": {
       "extractionState": "manual",
       "localizations": {
@@ -404,8 +404,25 @@
         }
       }
     },
-    "Aa": {},
     "AAC": {},
+    "AI tools and automation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI tools and automation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 도구 및 자동화"
+          }
+        }
+      }
+    },
+    "Aa": {},
     "Add": {
       "extractionState": "manual",
       "localizations": {
@@ -474,6 +491,23 @@
         }
       }
     },
+    "Add Text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Text"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "텍스트 추가"
+          }
+        }
+      }
+    },
     "Add a page to begin": {},
     "Add custom text": {
       "extractionState": "manual",
@@ -488,23 +522,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "사용자 지정 텍스트 추가"
-          }
-        }
-      }
-    },
-    "Add Text": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add Text"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "텍스트 추가"
           }
         }
       }
@@ -730,23 +747,6 @@
         }
       }
     },
-    "AI tools and automation": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI tools and automation"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI 도구 및 자동화"
-          }
-        }
-      }
-    },
     "Analyze silence and prepare automatic cuts for the selected clip.": {
       "extractionState": "manual",
       "localizations": {
@@ -782,6 +782,23 @@
       }
     },
     "Animation": {},
+    "Apply the %@ subtitle style to the selected clip.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply the %@ subtitle style to the selected clip."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립에 %@ 자막 스타일을 적용합니다."
+          }
+        }
+      }
+    },
     "Asset Grid": {
       "extractionState": "manual",
       "localizations": {
@@ -833,6 +850,24 @@
         }
       }
     },
+    "Audio Ducking": {},
+    "Audio Master": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Master"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오디오 마스터"
+          }
+        }
+      }
+    },
     "Audio browser": {
       "extractionState": "manual",
       "localizations": {
@@ -867,7 +902,6 @@
         }
       }
     },
-    "Audio Ducking": {},
     "Audio track header": {
       "extractionState": "manual",
       "localizations": {
@@ -903,23 +937,6 @@
       }
     },
     "Auto Cut (Silence)": {},
-    "Auto cut removal span": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auto cut removal span"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "자동 컷 제거 예정 구간"
-          }
-        }
-      }
-    },
     "Auto Reframe": {
       "extractionState": "manual",
       "localizations": {
@@ -933,6 +950,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "자동 리프레임"
+          }
+        }
+      }
+    },
+    "Auto cut removal span": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto cut removal span"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 컷 제거 예정 구간"
           }
         }
       }
@@ -971,6 +1005,23 @@
         }
       }
     },
+    "Back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "뒤로"
+          }
+        }
+      }
+    },
     "Background": {
       "extractionState": "manual",
       "localizations": {
@@ -988,23 +1039,6 @@
         }
       }
     },
-    "Background blur radius": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Background blur radius"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "배경 블러 반경"
-          }
-        }
-      }
-    },
     "Background Style": {
       "extractionState": "manual",
       "localizations": {
@@ -1018,6 +1052,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "배경 스타일"
+          }
+        }
+      }
+    },
+    "Background blur radius": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background blur radius"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "배경 블러 반경"
           }
         }
       }
@@ -1125,6 +1176,23 @@
       }
     },
     "Boundary fixture: fade-through-black midpoint accepted · vertical slide pending": {},
+    "Bypass the project master chain; clip and track processing still applies.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bypass the project master chain; clip and track processing still applies."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프로젝트 마스터 체인을 바이패스합니다. 클립·트랙 처리는 그대로 적용됩니다."
+          }
+        }
+      }
+    },
     "Cancel": {
       "extractionState": "manual",
       "localizations": {
@@ -1278,6 +1346,23 @@
         }
       }
     },
+    "Chooses bypass or the SNS preset for this project.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chooses bypass or the SNS preset for this project."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 프로젝트에 마스터 체인 바이패스 또는 SNS 프리셋을 적용합니다."
+          }
+        }
+      }
+    },
     "Cinematic": {},
     "Claim label: targeted transition confidence only": {},
     "Clear library search": {
@@ -1382,6 +1467,7 @@
         }
       }
     },
+    "Clip Info": {},
     "Clip boundary motion": {
       "extractionState": "manual",
       "localizations": {
@@ -1417,7 +1503,23 @@
         }
       }
     },
-    "Clip Info": {},
+    "Clips": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립"
+          }
+        }
+      }
+    },
     "Color": {
       "extractionState": "manual",
       "localizations": {
@@ -1435,6 +1537,8 @@
         }
       }
     },
+    "Color Correction": {},
+    "Color Grade": {},
     "Color adjustment for the selected clip": {
       "extractionState": "manual",
       "localizations": {
@@ -1469,8 +1573,23 @@
         }
       }
     },
-    "Color Correction": {},
-    "Color Grade": {},
+    "Compound clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compound clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컴파운드 클립"
+          }
+        }
+      }
+    },
     "Constant playback rate is active.": {},
     "Cool": {},
     "Copy": {
@@ -1486,6 +1605,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "복사"
+          }
+        }
+      }
+    },
+    "Create Compound Clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Compound Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컴파운드 클립 생성"
           }
         }
       }
@@ -1576,19 +1712,30 @@
         }
       }
     },
-    "custom": {
+    "Current Time — type a timecode and press Return to jump": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 시간 — 타임코드를 입력하고 Return을 누르면 이동합니다"
+          }
+        }
+      }
+    },
+    "Current time": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "custom"
+            "value": "Current time"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용자 지정"
+            "value": "현재 시간"
           }
         }
       }
@@ -1713,23 +1860,6 @@
         }
       }
     },
-    "Detect beats and add timeline markers for music edits.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Detect beats and add timeline markers for music edits."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "비트를 감지해 음악 편집용 타임라인 마커를 추가합니다."
-          }
-        }
-      }
-    },
     "Detect Scenes": {
       "extractionState": "manual",
       "localizations": {
@@ -1743,6 +1873,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "장면 감지"
+          }
+        }
+      }
+    },
+    "Detect beats and add timeline markers for music edits.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detect beats and add timeline markers for music edits."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비트를 감지해 음악 편집용 타임라인 마커를 추가합니다."
           }
         }
       }
@@ -1829,23 +1976,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "드래그하여 클립 시작을 트림합니다."
-          }
-        }
-      }
-    },
-    "draggable to timeline": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "draggable to timeline"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "타임라인으로 드래그 가능"
           }
         }
       }
@@ -2058,6 +2188,23 @@
         }
       }
     },
+    "Exports the current subtitles in the selected format.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exports the current subtitles in the selected format."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 자막을 선택한 형식으로 내보냅니다."
+          }
+        }
+      }
+    },
     "Extract Audio": {
       "extractionState": "manual",
       "localizations": {
@@ -2105,6 +2252,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "오디오 추출 중..."
+          }
+        }
+      }
+    },
+    "FX": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FX"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "효과"
           }
         }
       }
@@ -2300,23 +2464,6 @@
         }
       }
     },
-    "FX": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FX"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "효과"
-          }
-        }
-      }
-    },
     "Gamma · midtones": {},
     "Generate Proxy": {
       "extractionState": "manual",
@@ -2331,6 +2478,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "프록시 생성"
+          }
+        }
+      }
+    },
+    "Gentle compression · room reverb · −1 dBTP limiter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gentle compression · room reverb · −1 dBTP limiter."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "부드러운 컴프레션 · 룸 리버브 · −1 dBTP 리미터."
           }
         }
       }
@@ -2526,6 +2690,23 @@
         }
       }
     },
+    "Import Media": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미디어 가져오기"
+          }
+        }
+      }
+    },
     "Import and drag clips": {
       "extractionState": "manual",
       "localizations": {
@@ -2550,23 +2731,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import media"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "미디어 가져오기"
-          }
-        }
-      }
-    },
-    "Import Media": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import Media"
           }
         },
         "ko": {
@@ -2646,7 +2810,41 @@
       }
     },
     "Input Level": {},
+    "Integrated Loudness": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integrated Loudness"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "통합 라우드니스"
+          }
+        }
+      }
+    },
     "Karaoke": {},
+    "Karaoke highlight color": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karaoke highlight color"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카라오케 강조 색상"
+          }
+        }
+      }
+    },
     "Letterbox areas render black.": {
       "extractionState": "manual",
       "localizations": {
@@ -2784,6 +2982,17 @@
         }
       }
     },
+    "MM:SS:FF": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MM:SS:FF"
+          }
+        }
+      }
+    },
     "Main": {
       "extractionState": "manual",
       "localizations": {
@@ -2819,8 +3028,110 @@
       }
     },
     "Mask": {},
+    "Master Processing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master Processing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 프로세싱"
+          }
+        }
+      }
+    },
+    "Master audio processing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master audio processing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 오디오 처리"
+          }
+        }
+      }
+    },
+    "Master audio processing set to the SNS preset.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master audio processing set to the SNS preset."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 오디오 처리가 SNS 프리셋으로 설정되었습니다."
+          }
+        }
+      }
+    },
+    "Master audio processing turned off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master audio processing turned off."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 오디오 처리가 꺼졌습니다."
+          }
+        }
+      }
+    },
     "Master look": {},
     "Mbps": {},
+    "Measure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measure"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "측정"
+          }
+        }
+      }
+    },
+    "Measuring…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measuring…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "측정 중…"
+          }
+        }
+      }
+    },
     "Media": {
       "extractionState": "manual",
       "localizations": {
@@ -2957,227 +3268,6 @@
         }
       }
     },
-    "Solo track": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Solo track"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "트랙 솔로"
-          }
-        }
-      }
-    },
-    "Soloed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Soloed"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "솔로"
-          }
-        }
-      }
-    },
-    "Not soloed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not soloed"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "솔로 아님"
-          }
-        }
-      }
-    },
-    "Soloing silences every other track's audio.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Soloing silences every other track's audio."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "솔로하면 다른 모든 트랙의 오디오가 무음 처리됩니다."
-          }
-        }
-      }
-    },
-    "Audio Master": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audio Master"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "오디오 마스터"
-          }
-        }
-      }
-    },
-    "Integrated Loudness": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Integrated Loudness"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "통합 라우드니스"
-          }
-        }
-      }
-    },
-    "True Peak": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "True Peak"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "트루 피크"
-          }
-        }
-      }
-    },
-    "Measure": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Measure"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "측정"
-          }
-        }
-      }
-    },
-    "Measuring…": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Measuring…"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "측정 중…"
-          }
-        }
-      }
-    },
-    "No measurement yet": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No measurement yet"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "아직 측정값이 없습니다"
-          }
-        }
-      }
-    },
-    "Silence": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Silence"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "무음"
-          }
-        }
-      }
-    },
-    "SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SNS 가이드라인: −16…−14 LUFS-I, ≤ −1 dBTP (§7)"
-          }
-        }
-      }
-    },
-    "Preview is not ready yet — try again in a moment.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preview is not ready yet — try again in a moment."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "프리뷰가 아직 준비되지 않았습니다 — 잠시 후 다시 시도하세요."
-          }
-        }
-      }
-    },
     "Mute track": {
       "extractionState": "manual",
       "localizations": {
@@ -3238,6 +3328,23 @@
     "No markers": {},
     "No matching SFX": {},
     "No matching tracks": {},
+    "No measurement yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No measurement yet"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 측정값이 없습니다"
+          }
+        }
+      }
+    },
     "No page selected": {},
     "No proxy": {
       "extractionState": "manual",
@@ -3344,6 +3451,23 @@
         }
       }
     },
+    "Not soloed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not soloed"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "솔로 아님"
+          }
+        }
+      }
+    },
     "Off": {
       "extractionState": "manual",
       "localizations": {
@@ -3431,6 +3555,7 @@
       }
     },
     "Outline": {},
+    "PCM": {},
     "Page %@ of %@": {
       "localizations": {
         "en": {
@@ -3475,7 +3600,6 @@
         }
       }
     },
-    "PCM": {},
     "Platform Presets": {},
     "Play": {
       "extractionState": "manual",
@@ -3666,6 +3790,40 @@
         }
       }
     },
+    "Preview is not ready yet — try again in a moment.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview is not ready yet — try again in a moment."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프리뷰가 아직 준비되지 않았습니다 — 잠시 후 다시 시도하세요."
+          }
+        }
+      }
+    },
+    "Preview quality lowered: %@. Export uses the original.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview quality lowered: %@. Export uses the original."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프리뷰 품질이 낮아졌습니다: %@. 내보내기는 원본을 사용합니다."
+          }
+        }
+      }
+    },
     "Preview transition: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -3751,6 +3909,23 @@
         }
       }
     },
+    "Progressively highlight subtitle words during playback.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progressively highlight subtitle words during playback."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생 중 자막 단어를 순차적으로 강조합니다."
+          }
+        }
+      }
+    },
     "Project save status": {
       "extractionState": "manual",
       "localizations": {
@@ -3764,39 +3939,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "프로젝트 저장 상태"
-          }
-        }
-      }
-    },
-    "proxy playback on": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "proxy playback on"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "프록시 재생 켜짐"
-          }
-        }
-      }
-    },
-    "proxy playback on due to thermal pressure": {},
-    "proxy ready": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "proxy ready"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "프록시 준비됨"
           }
         }
       }
@@ -3836,7 +3978,58 @@
     },
     "Quick": {},
     "Quick Tools": {},
+    "RGB parade": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RGB parade"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RGB 퍼레이드"
+          }
+        }
+      }
+    },
     "Rate": {},
+    "Red, green, and blue channel waveforms side by side": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red, green, and blue channel waveforms side by side"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "빨강·초록·파랑 채널 파형을 나란히 표시합니다"
+          }
+        }
+      }
+    },
+    "Release Compound Clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release Compound Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컴파운드 클립 해제"
+          }
+        }
+      }
+    },
     "Remove the selected clip transition": {
       "extractionState": "manual",
       "localizations": {
@@ -3906,6 +4099,23 @@
       }
     },
     "Retrospective quote: targeted confidence · export golden pending": {},
+    "Return to parent timeline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return to parent timeline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상위 타임라인으로 돌아가기"
+          }
+        }
+      }
+    },
     "Reverse & Freeze": {},
     "Review handoff: Accepted evidence · Blocked claim · Next artifact · Owner": {},
     "Review-safe wording: do not say exported or device verified": {},
@@ -3943,7 +4153,23 @@
         }
       }
     },
-    "s": {},
+    "SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SNS 가이드라인: −16…−14 LUFS-I, ≤ −1 dBTP (§7)"
+          }
+        }
+      }
+    },
     "Safe zone guides": {
       "extractionState": "manual",
       "localizations": {
@@ -4337,6 +4563,23 @@
         }
       }
     },
+    "Silence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silence"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "무음"
+          }
+        }
+      }
+    },
     "Size": {},
     "Slide": {
       "extractionState": "manual",
@@ -4470,6 +4713,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "부드러운 슬로우모션"
+          }
+        }
+      }
+    },
+    "Solo track": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo track"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "트랙 솔로"
+          }
+        }
+      }
+    },
+    "Soloed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soloed"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "솔로"
+          }
+        }
+      }
+    },
+    "Soloing silences every other track's audio.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soloing silences every other track's audio."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "솔로하면 다른 모든 트랙의 오디오가 무음 처리됩니다."
           }
         }
       }
@@ -4612,6 +4906,7 @@
         }
       }
     },
+    "Sticker Transform": {},
     "Sticker browser": {
       "extractionState": "manual",
       "localizations": {
@@ -4646,7 +4941,6 @@
         }
       }
     },
-    "Sticker Transform": {},
     "Stickers": {
       "extractionState": "manual",
       "localizations": {
@@ -4698,6 +4992,23 @@
         }
       }
     },
+    "Subtitle export format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitle export format"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자막 내보내기 형식"
+          }
+        }
+      }
+    },
     "Subtitle start seconds": {
       "extractionState": "manual",
       "localizations": {
@@ -4735,23 +5046,6 @@
     "Subtitles": {},
     "Target bitrate may be adjusted by the selected format and system encoder.": {},
     "Templates": {},
-    "text": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "text"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "텍스트"
-          }
-        }
-      }
-    },
     "Text": {
       "extractionState": "manual",
       "localizations": {
@@ -4823,6 +5117,23 @@
     },
     "Thermal pressure: preview is using the proxy. It restores when the device cools. Export uses the original.": {},
     "This clip type does not support speed controls.": {},
+    "This project has no audio to measure.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This project has no audio to measure."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 프로젝트에는 측정할 오디오가 없습니다."
+          }
+        }
+      }
+    },
     "Thumbnail missing": {
       "extractionState": "manual",
       "localizations": {
@@ -4870,6 +5181,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "시간"
+          }
+        }
+      }
+    },
+    "Timecode not recognized. Use MM:SS:FF (e.g. 01:30:15), MM:SS, or seconds.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임코드를 인식할 수 없습니다. MM:SS:FF(예: 01:30:15), MM:SS 또는 초를 입력하세요."
           }
         }
       }
@@ -5199,6 +5521,23 @@
         }
       }
     },
+    "True Peak": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "True Peak"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "트루 피크"
+          }
+        }
+      }
+    },
     "Type a custom text clip at the playhead": {
       "extractionState": "manual",
       "localizations": {
@@ -5212,6 +5551,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "재생 헤드에 사용자 지정 텍스트 클립 입력"
+          }
+        }
+      }
+    },
+    "Type a timecode and press Return to jump": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type a timecode and press Return to jump"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임코드를 입력하고 Return을 눌러 이동합니다"
           }
         }
       }
@@ -5457,7 +5813,6 @@
         }
       }
     },
-    "x": {},
     "Zoom": {
       "extractionState": "manual",
       "localizations": {
@@ -5509,23 +5864,160 @@
         }
       }
     },
-    "Clips": {
+    "custom": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clips"
+            "value": "custom"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "클립"
+            "value": "사용자 지정"
           }
         }
       }
-    }
+    },
+    "draggable to timeline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "draggable to timeline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인으로 드래그 가능"
+          }
+        }
+      }
+    },
+    "preview quality is reduced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "preview quality is reduced"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프리뷰 품질이 낮아졌습니다"
+          }
+        }
+      }
+    },
+    "proxy playback is on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "proxy playback is on"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프록시 재생이 켜져 있습니다"
+          }
+        }
+      }
+    },
+    "proxy playback on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "proxy playback on"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프록시 재생 켜짐"
+          }
+        }
+      }
+    },
+    "proxy playback on due to thermal pressure": {},
+    "proxy ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "proxy ready"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프록시 준비됨"
+          }
+        }
+      }
+    },
+    "s": {},
+    "text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "text"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "텍스트"
+          }
+        }
+      }
+    },
+    "thermal pressure is using the proxy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "thermal pressure is using the proxy"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열 부하로 프록시를 사용하고 있습니다"
+          }
+        }
+      }
+    },
+    "thermal pressure reduced the preview resolution": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "thermal pressure reduced the preview resolution"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열 부하로 프리뷰 해상도가 낮아졌습니다"
+          }
+        }
+      }
+    },
+    "x": {}
   },
   "version": "1.0"
 }

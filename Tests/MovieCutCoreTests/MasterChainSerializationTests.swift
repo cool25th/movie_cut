@@ -130,6 +130,60 @@ struct MasterChainSerializationTests {
         #expect(strict < -5.0, "the −6 dBTP ceiling must bind: \(strict)")
     }
 
+    @Test("the set-preset command installs and clears the project preset")
+    func commandAppliesPreset() throws {
+        var project = Project(name: "g26-cmd")
+        try SetMasterAudioProcessingCommand(processing: .sns).apply(to: &project)
+        #expect(project.masterAudioProcessing == .sns)
+        try SetMasterAudioProcessingCommand(processing: nil).apply(to: &project)
+        #expect(project.masterAudioProcessing == nil)
+    }
+
+    @Test("the full product route renders the preset: project → builder bus → limited true peak")
+    func projectRouteRendersPreset() throws {
+        // A project with one loud audio clip, preset on vs off. The graph
+        // BUILDER (the product path) expands the preset into the master
+        // bus; the offline renderer consumes it. The measured difference
+        // proves the UI toggle's route end to end.
+        func renderTruePeakDbTp(preset: MasterAudioProcessing?) throws -> Double {
+            var project = Project(name: "route")
+            project.masterAudioProcessing = preset
+            let assetId = UUID()
+            project.mediaLibrary.assets[assetId] = MediaAsset(
+                originalURL: URL(fileURLWithPath: "/tmp/route.wav"), kind: .audio, duration: 0.5
+            )
+            var track = Track(kind: .audio, name: "a", zIndex: 0)
+            let clip = Clip(
+                assetId: assetId,
+                kind: .audio,
+                sourceRange: TimeRange(start: 0, duration: 0.5),
+                timelineRange: TimeRange(start: 0, duration: 0.5)
+            )
+            track.clips = [clip]
+            project.timeline.tracks = [track]
+
+            let plan = AudioGraphProjectBuilder.build(project: project)
+            guard let strip = plan.spec.clipStrips.first else {
+                throw NSError(domain: "test", code: 1)
+            }
+            let rendered = try AudioGraphOfflineRenderer.render(
+                spec: plan.spec,
+                activations: [strip.clipId: AudioGraphStripActivation(
+                    sampleRange: 0..<24_000,
+                    sourceFrameOffset: 0,
+                    playbackRate: 1
+                )],
+                sourceAudio: { _ in loudSine() },
+                frameCount: 24_000
+            )
+            return AudioGraphLoudness.measure(rendered).truePeakDbTp ?? 0
+        }
+        let bypassed = try renderTruePeakDbTp(preset: nil)
+        let processed = try renderTruePeakDbTp(preset: .sns)
+        #expect(bypassed > -0.5, "the raw mix must peak near 0 dBFS: \(bypassed)")
+        #expect(processed <= -0.5, "the preset's limiter must bind: \(processed)")
+    }
+
     @Test("project round-trips the master processing preset; nil omits the key")
     func projectCodableRoundTrip() throws {
         var project = Project(name: "g26")

@@ -1,3 +1,5 @@
+> (2026-08-22) REMAINING_TASKS는 archive 이동 — 현재 진행 상태는 LOOP_STATE.md·SESSION_HANDOFF_CURRENT.md·CAPCUT_FEATURE_BACKLOG.md §0.5 참조.
+
 # MovieCut 전체 개선 자율 실행 — 마스터 프롬프트 (2026-08-15)
 
 > 사용법: 새 개발 세션 시작 시 「마스터 프롬프트」를 통째로 붙여넣는다. 이후 세션은 「후속 세션 프롬프트」 한 줄이면 충분하다. 목표 설계 근거는 `docs/DEVELOPMENT_DIRECTION_20260815.md`.
@@ -26,7 +28,7 @@
       docs 재편)를 bash scripts/verify_gate.sh 4단계 통과 후 커밋한다.
    b. 방향 문서 §8 후속 문서 작업을 수행한다: CAPCUT_FEATURE_BACKLOG.md에 G-23~G-29 등록 및 기존 ID 재정의,
       VERIFICATION_STANDARD.md·PERFORMANCE_SLO.md·REQUIREMENTS.md 갱신.
-1. 세션 시작마다: 방향 문서 §3(고정 순서)·§9(워크오더)와 docs/REMAINING_TASKS.md, 백로그에서
+1. 세션 시작마다: 방향 문서 §3(고정 순서)·§9(워크오더)와 docs/archive/REMAINING_TASKS.md, 백로그에서
    "다음 작업"을 확정한다. 순서는 §3 고정이며 임의로 건너뛰거나 재배치하지 않는다.
 2. 증분 사이클(작업 1개당): 브랜치 생성 → 구현 → 테스트 → bash scripts/verify_gate.sh 4단계 전부 통과 →
    관련 문서·원장 상태 갱신 → conventional commits로 커밋.
@@ -40,7 +42,7 @@
 5. 정지 조건: (a) 게이트 2회 연속 실패 (b) 방향 문서 §7의 열린 결정이 필요한 시점
    (c) 조기 경보 신호 발생(검색 성공률 정체, 프리뷰↔출력 불일치, SDR 골든 변화 등).
    이 경우 진행을 멈추고 상태·근거·선택지를 보고하고 사용자 결정을 기다린다.
-6. 세션 종료 의례: docs/REMAINING_TASKS.md 상태 갱신 → 세션 핸드오프 문서 갱신 → log.md에 한 줄 기록 →
+6. 세션 종료 의례: docs/archive/REMAINING_TASKS.md 상태 갱신 → 세션 핸드오프 문서 갱신 → log.md에 한 줄 기록 →
    커밋/PR 정리.
 
 ## 금지 사항
@@ -65,7 +67,7 @@
 MovieCut 자율 실행을 계속한다. 마스터 프롬프트(docs/AGENT_MASTER_PROMPT_20260815.md)의
 실행 프로토콜을 그대로 따른다.
 
-시작 절차: docs/DEVELOPMENT_DIRECTION_20260815.md §3·§9와 docs/REMAINING_TASKS.md를 읽고
+시작 절차: docs/DEVELOPMENT_DIRECTION_20260815.md §3·§9와 docs/archive/REMAINING_TASKS.md를 읽고
 다음 작업을 확정해 진행하라. 이번 세션도 증분 1~3개, 게이트 수치로 증명, 정지 조건 준수.
 ```
 

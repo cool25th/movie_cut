@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-29 세션 (STAB-04 1차 완료 — W 측정 양분화·실결함 3건 포착, 메인 세션 수동 3연속 회차)
+
+- **STAB-04 1차**: ① `run_w_scenarios.sh` → **`run_w_smoke.sh`** 개명(헤더에 "대표 작업 게이트 아님·STT 무실행 허용·하드코딩 덕킹" 명시) ② 하니스 **`MOVIECUT_UITEST_W_STRICT=1`** 모드 — w1 세로 영상 임포트(strict 게이트 — 비게이트 시 스모크 형상 변형·파킹 실측)·**STT 미실행 시 ok=false**(`stt=user_tcc_required_for_acceptance` — 외부 리뷰 "STT 못 돌아도 성공" 폐지)·덕킹 실분석 경로(`autoDuckOtherAudio` F-14) ③ **ProRes 레이스 예산 90초 고정 → STRICT에서 `max(90, duration*2)`** — 고정 90초는 "게이트<실작업"의 사례 그 자체(300초 마스터가 RTF 정상이어도 타임아웃) ④ `make_w_acceptance_fixtures.sh`(say 실발화 60s — 문장 pauses로 덕킹 분석 유도·720x1280 세로·5분 마스터·120BPM) ⑤ `run_w_acceptance.sh`(와치독 held-PID + **앱 파킹 시 러너 직접 회수**·ffprobe 검증: 세로 기하·길이±·prores 코덱·A/V 싱크≤1프레임·시간 예산).
+- **게이트 즉시 포착 — 백로그 §1.15 등록**: **BUG-ACC-01 (P1)** ProRes·명시적 비트레이트 출력에서 겹치는 오디오 길이 **합산**(2s 영상+4s BGM→6.000s·300+300→600s — 프리셋/프리뷰 경로는 정상 오버레이. 코덱 prores 정상) — 그래프 믹스다운 배치 의심. **BUG-ACC-02 (P1)** `autoDuckOtherAudio` 실분석이 60초 실발화에서 continuation 파킹(메인 런루프 유휴·워커 부재·w.json 미기록·12분 스택 샘플) — **BUG-CA12-01 계열 신규 재현 경로**(1커맨드 재현 가능). **BUG-ACC-03 (P2)** 비트 마커 수율(4s 8클릭≥6개 vs 60s 120BPM→4개).
+- **함정 3건(정직 기록)**: ① 세로 임포트를 strict가 아닌 픽스처 존재로 걸어 스모크 w1 형상 변형→파킹(40분 소모 후 strict 가드로 회복 — 스모크 W 5/5·29/29·40s 재실측) ② 스모크/acceptance 러너 공통의 "와치독만 앱을 죽이는" 구조 — 파킹 시 `wait $pid` 영구 블록(양쪽 모두 러너 직접 회수로 보강) ③ bash `set -e` + `[ $? -ne 0 ] && FAIL=1` 무음 사망(acceptance 러너 — `if !` 형태로 수정, CA-01 함정 재발).
+- **검증**: 스모크 W 5/5·29/29(무회귀)·verify_gate 5/5. acceptance는 현재 정직하게 RED(w1=STT TCC 대기+BUG-ACC-02·w2=마커 수율 약어셜션·w4=BUG-ACC-01 duration) — **BUG-ACC-01/02 수정 후 5/5×3이 STAB-04 2차 완료 기준**.
+- **경과**: STAB 진도 4/8(1차). Phase 2(측정 재설계) 착수 — 게이트가 이미 결함을 잡기 시작함(외부 리뷰 요구의 실증).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **BUG-ACC-01 (P1)** ProRes/명시적 비트레이트 오디오 길이 합산 수정(그래프 믹스다운 배치 — 재현: 2s 영상+4s BGM 오버레이→ProRes 6s·수정 후 4s 단언 + 프리셋 경로 패리티) ② BUG-ACC-02 재현 경로 BUG-CA12-01 에스컬레이션 병합 + STAB-04 2차(acceptance 재실측) ③ STAB-05 파리티 통합. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·**W1 STT용 음성인식 TCC 승인(시스템 설정→개인정보→음성 인식 — 무인 acceptance가 실전 STT를 돌리는 전제)**·STAB-07 결정.
+
 ## 2026-08-29 세션 (STAB-03 완료 — iOS 제품 결함 4건, 메인 세션 수동 회차)
 
 - **STAB-03(메인 세션 수동 회차 — 연속 2회차)**: ① stepFrame이 `frameStepTick` 발행 → PreviewView가 해당 틱을 관찰해 **0.25s 공산 임계값을 우회한 강제 시크**(zero-tolerance) — ~0.033s 스텝이 재생헤드 숫자만 바꾸고 렌더 프레임이 남던 결함 폐지. 시크 함수를 `coalescingSmallMoves` 파라미터로 분리(일반 observer 동기화는 기존 0.25s 공산 유지 — 재생 중 15Hz 재시크 스퍼터 방지 목적 보존) ② 루프/정지 판단을 periodic observer의 종료 샘플링(미보장)에서 **AVPlayerItemDidPlayToEndTime 알림**으로 이관 — VM `handlePlaybackReachedEnd()`(루프→playhead 0·유지 / 비루프→정지) + 뷰가 시크·재개 수행. observer 클로저는 `MainActor.assumeIsolated`로 격리 명시 ③ fileImporter의 security scope을 **Task 내부**에서 열고 닫기(기존 defer는 Task 예약 직후 종료 — Files/iCloud URL 권한 조기 상실) ④ fileExporter 성공 후 중복 `saveProject` 제거(성공 저장의 2차 쓰기 실패가 오류로 표시되던 경로).

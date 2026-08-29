@@ -54,6 +54,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
     var backgroundRemovedClipIds: Set<UUID> = []
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
+    // STAB-02: the explicit-bitrate/ProRes writer path registers its live
+    // session so cancelExport() reaches it (the preset path goes through
+    // activeExportSession above).
+    @ObservationIgnored private var activeWriterSessionReaders: [AVAssetReader] = []
+    @ObservationIgnored private var activeWriterSessionWriter: AVAssetWriter?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     /// Security scopes held open for the duration of an export so source
     /// assets stay reachable under App Sandbox. (S2)
@@ -1547,6 +1552,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
             }
             writer.startSession(atSourceTime: .zero)
+            activeWriterSessionWriter = writer
+            activeWriterSessionReaders = [reader] + (audioReader.map { [$0] } ?? [])
 
             if let metadataAdaptor, let metadataInput {
                 for chapterGroup in chapterGroups {
@@ -1558,23 +1565,58 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
 
             let totalDuration = max(project.timeline.duration, 1.0 / 600.0)
-            if let writerVideoInput, let videoReaderOutput {
-                try await pumpSamples(
-                    output: UncheckedSendable(videoReaderOutput),
-                    input: UncheckedSendable(writerVideoInput),
-                    queueLabel: "moviecut.export.writer.video",
-                    totalDuration: totalDuration,
-                    reportsProgress: true
-                )
-            }
-            if let writerAudioInput, let audioReaderOutput {
-                try await pumpSamples(
-                    output: UncheckedSendable(audioReaderOutput),
-                    input: UncheckedSendable(writerAudioInput),
-                    queueLabel: "moviecut.export.writer.audio",
-                    totalDuration: totalDuration,
-                    reportsProgress: false
-                )
+            // STAB-02: both pumps run CONCURRENTLY. With an audio writer
+            // input present, pumping video ALONE first can stall the video
+            // queue forever (the W4 ProRes timeout class — iOS RENDER-02
+            // measured the same deadlock on 2026-08-26 and fixed it with
+            // concurrent pumps; this ports the pattern). A failing pump
+            // tears down the shared session so the sibling's reader drains
+            // (cancelled reader: copyNextSampleBuffer → nil) and its
+            // continuation resumes instead of parking forever.
+            let compositionReaderBox = UncheckedSendable(reader)
+            let graphAudioReaderBox = audioReader.map { UncheckedSendable($0) }
+            let writerBox = UncheckedSendable(writer)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                if let writerVideoInput, let videoReaderOutput {
+                    let output = UncheckedSendable(videoReaderOutput as AVAssetReaderOutput)
+                    let input = UncheckedSendable(writerVideoInput)
+                    group.addTask {
+                        do {
+                            try await self.pumpSamples(
+                                output: output,
+                                input: input,
+                                queueLabel: "moviecut.export.writer.video",
+                                totalDuration: totalDuration,
+                                reportsProgress: true
+                            )
+                        } catch {
+                            compositionReaderBox.value.cancelReading()
+                            graphAudioReaderBox?.value.cancelReading()
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
+                    }
+                }
+                if let writerAudioInput, let audioReaderOutput {
+                    let output = UncheckedSendable(audioReaderOutput as AVAssetReaderOutput)
+                    let input = UncheckedSendable(writerAudioInput)
+                    group.addTask {
+                        do {
+                            try await self.pumpSamples(
+                                output: output,
+                                input: input,
+                                queueLabel: "moviecut.export.writer.audio",
+                                totalDuration: totalDuration,
+                                reportsProgress: false
+                            )
+                        } catch {
+                            compositionReaderBox.value.cancelReading()
+                            graphAudioReaderBox?.value.cancelReading()
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
+                    }
+                }
             }
 
             guard reader.status != .failed else {
@@ -1585,16 +1627,23 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
 
             await finishWriting(UncheckedSendable(writer))
-            guard writer.status == .completed else {
+            switch writer.status {
+            case .completed:
+                break
+            case .cancelled:
+                throw CancellationError()
+            default:
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
             exportProgress = 1
             lastExportURL = url
+            clearActiveWriterSession()
             finishExport()
             return url
         } catch {
             removePartialOutput(at: url)
+            clearActiveWriterSession()
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
             exportError = classified.userMessage
@@ -1698,12 +1747,27 @@ final class ExportEngine: FlattenedTimelineConsumer {
     }
 
     func cancelExport() {
+        // STAB-02: the writer path (explicit bitrate / ProRes) cancels
+        // through its readers and writer; the in-flight pumps then fail
+        // into the catch path, which removes the partial output.
+        for reader in activeWriterSessionReaders {
+            reader.cancelReading()
+        }
+        activeWriterSessionReaders.removeAll()
+        activeWriterSessionWriter?.cancelWriting()
+        activeWriterSessionWriter = nil
         activeExportSession?.cancelExport()
         progressTask?.cancel()
         activeExportSession = nil
         exportProgress = 0
         lastExportURL = nil
         isExporting = false
+    }
+
+    /// Drops the writer path's live-session registration (STAB-02).
+    private func clearActiveWriterSession() {
+        activeWriterSessionWriter = nil
+        activeWriterSessionReaders.removeAll()
     }
 
     private func finishExport() {

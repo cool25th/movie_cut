@@ -138,6 +138,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             signposter.endInterval("export.preset", signpostState, "\(classified.userMessage, privacy: .public)")
             finishExport()
@@ -1250,6 +1255,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified
@@ -1383,6 +1393,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified
@@ -1646,6 +1661,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             clearActiveWriterSession()
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified

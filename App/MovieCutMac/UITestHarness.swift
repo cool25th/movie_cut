@@ -3973,11 +3973,16 @@ extension EditorViewModel {
                 let proresDone = await Self.raceWithTimeout(seconds: proresBudget) {
                     await self.exportProResMaster(to: dir.appendingPathComponent("w4-prores.mov"))
                 }
-                step("prores", ok: proresDone, detail: proresDone ? "" : "timeout_known_defect")
+                // BUG-ACC-04: exportProResMaster can return early with the
+                // error only in lastErrorMessage — surface it in the dump so
+                // a false-OK step carries its cause.
+                step("prores", ok: proresDone, detail: proresDone
+                    ? (lastErrorMessage.map { "err=\($0)" } ?? "")
+                    : "timeout_known_defect")
             }
             let bytes = (try? FileManager.default.attributesOfItem(atPath: exportURL.path)[.size] as? Int) ?? 0
             dump.exportBytes = bytes ?? 0
-            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)")
+            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)\(lastErrorMessage.map { ", err=\($0)" } ?? "")")
         } catch {
             dump.error = error.localizedDescription
         }

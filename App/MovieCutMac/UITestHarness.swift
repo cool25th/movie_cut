@@ -3749,38 +3749,65 @@ extension EditorViewModel {
                 guard let voice = fixtures.voice, let bgm = fixtures.bgm else {
                     throw NSError(domain: "W", code: 1, userInfo: [NSLocalizedDescriptionKey: "w1 requires W_VOICE + W_BGM"])
                 }
+                // STAB-04: acceptance mode (W_STRICT=1) also imports the
+                // portrait talking-head video — the representative W1 job is
+                // a 60 s vertical video with speech, not audio-only. Smoke
+                // shares the W_VIDEO env var, so this MUST be strict-gated
+                // (an unguarded import changed smoke's historical shape and
+                // parked — measured 2026-08-29).
+                let strict = environment["MOVIECUT_UITEST_W_STRICT"] == "1"
+                if strict, let portraitVideo = fixtures.video {
+                    await importMediaAndAddToTimeline([portraitVideo], startTime: 0)
+                }
                 await importMediaAndAddToTimeline([voice], startTime: 0)
                 await importMediaAndAddToTimeline([bgm], startTime: 0)
                 let voiceClip = firstClip(ofKind: .audio)
                 let bgmClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
-                step("import", ok: voiceClip != nil && bgmClip != nil)
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: voiceClip != nil && bgmClip != nil && (!strict || videoClip != nil))
                 if let voiceClip {
                     do { try await applyNoiseReduction(for: voiceClip.id); step("denoise", ok: true) }
                     catch { step("denoise", ok: false, detail: error.localizedDescription) }
                 }
                 if let bgmClip {
-                    // The ducking harness's established deterministic path:
-                    // explicit planner-style ranges through the real command
-                    // (applyDucking derives ranges from live silence analysis).
-                    await apply(SetAudioDuckingCommand(
-                        duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
-                        level: 0.25
-                    ))
-                    let ducked = currentProject.timeline.tracks.flatMap(\.clips)
-                        .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
-                    step("ducking", ok: ducked)
+                    if strict {
+                        // STAB-04: acceptance runs the REAL user path (F-14
+                        // autoDuckOtherAudio) — silence analysis of the
+                        // actual speech derives the ducking ranges; the smoke
+                        // gate keeps deterministic planner-style ranges.
+                        selectedClipId = voiceClip?.id
+                        await autoDuckOtherAudio(duckLevel: 0.25)
+                        let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                            .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                        step("ducking", ok: ducked, detail: "path=analysis")
+                    } else {
+                        // The ducking harness's established deterministic path:
+                        // explicit planner-style ranges through the real command
+                        // (applyDucking derives ranges from live silence analysis).
+                        await apply(SetAudioDuckingCommand(
+                            duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
+                            level: 0.25
+                        ))
+                        let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                            .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                        step("ducking", ok: ducked)
+                    }
                 } else {
                     step("ducking", ok: false, detail: "no bgm clip")
                 }
                 // STT is user-TCC-gated — calling it headless hard-crashes
                 // the process on privacy violation, so PROBE availability:
                 // with the user's grant the real transcription runs; without
-                // it the step records the permission gate (not a defect).
+                // it the smoke step records the permission gate. STAB-04:
+                // acceptance (W_STRICT=1) must NOT pass without STT actually
+                // running — the gate is surfaced as a step failure instead.
                 selectedClipId = voiceClip?.id
                 let speechAvailable = await SpeechTranscriptionProvider().isAvailable
                 if speechAvailable {
                     await generateSubtitles()
                     step("subtitles", ok: lastErrorMessage == nil, detail: "clips=\(currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count)")
+                } else if strict {
+                    step("subtitles", ok: false, detail: "stt=user_tcc_required_for_acceptance")
                 } else {
                     step("subtitles", ok: true, detail: "stt=user_tcc_gated_headless")
                 }
@@ -3933,12 +3960,17 @@ extension EditorViewModel {
             let exportURL = dir.appendingPathComponent("\(scenario).mp4")
             await exportProject(to: exportURL)
             if scenario == "w4" {
-                // The ProRes writer path with video+audio together is a
-                // KNOWN hang (reader side — LOOP_STATE defect family);
-                // race it against a timeout so the defect is RECORDED
-                // instead of wedging the measurement. The abandoned task
-                // dies with the process at quit.
-                let proresDone = await Self.raceWithTimeout(seconds: 90) {
+                // The ProRes race budget must scale with the job: 90 s fits
+                // the smoke fixture, but a representative 5-minute master
+                // needs minutes of encode even at a healthy RTF (STAB-04 —
+                // a fixed budget is exactly the "gate weaker than the real
+                // job" failure the external review flagged). The abandoned
+                // task still dies with the process at quit.
+                let strictBudget = environment["MOVIECUT_UITEST_W_STRICT"] == "1"
+                let proresBudget: TimeInterval = strictBudget
+                    ? max(90, currentProject.timeline.duration * 2.0)
+                    : 90
+                let proresDone = await Self.raceWithTimeout(seconds: proresBudget) {
                     await self.exportProResMaster(to: dir.appendingPathComponent("w4-prores.mov"))
                 }
                 step("prores", ok: proresDone, detail: proresDone ? "" : "timeout_known_defect")

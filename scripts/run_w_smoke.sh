@@ -1,16 +1,22 @@
 #!/bin/bash
-# W representative-job scenarios (development direction §1, plan §4's
-# "대표 작업 성공률 90%+" measurement window) — each W is a real user job
-# driven through the app's shipped feature paths by the in-app harness
-# (MOVIECUT_UITEST_W_SCENARIO), finishing with its own export. This script
-# runs W1-W5, reports per-step success + durations, and gates on:
-#   - overall step success rate >= 90%
-#   - every scenario produced a non-empty export
+# W SMOKE scenarios (STAB-04 renamed from run_w_scenarios.sh) — fast
+# regression coverage of the five W workflows through the app's shipped
+# feature paths (in-app harness MOVIECUT_UITEST_W_SCENARIO), using the
+# small 2-4 s synthetic fixtures. Gates on workflow success (all required
+# steps + export) >= 90%.
+#
+# This is NOT the representative-job acceptance gate: the fixtures here are
+# deliberately tiny, W1's STT step passes headless without transcribing
+# (user-TCC-gated), and ducking uses deterministic planner-style ranges.
+# Representative-length jobs (60 s talking head with real speech and STT
+# actually running, 5-minute multitrack ProRes master, real ducking
+# analysis) are measured by scripts/run_w_acceptance.sh — the W workflow
+# success-rate gate counts only acceptance results.
 #
 # W4 runs its Phase-1 variant: grading + audio mix + ProRes (the direction
 # doc's adjustment layer is G-03, explicitly Phase-2 — reported as a delta).
 #
-# Usage: bash scripts/run_w_scenarios.sh [scenario ...]   # e.g. w1 w3
+# Usage: bash scripts/run_w_smoke.sh [scenario ...]   # e.g. w1 w3
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -86,8 +92,22 @@ run_scenario() {
   done
   for _ in $(seq 1 600); do
     grep -q "W_DONE" "$dir/status.txt" 2>/dev/null && break
+    kill -0 "$pid" 2>/dev/null || break
     sleep 0.5
   done
+  if ! grep -q "W_DONE" "$dir/status.txt" 2>/dev/null && kill -0 "$pid" 2>/dev/null; then
+    # The scenario overran its window (parked continuation) — the runner
+    # itself must reap the app, not only the watchdog subshell (STAB-04:
+    # measured 2026-08-29 — the old flow killed the watchdog first and then
+    # blocked forever on `wait $pid`).
+    echo "$scenario status=KILL detail=app_overran_300s" >&2
+    kill "$pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.5
+    done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
   kill "$watchdog" 2>/dev/null || true
   if [ -n "$watchdog_sleep" ]; then
     kill "$watchdog_sleep" 2>/dev/null || true

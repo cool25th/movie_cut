@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-29 세션 (STAB-02 완료 — Mac 펌프 병렬화·W 측정 분쟁 판정, 메인 세션 수동 회차)
+
+- **STAB-02(메인 세션이 수동 실행 — 16:00 회차 전 유창)**: `ExportEngine.exportVideoWithExplicitBitrate`의 순차 pump(Video 완전 종료 후 Audio)를 **태스크그룹 병렬 pump로 교체**(iOS RENDER-02 패턴 포팅). 실패 전파 설계: 펌프 하나가 throw하면 즉시 양 reader+writer 해체 — 취소된 리더의 `copyNextSampleBuffer→nil`로 형제 pump continuation이 재개됨(`withThrowingTaskGroup`은 자식 전원 완료를 기다리므로, 해체 없으면 그룹 대기 자체가 교착 — continuation 기반 pump는 태스크 취소에 반응하지 않음). 부수: writer `.cancelled`→`CancellationError` 매핑, 활성 writer 세션 추적(`activeWriterSessionReaders/Writer`) + `cancelExport()` 확장 — 제품 경로 취소 배관(프리셋 경로와 동일 지위).
+- **W 측정 분쟁 판정(§0 원칙 이행)**: STAB-01+02 완료 상태에서 **W4 3회 연속(84,957B 동일) + W 전체 5/5 × 3회 연속(15/15 워크플로·29/29 스텝·고아 0)** — 외부 리뷰의 W 4/5(W4 ProRes timeout)는 재현되지 않았고, 구조적 교착 원인은 코드에서 제거됨. **내부 5/5로 확정.**
+- **검증**: verify_gate 5/5(Core 1,425/211스위트·Mac/iOS 빌드·lint).
+- **함정 2건(정직 기록)**: ① 취소 E2E 단위테스트는 라이브 export 테스트 인프라가 부재해(기존은 정적 계약만) 이번 증분에 넣지 못함 — STAB 잔여로 등록. ② `MovieCutMacUITests/ImportExportE2ETests.testImportThenExportProducesAMovieFile` 2회 연속 실패(124s·아티팩트 0B·로그: 미디어 오픈 실패 AVFoundation -11829/-12848 + 오디오 HAL 프록시 오류) — **부모 커밋(stash)에서 동일 실패로 선결함·환경 판정**(MACUI-01 계열·voiceagent 오디오 점유 의심). verify_gate 대상 아님. 후속 관찰 등록.
+- **경과**: STAB 진도 2/8. Phase 1(제품 결함) 잔여 = STAB-03(iOS 4건).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-03** iOS 4건 — 프레임 스텝이 0.25s seek 임계값 우회(PreviewView.swift:230 — VM 숫자가 아닌 AVPlayer 실제 프레임 실측)·루프/정지를 `AVPlayerItemDidPlayToEndTime` 알림으로(observer 추정 폐지)+MainActor 격리 명시·security scope를 Task 내부에서 열고 닫기(iOSContentView.swift:361-365)·fileExporter 성공 후 중복 `saveProject` 제거 ② STAB-04 W 측정 양분화. **소형 병행 후보**: STAB-02 잔여(취소 E2E)·CODEX-06(AIFF)·CODEX-17(iOS 트림 ClipTrimMath 전환 — STAB-03과 같은 파일군). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정. STAB 증분 커밋 후 push는 루프 금지 — 메인 세션/사용자가 반영.
+
 ## 2026-08-29 세션 (외부 리뷰 #2 병합 — 안정화 계획 등록, docs 전용)
 
 - **입력**: 사용자 제공 외부 종합 리뷰(2026-08-29, 판정 "후기 알파·베타 진입 전 안정화"). 핵심 주장 전부 코드 대조로 확인: Mac ExportEngine A/V 순차 펌프(ExportEngine.swift L1561-1578)·W 시나리오 2~4초 픽스처·iOS stepFrame 0.25초 seek 임계값 흡수(PreviewView.swift L230)·security scope Task 앞 조기 종료(iOSContentView.swift L361-365)·fileExporter 이중 저장·watchdog "수습" 주석의 순서 오류(kill 후 pkill -P — 재부모화된 sleep 미포획)·cross-dissolve 통합 스킵(run_core_editing_parity.sh L167-173)·freeze-frame 순서 의존 플래이크·CI 30분 제한 하 iOS 61테스트 미완주·MetricKit 요구 충돌(REQUIREMENTS §13.8 vs AppLog 미도입 정책)·122커밋 원격 미푸시.

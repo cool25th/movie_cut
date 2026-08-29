@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-29 세션 (STAB-03 완료 — iOS 제품 결함 4건, 메인 세션 수동 회차)
+
+- **STAB-03(메인 세션 수동 회차 — 연속 2회차)**: ① stepFrame이 `frameStepTick` 발행 → PreviewView가 해당 틱을 관찰해 **0.25s 공산 임계값을 우회한 강제 시크**(zero-tolerance) — ~0.033s 스텝이 재생헤드 숫자만 바꾸고 렌더 프레임이 남던 결함 폐지. 시크 함수를 `coalescingSmallMoves` 파라미터로 분리(일반 observer 동기화는 기존 0.25s 공산 유지 — 재생 중 15Hz 재시크 스퍼터 방지 목적 보존) ② 루프/정지 판단을 periodic observer의 종료 샘플링(미보장)에서 **AVPlayerItemDidPlayToEndTime 알림**으로 이관 — VM `handlePlaybackReachedEnd()`(루프→playhead 0·유지 / 비루프→정지) + 뷰가 시크·재개 수행. observer 클로저는 `MainActor.assumeIsolated`로 격리 명시 ③ fileImporter의 security scope을 **Task 내부**에서 열고 닫기(기존 defer는 Task 예약 직후 종료 — Files/iCloud URL 권한 조기 상실) ④ fileExporter 성공 후 중복 `saveProject` 제거(성공 저장의 2차 쓰기 실패가 오류로 표시되던 경로).
+- **검증**: iOS 전체 **62테스트/15스위트 PASS**(신규 `playbackEndHandling` — 엔드 핸들러 루프/정지 분기·`frameStepTick` 단언 포함)·verify_gate 5/5.
+- **정직 기록**: 틱→강제 시크 배선과 알림 등록은 SwiftUI 뷰 코드로 유닛테스트 불가 — **실기기/수동 확인 항목(G-27 연계)**으로 남김. VM 로직(틱·엔드 판단)은 단위테스트로 고착.
+- **경과**: STAB 진도 3/8. Phase 1(제품 결함) 전 증분 완료 — Phase 2(측정 재설계) 진입.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-04 W 측정 양분화** — 현행 스크립트를 `run_w_smoke.sh`로 개명 + `run_w_acceptance.sh` 신설(60초 토킹헤드 STT[TCC 전제]·5분 멀티트랙 ProRes·카드뉴스 문서 편집기·덕킹 실제 감지·작업시간·출력 품질 검증 — 설계 문서화 후 구현) ② STAB-05 파리티 통합(freeze-frame 플래이크·normal_delete 실제 gap·cross-dissolve 재편입). **소형 병행 후보**: STAB-02 잔여(취소 E2E)·CODEX-06(AIFF)·CODEX-17(iOS 트림 ClipTrimMath 전환). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정.
+
 ## 2026-08-29 세션 (STAB-02 완료 — Mac 펌프 병렬화·W 측정 분쟁 판정, 메인 세션 수동 회차)
 
 - **STAB-02(메인 세션이 수동 실행 — 16:00 회차 전 유창)**: `ExportEngine.exportVideoWithExplicitBitrate`의 순차 pump(Video 완전 종료 후 Audio)를 **태스크그룹 병렬 pump로 교체**(iOS RENDER-02 패턴 포팅). 실패 전파 설계: 펌프 하나가 throw하면 즉시 양 reader+writer 해체 — 취소된 리더의 `copyNextSampleBuffer→nil`로 형제 pump continuation이 재개됨(`withThrowingTaskGroup`은 자식 전원 완료를 기다리므로, 해체 없으면 그룹 대기 자체가 교착 — continuation 기반 pump는 태스크 취소에 반응하지 않음). 부수: writer `.cancelled`→`CancellationError` 매핑, 활성 writer 세션 추적(`activeWriterSessionReaders/Writer`) + `cancelExport()` 확장 — 제품 경로 취소 배관(프리셋 경로와 동일 지위).

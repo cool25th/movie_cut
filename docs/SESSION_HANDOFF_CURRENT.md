@@ -1,7 +1,18 @@
 # 세션 핸드오프 — 현재 (2026-08-19)
 
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
-> 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
+> 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
+
+## 2026-08-29 세션 (외부 리뷰 #2 병합 — 안정화 계획 등록, docs 전용)
+
+- **입력**: 사용자 제공 외부 종합 리뷰(2026-08-29, 판정 "후기 알파·베타 진입 전 안정화"). 핵심 주장 전부 코드 대조로 확인: Mac ExportEngine A/V 순차 펌프(ExportEngine.swift L1561-1578)·W 시나리오 2~4초 픽스처·iOS stepFrame 0.25초 seek 임계값 흡수(PreviewView.swift L230)·security scope Task 앞 조기 종료(iOSContentView.swift L361-365)·fileExporter 이중 저장·watchdog "수습" 주석의 순서 오류(kill 후 pkill -P — 재부모화된 sleep 미포획)·cross-dissolve 통합 스킵(run_core_editing_parity.sh L167-173)·freeze-frame 순서 의존 플래이크·CI 30분 제한 하 iOS 61테스트 미완주·MetricKit 요구 충돌(REQUIREMENTS §13.8 vs AppLog 미도입 정책)·122커밋 원격 미푸시.
+- **산출**: `docs/STABILIZATION_PLAN_20260829.md` 신설 — STAB-01~08 항목 원장(우선순위·실행주체·완료기준) + Phase 0~2 순서·종료기준 + 기존 기록(RENDER-02·세션 34 수습·BUG-CA12-01·PARITY-TOL-01)과의 관계 정리. 크론 프롬프트 우선순위 체인에 계획 문서 편입(무상태 유지 — 항목·상태는 문서에서만 읽음; LI-004로 기록, 사용자 병합 지시가 승인 근거).
+- **측정 분쟁 명시**: 외부 W 4/5(W4 ProRes 90초 timeout) vs 내부 W 5/5(2026-08-28 재실측) — **STAB-01·STAB-02 완료 후 동일 커맨드 3회 연속으로만 판정**(조건부 교착은 단발 실행으로 부정 불가). 그 전까지 W 보고에 측정 환경 병기. Phase 1 x/7 판정은 Phase 2 종료 시 재실측 대조까지 보류.
+- **큐 전환**: 경계 분해 잔여(F-17 TTS·F-13 자막·F-19 리프레임 — internal 승격 리팩터 승인 대상)·G-29·블라인드 A/B는 STAB 창구 종료 후 재개. soak 2run·실기기 2종(사용자 대기)은 병렬 유지.
+- **검증**: docs 전용 증분(코드 변경 없음) — 문서 경로 검증 통과. STAB-01부터 각 증분이 자체 게이트 실측으로 완료 판정.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-01** watchdog 고아 sleep 재수습(run_w_scenarios.sh 수습 로직 순서 정정 + run_longform_soak.sh 동일 패턴 적용 — STABILIZATION_PLAN §1) ② **STAB-02** Mac ExportEngine A/V 펌프 병렬화(iOS RENDER-02 태스크그룹 패턴 포팅·취소·부분파일 정리 — 완료 시 W4 ProRes 3회 연속) ③ **STAB-03** iOS 4건(프레임 스텝 임계값·루프 EndTime 알림·security scope 수명·fileExporter 이중 저장). **사용자 대기(병렬)**: 122커밋 push(PR 분할 — STAB-06 원격 검증 전제)·soak 2run(조용한 기기)·실기기 2종·MACUI-01/U-08 TCC.
 
 ## 2026-08-28 세션 (장편 soak 게이트 구축 — 유효 1차 실측·환경 오염으로 2run 확증 연기)
 

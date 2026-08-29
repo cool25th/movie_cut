@@ -12,7 +12,7 @@
 - **검증**: docs 전용 증분(코드 변경 없음) — 문서 경로 검증 통과. STAB-01부터 각 증분이 자체 게이트 실측으로 완료 판정.
 
 ### 다음 회차 — LOOP_STATE 우선순위
-① **STAB-01** watchdog 고아 sleep 재수습(run_w_scenarios.sh 수습 로직 순서 정정 + run_longform_soak.sh 동일 패턴 적용 — STABILIZATION_PLAN §1) ② **STAB-02** Mac ExportEngine A/V 펌프 병렬화(iOS RENDER-02 태스크그룹 패턴 포팅·취소·부분파일 정리 — 완료 시 W4 ProRes 3회 연속) ③ **STAB-03** iOS 4건(프레임 스텝 임계값·루프 EndTime 알림·security scope 수명·fileExporter 이중 저장). **사용자 대기(병렬)**: 122커밋 push(PR 분할 — STAB-06 원격 검증 전제)·soak 2run(조용한 기기)·실기기 2종·MACUI-01/U-08 TCC.
+① **STAB-01** watchdog 고아 sleep 재수습(run_w_scenarios.sh 수습 로직 순서 정정 + run_longform_soak.sh 동일 패턴 적용 — STABILIZATION_PLAN §1) ② **STAB-02** Mac ExportEngine A/V 펌프 병렬화(iOS RENDER-02 태스크그룹 패턴 포팅·취소·부분파일 정리 — 완료 시 W4 ProRes 3회 연속) ③ **STAB-03** iOS 4건(프레임 스텝 임계값·루프 EndTime 알림·security scope 수명·fileExporter 이중 저장). **사용자 대기(병렬)**: ~~122커밋 push~~ 완료(2026-08-29 — 스택 PR #19~#23, 순서 병합)·soak 2run(조용한 기기)·실기기 2종·MACUI-01/U-08 TCC. **STAB 증분 커밋 후 push는 루프 금지 — 메인 세션/사용자가 스택 PR #23로 주기 반영.**
 
 ## 2026-08-28 세션 (장편 soak 게이트 구축 — 유효 1차 실측·환경 오염으로 2run 확증 연기)
 

@@ -5,6 +5,6 @@
 현재 증분(최신) = **장편 soak 게이트 구축(리뷰 #6 부분 이행, 2026-08-28)** — `run_longform_soak.sh`(RSS 누수·A/V 싱크·결정성·조건 기록 게이트). 유효 실측: 30분 단일 실행 wall 872.6s·RSS 1,574MB·길이 정확·A/V Δ0. 2run 확증은 **환경 오염으로 연기**(사용자 voiceagent 어댑터 3종이 측정 중 기기 점유 + 디스크 98% — 아티팩트 2.3GB 정리로 11Gi 회복·사용자 프로세스 무손상). 직전 증분: iOS Phase-1 잔여 UI 완료(리뷰 #3 전항) — ①프레임 스텝(±1/fps·클램프·일시정지) ②루프 재생(토글+끝도달 시 0 재시작) ③트랙 관리 시트(추가·mute·lock·스와이프 삭제 — 실제 커맨드) ④프로젝트 열기/저장(fileImporter/fileExporter·MovieCutProjectDocument — ProjectStore 공유 코덱) ⑤출력 프리셋 시트(해상도 720p/1080p/4K·컨테이너). 부수: Core RemoveTrackCommand public화·ExportResolution displayName/CaseIterable. 검증: IOSPhase1SurfacesTests 6/6(스텝 수학·루프·트랙·저장/열기 왕복·손상 명시 오류·프리셋)·게이트 5/5. → 다음: 실기기 2종(사용자)·G-29·블라인드 A/B·장편 soak·EditorViewModel 경계 분리.
 **기존 결함 기록**: 자체 측정 게이트 5/5(1,425+신규)·iOS 시뮬 55/55(리뷰수정 5 포함)·Mac 48/48·W 5/5 워크플로. 실기기 1/3. **병렬 세션 경합 주의**: 커밋 직전 git status/diff --stat 확인 유지.
 **범위 외 발견(후속 관찰)**: ui_regression 골든 의도 드리프트(AX 복구 시)·VFR timestamp 매칭 편차(CA12 문서 §6)·EditorViewModel.swift 5,486줄 경계 분리 지속(리뷰 #7).
-대기 결정 사항: G-27 실기기 2종 연결+잠금 해제·MACUI-01+U-08 회귀 실측(TCC)·CA-07 가격(사용자 전용)·CA-11·CA-13·CA-16(P2)·**STAB-07 MetricKit 방침(제안 접수 후)**·**122커밋 push(STAB-06 원격 검증 전제)**. PARITY-TOL-01은 **실행 승인 완료(2026-08-28 리뷰 권고안 (a))**.
+대기 결정 사항: G-27 실기기 2종 연결+잠금 해제·MACUI-01+U-08 회귀 실측(TCC)·CA-07 가격(사용자 전용)·CA-11·CA-13·CA-16(P2)·**STAB-07 MetricKit 방침(제안 접수 후)**. **122커밋 push 완료(2026-08-29 — 스택 PR #19~#23 순서 병합, 원격 CI 관찰 창구 확보)**. PARITY-TOL-01은 **실행 승인 완료(2026-08-28 리뷰 권고안 (a))**.
 마지막 커밋: 31b36e2
 갱신: 2026-08-29 10:43

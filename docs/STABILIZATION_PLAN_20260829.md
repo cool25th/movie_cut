@@ -27,7 +27,7 @@
 
 ## 2 사용자 대기 항목 (루프 실행 불가 — 회차 보고만)
 
-- **122 로컬 커밋 push** (검토 가능한 PR 단위 분할) — 원격 push는 루프 금지. STAB-06 원격 검증의 전제.
+- **122 로컬 커밋 push — 완료(2026-08-29)**: 스택 PR 5본으로 분할(히스토리 재작성 없이 기존 커밋 경계에서 분할, 순서 병합): [#19](https://github.com/cool25th/movie_cut/pull/19) Core·오디오·효과+인프라 → [#20](https://github.com/cool25th/movie_cut/pull/20) 감사+결함 수정 → [#21](https://github.com/cool25th/movie_cut/pull/21) 포맷·파리티·iOS 통합 → [#22](https://github.com/cool25th/movie_cut/pull/22) CA 큐·벤치마크 → [#23](https://github.com/cool25th/movie_cut/pull/23) 리뷰 #2 반영·안정화(라이브 브랜치 — 이후 STAB 증분이 이 PR로 흘러듦). **원격 CI 결과는 이 PR들에서 관찰 가능 — STAB-06 원격 검증 창구.** 병합 순서 준수 필요.
 - **soak 2run** — 조용한 기기(voiceagent 일시중지 + 디스크 여유) 후 `bash scripts/run_longform_soak.sh 2`. STAB-01 완료 후 신뢰성 확보.
 - **G-27 실기기 잔여 2종** — 기기 연결·잠금 해제 후 `TEAM_ID=98ZKV9N9T4 bash scripts/run_g27_device_e2e.sh`.
 - **MACUI-01·U-08** — TCC/AX 환경 복구(접근성 권한 또는 재부팅).

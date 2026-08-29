@@ -23,7 +23,7 @@
 | STAB-05 | P1 | **파리티 통합 완결성** — ① freeze-frame 전체 실행 FAIL(MAD 9.69) vs 단독 PASS(0.99) 순서·리소스 의존 플래이크 원인 규명·결정론화 ② normal_delete 실제 gap 생성 ③ cross-dissolve 통합 경로 재편입(run_core_editing_parity.sh L167-173 스킵 주석 — 헤드리스 buildComposition hang, GPU 컴포지터 가용 호스트 의존. 환경 차단 시 명시적 기록). 완료 전까지 "18/18 완전 파리티" 표기 금지 — 대체 경로 명시 표기 | 루프 | cross-dissolve 포함 18/18 × 3회 연속(또는 환경 차단 근거와 함께 대체 경로 명시) |
 | STAB-06 | P1 | **CI 분할** — iOS 전체 61테스트가 30분 제한(.github/workflows/ci.yml L85) 내 미완주(1,047.8s에 8PASS 후 중단 선례). 빠른 상태 테스트 / AVFoundation 렌더 테스트(직렬 실행·명시적 simulator UUID·개별 타임아웃) 분리 + nightly에 W smoke·파리티 스윕 추가. yaml 작성·로컬 검증은 루프, **원격 실행 검증은 사용자 push 후** | 루프+사용자 | 원격 CI 현재 코드 전체 녹색(사용자 push 전제) |
 | STAB-07 | P2 | **MetricKit 방침 제안** — docs/REQUIREMENTS.md §13.8(관측성 확대)과 App/MovieCutMac/AppLog.swift("MetricKit 의도적 미도입 — 완전 온디바이스") 충돌. 제안만 작성(온디바이스 MXMetricManager 한정 채택 vs 요구 폐기), 결정은 사용자 | 루프 제안·사용자 결정 | DECISIONS 문서에 상신 후 사용자 결정 기록 |
-| STAB-08 | P2 | **LOOP_STATE 자동 생성** — 누적 서술식 상태 문서를 게이트 JSON(w.json·파리티·verify_gate 출력) 기반 상태표 생성 스크립트로 전환(외부 리뷰 #9: LOOP_STATE W 5/5 vs 실측 4/5 모순의 구조적 해법) | 루프 | 생성 재현성 + 최근 3회 게이트 결과 자동 반영 실측 |
+| STAB-08 | P2 | **LOOP_STATE 자동 생성 + 문서 정합** — 누적 서술식 상태 문서를 게이트 JSON(w.json·파리티·verify_gate 출력) 기반 상태표 생성 스크립트로 전환(외부 리뷰 #9 전반: LOOP_STATE W 5/5 vs 실측 4/5 모순의 구조적 해법) + **경쟁분석 문서의 구현 정합 재감사(리뷰 #9 후반 — iOS 행 낡은 표기 재확인)** | 루프 | 생성 재현성 + 최근 3회 게이트 결과 자동 반영 실측 + 경쟁분석 정합 재감사 기록 |
 
 ## 2 사용자 대기 항목 (루프 실행 불가 — 회차 보고만)
 
@@ -44,7 +44,11 @@
   종료: 각 항목 단위·통합 테스트 PASS + STAB-02 완료 시점부터 W4 ProRes 3회 연속.
 - **Phase 2 — 측정 재설계**: STAB-04 → STAB-05 → STAB-08 → STAB-07 제안.
   종료: **실제 W acceptance 5/5 × 3회 연속 + 파리티 18/18(통합 포함) × 3회 연속**. 이 시점에 Phase 1 게이트 재산정(§4 게이트 대조).
-- **Phase 3+ — 베타 준비 이후**: DEVELOPMENT_DIRECTION §3 체인 복귀(실기기 3/3·soak·백그라운드/디스크 부족/취소/재열기/외장 미디어·signed archive·베타 데이터손실 0건 → CapCut급 속도·선택 FCP급 품질).
+- **Phase 3+ — 베타 준비 이후** (리뷰 권장 2~4단계 전항 원장화 — STAB 창구 종료 후 이 체크리스트가 복귀 큐):
+  - **3-A 베타 준비(리뷰 2단계)**: 실기기 3/3(G-27 — 현재 1/3·사용자) · 30~60분 프로젝트 soak 2회 연속(✅ 2026-08-29 달성) · 백그라운드/디스크 부족/취소/재열기/외장 미디어 검증 매트릭스 · signed archive 실증 · 검토 가능한 PR 단위 push 상시 유지(✅ 체계화 — 스택 PR) · 10~30명 베타 중대 데이터 손실 0건.
+  - **3-B CapCut급 제작 속도(리뷰 3단계)**: W1/W2 사용자 완주 시간·클릭 수 측정 · 첫 출력 ≤10분·반복 작업 CapCut 대비 1.2배 이내 · 한국어·영어 자막 WER/CER·워드 타밍 실측(STT TCC 전제) · iOS 정밀 타임라인·템플릿 검색·Auto Style·**카드뉴스 완성(백로그 §K — G-20 브랜드 킷·G-21 페이지 일괄 출력·G-22 대본 분배·U-10 진입점 — W5 acceptance 경로의 전제)**.
+  - **3-C 선택 FCP급 품질(리뷰 4단계)**: ProRes/H.264/HEVC 색·시간·오디오 메타데이터 일관성(BUG-ACC-01 계열 포함) · G-29 10비트 HLG·SDR/HDR 혼합 색관리 · 프록시·재연결·캐시·장편 신뢰성 · 실제 CapCut/FCP 출력 블라인드 A/B 비열등 검증(하니스는 CA-12 — CODEX-10/11 수정 전제).
+  - **3-D 복귀 큐**: 경계 분해 잔여(F-17 TTS·F-13 자막·F-19 리프레임 — internal 승격 리팩터 승인 대상) · G-29 · BUG-CA12-01 에스컬레이션 · 비목표 유지(멀티캠·Auditions·FCPXML 전체 호환·서드파티 플러그인·클라우드 동기화).
 
 ## 4 기존 기록과의 관계 (중복·충돌 방지)
 

@@ -14,6 +14,67 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
     @ObservationIgnored private var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
+    // RENDER-02: the tagged-writer export's live reader/writer (cancellation).
+    @ObservationIgnored private var activeReaders: [AVAssetReader] = []
+    @ObservationIgnored private var activeWriter: AVAssetWriter?
+    /// G-15: temp segments backing image clips in the CURRENT render plan.
+    @ObservationIgnored private var imageRenderURLs: [URL] = []
+    /// RENDER-02: resolves writer output settings — SDR H.264 tagged
+    /// explicitly Rec.709 (the root fix for the preset-path decode drift).
+    @ObservationIgnored private let exportPlanner = ExportPlanner()
+
+    /// RENDER-01: the single render plan BOTH the preview and the export
+    /// consume — one composition (durations, speed, ramps, freeze, reverse)
+    /// and one videoComposition (per-clip effects through the custom
+    /// compositor). The preview used to build its own simpler composition and
+    /// post-filter single-clip frames, so ramps, reverse, masks, blend modes,
+    /// multi-track compositing, text, and stickers never matched the export.
+    struct IOSRenderPlan {
+        let composition: AVMutableComposition
+        let videoComposition: AVVideoComposition?
+        /// BUG-IOS-10: volume/fade ramps for BOTH the preview player and the
+        /// export session. Nil when no clip carries audio edits.
+        let audioMix: AVMutableAudioMix?
+    }
+
+    /// Builds the shared render plan. Throws when the project has no
+    /// exportable media (preview callers treat that as "nothing to play").
+    func makeRenderPlan(for project: Project) async throws -> IOSRenderPlan {
+        // G-15: image clips pre-render into temp video segments. Drop the
+        // PREVIOUS plan's segments first so repeated preview rebuilds don't
+        // accumulate — the newest plan owns the live set (plans start on the
+        // main actor, so a segment list only ever contains finished plans).
+        removeTemporaryImageRenders()
+        let composition = try await makeComposition(for: project)
+        // A video track whose sources carry no embedded audio leaves an
+        // EMPTY audio composition track — the export session fails with
+        // AVErrorOperationNotSupported for media-less tracks (caught by
+        // the output golden tests with a video-only fixture). A fresh
+        // empty track's timeRange is INVALID (not zero), so validity is
+        // part of the predicate.
+        for track in composition.tracks
+        where !track.timeRange.isValid || track.timeRange.duration <= .zero {
+            try? composition.removeTrack(track)
+        }
+        guard !composition.tracks.isEmpty else {
+            throw IOSExportEngineError.noExportableMedia
+        }
+
+        // CANVAS-01: the videoComposition is ALWAYS attached. Its renderSize
+        // comes from the project canvas — without it, a project whose only
+        // change was the canvas (16:9 source → 9:16/1:1) exported at the
+        // source's natural size, silently ignoring the ratio. The compositor
+        // also carries canvas backgrounds, so both are now guaranteed.
+        let videoComposition = makeVideoComposition(for: project, composition: composition)
+        // BUG-IOS-10: audio edits ride the same plan the preview consumes.
+        let audioMix = makeAudioMix(from: audioMixEntries, composition: composition)
+        audioMixEntries.removeAll()
+        return IOSRenderPlan(
+            composition: composition,
+            videoComposition: videoComposition,
+            audioMix: audioMix
+        )
+    }
 
     @discardableResult
     func exportProject(_ project: Project) async throws -> URL {
@@ -26,48 +87,248 @@ final class IOSExportEngine {
         lastExportURL = nil
 
         do {
-            let composition = try await makeComposition(for: project)
-            guard !composition.tracks.isEmpty else {
-                throw IOSExportEngineError.noExportableMedia
-            }
+            let plan = try await makeRenderPlan(for: project)
+            let composition = plan.composition
 
-            let shouldUseCustomCompositor = needsCustomCompositor(for: project)
-            guard let exportSession = AVAssetExportSession(
-                asset: composition,
-                presetName: AVAssetExportPresetHighestQuality
-            ) else {
+            // RENDER-02: the export drives an AVAssetWriter with the planner's
+            // resolved output settings instead of AVAssetExportSession's
+            // preset. The preset path cannot control color tags — the decoder
+            // then picked its default YUV matrix/range and the exported file
+            // drifted ~21/255 luma from the preview (band-guarded at 26). The
+            // planner tags SDR H.264 explicitly Rec.709, which the
+            // end-to-end sRGB/Rec.709 pipeline already is (Mac parity).
+            let resolvedPlan = exportPlanner.plan(
+                settings: project.exportSettings,
+                canvas: project.canvas,
+                mediaKind: .video
+            )
+            guard let videoOutputSettings = exportPlanner.assetWriterVideoOutputSettings(for: resolvedPlan),
+                  let audioOutputSettings = exportPlanner.assetWriterAudioOutputSettings(for: resolvedPlan) else {
                 throw IOSExportEngineError.exportSessionCreationFailed
             }
-
-            guard exportSession.supportedFileTypes.contains(.mov) else {
-                throw IOSExportEngineError.unsupportedOutputType
-            }
+            // The reader converts audio to the WRITER's resolved format. The
+            // composition's native audio (e.g. 44.1kHz mono) fed straight
+            // into a 48kHz stereo AAC input smeared the fade ramps across
+            // ~2.5× their window (measured 2026-08-26); converting on the
+            // reader side keeps the encoder on a matched stream.
+            let audioSampleRate = audioOutputSettings[AVSampleRateKey] as? Int ?? 48_000
+            let audioChannelCount = audioOutputSettings[AVNumberOfChannelsKey] as? Int ?? 2
 
             let outputURL = try makeOutputURL()
             activeOutputURL = outputURL
-            exportSession.outputURL = outputURL
-            exportSession.outputFileType = .mov
-            exportSession.shouldOptimizeForNetworkUse = true
-            if shouldUseCustomCompositor {
-                exportSession.videoComposition = makeVideoComposition(for: project)
-            }
-            activeExportSession = exportSession
-            startProgressPolling()
 
-            try await AVExportCompatibility.export(.init(exportSession), to: outputURL, as: .mov)
+            let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
+            writer.shouldOptimizeForNetworkUse = true
+            // Separate readers per modality (W4-defect parity, Mac
+            // code-review #3): one reader mixing a videoComposition output
+            // with an audioMix output over the same composition can park
+            // forever (measured on iOS 2026-08-26 — the audio-fade export
+            // hung). The audio side reads its OWN dumped asset (below).
+            let videoReader = try AVAssetReader(asset: composition)
+            let audioReader = try AVAssetReader(asset: composition)
+
+            // Video leg: the SAME videoComposition the preview renders with
+            // (RENDER-01/CANVAS-01 — always attached, canvas-sized).
+            let videoTracks = composition.tracks(withMediaType: .video)
+            var videoReaderOutput: AVAssetReaderVideoCompositionOutput?
+            var writerVideoInput: AVAssetWriterInput?
+            if !videoTracks.isEmpty {
+                let readerOutput = AVAssetReaderVideoCompositionOutput(
+                    videoTracks: videoTracks,
+                    videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                )
+                readerOutput.alwaysCopiesSampleData = false
+                readerOutput.videoComposition = plan.videoComposition
+                guard videoReader.canAdd(readerOutput) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                videoReader.add(readerOutput)
+                videoReaderOutput = readerOutput
+
+                let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoOutputSettings)
+                input.expectsMediaDataInRealTime = false
+                guard writer.canAdd(input) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                writer.add(input)
+                writerVideoInput = input
+            }
+
+            // Audio leg: the composition's inline audio through the plan's
+            // audioMix (BUG-IOS-10 — volume/fades bake into the file), on its
+            // own reader with the writer's resolved format so the AAC input
+            // receives a matched stream.
+            let audioTracks = composition.tracks(withMediaType: .audio)
+            var audioReaderOutput: AVAssetReaderAudioMixOutput?
+            var writerAudioInput: AVAssetWriterInput?
+            if !audioTracks.isEmpty {
+                let output = AVAssetReaderAudioMixOutput(
+                    audioTracks: audioTracks,
+                    audioSettings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM,
+                        AVLinearPCMBitDepthKey: 16,
+                        AVLinearPCMIsFloatKey: false,
+                        AVLinearPCMIsBigEndianKey: false,
+                        AVLinearPCMIsNonInterleaved: false,
+                        AVSampleRateKey: audioSampleRate,
+                        AVNumberOfChannelsKey: audioChannelCount
+                    ]
+                )
+                output.audioMix = plan.audioMix
+                guard audioReader.canAdd(output) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                audioReader.add(output)
+                audioReaderOutput = output
+
+                let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioOutputSettings)
+                input.expectsMediaDataInRealTime = false
+                guard writer.canAdd(input) else {
+                    throw IOSExportEngineError.exportSessionCreationFailed
+                }
+                writer.add(input)
+                writerAudioInput = input
+            }
+
+            guard videoReader.startReading() else {
+                throw videoReader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            guard audioReader.startReading() else {
+                throw audioReader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            guard writer.startWriting() else {
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+            writer.startSession(atSourceTime: .zero)
+
+            activeReaders = [videoReader, audioReader]
+            activeWriter = writer
+
+            let totalDuration = max(composition.duration.seconds, 1.0 / 600.0)
+            // Both pumps run CONCURRENTLY. With an audio writer input
+            // present, pumping video ALONE first stalls the video queue
+            // (measured 2026-08-26 on simulator: video-pump completion never
+            // fired while an audio input existed; no-audio and muted exports
+            // were clean; concurrent pumping completes both in seconds).
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                if let writerVideoInput, let videoReaderOutput {
+                    let videoOutput = SendableBox(value: videoReaderOutput as AVAssetReaderOutput)
+                    let videoInput = SendableBox(value: writerVideoInput)
+                    group.addTask {
+                        try await self.pumpSamples(
+                            output: videoOutput,
+                            input: videoInput,
+                            totalDuration: totalDuration
+                        )
+                    }
+                }
+                if let writerAudioInput, let audioReaderOutput {
+                    let audioOutputBox = SendableBox(value: audioReaderOutput as AVAssetReaderOutput)
+                    let audioInputBox = SendableBox(value: writerAudioInput)
+                    group.addTask {
+                        try await self.pumpSamples(
+                            output: audioOutputBox,
+                            input: audioInputBox,
+                            totalDuration: nil
+                        )
+                    }
+                }
+            }
+
+            for reader in activeReaders where reader.status == .failed {
+                throw reader.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+
+            await Self.finishWriting(SendableBox(value: writer))
+            switch writer.status {
+            case .completed:
+                break
+            case .cancelled:
+                throw CancellationError()
+            default:
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            }
+
             exportProgress = 1
             lastExportURL = outputURL
             finishExport()
-            activeOutputURL = nil
+            activeReaders.removeAll()
+            activeWriter = nil
             return outputURL
         } catch {
             removePartialOutput()
             finishExport()
+            activeReaders.removeAll()
+            activeWriter = nil
             throw error
         }
     }
 
+    /// Streams sample buffers from a reader output into a writer input,
+    /// driving the writer's pull model (Mac ExportEngine.pumpSamples parity).
+    /// `totalDuration` non-nil → progress reports by presentation time.
+    private nonisolated func pumpSamples(
+        output: SendableBox<AVAssetReaderOutput>,
+        input: SendableBox<AVAssetWriterInput>,
+        totalDuration: Double?
+    ) async throws {
+        let queue = DispatchQueue(label: "moviecut.ios.export.writer")
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
+                let writerInput = input.value
+                let readerOutput = output.value
+                while writerInput.isReadyForMoreMediaData {
+                    guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
+                        writerInput.markAsFinished()
+                        continuation.resume(returning: ())
+                        return
+                    }
+
+                    if let totalDuration, totalDuration > 0 {
+                        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                        if presentationTime.isFinite {
+                            let progress = min(max(presentationTime / totalDuration, 0), 1)
+                            Task { @MainActor [weak self] in
+                                self?.exportProgress = progress
+                            }
+                        }
+                    }
+
+                    if !writerInput.append(sampleBuffer) {
+                        continuation.resume(throwing: IOSExportEngineError.exportSessionCreationFailed)
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    /// Awaits an AVAssetWriter's completion handler off the main actor.
+    private static nonisolated func finishWriting(_ writer: SendableBox<AVAssetWriter>) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writer.value.finishWriting {
+                continuation.resume(returning: ())
+            }
+        }
+    }
+
+    /// Reader outputs and writer inputs are not Sendable; the pump owns them
+    /// for the transfer's duration and serializes access through the writer's
+    /// request queue.
+    private struct SendableBox<T>: @unchecked Sendable {
+        let value: T
+    }
+
     func cancelExport() {
+        // RENDER-02: the tagged-writer export cancels through its reader and
+        // writer; the in-flight export call then fails into the catch path,
+        // which removes the partial output (idempotent).
+        for reader in activeReaders {
+            reader.cancelReading()
+        }
+        activeReaders.removeAll()
+        activeWriter?.cancelWriting()
+        activeWriter = nil
         activeExportSession?.cancelExport()
         progressTask?.cancel()
         progressTask = nil
@@ -76,9 +337,7 @@ final class IOSExportEngine {
         lastExportURL = nil
         isExporting = false
         // UX-REC-01: a cancelled export leaves a truncated .mov at the output
-        // — remove it so the user never shares a broken artifact. The
-        // in-flight export call also fails into the catch path, which removes
-        // again (idempotent).
+        // — remove it so the user never shares a broken artifact.
         removePartialOutput()
     }
 
@@ -158,7 +417,10 @@ final class IOSExportEngine {
         return !track.isSolo
     }
 
-    private func makeVideoComposition(for project: Project) -> AVVideoComposition {
+    private func makeVideoComposition(
+        for project: Project,
+        composition: AVMutableComposition
+    ) -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
         // G-03: the timeline's adjustment clips (bottom-track-first).
         let adjustmentVideoTracks = project.timeline.tracks.filter { $0.kind == .video }
@@ -185,27 +447,42 @@ final class IOSExportEngine {
 
         let sortedTracks = project.timeline.tracks.sorted(by: { $0.zIndex < $1.zIndex })
         let trackIDComposition = AVMutableComposition()
-        var videoTrackIDsByTrackID: [UUID: CMPersistentTrackID] = [:]
+        // BUG-IOS-09: one entry per minted VIDEO track for the timeline track —
+        // transition tracks mint two (alternating slots). The allocation order
+        // mirrors insertVideoTrack exactly so the IDs match the real
+        // composition's.
+        var videoTrackIDsByTrackID: [UUID: [CMPersistentTrackID]] = [:]
 
         for timelineTrack in sortedTracks {
             switch timelineTrack.kind {
             case .video:
-                let playableClips = timelineTrack.clips.filter { $0.kind == .video }
+                let playableClips = timelineTrack.clips
+                    .filter { ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false }
                 guard !playableClips.isEmpty else { continue }
+                let slotCount = Self.transitionSlotCount(for: playableClips)
 
-                if !timelineTrack.isHidden,
-                   let videoTrack = trackIDComposition.addMutableTrack(
-                       withMediaType: .video,
-                       preferredTrackID: kCMPersistentTrackID_Invalid
-                   ) {
-                    videoTrackIDsByTrackID[timelineTrack.id] = videoTrack.trackID
+                if !timelineTrack.isHidden {
+                    var mintedTrackIDs: [CMPersistentTrackID] = []
+                    for _ in 0..<slotCount {
+                        if let videoTrack = trackIDComposition.addMutableTrack(
+                            withMediaType: .video,
+                            preferredTrackID: kCMPersistentTrackID_Invalid
+                        ) {
+                            mintedTrackIDs.append(videoTrack.trackID)
+                        }
+                    }
+                    if !mintedTrackIDs.isEmpty {
+                        videoTrackIDsByTrackID[timelineTrack.id] = mintedTrackIDs
+                    }
                 }
 
                 if !timelineTrack.isMuted, !audioSoloSuppresses(timelineTrack, in: project) {
-                    trackIDComposition.addMutableTrack(
-                        withMediaType: .audio,
-                        preferredTrackID: kCMPersistentTrackID_Invalid
-                    )
+                    for _ in 0..<slotCount {
+                        trackIDComposition.addMutableTrack(
+                            withMediaType: .audio,
+                            preferredTrackID: kCMPersistentTrackID_Invalid
+                        )
+                    }
                 }
             case .audio:
                 let playableClips = timelineTrack.clips.filter { $0.kind == .audio || $0.kind == .video }
@@ -222,21 +499,59 @@ final class IOSExportEngine {
 
         var clipEffects: [CustomCompositionClipEffect] = []
         var videoTrackIDs: [CMPersistentTrackID] = []
+        var transitionClipInfos: [VideoClipTransitionInfo] = []
 
         for timelineTrack in sortedTracks {
             switch timelineTrack.kind {
             case .video:
-                guard let trackID = videoTrackIDsByTrackID[timelineTrack.id] else { continue }
-                videoTrackIDs.append(trackID)
+                guard let trackIDs = videoTrackIDsByTrackID[timelineTrack.id], !trackIDs.isEmpty else { continue }
+                videoTrackIDs.append(contentsOf: trackIDs)
 
-                for clip in timelineTrack.clips
-                    .filter({ $0.kind == .video && $0.isAdjustmentLayer == false })
-                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
+                let sortedClips = timelineTrack.clips
+                    .filter({ ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false })
+                    .sorted(by: { $0.timelineRange.start < $1.timelineRange.start })
+
+                for (clipIndex, clip) in sortedClips.enumerated() {
+                    let slot = trackIDs.count > 1 ? clipIndex % trackIDs.count : 0
+                    let trackID = trackIDs[slot]
+
+                    // BUG-IOS-09: effect timeRanges follow the SAME adjusted
+                    // (back-timed) starts the composition inserts with, so
+                    // instruction boundaries and the transition window line up
+                    // with the real track content.
+                    var adjustedStart = clip.timelineRange.start
+                    if clipIndex > 0,
+                       let transition = sortedClips[clipIndex - 1].transition,
+                       transition.duration > 0 {
+                        adjustedStart = max(0, adjustedStart - transition.duration)
+                    }
                     let timeRange = CMTimeRange(
-                        start: cmTime(clip.timelineRange.start),
+                        start: cmTime(adjustedStart),
                         duration: cmTime(clip.timelineRange.duration)
                     )
+                    transitionClipInfos.append(
+                        VideoClipTransitionInfo(
+                            timelineTrackID: timelineTrack.id,
+                            trackID: trackID,
+                            timeRange: timeRange,
+                            transition: clip.transition
+                        )
+                    )
 
+                    // BUG-IOS-08: composition source frames arrive in STORAGE
+                    // orientation — the compositor orients them upright via
+                    // this transform before the canvas fit (Mac BUG-07 parity;
+                    // the composition track carries the same pt only as output
+                    // metadata for external players).
+                    let sourcePreferredTransform = composition.track(
+                        withTrackID: trackID
+                    )?.preferredTransform ?? .identity
+
+                    // BUG-08: a plain clip with no visual edits must still
+                    // produce an effect — without it the track never joins
+                    // `instruction.clipEffects` and the compositor drops the
+                    // layer beneath an overlay (Mac has passed the same flag
+                    // since its code-review #7; iOS was missing it).
                     guard let clipEffect = CustomCompositionClipEffect(
                         trackID: trackID,
                         timeRange: timeRange,
@@ -254,7 +569,9 @@ final class IOSExportEngine {
                         isBackgroundRemoved: clip.isBackgroundRemoved,
                         blendMode: clip.blendMode,
                         cropRect: clip.cropRect,
-                        stabilization: clip.stabilization
+                        stabilization: clip.stabilization,
+                        sourcePreferredTransform: sourcePreferredTransform,
+                        includeIdentitySource: true
                     ) else {
                         continue
                     }
@@ -304,8 +621,13 @@ final class IOSExportEngine {
             }
         }
 
-        let durationSeconds = max(project.timeline.duration, 0)
+        // BUG-IOS-09: transition overlaps shorten the composition below the
+        // model timeline duration — boundaries must follow the REAL extent,
+        // or a trailing no-content segment would request source frames after
+        // the last clip ends.
+        let durationSeconds = max(composition.duration.seconds, 0)
         let duration = cmTime(durationSeconds)
+        let transitionEffects = makeTransitionEffects(from: transitionClipInfos)
         var instructionBoundaries = [TimeInterval(0), durationSeconds]
         for clipEffect in clipEffects {
             let start = min(max(clipEffect.timeRange.start.seconds, 0), durationSeconds)
@@ -345,6 +667,7 @@ final class IOSExportEngine {
                     timeRange: segmentRange,
                     trackIDs: videoTrackIDs,
                     clipEffects: activeClipEffects,
+                    transitionEffects: transitionEffects,
                     canvasBackground: project.canvasBackground,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
@@ -357,6 +680,7 @@ final class IOSExportEngine {
                     timeRange: CMTimeRange(start: .zero, duration: duration),
                     trackIDs: videoTrackIDs,
                     clipEffects: clipEffects,
+                    transitionEffects: transitionEffects,
                     canvasBackground: project.canvasBackground,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
@@ -370,58 +694,219 @@ final class IOSExportEngine {
         StickerDetection.stickerEmoji(from: textContent)
     }
 
+    /// BUG-IOS-09: per-clip metadata for transition pairing (Mac
+    /// ExportEngine's ExportClipInstructionMetadata, scoped to what the
+    /// compositor needs).
+    private struct VideoClipTransitionInfo {
+        let timelineTrackID: UUID
+        let trackID: CMPersistentTrackID
+        let timeRange: CMTimeRange
+        let transition: Transition?
+    }
+
+    /// BUG-IOS-09 (Mac ExportEngine parity, ExportEngine.swift:831-882):
+    /// pairs consecutive clips within each timeline track where the OUTGOING
+    /// clip carries a two-source transition. The window is the outgoing
+    /// clip's tail (clamped to the shorter clip), during which both slot
+    /// tracks carry live source frames for the compositor's transition
+    /// branch.
+    private func makeTransitionEffects(
+        from infos: [VideoClipTransitionInfo]
+    ) -> [CustomCompositionTransitionEffect] {
+        let clipsByTimelineTrack = Dictionary(
+            grouping: infos.filter { $0.trackID != kCMPersistentTrackID_Invalid },
+            by: \.timelineTrackID
+        )
+
+        return clipsByTimelineTrack.values.flatMap { trackClips in
+            let sortedClips = trackClips.sorted {
+                if $0.timeRange.start == $1.timeRange.start {
+                    return $0.timeRange.duration > $1.timeRange.duration
+                }
+                return $0.timeRange.start < $1.timeRange.start
+            }
+
+            guard sortedClips.count > 1 else {
+                return [CustomCompositionTransitionEffect]()
+            }
+
+            return sortedClips.indices.dropLast().compactMap { index in
+                let outgoingClip = sortedClips[index]
+                let incomingClip = sortedClips[index + 1]
+
+                guard let transition = outgoingClip.transition,
+                      transition.duration > 0,
+                      transition.type.requiresTwoSourcePixelProcessing
+                else {
+                    return nil
+                }
+
+                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
+                let transitionDuration = min(
+                    requestedDuration,
+                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
+                )
+                guard transitionDuration > .zero else {
+                    return nil
+                }
+
+                let outgoingEnd = CMTimeAdd(outgoingClip.timeRange.start, outgoingClip.timeRange.duration)
+                let transitionStart = CMTimeSubtract(outgoingEnd, transitionDuration)
+
+                return CustomCompositionTransitionEffect(
+                    outgoingTrackID: outgoingClip.trackID,
+                    incomingTrackID: incomingClip.trackID,
+                    timeRange: CMTimeRange(start: transitionStart, duration: transitionDuration),
+                    type: transition.type
+                )
+            }
+        }
+    }
+
+    /// G-15: temp segment backing an image clip in the current render plan.
+    private func temporaryImageRenderURL(for clip: Clip) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSImage-\(clip.id.uuidString)-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
+    }
+
+    /// Deletes the temp segments from the PREVIOUS plan (see makeRenderPlan).
+    private func removeTemporaryImageRenders() {
+        let fileManager = FileManager.default
+        for url in imageRenderURLs where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
+        imageRenderURLs.removeAll()
+    }
+
     private func insertVideoTrack(
         _ timelineTrack: Track,
         from project: Project,
         into composition: AVMutableComposition
     ) async throws {
+        // G-15: image clips ride the video pipeline through a pre-rendered
+        // segment (Mac ExportEngine parity) — filtering to .video only made
+        // photo-only projects export nothing and previews empty. Adjustment
+        // layers carry no content (they render via instruction.adjustmentClips)
+        // and must not consume a transition slot — the effect loop in
+        // makeVideoComposition enumerates the identical list.
         let playableClips = timelineTrack.clips
-            .filter { $0.kind == .video }
+            .filter { ($0.kind == .video || $0.kind == .image) && $0.isAdjustmentLayer == false }
             .sorted { $0.timelineRange.start < $1.timelineRange.start }
 
         guard !playableClips.isEmpty else { return }
 
-        let compositionVideoTrack = timelineTrack.isHidden ? nil : composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
-        let compositionAudioTrack = (timelineTrack.isMuted
-            || audioSoloSuppresses(timelineTrack, in: project)) ? nil : composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
+        // BUG-IOS-09: two-source transitions need consecutive clips on
+        // DIFFERENT composition tracks — the custom compositor reads one
+        // source frame per track. Slots are allocated only when the track
+        // actually carries a transition; transition-free tracks keep the
+        // exact single-track layout (and byte-identical renders).
+        let slotCount = Self.transitionSlotCount(for: playableClips)
 
-        var videoCursor = CMTime.zero
-        var audioCursor = CMTime.zero
+        var videoTracks: [AVMutableCompositionTrack] = []
+        if !timelineTrack.isHidden {
+            for _ in 0..<slotCount {
+                if let track = composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                ) {
+                    videoTracks.append(track)
+                }
+            }
+        }
+        // Audio alternates across the same slot count with the same
+        // back-timing, so the overlapped window mixes both clips' audio and
+        // the composition extent stays aligned with the video.
+        let wantsAudio = !(timelineTrack.isMuted || audioSoloSuppresses(timelineTrack, in: project))
+        var audioTracks: [AVMutableCompositionTrack] = []
+        if wantsAudio {
+            for _ in 0..<slotCount {
+                if let track = composition.addMutableTrack(
+                    withMediaType: .audio,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                ) {
+                    audioTracks.append(track)
+                }
+            }
+        }
 
-        for clip in playableClips {
+        var videoCursors = [CMTime](repeating: .zero, count: videoTracks.count)
+        var audioCursors = [CMTime](repeating: .zero, count: audioTracks.count)
+
+        for (clipIndex, clip) in playableClips.enumerated() {
             guard
                 let assetId = clip.assetId,
                 let mediaAsset = project.mediaLibrary.assets[assetId]
             else { continue }
 
-            let asset = AVURLAsset(url: mediaAsset.originalURL)
+            // G-15 (Mac ExportEngine parity): an image asset renders into a
+            // temp H.264 segment at the canvas size, then inserts like any
+            // video. EXIF orientation is baked upright by the shared service.
+            let asset: AVURLAsset
+            if mediaAsset.kind == .image {
+                let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
+                let canvasSize = project.canvas.size
+                let renderSize = canvasSize.width > 0 && canvasSize.height > 0
+                    ? canvasSize
+                    : CGSize(width: 1920, height: 1080)
+                let imageVideoURL = temporaryImageRenderURL(for: clip)
+                try await ImageVideoRenderService().render(
+                    imageURL: mediaAsset.originalURL,
+                    duration: renderDuration,
+                    renderSize: renderSize,
+                    outputURL: imageVideoURL,
+                    kenBurnsEffect: clip.kenBurnsEffect
+                )
+                imageRenderURLs.append(imageVideoURL)
+                asset = AVURLAsset(url: imageVideoURL)
+            } else {
+                asset = AVURLAsset(url: mediaAsset.originalURL)
+            }
 
-            if let compositionVideoTrack, !timelineTrack.isHidden {
+            // BUG-IOS-09: overlap back-timing — the incoming clip starts
+            // transition-duration earlier so both sources are live during
+            // the transition window (Mac ExportEngine parity).
+            var adjustedStart = clip.timelineRange.start
+            if clipIndex > 0,
+               let transition = playableClips[clipIndex - 1].transition,
+               transition.duration > 0 {
+                adjustedStart = max(0, adjustedStart - transition.duration)
+            }
+
+            if !videoTracks.isEmpty {
+                let slot = videoTracks.count > 1 ? clipIndex % videoTracks.count : 0
                 try await insertClip(
                     clip,
                     mediaType: .video,
                     from: asset,
-                    into: compositionVideoTrack,
-                    cursor: &videoCursor
+                    into: videoTracks[slot],
+                    cursor: &videoCursors[slot],
+                    timelineStartOverride: adjustedStart
                 )
             }
 
-            if let compositionAudioTrack, !timelineTrack.isMuted {
+            if !audioTracks.isEmpty {
+                let slot = audioTracks.count > 1 ? clipIndex % audioTracks.count : 0
                 try await insertClip(
                     clip,
                     mediaType: .audio,
                     from: asset,
-                    into: compositionAudioTrack,
-                    cursor: &audioCursor
+                    into: audioTracks[slot],
+                    cursor: &audioCursors[slot],
+                    timelineStartOverride: adjustedStart
                 )
             }
         }
+    }
+
+    /// BUG-IOS-09: two composition tracks per video timeline track when any
+    /// clip boundary carries a two-source pixel transition, else one.
+    private static func transitionSlotCount(for clips: [Clip]) -> Int {
+        let needsSlots = clips.contains { clip in
+            guard let transition = clip.transition else { return false }
+            return transition.duration > 0 && transition.type.requiresTwoSourcePixelProcessing
+        }
+        return needsSlots ? 2 : 1
     }
 
     private func insertAudioTrack(
@@ -462,13 +947,30 @@ final class IOSExportEngine {
         }
     }
 
+    /// Per-clip audio placement captured during insertion (BUG-IOS-10): the
+    /// audioMix must follow the REAL placed span (speed-scaled, back-timed),
+    /// not the model timelineRange.
+    private struct AudioMixEntry {
+        let trackID: CMPersistentTrackID
+        let start: CMTime
+        let duration: CMTime
+        let volume: Double
+        let fadeInDuration: TimeInterval
+        let fadeOutDuration: TimeInterval
+    }
+
+    /// BUG-IOS-10: audio placements collected while building the composition.
+    @ObservationIgnored private var audioMixEntries: [AudioMixEntry] = []
+
+    @discardableResult
     private func insertClip(
         _ clip: Clip,
         mediaType: AVMediaType,
         from asset: AVURLAsset,
         into compositionTrack: AVMutableCompositionTrack,
-        cursor: inout CMTime
-    ) async throws {
+        cursor: inout CMTime,
+        timelineStartOverride: TimeInterval? = nil
+    ) async throws -> CMTime {
         // Step 7: handle reverse by substituting a pre-rendered reversed asset
         // (same pattern as macOS ExportEngine). The reversed asset's time 0
         // corresponds to the original sourceRange.end.
@@ -485,11 +987,11 @@ final class IOSExportEngine {
         }
 
         guard let sourceTrack = try await effectiveAsset.loadTracks(withMediaType: mediaType).first else {
-            return
+            return .zero
         }
 
         guard var sourceTimeRange = sourceTimeRange(for: clip) else {
-            return
+            return .zero
         }
         if clip.isReversed {
             // Reversed asset starts at 0; remap the source range.
@@ -499,9 +1001,11 @@ final class IOSExportEngine {
             )
         }
 
-        let timelineStart = cmTime(clip.timelineRange.start)
+        // BUG-IOS-09: transition back-timing shifts the insertion earlier than
+        // the model timeline position; the caller passes the adjusted start.
+        let timelineStart = cmTime(timelineStartOverride ?? clip.timelineRange.start)
         guard CMTimeCompare(timelineStart, cursor) >= 0 else {
-            return
+            return .zero
         }
 
         if CMTimeCompare(cursor, timelineStart) < 0 {
@@ -509,6 +1013,8 @@ final class IOSExportEngine {
             compositionTrack.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: gap))
             cursor = timelineStart
         }
+
+        let placedStart = cursor
 
         if mediaType == .video, compositionTrack.preferredTransform == .identity {
             compositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
@@ -530,7 +1036,11 @@ final class IOSExportEngine {
             let insertedWindow = CMTimeRange(start: cursor, duration: minimalSource.duration)
             compositionTrack.scaleTimeRange(insertedWindow, toDuration: cmTime(clip.timelineRange.duration))
             cursor = CMTimeAdd(cursor, cmTime(clip.timelineRange.duration))
-            return
+            recordAudioMixEntry(
+                for: clip, mediaType: mediaType, trackID: compositionTrack.trackID,
+                start: placedStart, duration: CMTimeSubtract(cursor, placedStart)
+            )
+            return CMTimeSubtract(cursor, placedStart)
         }
 
         try compositionTrack.insertTimeRange(sourceTimeRange, of: sourceTrack, at: cursor)
@@ -554,6 +1064,92 @@ final class IOSExportEngine {
             // Speed ramp: scale per-segment using the ramp curve (macOS pattern).
             cursor = try await applySpeedRamp(clip, sourceTrack: sourceTrack, sourceTimeRange: sourceTimeRange, into: compositionTrack, cursor: cursor)
         }
+
+        recordAudioMixEntry(
+            for: clip, mediaType: mediaType, trackID: compositionTrack.trackID,
+            start: placedStart, duration: CMTimeSubtract(cursor, placedStart)
+        )
+        return CMTimeSubtract(cursor, placedStart)
+    }
+
+    /// BUG-IOS-10: remembers an audio placement for the render plan's
+    /// audioMix (volume + fade ramps), following the real placed span.
+    private func recordAudioMixEntry(
+        for clip: Clip,
+        mediaType: AVMediaType,
+        trackID: CMPersistentTrackID,
+        start: CMTime,
+        duration: CMTime
+    ) {
+        guard mediaType == .audio, duration > .zero else { return }
+        audioMixEntries.append(
+            AudioMixEntry(
+                trackID: trackID,
+                start: start,
+                duration: duration,
+                volume: clip.volume,
+                fadeInDuration: clip.fadeInDuration,
+                fadeOutDuration: clip.fadeOutDuration
+            )
+        )
+    }
+
+    /// BUG-IOS-10 (Mac PlaybackEngine.applyAudioVolumeAndFades parity): one
+    /// input-parameters object per composition audio track, with the clips'
+    /// base volume plus fade-in/fade-out ramps. Nil when no clip carries
+    /// audio edits — the untouched mix stays exactly as before.
+    private func makeAudioMix(from entries: [AudioMixEntry], composition: AVMutableComposition) -> AVMutableAudioMix? {
+        let audibleEntries = entries.filter { entry in
+            entry.volume != 1 || entry.fadeInDuration > 0 || entry.fadeOutDuration > 0
+        }
+        guard !audibleEntries.isEmpty else { return nil }
+
+        var parametersByTrack: [CMPersistentTrackID: AVMutableAudioMixInputParameters] = [:]
+        for entry in audibleEntries {
+            let parameters: AVMutableAudioMixInputParameters
+            if let existing = parametersByTrack[entry.trackID] {
+                parameters = existing
+            } else {
+                guard let track = composition.track(withTrackID: entry.trackID) else { continue }
+                parameters = AVMutableAudioMixInputParameters(track: track)
+                parametersByTrack[entry.trackID] = parameters
+            }
+
+            let volume = Float(min(max(entry.volume, 0), 2))
+            parameters.setVolume(volume, at: entry.start)
+
+            guard entry.duration.seconds.isFinite, entry.duration.seconds > 0 else { continue }
+
+            // Fades clamp to the placed span; when both would overlap they
+            // share it evenly so neither ramp window is undefined.
+            var fadeIn = min(entry.fadeInDuration, entry.duration.seconds)
+            var fadeOut = min(entry.fadeOutDuration, entry.duration.seconds)
+            if fadeIn + fadeOut > entry.duration.seconds {
+                fadeIn = entry.duration.seconds / 2
+                fadeOut = entry.duration.seconds / 2
+            }
+
+            if fadeIn > 0 {
+                parameters.setVolumeRamp(
+                    fromStartVolume: 0,
+                    toEndVolume: volume,
+                    timeRange: CMTimeRange(start: entry.start, duration: cmTime(fadeIn))
+                )
+            }
+            if fadeOut > 0 {
+                let fadeOutStart = CMTimeAdd(entry.start, cmTime(entry.duration.seconds - fadeOut))
+                parameters.setVolumeRamp(
+                    fromStartVolume: volume,
+                    toEndVolume: 0,
+                    timeRange: CMTimeRange(start: fadeOutStart, duration: cmTime(fadeOut))
+                )
+            }
+        }
+
+        guard !parametersByTrack.isEmpty else { return nil }
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = Array(parametersByTrack.values)
+        return mix
     }
 
     /// Renders a reversed copy of the clip's source range (video only).
@@ -668,25 +1264,11 @@ final class IOSExportEngine {
         return outputURL
     }
 
-    private func startProgressPolling() {
-        progressTask?.cancel()
-        progressTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-
-                if let activeExportSession {
-                    exportProgress = Double(activeExportSession.progress)
-                }
-
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-        }
-    }
-
     private func finishExport() {
         progressTask?.cancel()
         progressTask = nil
         activeExportSession = nil
+        activeOutputURL = nil
         isExporting = false
     }
 

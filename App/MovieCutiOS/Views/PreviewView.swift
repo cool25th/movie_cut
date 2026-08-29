@@ -1,7 +1,5 @@
 #if os(iOS)
 import AVFoundation
-import CoreImage
-import Metal
 import MovieCutCore
 import SwiftUI
 
@@ -9,14 +7,14 @@ struct PreviewView: View {
     @Bindable var viewModel: IOSEditorViewModel
     @State private var player = AVPlayer()
     @State private var playerItem: AVPlayerItem?
-    @State private var imageGenerator: AVAssetImageGenerator?
     @State private var timeObserverToken: Any?
     @State private var hasPlayableMedia = false
-    @State private var ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
-    @State private var filteredFrame: UIImage?
-    @State private var lastRenderedFrameTime: TimeInterval?
-    @State private var frameRequestID = 0
-    @State private var isRenderingFilteredFrame = false
+    // RACE-01 (리뷰 2026-08-26): 재생성 경합 방지 — 빌드 Task를 추적·취소하고
+    // 세대 토큰으로 stale 설치를 차단한다. 느린 이전 빌드(reverse·대형
+    // asset 로딩)가 나중에 끝나 최신 AVPlayerItem을 덮어쓰던 결함(Mac
+    // PlaybackEngine 164-168·216-236 패리티).
+    @State private var compositionBuildTask: Task<Void, Never>?
+    @State private var compositionGeneration = 0
 
     var body: some View {
         VStack(spacing: 8) {
@@ -25,14 +23,11 @@ struct PreviewView: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                if let filteredFrame {
-                    Image(uiImage: filteredFrame)
-                        .resizable()
-                        .scaledToFit()
-                        .aspectRatio(16 / 9, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .allowsHitTesting(false)
-                }
+                // RACE-01: the up-to-15fps copyCGImage overlay is REMOVED —
+                // the player already renders the plan's videoComposition
+                // (every clip, effect, mask, transition, sticker) through the
+                // custom compositor; the overlay duplicated that work on the
+                // CPU and cost playback frame rate and power.
 
                 if !hasPlayableMedia {
                     RoundedRectangle(cornerRadius: 8)
@@ -68,19 +63,14 @@ struct PreviewView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .onAppear {
-            configureCIContext()
             rebuildComposition()
         }
         .onDisappear {
             removeTimeObserver()
             player.pause()
-            imageGenerator?.cancelAllCGImageGeneration()
         }
         .onChange(of: viewModel.currentProject.timeline) { _, _ in
             rebuildComposition()
-        }
-        .onChange(of: viewModel.selectedClipId) { _, _ in
-            refreshFilteredFrame(at: viewModel.playheadTime, force: true)
         }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
@@ -90,45 +80,55 @@ struct PreviewView: View {
         }
     }
 
-    private func configureCIContext() {
-        if let device = MTLCreateSystemDefaultDevice() {
-            ciContext = CIContext(mtlDevice: device, options: RenderColorConfiguration.contextOptions)
-        }
-    }
-
+    /// RENDER-01: the preview consumes the SAME render plan as the export
+    /// (one composition for durations/speed/ramps/freeze/reverse, one
+    /// videoComposition for per-clip effects through the custom compositor,
+    /// one audioMix for volume/fades). The previous preview built its own
+    /// simpler composition and post-filtered single-clip frames, so ramps,
+    /// reverse, masks, blend modes, multi-track compositing, text, and
+    /// stickers never matched the export.
     private func rebuildComposition() {
         removeTimeObserver()
         player.pause()
-        imageGenerator?.cancelAllCGImageGeneration()
-        clearFilteredFrame()
 
-        let composition = AVMutableComposition()
-        let project = viewModel.currentProject
-        hasPlayableMedia = IOSPreviewCompositionBuilder.populate(composition, from: project)
+        compositionBuildTask?.cancel()
+        compositionGeneration &+= 1
+        let requestedGeneration = compositionGeneration
+        compositionBuildTask = Task { @MainActor in
+            let project = viewModel.currentProject
+            let plan = try? await renderPlanEngine.makeRenderPlan(for: project)
 
-        guard hasPlayableMedia else {
-            playerItem = nil
-            imageGenerator = nil
-            player.replaceCurrentItem(with: nil)
-            viewModel.isPlaying = false
-            return
+            // A newer rebuild superseded this one — never install stale
+            // state, on EITHER the success or the empty-media path.
+            guard !Task.isCancelled, requestedGeneration == compositionGeneration else {
+                return
+            }
+
+            guard let plan, !plan.composition.tracks.isEmpty else {
+                hasPlayableMedia = false
+                playerItem = nil
+                player.replaceCurrentItem(with: nil)
+                viewModel.isPlaying = false
+                return
+            }
+
+            hasPlayableMedia = true
+            let item = AVPlayerItem(asset: plan.composition)
+            item.videoComposition = plan.videoComposition
+            // BUG-IOS-10: volume/fade ramps apply to preview playback too —
+            // the same audioMix the export session consumes.
+            item.audioMix = plan.audioMix
+
+            playerItem = item
+            player.replaceCurrentItem(with: item)
+            seekPlayerIfNeeded(to: viewModel.playheadTime)
+            addTimeObserver()
+            syncPlayback(isPlaying: viewModel.isPlaying)
         }
-
-        let item = AVPlayerItem(asset: composition)
-        let generator = AVAssetImageGenerator(asset: composition)
-        generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-        generator.maximumSize = CGSize(width: 1280, height: 720)
-
-        playerItem = item
-        imageGenerator = generator
-        player.replaceCurrentItem(with: item)
-        seekPlayerIfNeeded(to: viewModel.playheadTime)
-        refreshFilteredFrame(at: viewModel.playheadTime, force: true)
-        addTimeObserver()
-        syncPlayback(isPlaying: viewModel.isPlaying)
     }
+
+    /// Plan-builder only — the engine is never started (no export state).
+    private let renderPlanEngine = IOSExportEngine()
 
     @discardableResult
 
@@ -139,7 +139,6 @@ struct PreviewView: View {
             guard seconds.isFinite else { return }
 
             viewModel.playheadTime = min(max(0, seconds), max(viewModel.currentProject.timeline.duration, 0))
-            refreshFilteredFrame(at: seconds)
 
             if viewModel.isPlaying,
                viewModel.currentProject.timeline.duration > 0,
@@ -185,73 +184,16 @@ struct PreviewView: View {
         let currentSeconds = player.currentTime().seconds
 
         if currentSeconds.isFinite, abs(currentSeconds - clampedTime) < 0.25 {
-            refreshFilteredFrame(at: clampedTime)
             return
         }
 
-        player.seek(to: cmTime(clampedTime), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-            DispatchQueue.main.async {
-                refreshFilteredFrame(at: clampedTime, force: true)
-            }
-        }
-    }
-
-    private func refreshFilteredFrame(at time: TimeInterval, force: Bool = false) {
-        guard let generator = imageGenerator,
-              let clip = filteredClip(at: time) else {
-            clearFilteredFrame()
-            return
-        }
-
-        if !force, let lastRenderedFrameTime, abs(lastRenderedFrameTime - time) < 1.0 / 15.0 {
-            return
-        }
-        guard force || !isRenderingFilteredFrame else { return }
-
-        frameRequestID += 1
-        let requestID = frameRequestID
-        let context = ciContext
-        let frameTime = cmTime(time)
-        isRenderingFilteredFrame = true
-
-        // AVAssetImageGenerator and CIContext are not Sendable; wrap them so the
-        // concurrent closure compiles under Swift 6. Each render task is
-        // serialised by isRenderingFilteredFrame and requestID guarding.
-        struct UncheckedSendable<T>: @unchecked Sendable { let value: T }
-        let genBox = UncheckedSendable(value: generator)
-        let ctxBox = UncheckedSendable(value: context)
-
-        DispatchQueue.global(qos: .userInteractive).async {
-            let uiImage = Self.makeFilteredFrame(generator: genBox.value, time: frameTime, clip: clip, context: ctxBox.value)
-            DispatchQueue.main.async {
-                guard requestID == frameRequestID else { return }
-                filteredFrame = uiImage
-                lastRenderedFrameTime = time
-                isRenderingFilteredFrame = false
-            }
-        }
-    }
-
-    private func clearFilteredFrame() {
-        frameRequestID += 1
-        filteredFrame = nil
-        lastRenderedFrameTime = nil
-        isRenderingFilteredFrame = false
-    }
-
-    private func filteredClip(at time: TimeInterval) -> Clip? {
-        if let selected = viewModel.selectedClip,
-           selected.kind == .video,
-           selected.timelineRange.contains(time),
-           selected.requiresFilteredPreview {
-            return selected
-        }
-
-        return viewModel.currentProject.timeline.tracks
-            .filter { $0.kind == .video && !$0.isHidden }
-            .sorted { $0.zIndex > $1.zIndex }
-            .flatMap(\.clips)
-            .first { $0.kind == .video && $0.timelineRange.contains(time) && $0.requiresFilteredPreview }
+        // The player layer renders the composited frame at the seek target —
+        // the scrub preview needs no separate frame copy (RACE-01 cleanup).
+        player.seek(
+            to: cmTime(clampedTime),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
     }
 
     private func cmTime(_ seconds: TimeInterval) -> CMTime {
@@ -261,97 +203,6 @@ struct PreviewView: View {
     private func timeString(_ time: TimeInterval) -> String {
         let totalSeconds = Int(max(0, time.isFinite ? time : 0).rounded(.down))
         return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
-    }
-}
-
-private extension PreviewView {
-    static func makeFilteredFrame(
-        generator: AVAssetImageGenerator,
-        time: CMTime,
-        clip: Clip,
-        context: CIContext
-    ) -> UIImage? {
-        guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else { return nil }
-        let input = CIImage(cgImage: cgImage)
-        let output = applyFilterPipeline(to: input, clip: clip).cropped(to: input.extent)
-        guard let rendered = context.createCGImage(output, from: input.extent) else { return nil }
-        return UIImage(cgImage: rendered)
-    }
-
-    static func applyFilterPipeline(to image: CIImage, clip: Clip) -> CIImage {
-        var result = image
-        if let correction = clip.colorCorrection {
-            result = apply(colorCorrection: correction, to: result)
-        }
-        if let grade = clip.colorGrade {
-            result = ColorGradePixelProcessor.apply(grade, to: result)
-        }
-        for effect in clip.effects {
-            result = apply(effect: effect, to: result)
-        }
-        return result
-    }
-
-    static func apply(colorCorrection: ColorCorrection, to image: CIImage) -> CIImage {
-        // Delegate to the shared Core processor so the preview matches export and
-        // Mac. The previous inline warmth used the opposite sign (6500 + warmth)
-        // from the Core processor (6500 - warmth), so the slider ran backwards.
-        ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
-    }
-
-    static func apply(effect: Effect, to image: CIImage) -> CIImage {
-        switch effect.type {
-        case .brightness:
-            return colorControls(image, brightness: effect.parameters["amount"] ?? 0.1, contrast: 1, saturation: 1)
-        case .contrast:
-            return colorControls(image, brightness: 0, contrast: effect.parameters["amount"] ?? 1.1, saturation: 1)
-        case .saturation:
-            return colorControls(image, brightness: 0, contrast: 1, saturation: effect.parameters["amount"] ?? 1.2)
-        case .temperature:
-            let neutral = CIVector(x: effect.parameters["neutralX"] ?? 6500, y: effect.parameters["neutralY"] ?? 0)
-            let target = CIVector(x: effect.parameters["targetX"] ?? 7000, y: effect.parameters["targetY"] ?? 0)
-            return applyFilter("CITemperatureAndTint", to: image, parameters: ["inputNeutral": neutral, "inputTargetNeutral": target])
-        case .exposure:
-            return applyFilter("CIExposureAdjust", to: image, parameters: [kCIInputEVKey: effect.parameters["ev"] ?? 0.5])
-        case .grayscale:
-            return applyFilter("CIPhotoEffectMono", to: image)
-        case .sepia:
-            return applyFilter("CISepiaTone", to: image, parameters: [kCIInputIntensityKey: effect.parameters["intensity"] ?? 0.9])
-        case .blur:
-            return applyFilter("CIGaussianBlur", to: image, parameters: [kCIInputRadiusKey: effect.parameters["radius"] ?? 5])
-                .cropped(to: image.extent)
-        case .styleTransfer:
-            return applyFilter("CIPhotoEffectTransfer", to: image)
-        case .cinematicLUT, .vintageLUT, .noirLUT, .vividLUT, .coolLUT, .externalLUT:
-            return VisualEffectPixelProcessor.apply([effect], to: image)
-        case .fadeIn, .fadeOut, .crossDissolve:
-            return image
-        }
-    }
-
-    static func colorControls(_ image: CIImage, brightness: Double, contrast: Double, saturation: Double) -> CIImage {
-        applyFilter(
-            "CIColorControls",
-            to: image,
-            parameters: [
-                kCIInputBrightnessKey: brightness,
-                kCIInputContrastKey: contrast,
-                kCIInputSaturationKey: saturation
-            ]
-        )
-    }
-
-    static func applyFilter(_ name: String, to image: CIImage, parameters: [String: Any] = [:]) -> CIImage {
-        guard let filter = CIFilter(name: name) else { return image }
-        filter.setValue(image, forKey: kCIInputImageKey)
-        parameters.forEach { filter.setValue($0.value, forKey: $0.key) }
-        return filter.outputImage ?? image
-    }
-}
-
-private extension Clip {
-    var requiresFilteredPreview: Bool {
-        colorCorrection != nil || colorGrade != nil || !effects.isEmpty
     }
 }
 

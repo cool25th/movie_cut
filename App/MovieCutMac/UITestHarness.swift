@@ -3166,14 +3166,44 @@ extension EditorViewModel {
         for frame in 0..<count {
             let t = CMTime(seconds: Double(frame) / fps, preferredTimescale: 600)
             guard let cgImage = try? generator.copyCGImage(at: t, actualTime: nil) else { continue }
+            // BUG-06 fix: sources are now aspect-fit + CENTERED into the
+            // canvas (previously 1:1 at the bottom-left corner). Crop the
+            // centered fitted region — scaled to the analysis resolution —
+            // instead of the corner rect.
+            let frameExtent = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+            let sourceAspect: CGFloat
+            if width > 0, height > 0 {
+                sourceAspect = CGFloat(width) / CGFloat(height)
+            } else {
+                sourceAspect = 1
+            }
+            let cropW: CGFloat
+            let cropH: CGFloat
+            if frameExtent.width / frameExtent.height > sourceAspect {
+                cropH = frameExtent.height
+                cropW = cropH * sourceAspect
+            } else {
+                cropW = frameExtent.width
+                cropH = cropW / sourceAspect
+            }
+            let cropRect = CGRect(
+                x: (frameExtent.width - cropW) / 2,
+                y: (frameExtent.height - cropH) / 2,
+                width: cropW,
+                height: cropH
+            )
             let ciImage = CIImage(cgImage: cgImage)
+                .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+                .cropped(to: CGRect(x: 0, y: 0, width: cropRect.width, height: cropRect.height))
+                .transformed(by: CGAffineTransform(
+                    scaleX: CGFloat(width) / max(cropRect.width, 1),
+                    y: CGFloat(height) / max(cropRect.height, 1)
+                ))
             var bitmap = [UInt8](repeating: 0, count: width * height * 4)
-            // The identity-transform clip renders 1:1 at the viewport's
-            // bottom-left corner, so the content region is exactly the
-            // source-sized rect at the CI origin — crop THAT region at 1:1
-            // instead of downscaling the whole frame (a maximumSize
-            // downscale would shrink the content to a sub-sampled strip
-            // and the wobble below the estimator's floor).
+            // The analysis region is the aspect-fit content, scaled to the
+            // analysis resolution at 1:1 (a whole-frame downscale would shrink
+            // the content to a sub-sampled strip and the wobble below the
+            // estimator's floor).
             ciContext.render(
                 ciImage,
                 toBitmap: &bitmap,
@@ -4350,6 +4380,25 @@ extension EditorViewModel {
                     curves: ColorCurves(master: [
                         CurvePoint(x: 0.5, y: 0.65)
                     ])
+                )
+            )
+        }
+        // 8a1. G-02 Inc 6 curves-ONLY grade (master S-curve + red lift, no
+        //      3-way change, no HSL bands) — isolates the channel/master
+        //      curve chain the tone-curve editor commits, apart from the band
+        //      chain scenario 8a exercises.
+        if environment["MOVIECUT_UITEST_CURVES"] == "1", selectedClipId != nil {
+            await updateSelectedColorGrade(
+                ColorGrade(
+                    curves: ColorCurves(
+                        master: [
+                            CurvePoint(x: 0.25, y: 0.15),
+                            CurvePoint(x: 0.75, y: 0.85)
+                        ],
+                        red: [
+                            CurvePoint(x: 0.5, y: 0.7)
+                        ]
+                    )
                 )
             )
         }

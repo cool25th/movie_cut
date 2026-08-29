@@ -54,11 +54,11 @@ struct IOSEffectsInspectorView: View {
 
     private var clipInfoSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("클립 정보")
+            Text("Clip Info")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Text("타입")
+                Text("Type")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -66,7 +66,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("길이")
+                Text("Duration")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -78,7 +78,7 @@ struct IOSEffectsInspectorView: View {
 
     private var transformSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("변형")
+            Text("Transform")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
@@ -98,7 +98,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("배율")
+                Text("Scale")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -106,7 +106,7 @@ struct IOSEffectsInspectorView: View {
                     .font(.caption)
             }
             HStack {
-                Text("회전")
+                Text("Rotation")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -119,7 +119,7 @@ struct IOSEffectsInspectorView: View {
     private var opacitySection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(verbatim: opacityTitle)
+                Text(opacityTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -139,7 +139,7 @@ struct IOSEffectsInspectorView: View {
     private var speedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(verbatim: speedTitle)
+                Text(speedTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -158,8 +158,8 @@ struct IOSEffectsInspectorView: View {
 
     // MARK: - Effects Section
 
-    private var opacityTitle: String { "불투명도" }
-    private var speedTitle: String { "속도" }
+    private var opacityTitle: String { "Opacity" }
+    private var speedTitle: String { "Speed" }
 
     private var effectsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -175,11 +175,11 @@ struct IOSEffectsInspectorView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("색 보정")
+                Text("Color Correction")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("초기화") {
+                Button("Reset") {
                     Task { await viewModel.updateSelectedColorCorrection(nil) }
                 }
                 .font(.caption)
@@ -187,11 +187,11 @@ struct IOSEffectsInspectorView: View {
                 .disabled(clip.colorCorrection == nil)
             }
 
-            inspectorSlider(title: "밝기", value: cc.brightness, range: -1...1, binding: colorCorrectionBinding(keyPath: \.brightness))
-            inspectorSlider(title: "대비", value: cc.contrast, range: 0...2, binding: colorCorrectionBinding(keyPath: \.contrast))
-            inspectorSlider(title: "채도", value: cc.saturation, range: 0...2, binding: colorCorrectionBinding(keyPath: \.saturation))
-            inspectorSlider(title: "색온도", value: cc.warmth, range: -1...1, binding: colorCorrectionBinding(keyPath: \.warmth))
-            inspectorSlider(title: "색조", value: cc.tint, range: -1...1, binding: colorCorrectionBinding(keyPath: \.tint))
+            inspectorSlider(title: "Brightness", value: cc.brightness, range: -1...1, binding: colorCorrectionBinding(keyPath: \.brightness))
+            inspectorSlider(title: "Contrast", value: cc.contrast, range: 0...2, binding: colorCorrectionBinding(keyPath: \.contrast))
+            inspectorSlider(title: "Saturation", value: cc.saturation, range: 0...2, binding: colorCorrectionBinding(keyPath: \.saturation))
+            inspectorSlider(title: "Temperature", value: cc.warmth, range: -1...1, binding: colorCorrectionBinding(keyPath: \.warmth))
+            inspectorSlider(title: "Tint", value: cc.tint, range: -1...1, binding: colorCorrectionBinding(keyPath: \.tint))
         }
     }
 
@@ -200,11 +200,11 @@ struct IOSEffectsInspectorView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("컬러 그레이드")
+                Text("Color Grade")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("초기화") {
+                Button("Reset") {
                     Task { await viewModel.updateSelectedColorGrade(nil) }
                 }
                 .font(.caption)
@@ -212,45 +212,232 @@ struct IOSEffectsInspectorView: View {
                 .disabled(clip.colorGrade == nil)
             }
 
-            Text("리프트 · 그림자")
+            Text("Lift · Shadows")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "R", value: grade.lift.red, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.red))
             inspectorSlider(title: "G", value: grade.lift.green, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.green))
             inspectorSlider(title: "B", value: grade.lift.blue, range: -1...1, binding: colorGradeBinding(keyPath: \.lift.blue))
 
-            Text("감마 · 중간톤")
+            Text("Gamma · Midtones")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            inspectorSlider(title: "감마", value: grade.gamma, range: 0.2...2.0, binding: colorGradeBinding(keyPath: \.gamma))
+            inspectorSlider(title: "Gamma", value: grade.gamma, range: 0.2...2.0, binding: colorGradeBinding(keyPath: \.gamma))
 
-            Text("게인 · 하이라이트")
+            Text("Gain · Highlights")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             inspectorSlider(title: "R", value: grade.gain.red, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.red))
             inspectorSlider(title: "G", value: grade.gain.green, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.green))
             inspectorSlider(title: "B", value: grade.gain.blue, range: 0...2, binding: colorGradeBinding(keyPath: \.gain.blue))
+
+            toneCurvesSection(grade: grade)
         }
+    }
+
+    // MARK: - Tone Curves (iOS curve editing — Mac Inc 6 parity, touch-first)
+
+    private enum CurveChannel: String, CaseIterable, Identifiable {
+        case master, red, green, blue
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .master: "Master"
+            case .red: "Red"
+            case .green: "Green"
+            case .blue: "Blue"
+            }
+        }
+    }
+
+    @State private var selectedCurveChannel: CurveChannel = .master
+
+    /// Common curve shapes as presets — the touch-first alternative to the
+    /// Mac's draggable canvas. Each preset produces 3 control points
+    /// (endpoints + a midpoint at x=0.5).
+    private enum CurvePreset: String, CaseIterable, Identifiable {
+        case linear = "Linear"
+        case sCurve = "S-Curve"
+        case fadeUp = "Fade Up"
+        case fadeDown = "Fade Down"
+        case boost = "Boost"
+        case reduce = "Reduce"
+        var id: String { rawValue }
+
+        /// The midpoint's y value for this preset.
+        var midpointY: Double {
+            switch self {
+            case .linear: 0.5
+            case .sCurve: 0.5   // S-shape handled by a 3-point arrangement
+            case .fadeUp: 0.65
+            case .fadeDown: 0.35
+            case .boost: 0.55
+            case .reduce: 0.45
+            }
+        }
+
+        func points() -> [CurvePoint] {
+            let mid = midpointY
+            switch self {
+            case .linear:
+                return ColorCurves.identityPoints
+            case .sCurve:
+                // An S: shadows darken, highlights brighten
+                return [
+                    CurvePoint(x: 0, y: 0),
+                    CurvePoint(x: 0.25, y: 0.15),
+                    CurvePoint(x: 0.75, y: 0.85),
+                    CurvePoint(x: 1, y: 1),
+                ]
+            default:
+                return [
+                    CurvePoint(x: 0, y: 0),
+                    CurvePoint(x: 0.5, y: mid),
+                    CurvePoint(x: 1, y: 1),
+                ]
+            }
+        }
+    }
+
+    private func toneCurvesSection(grade: ColorGrade) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Tone Curves")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Picker("Channel", selection: $selectedCurveChannel) {
+                ForEach(CurveChannel.allCases) { channel in
+                    Text(channel.displayName).tag(channel)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            // Mini curve preview — sampled through the SAME evaluator the
+            // renderer consumes, so what you see is what renders.
+            curvePreview(for: selectedCurveChannel, in: grade)
+                .frame(height: 80)
+                .aspectRatio(1.6, contentMode: .fit)
+
+            // Preset chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(CurvePreset.allCases) { preset in
+                        presetChip(preset, for: selectedCurveChannel, in: grade)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A small curve visualization sampled through CurveEvaluator.
+    private func curvePreview(for channel: CurveChannel, in grade: ColorGrade) -> some View {
+        let curves = grade.curves ?? .identity
+        let points: [CurvePoint]
+        switch channel {
+        case .master: points = curves.master
+        case .red: points = curves.red
+        case .green: points = curves.green
+        case .blue: points = curves.blue
+        }
+
+        return Canvas { context, size in
+            // Identity diagonal reference
+            var diagonal = Path()
+            diagonal.move(to: .zero)
+            diagonal.addLine(to: CGPoint(x: size.width, y: size.height))
+            context.stroke(diagonal, with: .color(.secondary.opacity(0.3)), style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+
+            // The curve
+            var path = Path()
+            let samples = 48
+            for index in 0...samples {
+                let x = Double(index) / Double(samples)
+                let y = CurveEvaluator.evaluate(points: points, at: x)
+                let point = CGPoint(x: size.width * x, y: size.height * (1 - y))
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            context.stroke(path, with: .color(.accentColor), lineWidth: 2)
+        }
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel("Tone curve preview, \(channel.displayName)")
+        .accessibilityValue(
+            points == ColorCurves.identityPoints ? "Identity" : "\(points.count - 2) control points"
+        )
+    }
+
+    private func presetChip(_ preset: CurvePreset, for channel: CurveChannel, in grade: ColorGrade) -> some View {
+        let curves = grade.curves ?? .identity
+        let channelPoints: [CurvePoint]
+        switch channel {
+        case .master: channelPoints = curves.master
+        case .red: channelPoints = curves.red
+        case .green: channelPoints = curves.green
+        case .blue: channelPoints = curves.blue
+        }
+        let isActive = channelPoints.map { CurvePoint(x: $0.x, y: $0.y) } == preset.points().map { CurvePoint(x: $0.x, y: $0.y) }
+
+        return Button(preset.rawValue) {
+            applyCurvePreset(preset, to: channel, in: grade)
+        }
+        .font(.caption2.weight(isActive ? .semibold : .regular))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background {
+            if isActive {
+                Capsule().fill(Color.accentColor.opacity(0.2))
+            } else {
+                Capsule().fill(.quaternary)
+            }
+        }
+        .accessibilityLabel("\(preset.rawValue) curve preset")
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Applies a curve preset to the selected channel, preserving the other
+    /// channels. All-identity → nil commit keeps JSON byte-stable.
+    private func applyCurvePreset(_ preset: CurvePreset, to channel: CurveChannel, in grade: ColorGrade) {
+        var curves = grade.curves ?? .identity
+        let points = preset.points()
+        switch channel {
+        case .master: curves.master = points
+        case .red: curves.red = points
+        case .green: curves.green = points
+        case .blue: curves.blue = points
+        }
+
+        let updated = ColorGrade(
+            lift: grade.lift,
+            gamma: grade.gamma,
+            gain: grade.gain,
+            hslBands: grade.hslBands,
+            curves: curves.isIdentity ? nil : curves
+        )
+        Task { await viewModel.updateSelectedColorGrade(updated) }
     }
 
     private var maskSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("마스크")
+            Text("Mask")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
             if let mask = clip.mask {
                 HStack {
-                    Text("형태")
+                    Text("Shape")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(mask.shape.displayName)
                         .font(.caption)
                 }
-                inspectorSlider(title: "페더", value: mask.feather, range: 0...1, binding: maskFeatherBinding())
+                inspectorSlider(title: "Feather", value: mask.feather, range: 0...1, binding: maskFeatherBinding())
             } else {
-                Text("마스크 없음")
+                Text("No Mask")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -260,7 +447,7 @@ struct IOSEffectsInspectorView: View {
     private var effectsListSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("이펙트")
+                Text("Effects")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -275,7 +462,7 @@ struct IOSEffectsInspectorView: View {
             }
 
             if clip.effects.isEmpty {
-                Text("이펙트 없음")
+                Text("No Effects")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -312,7 +499,7 @@ struct IOSEffectsInspectorView: View {
     private var volumeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("볼륨")
+                Text("Volume")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
@@ -329,13 +516,13 @@ struct IOSEffectsInspectorView: View {
 
     private var fadeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("페이드")
+            Text("Fade")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("페이드 인")
+                    Text("Fade In")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -351,7 +538,7 @@ struct IOSEffectsInspectorView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("페이드 아웃")
+                    Text("Fade Out")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

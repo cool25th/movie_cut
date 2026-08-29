@@ -302,13 +302,25 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     at: request.compositionTime
                 )
                 let outgoingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                    to: Self.fittedToCanvas(
+                        Self.orientedForDisplay(
+                            RenderColorConfiguration.sourceImage(from: outgoingBuffer),
+                            preferredTransform: outgoingEffect?.sourcePreferredTransform ?? .identity
+                        ),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: outgoingEffect,
                     instruction: instruction,
                     request: request
                 )
                 let incomingImage = self.applyClipEffects(
-                    to: RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                    to: Self.fittedToCanvas(
+                        Self.orientedForDisplay(
+                            RenderColorConfiguration.sourceImage(from: incomingBuffer),
+                            preferredTransform: incomingEffect?.sourcePreferredTransform ?? .identity
+                        ),
+                        canvasSize: request.renderContext.size
+                    ),
                     effect: incomingEffect,
                     instruction: instruction,
                     request: request
@@ -346,10 +358,24 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 return
             }
 
-            var image = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            // BUG-06 root cause: source frames rendered 1:1 at the origin —
+            // any clip whose aspect differs from the canvas exported as a tiny
+            // corner sliver over black (mean luma collapses by the area ratio,
+            // e.g. 320×240 in 1920×1080 → 124→4.6). Aspect-fit + center every
+            // source into the render canvas BEFORE effects/overlays so the
+            // composited frame IS the canvas.
+            // BUG-07: composition source frames arrive in STORAGE orientation
+            // — orient them with the track's rotation metadata before the fit.
+            let effect = instruction?.effect(for: trackID, at: request.compositionTime)
+            var image = Self.fittedToCanvas(
+                Self.orientedForDisplay(
+                    RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                    preferredTransform: effect?.sourcePreferredTransform ?? .identity
+                ),
+                canvasSize: request.renderContext.size
+            )
 
             if let instruction {
-                let effect = instruction.effect(for: trackID, at: request.compositionTime)
                 image = self.applyClipEffects(
                     to: image,
                     effect: effect,
@@ -405,13 +431,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     /// opacity and blending are both reflected. Finally the primary is laid on
     /// top using its own blend mode.
     ///
-    /// **Pixel-identity gate (Requirement 4.3).** This step is skipped entirely
-    /// — returning `primaryImage` untouched — unless at least one active clip
-    /// (the primary included) carries a non-`.normal` blend mode. A project
-    /// that never sets a blend mode therefore renders byte-identically to
-    /// before this feature existed, including the pre-existing single-track
-    /// custom-compositor behavior. The multi-track layering only engages when
-    /// blending is actually requested.
+    /// **Pixel-identity gate (Requirement 4.3, revised for BUG-08).** The
+    /// frame is returned untouched only when NO other source track is active
+    /// beneath the primary — single-active-track frames stay byte-identical
+    /// to the pre-feature renderer. When a second track IS active, source-over
+    /// layering always runs: a `.normal` top clip with opacity < 1, a mask,
+    /// or a crop leaves canvas regions where the track beneath must show
+    /// through, so layering can no longer be gated on blend modes alone
+    /// (the 2026-08-26 review's dropped-overlay defect, Mac+iOS parity).
     private func layerActiveTracks(
         over primaryImage: CIImage,
         primaryEffect: CustomCompositionClipEffect?,
@@ -425,22 +452,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 && CMTimeRangeContainsTime(effect.timeRange, time: request.compositionTime)
         }
 
-        // Pixel-identity gate: if no active clip (primary included) uses a blend
-        // mode, the frame is returned as-is so exports are unchanged for
-        // `.normal`-only projects (Requirement 4.3).
-        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
-        let needsBlending = primaryBlendMode != .normal
-            || activeEffects.contains { $0.blendMode != .normal }
-        guard needsBlending else {
-            return primaryImage
-        }
-
-        // No other active track beneath the primary: there is nothing to blend
-        // against, so the primary frame is returned as-is. The canvas background
-        // is composited separately afterwards by CanvasBackgroundPixelProcessor.
+        // Pixel-identity passthrough: no other active track beneath the
+        // primary means there is nothing to layer — the frame returns as-is
+        // (single-track byte identity, the original Requirement 4.3 concern).
         guard !activeEffects.isEmpty else {
             return primaryImage
         }
+
+        let primaryBlendMode = primaryEffect?.blendMode ?? .normal
 
         // `clipEffects` is ordered bottom-to-top by z-order (matching the
         // layer-instruction construction in the engines). Build the backdrop by
@@ -453,7 +472,16 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 continue
             }
 
-            var layerImage = RenderColorConfiguration.sourceImage(from: sourceBuffer)
+            // BUG-06/BUG-07 residuals (2026-08-26, 후속 관찰 상환): the lower
+            // layer needs the SAME orientation + canvas fit the primary gets —
+            // raw storage frames here rendered sideways at natural size.
+            var layerImage = Self.fittedToCanvas(
+                Self.orientedForDisplay(
+                    RenderColorConfiguration.sourceImage(from: sourceBuffer),
+                    preferredTransform: effect.sourcePreferredTransform
+                ),
+                canvasSize: request.renderContext.size
+            )
             layerImage = applyClipEffects(
                 to: layerImage,
                 effect: effect,
@@ -604,6 +632,51 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
 
         return image
+    }
+
+    /// Aspect-fits and centers a source frame into the render canvas.
+    /// Identity-transform clips previously rendered 1:1 at the corner; content
+    /// smaller than the canvas left the rest black (BUG-06 / CA-04).
+    static func fittedToCanvas(_ image: CIImage, canvasSize: CGSize) -> CIImage {
+        let extent = image.extent
+        guard !extent.isEmpty,
+              extent.width > 0, extent.height > 0,
+              canvasSize.width > 0, canvasSize.height > 0 else { return image }
+        let scale = min(
+            canvasSize.width / extent.width,
+            canvasSize.height / extent.height
+        )
+        let scaledWidth = extent.width * scale
+        let scaledHeight = extent.height * scale
+        let dx = (canvasSize.width - scaledWidth) / 2 - extent.minX * scale
+        let dy = (canvasSize.height - scaledHeight) / 2 - extent.minY * scale
+        return image
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: dx, y: dy))
+            .cropped(to: CGRect(origin: .zero, size: canvasSize))
+    }
+
+    /// BUG-07: orients a storage-oriented source frame upright using the
+    /// track's rotation metadata. Cardinal rotations (the only kind cameras
+    /// write) map to CIImage orientations, which handle the Quartz y-up
+    /// bookkeeping; non-cardinal transforms are left untouched (v1 contract).
+    static func orientedForDisplay(
+        _ image: CIImage,
+        preferredTransform: CGAffineTransform
+    ) -> CIImage {
+        guard preferredTransform != .identity else { return image }
+        let angle = atan2(preferredTransform.b, preferredTransform.a)
+        let orientation: CGImagePropertyOrientation
+        if abs(angle - .pi / 2) < 0.01 {
+            orientation = .right
+        } else if abs(angle + .pi / 2) < 0.01 {
+            orientation = .left
+        } else if abs(abs(angle) - .pi) < 0.01 {
+            orientation = .down
+        } else {
+            return image
+        }
+        return image.oriented(orientation)
     }
 
     private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {

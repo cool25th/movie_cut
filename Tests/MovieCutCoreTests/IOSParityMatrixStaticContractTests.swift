@@ -99,7 +99,11 @@ struct IOSParityMatrixStaticContractTests {
         #expect(iosCompositor.contains("TextOverlayPixelProcessor.apply"))
         #expect(iosCompositor.contains("CanvasBackgroundPixelProcessor.compose"))
 
-        #expect(iosPreview.contains("ColorCorrectionPixelProcessor.apply"))
-        #expect(iosPreview.contains("ColorGradePixelProcessor.apply"))
+        // RENDER-01: the preview delegates ALL processing to the shared
+        // render plan (the compositor above carries the processors); it must
+        // not reimplement any pipeline inline.
+        #expect(iosPreview.contains("makeRenderPlan(for: project)"))
+        #expect(!iosPreview.contains("applyFilterPipeline"))
+        #expect(!iosPreview.contains("ColorCorrectionPixelProcessor.apply"))
     }
 }

@@ -3,7 +3,133 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
-## 2026-08-24 세션 (CA-06 접근성 핵심 경로 매트릭스 — P0-D 4종 완료)
+## 2026-08-26 세션 (G-02 Inc 6 완료 — 톤 커브 에디터 UI·커브 단독 파리티)
+
+- **ColorCurvesView 신규**(Mac 인스펙터, HSL 밴드 하위): 마스터/R/G/B 채널 4종 드래그 캔버스 — 커브는 렌더러가 소비하는 동일 `CurveEvaluator`로 샘플링(보이는 곡선=렌더 곡선), 끝점 (0,0)/(1,1) 고정·내부 점 드래그(x를 이웃 사이로 클램프해 단조 유지), Add Point(최대 폭 구간 중점 — 결정적·포인터 없이 접근 가능)·Remove·채널 리셋. **커밋 규율(Inc 5 동일)**: 드래그 중 로컬 드래프트, 제스처 종료 시 4채널 전체 단일 커맨드(undo 1-step/gesture), 전 채널 identity면 nil 커밋(미그레이션 JSON 바이트 안정). 스키마 무변경.
+- **파리티 #16 `curves_only` 신설**(하니스 `MOVIECUT_UITEST_CURVES=1` — 마스터 S-커브+레드 리프트, 3-way·밴드 없음): 밴드 체인(#15)과 커브 체인의 독립 분리 — **실측 PASS MAD 0.43**(허용치 2.0, t=0.5/1.5 양 지점). VERIFICATION_STANDARD 표 16번으로 등록(기존 16/17은 17/18로 이동).
+- **테스트**: `ColorCurvesEditorCommitTests` 3종(identity→nil 매핑·4채널 전체 커밋·커밋 점의 평가기 단조성) — Mac 유닛 48/48. 게이트 **PASS**(Core 1,416·208스위트·Mac/iOS 빌드·lint 5/5).
+- **잔여 기록**: iOS 커브 편집 UI 미연결(값 통과만 존재 — 후속 관찰). ui_regression 골든은 인스펙터 UI 변경으로 의도 드리프트 예상 — AX 환경 차단(U-08 회차 판정)으로 갱신 불가, 환경 복구 시 with_color_grade 상태 골든 갱신 필요.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **G-01 잔여 Inc 점검 후 착수**(v1.6 체인 — Inc2 카라오케·Inc3 스타일 6종은 완료 이력이므로 백로그에서 실제 잔여 Inc를 먼저 확인) ② 이후 백로그 점검. **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
+## 2026-08-26 세션 (U-08 착수 → 환경 차단 판정 — System Events AX 창 쿼리 머신 전체 불가)
+
+- **실측**: `ui_regression.sh` 4상태(import_only·populated_editor·with_color_grade·with_mask) 전부 **WINDOW_COUNT_0** — 앱 자체는 정상 기동(하니스 임포트·CoreMedia 첫 프레임 재생 로그 확인)하나 osascript System Events가 창을 0개로 카운트.
+- **원인 판정(제품 아님)**: 보장된 창을 가진 TextEdit 프로브에서도 `count of windows` = 0(프로세스 목록은 정상) — **AX 창 쿼리가 머신 전체에서 불가**. MACUI-01(러너 "hung before establishing connection")과 동일 접근성/TCC 클래스. 골든 4종 자체는 이미 커밋돼 있으므로(5945243 등), U-08 잔여는 ①4상태 회귀 PASS 실측 ②클릭수 metric(AX 구동 필요) — 둘 다 이 환경이 복구돼야만 측정 가능.
+- **조치**: 게이트 규율(원인 명확한 실패는 재시도 없이 중단·보고)에 따라 U-08을 사용자 조치 대기로 이동, 다음 자율 증분은 **G-02 Inc 6**으로 큐 정리(f31e326). **사용자 조치**: 시스템 설정 → 개인정보 보호 → 접근성에서 터미널/osascript 호스트에 권한 부여(또는 재부팅) — MACUI-01 조치와 동일.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **G-02 Inc 6**(커브 에디터 UI — Mac 인스펙터 내 커브 편집 컨트롤) ② G-01 Inc 2~4. **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 잔여(TCC 접근성/재부팅)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
+## 2026-08-26 세션 (G-15 AC7 완료 — 대형 이미지 다운스케일 검증)
+
+- **G-15 AC7**: 24MP(6000x4000) 비대칭 PNG 소스가 `kCGImageSourceThumbnailMaxPixelSize`를 통해 **캔버스 해상도 상한으로 다운스케일**됨을 3종 테스트로 고착: ①1080p 캔버스에서 출력 트랙 1920x1080(원본 6000x4000 아님) ②4K 캔버스에서 3840x2160 ③Ken Burns 2x 줌에서도 출력은 캔버스 크기 유지(로드 상한 = 캔버스장변 × 최대줌 = 3840px — 원본 6000px보다 작음).
+- **v1.6 체인 갱신**: G-15 잔여는 AC4(사용자 실기기)뿐 → 다음 자율 선택은 **U-08 잔여(4표면 골든·클릭수 metric)** → G-02 Inc 6(커브 에디터 UI) → G-01 Inc 2~4.
+- **검증**: Core 1,416(3종 신규)·verify_gate 5/5.
+- 커밋: 9fe5446.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① U-08 잔여(4표면 골든·클릭수 metric — `scripts/ui_capture.sh`·`ui_regression.sh` 인프라 존재, 골든 확장 필요) ② G-02 Inc 6(커브 에디터 UI — Mac 인스펙터 내 커브 편집 컨트롤) ③ G-01 Inc 2~4. **사용자 대기**: G-27 실기기 2종·MACUI-01(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
+## 2026-08-26 세션 (후속 관찰 2건 상환 — Mac 하위 트랙 오리엔테이션·핏 + 회전×전환 실측)
+
+- **(a) Mac 하위 트랙 결함(BUG-06/07 잔존)**: `layerActiveTracks`의 하위 레이어가 `orientedForDisplay`도 `fittedToCanvas`도 없이 raw storage 프레임을 쓰고 있었음 — 회전 소스가 오버레이 아래에서 옆으로 누운 채 자연 크기로 렌더. iOS 패리티로 둘 다 적용(6499efc). 검증: 비대칭 회전 픽스처(320x240 + 90°)를 하위 트랙으로, 30% 불투명도 오버레이를 얹어 세로 캔버스에서 밴드 실측 — 상=적/하=청 upright 확인(옆으로 누웠으면 좌측 1/3만 적색 = 밴드 신호 소멸).
+- **(b) 회전×전환 조합(iOS)**: 회전된 outgoing 클립이 전환 보유 트랙에서 창 전 upright·창 후 incoming 청색 지배 — 2-소스 전환 브랜치의 오리엔테이션 경로가 테스트 없이 방치돼 있던 것을 고착.
+- **검증**: Mac 45/45(신규 1)·iOS 48/48(신규 1)·verify_gate 5/5(Core 1,413).
+- **큐 상태**: §1.12 + 후속 관찰까지 전부 소진. 남은 것은 사용자 대기 3종뿐.
+
+### 다음 회차 — LOOP_STATE 우선순위
+자율 큐 소진 — 게이트 확인 후 보고로 마침. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01(TCC/재부팅)·PARITY-TOL-01(승인).
+
+## 2026-08-26 세션 (RENDER-02 해결 — 태그된 라이터 전환·드리프트 21→3.09·교착/측정결함 3건 실측 고착)
+
+- **본 증분**: iOS `exportProject`를 `AVAssetExportSession` 프리셋 → `AVAssetWriter`(플래너 출력 설정, SDR H.264 Rec.709 명시 태그) + `AVAssetReader` 출력으로 전면 교체. 프리뷰↔출력 luma 드리프트 **~21/255 → 3.09 실측 붕괴**, 파리티 밴드 26 → **<8**로 조임(태그 회귀 시 ~21 복귀로 즉시 실패).
+- **함정 3건(전부 실측으로 확정·고착)**: ①**교착** — 오디오 writer input 존재 시 비디오 pump 단독 선행이 비디오 큐를 영구 정지(오디오 포함 컴포지션 전부 행업, 뮤트·무오디오 정상, hung 프로세스 스택샘플 = MediaToolbox 전 파이프라인 유휴, 이분법 진단으로 트리거 특정) → **태스크그룹 병렬 pump**로 해결. ②리더가 라이터의 48k 스테레오 포맷으로 변환해 AAC 입력 정합. ③**테스트 측정 버그** — RMS 측정이 interleaved 스테레오를 mDataByteSize/4로 읽어 타임라인 2배+채널 교차("페이드 왜곡"의 진범; 모노 44.1k 프리셋 시대 은폐) → 채널 스트라이드 추출 수정. **교훈: 측정 도구 자체를 먼저 의심하라 — ffprobe 교차검증이 진범 규명의 결정타.**
+- **검증(전부 실측)**: iOS 전체 47/47(오디오 페이드·이미지 E2E·전환·회전의 export 다리가 전부 새 라이터 탑승) · verify_gate 5/5(Core 1,413·207스위트).
+- **큐 상태**: §1.12 리뷰 파생 자율 항목 전부 소진. 잔여는 사용자 대기 3종(G-27 실기기·MACUI-01·PARITY-TOL-01) + 후속 관찰 2건.
+
+### 다음 회차 — LOOP_STATE 우선순위
+자율 큐 소진 상태 — 게이트 확인 후 보고로 마침. 신규 자율 후보는 외부 리뷰/감사 등록 시에만 추가. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01(TCC/재부팅)·PARITY-TOL-01(승인).
+
+## 2026-08-26 세션 (루프 회차 — SURV-01 2차 완료, 중단 WIP 인계 마무리)
+
+- **경위**: 4시간 루프 회차가 06:05경 증분 중간에 중단되며 미커밋 WIP 6파일을 남김(상대 참조 필드·재결합·relink UI·정리 정책의 정합적 구현). 후속 수동 회차가 프로토콜 0로 인수 — 타 세션 부재 확인(타임스탬프 2시간 경과·실행 중 프로세스 없음) 후 diff 전수 검토·의존성 확인 후 검증 마무리.
+- **SURV-01 2차 내용**: ①`MediaAsset.managedImportPath`(상대 참조, Codable 하위호환) ②`ProjectStore.rebaseManagedImports` — 복구 로드 시 죽은 절대경로(재설치·기기 복원으로 컨테이너 경로 변경)를 상대 참조 → 레거시 `/MovieCut/Imports/<projectId>/<file>` 접미사 매칭 순으로 재결합 ③relink UI — 결측 배너 + fileImporter, 교체본을 관리 루트로 복사해 **자산 UUID를 유지한 채 재결합**(클립 참조 보존, Mac `relinkMedia` 패리티) ④`cleanupOrphanedImports` — 미참조 프로젝트 디렉터리 7일 유예 후 정리.
+- **검증(전부 실측)**: `IOSMediaSurvivabilityTests` 6/6(상대/레거시 재결합·relink E2E·정리 정책 4종 신설) · iOS 47/47(12스위트) · verify_gate 5/5(Core 1,413·207스위트). 로컬라이제이션 키(신규 3)·Hangul 리터럴 검사 PASS.
+- **함정 기록**: 루프 회차의 중단 잔존 WIP는 프로토콜 0(검증 후 커밋)으로 회수 가능하나, 인수 전 반드시 (a)타임스탬프 경과 확인 (b)실행 중 빌드 프로세스 부재 확인 (c)diff 전수 검토를 거칠 것 — 이번 케이스의 3원칙.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **RENDER-02** — iOS 태그된 라이터 마이그레이션(색 파리티 26 밴드 근본 해법). ② 이후 백로그 "진행중/후속" 자율 항목. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01(TCC/재부팅)·PARITY-TOL-01(승인).
+
+## 2026-08-26 세션 (외부 리뷰 반영 — Phase 0~3 완료: 게이트 복구·P0 출력 정확성 5건·P1 생존성 6건·CI 승격)
+
+- **리뷰 검증**: 사용자 제공 리뷰 8건 전부 코드 대조로 확정(탐색 3패스+직접 열독), 백로그 §1.12에 GATE-01·BUG-08·BUG-IOS-08·G-15 AC6·BUG-IOS-09·BUG-IOS-10·STICKER-01·SURV-01·RACE-01·L10N-01 등록.
+- **Phase 0(게이트)**: `AudioComponentFindNext` 프로브 제거(전체 스위트 병렬 오디오 부하에서 교착 — 08-26 게이트 FAIL 직접 원인) + verify_gate 와치독 타임아웃(기본 900s)·tee 스트리밍. 2553919.
+- **Phase 1(P0 출력 정확성, 전부 픽셀 실측)**: ①BUG-08 멀티트랙 — **이중 결함 판명**: pixel-identity 게이트 제거(Mac+iOS) + iOS `includeIdentitySource` 누락(항등 클립 효과 미생성 — 게이트만 고쳐선 안 고쳐짐). 이색 픽스처(solid_red/solid_blue)로 opacity·마스크 오버레이 하단 기여 단언. 8702109. ②BUG-IOS-08 회전 — 효과에 sourcePreferredTransform 전달+컴포지터 3경로 `orientedForDisplay` 포팅; 비대칭 픽스처로 플랜 프레임+출력 디코드(autorotate) 양 다리 upright — 이중 회전 차단. ③G-15 AC5+AC6 — `ImageVideoRenderService` Core 이동(양플랫폼 공유), 이미지 사전 렌더 분기; PNG·HEIC·EXIF upright·사진 전용 export E2E. e99ac37. ④BUG-IOS-09 전환 — 2슬롯 트랙 교차+백타이밍+`makeTransitionEffects` 포팅(전환 없는 트랙은 단일 레이아웃·byte-identity 유지); 플랜 프레임에서 순수 적→혼합→순수 청 실측. 03359cb. ⑤BUG-IOS-10 오디오 — 렌더 계획에 audioMix(배치 구간 기반 램프), 프리뷰·출력 양쪽; 리더 경로+출력 파일 RMS 실측. 43a20d7.
+- **Phase 2(P1 생존성/안정성)**: RACE-01(프리뷰 세대 토큰+15fps CPU 오버레이 전면 제거)·STICKER-01(addSticker Mac 패리티)·autosave scenePhase 즉시 flush+플래키 테스트 폴링 전환(f184401) · L10N-01(한글 리터럴 31곳→카탈로그+18키 등록+`verify_no_hangul_literals.py` CI 차단, 4d881cb) · G-27 하니스 `makeRenderPlan` 구동 전환+레거시 `IOSPreviewCompositionBuilder` 삭제(012c10e) · SURV-01 1차(App Support/MovieCut/Imports 관리 루트+복구 시 결측 원본 표면화, a5474df — relink UI·상대경로 참조는 후속).
+- **Phase 3**: Mac 전체 유닛테스트 CI 차단 승격(44/44 반복 안정 확인 후 continue-on-error 제거) · 백로그 §0.5에 범위 경계 명문화("FCP급"은 선택 영역 한정 — 멀티캠·Auditions·플러그인 생태계 등 명시적 비목표).
+- **검증**: 최종 게이트 PASS(Core 1,413/207스위트·Mac/iOS 빌드·lint 5/5) · iOS 43/43(12스위트, 신설 5스위트) · Mac 44/44. 잔여 사용자 대기: G-27 실기기 2종·MACUI-01 TCC·PARITY-TOL-01 승인·RENDER-02 태그된 라이터(별도 증분).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① SURV-01 2차(상대 경로 참조·relink UI·정리 정책) ② G-27 실기기 2종(사용자 잠금 해제 대기)·MACUI-01(사용자 TCC 조치 대기) ③ RENDER-02(iOS 태그된 라이터 — 색 패리티 26 밴드 근본 해법). PARITY-TOL-01 승인 대기 유지.
+
+## 2026-08-25 세션 (BUG-07 해결 — 회전 메타데이터 3경로 평행 수정·매트릭스 방향 어설션 승격)
+
+- **실측 판정**: 비대칭(좌=적/우=청) 회전 픽스처 신설(`ca04_rotated_asym_320x240_2s_90deg.mp4`, AVAssetWriter 생성기 확장) — BUG-07은 **실제 결함**: 회전된 표시 크기(240×320)로 핏 스케일만 계산하고 픽셀은 옆으로 누운 채 1080×810 상단 고정 렌더(BUG-06 핏 수정과의 상호작용). ffmpeg autorotate 기준값: 바로 세우면 **상=적/하=청**.
+- **3경로 수정**: ① 평문 출력 `ExportEngine.rotationAwareFitTransform` — 회전→핏 순 결합(**`concatenating`은 self-먼저·인자-나중 적용임을 실증 판명** — 순서 틀리면 콘텐츠가 캔버스 밖으로 감) ② 프리뷰 동일 결합 + **유저 변환 `.sourceFrame` 앵커에서 pt 제거**(앵커의 base가 pt 자체라 이중 적용 — "항등" 클립도 pt를 실음) + 컴포지션 트랙 pt identity 통일 ③ 커스텀 컴포지터 `orientedForDisplay`(±90°/180° → CIImage 오리엔테이션, `CustomCompositionClipEffect.sourcePreferredTransform` 플러밍 — 엔진·프리뷰 양쪽).
+- **검증(전부 실측)**: 엑스포트+프리뷰 프레임 픽셀 측정 모두 **상=적(R237)/하=청(B235)·마진 흑색 PASS** · 오리엔테이션 유닛 4종 신설(±90°·180°·항등 — 픽셀 렌더 측정, Mac 42/42) · **CA-04 매트릭스 PASS — rotated 시나리오 방향 어설션 승격, BUG-07 REG 소멸** · verify_gate 1,413·5/5.
+- **범위 외 기록**: `layerActiveTracks` 보조 블렌드 트랙은 캔버스 핏 없이 자연 크기(BUG-06 잔존 별도 결함 가능성) — 회전+전환 조합·iOS 회전 경로(RENDER-01 통합 후에도 pt 미결합 가능)도 후속 관찰 대상. ExportEngine:388(트랙 pt 설정)은 엑스포트 렌더 결과와 무관임을 실험 확인 — 유지.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① RENDER-02(P2) 범위 태깅 ② G-27 실기기 2종(사용자 잠금 해제 대기)·MACUI-01(사용자 TCC 조치 대기) ③ 잔여 소형(A11Y-01·UX-REC-01/02 등). PARITY-TOL-01 승인 대기 유지.
+
+## 2026-08-25 세션 (BUG-06 사후 독립 검증 — REG 소멸·회귀 없음 확인, 문서 세션)
+
+- **검증(전부 HEAD=62a0ba2 실측)**: tenbit 익스포트 **4회 연속 결정적**(bytes=922751 동일·전체 평균 92.6 — 필러박스 콘텐츠 75% 수학 부합)·t=1.0 프레임 시각 확인(전면 밝은 테스트 패턴)·**CA-04 매트릭스 PASS**(콘텐츠 영역 luma 123.5 vs 소스 124.4 Δ0.9 — **BUG-06 REG 소멸**, tenbit은 ±6 어설션 정식 가드로 상시화)·**G-24 게이트 PASS**(ratio 0.357·severe wobble 0·bypass 0 — RENDER-01/CANVAS-01 렌더 통합의 회귀 없음).
+- **판정**: 세션 exec 로그에 남은 G-24 FAIL(ratio 1.534)은 **2026-08-20 18:26 구버전 실행분** — ec5c9e3(08-25 08:31) 이전 아티팩트로 폐기.
+- **문서 정정**: AUDIT_INPUT_FORMATS — 매트릭스 10-bit 행을 해결 후 재실측치로 갱신(원인 재판정 명시), RenderColorConfiguration 코드경로 노트 정정(near-black 원인은 8비트 변환 경로가 아닌 범용 aspect-fit 부재). 코드 변경 없음.
+
+### 다음 회차 — LOOP_STATE 우선순위 그대로
+① **BUG-IOS-06** 공통 파일 기반 임포터 통합 → ② AUTOSAVE-02 직렬화+UI → ③ MACUI-01 러너 복구·CI 차단화 → ④ BUG-07 비대칭 픽스처 회전 실측·G-27 실기기 2종. PARITY-TOL-01 승인 대기 유지.
+
+## 2026-08-25 세션 (BUG-IOS-06·AUTOSAVE-02 수정, MACUI-01 진단)
+
+- **BUG-IOS-06**: `IOSEditorViewModel.importFromPhotosPicker(_:)` 단일 공유 임포터 — 상단 피커·MediaBrowserView 모두 호출, 뷰 로컬 Data 적재 복사 폐지.
+- **AUTOSAVE-02**: 직렬 coordinator(세대 번호·150ms 디바운스·최신 스냅샷만 기록·세대 일치 시에만 상태 갱신) + 상단 주황 실패 배너(en/ko) + `lastAutosaveLoadFailure` 소비(손상 복구 파일 제거 안내).
+- **MACUI-01 진단**: 단일 최소 테스트도 러너가 "hung before establishing connection" — stale 정리·양쪽 부호화 모드·크래시 리포트 확인 전부 시도, 제품 결함 아닌 머신 환경(TCC/데몬) 판정. **사용자 조치**: 접근성·개발자 도구 권한 또는 재부팅.
+- iOS 29/29·게이트 5/5·지역화 양 플랫폼 PASS.
+
+### 다음 회차
+BUG-07(회전 비대칭 재실측) → RENDER-02(P2) → G-27 실기기·MACUI-01(사용자 대기). PARITY-TOL-01 승인 대기.
+
+## 2026-08-25 세션 (외부 리뷰 반영 — iOS ko 유실 발견·재적용, §1.11 등록, 계획 재편)
+
+- **리뷰 검증**: BUG-06 "REG 통과" 주장은 낡음(이미 해결·게이트 승격). **iOS ko 106 미커밋은 사실** — fbf3149 커밋이 Mac 카탈로그만 담음(병렬 경합 유실), 커밋 메시지가 양쪽이라 주장해 기록 오류였음. iOS 프리뷰/익스포트 이중 엔진·캔버스 게이트 부재·MediaBrowser Data 임포트·automsave UI 부재·Mac UI 러너 kill 전부 코드로 확인.
+- **즉시 수정**: iOS ko 106 재적용 + 양 카탈로그 en 결손(Mac 103·iOS 100) 보완 → en+ko 전량. CI: 현지화 검사 양 플랫폼 실행 + 키별 en·ko 번역값 존재 차단 검사 추가.
+- **§1.11 등록**: RENDER-01(P0 iOS 공통 render plan)·CANVAS-01·BUG-IOS-06 재개방·AUTOSAVE-02·MACUI-01.
+- **문서 정정**: CA-21 큐 행(UI 존재 — §H와 모순 해소)·CA-24 완료 처리·LOOP_STATE 전면 재작성(병렬 커밋이 이전 상태로 덮어쓴 것 복구).
+
+### 다음 회차 — 리뷰 권고 순서
+RENDER-01(iOS 렌더 통합+패리티) → CANVAS-01 → 임포터 통합 → AUTOSAVE-02 → MACUI-01 → BUG-07·G-27. PARITY-TOL-01 승인 대기.
+
+## 2026-08-24 세션 (CA-04 입력 포맷 호환 매트릭스 — 실측)
+
+**게이트**: `run_ca04_format_matrix.sh` PASS(등록 결함 REG 처리·신규 회귀만 차단) + verify_gate 5/5(1,413).
+
+### 완료 — 매트릭스 6차원 실측 (픽스처→앱 파리티 하니스→출력 ffprobe/픽셀)
+- **✅ VFR→CFR**: 100프레임@~20.1fps → 출력 30/1·149프레임·4.967s (지속시간 보존).
+- **✅ 혼합 fps(24+30)+오디오**: 출력 3.000s·**A/V Δ=0ms** — 최우선 회귀(동기) 통과.
+- **✅ BT.2020+PQ 태그**: 출력 bt709 재태그 — v1 SDR Rec.709 계약 종단 확인.
+- **❌ BUG-06 등록(P0)**: 10비트 ProRes 소스가 출력에서 **near-black(평균 휘도 124.4→4.6)** — RenderColorConfiguration의 8비트 변환 경로에서 색 해석 결함.
+- **⚠ BUG-07 등록(조사)**: 회전 메타데이터 효과 미실증 — 단색 픽스처 한계, 비대칭 픽스처 재실측 필요(preferredTransform 전달 코드는 존재).
+- **픽스처 인프라**: VFR·회전은 AVAssetWriter 생성기 신설(`ca04_avfoundation_fixture_gen.swift` — ffmpeg 8.1.1은 디스플레이 매트릭스 출력 불가·setpts는 CFR 강제) + 10bit ProRes·BT.2020 태그 ffmpeg 생성. 매트릭스 스크립트는 등록 결함 허용 게이트로 상시 가동.
+
+### 다음 회차
+1. **BUG-06** 10비트 near-black 재현 최소화(유닛)→픽셀 수정 (P0 — 매트릭스 REG 소멸이 완료 판정).
+2. BUG-07 비대칭 픽스처로 회전 실측. 3. CA-05 실패·복구 UX 매트릭스·CA-06 접근성. 실기기 2종 연결 시 G-27 계속.
+
+ 세션 (CA-06 접근성 핵심 경로 매트릭스 — P0-D 4종 완료)
 
 - `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md` — 핵심 경로(임포트→편집→출력) × VoiceOver/키보드, 파일:라인 근거. **Mac 전 충족**(UX-08 계약 5종 + 43 메뉴 단축키 + 실패 경로 표면화). **iOS 차단 발견**: A11Y-01(P1 — 자막·필터·크로마키·효과·어시스턴트 뷰 VoiceOver 라벨 0건) 등 §1.10.
 - 인스펙터 세그먼트 Picker 라벨 접힘 수정(`.labelsHidden()`, VoiceOver 라벨 유지) — 외부 리뷰 UI 지적 2건 중 1건 해소. 스켈리톤 카드는 VO 숨김 정상, 시각 UX로 A11Y-03 등록.
@@ -1131,7 +1257,16 @@ P2-G24-1 — StabilizationMetrics(잔류 변위 중앙값·크롭 비율·워블
 5. 장형(≥10분) fixture 제작 후 `run_latency_baseline.sh` 재측 — SLO "10분 프로젝트 열기 3초"의 원 의미 실측.
 
 ### 사용자 결정 대기 사항
-- 없음(§7 열린 결정은 기본 채택값으로 진행 중). Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.## 2026-08-24 세션 (잔여 소형 4건 — UX-REC-01/02·BUG-IOS-06·ko 번역)
+- 없음(§7 열린 결정은 기본 채택값으로 진행 중). Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.## 2026-08-24 세션 (iOS 출력 golden 테스트 — 실제 익스포트 버그 포획·수정)
+
+- `IOSExportEngineBehaviorTests` 4종: 실제 엔진·표준 픽스처로 2x/0.5x 출력 길이·프리즈 지속·프레임 색(솔리드 레드) 검증.
+- **P0급 버그 발견·수정**: `insertVideoTrack`이 항상 오디오 composition 트랙를 추가 — 오디오 없는 소스는 빈 트랙 잔존 → `AVAssetExportSession`이 -11838으로 전체 익스포트 실패. 빈 트랙 제거로 수정(빈 트랙 `timeRange`는 0이 아닌 invalid/NaN — `!isValid` 포함). 바이섹트 진단(원시 경로·transform·네트워크 최적화·빈 오디어 트랙 순 차등)으로 원인 확정.
+- iOS 21/21·게이트 5/5(1,413). §1.8~1.10 등록 결함 전량 수정 상태 유지.
+
+### 다음 회차
+CA-04 통합(병렬) → BUG-01 백오프·북마크 자동 치유(P2) → 실기기 G-27.
+
+## 2026-08-24 세션 (잔여 소형 4건 — UX-REC-01/02·BUG-IOS-06·ko 번역)
 
 **게이트**: 5/5(1,413)·Mac 38/38·iOS 17/17·지역화 검증기 PASS(332 키/455 카탈로그).
 

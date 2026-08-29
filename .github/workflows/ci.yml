@@ -56,15 +56,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             test
 
-      - name: Run Mac app unit tests (best-effort)
-        continue-on-error: true
+      # Phase 3 (review 2026-08-26): the full Mac hosted suite is now
+      # BLOCKING. It ran clean across the BUG-08 compositor change and the
+      # multitrack pixel suites (44/44 locally, repeatedly); the historical
+      # best-effort treatment was for host-bootstrap flakes that have not
+      # recurred. Demote back to continue-on-error only if a runner-specific
+      # flake is demonstrated.
+      - name: Run Mac app unit tests (blocking)
         run: |
           xcodebuild -project MovieCut.xcodeproj \
             -scheme MovieCutMac \
             -destination 'platform=macOS' \
             -only-testing:MovieCutMacTests \
             CODE_SIGNING_ALLOWED=NO \
-            test || true
+            test
 
       - name: Build iOS app (generic, blocking)
         run: |
@@ -120,8 +125,34 @@ jobs:
         run: bash scripts/lint_gate.sh
       - name: Verify doc/command file paths (blocking)
         run: bash scripts/verify_doc_paths.sh
-      - name: Verify localization keys (blocking)
-        run: python3 scripts/verify_localization_keys.py
+      - name: Verify localization keys (blocking, both platforms)
+        run: |
+          python3 scripts/verify_localization_keys.py \
+            --catalog App/MovieCutMac/Localizable.xcstrings --source-root App/MovieCutMac
+          python3 scripts/verify_localization_keys.py \
+            --catalog App/MovieCutiOS/Localizable.xcstrings --source-root App/MovieCutiOS
+          # L10N-01 (review 2026-08-26): no hardcoded Hangul string literals
+          # in the iOS app sources — they bypass the catalog and show Korean
+          # in every environment.
+          python3 scripts/verify_no_hangul_literals.py
+          # Every key in BOTH catalogs must carry an en AND ko translation —
+          # a Mac-only fill once slipped through when the iOS catalog change
+          # was lost to a concurrent-write race (external review finding).
+          python3 - <<'PY'
+          import json, sys
+          failed = False
+          for path in ["App/MovieCutMac/Localizable.xcstrings",
+                       "App/MovieCutiOS/Localizable.xcstrings"]:
+              strings = json.load(open(path))["strings"]
+              for key, entry in strings.items():
+                  locs = entry.get("localizations", {})
+                  for lang in ("en", "ko"):
+                      value = locs.get(lang, {}).get("stringUnit", {}).get("value", "")
+                      if not value:
+                          print(f"MISSING {lang}: {path} :: {key[:80]}")
+                          failed = True
+          sys.exit(1 if failed else 0)
+          PY
       - name: Report full SwiftLint findings (non-blocking)
         if: always()
         run: swiftlint lint --reporter github-actions-logging . || true

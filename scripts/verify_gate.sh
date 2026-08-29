@@ -29,16 +29,42 @@ else
 fi
 
 # --- step 2: swift test ---
-echo "[gate] step 2/5: swift test (full)" | tee -a "$LOG"
-TEST_OUT=$(swift test 2>&1)
-TEST_RC=$?
-echo "$TEST_OUT" >>"$LOG"
+# Streams output as it runs (tee into the gate log) instead of buffering via
+# command substitution, and runs under a watchdog so a hung test process cannot
+# stall the gate indefinitely. macOS ships no `timeout(1)`, so poll a background
+# job and kill it (plus its children) when the budget is breached. Override the
+# budget with SWIFT_TEST_TIMEOUT_S (default 900s, matching CI's 15 minutes).
+SWIFT_TEST_TIMEOUT_S="${SWIFT_TEST_TIMEOUT_S:-900}"
+echo "[gate] step 2/5: swift test (full, timeout ${SWIFT_TEST_TIMEOUT_S}s)" | tee -a "$LOG"
+SWIFT_TEST_OUT="$REPO_ROOT/.build-check/last_swift_test.out"
+: > "$SWIFT_TEST_OUT"
+swift test > >(tee -a "$SWIFT_TEST_OUT" | tee -a "$LOG") 2>&1 &
+TEST_PID=$!
+TEST_RC=0
+SECONDS=0
+while kill -0 "$TEST_PID" 2>/dev/null; do
+  if [ "$SECONDS" -ge "$SWIFT_TEST_TIMEOUT_S" ]; then
+    echo "[gate] swift test: TIMEOUT after ${SECONDS}s — killing pid $TEST_PID and children" | tee -a "$LOG"
+    pkill -P "$TEST_PID" 2>/dev/null
+    kill -TERM "$TEST_PID" 2>/dev/null
+    sleep 5
+    pkill -9 -P "$TEST_PID" 2>/dev/null
+    kill -9 "$TEST_PID" 2>/dev/null
+    TEST_RC=124
+    break
+  fi
+  sleep 5
+done
+if [ "$TEST_RC" -ne 124 ]; then
+  wait "$TEST_PID"
+  TEST_RC=$?
+fi
 # The definitive summary line looks like:
 #   "✔ Test run with 984 tests in 162 suites passed after 6.0 seconds."  (PASS)
 #   "✘ Test run with 984 tests in 162 suites failed after 6.0 seconds."  (FAIL)
 # Match the EXACT tail keyword on the summary line, and require exit code 0.
 # (Naive `grep failed` would false-positive on test NAMES like "A failed save...".)
-SUMMARY_LINE=$(echo "$TEST_OUT" | grep -E "Test run with [0-9]+ tests in [0-9]+ suites" | tail -1)
+SUMMARY_LINE=$(grep -E "Test run with [0-9]+ tests in [0-9]+ suites" "$SWIFT_TEST_OUT" | tail -1)
 echo "[gate] swift test summary: ${SUMMARY_LINE:-<no summary line>}" | tee -a "$LOG"
 if [ "$TEST_RC" -eq 0 ] && echo "$SUMMARY_LINE" | grep -q " suites passed "; then
   echo "[gate] swift test: OK" | tee -a "$LOG"

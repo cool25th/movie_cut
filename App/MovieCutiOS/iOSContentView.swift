@@ -3,9 +3,16 @@ import AVFoundation
 import MovieCutCore
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct IOSContentView: View {
     @State private var viewModel = IOSEditorViewModel()
+    // 리뷰 2026-08-26 (Phase 2): background 진입 시 즉시 autosave flush —
+    // 디바운스 대기 중 서스펜션되면 편집이 실종된다.
+    @Environment(\.scenePhase) private var scenePhase
+    // SURV-01 2차: missing-originals relink — the banner offers relocation,
+    // the importer picks the replacement for the first missing asset.
+    @State private var isRelinkImporterPresented = false
     @State private var selectedPhotosItem: PhotosPickerItem?
     @State private var isMediaBrowserPresented = false
     @State private var isInspectorPresented = false
@@ -73,6 +80,14 @@ struct IOSContentView: View {
             }
             .navigationTitle(viewModel.currentProject.name)
             .navigationBarTitleDisplayMode(.inline)
+            // 리뷰 2026-08-26 (Phase 2): leaving the foreground must flush the
+            // pending autosave immediately — the debounce never fires while
+            // suspended.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background || phase == .inactive {
+                    Task { await viewModel.flushAutosave() }
+                }
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button {
@@ -157,6 +172,66 @@ struct IOSContentView: View {
                 if viewModel.recoveredUnsavedWork {
                     isRecoveryPromptPresented = true
                 }
+            }
+            // AUTOSAVE-02: surface a failing crash-recovery autosave —
+            // editing continues, but the user must know backups stopped.
+            .overlay(alignment: .top) {
+                if let autosaveWarning = viewModel.autosaveFailureMessage {
+                    Label(
+                        title: { Text(autosaveWarning).font(.caption) },
+                        icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                    )
+                    .foregroundStyle(.orange)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 6)
+                    .accessibilityLabel(Text(NSLocalizedString("Autosave failure warning", comment: "")))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                // SURV-01 2차: originals missing from this device — offer
+                // in-place relink instead of silently playing empty clips.
+                else if let firstMissing = viewModel.missingMediaAssets.first {
+                    HStack(spacing: 8) {
+                        Label(
+                            title: {
+                                Text(String(
+                                    format: NSLocalizedString(
+                                        "%d media file(s) missing — clips will play empty until relinked",
+                                        comment: "SURV-01 banner over the editor"
+                                    ),
+                                    viewModel.missingMediaAssets.count
+                                ))
+                                .font(.caption)
+                            },
+                            icon: { Image(systemName: "questionmark.square.dashed") }
+                        )
+                        Button(NSLocalizedString("Relink", comment: "SURV-01 banner action")) {
+                            isRelinkImporterPresented = true
+                        }
+                        .font(.caption.bold())
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 6)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(NSLocalizedString("Missing media relink banner", comment: "")))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .id(firstMissing.id)
+                }
+            }
+            .fileImporter(
+                isPresented: $isRelinkImporterPresented,
+                allowedContentTypes: [.movie, .video, .audio, .image],
+                allowsMultipleSelection: false
+            ) { result in
+                guard case .success(let urls) = result, let replacement = urls.first,
+                      let missing = viewModel.missingMediaAssets.first else {
+                    return
+                }
+                Task { await viewModel.relinkMedia(missing, to: replacement) }
             }
             .alert(
                 NSLocalizedString("Recovered unsaved work", comment: ""),
@@ -267,7 +342,11 @@ struct IOSContentView: View {
     @ViewBuilder
     private var stickerPickerSheet: some View {
         NavigationStack {
-            IOSStickerPickerView(viewModel: viewModel, onSelect: { _ in })
+            // STICKER-01 (리뷰 2026-08-26): the selection used to be discarded
+            // (`onSelect: { _ in }`) — it now lands on the timeline.
+            IOSStickerPickerView(viewModel: viewModel, onSelect: { sticker in
+                Task { await viewModel.addSticker(sticker) }
+            })
                 .navigationTitle("Stickers")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { DismissButton() } }
@@ -599,76 +678,9 @@ struct IOSContentView: View {
     }
 
     private func importPhotosItem(_ item: PhotosPickerItem) async {
-        // BUG-IOS-06: the old path loaded the ENTIRE asset into memory via
-        // loadTransferable(Data.self) — a 4K video could OOM — and swallowed
-        // every failure with try?/empty-catch. Request a FILE URL instead and
-        // copy it into the managed imports directory with a bounded buffer;
-        // failures surface through the view model's error channel.
-        let stagedURL: URL
-        do {
-            guard let providedURL = try await item.loadTransferable(type: URL.self) else {
-                throw ImportError.transferUnavailable
-            }
-            stagedURL = providedURL
-        } catch {
-            viewModel.lastErrorMessage = ImportError.transferFailed.localizedDescription
-            return
-        }
-
-        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
-            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
-        let folderURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
-        let fileURL = folderURL
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(fileExtension)
-
-        do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
-            await viewModel.importMedia(from: fileURL, kind: mediaKind(for: fileExtension))
-
-            if let importedAsset = viewModel.mediaAssets.first(where: { $0.originalURL == fileURL }) {
-                await viewModel.addClipToTimeline(asset: importedAsset)
-            }
-        } catch {
-            viewModel.lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
-        }
-    }
-
-    private enum ImportError: Error, LocalizedError {
-        case transferUnavailable
-        case transferFailed
-
-        var errorDescription: String? {
-            switch self {
-            case .transferUnavailable:
-                return "The selected item couldn't be accessed. Try picking it again."
-            case .transferFailed:
-                return "The selected item couldn't be loaded. Try picking it again."
-            }
-        }
-    }
-
-    /// Streams a file copy in bounded chunks so a large 4K video never has to
-    /// fit in memory (the Data-based write did exactly that).
-    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
-        let chunkSize = 1024 * 1024
-        FileManager.default.createFile(atPath: destination.path, contents: nil)
-        let input = try FileHandle(forReadingFrom: source)
-        let output = try FileHandle(forWritingTo: destination)
-        defer {
-            try? input.closeFile()
-            try? output.closeFile()
-        }
-        while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
-            try output.write(contentsOf: chunk)
-        }
-    }
-
-    private func mediaKind(for fileExtension: String) -> MediaKind {
-        let imageExtensions = ["heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
-        return imageExtensions.contains(fileExtension.lowercased()) ? .image : .video
+        // BUG-IOS-06: the single shared file-based importer (on the view
+        // model) — both picker surfaces route through it.
+        await viewModel.importFromPhotosPicker(item)
     }
 
     private func clampedPlayhead(_ time: TimeInterval) -> TimeInterval {

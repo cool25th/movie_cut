@@ -295,6 +295,15 @@ run_scenario "hsl_curves" "0.5,1.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
   "MOVIECUT_UITEST_HSL_CURVES=1" || FAIL=1
 
+echo "Scenario 16b: curves-only grade (G-02 Inc 6)"
+# Curves ONLY (master S-curve + red channel lift) — no 3-way, no HSL bands.
+# Isolates the master/channel tone-curve chain the curve editor commits, so
+# the two non-3-way grade legs (bands vs curves) have independent
+# preview↔export parity evidence. Same real command path as the editor UI.
+run_scenario "curves_only" "0.5,1.5" 2.0 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A" \
+  "MOVIECUT_UITEST_CURVES=1" || FAIL=1
+
 echo "Scenario 17: karaoke text highlight (G-01 Inc 2)"
 # Text overlay with karaokeEnabled + deterministic word timings (word i starts
 # 0.1+0.4i seconds into the clip, which starts at 0.5s). t=0.6 samples the

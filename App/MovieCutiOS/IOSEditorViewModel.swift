@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import MovieCutCore
+import PhotosUI
+import SwiftUI
 
 @MainActor
 @Observable
@@ -16,6 +18,9 @@ final class IOSEditorViewModel {
 
     private var session: EditorSession
     private let projectStore: ProjectStore
+    /// SURV-01 (리뷰 2026-08-26): 관리 임포트 루트 — Application Support는
+    /// OS가 정리하지 않으므로 복구 프로젝트가 참조하는 원본이 살아남는다.
+    private let importsRootDirectory: URL?
     private var sfxURLResolver: [String: URL]
 
     /// BUG-IOS-02: crash-recovery autosave state. Committed edits persist to
@@ -27,7 +32,9 @@ final class IOSEditorViewModel {
 
     /// - Parameter autosaveDirectory: test seam — routes the crash-recovery
     ///   autosave to an explicit directory. nil uses the production location.
-    init(autosaveDirectory: URL? = nil) {
+    /// - Parameter importsDirectory: SURV-01 test seam — routes managed media
+    ///   imports to an explicit root. nil uses the production location.
+    init(autosaveDirectory: URL? = nil, importsDirectory: URL? = nil) {
         // BUG-IOS-02: every launch used to start from a fresh project — work
         // was lost on termination or OS eviction. Restore the crash-recovery
         //   autosave when one exists (same Core ProjectStore contract as Mac).
@@ -38,6 +45,7 @@ final class IOSEditorViewModel {
         isPlaying = false
         session = EditorSession(project: project)
         projectStore = autosaveDirectory.map { ProjectStore(autosaveDirectory: $0) } ?? ProjectStore()
+        importsRootDirectory = importsDirectory ?? ProjectStore.defaultImportsDirectory()
         sfxURLResolver = Self.makeSFXURLResolver()
         templateStore = TemplateStore()
         for bundle in TemplateStore.builtInTemplates() {
@@ -49,6 +57,13 @@ final class IOSEditorViewModel {
         currentProject.mediaLibrary.assets.values.sorted {
             $0.originalURL.lastPathComponent.localizedStandardCompare($1.originalURL.lastPathComponent) == .orderedAscending
         }
+    }
+
+    /// SURV-01 2차: assets whose originals are gone from this device — the
+    /// relink banner drives ``relinkMedia(_:to:)`` over this list (Mac
+    /// `missingMediaAssets` parity).
+    var missingMediaAssets: [MediaAsset] {
+        mediaAssets.filter { !FileManager.default.fileExists(atPath: $0.originalURL.path) }
     }
 
     var selectedClip: Clip? {
@@ -305,11 +320,11 @@ final class IOSEditorViewModel {
     func setTransition(_ type: TransitionType) async {
         guard let selectedClipId else { return }
 
-        let transition: Transition?
+        let transition: MovieCutCore.Transition?
         if type == .none {
             transition = nil
         } else {
-            transition = Transition(type: type, duration: selectedClip?.transition?.duration ?? 0.5)
+            transition = MovieCutCore.Transition(type: type, duration: selectedClip?.transition?.duration ?? 0.5)
         }
 
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .transition(transition)))
@@ -431,7 +446,22 @@ final class IOSEditorViewModel {
     /// Restores the crash-recovery autosave at launch, when present. Call
     /// once from the root view's `task` before user interaction.
     func restoreAutosaveIfAvailable() async {
-        guard let recovered = await projectStore.loadAutosaveIfAvailable() else { return }
+        guard let recovered = await projectStore.loadAutosaveIfAvailable() else {
+            // AUTOSAVE-02: a recovery file that existed but could not be
+            // decoded is surfaced (the store removed the damaged file; the
+            // user should know their recovery was lost, not wonder).
+            if let failure = await projectStore.lastAutosaveLoadFailure {
+                lastErrorMessage = String(
+                    format: NSLocalizedString(
+                        "A damaged recovery file was found and removed: %@",
+                        comment: "Shown when the crash-recovery file could not be decoded"
+                    ),
+                    failure.userMessage
+                )
+            }
+            cleanupStaleImports()
+            return
+        }
         let project = Self.defaultProjectIfEmpty(recovered)
         session = EditorSession(project: project)
         currentProject = project
@@ -439,11 +469,153 @@ final class IOSEditorViewModel {
         playheadTime = 0
         isPlaying = false
         recoveredUnsavedWork = true
+
+        // SURV-01 (리뷰 2026-08-26): 복구 프로젝트가 참조하는 원본 중 이
+        // 기기에 없는 파일은 표면화 — 조용히 빈 클립으로 재생되는 대신
+        // relink 배너가 재배치를 안내한다(2차).
+        let missingMedia = missingMediaAssets
+        if !missingMedia.isEmpty {
+            lastErrorMessage = "\(missingMedia.count) imported media file(s) are missing from this device. Use Relink to relocate them."
+        }
+        cleanupStaleImports()
+    }
+
+    /// SURV-01 2차: the stale-imports policy — per-project import
+    /// directories that no live project references AND that sat untouched
+    /// past the grace period are removed. Runs after the recovery attempt so
+    /// a project being recovered on THIS launch (already installed as
+    /// `currentProject`) is always kept.
+    func cleanupStaleImports() {
+        ProjectStore.cleanupOrphanedImports(
+            importsRoot: importsRootDirectory,
+            keepingProjectIds: [currentProject.id]
+        )
     }
 
     /// Clears the recovery file (clean quit semantics).
     func clearRecoveryAutosave() async {
         await projectStore.clearAutosave()
+    }
+
+    /// BUG-IOS-06: the ONE file-based photo/video import path. Both picker
+    /// surfaces (the top bar and the media browser) previously each had their
+    /// own copy — the browser's loaded the ENTIRE asset into memory
+    /// (`loadTransferable(Data.self)` — a 4K video could OOM) and swallowed
+    /// every failure. Requests a FILE URL, streams a 1 MiB-buffered copy into
+    /// the managed imports directory, imports through the validated probe,
+    /// and adds the clip to the timeline. Failures surface through
+    /// `lastErrorMessage`.
+    func importFromPhotosPicker(_ item: PhotosPickerItem) async {
+        guard let stagedURL = try? await item.loadTransferable(type: URL.self) else {
+            lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+            return
+        }
+
+        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
+            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
+        // SURV-01 (리뷰 2026-08-26): 임시 디렉터리 대신 관리 Imports 영역
+        // (Application Support/MovieCut/Imports/<projectId>/)으로 복사 —
+        // OS가 임시 파일을 정리하면 복구 프로젝트만 남고 원본이 사라졌다.
+        let fileURL = stagedImportDestination(fileExtension: fileExtension)
+
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
+            await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
+            if var importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
+                // SURV-01 2차: stamp the imports-root-relative reference so a
+                // later container move (reinstall/restore) rebases the URL
+                // instead of losing the media. Only meaningful under the
+                // managed root — the temp fallback keeps absolute-only.
+                if importsRootDirectory != nil {
+                    importedAsset.managedImportPath = "\(currentProject.id.uuidString)/\(fileURL.lastPathComponent)"
+                    try? await session.dispatch(UpdateMediaAssetCommand(asset: importedAsset))
+                    await refreshFromSession()
+                }
+                await addClipToTimeline(asset: importedAsset)
+            }
+        } catch {
+            lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
+        }
+    }
+
+    /// SURV-01 2차: re-links a missing media asset from a user-picked
+    /// replacement. The picked file is copied INTO the managed imports root
+    /// (so the relinked original survives like any staged import), the
+    /// asset's UUID is kept so clip references survive, and the relative
+    /// reference is stamped for future rebases. Mac `relinkMedia` parity.
+    func relinkMedia(_ asset: MediaAsset, to replacementURL: URL) async -> Bool {
+        do {
+            // The picker hands out security-scoped URLs; the copy must run
+            // inside the scope.
+            let didStartAccess = replacementURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    replacementURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            let fileExtension = replacementURL.pathExtension.isEmpty
+                ? "mov"
+                : replacementURL.pathExtension
+            let destination = stagedImportDestination(fileExtension: fileExtension)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Self.copyFileBuffered(from: replacementURL, to: destination)
+
+            var relocated = try MediaImporter.validatedProbe(url: destination)
+            relocated.id = asset.id
+            relocated.duration = relocated.duration ?? asset.duration
+            if importsRootDirectory != nil {
+                relocated.managedImportPath = "\(currentProject.id.uuidString)/\(destination.lastPathComponent)"
+            }
+            try await session.dispatch(UpdateMediaAssetCommand(asset: relocated))
+            await refreshFromSession()
+            if missingMediaAssets.isEmpty {
+                lastErrorMessage = nil
+            }
+            return true
+        } catch {
+            lastErrorMessage = "Couldn't relink the selected media: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// SURV-01: 관리 임포트 복사 목적지 — 프로젝트별 하위 디렉터리 안의
+    /// 고유 파일명. App Support를 쓸 수 없는 극단적 환경은 임시 폴더로
+    /// 폴백(기존 동작).
+    func stagedImportDestination(fileExtension: String) -> URL {
+        let root = importsRootDirectory ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOSImports", isDirectory: true)
+        return root
+            .appendingPathComponent(currentProject.id.uuidString, isDirectory: true)
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(fileExtension)
+    }
+
+    /// Streams a file copy in bounded chunks so a large 4K video never has to
+    /// fit in memory.
+    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
+        let chunkSize = 1024 * 1024
+        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        let input = try FileHandle(forReadingFrom: source)
+        let output = try FileHandle(forWritingTo: destination)
+        defer {
+            try? input.closeFile()
+            try? output.closeFile()
+        }
+        while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
+            try output.write(contentsOf: chunk)
+        }
+    }
+
+    static func mediaKind(for fileExtension: String) -> MediaKind {
+        let imageExtensions = ["heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
+        return imageExtensions.contains(fileExtension.lowercased()) ? .image : .video
     }
 
     /// UX-REC-02: discard the silently-restored recovery and start fresh.
@@ -461,15 +633,37 @@ final class IOSEditorViewModel {
         await clearRecoveryAutosave()
     }
 
+    /// AUTOSAVE-02: serialized autosave coordinator. The old fire-and-forget
+    /// Task per commit had NO ordering guarantee — under rapid edits a STALE
+    /// snapshot could land last and win. Every save is enqueued onto one
+    /// serial worker that always writes the LATEST snapshot; per-save state
+    /// updates (success clears the warning, failure sets it) only apply when
+    /// that save was still the newest — a newer edit supersedes them.
+    @ObservationIgnored private var autosaveGeneration = 0
+    @ObservationIgnored private var autosaveWorker: Task<Void, Never>?
+
     private func scheduleAutosave() {
+        autosaveGeneration &+= 1
+        let generation = autosaveGeneration
         let snapshot = currentProject
-        Task { [projectStore, weak self] in
+
+        autosaveWorker?.cancel()
+        autosaveWorker = Task { [projectStore, weak self] in
+            // Debounce: coalesce bursts of commits into one write.
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
             do {
                 try await projectStore.saveAutosave(snapshot)
-                await MainActor.run { self?.autosaveSaveSucceeded() }
+                await MainActor.run {
+                    guard let self, self.autosaveGeneration == generation else { return }
+                    self.autosaveSaveSucceeded()
+                }
             } catch {
                 let classified = FileOperationError.classify(error)
-                await MainActor.run { self?.autosaveSaveFailed(classified) }
+                await MainActor.run {
+                    guard let self, self.autosaveGeneration == generation else { return }
+                    self.autosaveSaveFailed(classified)
+                }
             }
         }
     }
@@ -477,6 +671,29 @@ final class IOSEditorViewModel {
     private func autosaveSaveSucceeded() {
         guard autosaveFailureMessage != nil else { return }
         autosaveFailureMessage = nil
+    }
+
+    /// 리뷰 2026-08-26 (Phase 2): scenePhase background 진입 시 즉시 flush —
+    /// 150ms 디바운스는 서스펜션 중 절대 발화하지 않으므로, 대기 중인 편집이
+    /// OS eviction에서 실종된다. 디바운스를 취소하고 최신 스냅샷을 바로 기록.
+    func flushAutosave() async {
+        guard autosaveWorker != nil else { return }
+        autosaveWorker?.cancel()
+        autosaveWorker = nil
+        autosaveGeneration &+= 1
+        let generation = autosaveGeneration
+        let snapshot = currentProject
+        do {
+            try await projectStore.saveAutosave(snapshot)
+            if autosaveGeneration == generation {
+                autosaveSaveSucceeded()
+            }
+        } catch {
+            let classified = FileOperationError.classify(error)
+            if autosaveGeneration == generation {
+                autosaveSaveFailed(classified)
+            }
+        }
     }
 
     private func autosaveSaveFailed(_ failure: FileOperationError) {
@@ -650,6 +867,68 @@ final class IOSEditorViewModel {
         } catch {
             self.lastErrorMessage = error.localizedDescription
             return
+        }
+    }
+
+    /// STICKER-01 (리뷰 2026-08-26): iOS 스티커 선택이 입력을 버리지 않고
+    /// 타임라인에 스티커 클립을 추가한다. Mac addSticker 패리티 — emoji
+    /// 스티커 우선(이미지 지원 스티커는 Mac 전용 StickerImageProvider 포트
+    /// 전까지 미지원).
+    func addSticker(_ sticker: StickerAsset) async {
+        let stickerText = sticker.emoji ?? sticker.name
+        guard !stickerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        do {
+            let snapshot = await session.snapshot()
+            let track: Track
+            if let existingTrack = snapshot.timeline.tracks.first(where: { $0.kind == .text }) {
+                track = existingTrack
+            } else {
+                let textTrack = Track(
+                    kind: .text,
+                    name: "Text",
+                    zIndex: snapshot.timeline.tracks.count
+                )
+                try await session.dispatch(CreateTrackCommand(track: textTrack))
+                track = textTrack
+            }
+
+            let duration: TimeInterval = 3
+            let canvasSize = currentProject.canvas.size
+            let placement = CanvasGeometry.defaultStickerPlacement(for: sticker)
+            let stickerPosition = CGPoint(
+                x: canvasSize.width * placement.xRatio,
+                y: canvasSize.height * placement.yRatio
+            )
+            let content = TextClipContent(
+                text: stickerText,
+                fontFamily: "Apple Color Emoji",
+                fontSize: max(84, min(Double(canvasSize.width), Double(canvasSize.height)) * placement.fontScale),
+                fontColor: "#FFFFFF",
+                alignment: .center,
+                position: stickerPosition,
+                animation: TextAnimation(preset: .popIn, duration: 0.25),
+                contentKind: .sticker,
+                stickerAssetID: sticker.id,
+                stickerImageURL: nil
+            )
+            let clip = Clip(
+                assetId: nil,
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: duration),
+                timelineRange: TimeRange(start: playheadTime, duration: duration),
+                transform: ClipTransform(
+                    position: stickerPosition,
+                    scale: CGSize(width: placement.transformScale, height: placement.transformScale)
+                ),
+                textContent: content
+            )
+
+            try await session.dispatch(AddClipCommand(trackId: track.id, clip: clip))
+            selectedClipId = clip.id
+            await refreshFromSession()
+        } catch {
+            lastErrorMessage = error.localizedDescription
         }
     }
 

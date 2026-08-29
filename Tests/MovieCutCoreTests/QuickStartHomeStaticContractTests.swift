@@ -116,7 +116,9 @@ struct QuickStartHomeStaticContractTests {
 
     @Test("ImageVideoRenderService bakes Ken Burns into the per-frame draw")
     func imageRasterizerBakesKenBurns() throws {
-        let source = try source("App/MovieCutMac/Export/ReverseRenderService.swift")
+        // G-15 AC6: the service moved from the Mac app target to Core
+        // (Sources/MovieCutCore/Rendering) so the iOS render plan shares it.
+        let source = try source("Sources/MovieCutCore/Rendering/ImageVideoRenderService.swift")
 
         // The render entry point accepts a Ken Burns effect.
         #expect(source.contains("kenBurnsEffect: KenBurnsEffect? = nil"))

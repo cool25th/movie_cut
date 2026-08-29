@@ -24,10 +24,18 @@ public enum ProjectPackage {
 
     public enum PackageError: Error, Equatable, Sendable {
         case manifestMissing
+        /// BUG-IOS-04 (external review, verified): media that could not be
+        /// copied into the package — exporting anyway would produce a
+        /// broken package (manifest references with no files) behind a
+        /// success message. The list names the failed files.
+        case mediaCopyFailed(fileNames: [String])
     }
-
     /// Writes `project` and copies its media into a package at `packageURL`.
-    /// Missing source files are skipped (the manifest still references them).
+    ///
+    /// Fails with `PackageError.mediaCopyFailed` when any source file is
+    /// missing or cannot be copied — a package with absent media is never
+    /// written. The destination is removed on failure so no partial package
+    /// survives.
     @discardableResult
     public static func export(
         _ project: Project,
@@ -40,6 +48,9 @@ public enum ProjectPackage {
         let mediaURL = packageURL.appendingPathComponent(mediaDirectoryName, isDirectory: true)
         try fileManager.createDirectory(at: mediaURL, withIntermediateDirectories: true)
 
+        // Collect every failure; only throw once the full list is known so the
+        // error names ALL missing media, not just the first.
+        var failedCopies: [String] = []
         var packaged = project
         var rewritten: [UUID: MediaAsset] = [:]
         for (id, asset) in project.mediaLibrary.assets {
@@ -48,8 +59,11 @@ public enum ProjectPackage {
             let fileName = "\(id.uuidString).\(ext)"
             let destination = mediaURL.appendingPathComponent(fileName)
 
-            if fileManager.fileExists(atPath: asset.originalURL.path) {
-                try? fileManager.copyItem(at: asset.originalURL, to: destination)
+            do {
+                try fileManager.copyItem(at: asset.originalURL, to: destination)
+            } catch {
+                failedCopies.append(asset.originalURL.lastPathComponent)
+                continue
             }
 
             // Store a package-relative reference; proxies are machine-local.
@@ -61,6 +75,13 @@ public enum ProjectPackage {
             copy.originalBookmark = nil
             rewritten[id] = copy
         }
+
+        if !failedCopies.isEmpty {
+            // Never leave a partial package behind.
+            try? fileManager.removeItem(at: packageURL)
+            throw PackageError.mediaCopyFailed(fileNames: failedCopies.sorted())
+        }
+
         packaged.mediaLibrary.assets = rewritten
 
         let encoder = JSONEncoder()
@@ -101,5 +122,17 @@ public enum ProjectPackage {
         }
         project.mediaLibrary.assets = resolved
         return project
+    }
+}
+
+extension ProjectPackage.PackageError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .manifestMissing:
+            return "The package is missing its project manifest."
+        case .mediaCopyFailed(let fileNames):
+            let list = fileNames.joined(separator: ", ")
+            return "Could not copy media into the package: \(list). Check that the files still exist, then try again."
+        }
     }
 }

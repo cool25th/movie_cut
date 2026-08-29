@@ -55,6 +55,10 @@ struct IOSFilterPickerView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        // A11Y-01: the checkmark overlay is invisible to
+                        // VoiceOver — announce the selection state.
+                        .accessibilityLabel(filter.name)
+                        .accessibilityValue(isSelected(filter) ? "Selected" : "")
                     }
                 }
                 .padding(16)

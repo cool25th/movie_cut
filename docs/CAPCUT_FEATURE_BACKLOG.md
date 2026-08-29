@@ -43,10 +43,10 @@
 |---|---|---|---|---|
 | CA-01 | 오프라인 차단·DNS/HTTP 트래픽 캡처 테스트(iOS 포함) — 증거원장 MC-02 ②③ | P0 | **즉시 실행 가능** | 네트워크 차단망에서 대표 작업 전 통과 + 캡처 0 기록을 증거원장 MC-02에 갱신 |
 | CA-02 | 파리티 허용 오차 등급 수치 확정(Exact/Tolerance/Perceptual) | P0 | **완료(2026-08-23)** — VERIFICATION_STANDARD §2 등급별 수치 확정(Exact=수치 동일·유닛테스트 담당 / Tolerance=MAD ≤ 2.0+1프레임·17 시나리오 게이트 / Perceptual=블라인드 비열등)+신규 시나리오 등급 명시·허용치 변경 승인제 기재 | 골든 재판정 기준 문서화 |
-| CA-03 | 미디어 관리·프로젝트 생존성 감사(재연결·누락·손상·마이그레이션 실패 경로·디스크) | P0 | **즉시 실행 가능(방향 문서 §3 v1.1 반영 완료 2026-08-24)** | 감사 보고 + 발견 결함의 P0 버그 등록 |
+| CA-03 | 미디어 관리·프로젝트 생존성 감사(재연결·누락·손상·마이그레이션 실패 경로·디스크) | P0 | **완료(2026-08-24, e36f83a + 2차 실사 병합)** — `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(경로 5종 판정 + §4 2차 병합). 등록: BUG-01(P0 오토토회복 침묵)·BUG-02(P0 임포트 무검증)·**BUG-04(P1 익스포트 사전 미디어 검사 부재 — 2차 신규)**·**BUG-05(P1 분류 오류 미분류 덮어씀 — 2차 신규)**. BUG-03(재연결 자동화 0)은 **폐기** — `MediaRelinkTests`가 이미 실경로 잠금(1차 탐색 누락). 수정은 BUG 증분으로(§1.7) | 감사 보고 + 발견 결함의 P0 버그 등록 (완료) |
 | CA-04 | 입력 포맷 호환 매트릭스(VFR·10bit·Log·혼합 fps/sample rate·rotation) | P0 | **즉시 실행 가능(방향 문서 §3 v1.1 반영 완료 2026-08-24)** | 매트릭스 작성 + 최우선 회귀(혼합 미디어 sync·색 유지) 실측 |
-| CA-05 | 실패·복구 UX 매트릭스(15 실패 시나리오 × 무손실/원인/재시도/이어하기/임시파일) | P0 | **즉시 실행 가능(방향 문서 §3 v1.1 반영 완료 2026-08-24)** | 매트릭스 + 결함 우선순위화 |
-| CA-06 | 접근성 핵심 경로 매트릭스(임포트→편집→출력, VoiceOver 등) | P0 | **즉시 실행 가능(Q6·Q11 승인 + 방향 문서 §3 v1.1 반영 완료 2026-08-24 — 범위: 핵심 경로+키보드)** | 매트릭스 + 차단 결함 등록 |
+| CA-05 | 실패·복구 UX 매트릭스(15 실패 시나리오 × 무손실/원인/재시도/이어하기/임시파일) | P0 | **완료(2026-08-24)** — `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md`: 15 시나리오 × 5축 파일:라인 근거. 13/15 완전 충족(CA-03 감사·외부 리뷰 반영이 전제). 신규 등록: UX-REC-01(P2 iOS 부분출력 잔존)·UX-REC-02(P2 iOS 복구 무음 채택) — §1.9 | 매트릭스 + 결함 우선순위화 (완료) |
+| CA-06 | 접근성 핵심 경로 매트릭스(임포트→편집→출력, VoiceOver 등) | P0 | **완료(2026-08-24)** — `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md`: Mac 핵심 경로 VoiceOver·키보드 전 충족(UX-08 계약+43 단축키). **iOS 차단 발견: A11Y-01(P1) 인스펙터 하위 뷰 5종 라벨 0건** + A11Y-02(P2)·A11Y-03(P3) — §1.10. 인스펙터 Picker 라벨 접힘은 이번에 수정 | 매트릭스 + 차단 결함 등록 (완료) |
 | CA-07 | 가격·판매 단위 결정(모델 선택·Universal Purchase) | P0 | **모델 확정(Q2: 일회성+유료 메이저 업데이트) — 구체 가격은 사용자 전용 유지** | 결정 기록 → REQUIREMENTS §13 반영 |
 | CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **즉시(방향 문서 2단계 "카라오케 스타일 편집"과 일치)** | iOS 파리티 시나리오 + 실기기 검증 |
 | CA-09/10 | N1-A 대사 검색 / N1-B 텍스트 기반 구간 선택 | P1 | 승인 대기(Q11 일괄 승인) | 검색 성공률·구간 이동 정확도 측정 |
@@ -105,6 +105,108 @@
 실제 mp4/png 파일을 ① 타임라인에 직접 드롭 ② 라이브러리에서 타임라인으로 드래그 — 두 경로 모두 올바른 위치에 올바른 길이의 클립이 생기는지 확인. `swift build` + `xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug -destination 'platform=macOS' build`.
 
 > 참고: 현재 sandbox 엔타이틀먼트 파일 없음(`.entitlements` 부재) → 파일 접근 권한 문제는 아님. 순수하게 클립 생성 로직 누락이 원인.
+
+---
+
+## 1.7 CA-03 감사 발견 결함 — 미디어 생존성 (2026-08-24 등록·병합)
+
+> 원천: `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(1차 감사 e36f83a + §4 2차 실사 병합). 2차 병합에서 BUG-04/05 신규 등록·BUG-03 폐기(`App/MovieCutMacTests/MediaRelinkTests.swift`가 이미 재연결·누락 감지 자동화를 실경로로 잠금).
+
+### BUG-01 (P0) — 오토토회복 저장 실패 무음 — **수정 완료(2026-08-24, 9277d86)**
+
+- 위치: `App/MovieCutMac/EditorViewModel.swift:215-218` — `scheduleAutosave`의 `try? await saveAutosave`.
+- 디스크 풀/권한 상실 시 모든 autosave가 실패해도 신호 없음 → 크래시 시 옛 복구 파일 또는 부재 → 데이터 손실. 저장(saveProject)은 분류 메시지가 있으나 autosave는 부재.
+- 수정 완료: `scheduleAutosave`/`flushAutosave` 실패 분류 → 비차단 상태바 경고(성공 시 해제). 검증: `AutosaveFailureSurfacingTests` 3종(읽기전용 디렉터리 경고·회복 시 해제·flush 경고). 재시도 백오프는 미구현(경고 표면화가 본질 — 잔여는 P2).
+
+### BUG-02 (P0) — 임포트 무결성 검증 부재 — **수정 완료(2026-08-24, 11b2f20)**
+
+- 위치: `Sources/MovieCutCore/Media/MediaImporter.swift:17-27,51-52` — 확장자 판별만, 미지원 확장자의 조용한 `.video` 디폴트.
+- 수정 완료: Core `validatedProbe`(확장자 허용목록 + 512바이트 매직 스니프 + 종족 충돌 거부, mp3/aac 원시스트림 예외). 제품 경로 전환(맥 임포트·카드 이미지·재연결·보이스오버·슬라이드쇼·iOS 임포트). 검증: `MediaImporterValidationTests` 7종.
+
+### BUG-04 (P1) — 익스포트/패키지 전 미디어 사전 검사 없음 — **수정 완료(2026-08-24, e00b3fe)**
+
+- 위치: `exportProject(to:)`(`EditorViewModel.swift:1237`), `exportProjectPackage`(`EditorViewModel+Export.swift:20`) 등 전 익스포트 경로.
+- 누락 감지·재연결은 프로젝트 열기 시에만 — 세션 중 디스크 분리 후 익스포트하면 렌더 도중(수분) 실패.
+- 수정 완료: 5개 익스포트 진입점(무비·명시 비트레이트·ProRes×2·프로젝트 패키지) 전 `ensureAllMediaReachableForExport()` 가드. 검증: `ExportMediaPreflightTests` 3종.
+
+### BUG-05 (P1) — VM 익스포트 catch가 분류 오류를 일반 문구로 덮어씀 — **수정 완료(2026-08-24, 5674250)**
+
+- 위치: `EditorViewModel.swift:1256-1259` 등 — `lastErrorMessage = error.localizedDescription`. `FileOperationError`가 `LocalizedError` 미준수라 엔진이 분류해 throw한 디스크 풀 안내가 사라짐(계약 불이행).
+- 수정 완료: `FileOperationError` `LocalizedError` 채택(errorDescription=userMessage) — throw·catch 양단에서 분류 문구 생존. 검증: `FileOperationErrorTests` 3건 추가.
+
+---
+
+## 1.8 외부 리뷰(2026-08-24) 검증 등록 — iOS 정확성·신뢰성 (같은 날 실사 확정)
+
+> 원천: 사용자 제공 외부 리뷰. 코드 실사로 검증 후 등록 — 리뷰의 P0-2(iOS 속도·램프·프리즈·Reverse) 4건은 **현재 코드에서 이미 수정됨**(`IOSExportEngine`의 macOS 패리티 주석·`sourceTimeRange` 전체 소스 스팬·`renderReversedAsset` throw로 확인) → 등록 않음. 30fps 고정 주장도 부정확(동적 `exportSettings.frameRate`).
+
+### BUG-IOS-01 (P0) — iOS 프로젝트 상태 이중화 — **수정 완료(2026-08-24)**
+
+- 위치: `IOSEditorViewModel.swift:20` `currentProject` + 별도 `EditorSession`; 캔버스 변경(`:652` `currentProject.canvas = preset`)·템플릿 적용(`IOSTemplatePickerView.swift:138`)이 세션을 우회.
+- 수정 완료: 캔버스는 기존 Core `SetProjectCanvasCommand`, 템플릿은 기존 `ReplaceProjectCommand`로 세션 경유(커맨드 신설 불필요). 직접 변경 지점 전수 스캔 제거 확인. 검증: `IOSSessionStateTests` 2종(캔버스 후속 커밋 생존·타임라인 재바인딩, 템플릿 후속 편집 시 프로젝트 유지).
+
+### BUG-IOS-02 (P0) — iOS 프로젝트 저장·복구 부재 — **수정 완료(2026-08-24)**
+
+- 수정 완료: `IOSEditorViewModel`이 Core `ProjectStore`로 커밋마다 autosave(실패 시 비차단 `autosaveFailureMessage`) + 런치 시 `restoreAutosaveIfAvailable()`(하니스 실행 제외). 테스트: `IOSPersistenceTests` 2종(재시작 복원·읽기전용 실패 표면화).
+
+### BUG-IOS-03 (P1) — iOS 합성 누락 잔존 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 효과 객체 생성 2곳에 `blendMode: clip.blendMode` 전달 + 게이트에 transform(≠identity)·opacity(≠1) 트리거 추가.
+
+### BUG-IOS-04 (P1) — 프로젝트 패키지 미디어 복사 실패 무시 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 복사 실패 전량 수집 → `mediaCopyFailed(fileNames:)` throw + 부분 패키지 제거 + `LocalizedError` 사용자 문구. 테스트 2건 갱신(누락 명시적 실패·북마크 스트립 실제 파일).
+
+### BUG-IOS-05 (P1) — 보이스오버 버퍼 쓰기 실패 무시 — **수정 완료(2026-08-24)**
+
+- 수정 완료: 탭 내 첫 쓰기 실패 래치(스레드 안전) → `stopRecording()`이 `writeFailed(underlying:)` throw — 불완전 테이크 폐기.
+
+### BUG-IOS-06 (P1) — iOS 사진 임포트 전체 메모리 적재 + 실패 무음 — **수정 완료(2026-08-24, b0a5f03)**
+
+- 수정 완료: 파일 URL 전송 + 1MiB 버퍼 스트림 복사 + 전달/복사 실패 오류 채널 표면화(실행 가능 문구).
+
+### 참고 등록 (결함 아님)
+
+- **Mac 앱 테스트 CI 비차단은 의도설계**: `ci.yml:59` `continue-on-error`는 기록된 호스트 플랫폼 플레이크 완화 + G-28 스위트 별도 차단. 전면 차단화는 플레이크 원인 해소 후(별도 결정).
+- **ko 번역 누락 106개×2 카탈로그**: 빈 값이 아닌 ko 항목 자체가 없는 키(Mac/iOS 각 106). 현지화 완료 증분 필요(자동 검증기는 미싱 키만 잡음).
+- **SwiftLint 전체 936건(error 94)**: high-signal 게이트는 유지, 전체 부채는 파일 분리(5,348행 `EditorViewModel`) 증분으로.
+- **리뷰의 스크린샷 UI 지적(가짜 skeleton 카드·Inspector Picker 라벨 접힘)**: UX 부채로 CA-06 접근성 매트릭스와 함께 처리.
+
+---
+
+## 1.9 CA-05 매트릭스 파생 결함 — 실패·복구 UX (2026-08-24 등록)
+
+> 원천: `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md`.
+
+### UX-REC-01 (P2) — iOS 익스포트 취소/실패 시 부분 출력 — **수정 완료(2026-08-24, 2ca5f38)**
+
+- 수정 완료: 활성 출력 URL 추적 + 취소/실패 경로에서 제거(best-effort, 원 오류 보존).
+
+### UX-REC-02 (P2) — iOS 크래시 복구 무음 자동 채택 — **수정 완료(2026-08-24, 9d277fd)**
+
+- 수정 완료: 런치 복구 후 유지/버림 알림(영어 키+en/ko). 버림 → 신규 프로젝트 + 복구 파일 삭제.
+
+### 참고 (UX-REC-03) — 세션 중 스코프 철회는 열기/익스포트 게이트에서만 감지
+
+- 실시간 재탐지는 비용 대비 효과 낮음 — 현재 패턴 유지 결정(매트릭스 §2).
+
+---
+
+## 1.10 CA-06 매트릭스 파생 결함 — 접근성 (2026-08-24 등록)
+
+> 원천: `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md`. Mac 핵심 경로는 차단 없음 — 아래는 iOS 중심.
+
+### A11Y-01 (P1, iOS 차단급) — iOS 인스펙터 하위 뷰 VoiceOver — **수정 완료(2026-08-24)**
+
+- 실사 정정: 텍스트 라벨 버튼/토글/ColorPicker는 기본 announced(0건 카운트는 과대) — 실제 갭은 bare `Slider`(효과 인스펙터 opacity/speed/inspectorSlider·크로마키 slider 헬퍼)와 필터 선택 상태. 수정 완료: 슬라이더 라벨+값·필터 선택 announce + `IOSInspectorAccessibilityContractTests` 4종(시뮬레이터 #filePath 경로 해석 포함).
+
+### A11Y-02 (P2) — iOS 익스포트 진행 시트 — **해소(2026-08-24, 기존 구현 확인)**
+
+- 실사 결과 이미 구현돼 있었음(라벨+값+힌트·취소 파괴적 롤+힌트) — 계약 테스트로 잠금.
+
+### A11Y-03 (P3) — 빈 라이브러리 스켈리톤 카드 시각 신뢰감
+
+- VO 숨김은 정상. 로딩/깨진 자산처럼 보이는 시각 문제 — 빈 상태 안내 카드로 교체(외부 리뷰 지적, 기능 아님).
 
 ---
 
@@ -272,7 +374,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 
 ### H. AI 기능 (CapCut 차별화)
 - [ ] 🟡 자동 컷(무음 제거, F-18) (P1→preview/파라미터/단일undo 구현됨) — `AutoCutPlanner`(패딩으로 발화 보존) + `AutoCutCommand`(단일 undo) + ViewModel preview/apply/cancel + threshold/min/padding 슬라이더 + 타임라인 빨간 하이라이트. `AutoCutPlannerTests` 13개. Caveat: 실인터뷰 fixture 청취 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
-- [ ] 🟡 씬 변경 감지 자동 분할 — Core 존재 (P2)
+- [ ] 🟡 씬 변경 감지 자동 분할 (P2) — **2026-08-24 정정**: Core `SceneChangeProvider` + ViewModel `detectAndSplitScenes` 명령 경로 + UI 배선(분석 섹션·suggestCuts) 모두 존재. 잔여는 CA-21 측정 게이트(precision/recall 사전등록)뿐.
 - [ ] 🟡 자동 리프레임(피사체 추적 crop, F-19) (P2→스무딩/미리보기 구현됨) — `ReframeSmoothing`(moving average + clamp, AC③ 떨림 감소 테스트) + ViewModel preview/apply/cancel + PreviewPanel crop-path 오버레이 + Inspector 섹션. `ReframeSmoothingTests` 8개. Caveat: 실영상 추적 정확도(AC②) 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 AI 어시스턴트(자연어 편집 명령, F-21) (P3→규칙기반 1단계 구현됨) — `AssistantCommandParser`(동의어 target×action + 숫자 파싱) + ViewModel 실행기(기존 명령 매핑) + Inspector AssistantSection. `AssistantCommandParserTests` 8개(20 intent 시나리오 포함). Caveat: 외부 LLM 연동 별도 합의 — DoD §1.3에 따라 ✅ 보류.
 - [ ] 🟡 자동 하이라이트(롱폼→숏폼, F-20) (P3→구현됨) — `HighlightScorer`(silence/scene/beat 출력 조합, 비중첩 top-N) + ViewModel detect/createSequence(새 프로젝트 스왑) + Inspector HighlightsSection. `HighlightScorerTests` 8개. Caveat: 실영상 후보 적합성 확인 잔여 — DoD §1.3에 따라 ✅ 보류.
@@ -284,7 +386,7 @@ V6 문서의 판정은 "지정된 N개 파일 안에서 코드 경로가 보이�
 - [x] ✅ 챕터/비트 마커 export 메타데이터 (P3) — **2026-07-05 G-12 #9 상환**: `MOVIECUT_UITEST_CHAPTER_MARKERS=1`/`MOVIECUT_UITEST_BEAT_CHAPTERS=1` 하니스가 표준/비트 마커를 command path로 추가하고, ExportEngine이 AssetWriter timed metadata track + `.chapterList` association으로 MP4 chapter atom을 기록한다. `run_e2e_export.sh` ffprobe 실측: `count=3 starts=0.25,0.75,1.25 ends=0.75,1.25,1.75`. Caveat: ffprobe title tag는 빈 문자열로 표시되어 하니스 status로 marker name/count를 함께 검증한다.
 
 ### J. 협업/배포
-- [ ] 🟡 클라우드 동기화(F-22) (P3→충돌 해소+테스트 완료) — `CloudSyncService` latestWins+백업(`resolveConflictKeepingBackup`/`writeConflictBackup`), `CloudConflictTests` 7개(2기기 시나리오). Caveat: 실 iCloud 2기기 GUI 검증 잔여.
+- [ ] 🔴 클라우드 동기화(F-22) (P3, 미구현) — **2026-08-24 정정**: 과거 기록이 `CloudSyncService`·`CloudConflictTests`의 존재를 주장했으나 현재 저장소에 소스 0건(아카이브/DerivedData 잔재만 존재). 구현 시 신규 착수로 취급.
 - [ ] 🟡 템플릿 마켓플레이스 — picker만 (P3)
 - [ ] 🟡 템플릿 패키지(F-23) (P3→구현됨) — `ProjectPackage` .mctemplate export/import + Package 메뉴, `ProjectPackageTests` 7개. Caveat: 실기기 GUI 잔여.
 - [x] ✅ 플랫폼 게시(F-24) — OS 공유 시트(ShareLink)로 충족. 직접 API 게시는 스펙 권고대로 범위 외.

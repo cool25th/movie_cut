@@ -110,6 +110,10 @@ struct InspectorPanel: View {
             }
         }
         .pickerStyle(.segmented)
+        // CA-06: the leading label wrapped to multiple lines in the narrow
+        // panel (external review); the segmented control is self-describing
+        // visually and keeps its accessibility label for VoiceOver.
+        .labelsHidden()
         .controlSize(.small)
         .tint(MovieCutTheme.accentCyan)
         .padding(2)

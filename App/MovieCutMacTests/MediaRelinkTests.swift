@@ -23,8 +23,11 @@ struct MediaRelinkTests {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let original = dir.appendingPathComponent("\(UUID().uuidString)-original.mp4")
         let relocated = dir.appendingPathComponent("\(UUID().uuidString)-moved.mp4")
-        try Data([0x00, 0x01, 0x02, 0x03]).write(to: original)
-        try Data([0x00, 0x01, 0x02, 0x03]).write(to: relocated)
+        // Minimal mp4 header (ftyp at offset 4) — the relink probe validates
+        // content signatures since BUG-02; bare placeholder bytes are rejected.
+        let mp4Header = Data([0x00, 0x00, 0x00, 0x18] + Array("ftypisom".utf8))
+        try mp4Header.write(to: original)
+        try mp4Header.write(to: relocated)
         return (original, relocated)
     }
 

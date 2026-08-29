@@ -83,4 +83,16 @@ struct FileOperationErrorTests {
             #expect(!category.userMessage.isEmpty, "\(category) has an empty userMessage")
         }
     }
+
+    @Test("localizedDescription carries the classified message (BUG-05)")
+    func localizedDescriptionIsUserMessage() {
+        // VM catch sites surface error.localizedDescription; before LocalizedError
+        // conformance this returned a generic "(FileOperationError error N)"
+        // string and the disk-full guidance was lost at the UI boundary.
+        #expect(FileOperationError.diskFull.localizedDescription == FileOperationError.diskFull.userMessage)
+        #expect(FileOperationError.permissionDenied.localizedDescription.contains("permission"))
+        #expect((FileOperationError.diskFull as Error).localizedDescription
+                == FileOperationError.diskFull.userMessage,
+                "conformance must apply through the existential Error path too")
+    }
 }

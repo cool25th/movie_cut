@@ -97,3 +97,12 @@ public enum FileOperationError: Error, Sendable, Equatable {
         return .other(nsError.localizedDescription)
     }
 }
+
+extension FileOperationError: LocalizedError {
+    /// Makes `error.localizedDescription` carry the classified, user-actionable
+    /// message. Without this, a thrown `FileOperationError` surfaces as
+    /// "The operation couldn't be completed. (…)" at every VM catch site that
+    /// logs `localizedDescription` — silently discarding the disk-full /
+    /// permission guidance the classification exists to provide (BUG-05).
+    public var errorDescription: String? { userMessage }
+}

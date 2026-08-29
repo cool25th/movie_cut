@@ -85,6 +85,10 @@ struct IOSChromaKeyView: View {
                 set: onChange
             ), in: 0 ... 1)
             .frame(minHeight: 44)
+            // A11Y-01: explicit label/value — the visible title is a sibling
+            // Text, so without this VoiceOver announces a bare "slider".
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text("\(Int((value * 100).rounded()))%"))
         }
     }
 

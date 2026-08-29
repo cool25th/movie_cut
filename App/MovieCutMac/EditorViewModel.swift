@@ -160,7 +160,7 @@ final class EditorViewModel {
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession
-    @ObservationIgnored private let projectStore = EditorViewModel.makeProjectStore()
+    @ObservationIgnored private let projectStore: ProjectStore
     /// Single owner of compound flattening. Engines receive the same value
     /// snapshot and never compute or cache flattened timelines themselves.
     @ObservationIgnored private let flattenedTimelineCache = FlattenedTimelineCache()
@@ -212,15 +212,55 @@ final class EditorViewModel {
 
     /// Writes the current project to the crash-recovery autosave off the edit
     /// path (fire-and-forget so edits stay responsive).
+    ///
+    /// BUG-01: a failed autosave (disk full, permission loss) is SURFACED via
+    /// ``autosaveFailureMessage`` instead of being swallowed by `try?` — the
+    /// user must know crash recovery stopped backing their edits up. Still
+    /// non-blocking: editing continues, and the warning clears on the next
+    /// successful autosave.
     private func scheduleAutosave() {
         let snapshot = currentProject
-        Task { [projectStore] in try? await projectStore.saveAutosave(snapshot) }
+        Task { [projectStore, weak self] in
+            do {
+                try await projectStore.saveAutosave(snapshot)
+                self?.autosaveSaveSucceeded()
+            } catch {
+                self?.autosaveSaveFailed(FileOperationError.classify(error))
+            }
+        }
     }
 
     /// Awaitable autosave flush (used by automation to deterministically persist
     /// recovery state before quitting; same path as the edit-driven autosave).
     func flushAutosave() async {
-        try? await projectStore.saveAutosave(currentProject)
+        do {
+            try await projectStore.saveAutosave(currentProject)
+            autosaveSaveSucceeded()
+        } catch {
+            autosaveSaveFailed(FileOperationError.classify(error))
+        }
+    }
+
+    /// Non-blocking crash-recovery warning. nil while autosaves succeed;
+    /// set when the latest autosave failed (shown in the status bar).
+    var autosaveFailureMessage: String?
+    @ObservationIgnored private var consecutiveAutosaveFailures = 0
+
+    private func autosaveSaveSucceeded() {
+        guard autosaveFailureMessage != nil || consecutiveAutosaveFailures > 0 else { return }
+        consecutiveAutosaveFailures = 0
+        autosaveFailureMessage = nil
+    }
+
+    private func autosaveSaveFailed(_ failure: FileOperationError) {
+        consecutiveAutosaveFailures += 1
+        autosaveFailureMessage = String(
+            format: NSLocalizedString(
+                "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space.",
+                comment: "Warning shown when the crash-recovery autosave cannot be written"
+            ),
+            failure.userMessage
+        )
     }
 
     /// A project recovered from a non-clean previous session, if any.
@@ -267,7 +307,12 @@ final class EditorViewModel {
     @ObservationIgnored var pendingScrubTask: Task<Void, Never>?
     @ObservationIgnored var pendingScrubTime: TimeInterval?
 
-    init(project: Project? = nil) {
+    /// - Parameter autosaveDirectory: test seam — routes the crash-recovery
+    ///   autosave to an explicit directory (e.g. a read-only path to exercise
+    ///   the BUG-01 failure surfacing). nil uses the production location.
+    init(project: Project? = nil, autosaveDirectory: URL? = nil) {
+        self.projectStore = autosaveDirectory.map { ProjectStore(autosaveDirectory: $0) }
+            ?? EditorViewModel.makeProjectStore()
         let project = EditorViewModel.ensureDefaultTracks(in: project ?? Project(name: "Untitled"))
         self.currentProject = project
         self.canvasSelection = project.canvas.aspectRatio
@@ -733,7 +778,14 @@ final class EditorViewModel {
         elementId: UUID,
         with url: URL
     ) async -> Bool {
-        let probedAsset = await mediaAssetWithAppProbe(for: url)
+        let probedAsset: MediaAsset
+        do {
+            probedAsset = try await mediaAssetWithAppProbe(for: url)
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
         guard probedAsset.kind == .image else {
             lastStatusMessage = nil
             lastErrorMessage = "Card image replacement requires an image file."
@@ -865,7 +917,7 @@ final class EditorViewModel {
         do {
             // Re-probe the new location for current metadata + bookmark, but
             // KEEP the original asset's UUID and id so clip references survive.
-            var relocated = MediaImporter.probe(url: newURL)
+            var relocated = try MediaImporter.validatedProbe(url: newURL)
             relocated.id = asset.id
             relocated.originalBookmark = SecurityScopedAccess.makeBookmark(for: newURL)
             let probe = await Self.appMetadataProbe(
@@ -1206,7 +1258,28 @@ final class EditorViewModel {
             .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
     }
 
+    /// BUG-04 (CA-03 audit): export/package pre-flight. Missing-media
+    /// detection and the relink prompt only run at project OPEN — a disk
+    /// ejected mid-session used to fail the export minutes into the render.
+    /// Re-evaluate reachability NOW and refuse explicitly with relink
+    /// guidance before any render work starts.
+    func ensureAllMediaReachableForExport() -> Bool {
+        evaluateMissingMedia(in: currentProject)
+        guard !missingMediaAssets.isEmpty else { return true }
+        lastExportURL = nil
+        lastStatusMessage = nil
+        lastErrorMessage = String(
+            format: NSLocalizedString(
+                "Can't export: %d media file(s) can't be found. Use “Re-link Missing Media” to locate them, then export again.",
+                comment: "Export pre-flight refusal when source media is unreachable"
+            ),
+            missingMediaAssets.count
+        )
+        return false
+    }
+
     func exportProject() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1235,6 +1308,7 @@ final class EditorViewModel {
     /// but without the save panel. Used by automation and the XCUITest harness so
     /// the real export pipeline is exercised end-to-end.
     func exportProject(to url: URL) async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1262,6 +1336,7 @@ final class EditorViewModel {
     /// Exports the project to a movie with an explicit average video bitrate via
     /// the planner-backed `AVAssetWriter` path, instead of the preset approximation.
     func exportWithExplicitBitrate() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1293,6 +1368,7 @@ final class EditorViewModel {
 
     /// Exports a ProRes 422 master in a QuickTime container.
     func exportProResMaster() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.quickTimeMovie]
         panel.canCreateDirectories = true
@@ -1304,6 +1380,7 @@ final class EditorViewModel {
     /// Exports a ProRes 422 master to an explicit URL (no save panel). Used by
     /// automation and the harness.
     func exportProResMaster(to url: URL) async {
+        guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {
@@ -1451,7 +1528,7 @@ final class EditorViewModel {
 
         do {
             for url in urls {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 selectedAssetId = asset.id
             }
@@ -1481,7 +1558,7 @@ final class EditorViewModel {
         do {
             var insertionStart = max(0, startTime)
             for url in urls {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 needsRefresh = true
 
@@ -2557,8 +2634,24 @@ final class EditorViewModel {
 
     func suggestCuts() async throws {
         guard let clipId = selectedClipId else { return }
-        _ = try? await autoCutSilence(for: clipId)
-        _ = try? await detectAndSplitScenes(for: clipId)
+        // Attempt BOTH tools (a silence-cut result is still useful when scene
+        // detection fails), but never swallow the failures — report which
+        // ones failed so the user knows what they got.
+        var failures: [String] = []
+        do {
+            _ = try await autoCutSilence(for: clipId)
+        } catch {
+            failures.append("silence cut")
+        }
+        do {
+            _ = try await detectAndSplitScenes(for: clipId)
+        } catch {
+            failures.append("scene detection")
+        }
+        if !failures.isEmpty {
+            lastStatusMessage = nil
+            lastErrorMessage = "Cut suggestion failed for: \(failures.joined(separator: ", "))."
+        }
     }
 
 
@@ -4509,8 +4602,11 @@ final class EditorViewModel {
         }
     }
 
-    private func mediaAssetWithAppProbe(for url: URL) async -> MediaAsset {
-        var asset = MediaImporter.probe(url: url)
+    /// BUG-02: the probe is VALIDATED — unknown extensions and content whose
+    /// header bytes match no known media signature are rejected at import
+    /// with an explicit reason instead of exploding at preview/export.
+    private func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
+        var asset = try MediaImporter.validatedProbe(url: url)
 
         // Capture a security-scoped bookmark at import time so the file stays
         // reachable after restart under App Sandbox. (S2)
@@ -4776,7 +4872,7 @@ final class EditorViewModel {
 
     func addVoiceoverAudio(from url: URL, fallbackDuration: TimeInterval? = nil) async {
         do {
-            var asset = MediaImporter.probe(url: url)
+            var asset = try MediaImporter.validatedProbe(url: url)
             let duration = resolvedVoiceoverDuration(for: url, fallbackDuration: fallbackDuration)
             asset.duration = duration
             try await session.dispatch(ImportMediaCommand(asset: asset))
@@ -4848,7 +4944,7 @@ final class EditorViewModel {
         kenBurnsEnabled: Bool = true
     ) async {
         let imageURLs = urls.filter { url in
-            MediaImporter.probe(url: url).kind == .image
+            (try? MediaImporter.validatedProbe(url: url))?.kind == .image
         }
         guard !imageURLs.isEmpty else {
             lastErrorMessage = "Please choose at least one image to create a photo video."
@@ -4891,7 +4987,7 @@ final class EditorViewModel {
 
             var insertionStart: TimeInterval = 0
             for (index, url) in imageURLs.enumerated() {
-                let asset = await mediaAssetWithAppProbe(for: url)
+                let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
 
                 let duration = max(0.1, pace.clipDuration)

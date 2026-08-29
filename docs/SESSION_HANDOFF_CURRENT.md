@@ -3,7 +3,83 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
-## 2026-08-24 세션 65 (방향 문서 §3 v1.1 반영 + CA-28 RGB 파레이드)
+## 2026-08-24 세션 (CA-06 접근성 핵심 경로 매트릭스 — P0-D 4종 완료)
+
+- `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md` — 핵심 경로(임포트→편집→출력) × VoiceOver/키보드, 파일:라인 근거. **Mac 전 충족**(UX-08 계약 5종 + 43 메뉴 단축키 + 실패 경로 표면화). **iOS 차단 발견**: A11Y-01(P1 — 자막·필터·크로마키·효과·어시스턴트 뷰 VoiceOver 라벨 0건) 등 §1.10.
+- 인스펙터 세그먼트 Picker 라벨 접힘 수정(`.labelsHidden()`, VoiceOver 라벨 유지) — 외부 리뷰 UI 지적 2건 중 1건 해소. 스켈리톤 카드는 VO 숨김 정상, 시각 UX로 A11Y-03 등록.
+- **P0-D(CA-03/04/05/06) 중 3종 완료** — CA-04는 병렬 세션 진행 중.
+
+### 다음 회차
+잔여 소형 우선순위: A11Y-01(iOS 인스펙터 a11y) → UX-REC-01/02 → BUG-IOS-06 → ko 106×2 → iOS 출력 golden → BUG-01 백오프·북마크 자동 치유. CA-04 병렬 완료 시 통합 검증.
+
+## 2026-08-24 세션 (CA-05 실패·복구 UX 매트릭스 완료)
+
+- `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md` — 15 실패 시나리오 × 5축(무손실/원인/재시도/이어하기/임시파일) 매트릭스, 파일:라인 근거. **13/15 완전 충족**(이번 주 BUG-01/02/04/05·BUG-IOS-01~05·suggestCuts 수정이 전제). 신규 등록 §1.9: UX-REC-01(P2 — iOS 익스포트 취소/실패 시 부분 출력 잔존, Mac 패리티 부재)·UX-REC-02(P2 — iOS 복구 무음 자동 채택, 버림 선택 부재)·UX-REC-03(참고 — 스코프 철회 감지 시점 유지 결정).
+- 문서 전용 증분(코드 변경 없음 — 문서 경로 검증 통과).
+
+### 다음 회차
+CA-04(병렬 진행) → **CA-06 접근성 핵심 경로 매트릭스** → 잔여 소형(UX-REC-01/02·BUG-IOS-06·ko 106×2·golden·백오프).
+
+## 2026-08-24 세션 (리뷰 잔여 마무리 — BUG-IOS-01·try? 지점·AppIcon·프로브 v4)
+
+**게이트**: 5/5(1,413/207)·Mac 38/38·iOS 13/13.
+
+- **BUG-IOS-01 (P0) 수정**: 캔버스는 `SetProjectCanvasCommand`, 템플릿은 `ReplaceProjectCommand`(둘 다 기존 Core 커맨드)로 세션 경유 — 이중 상태 제거. `IOSSessionStateTests` 2종. 외부 리뷰 §1.8 전 결함(등록분) 수정 완료.
+- 리뷰 지목 `try?` 2곳 표면화: 크롭 프리셋 클릭 실패 보고, suggestCuts 두 도구 시도 후 실패 목록 보고.
+- AppIcon 1024 alpha 제거(RGBA→RGB). '필수 크기 누락'은 부정확(단일 크기 형식).
+- scene detection 백로그 행 정정 — Core+VM+UI 모두 존재, 잔여는 CA-21 측정 게이트뿐.
+- G-28 EffectCostProfile 응답성 프로브 v4: 공유 프로세스 메인 액터 경합(61.5s hop 관측)으로 wall-clock·순서 프로브 모두 위양성 — 결정적 스레드 친화성 검사로 교체.
+
+### 다음 회차
+CA-04(병렬 진행) → CA-05 → CA-06. 잔여 소형: BUG-IOS-06, ko 106×2, iOS 출력 golden 테스트, BUG-01 백오프, 북마크 자동 치유.
+
+## 2026-08-24 세션 (외부 리뷰 반영 — 검증·등록·BUG-IOS-02/03/04/05 수정)
+
+**입력**: 사용자 제공 외부 리뷰(iOS 정확성 중심). **실사로 검증 후 반영** — 리뷰의 P0-2 4건(속도·램프·프리즈·Reverse)과 30fps 고정 주장은 현재 코드에서 이미 수정/부정확(등록 않음), 나머지는 백로그 §1.8에 BUG-IOS-01~06 + 참고 4건으로 등록.
+
+### 완료
+- **BUG-IOS-02 (P0)**: iOS 크래시 복구 영속성 — `IOSEditorViewModel`이 Core `ProjectStore`로 커밋마다 autosave(실패 비차단 표면화), 루트 뷰 `task`에서 런치 복원(하니스 제외). `IOSPersistenceTests` 2종(재시작 복원·읽기전용 실패).
+- **BUG-IOS-03**: iOS 익스포트 `blendMode` 효과 객체 전달 + transform/opacity 컴포지터 게이트 트리거.
+- **BUG-IOS-04**: `ProjectPackage.export` 복사 실패 수집 → `mediaCopyFailed` throw + 부분 패키지 제거 + LocalizedError. 테스트 2건 갱신.
+- **BUG-IOS-05**: `VoiceoverRecorder` 쓰기 실패 래치 → `stopRecording()`이 `writeFailed` throw.
+- 백로그 CloudSync 허위 완료 기록 정정(소스 0건 확인).
+- **게이트**: 5/5(1,413/207)·Mac 38/38·iOS 11/11.
+
+### 잔여 (§1.8)
+- **BUG-IOS-01 (P0)**: iOS 상태 이중화(캔버스/템플릿 세션 우회) — Core 커맨드 신설 필요, 다음 증분.
+- BUG-IOS-06(iOS 파일기반 임포트)·ko 번역 106×2·CI 차단화(플레이크 해소 후)·SwiftLint 부채·UX 지적(CA-06 연계).
+
+## 2026-08-24 세션 (CA-03 결함 수정 — BUG-01/02/04/05 전량)
+
+**게이트**: verify_gate 5/5 — 1,413 테스트/207 스위트, Mac 앱 테스트 38/38, iOS generic 빌드 통과.
+
+### 완료 (커밋 순)
+- **BUG-05** (5674250): `FileOperationError` `LocalizedError` 채택 — 엔진이 분류해 throw한 값이 VM catch의 `localizedDescription`에서 살아남음(디스크 풀 안내 보존).
+- **BUG-01** (9277d86): 오토토회복 실패 표면화 — `scheduleAutosave`/`flushAutosave`가 `try?` 삼킴 대신 분류 후 비차단 상태바 경고(주황 배너+접근성), 성공 시 해제. 테스트 주입용 `autosaveDirectory` 시임 추가. 동작 테스트 3종.
+- **BUG-04** (e00b3fe): 익스포트 5개 진입점(무비·명시 비트레이트·ProRes 패널/자동화·프로젝트 패키지) 전 `ensureAllMediaReachableForExport()` — 누락 미디어 재연결 안내 후 렌더 전 거부. 동작 테스트 3종.
+- **BUG-02** (11b2f20): Core `MediaImporter.validatedProbe` — 확장자 허용목록(미지원 명시적 거부, 기존 `.video` 폴백 폐지) + 512바이트 매직 스니프(알려진 시그니처 없는 가비지 거부·종족 충돌 거부·mp3/aac 원시스트림 예외). 맥/iOS 임포트 경로 전환, TTS 자기생성 .caf는 신뢰 경로 유지. Core 테스트 7종 + 재연결 픽스처 ftyp 헤더 갱신 + StaticContract 2건 갱신.
+
+### 다음 회차 — P0-D 감사 계속
+1. **CA-04** 입력 포맷 매트릭스(VFR·10bit·Log·혼합 fps/sample rate·rotation).
+2. CA-05 실패·복구 UX 매트릭스 / CA-06 접근성 핵심 경로 매트릭스(병렬 가능).
+3. 잔여 소형(P2): BUG-01 재시도 백오프, 북마크 자동 치유.
+
+## 2026-08-24 세션 (프로토콜0 WIP 커밋 + CA-03 미디어 생존성 감사 — 1·2차 병합 완료)
+
+**게이트**: verify_gate 5/5(1,405) — 프로토콜0 커밋(a9103e9) 검증. 감사는 문서 전용(기존 증거 재조사).
+
+### 완료
+- **프로토콜0**: 핸드오프 "처리 대기" 사용자 변경(`ui_capture.sh` pgrep errexit 가드) 검증·커밋(a9103e9).
+- **CA-03 감사 완료** (e36f83a, `AUDIT_MEDIA_SURVIVABILITY_20260824.md`): 경로 5종 판정 — 재연결(UUID 보존·배치 UI 양호)·누락(북마크+안내 양호)·손상(오토토회복 5테스트·출력 부분파일 제거·마이그레이션 구조화 견고·**미디어 무검증**)·디스크(원자적 저장·분류 견고·**오토토회복 침묵**). **결함 등록(1차+2차 병합)**: BUG-01(P0 오토토회복 실패 `try?` 침묵)·BUG-02(P0 임포트 확장자 판별만·조용한 `.video` 디폴트)·**BUG-04(P1 익스포트 전 미디어 사전 검사 부재)**·**BUG-05(P1 VM catch가 분류 오류를 일반 문구로 덮어씀 — FileOperationError LocalizedError 미준수)**. **BUG-03 폐기** — `App/MovieCutMacTests/MediaRelinkTests.swift`가 이미 재연결·누락 감지 자동화를 실경로로 잠금(1차 탐색이 Mac 테스트 디렉터리를 누락). 2차 실사는 같은 날 병렬 독립 감사로 수행됐고 `AUDIT_MEDIA_SURVIVABILITY_20260824.md` §4에 병합.
+
+### 다음 회차 — BUG 증분 (심각도 순)
+1. **BUG-01** 오토토회복 실패 표면화(분류→경고+백오프, 비차단 유지).
+2. **BUG-02** 임포트 헤더 스니프 + 미지원 확장자 명시적 거부.
+3. **BUG-05** `FileOperationError` LocalizedError 채택(소형 — BUG-01과 동일 파일군, 분류 메시지가 throw·catch 양단에서 살아남).
+4. **BUG-04** 익스포트 전 `evaluateMissingMedia` 재실행 + 재연결 유도.
+5. CA-04 입력 포맷 매트릭스 → CA-05·CA-06. 실기기 2종 연결 시 G-27 계속(3종 PASS → DONE_PHASE1).
+
+ 세션 65 (방향 문서 §3 v1.1 반영 + CA-28 RGB 파레이드)
 
 ### ① 방향 문서 §3 v1.1 — Q11 승인 P0 편입
 - `DEVELOPMENT_DIRECTION_20260815.md` v1.0→v1.1(2026-08-24): §3 1단계 테이블에 **P0-D 신뢰성·호환성·접근성 감사** 스트림 신설(CA-03 미디어 생존성·CA-04 입력 포맷·CA-05 실패·복구 UX·CA-06 접근성 핵심 경로), 1단계 완료 게이트에 4종 산출물 명시.
@@ -1055,4 +1131,15 @@ P2-G24-1 — StabilizationMetrics(잔류 변위 중앙값·크롭 비율·워블
 5. 장형(≥10분) fixture 제작 후 `run_latency_baseline.sh` 재측 — SLO "10분 프로젝트 열기 3초"의 원 의미 실측.
 
 ### 사용자 결정 대기 사항
-- 없음(§7 열린 결정은 기본 채택값으로 진행 중). Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.
+- 없음(§7 열린 결정은 기본 채택값으로 진행 중). Track A(A-1 아이콘/A-2 App Store Connect)는 사용자 작업으로 계속 대기.## 2026-08-24 세션 (잔여 소형 4건 — UX-REC-01/02·BUG-IOS-06·ko 번역)
+
+**게이트**: 5/5(1,413)·Mac 38/38·iOS 17/17·지역화 검증기 PASS(332 키/455 카탈로그).
+
+- **UX-REC-01**(2ca5f38): iOS 익스포트 활성 출력 URL 추적 → 취소/실패 시 잘린 .mov 제거(Mac 패리티).
+- **UX-REC-02**(9d277fd): 런치 복구 후 유지/버림 알림 — 버림은 신규 프로젝트+복구 파일 삭제.
+- **BUG-IOS-06**(b0a5f03): `loadTransferable(URL.self)` + 1MiB 버퍼 복사 + 오류 표면화(기존 Data 전체 적재·try? 무음 폐지).
+- **ko 번역**(fbf3149): 양 카탈로그 106개 전량 — 기호/형식 키 동일값, UI 키 번역, 내부 증거 노트 실용 번역.
+- 도중 UX-REC-02 커밋에서 VM 파일 누락(병렬 git 경합 추정) 발견 → amend로 정정.
+
+### 다음 회차
+CA-04(병렬) 통합 검증 → **iOS 출력 golden 테스트** → BUG-01 백오프·북마크 자동 치유(P2). §1.8~1.10 등록 결함 전량 수정 완료.

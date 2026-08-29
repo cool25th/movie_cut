@@ -18,6 +18,7 @@ import UniformTypeIdentifiers
 extension EditorViewModel {
     /// Exports the current project and its media as a `.mctemplate` package.
     func exportProjectPackage() async {
+        guard ensureAllMediaReachableForExport() else { return }
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "\(currentProject.name).\(ProjectPackage.fileExtension)"

@@ -128,8 +128,8 @@ struct ProjectPackageTests {
         }
     }
 
-    @Test("missing source media is skipped but still referenced")
-    func missingSourceSkipped() throws {
+    @Test("missing source media fails the export explicitly — no broken package (BUG-IOS-04)")
+    func missingSourceFailsExport() throws {
         let work = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: work) }
 
@@ -143,13 +143,13 @@ struct ProjectPackageTests {
         project.mediaLibrary.assets[asset.id] = asset
 
         let packageURL = work.appendingPathComponent("Missing.mctemplate")
-        try ProjectPackage.export(project, to: packageURL)
-        let loaded = try ProjectPackage.load(from: packageURL)
-
-        // The asset is still in the manifest, pointing into the (empty) media dir.
-        let loadedAsset = try #require(loaded.mediaLibrary.assets[asset.id])
-        #expect(loadedAsset.originalURL.lastPathComponent == "\(asset.id.uuidString).mp4")
-        #expect(!FileManager.default.fileExists(atPath: loadedAsset.originalURL.path))
+        // The old behavior skipped the file and reported success — producing
+        // a package whose manifest referenced media that was never bundled.
+        #expect(throws: ProjectPackage.PackageError.mediaCopyFailed(fileNames: ["does-not-exist.mp4"])) {
+            try ProjectPackage.export(project, to: packageURL)
+        }
+        // No partial package survives the failure.
+        #expect(!FileManager.default.fileExists(atPath: packageURL.path))
     }
 }
 

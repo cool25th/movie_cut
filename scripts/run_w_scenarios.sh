@@ -73,18 +73,33 @@ run_scenario() {
   local pid=$!
   ( sleep 360; kill "$pid" 2>/dev/null; pkill -x MovieCutMac 2>/dev/null; true ) &
   local watchdog=$!
+  # STAB-01: record the watchdog subshell's inner sleep PID while the
+  # subshell is STILL ALIVE. After `kill $watchdog` the sleep re-parents to
+  # launchd and `pkill -P` can no longer see it (the previous "remediation"
+  # reaped nothing and left a 360s orphan per scenario). Held PIDs are the
+  # canonical fix per the stabilization plan.
+  local watchdog_sleep=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    watchdog_sleep="$(pgrep -P "$watchdog" -x sleep 2>/dev/null | head -1 || true)"
+    if [ -n "$watchdog_sleep" ]; then break; fi
+    sleep 0.05
+  done
   for _ in $(seq 1 600); do
     grep -q "W_DONE" "$dir/status.txt" 2>/dev/null && break
     sleep 0.5
   done
   kill "$watchdog" 2>/dev/null || true
-  # Review P2: killing the subshell orphaned its inner `sleep`, which held
-  # the stdout pipe for the full 360s and kept the script alive ~6 minutes
-  # after the last result. Reap the subshell's children (the sleep) and the
-  # subshell itself before waiting on the app.
-  pkill -P "$watchdog" 2>/dev/null || true
+  if [ -n "$watchdog_sleep" ]; then
+    kill "$watchdog_sleep" 2>/dev/null || true
+  fi
   wait "$watchdog" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
+  # STAB-01 evidence: the recorded sleep must be gone after reaping — an
+  # alive PID here means an orphan survived the cleanup.
+  if [ -n "$watchdog_sleep" ] && kill -0 "$watchdog_sleep" 2>/dev/null; then
+    echo "$scenario status=FAIL detail=watchdog_sleep_orphaned pid=$watchdog_sleep"
+    return 1
+  fi
 
   [ -s "$dir/w.json" ] || { echo "$scenario status=FAIL detail=no_result_json"; return 1; }
 }

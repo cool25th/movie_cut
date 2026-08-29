@@ -21,6 +21,13 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
     /// times. Does not override an explicit `useProxyPlayback = true`. (S7)
     public var autoProxyOnThermalPressure: Bool
 
+    /// CA-22: when true (default), a video import automatically starts proxy
+    /// generation in the background — the proxy is ready before the user
+    /// needs it, instead of requiring a manual trip to the media browser.
+    /// Skipped under critical thermal pressure. The user can turn this off
+    /// to keep imports instant on battery-constrained or disk-tight setups.
+    public var autoGenerateProxyOnImport: Bool
+
     /// The render resolution `PlaybackEngine` scales the project canvas down to
     /// for the editing preview (Requirement 5). Export always uses
     /// `project.canvas`, so this never changes the exported file. `.full` (the
@@ -31,11 +38,13 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         useProxyPlayback: Bool = false,
         proxyResolution: ProxyResolution = .default,
         autoProxyOnThermalPressure: Bool = true,
+        autoGenerateProxyOnImport: Bool = true,
         previewQuality: PreviewQuality = .default
     ) {
         self.useProxyPlayback = useProxyPlayback
         self.proxyResolution = proxyResolution
         self.autoProxyOnThermalPressure = autoProxyOnThermalPressure
+        self.autoGenerateProxyOnImport = autoGenerateProxyOnImport
         self.previewQuality = previewQuality
     }
 
@@ -48,6 +57,9 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         proxyResolution = try container.decodeIfPresent(ProxyResolution.self, forKey: .proxyResolution) ?? .default
         // Projects saved before S7 carry no key; default to the safety net on.
         autoProxyOnThermalPressure = try container.decodeIfPresent(Bool.self, forKey: .autoProxyOnThermalPressure) ?? true
+        // CA-22: projects saved before auto-generation carry no key; default
+        // to on so new imports get proxies without user action.
+        autoGenerateProxyOnImport = try container.decodeIfPresent(Bool.self, forKey: .autoGenerateProxyOnImport) ?? true
         // Projects saved before Requirement 5 carry no key; default to full
         // canvas so their preview renders identically. The raw value is decoded
         // as a String and mapped through `init(rawValue:)` so an unknown value
@@ -66,6 +78,11 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         try container.encode(proxyResolution, forKey: .proxyResolution)
         try container.encode(autoProxyOnThermalPressure, forKey: .autoProxyOnThermalPressure)
         // Encode only when not default so existing project files stay
+        // byte-identical when the user never touched this dial (CA-22).
+        if !autoGenerateProxyOnImport {
+            try container.encode(autoGenerateProxyOnImport, forKey: .autoGenerateProxyOnImport)
+        }
+        // Encode only when not default so existing project files stay
         // byte-identical when the user never touched this dial. This keeps the
         // schema-stability guarantee that a no-op setting writes nothing new.
         if previewQuality != .default {
@@ -77,6 +94,7 @@ public struct PlaybackSettings: Codable, Sendable, Equatable {
         case useProxyPlayback
         case proxyResolution
         case autoProxyOnThermalPressure
+        case autoGenerateProxyOnImport
         case previewQuality
     }
 }

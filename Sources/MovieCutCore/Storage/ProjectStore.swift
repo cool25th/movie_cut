@@ -1,8 +1,45 @@
 import Foundation
 
+/// Narrow file-I/O seam for project saves. The production adapter preserves
+/// Foundation behavior; tests can inject a deterministic write-stage failure.
+public protocol ProjectFileWriting: Sendable {
+    func createDirectory(at url: URL) throws
+    func write(_ data: Data, to temporaryURL: URL) throws
+    func commit(_ temporaryURL: URL, to destinationURL: URL) throws
+    func removeIfPresent(at url: URL) throws
+}
+
+public struct FoundationProjectFileWriter: ProjectFileWriting {
+    public init() {}
+
+    public func createDirectory(at url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    public func write(_ data: Data, to temporaryURL: URL) throws {
+        try data.write(to: temporaryURL, options: [.atomic])
+    }
+
+    public func commit(_ temporaryURL: URL, to destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            _ = try fileManager.replaceItemAt(destinationURL, withItemAt: temporaryURL)
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        }
+    }
+
+    public func removeIfPresent(at url: URL) throws {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+}
+
 /// Loads and saves MovieCut projects as JSON documents.
 public actor ProjectStore {
     private let autosaveDirectory: URL?
+    private let fileWriter: any ProjectFileWriting
 
     /// The most recent autosave-load failure, if the recovery file existed but
     /// could not be decoded. Set by `loadAutosaveIfAvailable` when it detects a
@@ -15,12 +52,22 @@ public actor ProjectStore {
     /// (Application Support/MovieCut).
     public init() {
         self.autosaveDirectory = Self.defaultAutosaveDirectory()
+        self.fileWriter = FoundationProjectFileWriter()
     }
 
     /// Creates a project store with an explicit autosave directory (tests), or
     /// `nil` to disable crash-recovery autosave.
     public init(autosaveDirectory: URL?) {
         self.autosaveDirectory = autosaveDirectory
+        self.fileWriter = FoundationProjectFileWriter()
+    }
+
+    /// Creates a store with an explicit save I/O adapter. This is intended for
+    /// deterministic fault-injection tests; production callers use the default
+    /// Foundation adapter.
+    public init(autosaveDirectory: URL?, fileWriter: any ProjectFileWriting) {
+        self.autosaveDirectory = autosaveDirectory
+        self.fileWriter = fileWriter
     }
 
     private static func defaultAutosaveDirectory() -> URL? {
@@ -107,22 +154,16 @@ public actor ProjectStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         let data = try encoder.encode(project)
-        let fileManager = FileManager.default
         let directoryURL = url.deletingLastPathComponent()
-        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try fileWriter.createDirectory(at: directoryURL)
 
         let temporaryURL = directoryURL.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
-        try data.write(to: temporaryURL, options: [.atomic])
-
         do {
-            if fileManager.fileExists(atPath: url.path) {
-                _ = try fileManager.replaceItemAt(url, withItemAt: temporaryURL)
-            } else {
-                try fileManager.moveItem(at: temporaryURL, to: url)
-            }
+            try fileWriter.write(data, to: temporaryURL)
+            try fileWriter.commit(temporaryURL, to: url)
         } catch {
-            try? fileManager.removeItem(at: temporaryURL)
-            throw error
+            try? fileWriter.removeIfPresent(at: temporaryURL)
+            throw FileOperationError.classify(error)
         }
     }
 

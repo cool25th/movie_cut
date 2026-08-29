@@ -4,6 +4,21 @@ import MovieCutCore
 import PhotosUI
 import SwiftUI
 
+/// CA-17: subtitle sidecar export formats — the same pair the Mac offers.
+enum SubtitleExportFormat: String, CaseIterable, Identifiable {
+    case srt = "srt"
+    case vtt = "vtt"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .srt: "SubRip (.srt)"
+        case .vtt: "WebVTT (.vtt)"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class IOSEditorViewModel {
@@ -12,9 +27,14 @@ final class IOSEditorViewModel {
     var playheadTime: TimeInterval
     var isPlaying: Bool
     var lastErrorMessage: String? = nil
+    /// CA-14: transient success feedback (beat-marker outcomes) — mirrors the
+    /// Mac status line; the timeline's beat ticks are the primary visual.
+    var lastStatusMessage: String? = nil
     var exportEngine: IOSExportEngine = IOSExportEngine()
     var musicLibrary: MusicLibrary = MusicLibrary.placeholder()
     var templateStore: TemplateStore
+    // CA-17: subtitle export state — SRT/VTT written from timeline text clips.
+    var lastSubtitleExportURL: URL? = nil
 
     private var session: EditorSession
     private let projectStore: ProjectStore
@@ -826,6 +846,25 @@ final class IOSEditorViewModel {
         }
     }
 
+    /// CA-08: applies a built-in subtitle style preset to the SELECTED text
+    /// clip (Mac `applySubtitleStylePreset` parity). The preset configures
+    /// font/color/stroke/background/position/karaoke highlight in one tap —
+    /// text, word timings, karaoke flag, and animation stay with the clip.
+    func applySubtitleStylePreset(_ preset: SubtitleStylePreset) async {
+        guard let selectedClipId,
+              let clip = currentProject.timeline.tracks
+                  .flatMap(\.clips)
+                  .first(where: { $0.id == selectedClipId }),
+              var textContent = clip.textContent else {
+            lastErrorMessage = "Select a text clip before applying a style preset."
+            return
+        }
+
+        let canvasSize = currentProject.canvas.size
+        textContent = preset.applying(to: textContent, canvasSize: canvasSize)
+        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .textContent(textContent)))
+    }
+
     func addTextClip(text: String, fontName: String, fontSize: Double, color: String) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
@@ -930,6 +969,63 @@ final class IOSEditorViewModel {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// CA-17: exports timeline text clips as a subtitle sidecar file
+    /// (SRT or VTT). Uses the same `SubtitleDocument` serializer the Mac
+    /// consumes, so the output is byte-identical across platforms.
+    /// Returns the written file URL, or nil when no text clips exist.
+    @discardableResult
+    func exportSubtitles(format: SubtitleExportFormat) -> URL? {
+        let segments = timelineSubtitleSegments()
+        guard !segments.isEmpty else {
+            lastErrorMessage = "There are no text clips to export as subtitles."
+            lastSubtitleExportURL = nil
+            return nil
+        }
+
+        let content: String
+        switch format {
+        case .srt:
+            content = SubtitleDocument.srtString(from: segments)
+        case .vtt:
+            content = SubtitleDocument.vttString(from: segments)
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCut-Subtitles")
+            .appendingPathExtension(format.rawValue)
+
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            lastSubtitleExportURL = url
+            lastErrorMessage = nil
+            return url
+        } catch {
+            lastErrorMessage = "Failed to write subtitles: \(error.localizedDescription)"
+            lastSubtitleExportURL = nil
+            return nil
+        }
+    }
+
+    /// CA-17: the subtitle segment set derived from timeline TEXT-track
+    /// clips (stickers excluded) — the same derivation the Mac export uses.
+    private func timelineSubtitleSegments() -> [TranscriptionSegment] {
+        currentProject.timeline.tracks
+            .filter { $0.kind == .text }
+            .flatMap(\.clips)
+            .compactMap { clip in
+                guard let content = clip.textContent, content.contentKind != .sticker else {
+                    return nil
+                }
+                return TranscriptionSegment(
+                    text: content.text,
+                    startTime: clip.timelineRange.start,
+                    endTime: clip.timelineRange.end,
+                    confidence: 1.0
+                )
+            }
+            .sorted { $0.startTime < $1.startTime }
     }
 
     func moveClip(clipId: UUID, newStart: TimeInterval) async {
@@ -1099,5 +1195,122 @@ final class IOSEditorViewModel {
             fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
             fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
         ))
+    }
+
+    // MARK: - Beat detection (CA-14, Mac detectBeats parity)
+
+    /// True when the selection can run beat detection (audio or video clip).
+    var canDetectBeats: Bool {
+        guard let selectedClip else { return false }
+        return selectedClip.kind == .audio || selectedClip.kind == .video
+    }
+
+    /// True when the timeline carries generated beat markers (Clear enabled).
+    var hasBeatMarkers: Bool {
+        currentProject.markers.contains { $0.kind == .beat }
+    }
+
+    /// CA-14: detects beats in the selected audio/video clip and adds beat
+    /// markers (Mac `detectBeats` parity) — the shared Core
+    /// `BeatDetectionProvider` analyzes the asset, source beat times map to
+    /// the timeline through the clip's canonical mapping (rates and ramps
+    /// included), and `AddMarkersCommand` lands them as one undoable step.
+    func detectBeats() async {
+        guard let selectedClipId else {
+            lastErrorMessage = "Select a music clip to detect beats."
+            return
+        }
+
+        do {
+            let snapshot = await session.snapshot()
+            let (clip, asset) = try beatSourceClipAndAsset(for: selectedClipId, in: snapshot)
+            guard clip.kind == .audio || clip.kind == .video else {
+                lastErrorMessage = "Beat detection needs an audio or video clip selection."
+                return
+            }
+
+            lastErrorMessage = nil
+            let provider = BeatDetectionProvider()
+            let beatTimes = try await provider.analyze(asset: asset)
+            let timelineBeats: [TimeInterval] = beatTimes.compactMap { time in
+                beatTimelineMapping(
+                    for: TimeRange(start: time, duration: .ulpOfOne),
+                    in: clip
+                )?.timelineRange.start
+            }
+
+            guard !timelineBeats.isEmpty else {
+                lastErrorMessage = nil
+                lastStatusMessage = "No beats detected in the selected clip."
+                return
+            }
+
+            let markers = timelineBeats.enumerated().map { index, time in
+                Marker(time: time, name: "Beat \(index + 1)", color: "FF9F0A", kind: .beat)
+            }
+            try await session.dispatch(AddMarkersCommand(markers: markers))
+            await refreshFromSession()
+
+            let bpmText = BeatDetectionProvider.estimatedBPM(from: beatTimes)
+                .map { String(format: " (~%.0f BPM)", $0) } ?? ""
+            lastStatusMessage = "Added \(markers.count) beat markers\(bpmText)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// CA-14: removes every generated beat marker in one undoable step
+    /// (Mac `clearBeatMarkers` parity).
+    func clearBeatMarkers() async {
+        guard hasBeatMarkers else { return }
+        await apply(RemoveMarkersCommand(kind: .beat))
+        lastStatusMessage = "Removed all beat markers."
+    }
+
+    /// Resolves the selected clip and its source asset for beat analysis.
+    private func beatSourceClipAndAsset(for clipId: UUID, in project: Project) throws -> (clip: Clip, asset: MediaAsset) {
+        for track in project.timeline.tracks {
+            if let clip = track.clips.first(where: { $0.id == clipId }) {
+                guard let assetId = clip.assetId else {
+                    throw EditorCommandError.invalidCommand("Selected clip has no source media.")
+                }
+                guard let asset = project.mediaLibrary.assets[assetId] else {
+                    throw EditorCommandError.assetNotFound(assetId)
+                }
+                return (clip, asset)
+            }
+        }
+        throw EditorCommandError.clipNotFound(clipId)
+    }
+
+    /// Maps a source-time window to the timeline through the clip's canonical
+    /// mapping — the same math the Mac beat path uses so rate/ramp projects
+    /// land beats at identical positions on both platforms.
+    private func beatTimelineMapping(
+        for sourceRange: TimeRange,
+        in clip: Clip
+    ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
+        guard
+            sourceRange.start.isFinite,
+            sourceRange.duration.isFinite,
+            sourceRange.duration > 0
+        else {
+            return nil
+        }
+
+        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
+        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
+        guard sourceEnd > sourceStart else { return nil }
+
+        guard let mapping = clip.makeTimeMapping() else { return nil }
+        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
+        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
+        guard timelineEnd > timelineStart else { return nil }
+
+        return (
+            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
+            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
+        )
     }
 }

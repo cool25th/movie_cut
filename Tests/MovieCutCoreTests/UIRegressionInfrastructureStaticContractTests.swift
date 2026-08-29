@@ -32,6 +32,11 @@ struct UIRegressionInfrastructureStaticContractTests {
         #expect(regression.contains("golden_${state}.png"))
         #expect(regression.contains("scale=9:8,format=gray"))
         #expect(regression.contains("distance > threshold"))
+        #expect(regression.contains("FAIL (no capture"))
+        #expect(regression.contains("FAIL (no committed golden"))
+        #expect(regression.contains("for golden in \"$GOLDEN_DIR\"/golden_*.png"))
+        #expect(!regression.contains("SKIP (no capture"))
+        #expect(!regression.contains("SKIP (no committed golden"))
     }
 
     @Test("U-08 committed editor goldens exist")

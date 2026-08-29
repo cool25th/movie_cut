@@ -136,7 +136,8 @@ struct Phase24TypographyDensityStaticContractTests {
             ".font(MovieCutTypography.cardTitle)",
             ".font(MovieCutTypography.cardBody)",
             ".font(MovieCutTypography.metadata.weight(.semibold))",
-            "mediaEmptySkeletonCard(index: index)",
+            "mediaEmptyGuidanceCard",
+            #"Text(NSLocalizedString("Your library is empty", comment: ""))"#,
             "openImportPanel()"
         ] {
             #expect(importCTA.contains(marker))

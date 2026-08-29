@@ -1531,11 +1531,125 @@ final class EditorViewModel {
                 let asset = try await mediaAssetWithAppProbe(for: url)
                 try await session.dispatch(ImportMediaCommand(asset: asset))
                 selectedAssetId = asset.id
+                // CA-22: kick off background proxy generation for video
+                // imports when the user hasn't disabled it and thermal state
+                // permits. Fire-and-forget — the import returns immediately.
+                scheduleAutoProxyGeneration(for: asset)
             }
             try await refreshFromSession()
             reportMediaLibraryDropSuccess(count: urls.count)
         } catch {
             setDropError(error.localizedDescription)
+        }
+    }
+
+    /// CA-22 2차: imported video assets that still have no proxy — drives the
+    /// inspector's "Generate missing proxies" (resume) affordance.
+    var videoAssetsMissingProxy: Int {
+        currentProject.mediaLibrary.assets.values
+            .filter { $0.kind == .video && $0.proxy == nil }
+            .count
+    }
+
+    /// CA-22: tracked in-flight proxy generation tasks (auto + resume). The
+    /// handles back the cancel control; the key set doubles as the
+    /// duplicate-work guard.
+    @ObservationIgnored
+    private var proxyGenerationTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// CA-22: assets with a proxy generation currently in flight. Observable
+    /// so the inspector's Playback section can show progress and Cancel.
+    private(set) var autoProxyGenerating: Set<UUID> = []
+
+    /// CA-22 2차: generations ended by cancellation since the last status
+    /// read — distinguishes "user cancelled" from "failed" in UI and tests.
+    /// Plain var (not private(set)) so the Media extension's catch can bump it.
+    var autoProxyCancelledCount = 0
+
+    /// CA-22 2차: cancels every in-flight proxy generation. Partial proxy
+    /// files are removed by the generator's cancellation path, so a later
+    /// resume starts clean rather than adopting a truncated file.
+    func cancelAutoProxyGeneration() {
+        for task in proxyGenerationTasks.values {
+            task.cancel()
+        }
+        if !autoProxyGenerating.isEmpty {
+            lastErrorMessage = nil
+            lastStatusMessage = "Proxy generation cancelled."
+        }
+    }
+
+    /// CA-22 2차: resume entry — generates proxies for every video asset that
+    /// does not have one yet. Covers both a prior cancel and the thermal-skip
+    /// path from auto generation; explicit user action, so it does not consult
+    /// the auto-on-import setting (only the thermal gate, matching manual
+    /// per-asset generation).
+    func resumeMissingProxies() async {
+        // Await any in-flight (or cancelling) generations first so a
+        // cancel→resume sequence doesn't skip the asset that is still winding
+        // down — without this the filter below would race the cancelled task.
+        for task in proxyGenerationTasks.values {
+            await task.value
+        }
+        let snapshot = await session.snapshot()
+        guard !ThermalState.current.shouldBlockExport else {
+            lastErrorMessage = nil
+            lastStatusMessage = "Device is hot — try generating proxies again after it cools."
+            return
+        }
+        let missing = snapshot.mediaLibrary.assets.values
+            .filter { $0.kind == .video && $0.proxy == nil && !autoProxyGenerating.contains($0.id) }
+        guard !missing.isEmpty else {
+            lastErrorMessage = nil
+            lastStatusMessage = "All video assets already have proxies."
+            return
+        }
+        lastErrorMessage = nil
+        lastStatusMessage = "Generating proxies for \(missing.count) video asset(s)..."
+        for asset in missing {
+            scheduleProxyGeneration(for: asset)
+        }
+    }
+
+    /// CA-22: schedules a background proxy generation for a newly imported
+    /// video asset. Checks the user's `autoGenerateProxyOnImport` setting and
+    /// the thermal state (critical → skip); the fire-and-forget Task means
+    /// the import flow never blocks on transcoding.
+    private func scheduleAutoProxyGeneration(for asset: MediaAsset) {
+        // UITest determinism: background transcodes would race the proxy-badge
+        // and parity gates (badge flips mid-assert, extra encode load). The
+        // CA-22 gate opts back in explicitly; users are unaffected.
+        #if DEBUG || MOVIECUT_HARNESS
+        if ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1",
+           ProcessInfo.processInfo.environment["MOVIECUT_UITEST_AUTO_PROXY"] != "1" {
+            return
+        }
+        #endif
+        guard currentProject.playbackSettings.autoGenerateProxyOnImport else { return }
+        scheduleProxyGeneration(for: asset)
+    }
+
+    /// Shared scheduler for the auto (import) and resume (explicit) paths.
+    /// Both go through the tracked-task path so Cancel covers everything.
+    private func scheduleProxyGeneration(for asset: MediaAsset) {
+        guard asset.kind == .video,
+              asset.proxy == nil,
+              !autoProxyGenerating.contains(asset.id)
+        else { return }
+
+        // Critical thermal: generating a proxy now risks a thermal shutdown
+        // mid-encode. The user can still generate manually after cooling
+        // (resumeMissingProxies surfaces that path).
+        guard !ThermalState.current.shouldBlockExport else { return }
+
+        autoProxyGenerating.insert(asset.id)
+        let assetId = asset.id
+        proxyGenerationTasks[assetId] = Task { [weak self] in
+            await self?.generateProxy(for: assetId)
+            await MainActor.run {
+                self?.autoProxyGenerating.remove(assetId)
+                self?.proxyGenerationTasks[assetId] = nil
+            }
         }
     }
 
@@ -1571,6 +1685,10 @@ final class EditorViewModel {
                 selectedAssetId = asset.id
                 selectedClipId = clip.id
                 playheadTime = clip.timelineRange.start
+                // CA-22 2차: timeline import is the primary import surface —
+                // auto proxy generation must fire here too, not just on the
+                // media-library import path (1차 gap).
+                scheduleAutoProxyGeneration(for: asset)
             }
 
             try await refreshFromSession()
@@ -2480,7 +2598,8 @@ final class EditorViewModel {
     func updatePlaybackSettings(
         useProxyPlayback: Bool? = nil,
         proxyResolution: ProxyResolution? = nil,
-        autoProxyOnThermalPressure: Bool? = nil
+        autoProxyOnThermalPressure: Bool? = nil,
+        autoGenerateProxyOnImport: Bool? = nil
     ) async {
         var settings = currentProject.playbackSettings
         if let useProxyPlayback {
@@ -2491,6 +2610,9 @@ final class EditorViewModel {
         }
         if let autoProxyOnThermalPressure {
             settings.autoProxyOnThermalPressure = autoProxyOnThermalPressure
+        }
+        if let autoGenerateProxyOnImport {
+            settings.autoGenerateProxyOnImport = autoGenerateProxyOnImport
         }
 
         await apply(SetProjectPlaybackSettingsCommand(playbackSettings: settings))

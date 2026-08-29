@@ -103,7 +103,61 @@ struct InspectorExportSection: View {
             .accessibilityLabel("Auto-use proxy under thermal pressure")
             .accessibilityHint("When on, the preview drops to a generated proxy while the device is hot, then restores the original when it cools. Turn off to keep the original at all times.")
 
+            // CA-22 2차: the auto-generation master switch plus the
+            // in-flight Cancel / missing-proxies Resume controls live with
+            // the other proxy settings so the whole proxy story is one block.
+            Toggle("Auto-generate proxy on import", isOn: Binding(
+                get: { viewModel.currentProject.playbackSettings.autoGenerateProxyOnImport },
+                set: { newValue in
+                    Task { await viewModel.updatePlaybackSettings(autoGenerateProxyOnImport: newValue) }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .accessibilityLabel("Auto-generate proxy on import")
+            .accessibilityHint("When on, importing a video starts generating its proxy in the background so playback is smooth sooner. Generation skips while the device is critically hot and can be resumed below.")
+
+            proxyProgressRow
+
             proxyResolutionPicker
+        }
+    }
+
+    /// CA-22 2차: in-flight generation progress with Cancel, and the Resume
+    /// control for assets still missing a proxy (after a cancel or a
+    /// thermal-skipped auto generation).
+    @ViewBuilder
+    private var proxyProgressRow: some View {
+        if !viewModel.autoProxyGenerating.isEmpty {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Generating proxies (\(viewModel.autoProxyGenerating.count))…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button("Cancel") {
+                    viewModel.cancelAutoProxyGeneration()
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Cancel proxy generation")
+                .accessibilityHint("Stops the in-flight background proxy generations. Partial files are discarded; use Generate missing proxies to restart.")
+            }
+        } else if viewModel.videoAssetsMissingProxy > 0 {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(viewModel.videoAssetsMissingProxy) video asset(s) without a proxy")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button("Generate missing proxies") {
+                    Task { await viewModel.resumeMissingProxies() }
+                }
+                .controlSize(.small)
+                .accessibilityLabel("Generate missing proxies")
+                .accessibilityHint("Generates proxies for every imported video that does not have one yet. Skips with a notice while the device is critically hot.")
+            }
         }
     }
 

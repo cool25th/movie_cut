@@ -43,26 +43,26 @@
 
 | ID | 항목 | 단계 | 승인 상태 | 완료 기준 요약 |
 |---|---|---|---|---|
-| CA-01 | 오프라인 차단·DNS/HTTP 트래픽 캡처 테스트(iOS 포함) — 증거원장 MC-02 ②③ | P0 | **즉시 실행 가능** | 네트워크 차단망에서 대표 작업 전 통과 + 캡처 0 기록을 증거원장 MC-02에 갱신 |
+| CA-01 | 오프라인 차단·DNS/HTTP 트래픽 캡처 테스트(iOS 포함) — 증거원장 MC-02 ②③ | P0 | **완료(2026-08-27)** — `run_ca01_offline_gate.sh` 실측: Mac은 sandbox-exec 네트워크 전면 거부(루프백 프로브로 프로파일 유효성 입증) 하에서 파리티 하니스(임포트→프리뷰→출력) 완주 + sandboxd 네트워크 위반 **0건**, iOS는 시뮬레이터 전체 하니스(임포트→프리뷰→출력→오디오→저장) 동안 lsof 소켓 캡처 **0개/36샘플** — MC-02 ②③ 갱신 | 네트워크 차단망에서 대표 작업 전 통과 + 캡처 0 기록 (완료) |
 | CA-02 | 파리티 허용 오차 등급 수치 확정(Exact/Tolerance/Perceptual) | P0 | **완료(2026-08-23)** — VERIFICATION_STANDARD §2 등급별 수치 확정(Exact=수치 동일·유닛테스트 담당 / Tolerance=MAD ≤ 2.0+1프레임·17 시나리오 게이트 / Perceptual=블라인드 비열등)+신규 시나리오 등급 명시·허용치 변경 승인제 기재 | 골든 재판정 기준 문서화 |
 | CA-03 | 미디어 관리·프로젝트 생존성 감사(재연결·누락·손상·마이그레이션 실패 경로·디스크) | P0 | **완료(2026-08-24, e36f83a + 2차 실사 병합)** — `AUDIT_MEDIA_SURVIVABILITY_20260824.md`(경로 5종 판정 + §4 2차 병합). 등록: BUG-01(P0 오토토회복 침묵)·BUG-02(P0 임포트 무검증)·**BUG-04(P1 익스포트 사전 미디어 검사 부재 — 2차 신규)**·**BUG-05(P1 분류 오류 미분류 덮어씀 — 2차 신규)**. BUG-03(재연결 자동화 0)은 **폐기** — `MediaRelinkTests`가 이미 실경로 잠금(1차 탐색 누락). 수정은 BUG 증분으로(§1.7) | 감사 보고 + 발견 결함의 P0 버그 등록 (완료) |
 | CA-04 | 입력 포맷 호환 매트릭스(VFR·10bit·Log·혼합 fps/sample rate·rotation) | P0 | **완료(2026-08-25) — `AUDIT_INPUT_FORMATS_20260824.md` + `run_ca04_format_matrix.sh` 실측: VFR→CFR✅·혼합 fps A/V Δ0ms✅·BT.2020→bt709 재태그✅·10bit → BUG-06 해결(콘텐츠 영역 Δ0.9)·회전 → BUG-07 해결(비대칭 픽스처 방향 실측 + 어설션 승격)** | 매트릭스 작성 + 최우선 회귀(혼합 미디어 sync·색 유지) 실측 |
 | CA-05 | 실패·복구 UX 매트릭스(15 실패 시나리오 × 무손실/원인/재시도/이어하기/임시파일) | P0 | **완료(2026-08-24)** — `CA05_FAILURE_RECOVERY_UX_MATRIX_20260824.md`: 15 시나리오 × 5축 파일:라인 근거. 13/15 완전 충족(CA-03 감사·외부 리뷰 반영이 전제). 신규 등록: UX-REC-01(P2 iOS 부분출력 잔존)·UX-REC-02(P2 iOS 복구 무음 채택) — §1.9 | 매트릭스 + 결함 우선순위화 (완료) |
 | CA-06 | 접근성 핵심 경로 매트릭스(임포트→편집→출력, VoiceOver 등) | P0 | **완료(2026-08-24)** — `CA06_ACCESSIBILITY_CORE_PATH_MATRIX_20260824.md`: Mac 핵심 경로 VoiceOver·키보드 전 충족(UX-08 계약+43 단축키). **iOS 차단 발견: A11Y-01(P1) 인스펙터 하위 뷰 5종 라벨 0건** + A11Y-02(P2)·A11Y-03(P3) — §1.10. 인스펙터 Picker 라벨 접힘은 이번에 수정 | 매트릭스 + 차단 결함 등록 (완료) |
 | CA-07 | 가격·판매 단위 결정(모델 선택·Universal Purchase) | P0 | **모델 확정(Q2: 일회성+유료 메이저 업데이트) — 구체 가격은 사용자 전용 유지** | 결정 기록 → REQUIREMENTS §13 반영 |
-| CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **즉시(방향 문서 2단계 "카라오케 스타일 편집"과 일치)** | iOS 파리티 시나리오 + 실기기 검증 |
+| CA-08 | iOS 자막 스타일 6종·카라오케 이식 | P1 | **완료(2026-08-26)** — `IOSEditorViewModel.applySubtitleStylePreset`(Mac 패리티·SetClipPropertyCommand) + 인스펙터 "Subtitle Style" 섹션: Core `SubtitleStylePresets.builtins` 6종(Clean White/Bold Box/Yellow Pop/Shadow Soft/Mint Outline/Classic Serif) 수평 칩 + 색상 미리보기 원형 + 원탭 적용(undo 1-step). 카라오케 렌더링은 Core TextOverlayPixelProcessor가 이미 처리 | iOS 파리티 + 실기기 검증 |
 | CA-09/10 | N1-A 대사 검색 / N1-B 텍스트 기반 구간 선택 | P1 | 승인 대기(Q11 일괄 승인) | 검색 성공률·구간 이동 정확도 측정 |
 | CA-11 | N2 제안형 오토스타일 MVP(제안→미리보기→적용→undo — 자동화 4원칙 전항) | P1 | 승인 대기(기존 'N2 등록' 대기와 동일 건) | COMPETITIVE_ANALYSIS §1.5 원칙 전항 + 동일 입력 재현성 |
-| CA-12 | 경쟁사 A/B 벤치마크 하니스(조건 필드·12 fixture·PSNR/SSIM+블라인드) | P1 | **즉시 실행 가능(측정 인프라 — 방향 문서 4단계 게이트의 전진 구축)** | 하니스 + 기준 수치 최초 기록 |
+| CA-12 | 경쟁사 A/B 벤치마크 하니스(조건 필드·12 fixture·PSNR/SSIM+블라인드) | P1 | **완료(2026-08-27)** — `ab_benchmark_metrics.py`(single/pair/blind/self-test 15종 — PSNR·SSIM·ΔE·banding·clipping·VFR·sync·loudness) + `make_ab_fixtures.sh`(12 fixture·SHA-256 핀=세트 버전 관리) + `run_ca12_ab_benchmark.sh`(§1.4 조건 필드·실앱 구동·RTF/RSS·baseline.json) + 하니스 게이트 CHROMA_KEY·export_wall_s. **첫 기준 수치 11/12 fixture 실측 기록**(`CA12_AB_BENCHMARK_20260827.md` — 30분 RTF 0.299·2시간 RTF 0.348·A/V Δ0.000s·peakRSS 5,054MB 등). 발견 등록: §1.13 BUG-CA12-01(파리티×덕킹 파킹)·BUG-CA12-02(HDR 파리티 위반) | 하니스 + 기준 수치 최초 기록 (완료 — B측 블라인드 평가는 경쟁사 출력 확보 시) |
 | CA-13 | 폰트 패키징 정책(N5 — 라이선스 경고·프로젝트 포함·PostScript 충돌) | P1 | 승인 대기(라이선스 검토 선행) | 정책 문서 + 구현 |
-| CA-14/15 | 비트 감지 iOS UI / 현지화·텍스트 품질 감사 | P1 | 즉시(소형 — G-09 Inc3 이후 슬롯) | 파리티/감사 보고 |
+| CA-14/15 | 비트 감지 iOS UI / 현지화·텍스트 품질 감사 | P1 | **완료(2026-08-28)** — CA-14: iOS `detectBeats`/`clearBeatMarkers`(Mac 패리티 — Core BeatDetectionProvider 공유·canonical 매핑·AddMarkersCommand 단일 undo) + 하단 툴바 "Beats" confirmationDialog(Detect/Clear) + 타임라인 비트 틱 오버레이 + **스냅 대상에 마커 포함**(Mac 파리티 갭 수습). 검증: `IOSBeatDetectionTests` 2/2(실제 클릭트랙 WAV→임포트→감지→마커≥6·클립 범위 내→정리·무선택 명시 오류). CA-15: `CA15_LOCALIZATION_TEXT_QUALITY_MATRIX_20260828.md` — 축 10종 중 7종 충족(4종 실측 프로브 `MultilingualTextRenderTests` — CJK·emoji/결합문자·RTL·줄바꿈 잉크 커버리지 4/4 PASS)·1종 범위 외(세로 텍스트)·2종 관찰(파일명 정규화·혼합방향). **신규 결함 0건** | 파리티/감사 보고 (완료) |
 | CA-16 | [P2 묶음] N1-C/D·매치컬러·애니메이션 스티커·보이스 체인저·업로드 보조·iOS 프록시·배치 export·**Auditions 테이크 비교(2026-08-23 v4 보류 편입 — 중간 규모·FCP 고유 패러다임, 베타 반응 후)** — 벡터스코프 제거(2026-08-23: 이미 구현 `InspectorEffectsSection.swift:200`) | P2 | 베타 반응 후 | 각 항목 DoD |
-| CA-17 | 자막 sidecar **검증**·iOS 진입 — VTT/SRT 구현·UI·테스트 이미 존재(737c036, `CA_REGISTRATION_PROPOSAL_20260823.md` v2). 잔여: 실제 플레이어 3종 로드 확인(D), iOS export 진입(없음 — G-09 Inc3 4순위와 세트) | 소형 | **즉시 실행 가능(2026-08-23 승인)** | 플레이어 3종 로드 기록(체크섬) + SRT↔VTT round-trip 골든 회귀 |
+| CA-17 | 자막 sidecar 검증·iOS 진입 | 소형 | **iOS export 진입 완료(2026-08-26)** — `IOSEditorViewModel.exportSubtitles(format:)`(SRT/VTT, Core `SubtitleDocument` 공유·Mac 바이트 동일) + 하단 툴바 "Subtitles" 버튼 → confirmationDialog 형식 선택 → 상단 ShareLink로 공유. 잔여: 실제 플레이어 3종 로드 확인(수동/D) | iOS export 진입 완료 + Core 파리티 |
 | CA-18 | 화자 분리(diarization) 자막 — 게이트형 연구. **임계값 사전 등록: 화자 혼동율 ≤10%(합성·실녹음 각각)·RTF ≤0.5·메모리 예산(스템 게이트와 동일 기준)** | 연구 | **측정 단계만 승인(2026-08-23)** — 구현 착수는 측정 보고 후 별도 승인 | 2인 fixture 측정 보고 → 임계값 전항 통과 시에만 UI 착수 승인 요청, 미통과 시 명시적 실패 기록 |
-| CA-19 | 타임라인 **가이드라인**(드래그 기준선) + 눈자 밀도 감사 — 시간 눈자는 이미 존재(1/5/10초 밀도 적응, `TimelineView` timeRuler), 잔여는 가이드라인과 장편 분 단위 가독성 | 소형 | **즉시 실행 가능(2026-08-23 승인)** | 가이드라인 생성·이동·삭제·스냅 우선·undo 단일 골든 + 밀도 감사 보고 + VoiceOver 회귀 |
+| CA-19 | 타임라인 **가이드라인**(드래그 기준선) + 눈자 밀도 감사 | 소형 | **완전 종결(2026-08-28)** — 밀도 감사 보고(`CA19_RULER_DENSITY_AUDIT_20260828.md`): 충돌은 전 줌 범위(20~300px/s)에서 산술적으로 안전(최악 라벨 간격 200px·결함 0건), 장편 가독성 결함(초 고정 라벨 "3600s")은 `TimecodeParser.rulerLabel` 3단 적응(45s/12:05/2:02:05)으로 수정+표값 테스트 고착. 이전: iOS 스냅+가이드 완료(2026-08-26·Mac 패리티) | iOS 드래그 스냅+가이드 실측 + Mac 빌드 복구 + 밀도 감사 (완료) |
 | CA-20 | roles + 타임라인 인덱스(W4 장편 관리 세트) — 클립 role 태그·롤별 레인 색·인덱스 검색→이동. FCP roles+Timeline Index 대응. role·키워드·스마트컬렉션 전무(`CA_REGISTRATION_PROPOSAL_20260823.md` v3 §2, 2026-08-23 코드 확인) | P2 | **등록 승인(2026-08-23) — 방향 문서 §3 반영 후 실행**(W4 직결, 2단계 배치 검토) | role 영속화+migration round-trip · 롤별 레인 골든(U) · 인덱스 검색→이동 30분 fixture p95 · VoiceOver 인덱스 탐색 · iOS defer 사유 기록 |
 | CA-21 | Edit Detection(씬 자동 분할 제안) — Core `SceneChangeProvider` + VM `detectAndSplitScenes` + UI 배선 모두 존재(2026-08-25 정정, §H 참조). FCP 12.3 대응 | 연구(P2) | **측정 단계만 승인(2026-08-23)** — precision/recall 임계값은 측정 설계 시 사전 등록 후 고정 | 합성 fixture+실영상 2종 측정 보고 → 통과 시에만 UI 착수 승인 요청(§1.5 원칙 전항), 미통과 시 명시적 실패 기록 |
-| CA-22 | 프록시 자동 생성 — 임포트 시 백그라운드 큐(현재 수동 전용 `EditorViewModel+Media.swift:63`). 인프라 완비(4단계+배지+thermal), 자동화만 부재(N8) | P2 | **즉시 실행 가능(2026-08-23 승인)** — G-27 이후 슬롯 | 백그라운드 생성 E2E(진행·취소·재개) · thermal 상호 정책 · 생성 중 편집 회귀 · 디스크 여유·실패 안내(CA-05 연결) |
+| CA-22 | 프록시 자동 생성 — 임포트 시 백그라운드 | P2 | **완료(2026-08-27, 2차)** — 2차: ①설정 UI 토글(인스펙터 Playback 섹션 "Auto-generate proxy on import") ②진행 취소(`cancelAutoProxyGeneration` — Core `ProxyGenerator`가 `withTaskCancellationHandler`+`cancelExport`로 인코딩 중 취소·부분 파일 정리) ③재개(`resumeMissingProxies` — 취소/thermal 스킵 분 모두 커버, 진행 중 태스크 완료 대기 후 스케줄) ④**1차 갭 수습: 타임라인 임포트 경로(주 경로)에도 자동 생성 연결**(미디어 라이브러리 경로에만 있었음) ⑤하니스 게이트 MODE/CANCEL/RESUME+정착 대기·기존 게이트 결정성 보호 옵트아웃. 검증: `run_ca22_proxy_gate.sh` **4 leg 12/12 PASS**(off 미스케줄·on 생성·인코딩 중 취소·취소→재개 완주) + Core 3종(취소 거부·레디 단축·설정 왕복) + 게이트 5/5(1,420)·파리티 스윕 13/13 | 백그라운드 생성 E2E·thermal 상호 정책 (완료) |
 | CA-23 | 프로젝트 스냅샷/버전 히스토리 — autosave와 별개 사용자 주도 안전망(현 기능 부재. 과거 `VersionHistory`는 archive V1/V2 이후 삭제 — 2026-08-23 전역 검색 0건, dead-code 재활용 근거 정정) | P2 | **등록 승인(2026-08-23) — 실행 시점은 별도 결정** | 스냅샷 생성·목록·복원 앱 E2E(undo 독립) · 용량 정책·오래된 정리 · autosave 역할 구분 문서화 · 복원 전 현재 상태 보호 확인 |
 | CA-24 | 한국어 UI 커버리지 100% — Q1 페르소나 직결 | 소형(P1 하위) | **완료(2026-08-25)** — 양 카탈로그 en+ko 전량(외부 리뷰가 iOS 106 미커밋 발견: fbf3149는 Mac만 반영돼 있었음 — 병렬 git 경합 유실, 재적용). CI 강화: 양 플랫폼 키+번역값(en·ko) 존재 검사 차단화. 잔여: `SNS 좋은 소리` 프리셋명은 로케일 불변 제품명(의도), ko 실기기 스크린샷 골든은 베타 시점 | 커버리지 100%·CI 이중 검사 (완료) |
 | CA-25 | 온보딩·샘플 프로젝트 — W1 미니 샘플 번들+첫실행 3단계 안내(임포트→자막→출력). 첫실행 경로 부재("Landscape Tutorial"은 템플릿 자산일 뿐, `BuiltinTemplates.swift:43`) | 소형 | **등록 승인(2026-08-23) — 방향 문서 §3 반영 후 실행**(Track A 베타 체감 직결) | 샘플 프로젝트 번들 내장(**오프라인 원칙 유지**) · 신규 사용자 첫 출력 ≤10분 목표 측정(SC-C1 스타일) · Quick Tools 발견률 최소 측정 |
@@ -70,7 +70,7 @@
 | CA-27 | Timecode 직접 입력 — `PreviewPanel` 표시 전용이었음(2026-08-23 확인). 키보드 완결성·정밀 탐색(Q6 핵심 경로 정합) | 소형 | **완료(2026-08-23)** — Core `TimecodeParser`(SS·MM:SS·MM:SS:FF·HH:MM:SS:FF, 무효 입력 nil 명시적 실패)+유닛테스트 6건(Exact)+현재 시간 배지 편집 필드화(제출·포커스 상실 시 seek, 무효 입력 상태 메시지·원복)+VoiceOver 라벨+표시 fps를 프로젝트 프레임레이트로 정통화(기존 30 고정 오류)+StaticContract 2건 갱신·ko 문자열 3건 추가 | 게이트 5단계 통과(1,351 테스트) |
 | CA-28 | RGB 파레이드 스코프 — `parade` 0건(2026-08-23 확인, 벡터스코프는 존재). `ScopeViews` 확장 소형 | 소형 | **완료(2026-08-24)** — Core `ScopeAnalyzer.rgbParade`(lumaWaveform과 동일 빈ning 계약의 R/G/B 채널별 파형)+골든 테스트 4건(채널 분리·x 램프 추적·혼합 픽셀 독립 빈ning·퇴화 가드, Exact)+Mac `RGBParadeView`(R/G/B 패널, WaveformView와 동일 렌더링 계약)+인스펙터 노출(그레이딩 패널 waveform/vectorscope 행 아래)+접근성 라벨/값(영어 키+en/ko). 기존 스코프(histogram·waveform·vectorscope) 무변경·회귀 없음 | 게이트 5단계 통과 |
 
-**실행 규칙**: CA-01·02·03·04·05·06·08·12·14·15·17·19·22·24·26·27는 즉시 실행(03~06은 2026-08-24 방향 문서 §3 v1.1 반영으로 자격 확보), CA-28 완료, CA-18·21은 측정 단계만, CA-20·23·25는 등록 완료(실행 조건 도달 시), 나머지는 승인 대기. AI 음성(TTS 보이스 확장)은 **등록 보류(2026-08-23 승인 — 베타 반응 후 재상정)**. 루프 회차 보고에는 '승인 대기' 항목을 항상 나열한다.
+**실행 규칙**: CA-02·04·05·06·08·12·24·26·27·28 완료, CA-01 완료, CA-14·15·17·19·22 잔여 즉시 실행 가능, CA-18·21은 측정 단계만, CA-20·23·25는 등록 완료(실행 조건 도달 시), 나머지는 승인 대기. AI 음성(TTS 보이스 확장)은 **등록 보류(2026-08-23 승인 — 베타 반응 후 재상정)**. 루프 회차 보고에는 '승인 대기' 항목을 항상 나열한다.
 
 ---
 
@@ -212,9 +212,9 @@
 
 - 실사 결과 이미 구현돼 있었음(라벨+값+힌트·취소 파괴적 롤+힌트) — 계약 테스트로 잠금.
 
-### A11Y-03 (P3) — 빈 라이브러리 스켈리톤 카드 시각 신뢰감
+### A11Y-03 (P3) — 빈 라이브러리 스켈리톤 카드 시각 신뢰감 — **수정 완료(2026-08-28)**
 
-- VO 숨김은 정상. 로딩/깨진 자산처럼 보이는 시각 문제 — 빈 상태 안내 카드로 교체(외부 리뷰 지적, 기능 아님).
+- VO 숨김은 정상이었으나 로딩/깨진 자산처럼 보이는 시각 문제(외부 리뷰 지적) — 스켈리톤 6장(`mediaEmptySkeletonCard`·`mediaEmptyGridRhythm`)을 **단일 빈 상태 안내 카드**로 교체: "Your library is empty" + 임포트 안내(en/ko 카탈로그 등록)·VoiceOver 가시(스켈리톤은 숨김이었음). 아이콘은 Phase 2-1 계약이 금지한 온보딩 아이콘 대신 `square.grid.2x2`. 계약 3종(Phase21·P0Browser·Phase24)을 새 구조로 갱신 + 스켈리톤 복귀 금지 부정 단언 추가. 게이트 5/5.
 
 ---
 
@@ -308,6 +308,26 @@
 
 - `IOSEffectsInspectorView.swift` 57-354의 한글 리터럴 31곳이 카탈로그 키를 우회(source language en인데 영어 환경에서도 한국어 표시). 카탈로그에 이미 대응 키 다수 존재 — 영어 키 교체 + 부족 키 등록 + Swift 소스 Hangul 리터럴 차단 CI 검사. 함께: G-27 시뮬레이터 하니스가 공유 렌더 계획(`IOSExportEngine.makeRenderPlan`)이 아닌 레거시 `IOSPreviewCompositionBuilder` 사용(드리프트 위험) → 하니스 교체 후 레거시 빌더 삭제.
 - 수정(2026-08-26): 31곳 영어 키 교체(verbatim 2건 포함) + 카탈로그 18키 등록 + `scripts/verify_no_hangul_literals.py` CI 차단 도입(4d881cb). G-27 하니스는 `makeRenderPlan` 구동으로 교체 + 레거시 빌더 삭제(012c10e).
+
+---
+
+## 1.13 CA-12 벤치마크 하니스 발견 결함 (2026-08-27 등록)
+
+> 원천: CA-12 첫 기준 수치 실측 중 하니스가 포획(`docs/CA12_AB_BENCHMARK_20260827.md` §6). 둘 다 기존 도구 교차검증으로 확정.
+
+### BUG-CA12-01 (P2 인프라) — 파리티 하니스×덕킹 조합의 태스크 파킹 — 미수정(조사 심화됨)
+
+- 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴). **결정론 재현**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
+- **조사 결과(2026-08-27 심화)**: ①파킹은 composition 재구성 이후 **첫 필수 서스펜션 지점마다 이동** — 순서 재배열(덕킹을 비억제 창에서 먼저 실행)로 composition_ready까지는 통과하지만 스냅샷 대기 루프에서 동일 파킹(→재배열은 폐기). ②`Task.sleep`·`Task.yield` 모두 재개 안 됨(시계 문제 아님). ③**`DispatchQueue.main.async` 블록도 전달 안 됨(GCD 레벨)** — 반면 앱 활성화 등 런루프 이벤트는 계속 처리됨(메인 런루프 모드 kCFRunLoopDefaultMode 정상·lldb 확인). ④전역 협력 풀은 생존(detached 하트비트 1틱 기록) — 이후 MainActor.run 홉에서 정지. ⑤덕킹 **램프 적용(APPLY)과 무관**(오디오 트랙 존재 자체가 트리거)·크로마키 게이트는 무관·일반 경로 덕킹 E2E는 통과. 종합: **메인 디스패치 큐의 전달이 영구 정지하는 OS/AVFoundation 계열 결함**(W4 ProRes 교찰의 "once-continuation 파킹(Apple측)"과 같은 부류로 추정) — 루프 내 도구로는 근본 원인 특정 불가.
+- 부산물(유지): `snapshotFrame`의 seek completion 누수 방어 와치독(2s 경합·1회 재개 보장 — AVPlayer 공식 문서상 완전 핸들러 미보장 클래스). 파리티 스윕 13/13 무회귀 확인.
+- 잔여: 재현은 1커맨드로 고정됨(ab09). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
+
+### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정(메커니즘 확정·G-29 연계)
+
+- 증상: `ca04_bt2020pq` 소스 패스스루에서 프리뷰 PNG 대비 출력 PSNR 15.1dB·ΔE mean 10.98. 기존 파리티 비교기 교차 FAIL(MAD 11.26 vs 허용 2.0) — CA-12 pair 메트릭 정합성 확인 완료.
+- **메커니즘 확정(2026-08-27)**: 대부분 밴드는 일치(Δ≤2)하나 **고채도 시안 밴드만 프리뷰에서 핑크로 뒤집힘** — 프리뷰(plain 경로·플레이어 다리)는 AVFoundation이 HDR 태그 소스를 SDR 렌더 표면에 맞춰 변환하며 그 변환이 범위 밖 색을 뒤집는 것. 출력은 원시 재해석(bt2020 매트릭스 RGB 그대로 — CA-04가 검증한 v1 SDR 계약·소스 프레임과 MAD 2.49로 충실).
+- **시도·부정된 수정 2건**: ①스냅샷 최종 변환의 작업공간 고정(`RenderColorConfiguration.sourceImage`) — 버퍼가 이미 변환돼 도착해 효과 없음(측정 MAD 11.13→11.07 노이즈). ②합성 색 삼중항 Rec.709 명시(player+reader 양 다리) — reader 다리는 삼중항을 색 변환에 소비하지 않아 효과 없음(11.07). 둘 다 폐기(측정 증거 없는 배선 금지 원칙). ①의 스냅샷 고정은 후속 HDR 파이프라인을 위한 원칙적 핀으로만 유지(주석에 행동 중립 명시).
+- 본수정 방향: 양 다리가 동일 해석을 하도록 **HDR 인입 형식을 수용하는 컴포지터 + 공유 변환** 필요 — G-29(HDR-ready 파이프라인, 3단계)의 입력 요구사항으로 이관. 혼합(HDR+SDR) 소스 프로젝트의 처리 정책도 함께 설계 대상.
 
 ---
 

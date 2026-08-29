@@ -3,6 +3,102 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9.
 
+## 2026-08-28 세션 (A11Y-03 + CA-19 — 자율 소형 큐 소진)
+
+- **A11Y-03(P3) 수정**: 빈 라이브러리의 스켈리톤 6장(로딩/깨진 자산처럼 보임) → 단일 빈 상태 안내 카드("Your library is empty"+임포트 안내·en/ko 카탈로그 등록·VO 가시·`square.grid.2x2` 아이콘). StaticContract 3종(Phase21·P0Browser·Phase24)을 새 구조로 갱신 + 스켈리톤 복귀 금지 부정 단언. 계약이 금지한 온보딩 아이콘(`photo.on.rectangle.angled`) 재사용을 피한 경위 주석.
+- **CA-19 완전 종결**(0d4909e): 밀도 감사 — 전 줌 범위 라벨 충돌 불가(최악 200px)·결함 0건, 장편 라벨 가독성은 `TimecodeParser.rulerLabel` 3단 적응으로 수정(12/12).
+- **큐 상태**: 잔여 자율 소형 전부 소진 — 남은 것은 사용자 대기(G-27 실기기·TCC·PARITY-TOL-01·디스크)와 상위 이관(BUG-CA12-01 에스컬레이션·BUG-CA12-02→G-29)뿐. 게이트 5/5.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① 방향 문서 §3 게이트 대조·백로그 잔여 점검 후 보고(자율 큐 소진). **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량 관리·BUG-CA12-01 에스컬레이션.
+
+## 2026-08-28 세션 (CA-19 완전 종결 — 타임라인 눈금 밀도 감사·장편 라벨 적응)
+
+- **밀도 감사(잔여 소멸)**: `CA19_RULER_DENSITY_AUDIT_20260828.md` — 라벨 충돌은 줌 하한(20px/s)에서도 200px 간격으로 전 범위 산술 안전(충돌 조건 줌<5px/s 도달 불가)·2시간 콘텐츠도 Canvas 가시 영역 렌더라 국소 부담 — **결함 0건**.
+- **가독성 결함 수정**: 룰러 라벨이 초 고정("3600s")이던 것을 `TimecodeParser.rulerLabel` 3단 적응(45s / 12:05 / 2:02:05·프레임 무 — 전송부 MM:SS:FF와 역할 구분)으로 교체. 표값 테스트 9종 포함 12/12 PASS.
+- **큐 상태**: A11Y-01/02·UX-REC-01/02·CA-14/15/22/19 전부 완료 확인 — 잔여 자율 소형은 A11Y-03(P3)뿐. 사용자 대기 불변.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **A11Y-03**(P3 빈 라이브러리 빈 상태 카드) ② 방향 문서 §3 게이트 대조·자율 큐 소진 보고. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량 관리.
+
+## 2026-08-28 세션 (CA-14/15 완료 — 비트 감지 iOS UI·현지화·텍스트 품질 감사)
+
+- **CA-14(iOS 비트 감지, Mac 패리티)**: ①`IOSEditorViewModel.detectBeats/clearBeatMarkers/canDetectBeats/hasBeatMarkers` + `lastStatusMessage` — Core `BeatDetectionProvider` 공유·canonical 매핑(속도/램프 포함)·`AddMarkersCommand` 단일 undo·BPM 상태. ②하단 툴바 "Beats" 버튼 → confirmationDialog(Detect/Clear — 선택 게이트). ③타임라인 비트 틱 오버레이(레인 상단 2pt 주황·장식용 — 터치 타깃 문제로 비인터랙티브·VO 숨김, 개수는 상태로 안내). ④**스냅 대상에 마커 포함**(Mac은 포함·iOS는 빠져 있던 파리티 갭 수습). ⑤`IOSBeatDetectionTests` 2/2 — 실제 클릭트랙 WAV(120BPM 8클릭)를 AVAudioFile로 합성→임포트→선택→감지→마커≥6·클립 범위 내→정리·무선택 명시 오류.
+- **CA-15(현지화·텍스트 품질 감사)**: `CA15_LOCALIZATION_TEXT_QUALITY_MATRIX_20260828.md` — 축 10종(카탈로그/CJK/emoji·결합/RTL/줄바꿈/세로텍스트/숫자·시간/파일명/단축키/측정) 판정: **7종 충족(4종 실측)·1종 범위 외·2종 관찰 — 신규 결함 0건**. 실측 프로브 `MultilingualTextRenderTests` 4/4 PASS(공유 TextOverlayPixelProcessor 경로 잉크 커버리지 — 폰트 캐스케이드 가정 아닌 픽셀 증거)가 상시 게이트에 편입되어 다국어 렌더 회귀 차단.
+- **검증**: iOS 시뮬레이터 테스트 2/2(TEST SUCCEEDED)·Core 프로브 4/4·verify_gate 5/5.
+- **부수**: 테스트 게이팅 단언 순서 수정(addClipToTimeline 자동 선택 반영).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① 백로그 잔여 자율 소형 점검(CA-17 실제 플레이어 로드 확인=수동/D·CA-19 밀도 감사 보고 등) ② 방향 문서 게이트 대조·자율 큐 소진 시 보고. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량 관리.
+
+## 2026-08-27 세션 (CA-22 2차 완료 — 프록시 설정 UI·진행 취소·재개)
+
+- **설정 토글**: 인스펙터 Playback 섹션에 "Auto-generate proxy on import" 체크박스(`updatePlaybackSettings` 신규 파라미터) — 프록시 설정 3종(재생 사용·thermal 자동·해상도)과 한 블록.
+- **취소**: `cancelAutoProxyGeneration()` — 관찰 가능 `autoProxyGenerating` 집합 + 태스크 핸들 저장. Core `ProxyGenerator.generateProxy`는 `withTaskCancellationHandler`+`cancelExport`로 **인코딩 중 취소**를 지원하고 부분 파일을 정리(취소≠실패 구분 — `autoProxyCancelledCount`).
+- **재개**: `resumeMissingProxies()` — 프록시 없는 전 비디오 자산 일괄 생성(취소분+thermal 스킵분 모두). 진행 중/취소 중 태스크 완료를 먼저 대기해 cancel→resume 경쟁 차단. thermal critical은 안내 후 거부.
+- **1차 갭 수습**: 자동 생성이 미디어 라이브러리 임포트에만 연결돼 있었음 → **타임라인 임포트(주 사용자 경로)에도 연결**. 하니스(MOVIECUT_UITEST) 실행은 기본 억제(CA-22 게이트만 옵트인)로 기존 게이트 결정성 보존 — 파리티 스윕 13/13 무회귀로 확인.
+- **검증**: `scripts/run_ca22_proxy_gate.sh` **4 leg 12/12 PASS** — A off→미스케줄·B on→백그라운드 생성 완료·C 90s fixture 인코딩 중 취소(cancelled=1·프록시 0)·D 취소→재개 완주(cancelled=1·프록시 1). Core 유닛 3종(취소 거부 결정적 seam·레디 파일 단축·설정 왕복). 게이트 5/5(Core 1,420).
+- **부수**: 게이트 스크립트 set -e 함정 2건(PASS 판정 후 `[ ] && FAIL=1` 반환값 1로 조용히 사망·field 파이프라인) — `return 0`/`|| echo`로 수습. DerivedData Debug 산출물이 세션 중 1회 원인 불명 소실(재빌드로 회복 — 재발 시 관찰).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **CA-14/15**(소형) ② 이후 백로그 점검. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량.
+
+## 2026-08-27 세션 (BUG-CA12-01·02 결함 조사 — 메커니즘 확정·근본 수정은 각각 상위 이관)
+
+- **BUG-CA12-02(HDR 파리티, P1 후보)**: 픽셀 특성화로 범인 특정 — 대부분 밴드 Δ≤2·**고채도 시안 밴드만 프리뷰에서 핑크**. 프리뷰(plain 경로·플레이어 다리)는 AVFoundation이 HDR 태그 소스를 SDR 렌더 표면에 맞춰 변환하며 범위 밖 색을 뒤집음. 출력은 원시 재해석(소스 프레임과 MAD 2.49 충실 — CA-04 v1 계약). **수정 시도 2건 모두 측정 무효로 폐지**: ①스냅샷 최종 변환 작업공간 핀(버퍼가 이미 변환돼 도착 — MAD 11.13→11.07) ②합성 색 삼중항 709 명시(reader 다리는 소비 안 함 — 11.07). 측정 증거 없는 배선 금지 원칙으로 둘 다 revert. **본수정 = HDR 인입 형식 수용 컴포지터 + 공유 변환 → G-29(3단계) 이관**. 스냅샷 핀은 행동 중립 주석과 함께 원칙적 핀으로만 유지.
+- **BUG-CA12-01(파리티×덕킹 파킹, P2)**: 계측 체인으로 확정 — ①파킹은 **첫 필수 서스펜션마다 이동**(재배열로 composition_ready 통과 → 스냅샷 대기에서 동일 파킹 → 재배열 폐기) ②`Task.sleep`·`Task.yield` 모두 재개 안 됨 ③**`DispatchQueue.main.async` 블록도 전달 정지(GCD 레벨)** — 반면 앱 활성화 등 런루프 이벤트는 처리됨(모드 DefaultMode 정상·lldb 확인) ④전역 풀 생존(detached 하트비트 1틱) 후 MainActor 홉에서 정지 ⑤덕킹 램프 적용 무관(오디오 트랙 존재가 트리거). 종합: **메인 디스패치 큐 전달 영구 정지** 클래스 — W4 ProRes 교찰의 "once-continuation 파킹(Apple측)" 부류 추정, 루프 내 도구로 근본 특정 불가 → 상위 도구·에스컬레이션 후보. 재현 1커맨드 고정(ab09).
+- **부산물(유지·검증)**: `snapshotFrame` seek completion 누수 방어 와치독(2s 경합·1회 재개 — AVPlayer 문서상 미보장 클래스) + 스냅샷 작업공간 핀. **파리티 스윕 13/13 ALL PASS**·verify_gate 5/5.
+- **교훈**: 정적 분석 불가능한 파킹은 계측 체크포인트→프로브 태스크→GCD/이벤트 분리 실험의 사다리로 좁힌다; 측정 무효 배선은 즉시 revert(원칙 준수).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **CA-22 2차**(프록시 설정 UI·취소·재개) ② CA-14/15(소형) ③ BUG-CA12-01은 에스컬레이션 후보·BUG-CA12-02는 G-29 입력 요구. **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01(승인)·디스크 용량.
+
+## 2026-08-27 세션 (CA-12 완료 — 경쟁사 A/B 벤치마크 하니스 + 기준 수치 최초 기록)
+
+- **환경 사건**: 세션 시작 시 데이터 볼륨 **100%(가용 163MB)** — CA-12 픽스처 생성 불가 상태. 재생 가능 캐시만 정리(/tmp 세션 임시 434MB·Xcode DerivedData 2곳 908MB·xcresult 176MB ≈ 1.5GB — 사용자 데이터 무손상)로 회복, 이후 purgeable 정산으로 27Gi까지 안정. 부수: 7.5GB ab12 출력은 메트릭 기록 후 러너가 자동 프루닝(13Gi 유지). **데이터 볼륨 용량은 사용자 관리 필요**.
+- **하니스 3종**: ①`scripts/ab_benchmark_metrics.py` — `single`(절대 지표: 코덱/색태그/chroma·비트레이트·키프레임·CFR/VFR·클리핑/크러시/banding·LUFS/true-peak·A/V sync) `pair`(무손실 프리뷰 PNG 참조 대비 PSNR 전역/프레임·block SSIM·MAD p95/max·CIE76 ΔE) `blind`(시드 랜덤화 투표+채점 왕복) `self-test` **15/15 PASS**(해석값 고정). ②`scripts/make_ab_fixtures.sh` — Part 5 §3의 12 대표 fixture 결정적 생성(장편 2종은 축소 스케일 명시)+SHA-256 핀 테이블=세트 버전 관리+manifest.json. ③`scripts/run_ca12_ab_benchmark.sh` — §1.4 조건 필드 전항 기록·실앱 구동(RSS 폴링·와치독)·RTF(encode 구간 격리 시계)·baseline.json·블라인드 A측 스테이징+거대 출력 프루닝.
+- **하니스 게이트(Swift)**: `MOVIECUT_UITEST_CHROMA_KEY=1`(실제 SetClipPropertyCommand 경로·⑦) + `export_wall_s`(일반·파리티 양 경로 — §1.4 앱 전체 vs encode 분리) + 파리티 경로 DUCKING/CHROMA_KEY 미러링(파리티는 앱 종료로 일반 플로우에 도달 못 함).
+- **첫 기준 수치(11/12 fixture 실측**, `CA12_AB_BENCHMARK_20260827.md`§5): 소형 RTF 0.24~0.44·30분 0.299(peakRSS 1,387MB)·2시간 0.348(peakRSS 5,054MB·**A/V 싱크 Δ0.000s**). 전 출력 기본 캔버스 1920x1080(4K 소스 다운스케일 — 조건 기록). 해석 규칙 발견: pair 지표는 동일 스케일 fixture 간 비교로 한정(업스케일 소스는 보간 차이가 지배).
+- **발견 등록(§1.13)**: **BUG-CA12-01**(P2 인프라) — 파리티×덕킹 조합 태스크 파킹(`scenarios_applied`에서 0% CPU 정지·결정론 재현 2회·일반 경로는 통과 — ⑨ 수치 공백). **BUG-CA12-02**(P1 후보) — HDR(BT.2020+PQ) 태그 소스 preview↔export 픽셀 발산(PSNR 15.1dB·기존 비교기 교차 FAIL MAD 11.26 vs 허용 2.0 — CA-04는 태그만 확인하고 픽셀 파리티 미측정이었음). VFR timestamp 편차(MAD 78)는 측정 정의 한계로 기록(결함 아님).
+- **검증**: self-test 15/15·블라인드 왕복·파리티 비교기 교차(ab03/ab11)·verify_gate 5/5.
+- **부수**: 러너 fixture 접두사 선택 버그 수정(ab03→ab03_hdr_10bit 매칭)·CFR 판정 B-프레임 정렬 수정·blind --tally 인자 검증 순서 수정.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **BUG-CA12-02 감사**(HDR 색 해석 경로 — P1 후보·G-29 연계) ② BUG-CA12-01 최소화(파리티×덕킹 파킹) 또는 CA-22 2차(프록시 설정 UI·취소·재개) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인)·디스크 용량(데이터 볼륨 만약 — 캐시 정리는 1회 수행됨).
+
+## 2026-08-27 세션 (CA 소형~중형 4건 + iOS 커브 UI + 후속 관찰 상환 — 직렬 세션)
+
+- **CA-08(iOS 자막 스타일 6종, 7ca8949)**: Core `SubtitleStylePresets.builtins` 6종(Clean White·Bold Box·Yellow Pop·Shadow Soft·Mint Outline·Classic Serif)을 iOS 인스펙터 "Subtitle Style" 섹션에서 원탭 적용 — `applySubtitleStylePreset`(Mac 패리티) + 수평 칩(색상 미리보기 원형·스트로크 테두리). 렌더링 변경 불필요(TextOverlayPixelProcessor 공유).
+- **CA-17(iOS 자막 export SRT/VTT, b03c62b)**: `exportSubtitles(format:)` — 텍스트 트랙 클립을 Core `SubtitleDocument`로 직렬화(Mac 바이트 동일) + 하단 툴바 "Subtitles" → confirmationDialog(SRT/VTT) → 상단 ShareLink.
+- **CA-19(iOS 타임라인 스냅+가이드, fa11902)**: 드래그 종료 시 다른 클립 가장자리·플레이헤드·0에 스냅(14pt 반경) + 액센트 가이드라인(Mac 패리티). 부수: Mac trim `snappedTime` 빌드 오류 수정.
+- **CA-22 1차(프록시 자동 생성, a789b58)**: `PlaybackSettings.autoGenerateProxyOnImport`(기본 true·Codable 하위호환) + 비디오 임포트 후 fire-and-forget 백그라운드 Task(중복 방지·thermal critical 스킵).
+- **iOS 커브 편집 UI(5e5e36b)**: 효과 인스펙터 Color Grade에 Tone Curves 추가 — 4채널 피커 + CurveEvaluator 미니 프리뷰(Canvas) + 6종 프리셋 칩(Linear/S-Curve/Fade Up/Fade Down/Boost/Reduce).
+- **후속 관찰 2건 상환(6499efc)**: Mac 하위 트랙 orientedForDisplay+fittedToCanvas(iOS 패리티) + 회전×전환 upright 실측.
+- **검증**: iOS 48/48·Mac 48/48·Core 1,417·verify_gate 5/5.
+- **병렬 세션(4시간 루프)**: CA-01(오프라인 차단 — sandbox 네트워크 거부 하 E2E·MC-02 ②③✅)·ENOSPC fail-closed 저장·ui_regression 무음 PASS 폐쇄(49b7f87)·iOS 커브 UI 연결.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **CA-12**(경쟁사 A/B 벤치마크 하니스 — PSNR/SSIM+블라인드·중형) ② CA-22 2차(프록시 설정 UI·취소·재개) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종(잠금 해제)·MACUI-01+U-08 회귀 실측(TCC 접근성/재부팅)·PARITY-TOL-01(승인).
+
+## 2026-08-27 세션 (중단 WIP 인수 — ProjectStore ENOSPC fail-closed + ui_regression 무음 PASS 폐쇄)
+
+- **인수 경위(LI-003 3원칙)**: 타 세션 WIP 4파일 발견(ProjectStore·ENOSPC 테스트 신규·ui_regression·static contract) — 타임스탬프 1시간 40분 경과·실행 중 빌드 프로세스 없음·diff 전수 검토(일관된 단일 증분 판정) 후 프로토콜 0로 검증 마무리·커밋(49b7f87).
+- **내용**: ①`ProjectStore` 저장 흐름의 파일 I/O를 `ProjectFileWriting` 심으로 분리(생산 동작 불변) — temp 쓰기 실패 시 `FileOperationError.classify`(ENOSPC→.diskFull)로 표면화·temp 잔여 정리·커밋 미도달. ②`ProjectStoreENOSPCIntegrationTests` — 주입된 ENOSPC에서 기존 목적지 SHA256 바이트 동일 보존·커밋 0회·temp 잔여 0·.diskFull 분류 단언. ③`ui_regression.sh` — "캡처 없음/골든 없음"이 SKIP(무음 통과)이던 것을 FAIL로, 전체 실행은 캡처∪커밋 골든 합집합 검사(한쪽에만 있는 파일이 조용히 사라지는 것 차단), static contract로 고착.
+- **검증**: 신규 스위트 3테스트 PASS + verify_gate 5/5(Core 1,416·Mac/iOS 빌드·lint).
+- **주의**: ui_regression의 FAIL 강화로 AX 환경 차단 중 전체 회귀 실행은 (의도적으로) 실패함 — 환경 복구 전까지 회귀 PASS 실측은 U-08 잔여 상태 유지.
+
+### 다음 회차 — CA 큐 잔여 자율 행
+① **CA-08**(iOS 자막 스타일 6종·카라오케 이식 — 방향 문서 2단계 일치) ② CA-12(A/B 벤치마크 하니스) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
+## 2026-08-27 세션 (CA-01 완료 — 오프라인 차단·캡처 실측, MC-02 ②③ 갱신)
+
+- **`scripts/run_ca01_offline_gate.sh` 신설·실측 PASS**: **Mac 다리** — sandbox-exec `(deny network*)` 프로파일(루프백 접속 거부 프로브로 프로파일 유효성 선입증 — 무효 프로파일의 공회전 PASS 차단) 하에서 파리티 하니스(임포트→프리뷰 덤프→출력) 완주(8,283바이트·2.0s 출력) + **sandboxd 네트워크 위반 0건**(시도조차 없음). **iOS 다리** — 시뮬레이터에서 G-27 전체 하니스(임포트→프리뷰→출력→오디오 라우팅→저장) 구동 중 `lsof -i -p` 폴링으로 소켓 캡처 — **최대 0개/36 샘플**.
+- **함정 3건(set -e 계열 — 스크립트 전체가 조용히 죽는 원인 전부 실측 판명)**: ①`$(xcodebuild -showBuildSettings | awk)` 치환 실패 시 할당문이 set -e 격발(빌드는 성공했는데 설정 조회가 빌드 시스템 경합 실패 → 무음 exit) ②`[ … ] && 할당` 행이 거짓이면 문장 전체 exit 1 ③**`lsof`는 매칭 0이면 exit 1** — 파이프라인 치환이 실패해 첫 샘플에서 사망(기대 상태가 정상 종료를 유발하는 역설). 모두 `|| true`·if문·재시도로 보강.
+- **문서**: 백로그 CA-01 완료 처리·증거원장 MC-02 ②③ ✅ 갱신. 게이트 PASS(Core 1,416·Mac/iOS 빌드·lint 5/5).
+
+### 다음 회차 — CA 큐 잔여 자율 행
+① **CA-08**(iOS 자막 스타일 6종·카라오케 이식 — 방향 문서 2단계 일치) ② CA-12(A/B 벤치마크 하니스) ③ CA-14/15(소형). **사용자 대기**: G-27 실기기 2종·MACUI-01+U-08 회귀 실측(TCC)·PARITY-TOL-01·G-15 AC4·G-16 AC3/AC4.
+
 ## 2026-08-26 세션 (G-02 Inc 6 완료 — 톤 커브 에디터 UI·커브 단독 파리티)
 
 - **ColorCurvesView 신규**(Mac 인스펙터, HSL 밴드 하위): 마스터/R/G/B 채널 4종 드래그 캔버스 — 커브는 렌더러가 소비하는 동일 `CurveEvaluator`로 샘플링(보이는 곡선=렌더 곡선), 끝점 (0,0)/(1,1) 고정·내부 점 드래그(x를 이웃 사이로 클램프해 단조 유지), Add Point(최대 폭 구간 중점 — 결정적·포인터 없이 접근 가능)·Remove·채널 리셋. **커밋 규율(Inc 5 동일)**: 드래그 중 로컬 드래프트, 제스처 종료 시 4채널 전체 단일 커맨드(undo 1-step/gesture), 전 채널 identity면 nil 커밋(미그레이션 JSON 바이트 안정). 스키마 무변경.

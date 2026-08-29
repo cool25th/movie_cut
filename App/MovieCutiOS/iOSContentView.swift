@@ -22,6 +22,8 @@ struct IOSContentView: View {
     @State private var didCancelExport = false
     // UX-REC-02: launch recovery prompt — offer Keep/Discard for restored work.
     @State private var isRecoveryPromptPresented = false
+    // CA-17: subtitle export format picker.
+    @State private var isSubtitleFormatPickerPresented = false
     @State private var exportErrorMessage: String?
     @State private var isImporting = false
     @State private var isTextClipPresented = false
@@ -33,6 +35,8 @@ struct IOSContentView: View {
     @State private var isMusicLibraryPresented = false
     @State private var isSFXPickerPresented = false
     @State private var isVoiceoverPresented = false
+    // CA-14: beat detection action sheet (Detect / Clear) — Mac parity entry.
+    @State private var isBeatActionPresented = false
     @State private var isAutoSubtitlesPresented = false
     @State private var isAutoAssistantPresented = false
     @State private var isTemplatePickerPresented = false
@@ -51,6 +55,16 @@ struct IOSContentView: View {
             }
         }
         return nil
+    }
+
+    /// CA-17: whether any non-sticker text clip exists on the timeline —
+    /// controls the subtitle export menu's enabled state.
+    private var hasExportableSubtitles: Bool {
+        viewModel.currentProject.timeline.tracks.contains { track in
+            track.kind == .text && track.clips.contains { clip in
+                clip.textContent?.contentKind != .sticker
+            }
+        }
     }
 
     var body: some View {
@@ -132,6 +146,13 @@ struct IOSContentView: View {
                             Image(systemName: "square.and.arrow.up.on.square")
                         }
                         .accessibilityLabel("Share Export")
+                    } else if let subtitleURL = viewModel.lastSubtitleExportURL {
+                        // CA-17: share the subtitle sidecar when it's the
+                        // latest export artifact.
+                        ShareLink(item: subtitleURL) {
+                            Image(systemName: "square.and.arrow.up.on.square")
+                        }
+                        .accessibilityLabel("Share Subtitle Export")
                     } else {
                         Button {} label: {
                             Image(systemName: "square.and.arrow.up.on.square")
@@ -291,6 +312,26 @@ struct IOSContentView: View {
             .sheet(isPresented: $isSFXPickerPresented) {
                 sfxPickerSheet
             }
+            // CA-14: Detect/Clear beat markers on the selected clip. Clear
+            // stays available whenever beat markers exist even if the
+            // current selection cannot run a new detection.
+            .confirmationDialog(
+                "Beat Markers",
+                isPresented: $isBeatActionPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Detect Beats") {
+                    Task { await viewModel.detectBeats() }
+                }
+                if viewModel.hasBeatMarkers {
+                    Button("Clear Beat Markers", role: .destructive) {
+                        Task { await viewModel.clearBeatMarkers() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Adds beat markers to the selected audio or video clip. Clips snap to beats while dragging.")
+            }
             .sheet(isPresented: $isVoiceoverPresented) {
                 voiceoverSheet
             }
@@ -317,6 +358,22 @@ struct IOSContentView: View {
             }
             .sheet(isPresented: $isKeyframeEditorPresented) {
                 keyframeEditorSheet
+            }
+            // CA-17: subtitle export format picker — SRT or VTT.
+            .confirmationDialog(
+                "Export Subtitles",
+                isPresented: $isSubtitleFormatPickerPresented,
+                titleVisibility: .visible
+            ) {
+                Button("SubRip (.srt)") {
+                    viewModel.exportSubtitles(format: .srt)
+                }
+                Button("WebVTT (.vtt)") {
+                    viewModel.exportSubtitles(format: .vtt)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose a subtitle file format. The file will appear in the share button above.")
             }
             .alert("Error", isPresented: Binding(
                 get: { viewModel.lastErrorMessage != nil },
@@ -590,7 +647,19 @@ struct IOSContentView: View {
                     isVoiceoverPresented = true
                 }
 
+                // CA-14: beat detection on the selected audio/video clip —
+                // markers become drag snap targets (Mac parity).
+                toolbarButton(title: "Beats", systemImage: "waveform") {
+                    isBeatActionPresented = true
+                }
+                .disabled(!viewModel.canDetectBeats)
+
                 Divider().frame(height: 28)
+
+                toolbarButton(title: "Subtitles", systemImage: "captions.bubble") {
+                    isSubtitleFormatPickerPresented = true
+                }
+                .disabled(!hasExportableSubtitles)
 
                 toolbarButton(title: "Filter", systemImage: "wand.and.stars") {
                     isFilterPickerPresented = true

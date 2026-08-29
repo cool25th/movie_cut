@@ -1121,7 +1121,7 @@ struct MediaLibraryPanel: View {
             VStack(alignment: .leading, spacing: MovieCutSpacing.small) {
                 mediaCompactImportSourceRow
                 mediaCompactDropTile
-                mediaEmptyGridRhythm
+                mediaEmptyGuidanceCard
             }
             .padding(MovieCutSpacing.medium)
         }
@@ -1205,46 +1205,41 @@ struct MediaLibraryPanel: View {
         .accessibilityHint(NSLocalizedString("Opens a file picker for video, audio, or image assets.", comment: ""))
     }
 
-    private var mediaEmptyGridRhythm: some View {
-        LazyVGrid(columns: libraryGridColumns, alignment: .leading, spacing: MovieCutSpacing.small) {
-            ForEach(0..<6, id: \.self) { index in
-                mediaEmptySkeletonCard(index: index)
+    /// A11Y-03: the empty library previously showed six skeleton cards —
+    /// placeholder bars that read as "loading / broken assets" in a state
+    /// that is genuinely empty. A single explicit guidance card says what
+    /// the state is and what to do next, and is VoiceOver-visible (the
+    /// skeleton grid was deliberately hidden).
+    private var mediaEmptyGuidanceCard: some View {
+        HStack(spacing: MovieCutSpacing.medium) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(MovieCutTheme.mutedText)
+                .frame(width: 52, height: 52)
+                .background(
+                    MovieCutTheme.libraryThumbnailBackground,
+                    in: RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                Text(NSLocalizedString("Your library is empty", comment: ""))
+                    .font(MovieCutTypography.metadata.weight(.semibold))
+                Text(NSLocalizedString("Imported videos, audio, and images appear here. Drag files in or use the Import button above.", comment: ""))
+                    .font(MovieCutTypography.micro)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            Spacer(minLength: 0)
         }
-        .accessibilityHidden(true)
-    }
-
-    private func mediaEmptySkeletonCard(index: Int) -> some View {
-        VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
-            ZStack(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: MovieCutRadius.small, style: .continuous)
-                    .fill(MovieCutTheme.libraryThumbnailBackground.opacity(0.72))
-                HStack(spacing: 4) {
-                    ForEach(0..<3, id: \.self) { column in
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(MovieCutTheme.librarySkeletonFill.opacity(column == index % 3 ? 0.86 : 0.54))
-                            .frame(width: 16 + CGFloat(column * 4), height: 24 + CGFloat((index + column) % 3) * 6)
-                    }
-                }
-                .padding(MovieCutSpacing.small)
-            }
-            .frame(height: 64)
-
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(MovieCutTheme.librarySkeletonFill)
-                .frame(width: index.isMultiple(of: 2) ? 72 : 96, height: 6)
-
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(MovieCutTheme.librarySkeletonFill.opacity(0.56))
-                .frame(width: 52, height: 5)
-        }
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .movieCutLibraryBrowserCard(
-            padding: MovieCutSpacing.small,
+            padding: MovieCutSpacing.medium,
             background: MovieCutTheme.libraryCardBackground.opacity(0.72),
             border: MovieCutTheme.border.opacity(0.10)
         )
     }
+
 
     private func mediaRhythmPlaceholderCount(for assetCount: Int) -> Int {
         max(0, min(4, 6 - assetCount))

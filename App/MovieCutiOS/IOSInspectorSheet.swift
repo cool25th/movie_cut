@@ -20,6 +20,16 @@ struct IOSInspectorSheet: View {
                             }
                         }
 
+                        // CA-08: subtitle style presets — only for text clips
+                        // with actual text content (not stickers).
+                        if clip.kind == .text,
+                           let content = clip.textContent,
+                           content.contentKind != .sticker {
+                            Section("Subtitle Style") {
+                                subtitleStylePresetPicker
+                            }
+                        }
+
                         Section("Adjust") {
                             sliderRow(
                                 title: "Opacity",
@@ -271,6 +281,47 @@ struct IOSInspectorSheet: View {
             && abs(cropRect.height - expected.height) < 1.0e-6
     }
 
+    /// CA-08: the 6 built-in subtitle style presets as a horizontal chip row.
+    /// Tapping applies the preset to the selected text clip in one undo step.
+    private var subtitleStylePresetPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(SubtitleStylePresets.builtins) { preset in
+                    presetChip(preset)
+                }
+            }
+        }
+    }
+
+    private func presetChip(_ preset: SubtitleStylePreset) -> some View {
+        Button {
+            Task { await viewModel.applySubtitleStylePreset(preset) }
+        } label: {
+            VStack(spacing: 4) {
+                // Visual preview: the preset's font color as a colored dot
+                Circle()
+                    .fill(Self.swiftUIColor(fromHex: preset.style.fontColor))
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        if preset.style.strokeColor != nil {
+                            Circle().strokeBorder(.black.opacity(0.5), lineWidth: 1.5)
+                        }
+                    }
+
+                Text(preset.name)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+            .frame(minWidth: 64)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+            .background(Color(uiColor: .quaternarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Subtitle style \(preset.name)")
+        .accessibilityHint("Applies this style preset to the selected text clip")
+    }
+
     private func percentText(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
     }
@@ -340,6 +391,23 @@ struct IOSInspectorSheet: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    /// CA-08: parses a hex color string (#RRGGBB or #RRGGBBAA) into a
+    /// SwiftUI Color. Falls back to white for unparseable input.
+    private static func swiftUIColor(fromHex hex: String) -> Color {
+        var value: UInt64 = 0
+        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        Scanner(string: cleaned).scanHexInt64(&value)
+        let r, g, b: Double
+        if cleaned.count >= 6 {
+            r = Double((value >> 16) & 0xFF) / 255.0
+            g = Double((value >> 8) & 0xFF) / 255.0
+            b = Double(value & 0xFF) / 255.0
+        } else {
+            r = 1; g = 1; b = 1
+        }
+        return Color(red: r, green: g, blue: b)
     }
 }
 #endif

@@ -7622,6 +7622,40 @@
           }
         }
       }
+    },
+    "Your library is empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your library is empty"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "라이브러리가 비어 있습니다"
+          }
+        }
+      }
+    },
+    "Imported videos, audio, and images appear here. Drag files in or use the Import button above.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported videos, audio, and images appear here. Drag files in or use the Import button above."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져온 비디오·오디오·이미지가 여기에 표시됩니다. 파일을 끌어다 놓거나 위의 가져오기 버튼을 사용하세요."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

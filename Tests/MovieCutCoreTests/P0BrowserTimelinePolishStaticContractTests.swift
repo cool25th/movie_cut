@@ -35,17 +35,16 @@ struct P0BrowserTimelinePolishStaticContractTests {
         for marker in [
             "mediaCompactImportSourceRow",
             "mediaCompactDropTile",
-            "mediaEmptyGridRhythm",
-            "mediaEmptySkeletonCard(index: index)",
+            "mediaEmptyGuidanceCard",
+            #"Text(NSLocalizedString("Your library is empty", comment: ""))"#,
             #"Label(NSLocalizedString("Local media", comment: ""), systemImage: "folder")"#,
             #"Label(NSLocalizedString("Import", comment: ""), systemImage: "square.and.arrow.down")"#,
             #"Text(NSLocalizedString("Drop files to import", comment: ""))"#,
-            "LazyVGrid(columns: libraryGridColumns",
-            "ForEach(0..<6, id: \\.self)",
             ".movieCutLibraryBrowserCard("
         ] {
             #expect(empty.contains(marker))
         }
+        #expect(!empty.contains("mediaEmptySkeletonCard"))
 
         #expect(shared.contains("func movieCutLibraryBrowserCard("))
         #expect(shared.contains("static let librarySourceRowBackground"))

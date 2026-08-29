@@ -22,6 +22,19 @@ import Foundation
 /// callers can fail explicitly instead of guessing a position — invalid
 /// input must never silently seek to 0.
 public enum TimecodeParser {
+    /// CA-19 long-form ruler labels: adaptive scale so a 2-hour timeline reads
+    /// "1:00:00" instead of "3600s". Seconds under a minute keep the tick-style
+    /// suffix; minute scale is M:SS, hour scale H:MM:SS (no frames — ruler
+    /// labels are coarse position markers, unlike the transport's MM:SS:FF).
+    public static func rulerLabel(forSeconds seconds: Int) -> String {
+        guard seconds > 0 else { return "0s" }
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 {
+            return String(format: "%d:%02d", seconds / 60, seconds % 60)
+        }
+        return String(format: "%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+    }
+
     public static func seconds(from input: String, frameRate: Double) -> TimeInterval? {
         // `frameRate > 0` alone admits +inf; only isFinite excludes it.
         guard frameRate.isFinite, frameRate > 0 else { return nil }

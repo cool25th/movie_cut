@@ -44,25 +44,24 @@ struct Phase21MediaImportCTAStaticContractTests {
         for marker in [
             "private var mediaCompactImportSourceRow: some View",
             "private var mediaCompactDropTile: some View",
-            "private var mediaEmptyGridRhythm: some View",
-            "private func mediaEmptySkeletonCard(index: Int) -> some View",
+            "private var mediaEmptyGuidanceCard: some View",
             "mediaCompactImportSourceRow",
             "mediaCompactDropTile",
-            "mediaEmptyGridRhythm",
+            "mediaEmptyGuidanceCard",
             #"Label(NSLocalizedString("Local media", comment: ""), systemImage: "folder")"#,
             #"Label(NSLocalizedString("Import", comment: ""), systemImage: "square.and.arrow.down")"#,
             #"Text(NSLocalizedString("Drop files to import", comment: ""))"#,
-            #"Video, audio, and image assets appear in this grid."#,
             "openImportPanel()",
-            "LazyVGrid(columns: libraryGridColumns",
-            "ForEach(0..<6, id: \\.self)",
-            ".frame(maxWidth: .infinity, minHeight: 82",
+            #"Text(NSLocalizedString("Your library is empty", comment: ""))"#,
+            #"Text(NSLocalizedString("Imported videos, audio, and images appear here. Drag files in or use the Import button above.", comment: ""))"#,
             "MovieCutTheme.librarySourceRowBackground",
-            "MovieCutTheme.librarySkeletonFill",
             ".movieCutLibraryBrowserCard("
         ] {
             #expect(importCTA.contains(marker))
         }
+        // A11Y-03: the skeleton surface must not come back.
+        #expect(!source.contains("mediaEmptyGridRhythm"))
+        #expect(!source.contains("mediaEmptySkeletonCard"))
 
         for oldLargeCardMarker in [
             ".font(.system(size: 44, weight: .semibold))",

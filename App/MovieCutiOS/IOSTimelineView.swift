@@ -10,9 +10,15 @@ struct IOSTimelineView: View {
     @State private var draggedClipId: UUID?
     @State private var dragInitialStartTime: TimeInterval?
     @GestureState private var dragTranslation: CGFloat = 0
+    // CA-19: the active snap target during a drag — drives the alignment
+    // guide line (Mac TimelineView parity).
+    @State private var snapGuideTime: TimeInterval? = nil
 
     private let secondsWidth: CGFloat = 38
     private let trackHeaderWidth: CGFloat = 76
+    /// CA-19: snap radius in points — a drag within this distance of a snap
+    /// target (other clips' edges, playhead, zero) locks to it.
+    private let snapRadius: CGFloat = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,7 +34,56 @@ struct IOSTimelineView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 16)
+                .overlay(alignment: .leading) {
+                    // CA-19: the alignment guide — a vertical line at the
+                    // active snap target, spanning all track lanes. The
+                    // user SEES what the clip aligned to, not just feels the
+                    // snap (Mac parity).
+                    if let guideTime = snapGuideTime, draggedClipId != nil {
+                        let x = CGFloat(guideTime) * secondsWidth
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(0.6))
+                            .frame(width: 1.5)
+                            .frame(maxHeight: .infinity)
+                            .offset(x: x + 14)  // + horizontal padding
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.1), value: snapGuideTime)
             }
+            .overlay(alignment: .topLeading) {
+                // CA-14: generated beat markers render as compact ticks along
+                // the top of the track lanes (Mac renders them in the ruler;
+                // iOS has no ruler strip, so the lane-top band is the surface).
+                // A full flag per beat would flood the view on real music
+                // tracks — same compact-tick rationale as the Mac ruler.
+                beatTickOverlay
+            }
+        }
+    }
+
+    /// CA-14: one 2pt orange tick per beat marker at its timeline position.
+    /// Decorative-by-design: taps land on the clips below (2pt targets are
+    /// hostile to touch), and the beat COUNT is surfaced by the detect/clear
+    /// status instead. VoiceOver therefore hides the ticks; discoverability
+    /// comes from the toolbar action that created them.
+    @ViewBuilder
+    private var beatTickOverlay: some View {
+        let beats = viewModel.currentProject.markers.filter { $0.kind == .beat }
+        if !beats.isEmpty {
+            HStack(spacing: 0) {
+                ForEach(beats) { marker in
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.85))
+                        .frame(width: 2, height: 12)
+                        .offset(x: CGFloat(marker.time) * secondsWidth + 14)  // + horizontal padding
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 
@@ -167,7 +222,11 @@ struct IOSTimelineView: View {
             }
             .onEnded { value in
                 let initialStart = dragInitialStartTime ?? clip.timelineRange.start
-                let newStart = max(0, initialStart + Double(value.translation.width / secondsWidth))
+                let rawStart = max(0, initialStart + Double(value.translation.width / secondsWidth))
+                // CA-19: snap the final position to nearby targets (other
+                // clips' edges, playhead, zero) — the same guide set the Mac
+                // timeline snaps to.
+                let newStart = snappedTime(rawStart, excluding: clip.id)
 
                 Task {
                     await viewModel.moveClip(clipId: clip.id, newStart: newStart)
@@ -176,7 +235,41 @@ struct IOSTimelineView: View {
                 dragOffset = 0
                 draggedClipId = nil
                 dragInitialStartTime = nil
+                snapGuideTime = nil
             }
+    }
+
+    /// CA-19: returns the nearest snap point within the threshold, or the
+    /// raw time when no target is close enough. Snap targets are other
+    /// clips' start/end edges, the playhead, and zero — the same set the
+    /// Mac timeline uses. Also records the active snap target for the
+    /// alignment guide.
+    private func snappedTime(_ rawTime: Double, excluding clipId: UUID) -> Double {
+        // CA-14: markers (beat markers included) are snap targets too — the
+        // same guide set the Mac timeline snaps to, so beats generated on
+        // either platform guide drags identically.
+        let snapPoints = viewModel.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .filter { $0.id != clipId }
+            .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
+            + viewModel.currentProject.markers.map(\.time)
+            + [viewModel.playheadTime, 0.0]
+
+        let threshold = Double(snapRadius / secondsWidth)
+        var nearest: (point: Double, distance: Double)?
+        for point in snapPoints {
+            let distance = abs(rawTime - point)
+            if distance < threshold && (nearest == nil || distance < nearest!.distance) {
+                nearest = (point, distance)
+            }
+        }
+
+        if let nearest {
+            snapGuideTime = nearest.point
+            return nearest.point
+        }
+        snapGuideTime = nil
+        return rawTime
     }
 
     private func clipSegments(for track: Track) -> [TimelineClipSegment] {

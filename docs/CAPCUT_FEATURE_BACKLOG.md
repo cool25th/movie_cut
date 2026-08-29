@@ -363,6 +363,21 @@
 - 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
 - 수정 방향: RIFF와 동일 패턴으로 `FORM` 시그니처 추가(종류는 확장자로 판정) + 실제 AIFF 픽스처 왕복 단위테스트. 기존 지원 포맷 회귀라 P2 상단 배치.
 
+### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — 미수정 (PR #21)
+
+- 증상: `relinkMedia`는 `currentProject.mediaLibrary`만 갱신하는데 `PreviewView`는 `.onChange(of: currentProject.timeline)`(L109)에서만 렌더 플랜을 재구축 — 원본 결측 상태에서 만든 플랜의 빈/부분 `AVPlayerItem`이 그대로 남아 relink된 클립이 무관한 타임라인 편집·뷰 재생성 전까지 재생 불가. 위치: `App/MovieCutiOS/Views/PreviewView.swift` L109·`IOSEditorViewModel.swift` L570.
+- 수정 방향: mediaLibrary 변경(또는 relink 완료) 시 플랜 재구축 트리거 — SURV-01 왕복 테스트에 "relink 후 프리뷰 재생" 다리 추가로 고착.
+
+### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — 미수정 (PR #21)
+
+- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift L560-562)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정(L1032-1033) — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
+- 수정 방향: 클립 소유의 `AVAssetTrack.preferredTransform`을 클립별로 로드해 이펙트에 전달(트랙 pt는 외부 플레이어 메타데이터로만 유지) + **혼합 회전(가로+세로) 트랙 픽스처**로 upright 실측.
+
+### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — 미수정 (PR #21)
+
+- 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
+- 수정 방향: 배치와 이펙트가 동일한 클램프된 지속시간을 사용(단일 계산 함수로) + 초과 전환 픽스처로 3클립 완주·드랍 0 단언.
+
 ---
 
 ## 2. 갭 분석 V6 현실 점검 (중요)

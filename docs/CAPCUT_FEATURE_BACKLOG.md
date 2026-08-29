@@ -329,9 +329,9 @@
 - **시도·부정된 수정 2건**: ①스냅샷 최종 변환의 작업공간 고정(`RenderColorConfiguration.sourceImage`) — 버퍼가 이미 변환돼 도착해 효과 없음(측정 MAD 11.13→11.07 노이즈). ②합성 색 삼중항 Rec.709 명시(player+reader 양 다리) — reader 다리는 삼중항을 색 변환에 소비하지 않아 효과 없음(11.07). 둘 다 폐기(측정 증거 없는 배선 금지 원칙). ①의 스냅샷 고정은 후속 HDR 파이프라인을 위한 원칙적 핀으로만 유지(주석에 행동 중립 명시).
 - 본수정 방향: 양 다리가 동일 해석을 하도록 **HDR 인입 형식을 수용하는 컴포지터 + 공유 변환** 필요 — G-29(HDR-ready 파이프라인, 3단계)의 입력 요구사항으로 이관. 혼합(HDR+SDR) 소스 프로젝트의 처리 정책도 함께 설계 대상.
 
-## 1.14 Codex 봇 리뷰(PR #19) 파생 결함 (2026-08-29 등록)
+## 1.14 Codex 봇 리뷰(스택 PR) 파생 결함 (2026-08-29 등록)
 
-> 원천: 스택 PR #19(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 P2 3건 — 코드 대조로 유효 판정. 본 PR은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
+> 원천: 스택 PR #19·#20(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
 
 ### CODEX-01 (P2) — 타임코드 표시 프레임 양자화 하방 드리프트 — 미수정
 
@@ -347,6 +347,21 @@
 
 - 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 `` `docs/DOES_NOT_EXIST.md` `` 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
 - 수정 방향: 닫는 백틱까지 매칭. **A류(계측 스크립트 개선) — 루프 자율 실행 가능.**
+
+### CODEX-04 (P1) — PhotosPicker URL transferable가 라이브러리 선택에서 nil 반환 가능 — 미수정 (PR #20)
+
+- 증상: `importFromPhotosPicker`가 `item.loadTransferable(type: URL.self)` 사용 — PhotosPickerItem은 일반적으로 선택 미디어를 파일 표현으로 노출하므로, 라이브러리 선택이 URL 값 전송을 지원하지 않으면 nil 반환 → 모든 사진·영상 임포트가 transferFailed로 종료 가능. iOSContentView·MediaBrowserView 양 진입점이 동일 경로. 위치: `App/MovieCutiOS/IOSEditorViewModel.swift` L529.
+- 수정 방향: `FileRepresentation` 기반 소형 `Transferable` 정의 후 수신 파일 URL 복사. **실기기 확인 필수(G-27 연계)** — 시뮬레이터 테스트는 파일 URL 경로라 이 결함을 못 잡음.
+
+### CODEX-05 (P2) — 취소 export의 부분파일 정리가 공유 activeOutputURL에 결합 — 미수정 (PR #20)
+
+- 증상: `cancelExport()`가 즉시 `isExporting=false`로 돌려 UI가 새 export를 시작할 수 있음. 새 export가 공유 `activeOutputURL`을 교체한 뒤 이전 취소 호출의 catch가 `removePartialOutput()`에 도달하면 **새 export의 출력 파일을 삭제**하고 엔진 상태를 초기화. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L335-364.
+- 수정 방향: 실패한 호출의 국소 URL 또는 export 세대(generation) 번호로 정리 결합.
+
+### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — 미수정 (PR #20)
+
+- 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
+- 수정 방향: RIFF와 동일 패턴으로 `FORM` 시그니처 추가(종류는 확장자로 판정) + 실제 AIFF 픽스처 왕복 단위테스트. 기존 지원 포맷 회귀라 P2 상단 배치.
 
 ---
 

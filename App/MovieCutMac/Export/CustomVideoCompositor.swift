@@ -354,6 +354,21 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
             let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction
             guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request, instruction: instruction) else {
+                // BUG-ACC-04 diagnosis: the -1 failure fires intermittently on
+                // the 5-minute master (2-of-4). Adjudicates track-coverage gap
+                // (①) vs source-reader starvation (②): log the request time
+                // against the instruction's range and the tracks that were
+                // asked, so ONE reproduction identifies the nil's cause.
+                let time = request.compositionTime.seconds
+                let range = instruction?.timeRange
+                let active = instruction?.activeSourceTrackIDs(at: request.compositionTime).map(String.init) ?? []
+                let all = request.sourceTrackIDs.map { String($0.int32Value) }
+                AppLog.export.error("""
+                    compositor nil source frame: t=\(time, privacy: .public) \
+                    instruction=[\(range?.start.seconds ?? -1, privacy: .public)..\(range?.end.seconds ?? -1, privacy: .public)] \
+                    active=[\(active.joined(separator: ","), privacy: .public)] \
+                    sourceTrackIDs=[\(all.joined(separator: ","), privacy: .public)]
+                    """)
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
             }

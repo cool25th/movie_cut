@@ -159,7 +159,7 @@ for step in dump.get("steps", []):
 elapsed = dump.get("elapsedSeconds", 0)
 print(f"  elapsed={elapsed:.1f}s export_bytes={dump.get('exportBytes', 0)}")
 
-def probe(path, entries, stream=None, attempts=4):
+def probe(path, entries, stream=None, attempts=6):
     args = ["ffprobe", "-v", "error"]
     if stream:
         args += ["-select_streams", stream]
@@ -169,10 +169,11 @@ def probe(path, entries, stream=None, attempts=4):
     # contains (re-probing the kept artifact returned it instantly). A short
     # retry window makes the measurement deterministic instead of flaky.
     for attempt in range(attempts):
-        out = subprocess.run(args, capture_output=True, text=True).stdout.strip()
-        if out:
+        proc = subprocess.run(args, capture_output=True, text=True)
+        out = proc.stdout.strip()
+        if out and proc.returncode == 0:
             return out.split(",")
-        time.sleep(0.5)
+        time.sleep(1.0)
     return out.split(",")
 
 videos = sorted(glob.glob(os.path.join(d, "*.mp4")) + glob.glob(os.path.join(d, "*.mov")),

@@ -378,6 +378,41 @@
 - 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
 - 수정 방향: 배치와 이펙트가 동일한 클램프된 지속시간을 사용(단일 계산 함수로) + 초과 전환 픽스처로 3클립 완주·드랍 0 단언.
 
+### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — 미수정 (PR #22)
+
+- 증상: `x_is_a=False` 시 `_X.mp4`=B측·`_Y.mp4`=A측으로 구현화는 정상인데 투표표의 X열이 `_Y.mp4`(=A측)를 안내 — 평가자의 X 선호가 mapping(X↔B)에 따라 **반대 편집기로 집계**. 블라인드 비교 결과를 왜곡. 위치: `scripts/ab_benchmark_metrics.py` L485-487.
+- 수정 방향: 투표표는 항상 `<fixture>_X.mp4`를 X열에 고정(해독은 mapping 테이블이 담당) + 라벨/구현화 정합 셀프테스트. **A류(계측 스크립트) — 루프 자율 실행 가능.** B측 블라인드 평가 개시 전 필수.
+
+### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — 미수정 (PR #22)
+
+- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
+- 수정 방향: `rep_results` 전부 소비해 median/p95 산출 + 단일 rep 시 명시. **A류 — 루프 자율 실행 가능.**
+
+### CODEX-12 (P2) — 레거시 AVFoundation 취소가 취소로 분류 안 됨 — 미수정 (PR #22)
+
+- 증상: macOS 14 배포 대상의 레거시 브랜치에서 `cancelExport()` 후 `session.error`(AVFoundation 오류)가 throw되어 `catch is CancellationError`(`EditorViewModel+Media.swift` L124)를 우회 — 정상 취소가 "Proxy generation failed"로 보고되고 `autoProxyCancelledCount` 미증가. 현대 브랜치(개발기·CI macOS 15)만 게이트가 통과해 레거시 경로가 무검증.
+- 수정 방향: Task 취소 상태 또는 AV 취소 오류도 취소로 분류 + 레거시 브랜치 재현 테스트.
+
+### CODEX-13 (P2) — 수동 프록시 생성이 진행 중 가드를 우회 — 미수정 (PR #22)
+
+- 증상: 자동 생성 활성 시 미디어 카드·컨텍스트 메뉴의 수동 `generateProxy(for:)`(`EditorViewModel+Media.swift` L63-73)가 `autoProxyGenerating` 집합을 안 거침 — 동일 자산에 두 export가 같은 URL에 동시 기입 가능, `proxyInfoIfReady`의 비어있지 않은 파일=준비 완료 판정이 첫 export의 부분파일을 부착할 수 있음.
+- 수정 방향: 수동 진입도 동일 스케줄러/가드 경유 또는 추적 중 수동 비활성화.
+
+### CODEX-14 (P2) — 비트 마커 삭제가 유효 선택 없이는 도달 불가 — 미수정 (PR #22)
+
+- 증상: 소스 클립 삭제 후 마커 잔존·텍스트/이미지 클립 선택 시 `canDetectBeats=false`가 유일한 진입 버튼을 비활성화(`iOSContentView.swift` L844) — Detect/Clear 다이얼로그의 Clear가 의도(마커 존재 시 항상 가능 — L351-353 주석)와 모순되게 도달 불가. 위치: `App/MovieCutiOS/iOSContentView.swift` L844.
+- 수정 방향: `canDetectBeats || hasBeatMarkers`일 때 툴바 활성, 다이얼로그 내 Detect만 선택 게이트 + 마커 잔존(소스 삭제 후) 정리 테스트.
+
+### CODEX-15 (P2) — iOS 스냅 가이드가 드래그 중 렌더되지 않음 — 미수정 (PR #22)
+
+- 증상: `snappedTime`이 `onEnded`에서만 호출(`IOSTimelineView.swift` L223-238)되고 같은 핸들러가 `draggedClipId`·`snapGuideTime`을 즉시 해제 — SwiftUI가 새 가이드를 렌더할 기회가 없음. Mac 구현은 onChanged에서 임시 위치·가이드 계산.
+- 수정 방향: `onChanged`에서 임시 스냅 위치·가이드 계산(레이아웃 변경 없이 가이드만 표시 — 결정성 게이트 무영향 확인 후).
+
+### CODEX-16 (P2) — 비트 틱이 HStack 셀 기준 오프셋으로 누적 드리프트 — 미수정 (PR #22)
+
+- 증상: 각 틱의 오프셋이 순차 HStack 셀에서 측정(`IOSTimelineView.swift` L73-76) — 앞선 마커마다 2pt씩 표시 위치가 누적 이동(밀집 곡에서 큰 드리프프), 트랙 헤더 76pt·행 간격 미반영으로 전체가 좌측 편이. 장식용(비인터랙티브)이라 기능 영향은 없으나 시각적으로 마커 위치와 불일치.
+- 수정 방향: 공통 ZStack/canvas 좌표계에 배치 + 헤더 원점 반영.
+
 ---
 
 ## 2. 갭 분석 V6 현실 점검 (중요)

@@ -54,6 +54,16 @@ public extension Track {
         if lhs.timelineRange.duration != rhs.timelineRange.duration {
             return lhs.timelineRange.duration < rhs.timelineRange.duration
         }
+        // BUG-ACC-04: a start+duration tie must not fall through to the
+        // UUID comparison — random UUIDs made magnetic compaction order
+        // adjustment-vs-content coin-flips (measured ~50%: an adjustment
+        // borrowing the video's span could compact FIRST, shoving the real
+        // content to the back half and killing the export on an
+        // empty-source request). An adjustment layer is an overlay — it
+        // never displaces renderable content in a tie.
+        if lhs.isAdjustmentLayer != rhs.isAdjustmentLayer {
+            return !lhs.isAdjustmentLayer
+        }
         return lhs.id.uuidString < rhs.id.uuidString
     }
 }

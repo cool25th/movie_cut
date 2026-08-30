@@ -352,6 +352,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // 9.69 vs 0.99 standalone at a freeze boundary — the parity
         // "order/resource dependent" flake). Retry the whole zero-tolerance
         // seek + poll once before accepting the current-frame fallback.
+        // BUG-ACC-05 (measured 2026-08-30): neither a pre-roll warm-up seek
+        // (t−0.2 with 150/400 ms settle) nor a flag-less copy improved the
+        // post-gap black frame — the copy SUCCEEDS at the post-gap item time
+        // and returns BLACK pixels (4/4), so the flag is load-bearing and the
+        // defect is render-side, not supply-side. Left as-is pending the
+        // compositor-level investigation (see backlog §1.15).
         for _ in 0..<2 {
             let resumeOnce = ResumeOnce()
             await withCheckedContinuation { continuation in

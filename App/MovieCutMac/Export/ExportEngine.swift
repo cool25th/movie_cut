@@ -65,10 +65,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
     @ObservationIgnored private var activeSecurityScopes: [URL] = []
 
     private static let maximumOpticalFlowFrameRate: Int32 = 120
-    /// BUG-ACC-04 diagnosis: log the export package's per-track time ranges
-    /// (the failing instruction spans 2× the master's length — which track
-    /// stretches the composition?). Remove once the defect is fixed.
-    private static let diagLogCompositionShape = true
 
     /// Centralized export decision engine: render size, explicit bitrate, codec
     /// profile, file type, and writer output settings (see `MovieCutCore.ExportPlanner`).
@@ -586,37 +582,6 @@ final class ExportEngine: FlattenedTimelineConsumer {
             canvasBackground: project.canvasBackground,
             project: project
         )
-
-        // BUG-ACC-04 diagnosis: failing runs see the videoComposition's
-        // instruction span 2× the master (600 s vs 300 s) — log the package
-        // shape + graph-audio length at the ONE place both export paths
-        // share, so a failing reproduction names the stretching contributor.
-        if Self.diagLogCompositionShape {
-            let shape = composition.tracks
-                .map { "\($0.mediaType.rawValue):\($0.timeRange.start.seconds)..\($0.timeRange.end.seconds)" }
-                .joined(separator: " ")
-            let graphSeconds: Double
-            if let graphAudio {
-                graphSeconds = (try? await AVURLAsset(url: graphAudio).load(.duration).seconds) ?? -1.0
-            } else {
-                graphSeconds = -1.0
-            }
-            AppLog.export.error("""
-                pkg shape: composition=\(composition.duration.seconds, privacy: .public)s \
-                graphAudio=\(graphSeconds, privacy: .public)s \
-                tracks=[\(shape, privacy: .public)] \
-                videoComp=\(videoComposition?.instructions.count ?? -1, privacy: .public)ins
-                """)
-            let clips = project.timeline.tracks
-                .map { track in
-                    let ranges = track.clips
-                        .map { "\($0.timelineRange.start)..\($0.timelineRange.end)\($0.isAdjustmentLayer ? "adj" : "")" }
-                        .joined(separator: ",")
-                    return "\(track.kind.rawValue):[\(ranges)]"
-                }
-                .joined(separator: " ")
-            AppLog.export.error("pkg project clips: \(clips, privacy: .public)")
-        }
 
         return ExportPackage(
             composition: composition,

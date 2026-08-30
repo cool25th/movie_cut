@@ -352,57 +352,89 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // 9.69 vs 0.99 standalone at a freeze boundary — the parity
         // "order/resource dependent" flake). Retry the whole zero-tolerance
         // seek + poll once before accepting the current-frame fallback.
-        // BUG-ACC-05 (measured 2026-08-30): neither a pre-roll warm-up seek
-        // (t−0.2 with 150/400 ms settle) nor a flag-less copy improved the
-        // post-gap black frame — the copy SUCCEEDS at the post-gap item time
-        // and returns BLACK pixels (4/4), so the flag is load-bearing and the
-        // defect is render-side, not supply-side. Left as-is pending the
-        // compositor-level investigation (see backlog §1.15).
-        var attemptDiagnostic = 0
-        for _ in 0..<2 {
-            let resumeOnce = ResumeOnce()
+        func seekWithWatchdog(to time: CMTime) async {
+            let resume = ResumeOnce()
             await withCheckedContinuation { continuation in
                 player.seek(
-                    to: itemTime,
+                    to: time,
                     toleranceBefore: .zero,
                     toleranceAfter: .zero
                 ) { _ in
-                    resumeOnce.run { continuation.resume() }
+                    resume.run { continuation.resume() }
                 }
                 Task {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    resumeOnce.run { continuation.resume() }
+                    resume.run { continuation.resume() }
                 }
             }
-
-            // Poll the exact requested item time. Custom-compositor frames can take
-            // longer than a decoded passthrough frame on their first request, and
-            // host-time lookup is ambiguous while the player is paused after seek.
-            // BUG-ACC-05 4th-pass instrumentation: which path returned the
-            // image — poll (player rendered the frame) vs current-frame
-            // fallback (frame never delivered). Remove when fixed.
-            let frameDeadline = Date().addingTimeInterval(2)
-            while Date() < frameDeadline {
-                if let output = previewVideoOutput,
-                   output.hasNewPixelBuffer(forItemTime: itemTime),
+        }
+        func pollFrame(at time: CMTime, limit: TimeInterval) -> CGImage? {
+            guard let output = previewVideoOutput else { return nil }
+            let deadline = Date().addingTimeInterval(limit)
+            while Date() < deadline {
+                if output.hasNewPixelBuffer(forItemTime: time),
                    let pixelBuffer = output.copyPixelBuffer(
-                       forItemTime: itemTime,
+                       forItemTime: time,
                        itemTimeForDisplay: nil
                    ),
                    let image = Self.cgImage(from: pixelBuffer) {
-                    AppLog.export.error("snapshot path: t=\(targetTime, privacy: .public) attempt=\(attemptDiagnostic, privacy: .public) POLL")
                     return image
                 }
-                try? await Task.sleep(nanoseconds: 30_000_000)
-            }
-            attemptDiagnostic += 1
-        }
-            if let current = snapshotCurrentFrame() {
-                AppLog.export.error("snapshot path: t=\(targetTime, privacy: .public) attempt=\(attemptDiagnostic, privacy: .public) FALLBACK")
-                return current
+                Thread.sleep(forTimeInterval: 0.03)
             }
             return nil
         }
+        // BUG-ACC-05 (5th pass): right after a zero-tolerance seek out of an
+        // empty time range, the plain compositor can complete a render while
+        // the source is still unprimed — BLACK pixels tagged NEW for the
+        // requested item time, returned by the poll in ~34 ms (4th-pass
+        // measurement). Distrust a fast attempt-0 success ONLY within 0.5 s
+        // after a video segment that starts mid-timeline (i.e. after a real
+        // gap): there the unprimed-render failure lives. Distrusting every
+        // fast success regressed motion_tracking (warm cache returns the
+        // correct frame fast; the re-render differs — measured 0.05→4.33).
+        func snapshotIsJustAfterGap() async -> Bool {
+            guard let item = playerItem,
+                  let track = (try? await item.asset.loadTracks(withMediaType: .video))?.first
+            else { return false }
+            let segments = track.segments
+            for (index, segment) in segments.enumerated() {
+                let start = CMTimeGetSeconds(segment.timeMapping.target.start)
+                guard start > 0.01, targetTime > start, targetTime - start <= 0.5 else { continue }
+                // A real gap: the previous segment is an inserted EMPTY range
+                // (no source media — zero source duration), or nothing
+                // contiguous precedes.
+                guard index > 0 else { return true }
+                let previous = segments[index - 1].timeMapping
+                let previousSource = CMTimeGetSeconds(previous.source.duration)
+                let previousTargetEnd = CMTimeGetSeconds(previous.target.start) + CMTimeGetSeconds(previous.target.duration)
+                return previousSource < 0.01 || start - previousTargetEnd > 0.01
+            }
+            return false
+        }
+        let distrustFastSuccess = await snapshotIsJustAfterGap()
+        let fastSuccessWindow: TimeInterval = 0.150
+        let awayOffset: TimeInterval = 0.05
+        for attempt in 0..<2 {
+            await seekWithWatchdog(to: itemTime)
+            let pollStart = Date()
+            if let image = pollFrame(at: itemTime, limit: 2) {
+                let elapsed = Date().timeIntervalSince(pollStart)
+                if attempt == 0, distrustFastSuccess, elapsed < fastSuccessWindow {
+                    let awaySeconds = targetTime > awayOffset ? targetTime - awayOffset : targetTime + awayOffset
+                    let awayTime = CMTime(seconds: min(max(0, awaySeconds), max(duration, awaySeconds)), preferredTimescale: 600)
+                    await seekWithWatchdog(to: awayTime)
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    await seekWithWatchdog(to: itemTime)
+                    if let refreshed = pollFrame(at: itemTime, limit: 1.5) {
+                        return refreshed
+                    }
+                }
+                return image
+            }
+        }
+        return snapshotCurrentFrame()
+    }
 
     /// Renders the exact asset/audio-mix currently installed in Preview to an
     /// audio file. The integration harness decodes this output as PCM so it can

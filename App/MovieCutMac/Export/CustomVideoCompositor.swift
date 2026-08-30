@@ -277,23 +277,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     }
 
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
-        // BUG-ACC-05 4th-pass instrumentation: log EVERY request's time and
-        // source availability. The post-gap snapshot (t≈2.5) returns a BLACK
-        // buffer from copyPixelBuffer while the compositor's nil-source log
-        // stays silent — the open question is whether the compositor is even
-        // CALLED at that time (player render stall) or called and composing
-        // black. Absence of a request line near 2.5 = the former. Remove once
-        // BUG-ACC-05 is fixed.
-        if Self.diagLogCompositionRequests {
-            let t = request.compositionTime.seconds
-            let sources = request.sourceTrackIDs
-                .compactMap { id -> String? in
-                    let tid = id.int32Value
-                    return request.sourceFrame(byTrackID: tid) != nil ? "\(tid)✓" : "\(tid)✗"
-                }
-                .joined(separator: ",")
-            AppLog.export.error("compositor request: t=\(t, privacy: .public) sources=[\(sources, privacy: .public)]")
-        }
         // Boxed for the @Sendable render-queue closure (the request is not
         // Sendable on the macOS 15 SDK; see CompositionRequestBox).
         let sendableRequest = CompositionRequestBox(request: request)
@@ -669,9 +652,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     /// Aspect-fits and centers a source frame into the render canvas.
     /// Identity-transform clips previously rendered 1:1 at the corner; content
     /// smaller than the canvas left the rest black (BUG-06 / CA-04).
-    /// BUG-ACC-05 4th-pass instrumentation flag (remove when fixed).
-    static let diagLogCompositionRequests = true
-
     static func fittedToCanvas(_ image: CIImage, canvasSize: CGSize) -> CIImage {
         let extent = image.extent
         guard !extent.isEmpty,

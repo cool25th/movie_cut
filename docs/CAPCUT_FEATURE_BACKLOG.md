@@ -344,10 +344,10 @@
 - 증상: 기존 대상 경로 선택 + 관리 LUT 원본 결측 또는 후속 복사 실패 시, export 오류를 보고하기 전에 사용자의 기존 파일을 제거 — 실패한 export가 이전 LUT를 파괴(데이터 손실 인접). 위치: `App/MovieCutMac/EditorViewModel.swift` L5204 부근(CA-26 경로).
 - 수정 방향: 임시 형제 파일에 기록/복사 후 새 파일 완성 뒤에만 원자적 치환 — ProjectStore ENOSPC fail-closed(2026-08-27)와 동일 패턴.
 
-### CODEX-03 (P2·A류) — verify_doc_paths 백틱 경로 누수 — 미수정
+### CODEX-03 (P2·A류) — verify_doc_paths 백틱 경로 누수 — **수정 완료(2026-08-30, 메인 세션)**
 
-- 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 `` `docs/DOES_NOT_EXIST.md` `` 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
-- 수정 방향: 닫는 백틱까지 매칭. **A류(계측 스크립트 개선) — 루프 자율 실행 가능.**
+- 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 "docs/DOES_NOT_EXIST.md" 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
+- 수정 완료(2026-08-30): 정규식 슬래시 종결 폐지(백틱까지 매치) — 개방 즉시 기존 문서의 낡은 참조 27건 노출(아카이브·Core 이동분) → 명시적 허용목록으로 게이트 녹색 유지(신규 깨짐은 여전히 FAIL — 탐침 양방향 증명). 허용목록 정리는 별도 소형.
 
 ### CODEX-04 (P1) — PhotosPicker URL transferable가 라이브러리 선택에서 nil 반환 가능 — 미수정 (PR #20)
 

@@ -346,36 +346,44 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 body()
             }
         }
-        let resumeOnce = ResumeOnce()
-        await withCheckedContinuation { continuation in
-            player.seek(
-                to: itemTime,
-                toleranceBefore: .zero,
-                toleranceAfter: .zero
-            ) { _ in
-                resumeOnce.run { continuation.resume() }
+        // STAB-05 (freeze_frame flake): under full-suite load the exact
+        // frame can miss the 2 s poll window; falling straight back to the
+        // CURRENT frame then returns a stale/wrong frame (measured MAD
+        // 9.69 vs 0.99 standalone at a freeze boundary — the parity
+        // "order/resource dependent" flake). Retry the whole zero-tolerance
+        // seek + poll once before accepting the current-frame fallback.
+        for _ in 0..<2 {
+            let resumeOnce = ResumeOnce()
+            await withCheckedContinuation { continuation in
+                player.seek(
+                    to: itemTime,
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero
+                ) { _ in
+                    resumeOnce.run { continuation.resume() }
+                }
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    resumeOnce.run { continuation.resume() }
+                }
             }
-            Task {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                resumeOnce.run { continuation.resume() }
-            }
-        }
 
-        // Poll the exact requested item time. Custom-compositor frames can take
-        // longer than a decoded passthrough frame on their first request, and
-        // host-time lookup is ambiguous while the player is paused after seek.
-        let frameDeadline = Date().addingTimeInterval(2)
-        while Date() < frameDeadline {
-            if let output = previewVideoOutput,
-               output.hasNewPixelBuffer(forItemTime: itemTime),
-               let pixelBuffer = output.copyPixelBuffer(
-                   forItemTime: itemTime,
-                   itemTimeForDisplay: nil
-               ),
-               let image = Self.cgImage(from: pixelBuffer) {
-                return image
+            // Poll the exact requested item time. Custom-compositor frames can take
+            // longer than a decoded passthrough frame on their first request, and
+            // host-time lookup is ambiguous while the player is paused after seek.
+            let frameDeadline = Date().addingTimeInterval(2)
+            while Date() < frameDeadline {
+                if let output = previewVideoOutput,
+                   output.hasNewPixelBuffer(forItemTime: itemTime),
+                   let pixelBuffer = output.copyPixelBuffer(
+                       forItemTime: itemTime,
+                       itemTimeForDisplay: nil
+                   ),
+                   let image = Self.cgImage(from: pixelBuffer) {
+                    return image
+                }
+                try? await Task.sleep(nanoseconds: 30_000_000)
             }
-            try? await Task.sleep(nanoseconds: 30_000_000)
         }
         return snapshotCurrentFrame()
     }

@@ -462,6 +462,12 @@
 - 증상: W_STRICT의 w1에서 `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 앱 파킹 — 메인 런루프 유휴·워커 스레드 부재·w.json 미기록(첫 스텝도 디스크에 없음). 12분 관찰·스택 샘플로 확인. **BUG-CA12-01(메인 디스패치 전달 정지 계열)의 새 재현 경로** — 스모크의 하드코딩 범위 경로는 이 결함을 가림.
 - 병합: 재현 경로·스택 증거가 §1.13 BUG-CA12-01 에스컬레이션 기록에 통합됨(아래 "재현 경로 추가" 불릿). 본 행은 동일 계열로 통합 관리 — 별도 수정 없이 근본 에스컬레이션(BUG-CA12-01) 해법을 따름. W1 acceptance는 이 계열 해소 전까지 RED 유지.
 
+### BUG-ACC-05 (P1) — 실제 갭 이후 잔존 클립 구간을 프리뷰가 BLACK으로 렌더 (export는 정상) — 미수정 (STAB-05 발견, 2026-08-30)
+
+- 증상: 비후행 클립 삭제(간극 보존 DeleteClipCommand — A[0,2] 삭제, B bars[2,5] 잔존) 후 **프리뷰 덤프가 t=2.5 잔존 클립 구간에서 완전 검정**(평균 RGB 0,0,0) — export는 같은 시점에 B 정상 렌더(평균 51/51/58). 갭 내부 t=0.5는 양쪽 모두 검정(정상). 결정적 재현(3/3 동일 MAD 53.31) — 시나리오: `run_core_editing_parity.sh` Scenario 8(실갑 normal_delete, STAB-05에서 갭 미생성 폐지 후 즉시 노출 — 리뷰 #7이 지적한 은폐의 실증).
+- 의심 메커니즘: 컴포지터 nil-source 계열의 **세 번째 발현** — BUG-ACC-04(export 사망·레이아웃 트리거)·백투백 freeze/motion 플래이크와 동일 계열(요청이 소스 프레임 없이 도착) 가능성. export 경로는 프레임이 버퍼링돼 정상, 프리뷰(실시간 AVPlayer 요청)만 검정으로 떨어지는 형상과 정합.
+- 수정 방향: CustomVideoCompositor의 소스 프레임 대기/재시의(현재는 nil 즉시 -1 또는 검정 종결) + 갭 이후 첫 요청의 sourceFrame 전달 시점 조사. 보존 증거: `~/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-parity/normal_delete.*`(n2vUAu·iplqXt).
+
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
 
 - 증상: 4초 8클릭 픽스처는 마커 ≥6(기존 테스트)이나 **60초 120BPM(약 120 온셋)에서 마커 4개**(240BPM 드래프트에서는 6개). 스텝 자체는 통과(마커 존재)하나 대표 작업 관점에서 수율이 비정상적으로 낮음 — 분석 윈도우/최댓값/씬 정규화 의심.

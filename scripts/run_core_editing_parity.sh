@@ -209,18 +209,16 @@ echo "Scenario 7: image + video mixed"
 run_scenario "image_video_mixed" "0.5,2.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$IMAGE,$VIDEO_A" || FAIL=1
 
-echo "Scenario 8: normal delete (gap preserved)"
-# The harness deletes the *last-imported* clip (VIDEO_B), leaving only VIDEO_A
-# at [0, 2], so the export is 2.0s. The old "0.5,2.5" requested a 2.5s frame
-# past the end, which now fails cleanly (out-of-range guard) instead of
-# crashing. Sample inside the 2.0s export.
-# NOTE: because deleteClip() always removes the selected (last) clip, this
-# scenario does not actually leave an on-timeline gap — it just tests that
-# Preview matches Export for the remaining clip after a delete. Exercising a
-# real gap would require a harness change to delete a non-trailing clip.
-run_scenario "normal_delete" "0.5,1.5" 2.0 \
+echo "Scenario 8: normal delete (REAL gap preserved)"
+# STAB-05: delete the FIRST clip (timeline index 0 = VIDEO_A) through the
+# harness's index-targeted path (same gap-preserving DeleteClipCommand the
+# menu uses) — VIDEO_B stays at [2, 4] with a REAL [0, 2] gap. Sample the
+# gap interior (0.5 — canvas background in both engines) and inside the
+# surviving clip (2.5, 3.5). Export stays 4.0s: gap-preserving, not ripple.
+run_scenario "normal_delete" "0.5,2.5,3.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
-  "MOVIECUT_UITEST_NORMAL_DELETE=1" || FAIL=1
+  "MOVIECUT_UITEST_NORMAL_DELETE=1" \
+  "MOVIECUT_UITEST_DELETE_CLIP_INDEX=0" || FAIL=1
 
 # ---------------------------------------------------------------------------
 # Task 7.2 — additional editing-operation parity scenarios (requirement 2.1,

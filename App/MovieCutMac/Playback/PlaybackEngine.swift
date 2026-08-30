@@ -358,6 +358,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // and returns BLACK pixels (4/4), so the flag is load-bearing and the
         // defect is render-side, not supply-side. Left as-is pending the
         // compositor-level investigation (see backlog §1.15).
+        var attemptDiagnostic = 0
         for _ in 0..<2 {
             let resumeOnce = ResumeOnce()
             await withCheckedContinuation { continuation in
@@ -377,6 +378,9 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             // Poll the exact requested item time. Custom-compositor frames can take
             // longer than a decoded passthrough frame on their first request, and
             // host-time lookup is ambiguous while the player is paused after seek.
+            // BUG-ACC-05 4th-pass instrumentation: which path returned the
+            // image — poll (player rendered the frame) vs current-frame
+            // fallback (frame never delivered). Remove when fixed.
             let frameDeadline = Date().addingTimeInterval(2)
             while Date() < frameDeadline {
                 if let output = previewVideoOutput,
@@ -386,13 +390,19 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                        itemTimeForDisplay: nil
                    ),
                    let image = Self.cgImage(from: pixelBuffer) {
+                    AppLog.export.error("snapshot path: t=\(targetTime, privacy: .public) attempt=\(attemptDiagnostic, privacy: .public) POLL")
                     return image
                 }
                 try? await Task.sleep(nanoseconds: 30_000_000)
             }
+            attemptDiagnostic += 1
         }
-        return snapshotCurrentFrame()
-    }
+            if let current = snapshotCurrentFrame() {
+                AppLog.export.error("snapshot path: t=\(targetTime, privacy: .public) attempt=\(attemptDiagnostic, privacy: .public) FALLBACK")
+                return current
+            }
+            return nil
+        }
 
     /// Renders the exact asset/audio-mix currently installed in Preview to an
     /// audio file. The integration harness decodes this output as PCM so it can
@@ -1377,6 +1387,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 uniqueKeysWithValues: zip(sortedVideoCompositionTracks.map { $0.track.trackID }, layerInstructions)
             )
 
+            // BUG-ACC-05 (measured 2026-08-30, 4th pass): mirroring the
+            // export path's explicit opacity anchors — setOpacity(0, at:
+            // .zero) per instruction + the clip's opacity at its start —
+            // does NOT fix the post-gap black (3/3 fail identical). Opacity
+            // points are NOT the mechanism; instrumentation continues on the
+            // snapshot delivery path.
             for clipInstruction in videoClipInstructions {
                 guard let layerInstruction = layerInstructionsByTrackID[clipInstruction.trackID] else {
                     continue

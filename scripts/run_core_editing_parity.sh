@@ -164,13 +164,24 @@ run_scenario() {
 }
 
 FAIL=0
-# NOTE: Scenario 1 (two clips + cross dissolve) is intentionally skipped in
-# this script. It requires CustomVideoCompositor two-source transitions, whose
-# composition build does not complete reliably under the headless harness on
-# this host (the app hangs in buildComposition). The transition pixel path is
-# instead covered by TransitionPixelProcessorTests under the software renderer
-# (Step 6-A). Re-enable here once a CI/host with a working GPU compositor is
-# available. Tracked as a Step 6 caveat.
+echo "Scenario 1: two clips + cross dissolve (STAB-05 re-entry)"
+# Skipped from the script's inception (headless buildComposition hang on this
+# host). That hang class matched the sequential A/V pump starvation STAB-02
+# cured (2026-08-29 task-group parallel pumps), so the scenario is re-entered
+# as a MEASURED probe: sequential comma import A[0,2]+B[2,5], 0.5s cross
+# dissolve on the OUTGOING clip (TRANSITION_TARGET=first — the harness knob
+# this scenario added; a comma import leaves selection on the LAST clip,
+# where a transition gates no pair). v1 samples OUTSIDE the dissolve window
+# (t=0.5 pure A, t=2.6 pure B): the back-timed two-slot STRUCTURE (4.5s
+# duration, overlap, both sources alive) is asserted end-to-end. The
+# dissolve-window sample (t≈1.75) is BLOCKED by the stale-frame supply class
+# (BUG-CA12-01 adjacent — preview returns a one-behind/pure-A frame tagged
+# new, deterministic per instant: 1.7667→35.26 4/4, 1.75→4.55/35.26 bimodal;
+# measured 2026-08-31). Re-add the in-window time when that root is fixed.
+run_scenario "cross_dissolve" "0.5,2.6" 4.5 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
+  "MOVIECUT_UITEST_TRANSITION=crossDissolve" \
+  "MOVIECUT_UITEST_TRANSITION_TARGET=first" || FAIL=1
 
 echo "Scenario 2: 2x clip split"
 # 2s source at 2x -> ~1.0s export; the old "0.5,1.5" requested a 1.5s frame

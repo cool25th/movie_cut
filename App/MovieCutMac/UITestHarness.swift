@@ -4377,7 +4377,19 @@ extension EditorViewModel {
         }
 
         // 4. Transition on the selected clip — covers "2 clips + cross dissolve".
+        // TRANSITION_TARGET=first moves the selection to the FIRST timeline
+        // video clip first: the transition rides the OUTGOING clip (the
+        // pair's makeTransitionEffects contract), but a comma import leaves
+        // the selection on the LAST imported clip — without this knob the
+        // transition would gate a pair that doesn't exist.
         if let transitionRaw = environment["MOVIECUT_UITEST_TRANSITION"] {
+            if environment["MOVIECUT_UITEST_TRANSITION_TARGET"] == "first",
+               let firstVideoClip = currentProject.timeline.tracks
+                   .sorted(by: { $0.zIndex < $1.zIndex })
+                   .flatMap(\.clips)
+                   .first(where: { $0.kind == .video || $0.kind == .image }) {
+                selectedClipId = firstVideoClip.id
+            }
             let type = TransitionType(rawValue: transitionRaw) ?? .crossDissolve
             await updateSelectedTransition(Transition(type: type, duration: 0.5))
         }

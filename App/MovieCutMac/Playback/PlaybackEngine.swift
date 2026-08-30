@@ -389,28 +389,41 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // the source is still unprimed — BLACK pixels tagged NEW for the
         // requested item time, returned by the poll in ~34 ms (4th-pass
         // measurement). Distrust a fast attempt-0 success ONLY within 0.5 s
-        // after a video segment that starts mid-timeline (i.e. after a real
-        // gap): there the unprimed-render failure lives. Distrusting every
-        // fast success regressed motion_tracking (warm cache returns the
-        // correct frame fast; the re-render differs — measured 0.05→4.33).
+        // after a REAL gap: a time not covered by ANY video segment (the
+        // union across ALL tracks — transition slot alternation makes a
+        // single track's first segment start mid-timeline WITHOUT any gap
+        // existing; treating that as a gap mis-fired the away-and-back inside
+        // the dissolve window and returned the away-frame — cross_dissolve
+        // parity MAD 4.55/8.61 bimodal, deterministic per run). Distrusting
+        // every fast success regressed motion_tracking (0.05→4.33).
         func snapshotIsJustAfterGap() async -> Bool {
             guard let item = playerItem,
-                  let track = (try? await item.asset.loadTracks(withMediaType: .video))?.first
+                  let tracks = try? await item.asset.loadTracks(withMediaType: .video),
+                  !tracks.isEmpty
             else { return false }
-            let segments = track.segments
-            for (index, segment) in segments.enumerated() {
-                let start = CMTimeGetSeconds(segment.timeMapping.target.start)
-                guard start > 0.01, targetTime > start, targetTime - start <= 0.5 else { continue }
-                // A real gap: the previous segment is an inserted EMPTY range
-                // (no source media — zero source duration), or nothing
-                // contiguous precedes.
-                guard index > 0 else { return true }
-                let previous = segments[index - 1].timeMapping
-                let previousSource = CMTimeGetSeconds(previous.source.duration)
-                let previousTargetEnd = CMTimeGetSeconds(previous.target.start) + CMTimeGetSeconds(previous.target.duration)
-                return previousSource < 0.01 || start - previousTargetEnd > 0.01
+            // Union of every track's segment coverage.
+            var covered: [(start: Double, end: Double)] = []
+            for track in tracks {
+                for segment in track.segments {
+                    let start = CMTimeGetSeconds(segment.timeMapping.target.start)
+                    let end = start + CMTimeGetSeconds(segment.timeMapping.target.duration)
+                    if end > start { covered.append((start, end)) }
+                }
             }
-            return false
+            guard !covered.isEmpty else { return false }
+            covered.sort { $0.start < $1.start }
+            // Real gaps = uncovered intervals after merging the union.
+            var gapEnds: [Double] = []
+            var cursor = 0.0
+            for interval in covered {
+                if interval.start > cursor + 0.01 {
+                    gapEnds.append(interval.start)
+                }
+                cursor = max(cursor, interval.end)
+            }
+            return gapEnds.contains { gapEnd in
+                targetTime > gapEnd && targetTime - gapEnd <= 0.5
+            }
         }
         let distrustFastSuccess = await snapshotIsJustAfterGap()
         let fastSuccessWindow: TimeInterval = 0.150

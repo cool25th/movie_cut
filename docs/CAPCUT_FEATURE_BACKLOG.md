@@ -359,10 +359,10 @@
 - 증상: `cancelExport()`가 즉시 `isExporting=false`로 돌려 UI가 새 export를 시작할 수 있음. 새 export가 공유 `activeOutputURL`을 교체한 뒤 이전 취소 호출의 catch가 `removePartialOutput()`에 도달하면 **새 export의 출력 파일을 삭제**하고 엔진 상태를 초기화. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L335-364.
 - 수정 방향: 실패한 호출의 국소 URL 또는 export 세대(generation) 번호로 정리 결합.
 
-### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — 미수정 (PR #20)
+### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — **수정 완료(2026-08-30, 메인 세션)**
 
 - 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
-- 수정 방향: RIFF와 동일 패턴으로 `FORM` 시그니처 추가(종류는 확장자로 판정) + 실제 AIFF 픽스처 왕복 단위테스트. 기존 지원 포맷 회귀라 P2 상단 배치.
+- 수정 완료(2026-08-30): `FORM` 시그니처 추가(오디오 종류·RIFF 패턴) + 왕복 3단언 테스트(aiff·aif 통과, FORM↔mp4 라벨 오용 기각) — 임포터 스위트 8/8·verify_gate 5/5.
 
 ### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — 미수정 (PR #21)
 

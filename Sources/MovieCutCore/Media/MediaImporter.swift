@@ -111,6 +111,13 @@ extension MediaImporter {
         // RIFF containers (wav/avi/webp) — kind decided by extension.
         KnownSignature(bytes: Array("RIFF".utf8), offset: 0,
                        kinds: [.video, .audio, .image]),
+        // IFF containers (aif/aiff) — kind decided by extension, same as
+        // RIFF. CODEX-06: .aif/.aiff are in the allow-list but FORM was
+        // never a known signature, so every valid AIFF fell through to
+        // .unrecognizedContent once the BUG-02 sniff landed — a shipped
+        // format regression.
+        KnownSignature(bytes: Array("FORM".utf8), offset: 0,
+                       kinds: [.audio]),
         // Matroska / WebM (EBML header).
         KnownSignature(bytes: [0x1A, 0x45, 0xDF, 0xA3], offset: nil, kinds: [.video]),
         // MPEG program stream start code (mpg/mpeg).

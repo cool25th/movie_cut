@@ -39,6 +39,33 @@ struct MediaImporterValidationTests {
         #expect(try MediaImporter.validatedProbe(url: mkv).kind == .video)
     }
 
+    @Test("AIFF (IFF FORM) passes the sniff — shipped-format regression guard (CODEX-06)")
+    func aiffPasses() throws {
+        // .aif/.aiff are allow-listed but FORM was missing from the
+        // signature table — every valid AIFF fell through to
+        // .unrecognizedContent once the BUG-02 sniff landed.
+        let aiff = try temporaryFile(
+            extension: "aiff",
+            bytes: Array("FORM".utf8) + [0x00, 0x00, 0x00, 0x00] + Array("AIFFCOMM".utf8)
+                + Array(repeating: 0, count: 16))
+        #expect(try MediaImporter.validatedProbe(url: aiff).kind == .audio)
+
+        let aif = try temporaryFile(
+            extension: "aif",
+            bytes: Array("FORM".utf8) + [0x00, 0x00, 0x00, 0x00] + Array("AIFCCOMM".utf8)
+                + Array(repeating: 0, count: 16))
+        #expect(try MediaImporter.validatedProbe(url: aif).kind == .audio)
+
+        // A FORM container mislabeled .mp4 is still rejected (wrong family).
+        let mislabeled = try temporaryFile(
+            extension: "mp4",
+            bytes: Array("FORM".utf8) + [0x00, 0x00, 0x00, 0x00] + Array("AIFF".utf8)
+                + Array(repeating: 0, count: 16))
+        #expect(throws: MediaImportValidationError.self) {
+            _ = try MediaImporter.validatedProbe(url: mislabeled)
+        }
+    }
+
     @Test("unknown extensions are rejected explicitly, never defaulted to video")
     func unknownExtensionRejected() throws {
         let txt = try temporaryFile(extension: "txt", bytes: Array("hello world".utf8))

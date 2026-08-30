@@ -433,6 +433,25 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 return image
             }
         }
+        // STAB-05 (motion parity): both poll attempts starved — under the
+        // suite-context load the custom compositor's render for THIS seek can
+        // still be in flight, and snapshotCurrentFrame() then hands back the
+        // PREVIOUS seek's frame (measured: the t=0.3 request returned the
+        // t≈0 frame, t=1.7 returned the freshly-arrived t=0.3 frame — while
+        // the compositor's own keyframe evaluations logged CORRECT values for
+        // every request). Re-render via away-and-back BEFORE accepting the
+        // stale fallback: this costs nothing on healthy paths (the poll
+        // succeeded above) and, unlike distrusting fast successes (which
+        // regressed warm-cache scenarios 0.05→4.33), only fires when the
+        // snapshot would otherwise return a provably-stale frame.
+        let awaySeconds = targetTime > awayOffset ? targetTime - awayOffset : targetTime + awayOffset
+        let awayTime = CMTime(seconds: min(max(0, awaySeconds), max(duration, awaySeconds)), preferredTimescale: 600)
+        await seekWithWatchdog(to: awayTime)
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        await seekWithWatchdog(to: itemTime)
+        if let refreshed = pollFrame(at: itemTime, limit: 2) {
+            return refreshed
+        }
         return snapshotCurrentFrame()
     }
 

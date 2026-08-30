@@ -596,6 +596,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         let clipEffects = effect?.effects ?? []
         let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
 
+
         if !clipEffects.isEmpty {
             image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
         }

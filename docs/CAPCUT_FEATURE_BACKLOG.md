@@ -465,7 +465,8 @@
 ### BUG-ACC-05 (P1) — 실제 갭 이후 잔존 클립 구간을 프리뷰가 BLACK으로 렌더 (export는 정상) — 미수정 (STAB-05 발견, 2026-08-30)
 
 - 증상: 비후행 클립 삭제(간극 보존 DeleteClipCommand — A[0,2] 삭제, B bars[2,5] 잔존) 후 **프리뷰 덤프가 t=2.5 잔존 클립 구간에서 완전 검정**(평균 RGB 0,0,0) — export는 같은 시점에 B 정상 렌더(평균 51/51/58). 갭 내부 t=0.5는 양쪽 모두 검정(정상). 결정적 재현(3/3 동일 MAD 53.31) — 시나리오: `run_core_editing_parity.sh` Scenario 8(실갑 normal_delete, STAB-05에서 갭 미생성 폐지 후 즉시 노출 — 리뷰 #7이 지적한 은폐의 실증).
-- 의심 메커니즘: 컴포지터 nil-source 계열의 **세 번째 발현** — BUG-ACC-04(export 사망·레이아웃 트리거)·백투백 freeze/motion 플래이크와 동일 계열(요청이 소스 프레임 없이 도착) 가능성. export 경로는 프레임이 버퍼링돼 정상, 프리뷰(실시간 AVPlayer 요청)만 검정으로 떨어지는 형상과 정합.
+- **정밀화(2026-08-30 10:0x, 메인 세션)**: ①t=3.5(잔존 클립 내부)는 **통과** — 검정은 **잔존 클립 시작 ~0.5초 구간(t=2.5) 한정** ②파리티 실행 창 unified log에서 **컴포지터 nil-source 로그 0건** — 에러 경로 아님 ③프리뷰 컴포지션 명령은 전체 길이·트랙 ID 포함으로 정상 구축. → 의심: **빈 구간(empty time range) 직후 세그먼트 시작에서 AVPlayer 비디오 출력이 프레임을 늦게 공급**하고 snapshotFrame 폴링(재시도 2×2s 포함)이 놓친 뒤 검정 폴백 — export(리더 기반·프리롤 있음)는 무영향. 수정 방향: 세그먼트 경계 직후 시점의 스냅숏 사전 웜업(목표 시각 직전 시크 후 재시크) 또는 폴링 연장·hasNewPixelBuffer 외 복사 경로.
+- 의심 메커니즘(초기): 컴포지터 nil-source 계열의 세 번째 발현 가능성으로 추정했으나 로그 0건으로 **기각**.
 - 수정 방향: CustomVideoCompositor의 소스 프레임 대기/재시의(현재는 nil 즉시 -1 또는 검정 종결) + 갭 이후 첫 요청의 sourceFrame 전달 시점 조사. 보존 증거: `~/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-parity/normal_delete.*`(n2vUAu·iplqXt).
 
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사

@@ -130,6 +130,12 @@ run_scenario() {
     return 1
   fi
 
+  # Multi-GB exports leave the volume with seconds-to-minutes of dirty
+  # pages; an immediate stream-level ffprobe has measured EMPTY (rc 0) for
+  # a codec the file demonstrably contains, while format-level queries
+  # succeed. Force the flush before validation (BUG-ACC-04 postmortem).
+  sync
+
   [ -s "$dir/w.json" ] || { echo "$scenario status=FAIL detail=no_result_json"; return 1; }
 }
 
@@ -159,21 +165,29 @@ for step in dump.get("steps", []):
 elapsed = dump.get("elapsedSeconds", 0)
 print(f"  elapsed={elapsed:.1f}s export_bytes={dump.get('exportBytes', 0)}")
 
-def probe(path, entries, stream=None, attempts=6):
+def probe(path, entries, stream=None, attempts=10):
     args = ["ffprobe", "-v", "error"]
     if stream:
         args += ["-select_streams", stream]
     args += ["-show_entries", entries, "-of", "csv=p=0", path]
-    # Post-encode settling: probing IMMEDIATELY after a 5-minute export's
-    # process exit has measured EMPTY for a stream the file demonstrably
-    # contains (re-probing the kept artifact returned it instantly). A short
-    # retry window makes the measurement deterministic instead of flaky.
+    # Post-encode settling: probing IMMEDIATELY after a multi-GB export can
+    # measure EMPTY (rc 0) for a stream the file demonstrably contains —
+    # measured even past a 6x1s window on 2.7 GB ProRes artifacts while the
+    # same files probe instantly minutes later. A 10x2s window on EMPTY
+    # OUTPUT (not return code) keeps the measurement deterministic.
     for attempt in range(attempts):
         proc = subprocess.run(args, capture_output=True, text=True)
         out = proc.stdout.strip()
         if out and proc.returncode == 0:
             return out.split(",")
-        time.sleep(1.0)
+        if proc.returncode != 0:
+            # Usage/query errors (e.g. a missing section prefix in `entries`)
+            # never succeed on retry — fail loud instead of burning the
+            # window and returning an empty match (the "empty probe" mystery
+            # was exactly this: rc=1 "No match for section 'codec_name'").
+            print(f"    [probe] ffprobe error (no retry): {proc.stderr.strip()[:200]}")
+            return [""]
+        time.sleep(2.0)
     return out.split(",")
 
 videos = sorted(glob.glob(os.path.join(d, "*.mp4")) + glob.glob(os.path.join(d, "*.mov")),
@@ -182,7 +196,7 @@ if scenario == "w1":
     if not videos:
         fail.append("export_file")
     else:
-        v = probe(videos[-1], "width,height", "v:0")
+        v = probe(videos[-1], "stream=width,height", "v:0")
         dur_vals = probe(videos[-1], "format=duration")
         if len(v) >= 2 and v[0] and v[1]:
             w, h = int(v[0]), int(v[1])
@@ -190,7 +204,7 @@ if scenario == "w1":
             w = h = 0
             fail.append("ffprobe_video")
         dur = float(dur_vals[0]) if dur_vals and dur_vals[0] else 0.0
-        has_audio = bool(probe(videos[-1], "codec_name", "a:0"))
+        has_audio = bool(probe(videos[-1], "stream=codec_name", "a:0"))
         print(f"  export: {w}x{h} dur={dur:.2f}s audio={has_audio}")
         if not h > w: fail.append("portrait_geometry")
         if abs(dur - 60) > 2: fail.append("duration")
@@ -213,9 +227,9 @@ elif scenario == "w4":
     if not os.path.exists(prores) or os.path.getsize(prores) == 0:
         fail.append("prores_file")
     else:
-        v = probe(prores, "codec_name", "v:0")
+        v = probe(prores, "stream=codec_name", "v:0")
         dur_vals = probe(prores, "format=duration")
-        a = probe(prores, "codec_name", "a:0")
+        a = probe(prores, "stream=codec_name", "a:0")
         dur = float(dur_vals[0]) if dur_vals and dur_vals[0] else 0.0
         starts = []
         for s in ("v:0", "a:0"):

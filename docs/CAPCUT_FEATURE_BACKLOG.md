@@ -389,10 +389,10 @@
 - 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
 - 수정 완료(2026-08-31): 단일 클램프 계산 `clampedTransitionDuration`(+ 백타이밍 래퍼 `clampedOverlapPull`) 신설 — **배치(`insertVideoTrack`)·이펙트 timeRange(`makeVideoComposition`)·전환 창(`makeTransitionEffects`) 3경로가 동일한 클램프된 지속시간 사용**. 초과 전환 픽스처(red·blue·red 3×1s 클립 + 2s crossDissolve 2개)로 3클립 완주·드랍 0 단언: 수정 전 재현(미디어 세그먼트 2/3·composition 1.0s·t=1.9 프레임 생성 불가 -11832) → 수정 후 세그먼트 3/3·2.0s·t=1.9 red-dominant 블렌드. iOS 전체 15스위트 통과·전환 스위트 5회 연속 통과·verify_gate 5/5. **Mac ExportEngine도 동일 구조(백타이밍 raw L412·창 클램프 L872-877)지만 cursor 가드가 아닌 절대 시각 삽입이라 드랍 경로는 다름 — Mac은 별도 관찰 항목으로 잔여.**
 
-### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — 미수정 (PR #22)
+### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
 - 증상: `x_is_a=False` 시 `_X.mp4`=B측·`_Y.mp4`=A측으로 구현화는 정상인데 투표표의 X열이 `_Y.mp4`(=A측)를 안내 — 평가자의 X 선호가 mapping(X↔B)에 따라 **반대 편집기로 집계**. 블라인드 비교 결과를 왜곡. 위치: `scripts/ab_benchmark_metrics.py` L485-487.
-- 수정 방향: 투표표는 항상 `<fixture>_X.mp4`를 X열에 고정(해독은 mapping 테이블이 담당) + 라벨/구현화 정합 셀프테스트. **A류(계측 스크립트) — 루프 자율 실행 가능.** B측 블라인드 평가 개시 전 필수.
+- 수정 완료(2026-08-31): **투표표 X/Y열을 항상 `{fid}_X.mp4`/`{fid}_Y.mp4`로 고정** — X↔A/B 해독은 mapping 테이블(blind_key.json·`--tally`)이 유일 담당. ballot 안내문에 파일 대응 명시. **셀프테스트 2건 추가**: ①투표표 라벨 정합(전 row `_X`/`_Y`) ②구현화 바이트==mapping 측 + all-X 투표 tally 왕복 — 12시드×4fixture로 **x_is_a 양 분기 커버**. **반전 실증(pre/post)**: A를 4번 전부 선호한 정직한 평가자(투표표 파일 열 파싱 기준)가 수정 전 2/2로 절반 오집계(x_is_a=False 비율만큼 — 원 서술 "약 반수"와 정확 일치) → 수정 후 4/0 정확. self-test 전체 PASS.
 
 ### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — **수정 완료(2026-08-31, CODEX P1 세션)**
 

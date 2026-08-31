@@ -3,6 +3,15 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-31 세션 (STAB-07 제안 상신 + CODEX-11 수정 — REPS 집계·B측 블라인드 평가 전제 정리)
+
+- **STAB-07(제안 작성 완료·사용자 결정 대기)**: `DECISIONS_20260822.md`에 **Q13 상신** — 안 A(온디바이스 `MXMetricManager` 구독 한정 채택·네트워크/서버 코드 추가 0·미디어·편집 데이터 전송 없음·진단은 Apple 익명 집계 경유 + OS 수준 옵트인 기본 OFF가 §13.10 "외부 처리 명시·기본 OFF" 원칙과 정합·macOS 12+로 Q3 macOS 14와 호환)·안 B(§13.8 요구 폐기 — 크래시 가시성이 사용자 수동 의존으로 약화)·안 C(베타 후 재검토) 3안·권고 A. 사실 관계(전송 범위·플랫폼·옵트인 구조) 명시 — 단 전력 지표의 macOS 가용성·Privacy Label 영향은 도입 시 실험 확인 필요로 신중 표기. **결정 전 구현 없음.**
+- **CODEX-11 수정(A류 계측)**: `run_ca12_ab_benchmark.sh`의 fixture별 집계가 rep1만 읽던 것을 **모든 rep 소비**로 교체 — `repetition_stats`(median/p95/min/max/n)·`reps_recorded`·`failed_reps`(실패 은폐 없음)·`reps_expected` 불일치 마커·**n=1은 `single_rep`+`p95:null` 명시**(단일 표본의 통계 위장 폐지 — 조건 노트의 "median/p95 recorded" 약속 이행). rep1 엔트리는 하위호환 대표로 유지. 검증: 합성 4케이스 단위 검증 + **REPS=2 ab05 종단 실증 — 양 rep 값(min 1.628/max 4.296) 전부 소비·5필드 통계 기록·status=0**. 검증 잔여물 296KB 즉시 정리·lint 게이트 PASS.
+- **경과**: CODEX P1 잔여 **5건**(04·07·08·10·17). STAB 계획의 루프 실행 가능 항목 중 미완료는 **worst-MAD 캡처 소형과 CODEX P1·STAB-02 취소 E2E 소형뿐** — STAB-07 제안은 상신 완료로 루트 닫힘(결정은 사용자).
+
+### 다음 회차 — STAB 큐
+① **CODEX-10** (P1·A류 — 블라인드 투표 라벨 불일치, `ab_benchmark_metrics.py` L485-487·셀프테스트 보강으로 자율 실행 가능·**CODEX-11과 같은 B측 평가 전제**) → CODEX P1 잔여(08 혼합 회전 — 엔진 로직·실기기 불필요 / 17 iOS 트림 ClipTrimMath / 04·07은 실기기 검증 권장)·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·**STAB-07(Q13) 결정**·push 후 원격 CI 관찰.
+
 ## 2026-08-31 세션 (CODEX-09 수정 완료 — iOS 초과 전환 클립 무음 드랍·배치/이펙트 단일 클램프 통일)
 
 - **스카웃**: STAB-05 루트(스테일 공급=BUG-CA12-01 에스컬레이션 대기)·STAB-06 원격(사용자 push 대기)·STAB-04 w1(STT TCC 대기)는 전부 대기 → CODEX P1 7건 중 **CODEX-09** 선택(데이터 손실급 제품 결함·엔진 로직으로 결정적 재현 가능·실기기 불필요). CODEX-04는 시뮬레이터가 못 잡는 결함이라 이번 세션 제외.

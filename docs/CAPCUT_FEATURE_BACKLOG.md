@@ -394,10 +394,10 @@
 - 증상: `x_is_a=False` 시 `_X.mp4`=B측·`_Y.mp4`=A측으로 구현화는 정상인데 투표표의 X열이 `_Y.mp4`(=A측)를 안내 — 평가자의 X 선호가 mapping(X↔B)에 따라 **반대 편집기로 집계**. 블라인드 비교 결과를 왜곡. 위치: `scripts/ab_benchmark_metrics.py` L485-487.
 - 수정 방향: 투표표는 항상 `<fixture>_X.mp4`를 X열에 고정(해독은 mapping 테이블이 담당) + 라벨/구현화 정합 셀프테스트. **A류(계측 스크립트) — 루프 자율 실행 가능.** B측 블라인드 평가 개시 전 필수.
 
-### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — 미수정 (PR #22)
+### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
-- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
-- 수정 방향: `rep_results` 전부 소비해 median/p95 산출 + 단일 rep 시 명시. **A류 — 루프 자율 실행 가능.**
+- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133-134)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
+- 수정 완료(2026-08-31): fixture별 집계가 **모든 rep 디렉터리를 소비** — `repetition_stats`(타이밍 전 필드 median/p95[nearst-rank·작은 n에서 정직]/min/max/n)·`reps_recorded`·실패 rep는 `failed_reps`로 은폐 없이 기록·기대 불일치 시 `reps_expected` 마커. **n=1은 `single_rep:true`+`p95:null`로 명시**(단일 표본을 통계로 위장하지 않음). rep1 엔트리(timing·single·pair·error)는 하위호환 대표 레코드로 유지. 검증: 합성 rep 디렉터리 4케이스 단위 검증(n=3 통계·n=1 명시·실패 rep·불일치 마커) + **종단 실증 REPS=2 ab05 — 양 rep 값(min 1.628/max 4.296)이 전부 소수되고 5필드 median/p95 기록**(수정 전이면 rep1만 남았을 것)·`conditions.repetitions=2`·status=0. 검증 run·스테이징 카피 296KB 즉시 정리.
 
 ### CODEX-12 (P2) — 레거시 AVFoundation 취소가 취소로 분류 안 됨 — 미수정 (PR #22)
 

@@ -322,6 +322,7 @@
 - 부산물(유지): `snapshotFrame`의 seek completion 누수 방어 와치독(2s 경합·1회 재개 보장 — AVPlayer 공식 문서상 완전 핸들러 미보장 클래스). 파리티 스윕 13/13 무회귀 확인.
 - **재현 경로 추가(2026-08-29, BUG-ACC-02에서 병합 — 메인 세션)**: W1 acceptance 실덕킹 경로에서 동일 파킹 — `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 60초 실발화(say 생성)에서 메인 런루프 유휴·워커 부재·첫 스텝조차 미기록(스택 샘플 2026-08-29 — 메인 스레드 mach_msg 대기만 존재). **1커맨드 재현: `bash scripts/run_w_acceptance.sh w1`**(STRICT — ducking 스텝 `path=analysis` 직후 무출력, 러너 900초 회수). 파리티×덕킹 '조합'이 아니라 덕킹 **분석 경로 자체**가 트리거일 가능성 — 에스컬레이션 조사 범위에 SilenceDetectionProvider.analyze의 continuation 포함 권장.
 - 잔여: 재현은 1커맨드로 고정됨(ab09 + 위 acceptance w1 경로 2종). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
+- **증거 통합(2026-08-31, 루프 회차 — BUG-ACC-06 계열 확정·판별기 확보)**: STAB-05의 잔여 플래이크(motion·freeze·normal_delete 부하 재발·디졸브 창)가 전부 본 계열(플레이어 비디오 출력의 one-behind 스테일 프레임 태깅)로 수렴. **프레임 격자 정렬 판별기**: 샘플 시각을 30fps 격자(예: 1.7667s)에 맞추면 위상차(MAD 4.55)와 스테일(MAD 35.26)이 분리 — 스테일은 4/4 결정적. normal_delete는 단독 12연속 통과 vs 풀스윕 부하 재발(53.31)로 부하 민감성 확정. 재현 레시피: `PARITY_ONLY=cross_dissolve bash scripts/run_core_editing_parity.sh`(샘플 1.7667로 수동 지정) 또는 풀스윕 후 normal_delete. 상위 도구 조사 시 우선 사용 권장.
 
 ### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정(메커니즘 확정·G-29 연계)
 

@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-31 세션 (CODEX-08 수정 완료 — 혼합 회전 트랙 클립별 orientation·발현 조건 정밀화)
+
+- **본체**: iOS 클립 이펙트의 `sourcePreferredTransform`이 composition **트랙의** pt를 읽어 혼합 회전 트랙에서 뒤따르는 클립이 첫 클립 방향을 상속. BUG-IOS-10 audioMixEntries와 동일한 **수집-소비 패턴**으로 전환 — `insertClip`이 effective 소스(원본·리버스 렌더·이미지 프리렌더)에서 클립별 pt를 `sourceOrientations[clip.id]`에 기록, 이펙트가 자기 pt 수신, 플랜 종료 시清除. 트랙 pt는 외부 플레이어 메타데이터로 유지(first-writer-wins).
+- **발현 조건 정밀화(재현에서 판명 — 원 서술보다 좁음)**: 설정 조건이 `pt == .identity`일 때만이라 **가로(첫)→세로(둘째)는 트랙이 identity에 머물러 둘째 삽입 시 재설정이 우연히 동작**(결과는 올바르지만 취약) — **세로(첫, 90°)→가로(둘째)에서만** 뒤따르는 클립이 90° 상속으로 옆으로 눕는다. 테스트 2건: 구조 단언(세로→가로·수정 전 RED → 후 GREEN: 둘째 이펙트 identity·첫 클립은 90° 유지) + 픽셀 밴드 단언(가로→세로 upright 고정 — 우연 동작의 회귀 방지).
+- **검증**: 전환 스위트 **4회 연속 통과**(GREEN 직후 + 백투백 3 — rotatedOutgoing 플레이크 재발 0)·**iOS 15스위트 전부 통과**(렌더/익스포트 골든 포함 — 회전 변경 무회귀)·**verify_gate 5/5 GATE_PASS**(Core 1,429/212·양 빌드·lint)·LOOP_STATE 재생성.
+- **경과**: CODEX P1 잔여 **3건**(04·07 — 실기기 검증 권장·17 — iOS 트림 ClipTrimMath). iOS 엔진 결함 CODEX-08·09 소진.
+
+### 다음 회차 — STAB 큐
+① **CODEX-17** (P1 — iOS 플레이헤드 트림이 비정규 시간 매핑 사용, `IOSEditorViewModel.swift` L1329·L1350 → `trimClip` L1074 — 양 플레이헤드 동작 `ClipTrimMath.compute` 경유 전환[Mac 4경로 패리티] + 속도 램프·리버스 픽스처 왕복 테스트. VM 로직·실기기 불필요) → CODEX-04·07(실기기 검증 권장 — 코드 수정만 먼저 가능)·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력(블라인드 평가 개시 조건).
+
 ## 2026-08-31 세션 (CODEX-10 수정 완료 — 블라인드 투표 라벨 반전·B측 평가 전제 전부 정리)
 
 - **본체**: `ab_benchmark_metrics.py` blind 프로토콜에서 `x_is_a=False` 시 구현화는 `_X.mp4`←B측로 정상인데 **투표표 rows만 X열에 `_Y.mp4`(=A측)를 안내** — X↔A/B 해독을 tally의 mapping이 담당하는 구조와 충돌해 평가자의 X 선호가 반대 편집기로 집계. **투표표 X/Y열을 항상 `{fid}_X.mp4`/`{fid}_Y.mp4`로 고정**(해독은 mapping이 유일 담당) + ballot 안내문에 파일 대응 명시.

@@ -69,6 +69,7 @@ final class IOSExportEngine {
         // BUG-IOS-10: audio edits ride the same plan the preview consumes.
         let audioMix = makeAudioMix(from: audioMixEntries, composition: composition)
         audioMixEntries.removeAll()
+        sourceOrientations.removeAll()
         return IOSRenderPlan(
             composition: composition,
             videoComposition: videoComposition,
@@ -560,12 +561,14 @@ final class IOSExportEngine {
 
                     // BUG-IOS-08: composition source frames arrive in STORAGE
                     // orientation — the compositor orients them upright via
-                    // this transform before the canvas fit (Mac BUG-07 parity;
-                    // the composition track carries the same pt only as output
-                    // metadata for external players).
-                    let sourcePreferredTransform = composition.track(
-                        withTrackID: trackID
-                    )?.preferredTransform ?? .identity
+                    // this transform before the canvas fit (Mac BUG-07 parity).
+                    // CODEX-08: the transform is the clip's OWN (recorded at
+                    // insert time from its effective source); the composition
+                    // track's pt is first-writer-wins metadata and mis-orients
+                    // mixed-rotation tracks when read back per clip.
+                    let sourcePreferredTransform = sourceOrientations[clip.id]
+                        ?? composition.track(withTrackID: trackID)?.preferredTransform
+                        ?? .identity
 
                     // BUG-08: a plain clip with no visual edits must still
                     // produce an effect — without it the track never joins
@@ -1021,6 +1024,14 @@ final class IOSExportEngine {
     /// BUG-IOS-10: audio placements collected while building the composition.
     @ObservationIgnored private var audioMixEntries: [AudioMixEntry] = []
 
+    /// CODEX-08: each video clip's EFFECTIVE source orientation (original,
+    /// reversed, or image pre-render asset), recorded by insertClip while
+    /// building the composition. The composition track's preferredTransform
+    /// is first-writer-wins output metadata for external players and cannot
+    /// orient mixed-rotation tracks — the per-clip effect must carry the
+    /// clip's own transform.
+    @ObservationIgnored private var sourceOrientations: [UUID: CGAffineTransform] = [:]
+
     @discardableResult
     private func insertClip(
         _ clip: Clip,
@@ -1075,8 +1086,17 @@ final class IOSExportEngine {
 
         let placedStart = cursor
 
-        if mediaType == .video, compositionTrack.preferredTransform == .identity {
-            compositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+        if mediaType == .video {
+            // CODEX-08: record THIS clip's source orientation for its effect.
+            // The track-level pt below stays first-writer-wins metadata for
+            // external players — a mixed-rotation track must not read it
+            // back per clip (the second clip inherited the first clip's
+            // orientation and rendered sideways).
+            let sourceTransform = try await sourceTrack.load(.preferredTransform)
+            sourceOrientations[clip.id] = sourceTransform
+            if compositionTrack.preferredTransform == .identity {
+                compositionTrack.preferredTransform = sourceTransform
+            }
         }
 
         // Step 7: freeze-frame handling. A tiny source range held over a long

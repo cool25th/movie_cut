@@ -379,10 +379,10 @@
 - 증상: `relinkMedia`는 `currentProject.mediaLibrary`만 갱신하는데 `PreviewView`는 `.onChange(of: currentProject.timeline)`(L109)에서만 렌더 플랜을 재구축 — 원본 결측 상태에서 만든 플랜의 빈/부분 `AVPlayerItem`이 그대로 남아 relink된 클립이 무관한 타임라인 편집·뷰 재생성 전까지 재생 불가. 위치: `App/MovieCutiOS/Views/PreviewView.swift` L109·`IOSEditorViewModel.swift` L570.
 - 수정 방향: mediaLibrary 변경(또는 relink 완료) 시 플랜 재구축 트리거 — SURV-01 왕복 테스트에 "relink 후 프리뷰 재생" 다리 추가로 고착.
 
-### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — 미수정 (PR #21)
+### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
-- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift L560-562)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정(L1032-1033) — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
-- 수정 방향: 클립 소유의 `AVAssetTrack.preferredTransform`을 클립별로 로드해 이펙트에 전달(트랙 pt는 외부 플레이어 메타데이터로만 유지) + **혼합 회전(가로+세로) 트랙 픽스처**로 upright 실측.
+- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정 — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
+- 수정 완료(2026-08-31): BUG-IOS-10 audioMixEntries와 동일한 **수집-소비 패턴**으로 `sourceOrientations[clip.id]`를 `insertClip`이 effective 소스(원본·리버스 렌더·이미지 프리렌더 전부 자연 커버)에서 기록 → 클립 이펙트가 자기 pt 수신(누락 시 기존 트랙 pt 폴백) → 플랜 종료 시清除. **트랙 pt는 외부 플레이어 메타데이터로 유지**(first-writer-wins). **발현 조건 정밀화(재현에서 판명)**: 설정 조건이 `pt == .identity`일 때만이라 가로(첫)→세로(둘째)는 트랙이 identity에 머물러 둘째 삽입 시 재설정이 우연히 동작(올바르지만 취약) — **세로(첫, 90°)→가로(둘째)에서만 뒤따르는 클립이 90°를 상속해 옆으로 눕는다.** 테스트 2건: ①구조 단언(세로→가로 — 수정 전 RED: 둘째 이펙트 pt 90° → 수정 후 identity·첫 클립은 90° 유지) ②픽셀 밴드 단언(가로→세로 upright 고정 — 우연 동작의 회귀 방지). iOS 15스위트 통과·verify_gate 5/5.
 
 ### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — **수정 완료(2026-08-31, CODEX P1 세션)**
 

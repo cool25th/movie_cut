@@ -1071,7 +1071,15 @@ final class IOSEditorViewModel {
         }
     }
 
-    func trimClip(clipId: UUID, newStart: TimeInterval, newDuration: TimeInterval) async {
+    /// CODEX-17: `sourceRange` is optional — the playhead trims pass the
+    /// canonical `ClipTrimMath` result (rates/ramps/reverse handled); other
+    /// callers keep the legacy 1s==1s derivation.
+    func trimClip(
+        clipId: UUID,
+        newStart: TimeInterval,
+        newDuration: TimeInterval,
+        sourceRange: TimeRange? = nil
+    ) async {
         guard newStart.isFinite, newDuration.isFinite, newDuration >= 0 else { return }
 
         let trackAndClip = currentProject.timeline.tracks.compactMap { track -> (Track, Clip)? in
@@ -1080,11 +1088,16 @@ final class IOSEditorViewModel {
         }.first
         guard let (track, clip) = trackAndClip else { return }
 
-        let sourceStartDelta = newStart - clip.timelineRange.start
-        let sourceRange = TimeRange(
-            start: max(0, clip.sourceRange.start + sourceStartDelta),
-            duration: newDuration
-        )
+        let derivedSourceRange: TimeRange
+        if let sourceRange {
+            derivedSourceRange = sourceRange
+        } else {
+            let sourceStartDelta = newStart - clip.timelineRange.start
+            derivedSourceRange = TimeRange(
+                start: max(0, clip.sourceRange.start + sourceStartDelta),
+                duration: newDuration
+            )
+        }
         let timelineRange = TimeRange(start: newStart, duration: newDuration)
 
         do {
@@ -1092,7 +1105,7 @@ final class IOSEditorViewModel {
                 TrimClipCommand(
                     clipId: clipId,
                     trackId: track.id,
-                    newSourceRange: sourceRange,
+                    newSourceRange: derivedSourceRange,
                     newTimelineRange: timelineRange
                 )
             )
@@ -1342,46 +1355,87 @@ final class IOSEditorViewModel {
 
     // MARK: - Playhead trim (review P0 — the Trim toolbar button was a no-op)
 
+    /// CODEX-17: the source asset's real duration, used by the shared trim
+    /// math to guard against trimming past the asset's end. Nil for image
+    /// clips (unbounded) and clips without an asset — Mac parity.
+    private func assetDuration(for clip: Clip) -> TimeInterval? {
+        guard let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            return nil
+        }
+        return asset.duration
+    }
+
+    /// Mac parity minimum (EditorViewModel.minimumTimelineClipDuration).
+    private static let minimumTimelineClipDuration: TimeInterval = 0.1
+
     /// Trims the selected clip's START to the playhead (Mac
     /// trimSelectedClipEndToPlayhead's sibling): the clip begins playing at
-    /// the playhead, keeping its end fixed. Routes through the same
-    /// `trimClip` engine math (source range follows the timeline delta).
+    /// the playhead, keeping its end fixed. CODEX-17: routed through the
+    /// shared `ClipTrimMath.compute` — the previous `trimClip` handoff
+    /// assumed timeline 1s == source 1s, so a 2x-speed clip trimmed 0.5s
+    /// kept only 0.5s of source instead of the correct 1.0s, and reverse
+    /// start-trims moved the wrong source edge.
     func trimSelectedClipStartToPlayhead() async {
         guard let clip = selectedClip else {
             lastErrorMessage = "Select a clip to trim."
             return
         }
-        let playhead = playheadTime
-        guard playhead > clip.timelineRange.start + 0.05,
-              playhead < clip.timelineRange.end else {
+        // `ClipTrimMath.compute` CLAMPS an outside target into the trimmable
+        // region (the drag contract); the playhead contract rejects it —
+        // keep the pre-guard so a parked-far-out playhead cannot silently
+        // clamp-trim.
+        guard playheadTime > clip.timelineRange.start + Self.minimumTimelineClipDuration,
+              playheadTime < clip.timelineRange.end else {
             lastErrorMessage = "Move the playhead inside the clip to trim its start."
             return
         }
-        let delta = playhead - clip.timelineRange.start
+        guard let result = ClipTrimMath.compute(
+            clip: clip,
+            edge: .start,
+            targetTimelineTime: playheadTime,
+            assetDuration: assetDuration(for: clip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its start."
+            return
+        }
         await trimClip(
             clipId: clip.id,
-            newStart: playhead,
-            newDuration: clip.timelineRange.duration - delta
+            newStart: result.timeline.start,
+            newDuration: result.timeline.duration,
+            sourceRange: result.source
         )
     }
 
     /// Trims the selected clip's END to the playhead: the clip stops at the
-    /// playhead, keeping its start fixed.
+    /// playhead, keeping its start fixed. CODEX-17: `ClipTrimMath.compute`
+    /// like the start edge (rates, ramps, and reverse included).
     func trimSelectedClipEndToPlayhead() async {
         guard let clip = selectedClip else {
             lastErrorMessage = "Select a clip to trim."
             return
         }
-        let playhead = playheadTime
-        guard playhead > clip.timelineRange.start + 0.05,
-              playhead < clip.timelineRange.end else {
+        guard playheadTime > clip.timelineRange.start + Self.minimumTimelineClipDuration,
+              playheadTime < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its end."
+            return
+        }
+        guard let result = ClipTrimMath.compute(
+            clip: clip,
+            edge: .end,
+            targetTimelineTime: playheadTime,
+            assetDuration: assetDuration(for: clip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
             lastErrorMessage = "Move the playhead inside the clip to trim its end."
             return
         }
         await trimClip(
             clipId: clip.id,
-            newStart: clip.timelineRange.start,
-            newDuration: playhead - clip.timelineRange.start
+            newStart: result.timeline.start,
+            newDuration: result.timeline.duration,
+            sourceRange: result.source
         )
     }
 

@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-31 세션 (STAB-08 완료 — LOOP_STATE 자동 생성·이력 레코더 + Part 9 재감사)
+
+- **본체**: 3게이트(verify_gate·W smoke·파리티)가 종료 시 `.build-check/history/*.json`으로 판정을 append-only 기록 → `gen_loop_state_report.py`가 최근 3회를 `docs/LOOP_STATE_REPORT.md`로 생성(수작업 편집 금지 마킹). **재현성 DoD 실측**(`--check-reproducible` 2회 렌더 동일). 등록 플래이크는 이름으로 표기 — "측정된 것을 보여준다".
+- **계측 도구 결함 2건 발견·수정(자기 리뷰 ③문항의 값)**: ①파리티 스크립트가 `--export_mp4`(언더스코어)로 비교기를 호출 — argparse가 전 시나리오 기각(전 스윕 오염 이력은 삭제) ②게이트 이력 파서가 xcodebuild Mac/iOS 라인 누락(소문자 전용 charset)·따옴표 값 기각 — 수정 후 4스텝 전부 기록.
+- **Part 9 재감사(STAB-08 후반)**: M1~M4 정정 상태 확인·**MC-07 갱신** — 19시나리오 파리티 상시 게이트화(CI nightly 포함)·스테일 클래스 4시나리오 잔여 명시.
+- **측정 스냅샷**: 게이트 5/5(기록됨)·W smoke 5/5(29/29)·파리티 15/19(cross_dissolve·normal_delete·freeze·motion = 등록 스케일 클래스, 부하 하 FAIL — 리포트에 그대로).
+- 잔여 소형 등록: worst MAD 캡처(레코더 파싱 확장). 스카웃: 파리티 타입수정은 계측 도구 결함의 실례 — 타 게이트 스크립트의 argparse 인자 접두사 정합 검사 후보(저우선).
+
+### 다음 회차 — STAB 큐
+① **STAB-07 MetricKit 제안 작성**(제안만·결정은 사용자 — DECISIONS 상신) → 소형(STAB-02 취소 E2E·CODEX P1 7건·worst-MAD 캡처). STAB-05 루트·STAB-06 원격 = 대기. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07 결정·push 후 원격 CI 관찰.
+
 ## 2026-08-31 세션 (STAB-06 로컬 완료 — CI iOS 잡 분할·nightly W smoke + BUG-ACC-06 증거 통합)
 
 - **스카웃**: STAB-05 잔여의 근본(스테일 공급)이 전 플래이크로 수렴했으나 BUG-CA12-01 에스컬레이션 대기 — 루프가 즉시 실행 불가. **큐 챌린지**: STAB-06(완전 실행 가능·원격 CI 관찰 창구 직결)으로 전환, BUG-ACC-06 증거 통합을 소형 병행.

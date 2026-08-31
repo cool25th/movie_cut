@@ -301,7 +301,14 @@ final class IOSEditorViewModel {
 
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
+        // CODEX-21: SetClipSpeedCommand retimes the clip's rendered
+        // timeline span (and ripples the magnetic track) in the same undo
+        // step — the raw property write left timelineRange.duration stale
+        // while preview/export rendered the canonical mapping, drifting
+        // the timeline width, snap points, and downstream clips out of
+        // sync with the render (Mac parity; the command's own header
+        // documents this defect class).
+        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
     }
 
     func updateSelectedColorCorrection(_ correction: ColorCorrection) async {

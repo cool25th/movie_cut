@@ -1,12 +1,12 @@
 # LOOP STATE REPORT (generated — do not hand-edit)
 
-_Generated: 2026-09-01T07:59:52 from `.build-check/history/` (last 3 runs per gate)._
+_Generated: 2026-09-01T08:16:47 from `.build-check/history/` (last 3 runs per gate)._
 ## verify_gate (5-step)
 | run | steps | overall |
 |---|---|---|
-| 08-31 22:04 | swift build:OK xcodebuild:OK lint gate:OK swift test:OK | GATE_PASS |
 | 09-01 02:25 | swift build:OK xcodebuild:OK lint gate:OK swift test:OK | GATE_PASS |
 | 09-01 07:58 | swift build:OK xcodebuild:OK lint gate:OK swift test:OK | GATE_PASS |
+| 09-01 08:16 | swift build:OK xcodebuild:OK lint gate:OK swift test:OK | GATE_PASS |
 
 ## W smoke (representative workflows)
 | run | workflows | steps | verdict |

@@ -97,11 +97,11 @@ struct IOSPlayheadTrimMathTests {
         let speedClip = try #require(vm.currentProject.timeline.tracks
             .flatMap(\.clips)
             .first { $0.id == clipId })
-        // The property command sets rate=2; the model's timelineRange stays
-        // 4s (the composition retimes) and the canonical mapping's rendered
-        // span becomes 4/2 = 2s. A playhead inside the rendered span trims
-        // through the MAPPING — the legacy 1s==1s math kept 1.0s of source
-        // here; the canonical result keeps the mapped 2.0s.
+        // CODEX-21 retimes the span on the rate change itself: rate=2
+        // shrinks the model's timelineRange from 4s to the canonical 4/2
+        // = 2s. A playhead inside that rendered span trims through the
+        // MAPPING — the legacy 1s==1s math kept 1.0s of source here; the
+        // canonical result keeps the mapped 2.0s.
         vm.playheadTime = 1.0
         await vm.trimSelectedClipEndToPlayhead()
 
@@ -166,5 +166,45 @@ struct IOSPlayheadTrimMathTests {
         await vm.trimSelectedClipStartToPlayhead()
         #expect(vm.lastErrorMessage?.contains("inside the clip") == true,
                 "got: \(vm.lastErrorMessage ?? "nil")")
+    }
+
+    @Test("speed change retimes the clip's timeline span (CODEX-21)")
+    func speedChangeRetimesTimelineSpan() async throws {
+        let fixture = try makeVideoFixture()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+
+        let vm = IOSEditorViewModel(
+            autosaveDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("codex21-\(UUID().uuidString)", isDirectory: true)
+        )
+        await vm.importMedia(from: fixture)
+        let asset = try #require(vm.mediaAssets.first)
+        await vm.addClipToTimeline(asset: asset)
+        let clipId = try #require(vm.selectedClipId)
+
+        await vm.updateSelectedPlaybackRate(2)
+
+        let clip = try #require(vm.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first { $0.id == clipId })
+        // The raw property write left timelineRange.duration at the stale 4s
+        // while preview/export rendered the canonical 4/2 = 2s — the
+        // timeline width, snap points, and downstream clips all drifted
+        // from the render (SetClipSpeedCommand's own header documents the
+        // defect class). Mac parity: the speed command retimes the span.
+        #expect(abs(clip.playbackRate - 2.0) < 1e-9)
+        #expect(abs(clip.timelineRange.duration - 2.0) < 0.05,
+                "2x on a 4s clip must retime the timeline span to ~2.0s, got \(clip.timelineRange.duration)")
+
+        // One undo step restores both (the command is atomic; the raw
+        // property write needed no undo interplay, but the retime must not
+        // fragment into a second undo entry).
+        await vm.undo()
+        let undone = try #require(vm.currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first { $0.id == clipId })
+        #expect(abs(undone.playbackRate - 1.0) < 1e-9)
+        #expect(abs(undone.timelineRange.duration - 4.0) < 0.05,
+                "one undo must restore rate AND timeline span, got rate=\(undone.playbackRate) dur=\(undone.timelineRange.duration)")
     }
 }

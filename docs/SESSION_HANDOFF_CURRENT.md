@@ -3,6 +3,15 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-01 세션 (CODEX-21 등록+수정 완료 — iOS 속도 UI 재타이밍·SetClipSpeedCommand 패리티)
+
+- **본체**: iOS `updateSelectedPlaybackRate`가 raw `SetClipPropertyCommand(.playbackRate)` 사용 — `timelineRange.duration`이 stale로 남아 타임라인 폭·스냅·전환/페이드·덕킹·마그네틱 후속 클립이 렌더와 어긋남(결함 클래스는 `SetClipSpeedCommand` 헤더가 스스로 서술하는 그 것). **`SetClipSpeedCommand(.constantRate)` 경유 전환**(Mac 패리티 — 재타이밍+ripple이 같은 undo 스텝에 원자 포함. iOS 속도 UI는 슬라이더라 constantRate만 해당). 백로그 **CODEX-21로 등록 후 완료 처리**(20은 기존 RemoveTrackCommand 항목이 사용 중 — 번호 충돌 회피).
+- **검증**: 신규 테스트 — 4s 클립 2x → 타임라인 스팬 ~2.0s 수축 단언(수정 전 4.0 stale로 RED 재현) + **undo 1회에 rate·스팬 동시 왕복** 단언. CODEX-17 `speedEndTrim` 무영향 통과(수축된 [0,2] 스팬 내 트림·결과 동일 — 낡은 "stays 4s" 주석만 갱신). **iOS 15스위트 전부 통과**·**verify_gate 5/5 GATE_PASS**.
+- **경과**: CODEX P1 잔여 **1건**(04 PhotosPicker — 실기기 검증 필수·코드 수정만 가능). iOS 속도·트림·회전·전환·relink 결함(CODEX-07/08/09/17/21) 소진.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-04 코드 수정 선행**(PhotosPicker FileRepresentation 전환 — 검증은 G-27 실기기 대기·하니스는 시뮬레이터 파일 URL로 못 잡음을 문서에 명시) 또는 **CODEX-18/19(P2)**·STAB-02 취소 E2E·worst-MAD 캡처 소형. **사용자 대기**: 실기기 2종(G-27 — CODEX-04/07 배선 확인 포함)·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-09-01 세션 (CODEX-07 수정 완료 — relink 후 iOS 프리뷰 재구축 트리거)
 
 - **스카웃**: 큐 1번 CODEX-17은 **병렬 세션이 이미 완료**(5100d22+586f356 — 코드·백로그·핸드오프 전부 갱신·CODEX-20 속도 UI 재타이밍 후보 플래그) → 반복 제외. CODEX-04는 실기기 없이 검증 불가(시뮬레이터가 못 잡는 결함) → **CODEX-07** 선택(수정 방향 명확·SURV-01 왕복으로 고착 가능).

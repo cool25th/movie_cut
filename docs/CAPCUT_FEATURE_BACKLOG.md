@@ -447,6 +447,11 @@
 - 증상: `RemoveTrackCommand.apply`(`CreateTrackCommand.swift` 내 정의)가 index 제거만 하고 `ensureTrackIsEditable` 미호출 — 트랙 관리 시트의 스와이프 삭제가 잠긴 트랙과 클립 전체를 삭제(RippleDelete·SlideClip 등 다른 커맨드는 검사 사용). `Track.isLocked`의 보호 의도와 모순.
 - 수정 방향: 제거 전 잠금 거부(또는 잠금 시 UI 삭제 비활성) + 잠금 트랙 삭제 거부 테스트.
 
+### CODEX-21 (P1) — iOS 속도 UI가 raw 프로퍼티 기록이라 재타이밍 없음 — **수정 완료(2026-09-01)**
+
+- 증상: `updateSelectedPlaybackRate`(`IOSEditorViewModel.swift` L302)가 raw `SetClipPropertyCommand(.playbackRate)` 사용 — `timelineRange.duration`이 stale로 남아 타임라인 폭·스냅·마커·전환/페이드·덕킹 범위·마그네틱 트랙의 뒤 클립 시작이 프리뷰/익스포트가 실제 렌더하는 것과 어긋남(결함 클래스는 `SetClipSpeedCommand` 헤더 주석이 스스로 서술). Mac은 `SetClipSpeedCommand`(.constantRate/.rampPoints) 사용 — CODEX-17 세션(5100d22) 발견. iOS 속도 UI는 슬라이더(램프 없음)라 constantRate만 해당.
+- 수정 완료(2026-09-01): `SetClipSpeedCommand(.constantRate)` 경유 전환(Mac 패리티 — 재타이밍+마그네틱 ripple이 같은 undo 스텝에 원자 포함). 테스트: 4s 클립 rate 2x → 타임라인 스팬 ~2.0s 수축 단언(수정 전 4.0 stale 재현) + **undo 1회에 rate·스팬 동시 왕복** 단언. CODEX-17 speedEndTrim은 무영향 통과(수축된 [0,2] 스팬 내 트림·결과 동일 — 낡은 주석만 갱신). iOS 15스위트 통과·verify_gate 5/5.
+
 ## 1.15 W acceptance 게이트 발견 결함 (2026-08-29 등록)
 
 > 원천: STAB-04 1차 — 실길이 대표 작업 게이트(`run_w_acceptance.sh`·W_STRICT 하니스 모드) 구축 직후 실측. 스모크(2~4초 픽스처)가 구조적으로 가리고 있던 결함들 — 외부 리뷰 #2 "게이트가 실제 작업보다 약하다" 지적의 실증.

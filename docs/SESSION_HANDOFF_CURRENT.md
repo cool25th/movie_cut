@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-01 세션 (CODEX-17 완료 — iOS 플레이헤드 트림 정규 매핑 전환)
+
+- **스카웃·챌린지**: CODEX-08 커밋(51dd431) 확인·활성 세션 부재 → 큐 그대로 CODEX-17 착수(반박 근거 없음).
+- **수정**: 양 플레이헤드 트림이 `ClipTrimMath.compute` 경유(Mac 4경로 패리티 — iOS는 그동안 사용 0건). `trimClip`에 `sourceRange` 선택 파라미터(정규 결과 직접 전달·레거시 호출부 무변경). **플레이헤드 사전 가드 유지** — compute는 드래그 계약(클램프)이라 밖 目标도 조용히 클램프 트림하는데, 플레이헤드 계약은 거부+안내가 옳음(계약 차등 명시).
+- **실측**: 신설 3종(실 AVAssetWriter 비대칭 픽스처·실 임포트→타임라인→속도 커맨드→트림 경로) — ①2x END 트림 **매핑 기준 ~2.0s 소스 보존**(레거시 1.0s 절단 실측) ②1x 리버스 START 반대 엣지 ③밖 거부. **iOS 68테스트/16스위트 2회 연속 PASS**·verify_gate 5/5.
+- **자기 리뷰**: ①iOS 속도 UI가 raw `SetClipPropertyCommand(.playbackRate)`(재타이밍 없음) vs Mac `SetClipSpeedCommand` — **CODEX-20 후보 등록 권장**(매핑 비일관 모델) ②CODEX-08 rotated-outgoing 전환 테스트 1회 플래이크(풀 번들 부하 — 3회 재측·2회 풀 정상) 후속 관찰 ③계측 무결.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-04·07**(코드 수정先行 — 실기기 검증 권장)·CODEX-18/19(P2)·CODEX-20(속도 UI 재타이밍 — 이번 발견) ② STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-08-31 세션 (CODEX-08 수정 완료 — 혼합 회전 트랙 클립별 orientation·발현 조건 정밀화)
 
 - **본체**: iOS 클립 이펙트의 `sourcePreferredTransform`이 composition **트랙의** pt를 읽어 혼합 회전 트랙에서 뒤따르는 클립이 첫 클립 방향을 상속. BUG-IOS-10 audioMixEntries와 동일한 **수집-소비 패턴**으로 전환 — `insertClip`이 effective 소스(원본·리버스 렌더·이미지 프리렌더)에서 클립별 pt를 `sourceOrientations[clip.id]`에 기록, 이펙트가 자기 pt 수신, 플랜 종료 시清除. 트랙 pt는 외부 플레이어 메타데이터로 유지(first-writer-wins).

@@ -424,7 +424,10 @@
 - 증상: 각 틱의 오프셋이 순차 HStack 셀에서 측정(`IOSTimelineView.swift` L73-76) — 앞선 마커마다 2pt씩 표시 위치가 누적 이동(밀집 곡에서 큰 드리프프), 트랙 헤더 76pt·행 간격 미반영으로 전체가 좌측 편이. 장식용(비인터랙티브)이라 기능 영향은 없으나 시각적으로 마커 위치와 불일치.
 - 수정 방향: 공통 ZStack/canvas 좌표계에 배치 + 헤더 원점 반영.
 
-### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — 미수정 (PR #23)
+### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — **수정 완료(2026-09-01)**
+
+- **수정**: 양 플레이헤드 트림(`trimSelectedClipStart/EndToPlayhead`)이 **`ClipTrimMath.compute` 경유**(Mac 4경로 패리티 — assetDuration 가드·0.1s 최소길이·속도/램프/리버스 정규 매핑). `trimClip`은 `sourceRange` 선택 파라미터로 정규 결과를 직접 받음(기존 1s==1s 델타 파생은 다른 호출부 호환 유지). **플레이헤드 사전 가드 유지** — compute가 밖的目标을 클램프하는 드래그 계약과 달리 플레이헤드 계약은 거부(+안내 메시지).
+- **검증**: `IOSPlayheadTrimMathTests` 3종 신설 — ①2x 속도 END 트림이 **매핑 기준 ~2.0s 소스 보존**(레거시는 1.0s 절단 — 실측 픽스처 AVAssetWriter 생성) ②1x 리버스 START 트림 반대 엣지 수축 ③플레이헤드 밖 거부. iOS 전체 **68테스트/16스위트 2회 연속 PASS**(전환 rotated-outgoing 1회 실패는 3회 재측 정상 — 풀 번들 부하 플래이크·후속 관찰). verify_gate 5/5.
 
 - 증상: `trimSelectedClipStartToPlayhead`·`trimSelectedClipEndToPlayhead`(`IOSEditorViewModel.swift` L1329·L1350)가 `trimClip`(L1074)에 위임 — 타임라인 1초=소스 1초 가정이라 2x 속도 클립을 0.5초 트림하면 실제 1.0초가 남아야 하나 0.5초만 남겨 조기 절단·갭 발생, 리버스 시작 트림도 반대 소스 엣지 이동. **iOS 전체에 ClipTrimMath 사용 0건(Mac은 4경로 사용) 실측.**
 - 수정 방향: 양 플레이헤드 동작을 `ClipTrimMath.compute` 경유로 전환(Mac 패리티) + 속도 램프·리버스 픽스처 트림 왕복 테스트.

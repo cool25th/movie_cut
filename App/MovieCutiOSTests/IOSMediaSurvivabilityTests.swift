@@ -181,6 +181,7 @@ struct IOSMediaSurvivabilityTests {
         #expect(vm.missingMediaAssets.map(\.id) == [asset.id])
 
         let replacement = try temporaryWAV()
+        let libraryBeforeRelink = vm.currentProject.mediaLibrary
         let linked = await vm.relinkMedia(vm.missingMediaAssets[0], to: replacement)
         #expect(linked == true)
 
@@ -193,6 +194,16 @@ struct IOSMediaSurvivabilityTests {
         #expect(relinked!.managedImportPath?.hasPrefix(vm.currentProject.id.uuidString) == true,
                 "the relinked copy must carry the relative reference")
         #expect(vm.lastErrorMessage == nil)
+
+        // CODEX-07: the preview rebuild rides
+        // `.onChange(of: currentProject.mediaLibrary)` — pin the firing
+        // PREMISE: relink must actually CHANGE the library value under
+        // Equatable (the URL swap), or the observation would stay silent
+        // and the plan built while the asset was missing would persist.
+        // (The SwiftUI wiring itself needs device/manual verification,
+        // STAB-03 precedent.)
+        #expect(vm.currentProject.mediaLibrary != libraryBeforeRelink,
+                "relink must mutate mediaLibrary so the preview observation fires")
     }
 
     @Test("the cleanup policy removes only unreferenced, stale import directories")

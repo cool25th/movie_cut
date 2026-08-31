@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-01 세션 (CODEX-07 수정 완료 — relink 후 iOS 프리뷰 재구축 트리거)
+
+- **스카웃**: 큐 1번 CODEX-17은 **병렬 세션이 이미 완료**(5100d22+586f356 — 코드·백로그·핸드오프 전부 갱신·CODEX-20 속도 UI 재타이밍 후보 플래그) → 반복 제외. CODEX-04는 실기기 없이 검증 불가(시뮬레이터가 못 잡는 결함) → **CODEX-07** 선택(수정 방향 명확·SURV-01 왕복으로 고착 가능).
+- **본체**: `relinkMedia`는 mediaLibrary만 갱신하는데 PreviewView는 timeline만 관찰 — 결측 상태에서 만든 플랜이 relink 후에도 남아 재생 불가. **`.onChange(of: currentProject.mediaLibrary)` → 재구축 트리거 추가**(MediaLibrary는 Core Equatable — relink의 URL 교체가 발화). generation 가드가 이중 발화 무해화.
+- **검증**: SURV-01 왕복 테스트에 **"relink가 mediaLibrary 값을 실제로 변경(Equatable≠)" 단언 다리** 추가(onChange 발화 전제 고정) — 스위트 통과. iOS 15스위트 전부·**verify_gate 5/5 GATE_PASS**. **정직 잔여: SwiftUI 배선 자체는 유닛테스트 불가(STAB-03 선례) — 실기기/수동 확인 항목(G-27 연계)**.
+- **경과**: CODEX P1 잔여 **2건**(04 PhotosPicker — 실기기 검증 필수·코드 수정만 가능 / 20-신규후보 속도 UI 재타이밍 — 미등록, 번호 주의: CODEX-20은 기존 RemoveTrackCommand 항목이 사용 중 → 신규는 CODEX-21로 등록 권장). iOS 엔진+VM 결함(CODEX-07·08·09·17) 소진.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-21 등록+수정(속도 UI 재타이밍)** — iOS 속도 UI가 raw `SetClipPropertyCommand(.playbackRate)`(재타이밍 없음) vs Mac `SetClipSpeedCommand` — Mac 구현 포팅이라 자율 실행·검증 용이(CODEX-17 세션 발견) ② CODEX-04(코드 수정 선행 — 실기기 검증은 G-27 대기)·CODEX-18/19(P2) ③ STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-09-01 세션 (CODEX-17 완료 — iOS 플레이헤드 트림 정규 매핑 전환)
 
 - **스카웃·챌린지**: CODEX-08 커밋(51dd431) 확인·활성 세션 부재 → 큐 그대로 CODEX-17 착수(반박 근거 없음).

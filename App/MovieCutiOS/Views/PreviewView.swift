@@ -112,6 +112,16 @@ struct PreviewView: View {
         .onChange(of: viewModel.currentProject.timeline) { _, _ in
             rebuildComposition()
         }
+        // CODEX-07: relink swaps the asset backing existing clips without
+        // touching the timeline — the plan built while the asset was
+        // missing kept empty/partial tracks until an unrelated timeline
+        // edit (or view recreation) rebuilt it. Any mediaLibrary change
+        // now rebuilds too; the generation guard inside
+        // rebuildComposition makes the double fire on import+timeline
+        // changes harmless.
+        .onChange(of: viewModel.currentProject.mediaLibrary) { _, _ in
+            rebuildComposition()
+        }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
         }

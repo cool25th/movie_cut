@@ -374,10 +374,10 @@
 - 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
 - 수정 완료(2026-08-30): `FORM` 시그니처 추가(오디오 종류·RIFF 패턴) + 왕복 3단언 테스트(aiff·aif 통과, FORM↔mp4 라벨 오용 기각) — 임포터 스위트 8/8·verify_gate 5/5.
 
-### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — 미수정 (PR #21)
+### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — **수정 완료(2026-09-01)**
 
 - 증상: `relinkMedia`는 `currentProject.mediaLibrary`만 갱신하는데 `PreviewView`는 `.onChange(of: currentProject.timeline)`(L109)에서만 렌더 플랜을 재구축 — 원본 결측 상태에서 만든 플랜의 빈/부분 `AVPlayerItem`이 그대로 남아 relink된 클립이 무관한 타임라인 편집·뷰 재생성 전까지 재생 불가. 위치: `App/MovieCutiOS/Views/PreviewView.swift` L109·`IOSEditorViewModel.swift` L570.
-- 수정 방향: mediaLibrary 변경(또는 relink 완료) 시 플랜 재구축 트리거 — SURV-01 왕복 테스트에 "relink 후 프리뷰 재생" 다리 추가로 고착.
+- 수정 완료(2026-09-01): PreviewView에 **`.onChange(of: currentProject.mediaLibrary)` → 재구축 트리거 추가** — MediaLibrary는 Core Equatable이라 relink의 URL 교체가 관찰 발화. `rebuildComposition`의 generation 가드가 임포트+타임라인 동시 변경 시 이중 발화를 무해화. SURV-01 왕복 테스트에 **"relink가 mediaLibrary 값을 실제로 변경(Equatable≠)" 단언 다리 추가** — onChange 발화 전제 고정. **SwiftUI 배선 자체는 유닛테스트 불가(STAB-03 선례) — 실기기/수동 확인 항목으로 잔여**(G-27 연계). iOS 15스위트 통과·verify_gate 5/5.
 
 ### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — **수정 완료(2026-08-31, CODEX P1 세션)**
 

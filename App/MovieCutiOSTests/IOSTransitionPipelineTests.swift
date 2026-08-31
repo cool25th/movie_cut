@@ -226,4 +226,69 @@ struct IOSTransitionPipelineTests {
         let after = try await Self.meanFrameRGB(of: project, at: 2.5)
         #expect(after.b > 100 && after.r < 50, "after the window the incoming blue must dominate, got \(after)")
     }
+
+    /// CODEX-09: three 1s clips with 2s crossDissolves. Each request
+    /// exceeds BOTH neighbors, so the transition effect window clamps to
+    /// 1s — but the placement back-timing pulled starts by the RAW 2s
+    /// request, putting clip 3 before its slot cursor where insertClip's
+    /// `timelineStart >= cursor` guard silently dropped it from the export.
+    private func oversizedTransitionProject() -> Project {
+        let redId = UUID(), blueId = UUID()
+        let red = MediaAsset(originalURL: Self.fixtureURL("solid_red_320x240_2s_30fps.mp4"), kind: .video, duration: 2)
+        let blue = MediaAsset(originalURL: Self.fixtureURL("solid_blue_320x240_2s_30fps.mp4"), kind: .video, duration: 2)
+
+        func clip(_ assetId: UUID, timelineStart: Double, transitionDuration: Double?) -> Clip {
+            var clip = Clip(
+                assetId: assetId,
+                kind: .video,
+                sourceRange: TimeRange(start: 0, duration: 1),
+                timelineRange: TimeRange(start: timelineStart, duration: 1)
+            )
+            if let transitionDuration {
+                clip.transition = Transition(type: .crossDissolve, duration: transitionDuration)
+            }
+            return clip
+        }
+
+        var project = Project(
+            name: "oversized-transition",
+            mediaLibrary: MediaLibrary(assets: [redId: red, blueId: blue]),
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .video, name: "V1", zIndex: 0, clips: [
+                    clip(redId, timelineStart: 0, transitionDuration: 2.0),
+                    clip(blueId, timelineStart: 1, transitionDuration: 2.0),
+                    clip(redId, timelineStart: 2, transitionDuration: nil),
+                ])
+            ])
+        )
+        project.canvas = CanvasPreset(aspectRatio: .custom, customWidth: 320, customHeight: 240)
+        return project
+    }
+
+    @Test("oversized transitions keep all three clips placed (CODEX-09)")
+    func oversizedTransitionsKeepAllClips() async throws {
+        let project = oversizedTransitionProject()
+        let plan = try await IOSExportEngine().makeRenderPlan(for: project)
+
+        let videoTracks = plan.composition.tracks.filter { $0.mediaType == .video }
+        #expect(videoTracks.count == 2,
+                "transition-carrying track alternates two slots, got \(videoTracks.count)")
+
+        let mediaSegments = videoTracks.flatMap { track in
+            track.segments.filter { $0.sourceURL != nil }
+        }
+        #expect(mediaSegments.count == 3,
+                "all three clips must place media — a silent drop loses the tail clip, got \(mediaSegments.count)")
+
+        // Each 2s request clamps to the 1s neighbors: 3.0s of model timeline
+        // loses 1.0s + 1.0s of overlap → 2.0s composition.
+        #expect(abs(plan.composition.duration.seconds - 2.0) < 0.05,
+                "composition carries the clamped overlaps, got \(plan.composition.duration.seconds)")
+
+        // Late-window frame comes from the THIRD clip: with the drop, the
+        // composition ended at 1.0s and this seek produced no frame at all.
+        let late = try await Self.meanFrameRGB(of: project, at: 1.9)
+        #expect(late.r > 150 && late.b < 110,
+                "the second blend window must mix toward the third (red) clip, got \(late)")
+    }
 }

@@ -531,12 +531,19 @@ final class IOSExportEngine {
                     // BUG-IOS-09: effect timeRanges follow the SAME adjusted
                     // (back-timed) starts the composition inserts with, so
                     // instruction boundaries and the transition window line up
-                    // with the real track content.
+                    // with the real track content. CODEX-09: the pull is
+                    // clamped to the shorter neighbor like the effect window.
                     var adjustedStart = clip.timelineRange.start
                     if clipIndex > 0,
                        let transition = sortedClips[clipIndex - 1].transition,
                        transition.duration > 0 {
-                        adjustedStart = max(0, adjustedStart - transition.duration)
+                        let overlap = Self.clampedOverlapPull(
+                            predecessorTransition: transition,
+                            predecessorDuration: sortedClips[clipIndex - 1].timelineRange.duration,
+                            clipTimelineStart: clip.timelineRange.start,
+                            clipDuration: clip.timelineRange.duration
+                        )
+                        adjustedStart = max(0, adjustedStart - overlap)
                     }
                     let timeRange = CMTimeRange(
                         start: cmTime(adjustedStart),
@@ -717,6 +724,36 @@ final class IOSExportEngine {
         let transition: Transition?
     }
 
+    /// CODEX-09: the placement back-timing and the transition effect window
+    /// must share ONE clamped duration. The effect window clamps the request
+    /// to the shorter neighboring clip, but placement pulled by the RAW
+    /// request — an oversized transition put the next clip before its slot
+    /// cursor, where insertClip's `timelineStart >= cursor` guard silently
+    /// dropped it from the export.
+    static func clampedTransitionDuration(
+        _ transition: Transition,
+        outgoingDuration: TimeInterval,
+        incomingDuration: TimeInterval
+    ) -> TimeInterval {
+        max(0, min(transition.duration, outgoingDuration, incomingDuration))
+    }
+
+    /// CODEX-09: overlap pull for a clip whose PREDECESSOR carries a
+    /// transition — the clamped twin of the raw subtraction the effect
+    /// window has always used.
+    static func clampedOverlapPull(
+        predecessorTransition: Transition,
+        predecessorDuration: TimeInterval,
+        clipTimelineStart: TimeInterval,
+        clipDuration: TimeInterval
+    ) -> TimeInterval {
+        clampedTransitionDuration(
+            predecessorTransition,
+            outgoingDuration: predecessorDuration,
+            incomingDuration: clipDuration
+        )
+    }
+
     /// BUG-IOS-09 (Mac ExportEngine parity, ExportEngine.swift:831-882):
     /// pairs consecutive clips within each timeline track where the OUTGOING
     /// clip carries a two-source transition. The window is the outgoing
@@ -754,11 +791,11 @@ final class IOSExportEngine {
                     return nil
                 }
 
-                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
-                let transitionDuration = min(
-                    requestedDuration,
-                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
-                )
+                let transitionDuration = cmTime(Self.clampedTransitionDuration(
+                    transition,
+                    outgoingDuration: outgoingClip.timeRange.duration.seconds,
+                    incomingDuration: incomingClip.timeRange.duration.seconds
+                ))
                 guard transitionDuration > .zero else {
                     return nil
                 }
@@ -878,12 +915,21 @@ final class IOSExportEngine {
 
             // BUG-IOS-09: overlap back-timing — the incoming clip starts
             // transition-duration earlier so both sources are live during
-            // the transition window (Mac ExportEngine parity).
+            // the transition window (Mac ExportEngine parity). CODEX-09: the
+            // pull is clamped to the shorter neighbor, matching the effect
+            // window — the raw pull put oversized transitions before the
+            // slot cursor and insertClip silently dropped the clip.
             var adjustedStart = clip.timelineRange.start
             if clipIndex > 0,
                let transition = playableClips[clipIndex - 1].transition,
                transition.duration > 0 {
-                adjustedStart = max(0, adjustedStart - transition.duration)
+                let overlap = Self.clampedOverlapPull(
+                    predecessorTransition: transition,
+                    predecessorDuration: playableClips[clipIndex - 1].timelineRange.duration,
+                    clipTimelineStart: clip.timelineRange.start,
+                    clipDuration: clip.timelineRange.duration
+                )
+                adjustedStart = max(0, adjustedStart - overlap)
             }
 
             if !videoTracks.isEmpty {

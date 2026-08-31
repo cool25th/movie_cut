@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-08-31 세션 (CODEX-09 수정 완료 — iOS 초과 전환 클립 무음 드랍·배치/이펙트 단일 클램프 통일)
+
+- **스카웃**: STAB-05 루트(스테일 공급=BUG-CA12-01 에스컬레이션 대기)·STAB-06 원격(사용자 push 대기)·STAB-04 w1(STT TCC 대기)는 전부 대기 → CODEX P1 7건 중 **CODEX-09** 선택(데이터 손실급 제품 결함·엔진 로직으로 결정적 재현 가능·실기기 불필요). CODEX-04는 시뮬레이터가 못 잡는 결함이라 이번 세션 제외.
+- **본체**: iOS `IOSExportEngine`의 백타이밍 배치 2경로(`insertVideoTrack`·`makeVideoComposition` 이펙트 timeRange)가 **raw `transition.duration`** 으로 시작을 당기는 동안 전환 창(`makeTransitionEffects`)만 인접 클립 길이로 클램프 — 요청이 이웃보다 길면 커서 역전 → `insertClip`의 `timelineStart >= cursor` 가드가 꼬리 클립을 조용히 드랍. **단일 클램프 계산 `clampedTransitionDuration`(+래퍼 `clampedOverlapPull`) 신설, 3경로 전환이 동일 값 사용.** 초과 전환 픽스처(3×1s red·blue·red + 2s crossDissolve×2): 수정 전 미디어 세그먼트 2/3·composition 1.0s·t=1.9 프레임 생성 불가(AVF -11832) 재현 → 수정 후 3/3·2.0s·t=1.9 red-dominant 블렌드.
+- **검증**: iOS 전체 **15스위트 통과**(상태 4·렌더/익스포트 5·파이프라인/접근성 6 — STAB-06 분할과 동일 그룹핑)·전환 스위트 **5회 연속 통과**·**verify_gate 5/5 GATE_PASS**(Core 1,429/212·Mac/iOS 빌드·lint)·LOOP_STATE `--check-reproducible` 후 `--write` 재생성.
+- **관찰 2건(정직 기록)**: ①`rotatedOutgoingTransitionsUpright`가 수정 전 빌드 첫 실행에서 1회 실패(after.r=87.7 vs <50) — 이후 재발 0(5회). 0.6s 전환은 클램프 미발동 경로로 본 수정과 무관·원인 미상 — STAB-05 "빌드 간 수치 변동" 클래스 인접 관찰로 남김. ②**Mac ExportEngine도 동일 구조(백타이밍 raw·창 클램프)** — 단 Mac은 cursor 가드가 아닌 절대 시각 삽입이라 초과 전환 시 드랍이 아닌 겹침 삽입 동작(별개 결함 가능성) — CODEX-09의 Mac 측은 별도 관찰 항목.
+
+### 다음 회차 — STAB 큐
+① **STAB-07 MetricKit 제안 작성**(제안만·결정은 사용자 — DECISIONS 상신) → 소형(**CODEX P1 잔여 04·07·08·10·11·17** — 10/11은 A류 계측·B측 블라인드 평가 개시 전 필수, 08·17은 엔진/VM 로직으로 실기기 불필요, 04·07은 실기기 검증 권장·코드 수정만 가능 — STAB-02 취소 E2E·worst-MAD 캡처). STAB-05 루트·STAB-06 원격 = 대기. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07 결정·push 후 원격 CI 관찰.
+
 ## 2026-08-31 세션 (STAB-08 완료 — LOOP_STATE 자동 생성·이력 레코더 + Part 9 재감사)
 
 - **본체**: 3게이트(verify_gate·W smoke·파리티)가 종료 시 `.build-check/history/*.json`으로 판정을 append-only 기록 → `gen_loop_state_report.py`가 최근 3회를 `docs/LOOP_STATE_REPORT.md`로 생성(수작업 편집 금지 마킹). **재현성 DoD 실측**(`--check-reproducible` 2회 렌더 동일). 등록 플래이크는 이름으로 표기 — "측정된 것을 보여준다".

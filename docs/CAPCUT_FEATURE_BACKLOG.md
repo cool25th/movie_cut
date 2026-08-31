@@ -384,10 +384,10 @@
 - 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift L560-562)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정(L1032-1033) — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
 - 수정 방향: 클립 소유의 `AVAssetTrack.preferredTransform`을 클립별로 로드해 이펙트에 전달(트랙 pt는 외부 플레이어 메타데이터로만 유지) + **혼합 회전(가로+세로) 트랙 픽스처**로 upright 실측.
 
-### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — 미수정 (PR #21)
+### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
 - 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
-- 수정 방향: 배치와 이펙트가 동일한 클램프된 지속시간을 사용(단일 계산 함수로) + 초과 전환 픽스처로 3클립 완주·드랍 0 단언.
+- 수정 완료(2026-08-31): 단일 클램프 계산 `clampedTransitionDuration`(+ 백타이밍 래퍼 `clampedOverlapPull`) 신설 — **배치(`insertVideoTrack`)·이펙트 timeRange(`makeVideoComposition`)·전환 창(`makeTransitionEffects`) 3경로가 동일한 클램프된 지속시간 사용**. 초과 전환 픽스처(red·blue·red 3×1s 클립 + 2s crossDissolve 2개)로 3클립 완주·드랍 0 단언: 수정 전 재현(미디어 세그먼트 2/3·composition 1.0s·t=1.9 프레임 생성 불가 -11832) → 수정 후 세그먼트 3/3·2.0s·t=1.9 red-dominant 블렌드. iOS 전체 15스위트 통과·전환 스위트 5회 연속 통과·verify_gate 5/5. **Mac ExportEngine도 동일 구조(백타이밍 raw L412·창 클램프 L872-877)지만 cursor 가드가 아닌 절대 시각 삽입이라 드랍 경로는 다름 — Mac은 별도 관찰 항목으로 잔여.**
 
 ### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — 미수정 (PR #22)
 

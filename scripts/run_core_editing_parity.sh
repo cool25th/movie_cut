@@ -155,6 +155,9 @@ run_scenario() {
     --size 320x240 \
     --work-dir "$work"
   local rc=$?
+  # STAB-08: append this scenario's verdict to the run ledger the history
+  # recorder at the script tail reads.
+  echo "$name $rc" >> "$PARITY_LEDGER"
   if [ "$rc" -ne 0 ]; then
     echo "    Preserving work dir: $work" >&2
   else
@@ -164,6 +167,9 @@ run_scenario() {
 }
 
 FAIL=0
+# STAB-08: per-scenario verdict ledger for the history recorder at the tail.
+PARITY_LEDGER="$(mktemp /tmp/moviecut-parity-ledger.XXXXXX)"
+export PARITY_LEDGER
 echo "Scenario 1: two clips + cross dissolve (STAB-05 re-entry)"
 # Skipped from the script's inception (headless buildComposition hang on this
 # host). That hang class matched the sequential A/V pump starvation STAB-02
@@ -339,10 +345,32 @@ run_scenario "motion_tracking" "0.3,1.7" 2.0 \
   "MOVIECUT_UITEST_MOTION_TRACKING=1" || FAIL=1
 
 echo ""
+# STAB-08: record per-scenario verdicts into the history ledger the
+# LOOP_STATE report generator reads (scenarios that were skipped by
+# PARITY_ONLY never reach the ledger — the table shows what ran).
+parity_rc=0
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"
-  exit 0
 else
   echo "RESULT: ONE OR MORE PARITY SCENARIOS FAILED"
-  exit 1
+  parity_rc=1
 fi
+mkdir -p "$ROOT/.build-check/history"
+python3 - "$PARITY_LEDGER" $parity_rc <<'PYEOF'
+import json, sys, time
+ledger, rc = sys.argv[1], int(sys.argv[2])
+scenarios = {}
+for line in open(ledger):
+    parts = line.split()
+    if len(parts) == 2:
+        scenarios[parts[0]] = "PASS" if parts[1] == "0" else "FAIL"
+out = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "scenarios": scenarios,
+    "rc": rc,
+}
+with open(f".build-check/history/parity-{int(time.time())}.json", "w") as f:
+    json.dump(out, f)
+PYEOF
+rm -f "$PARITY_LEDGER"
+exit $parity_rc

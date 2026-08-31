@@ -114,6 +114,39 @@ if $pass; then
   fi
 fi
 
+# STAB-08: record this run's per-step verdicts into the history ledger the
+# LOOP_STATE report generator reads (scripts/gen_loop_state_report.py).
+# History is append-only JSON — the report table is generated, never edited.
+record_gate_history() {
+  local overall="GATE_FAIL"
+  if $pass; then overall="GATE_PASS"; fi
+  local step_line
+  step_line=$(grep -oE "\[gate\] [A-Za-z /()]+: (OK|FAIL)" "$LOG" \
+    | sed -E 's/\[gate\] //; s/ \(.*\)//; s/: /:/' \
+    | awk -F: '{steps[$1]=$2} END {for (s in steps) printf "\"%s\":\"%s\",", s, steps[s]}')
+  mkdir -p "$REPO_ROOT/.build-check/history"
+  python3 - "$overall" "$step_line" <<'PYEOF'
+import json, sys, time, re
+overall, raw = sys.argv[1], sys.argv[2]
+steps = {}
+for pair in raw.split(","):
+    if ":" in pair:
+        k, v = pair.split(":", 1)
+        k = k.strip().strip('"')
+        v = v.strip().strip('"')
+        if k and v in ("OK", "FAIL"):
+            steps[k] = v
+out = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "steps": steps,
+    "overall": overall,
+}
+with open(f".build-check/history/gate-{int(time.time())}.json", "w") as f:
+    json.dump(out, f)
+PYEOF
+}
+record_gate_history
+
 if $pass; then
   echo "GATE_PASS ${TEST_LINE:-}" | tee -a "$LOG"
   exit 0

@@ -188,4 +188,37 @@ if rate < 90.0:
     sys.exit(1)
 sys.exit(rate_fail)
 PY
-echo "W SCENARIOS PASS"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  echo "W SCENARIOS PASS"
+fi
+# STAB-08: record this run into the history ledger the LOOP_STATE report
+# generator reads. Captures per-workflow verdicts + step totals; appended
+# only on completion (either verdict), never on an aborted run.
+mkdir -p "$ROOT/.build-check/history"
+python3 - "$WORK/all.log" $rc <<'PYEOF'
+import json, re, sys, time
+log, rc = sys.argv[1], int(sys.argv[2])
+workflows = {}
+steps_ok = steps_total = 0
+for line in open(log):
+    # WORKFLOW verdicts print to stdout (not all.log) — derive them from the
+    # SUMMARY lines with the final block's exact rule: every step ok AND a
+    # non-empty export.
+    m = re.match(r"SUMMARY (\w+) (\d+) (\d+) (\d+)", line)
+    if m:
+        name, ok, total, export_bytes = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+        steps_ok += ok
+        steps_total += total
+        workflows[name] = "PASS" if (ok == total and export_bytes > 0) else "FAIL"
+out = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "workflows": workflows,
+    "steps_ok": steps_ok,
+    "steps_total": steps_total,
+    "rc": rc,
+}
+with open(f".build-check/history/w-smoke-{int(time.time())}.json", "w") as f:
+    json.dump(out, f)
+PYEOF
+exit $rc

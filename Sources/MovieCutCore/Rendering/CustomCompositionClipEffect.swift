@@ -236,7 +236,8 @@ public struct CustomCompositionClipEffect: Sendable {
                 from: startKeyframe.value,
                 to: endKeyframe.value,
                 progress: (localTime - startKeyframe.time) / duration,
-                mode: startKeyframe.interpolation
+                mode: startKeyframe.interpolation,
+                customCurve: startKeyframe.customCurve
             )
         }
 

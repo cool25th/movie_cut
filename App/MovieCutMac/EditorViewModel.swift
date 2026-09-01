@@ -218,27 +218,63 @@ final class EditorViewModel {
     /// user must know crash recovery stopped backing their edits up. Still
     /// non-blocking: editing continues, and the warning clears on the next
     /// successful autosave.
+    // Coalescing state (capcut-surpass 9304e8b, rewritten for this tree's
+    // error-surfacing contract): rapid edits debounce into ONE disk write,
+    // saves run serially (never interleaved temp-file replaces), and a save
+    // requested while one is in flight re-fires with the LATEST snapshot
+    // afterwards — last snapshot always wins.
+    @ObservationIgnored private var pendingAutosaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveSaveInFlight = false
+    @ObservationIgnored private var autosaveDirty = false
+    @ObservationIgnored private var lastAutosavedProject: Project?
+
     private func scheduleAutosave() {
+        // A no-op re-publish of identical content skips the write entirely.
+        if let lastAutosavedProject, lastAutosavedProject == currentProject, !autosaveSaveInFlight {
+            return
+        }
+        pendingAutosaveTask?.cancel()
+        pendingAutosaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 750_000_000) // 0.75 s debounce
+            guard !Task.isCancelled else { return }
+            await self?.performAutosave()
+        }
+    }
+
+    /// Serial, latest-snapshot-wins autosave. Recommitted after an in-flight
+    /// save when an edit landed mid-save (autosaveDirty).
+    private func performAutosave() async {
+        if autosaveSaveInFlight {
+            autosaveDirty = true
+            return
+        }
         let snapshot = currentProject
-        Task { [projectStore, weak self] in
-            do {
-                try await projectStore.saveAutosave(snapshot)
-                self?.autosaveSaveSucceeded()
-            } catch {
-                self?.autosaveSaveFailed(FileOperationError.classify(error))
-            }
+        if let lastAutosavedProject, lastAutosavedProject == snapshot {
+            autosaveDirty = false
+            return
+        }
+        autosaveSaveInFlight = true
+        defer { autosaveSaveInFlight = false }
+        do {
+            try await projectStore.saveAutosave(snapshot)
+            lastAutosavedProject = snapshot
+            autosaveSaveSucceeded()
+        } catch {
+            autosaveSaveFailed(FileOperationError.classify(error))
+        }
+        if autosaveDirty {
+            autosaveDirty = false
+            await performAutosave()
         }
     }
 
     /// Awaitable autosave flush (used by automation to deterministically persist
     /// recovery state before quitting; same path as the edit-driven autosave).
+    /// Cancels any pending debounced save and writes the latest snapshot now.
     func flushAutosave() async {
-        do {
-            try await projectStore.saveAutosave(currentProject)
-            autosaveSaveSucceeded()
-        } catch {
-            autosaveSaveFailed(FileOperationError.classify(error))
-        }
+        pendingAutosaveTask?.cancel()
+        pendingAutosaveTask = nil
+        await performAutosave()
     }
 
     /// Non-blocking crash-recovery warning. nil while autosaves succeed;

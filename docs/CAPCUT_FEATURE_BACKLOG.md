@@ -447,7 +447,10 @@
 - 증상: `CreateTrackCommand.apply`가 caller가 준 z-index를 정규화 없이 append — iOS(`IOSEditorViewModel.swift` L418)·**Mac(`EditorViewModel.swift` L4510) 모두** `zIndex: tracks.count` 배정. 기본 0/1/2에서 z0 삭제 시 잔여 2트랙 상태로 다음 추가가 2로 중복 → 프리뷰·export가 zIndex 정렬만 하므로 겹침 레이어 순서가 비결정론화.
 - 수정 방향: 삭제 시 전체 재정규화 또는 max+1 배정 + 중복 z-index 0 단언 테스트(양 플랫폼).
 
-### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — 미수정 (PR #23)
+### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — **수정 완료(2026-09-01)**
+
+- **수정**: `RemoveTrackCommand.apply`가 제거 전 **`ensureTrackIsEditable` 가드** 호출(다른 모든 변경 커맨드와 동일 — SlideClip·trim·append-effect 전부 검사 사용) — 잠긴 트랙의 스와이프 삭제가 이제 `trackLocked` 거부. iOS VM `apply`가 이미 오류를 표면화하므로 caller 무수정.
+- **검증**: 신설 3종 — ①잠긴 트랙 거부(트랙·클립 전부 생존) ②미잠금 정상 제거 ③세션 경로(거부 후 상태 불변·**undo 스택 무오염** — 빈 스택 undo는 nothingToUndo). Core 전체 **1,437테스트/214스위트 PASS**·게이트 5/5.
 
 - 증상: `RemoveTrackCommand.apply`(`CreateTrackCommand.swift` 내 정의)가 index 제거만 하고 `ensureTrackIsEditable` 미호출 — 트랙 관리 시트의 스와이프 삭제가 잠긴 트랙과 클립 전체를 삭제(RippleDelete·SlideClip 등 다른 커맨드는 검사 사용). `Track.isLocked`의 보호 의도와 모순.
 - 수정 방향: 제거 전 잠금 거부(또는 잠금 시 UI 삭제 비활성) + 잠금 트랙 삭제 거부 테스트.

@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-01 세션 (CODEX-20 완료 — RemoveTrack 잠금 가드·병렬 WIP와 무겹침 병행)
+
+- **병렬 판정**: 타 세션 WIP(캔버스 배경 오염 조사 — 컴포지터 3종·CanvasBackground 계열) 78분 경과·프로세스 0 — CODEX-20 파일(Core 커맨드)과 **무겹침**이라 병행 착수(경합 파일 일절 미접촉).
+- **수정**: `RemoveTrackCommand.apply`에 제거 전 **`ensureTrackIsEditable` 가드** — 다른 모든 변경 커맨드(SlideClip·trim·append-effect)와 계약 통일. 잠긴 트랙 스와이프 삭제가 `trackLocked` 거부로 전환, iOS VM `apply`가 이미 오류 표면화라 caller 무수정.
+- **실측**: 신설 3종 — ①잠긴 트랙 거부(트랙·클립 전부 생존) ②미잠금 정상 제거 ③세션 경로(거부 후 상태 불변·**undo 스택 무오염** — 빈 스택 undo는 nothingToUndo로 계약 확인). Core 전체 **1,437/214 PASS**·게이트 5/5.
+- **자기 리뷰**: ①커맨드 계약 통일 완료(모든 변경 경로가 이제 잠금 검사) ②잠금 UI 비활성화(삭제 버튼 disable)는 UI 증분 후보로 기록 ③계측 무결(빈 undo 스택의 nothingToUndo는 정상 계약 — 첫 기대치 오류 수정).
+- **주의**: `5m/` 루트 디렉터리가 타 세션 스크래치로 추정 — 미접촉·소유 세션 정리 대기.
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰 ② STAB-02 취소 E2E·worst-MAD 캡처·잠금 UI 비활성화(소형). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-09-01 세션 (CODEX-19 완료 — z-index 정규화·커맨드 원천 해법)
 
 - **스카웃·챌린지**: 큐 그대로 CODEX-19(양플랫폼·유닛 검증 가능) — 반박 근거 없음.

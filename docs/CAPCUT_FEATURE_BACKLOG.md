@@ -439,7 +439,10 @@
 - 증상: 프리셋 선택이 `SetProjectCanvasCommand`(`IOSEditorViewModel.swift` L1145)와 `SetProjectExportSettingsCommand`(L1156)를 개별 dispatch — undo 1회가 exportSettings.frameRate만 복원해 캔버스·타임라인은 새 fps에 남아, 이 동기화가 막으려던 불일치가 undo로 재발.
 - 수정 방향: 단일 커맨드 원자화(또는 세션 트랜잭션) + undo 1회 전체 왕복 테스트.
 
-### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — 미수정 (PR #23)
+### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — **수정 완료(2026-09-01)**
+
+- **수정(원천 해법)**: `CreateTrackCommand.apply`이 추가 시점에 **충돌하는 z-index를 max+1로 정규화** — 양플랫폼 caller(iOS L425 외 4곳·Mac L4515)가 `tracks.count`를 배정하지만, 커맨드가 모든 표면의 단일 초이크 포인트라 여기서 방어(이미 고유한 명시적 z-index는 보존 — 의도적 레이어 배치 생존). caller 수정 불필요.
+- **검증**: `CreateTrackZIndexNormalizationTests` 4종 — ①충돌 시 max+1(0/1/2→삭제→2 재추가 → 3) ②비충돌 명시 z(7) 보존 ③**정확한 결함 시퀀스**(0/1/2→z0 삭제→tracks.count 재추가 → 유일성) ④undo 왕복. Core 전체 **1,433테스트/213스위트 PASS**·게이트 5/5.
 
 - 증상: `CreateTrackCommand.apply`가 caller가 준 z-index를 정규화 없이 append — iOS(`IOSEditorViewModel.swift` L418)·**Mac(`EditorViewModel.swift` L4510) 모두** `zIndex: tracks.count` 배정. 기본 0/1/2에서 z0 삭제 시 잔여 2트랙 상태로 다음 추가가 2로 중복 → 프리뷰·export가 zIndex 정렬만 하므로 겹침 레이어 순서가 비결정론화.
 - 수정 방향: 삭제 시 전체 재정규화 또는 max+1 배정 + 중복 z-index 0 단언 테스트(양 플랫폼).

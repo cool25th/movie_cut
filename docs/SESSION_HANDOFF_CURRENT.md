@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-01 세션 (CODEX-18 완료 — fps 프리셋 원자 undo·Mac 동일 클래스 동시 수습)
+
+- **큐 챌린지**: CODEX-04(실기기 검증 대기 — 측정 불가) 대신 **CODEX-18**(완전 유닛 검증 가능) 선택.
+- **수정**: Core `SetProjectCanvasAndExportSettingsCommand` 신규 — 캔버스 재바인딩+exportSettings를 **하나의 undo 엔트리**로. iOS `updateCanvasPreset` 전환(스냅숏 왕往返 부수 제거) + **Mac `applyExportPreset` 동일 결함 클래스**를 자기 리뷰 ①문항으로 발견해 동시 수습.
+- **실측**: 신설 2종 — 60fps 정사각 프리셋 후 **undo 1회가 캔버스·타임라인 재바인딩·export fps 전체 왕복**(구 2-디스패치는 export만 복원)·redo 왕복. iOS 71테스트/17스위트 PASS·게이트 5/5.
+- **자기 리뷰**: ①동일 클래스 Mac까지 수습 완료 ②CODEX-19(z-index)가 같은 "커맨드 정합성" 묶음 — 다음 후보 ③계측 무결(첫 테스트의 프리셋 기본 fps30 가정 오탐 — 명시 fps60으로 수정).
+
+### 다음 회차 — CODEX 큐
+① **CODEX-19**(P2 — z-index tracks.count 중복·양플랫폼·유닛 검증 가능) ② CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-09-01 세션 (CODEX-21 등록+수정 완료 — iOS 속도 UI 재타이밍·SetClipSpeedCommand 패리티)
 
 - **본체**: iOS `updateSelectedPlaybackRate`가 raw `SetClipPropertyCommand(.playbackRate)` 사용 — `timelineRange.duration`이 stale로 남아 타임라인 폭·스냅·전환/페이드·덕킹·마그네틱 후속 클립이 렌더와 어긋남(결함 클래스는 `SetClipSpeedCommand` 헤더가 스스로 서술하는 그 것). **`SetClipSpeedCommand(.constantRate)` 경유 전환**(Mac 패리티 — 재타이밍+ripple이 같은 undo 스텝에 원자 포함. iOS 속도 UI는 슬라이더라 constantRate만 해당). 백로그 **CODEX-21로 등록 후 완료 처리**(20은 기존 RemoveTrackCommand 항목이 사용 중 — 번호 충돌 회피).

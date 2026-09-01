@@ -432,7 +432,9 @@
 - 증상: `trimSelectedClipStartToPlayhead`·`trimSelectedClipEndToPlayhead`(`IOSEditorViewModel.swift` L1329·L1350)가 `trimClip`(L1074)에 위임 — 타임라인 1초=소스 1초 가정이라 2x 속도 클립을 0.5초 트림하면 실제 1.0초가 남아야 하나 0.5초만 남겨 조기 절단·갭 발생, 리버스 시작 트림도 반대 소스 엣지 이동. **iOS 전체에 ClipTrimMath 사용 0건(Mac은 4경로 사용) 실측.**
 - 수정 방향: 양 플레이헤드 동작을 `ClipTrimMath.compute` 경유로 전환(Mac 패리티) + 속도 램프·리버스 픽스처 트림 왕복 테스트.
 
-### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — 미수정 (PR #23)
+### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — **수정 완료(2026-09-01)**
+
+- **수정**: Core `SetProjectCanvasAndExportSettingsCommand` 신규(캔버스 재바인딩[timeline size/aspect/frameRate — SetProjectCanvasCommand와 동일] + exportSettings를 **하나의 apply/undo 엔트리**로). iOS `updateCanvasPreset`(L1160)·**Mac `applyExportPreset`(동일 결함 클래스 — 자기 리뷰 발견) 전환**. 검증: `IOSFpsPresetAtomicUndoTests` 2종 — **undo 1회가 캔버스·타임라인 재바인딩·export fps 전체 왕복**(구 2-디스패치는 export만 복원)·redo 왕복. iOS 전체 71테스트/17스위트 PASS·게이트 5/5.
 
 - 증상: 프리셋 선택이 `SetProjectCanvasCommand`(`IOSEditorViewModel.swift` L1145)와 `SetProjectExportSettingsCommand`(L1156)를 개별 dispatch — undo 1회가 exportSettings.frameRate만 복원해 캔버스·타임라인은 새 fps에 남아, 이 동기화가 막으려던 불일치가 undo로 재발.
 - 수정 방향: 단일 커맨드 원자화(또는 세션 트랜잭션) + undo 1회 전체 왕복 테스트.

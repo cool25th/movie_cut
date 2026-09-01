@@ -45,6 +45,12 @@ public struct RemoveTrackCommand: EditorCommand {
 
     public func apply(to project: inout Project) throws {
         let index = try project.trackIndex(for: track.id)
+        // CODEX-20: a locked track is not editable — every other mutating
+        // command (SlideClip, trim, append-effect) routes through
+        // ensureTrackIsEditable; removal silently skipped the guard, so the
+        // track-management sheet's swipe-delete destroyed a locked track and
+        // every clip on it. Reject instead of deleting.
+        try project.ensureTrackIsEditable(at: index)
         project.timeline.tracks.remove(at: index)
     }
 }

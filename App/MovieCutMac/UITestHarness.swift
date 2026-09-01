@@ -142,6 +142,7 @@ extension EditorViewModel {
     ///   (`Basic` / `Speed` / `Animation` / `Adjustment` / `Mask`) so the dhash golden states
     ///   can capture each inspector section as a distinct editor state.
     /// - `MOVIECUT_UITEST_EXPORT_RESOLUTION=<rawValue>` — sets `ExportSettings.resolution` before export
+    /// - `MOVIECUT_UITEST_EXPORT_FRAMERATE=<fps24|fps30|fps60>` — sets `ExportSettings.frameRate` before export
     ///   (e.g. `p4K`), independent of any platform preset. Used by the 4K perf baseline (S6).
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
@@ -597,6 +598,17 @@ extension EditorViewModel {
                 await updateExportSettings(resolution: resolution)
             } else {
                 lastErrorMessage = "unknown export resolution: \(rawResolution)"
+            }
+        }
+
+        // Export frame-rate override (LF-ACTION-05, 24fps long-form
+        // deliveries). Rides the same SetProjectExportSettingsCommand path
+        // as the inspector so the harness exercises the real setting.
+        if let rawFrameRate = env["MOVIECUT_UITEST_EXPORT_FRAMERATE"], !rawFrameRate.isEmpty {
+            if let frameRate = ExportFrameRate(rawValue: rawFrameRate) {
+                await updateExportSettings(frameRate: frameRate)
+            } else {
+                lastErrorMessage = "unknown export frame rate: \(rawFrameRate)"
             }
         }
 

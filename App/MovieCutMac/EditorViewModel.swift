@@ -3441,11 +3441,17 @@ final class EditorViewModel {
         var first = segment
         first.text = firstText
         first.endTime = midTime
+        // Split word timings at midTime so both halves stay karaoke-capable.
+        // Without this the split demotes a karaoke caption to plain text.
+        if let halves = SubtitleGenerator.splitWordTimings(segment.words, at: midTime) {
+            first.words = halves.first
+        }
         let second = TranscriptionSegment(
             text: secondText,
             startTime: midTime,
             endTime: segment.endTime,
-            confidence: segment.confidence
+            confidence: segment.confidence,
+            words: SubtitleGenerator.splitWordTimings(segment.words, at: midTime)?.second
         )
         generatedSubtitleSegments.replaceSubrange(index...index, with: [first, second])
         await rebuildPendingSubtitleClips()
@@ -3466,6 +3472,9 @@ final class EditorViewModel {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         merged.endTime = max(merged.endTime, next.endTime)
+        // Merge word timings so the combined segment stays karaoke-capable.
+        // Without this the merge demotes a karaoke caption to plain text.
+        merged.words = SubtitleGenerator.mergedWordTimings(merged.words, next.words)
         generatedSubtitleSegments.replaceSubrange(index...(index + 1), with: [merged])
         await rebuildPendingSubtitleClips()
         lastStatusMessage = "Merged subtitle segment with the next one."

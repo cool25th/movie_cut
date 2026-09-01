@@ -46,8 +46,11 @@ struct R402InspectorSubtabStaticContractTests {
     func inspectorPanelOnlyRoutesVisualClipsThroughSubtabs() throws {
         let panel = try source("App/MovieCutMac/InspectorPanel.swift")
 
+        // Audio clips route through the audio helper (basic + vocal
+        // separation hosting, capcut-surpass cc68964); the basic-audio mode
+        // lives inside that helper, not the branch itself.
         let audioBranch = try section(in: panel, from: "case .audio:", to: "case .text:")
-        #expect(audioBranch.contains("mode: InspectorBasicMode.audio"))
+        #expect(audioBranch.contains("audioClipInspectorSections(for: clip)"))
         #expect(!audioBranch.contains("visualClipInspectorSections"))
         #expect(!audioBranch.contains("Picker(\"Inspector section\""))
 

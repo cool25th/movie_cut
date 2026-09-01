@@ -375,7 +375,13 @@ public struct ExportPlanner: Sendable {
         // tag 8-bit pixels as HDR — the output would lie about its depth. When
         // the flag is off, downgrade any HDR profile to the SDR delivery
         // profile for the same codec instead of producing a mislabeled file.
-        if profile.isHDR && !FeatureFlag.hdrMaster {
+        // The flag governs what the PRODUCT offers: a persisted delivery
+        // codec (the UI path, gated in EditorViewModel/ContentView) is
+        // downgraded so v1 never ships a mislabeled HDR file. An EXPLICIT
+        // profile override is the developer/mastering path — it passes
+        // through so the 10-bit writer contract and e2e verification can be
+        // exercised before the flag flips (capcut-surpass stage-3 port).
+        if options.videoProfileOverride == nil, profile.isHDR, !FeatureFlag.hdrMaster {
             profile = VideoCompressionProfile.deliveryProfile(for: settings.codec)
         }
         let size = renderSize(for: settings.resolution, canvas: canvas)
@@ -505,6 +511,11 @@ public struct ExportPlanner: Sendable {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
             ]
             compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel as String
+            // The writer must request a 10-bit surface, otherwise VideoToolbox
+            // encodes the Main10 profile from 8-bit pixels — a depth lie the
+            // FeatureFlag.hdrMaster gate exists to prevent (capcut-surpass
+            // ac589c2 re-port, adapted to the planner's profile model).
+            settings[kCVPixelBufferPixelFormatTypeKey as String] = Int(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
         } else {
             // SDR outputs are tagged explicitly Rec.709 so the file's color
             // primaries/transfer/matrix match the v1 render pipeline

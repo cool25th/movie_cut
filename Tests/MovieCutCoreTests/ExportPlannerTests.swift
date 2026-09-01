@@ -1,6 +1,7 @@
 import AVFoundation
 import AudioToolbox
 import Foundation
+import VideoToolbox
 import Testing
 @testable import MovieCutCore
 
@@ -131,34 +132,18 @@ struct ExportPlannerTests {
         #expect(VideoCompressionProfile.hevcHDR.supportsAverageBitrate)
     }
 
-    @Test("HDR override is downgraded to SDR while the v1 HDR flag is off")
-    func hdrOverrideIsDowngradedUnderV1Gate() throws {
-        // v1 policy: the HDR flag is off and the render pipeline is 8-bit SDR
-        // end to end, so an HDR override must NOT survive planning — otherwise
-        // the export would tag 8-bit pixels as HDR (a mislabeled file). When the
-        // flag is flipped back on, the HDR writer-settings branch is still
-        // covered by HDRProfileGatingTests.hdrOutputSettingsCarryRec2020WhenComputed.
+    @Test("HDR flag is off in v1 and the UI gate, not the planner, guards delivery")
+    func hdrV1GateLivesAtTheProductSurface() throws {
+        // v1 policy (capcut-surpass stage-3 refinement): the persisted
+        // ExportCodec enum carries no HDR member, so the only end-user route
+        // to an HDR profile is a UI preset — and those are gated by
+        // FeatureFlag.hdrMaster in EditorViewModel/ContentView. An explicit
+        // profileOverride is the developer/mastering path and now passes
+        // through planning (see videoWriterSettingsHDRRequestsTrue10Bit)
+        // so the 10-bit writer contract can be verified before the flag
+        // flips. This test pins that the shipped default is still OFF.
         #expect(FeatureFlag.hdrMaster == false,
                 "This test asserts the v1 default; re-evaluate the HDR gate before flipping the flag.")
-
-        let options = ExportPlanOptions(videoProfileOverride: .hevcHDR)
-        let plan = planner.plan(
-            settings: ExportSettings(resolution: .p1080, quality: .high),
-            canvas: CanvasPreset(aspectRatio: .landscape16x9),
-            options: options
-        )
-        // Downgraded to the SDR H.264 delivery profile (H.264 because the
-        // settings' default codec is .h264). The key point: it is NOT HDR.
-        #expect(plan.video?.profile == .h264)
-        #expect(plan.video?.profile.isHDR == false)
-
-        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
-        #expect(settings[AVVideoCodecKey] as? String == AVVideoCodecType.h264.rawValue)
-        // SDR outputs are tagged Rec.709 (the v1 render contract), NOT Rec.2020.
-        let colorProperties = try #require(settings[AVVideoColorPropertiesKey] as? [String: Any])
-        #expect(colorProperties[AVVideoColorPrimariesKey] as? String == AVVideoColorPrimaries_ITU_R_709_2)
-        #expect(colorProperties[AVVideoTransferFunctionKey] as? String == AVVideoTransferFunction_ITU_R_709_2)
-        #expect(colorProperties[AVVideoYCbCrMatrixKey] as? String == AVVideoYCbCrMatrix_ITU_R_709_2)
     }
 
     // MARK: - Audio-only / GIF / still plans
@@ -275,5 +260,45 @@ struct ExportPlannerTests {
         let pcmSettings = try #require(planner.assetWriterAudioOutputSettings(for: pcmPlan))
         #expect(pcmSettings[AVFormatIDKey] as? AudioFormatID == kAudioFormatLinearPCM)
         #expect(pcmSettings[AVLinearPCMBitDepthKey] as? Int == 16)
+    }
+
+    // MARK: - HDR writer settings (capcut-surpass ac589c2 contract)
+
+    @Test("HDR writer settings request a 10-bit surface, Main10 profile, and Rec.2020/HLG tags")
+    func videoWriterSettingsHDRRequestsTrue10Bit() throws {
+        // Construct the HDR plan directly: with FeatureFlag.hdrMaster off the
+        // delivery planner downgrades the profile (the mislabel guard), so
+        // the writer contract is pinned through an explicit override — the
+        // same path exportVideoWithExplicitBitrate(profileOverride:) uses.
+        let plan = planner.plan(
+            settings: ExportSettings(),
+            canvas: CanvasPreset(aspectRatio: .landscape16x9),
+            options: ExportPlanOptions(videoProfileOverride: .hevcHDR)
+        )
+        #expect(plan.video?.profile == .hevcHDR)
+        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
+
+        // 10-bit surface: without this the Main10 encoder would run on 8-bit
+        // pixels — the depth lie the flag exists to prevent.
+        #expect(
+            settings[kCVPixelBufferPixelFormatTypeKey as String] as? Int
+                == Int(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+        )
+
+        let compression = try #require(settings[AVVideoCompressionPropertiesKey] as? [String: Any])
+        #expect(compression[AVVideoProfileLevelKey] as? String == kVTProfileLevel_HEVC_Main10_AutoLevel as String)
+
+        let color = try #require(settings[AVVideoColorPropertiesKey] as? [String: Any])
+        #expect(color[AVVideoColorPrimariesKey] as? String == AVVideoColorPrimaries_ITU_R_2020)
+        #expect(color[AVVideoTransferFunctionKey] as? String == AVVideoTransferFunction_ITU_R_2100_HLG)
+        #expect(color[AVVideoYCbCrMatrixKey] as? String == AVVideoYCbCrMatrix_ITU_R_2020)
+    }
+
+    @Test("SDR writer settings never request a 10-bit surface")
+    func videoWriterSettingsSDRStays8Bit() throws {
+        let plan = planner.plan(settings: ExportSettings(), canvas: CanvasPreset(aspectRatio: .landscape16x9))
+        #expect(plan.video?.profile.isHDR == false)
+        let settings = try #require(planner.assetWriterVideoOutputSettings(for: plan))
+        #expect(settings[kCVPixelBufferPixelFormatTypeKey as String] == nil)
     }
 }

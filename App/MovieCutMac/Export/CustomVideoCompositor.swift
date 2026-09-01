@@ -721,7 +721,22 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             return
         }
 
-        ciContext.render(image, to: outputBuffer)
+        // HDR masters get a 10-bit destination surface from the writer; render
+        // through the Rec.2020 HLG color space so the transfer function is
+        // applied for real instead of re-tagging 8-bit pixels (capcut-surpass
+        // ac589c2 idea, re-cut for this compositor). SDR keeps the original
+        // 2-arg render byte-for-byte.
+        if CVPixelBufferGetPixelFormatType(outputBuffer) == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+           let hdrColorSpace = CGColorSpace(name: CGColorSpace.itur_2100_HLG) {
+            ciContext.render(
+                image,
+                to: outputBuffer,
+                bounds: CGRect(origin: .zero, size: image.extent.size),
+                colorSpace: hdrColorSpace
+            )
+        } else {
+            ciContext.render(image, to: outputBuffer)
+        }
         request.finish(withComposedVideoFrame: outputBuffer)
     }
 

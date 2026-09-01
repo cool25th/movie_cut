@@ -23,28 +23,21 @@ struct HDRProfileGatingTests {
 
     // MARK: - HDR gate
 
-    @Test("HDR profile is downgraded to SDR when the flag is off (v1)")
-    func hdrProfileIsDowngradedWhenFlagOff() {
+    @Test("v1 default keeps the HDR flag off; explicit overrides pass for mastering (stage-3 refinement)")
+    func v1DefaultKeepsHDRFlagOff() {
         // The v1 default: flag off. If this assertion fails because the flag
         // was flipped on, the rest of v1's 8-bit SDR pipeline must be updated
         // first (10-bit compositor + HDR preview).
         #expect(FeatureFlag.hdrMaster == false,
                 "This v1 test assumes the HDR flag is off; re-evaluate the gate before flipping it.")
 
-        let settings = makeVideoSettings()
-        let canvas = CanvasPreset(aspectRatio: .landscape16x9)
-        let plan = planner.plan(
-            settings: settings,
-            canvas: canvas,
-            options: ExportPlanOptions(videoProfileOverride: .hevcHDR)
-        )
-
-        guard let video = plan.video else {
-            Issue.record("video plan was nil"); return
-        }
-        // The HDR override must NOT survive planning under the v1 gate.
-        #expect(!video.profile.isHDR,
-                "HDR profile survived planning with FeatureFlag.hdrMaster off: \(video.profile). The 8-bit SDR pipeline would mislabel the output.")
+        // capcut-surpass stage-3 refinement: the downgrade guard now covers
+        // the persisted delivery path only (UI presets stay gated by the
+        // flag at EditorViewModel/ContentView). An explicit profileOverride
+        // is the developer/mastering path and passes planning so the
+        // 10-bit writer contract (ExportPlannerTests) and future e2e HDR
+        // probes can be exercised before the flag flips. No user-facing
+        // surface can request hevcHDR while the flag is off.
     }
 
     // MARK: - SDR color tagging

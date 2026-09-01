@@ -280,7 +280,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
         for project: Project,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions(),
         graphAudio: URL? = nil,
-        includeAudioTrack: Bool = true
+        includeAudioTrack: Bool = true,
+        preservesCanvasAlpha: Bool = false
     ) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
@@ -580,6 +581,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
             canvas: project.canvas,
             exportSettings: project.exportSettings,
             canvasBackground: project.canvasBackground,
+            preservesCanvasAlpha: preservesCanvasAlpha,
             project: project
         )
 
@@ -603,6 +605,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
         canvas: CanvasPreset,
         exportSettings: ExportSettings,
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         project: Project
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
@@ -823,6 +826,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                     },
                     transitionEffects: transitionEffects,
                     canvasBackground: canvasBackground,
+                    preservesCanvasAlpha: preservesCanvasAlpha,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             ]
@@ -1432,7 +1436,10 @@ final class ExportEngine: FlattenedTimelineConsumer {
             defer { removeTemporaryRenderURLs(graphAudioOwnedURLs) }
             let exportPackage = try await makeExportPackage(
                 for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL,
-                includeAudioTrack: false
+                includeAudioTrack: false,
+                // LF-ACTION-02: ProRes 4444 is the only alpha-capable profile;
+                // every other delivery composites an opaque canvas.
+                preservesCanvasAlpha: profileOverride == .proRes4444
             )
             graphAudioOwnedURLs.removeAll()
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }

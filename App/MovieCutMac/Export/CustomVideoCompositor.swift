@@ -52,6 +52,12 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let clipEffects: [CustomCompositionClipEffect]
     let transitionEffects: [CustomCompositionTransitionEffect]
     let canvasBackground: CanvasBackground?
+    /// LF-ACTION-02: true only for alpha-capable mastering (ProRes 4444) —
+    /// the canvas must stay transparent there. Every opaque delivery
+    /// (H.264/HEVC/ProRes 422, preview) leaves it false so the nil-background
+    /// canvas composites over opaque black and recycled codec buffers
+    /// cannot leak the previous scene into aspect-fit bands.
+    let preservesCanvasAlpha: Bool
     let prefersFastSegmentation: Bool
 
     init(
@@ -68,6 +74,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         mask: Mask? = nil,
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
@@ -87,6 +94,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = []
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.preservesCanvasAlpha = preservesCanvasAlpha
         self.prefersFastSegmentation = prefersFastSegmentation
     }
 
@@ -96,6 +104,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         prefersFastSegmentation: Bool = false,
         adjustmentClips: [Clip]? = nil
     ) {
@@ -116,6 +125,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = clipEffects
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.preservesCanvasAlpha = preservesCanvasAlpha
         self.prefersFastSegmentation = prefersFastSegmentation
     }
 
@@ -346,7 +356,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 transitionedImage = CanvasBackgroundPixelProcessor.compose(
                     frame: transitionedImage,
                     over: instruction.canvasBackground,
-                    renderSize: request.renderContext.size
+                    renderSize: request.renderContext.size,
+                    fillPolicy: instruction.preservesCanvasAlpha ? .alphaPreserving : .opaqueDelivery
                 )
                 self.finishRequest(request, with: transitionedImage)
                 return
@@ -427,6 +438,15 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 image = CanvasBackgroundPixelProcessor.compose(
                     frame: image,
                     over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size,
+                    fillPolicy: instruction.preservesCanvasAlpha ? .alphaPreserving : .opaqueDelivery
+                )
+            } else {
+                // No instruction → no project background to honor; the
+                // opaque default decides every canvas pixel (LF-ACTION-01).
+                image = CanvasBackgroundPixelProcessor.compose(
+                    frame: image,
+                    over: nil,
                     renderSize: request.renderContext.size
                 )
             }

@@ -2584,10 +2584,15 @@ final class EditorViewModel {
         canvas: CanvasPreset,
         exportSettings: ExportSettings
     ) async {
-        await apply(SetProjectCanvasCommand(canvas: canvas))
-        guard lastErrorMessage == nil else { return }
-
-        await apply(SetProjectExportSettingsCommand(exportSettings: exportSettings))
+        // CODEX-18 (same class as the iOS fps preset): canvas + export
+        // settings land as ONE command so a single undo restores both —
+        // the previous back-to-back applies stepped undo twice and one
+        // undo left the canvas/timeline at the new preset while only the
+        // export settings reverted.
+        await apply(SetProjectCanvasAndExportSettingsCommand(
+            canvas: canvas,
+            exportSettings: exportSettings
+        ))
         guard lastErrorMessage == nil else { return }
 
         reportQuickToolSuccess("Applied \(name) export preset.")

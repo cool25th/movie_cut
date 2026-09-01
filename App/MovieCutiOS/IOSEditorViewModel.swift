@@ -1161,21 +1161,21 @@ final class IOSEditorViewModel {
         // BUG-IOS-01: route through the session command — the previous direct
         // `currentProject.canvas = preset` mutation was invisible to the
         // EditorSession, so the next dispatch or undo reverted it.
+        // Review P1: keep the export frame rate in lockstep with the canvas
+        // selection (IOSExportEngine reads exportSettings.frameRate).
+        // CODEX-18: ONE atomic command — the previous two dispatches meant
+        // undo stepped twice, and a single undo restored only the export
+        // rate while the canvas/timeline kept the new fps (exactly the
+        // drift the lockstep was preventing).
         do {
-            try await session.dispatch(SetProjectCanvasCommand(canvas: preset))
-            // Review P1: the Frame Rate picker lives on this sheet but only
-            // moved the canvas/timeline rate — IOSExportEngine reads
-            // project.exportSettings.frameRate, so the selected rate never
-            // reached the output. Keep the export frame rate in lockstep
-            // with the canvas selection from this surface.
-            let snapshot = await session.snapshot()
-            var exportSettings = snapshot.exportSettings
-            if exportSettings.frameRate != preset.frameRate {
-                exportSettings.frameRate = preset.frameRate
-                try await session.dispatch(
-                    SetProjectExportSettingsCommand(exportSettings: exportSettings)
+            var exportSettings = currentProject.exportSettings
+            exportSettings.frameRate = preset.frameRate
+            try await session.dispatch(
+                SetProjectCanvasAndExportSettingsCommand(
+                    canvas: preset,
+                    exportSettings: exportSettings
                 )
-            }
+            )
             await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription

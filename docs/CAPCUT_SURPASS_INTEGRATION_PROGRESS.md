@@ -39,8 +39,16 @@
 - 1·2단계 완료 시점 각각 `verify_gate.sh` **GATE_PASS 5/5** (swift build·swift test 전체·Mac 빌드·iOS 빌드·lint).
 - 미수행: `run_e2e_export.sh`(렌더 변경분에 대해 — 베지어는 Core 유닛 9종이 수학을 pin, E2E는 3단계 HDR 시점에 함께), 원격 백업/push, 소스 브랜치 삭제.
 
+## 3단계 증분 A (2026-09-02, `6489be5`) — 게이트 5/5
+
+- writer 10-bit 서페이스 요청(HDR 프로파일)·양 컴포지터 Rec.2020 HLG colorSpace 렌더(SDR은 기존 경로 무변경).
+- guard 정교화: 지속 delivery 경로만 다운그레이드, 명시적 profileOverride는 마스터링/검증 경로로 통과(UI 진입은 여전히 flag 게이트).
+- 계약 테스트: HDR writer 설정 10-bit·Main10·Rec.2020/HLG 태그 pin + SDR 8-bit 유지 pin. 기존 v1 게이트 테스트 2건 새 의미로 갱신.
+- **FeatureFlag.hdrMaster는 여전히 OFF** — 다음 증분(하니스 profile env + e2e pix_fmt/bit-depth/primaries/transfer/matrix 프로브)에서 실출력 검증 후에만 플립.
+- 소스 브랜치 `feat/capcut-surpass-7gaps`는 사용자 지시로 삭제 완료(원격 백업은 통합 브랜치로 충분하다고 판정).
+
 ## 다음 작업
 
-1. 원격 백업(push) 후 통합 브랜치 리뷰/병합 여부 결정.
-2. 3단계 HDR(별도 증분 — 진입 조건 충족).
-3. 4단계 감사 항목(thermal 측정·iOS proxy/thermal/ducking·EQ placed-span).
+1. 3단계 증분 B: 하니스 `MOVIECUT_UITEST_EXPORT_PROFILE` env → `exportVideoWithExplicitBitrate(profileOverride:)` 배선 + `run_e2e_export.sh` HDR 프로브 → 실출력 10-bit/Rec.2020/HLG 확인 후 flag 플립.
+2. 4단계: thermal(serious 상태 장편 완주율 측정 먼저)·iOS preview 전용 source policy·thermal observer·ducking/EQ placed-span.
+3. 통합 브랜치 병합 결정(사용자).

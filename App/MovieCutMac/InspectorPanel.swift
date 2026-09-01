@@ -90,14 +90,26 @@ struct InspectorPanel: View {
     private func selectedClipInspectorSections(for clip: Clip) -> some View {
         switch clip.kind {
         case .audio:
-            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
-                .movieCutInspectorSelectedFlatRow()
+            audioClipInspectorSections(for: clip)
         case .text:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
                 .movieCutInspectorSelectedFlatRow()
         case .video, .image:
             visualClipInspectorSections(for: clip)
         }
+    }
+
+    /// Audio clips show the basic section plus the offline vocal-separation
+    /// section. The vocal section's VM/Renderer/`ImportAndSetClipSourceCommand`
+    /// path is fully implemented; this is its host surface (the section was
+    /// previously compiled but never instantiated).
+    @ViewBuilder
+    private func audioClipInspectorSections(for clip: Clip) -> some View {
+        InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
+            .movieCutInspectorSelectedFlatRow()
+
+        InspectorVocalSection(viewModel: viewModel, clip: clip)
+            .movieCutInspectorSelectedFlatRow()
     }
 
     /// R4-02: visual clips use Inspector subtabs instead of rendering every

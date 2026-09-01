@@ -149,6 +149,7 @@
 		68D903FA8AEFDE1C469A687A /* CropCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0F97D6BA96769DFFB4EADD /* CropCanvasView.swift */; };
 		6905F0927B5B74BDF25CCC5E /* Phase24TypographyDensityStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82F4B4E0C5B4C681B9D4E01 /* Phase24TypographyDensityStaticContractTests.swift */; };
 		6BD68BAD7FE854CA3EAF1443 /* KeyframeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B8A327DF5C17EB5822F959 /* KeyframeListView.swift */; };
+		7A4C0D9200000000000B0001 /* BezierCurveEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4C0D9200000000000B0002 /* BezierCurveEditorView.swift */; };
 		6C018E2C4A10B4DFD079E1FB /* AppStagePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2241E4363D1A7F983CD2C7 /* AppStagePolicyTests.swift */; };
 		6C1838C71EF8C6B193EAB688 /* Phase13CardDensityStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C8034A487928203AD2F29C4 /* Phase13CardDensityStaticContractTests.swift */; };
 		6C38738AAF1B2D06FDB6D9DF /* InspectorVocalSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4230BF3E0B1059DE69D11670 /* InspectorVocalSection.swift */; };
@@ -401,6 +402,7 @@
 		0FDD92D6B5902CDE50A2F5B3 /* R103R303CanvasResolutionBadgeStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R103R303CanvasResolutionBadgeStaticContractTests.swift; sourceTree = "<group>"; };
 		11259ED82B4488D3FC50B574 /* InspectorExportSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorExportSection.swift; sourceTree = "<group>"; };
 		11B8A327DF5C17EB5822F959 /* KeyframeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyframeListView.swift; sourceTree = "<group>"; };
+		7A4C0D9200000000000B0002 /* BezierCurveEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BezierCurveEditorView.swift; sourceTree = "<group>"; };
 		1416906E851347CD329192B7 /* InspectorEffectsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorEffectsSection.swift; sourceTree = "<group>"; };
 		141C579A6DD78E4583891978 /* AutoSubtitleStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSubtitleStaticContractTests.swift; sourceTree = "<group>"; };
 		15063F7773AD551764B4253C /* ColorCorrectionPixelProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCorrectionPixelProcessorTests.swift; sourceTree = "<group>"; };
@@ -760,6 +762,7 @@
 				B12241A89AD30CCEAB719243 /* KeyframeEditorView.swift */,
 				98B7158C5CBC5B4A321DEA83 /* KeyframeGraphView.swift */,
 				11B8A327DF5C17EB5822F959 /* KeyframeListView.swift */,
+				7A4C0D9200000000000B0002 /* BezierCurveEditorView.swift */,
 				FA8783EDDC39100FEC510546 /* KeyframeUIFormatting.swift */,
 			);
 			path = Keyframes;
@@ -1792,6 +1795,7 @@
 				6E9D2B9DEFBC2DACF6D67363 /* KeyframeEditorView.swift in Sources */,
 				9CFA3E7E0BB5577C45CAF457 /* KeyframeGraphView.swift in Sources */,
 				6BD68BAD7FE854CA3EAF1443 /* KeyframeListView.swift in Sources */,
+				7A4C0D9200000000000B0001 /* BezierCurveEditorView.swift in Sources */,
 				2C2AFC201CFB1FFDC061C967 /* KeyframeUIFormatting.swift in Sources */,
 				D81656690729B2F09C50CE5E /* MaskCanvasView.swift in Sources */,
 				6697ABFAF075E9AB2BB5EDD7 /* MediaLibraryPanel.swift in Sources */,

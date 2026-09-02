@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (capcut-surpass 4단계 증분 1 — iOS preview source policy·thermal observer)
+
+- **구현**: `IOSExportEngine`에 `IOSSourcePolicy`(originalOnly=export 명시/proxyWhenAvailable=프리뷰) — 플랜이 설정을 안 읽고 호출자가 해석(Mac playbackURL 패리티)·비디오/오디오 삽입 양쪽 동일 해석기(A/V 동기)·export는 원본 명시. 프리뷰는 `ProxyDowngradePolicy`+`ThermalState.current`로 정책 해석 + thermal 알림 onReceive 재구축(S7·Core 정책 재사용, 관찰자 복제 없음).
+- **테스트**: 신규 `IOSSourcePolicyTests` 4종(구조 2·**행동 1**: 프록시 있어도 export mid-frame 적색=원본 판독·정책표 1)·`IOSPhase1SurfacesTests` 트랙 테스트 CODEX-20 잠금 계약 갱신(CODEX-20 세션이 iOS 스위트 미실행으로 방치됨)·정적 계약 2건 갱신.
+- **검증**: iOS 시뮬 **75/18 PASS**·Core 1,467/218·verify_gate **GATE_PASS 5/5**.
+- **thermal(4-1) 환경 차단 기록**: serious 강제 불가(공식 오버라이드 부재·사용자 프로세스 활성) — 측정 창구 대기.
+
+### 다음 회차 — 큐
+① **4단계 잔여 ducking/EQ placed-span**(AudioMixEntry 확장 — 그래프/DSP 계약 준수) ② BUG-ACC-08 조사 ③ thermal 측정(환경 대기)·CODEX-04·통합 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (STAB-08 잔여 — worst-MAD 캡처·병렬 활성 세션과 게이트 경합 기록)
 
 - **병렬 판정**: 이전 WIP(HDR stage-3 B)는 타 세션이 d43146a로 커밋 후 **새 WIP 진행 중 활성**(IOSExportEngine·PreviewView·IOSSourcePolicyTests — 9분 전 수정) — STAB-02·잠금 UI는 파일 겹침으로 보류, **무겹침 worst-MAD 캡처** 선택.

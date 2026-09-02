@@ -122,6 +122,15 @@ struct PreviewView: View {
         .onChange(of: viewModel.currentProject.mediaLibrary) { _, _ in
             rebuildComposition()
         }
+        // capcut-surpass stage-4: thermal transitions re-resolve the preview
+        // source policy — serious/critical pressure drops to proxy playback
+        // (when the user allows the safety net), cooling restores the
+        // original. Same S7 ladder Mac's ThermalStateObserver drives; the
+        // decision itself lives in the shared Core ProxyDowngradePolicy, so
+        // this only needs to trigger a rebuild.
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            rebuildComposition()
+        }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
         }
@@ -153,7 +162,20 @@ struct PreviewView: View {
         let requestedGeneration = compositionGeneration
         compositionBuildTask = Task { @MainActor in
             let project = viewModel.currentProject
-            let plan = try? await renderPlanEngine.makeRenderPlan(for: project)
+            // Stage-4 preview-only source policy: proxy playback under the
+            // user's explicit preference OR the thermal safety net (S7,
+            // ProxyDowngradePolicy parity with Mac). The export always reads
+            // originals — the plan-level policy is resolved HERE, never from
+            // settings inside the engine.
+            let useProxyPlayback = project.playbackSettings.useProxyPlayback
+                || ProxyDowngradePolicy.shouldAutoDowngrade(
+                    thermalState: ThermalState.current,
+                    autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
+                )
+            let plan = try? await renderPlanEngine.makeRenderPlan(
+                for: project,
+                sourcePolicy: useProxyPlayback ? .proxyWhenAvailable : .originalOnly
+            )
 
             // A newer rebuild superseded this one — never install stale
             // state, on EITHER the success or the empty-media path.

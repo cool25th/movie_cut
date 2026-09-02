@@ -37,14 +37,51 @@ final class IOSExportEngine {
         let audioMix: AVMutableAudioMix?
     }
 
+    /// capcut-surpass stage-4: which asset URL a render plan reads. Exports
+    /// must ALWAYS read originals (a master transcoded from a proxy would
+    /// bake the proxy's downscale artifacts into the delivery); the editing
+    /// preview may read a generated proxy for smoother playback under heavy
+    /// media or thermal pressure (S7). Mirrors Mac's
+    /// `PlaybackEngine.playbackURL(for:)` decision; the CALLER resolves the
+    /// policy so the plan never reads settings or `ProcessInfo` itself.
+    enum IOSSourcePolicy: Equatable {
+        /// Masters read the original media — the explicit export/harness mode.
+        case originalOnly
+        /// The editing preview reads each asset's generated proxy when one
+        /// exists, falling back to the original per asset.
+        case proxyWhenAvailable
+    }
+
+    /// The source policy the plan currently being built reads (transient,
+    /// cleared when the plan completes — same lifetime as `audioMixEntries`).
+    @ObservationIgnored private var activeSourcePolicy: IOSSourcePolicy = .originalOnly
+
+    /// Resolves the URL a plan reads for an asset under the active policy.
+    /// Proxies are video-only (CA-22 generation is video-scoped), so audio and
+    /// image assets naturally fall back to their original.
+    private func playbackSourceURL(for mediaAsset: MediaAsset) -> URL {
+        guard activeSourcePolicy == .proxyWhenAvailable,
+              mediaAsset.kind == .video,
+              let proxyURL = mediaAsset.proxy?.proxyURL
+        else { return mediaAsset.originalURL }
+        return proxyURL
+    }
+
     /// Builds the shared render plan. Throws when the project has no
     /// exportable media (preview callers treat that as "nothing to play").
-    func makeRenderPlan(for project: Project) async throws -> IOSRenderPlan {
+    /// The default source policy is `.originalOnly` so existing callers
+    /// (export, harness) keep masters on originals; the preview passes its
+    /// resolved policy explicitly.
+    func makeRenderPlan(
+        for project: Project,
+        sourcePolicy: IOSSourcePolicy = .originalOnly
+    ) async throws -> IOSRenderPlan {
         // G-15: image clips pre-render into temp video segments. Drop the
         // PREVIOUS plan's segments first so repeated preview rebuilds don't
         // accumulate — the newest plan owns the live set (plans start on the
         // main actor, so a segment list only ever contains finished plans).
         removeTemporaryImageRenders()
+        activeSourcePolicy = sourcePolicy
         let composition = try await makeComposition(for: project)
         // A video track whose sources carry no embedded audio leaves an
         // EMPTY audio composition track — the export session fails with
@@ -70,6 +107,7 @@ final class IOSExportEngine {
         let audioMix = makeAudioMix(from: audioMixEntries, composition: composition)
         audioMixEntries.removeAll()
         sourceOrientations.removeAll()
+        activeSourcePolicy = .originalOnly
         return IOSRenderPlan(
             composition: composition,
             videoComposition: videoComposition,
@@ -88,7 +126,9 @@ final class IOSExportEngine {
         lastExportURL = nil
 
         do {
-            let plan = try await makeRenderPlan(for: project)
+            // Stage-4: the export is EXPLICITLY original-only — a master
+            // transcoded from a proxy would bake the downscale artifacts in.
+            let plan = try await makeRenderPlan(for: project, sourcePolicy: .originalOnly)
             let composition = plan.composition
 
             // RENDER-02: the export drives an AVAssetWriter with the planner's
@@ -913,7 +953,9 @@ final class IOSExportEngine {
                 imageRenderURLs.append(imageVideoURL)
                 asset = AVURLAsset(url: imageVideoURL)
             } else {
-                asset = AVURLAsset(url: mediaAsset.originalURL)
+                // Stage-4 source policy: preview plans may read the generated
+                // proxy; exports always read the original.
+                asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
             }
 
             // BUG-IOS-09: overlap back-timing — the incoming clip starts
@@ -998,7 +1040,10 @@ final class IOSExportEngine {
                 let mediaAsset = project.mediaLibrary.assets[assetId]
             else { continue }
 
-            let asset = AVURLAsset(url: mediaAsset.originalURL)
+            // Stage-4 source policy: a video asset's embedded audio follows
+            // the same source as its video (the proxy is a full transcode),
+            // so a proxy preview stays in A/V sync.
+            let asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
             try await insertClip(
                 clip,
                 mediaType: .audio,

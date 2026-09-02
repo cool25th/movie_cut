@@ -125,6 +125,16 @@ struct IOSPhase1SurfacesTests {
         await vm.setTrackLocked(trackId, true)
         #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId }?.isLocked == true)
 
+        // CODEX-20 contract: RemoveTrackCommand honors the track lock (the
+        // same guard every other mutating command applies) — a locked track
+        // refuses removal, so both the track and the count survive.
+        await vm.deleteTrack(trackId)
+        #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId } != nil,
+                "a locked track must refuse deletion")
+        #expect(vm.currentProject.timeline.tracks.count == before + 2)
+
+        // Unlocked, the same delete goes through.
+        await vm.setTrackLocked(trackId, false)
         await vm.deleteTrack(trackId)
         #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId } == nil)
         #expect(vm.currentProject.timeline.tracks.count == before + 1)

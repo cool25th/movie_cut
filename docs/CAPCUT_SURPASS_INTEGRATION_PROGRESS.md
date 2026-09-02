@@ -57,9 +57,18 @@
 - **검증**: swift test **1,467/218 PASS**(실패 1건=정적 계약 낡은 문자열 — 갱신으로 해결)·verify_gate **5/5 GATE_PASS**·run_e2e_export — **HDR 3섹션(명시적·SDR 회귀·flag 게이트) 전부 PASS**.
 - **e2e 완주 부대낌(정직 기록 → 백로그 등록)**: ①**BUG-ACC-07**: G-25 §8 meter run M "measurement nil" — stash A/B로 **선결함 판정**(이번 증분 무관, 4/4 재현) — 전 섹션 외 유일 FAIL로 스크립트는 종료 코드 실패. ②**BUG-ACC-08**: 하니스 앱 간헐 비종료(산출물 완결 후 terminate 불이행 + ShareKit 루프) — 3회 관찰, 사이드카 와치독으로 회수하며 완주(소유 미판정·변경 경로 무관).
 
+## 4단계 증분 1 (2026-09-02) — iOS preview 전용 source policy + thermal observer
+
+- **범위**: 계획 4-2항 중 proxy/thermal 의미만 재구현(구형 IOSPlaybackEngine 복원 없음). ducking/EQ placed-span은 다음 증분.
+- **구현**: ①`IOSExportEngine`에 `IOSSourcePolicy`(`.originalOnly`=export/하니스 명시 모드·`.proxyWhenAvailable`=프리뷰) 추가 — 플랜이 설정/ProcessInfo를 직접 읽지 않게 **호출자가 정책을 해석**해 전달(Mac `PlaybackEngine.playbackURL` 패리티). 비디오 삽입·오디오 삽입 양쪽이 같은 해석기 경유(프록시는 풀 트랜스코드라 A/V 동기 유지). ②`exportProject`는 `.originalOnly` **명시 전달** — 프록시로 마스터 만들면 다운스케일 아티팩트가 배이므로. ③프리뷰(PreviewView)는 `useProxyPlayback || ProxyDowngradePolicy.shouldAutoDowngrade(ThermalState.current, autoProxyOnThermalPressure)`로 정책 해석 + `thermalStateDidChangeNotification` onReceive 재구축 트리거(S7 사다리·Mac ThermalStateObserver와 동일 Core 정책 재사용 — 관찰자 클래스 복제 없음).
+- **테스트**: 신규 `IOSSourcePolicyTests` 4종 — ①proxyWhenAvailable 플랜의 비디오 세그먼트가 프록시 URL 참조(구조 단언) ②기본(export/하니스) 플랜이 프록시 존재에도 원본 참조 ③**행동 증명**: 프록시(단색 청색 스탠드인·실 AVAssetWriter 생성)가 있어도 export 출력의 mid-frame이 적색 지배(원본 판독) ④정책 판정표(Core 패리티). 부수: `IOSPhase1SurfacesTests` 트랙 관리 테스트를 CODEX-20 잠금 계약으로 갱신(잠긴 트랙 삭제 거부 → 해제 후 삭제 — CODEX-20 세션이 iOS 전체 스위트를 안 돌려 방치된 낡은 기대치).
+- **정적 계약 갱신 2건**: IOSParityMatrix·IOSColorCorrectionParity(플랜 호출 시그니처에 sourcePolicy 추가 반영 — 위임 의도 불변).
+- **검증**: iOS 시뮬 전체 **75테스트/18스위트 PASS**(신규 4 포함)·Core swift test 1,467/218·verify_gate **GATE_PASS 5/5**.
+- **thermal 측정 항목(4-1)은 환경 차단 기록**: serious 상태 장편 완주율 측정이 선행 조건이나 이 Mac mini에서 열 상태를 결정적으로 강제할 방법이 없음(공식 오버라이드 부재·지속 부하 방식은 사용자 voiceagent 활성 중 비현실적) — 조용한/부하 상태에서 측정 창구 확보 시 재개.
+
 ## 다음 작업
 
 1. ~~3단계 증분 B~~ **완료**.
-2. 4단계: thermal(serious 상태 장편 완주율 측정 먼저)·iOS preview 전용 source policy·thermal observer·ducking/EQ placed-span.
-3. BUG-ACC-07/08 조사(선행 결함 — 3-B 검증 중 발견).
+2. 4단계 잔여: **ducking/EQ placed-span**(AudioMixEntry가 volume/fade만 처리 → 그래프/DSP 계약에 맞춘 시간축 구현)·thermal(측정 환경 대기).
+3. BUG-ACC-07/08: 07 완료·08 조사 대기.
 4. 통합 브랜치 병합 결정(사용자).

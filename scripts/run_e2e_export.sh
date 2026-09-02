@@ -1220,28 +1220,157 @@ rm -rf "$(dirname "$PR_OUT")"
 [ "$PR_CODEC" = "prores" ] && echo "PASS: ProRes master exported (codec $PR_CODEC)" \
   || { echo "FAIL: ProRes export wrong codec ($PR_CODEC)" >&2; exit 1; }
 
-# v1 contract (Phase 1 render reliability): HDR mastering is feature-gated
-# OFF — the 8-bit SDR pipeline must never emit a file TAGGED as HDR. The old
-# assertion expected 10-bit/HLG/Rec.2020 output; with the flag off the export
-# is refused and no file appears, which used to kill ffprobe (and the whole
-# script) under set -e with no FAIL line. The honest assertion now checks the
-# false-label guarantee: no output at all, or an output with no HDR tags.
+# capcut-surpass stage-3 increment B: the explicit profile-override route must
+# produce a REAL 10-bit Rec.2020/HLG master. Depth and color tags are verified
+# on the ACTUAL file (ffprobe), not the writer-settings dictionary. This rides
+# MOVIECUT_UITEST_EXPORT_PROFILE → exportMaster(to:profile:), which is the
+# mastering/verification path and is deliberately flag-independent so the probe
+# could run BEFORE FeatureFlag.hdrMaster flipped; the UI entry remains gated.
+HDR_OVERRIDE_OUT="$(mktemp -d)/hdr_override.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" \
+  MOVIECUT_UITEST_EXPORT_PROFILE=hevcHDR MOVIECUT_UITEST_EXPORT="$HDR_OVERRIDE_OUT" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+HOP=$!; for _ in $(seq 1 180); do [ -s "$HDR_OVERRIDE_OUT" ] && break; sleep 0.5; done; wait "$HOP" 2>/dev/null || true
+[ -s "$HDR_OVERRIDE_OUT" ] || { echo "FAIL: explicit hevcHDR profile export missing" >&2; exit 1; }
+HDR_PROBE="$(python3 - "$HDR_OVERRIDE_OUT" <<'PY'
+import json, subprocess, sys
+
+path = sys.argv[1]
+raw = subprocess.check_output([
+    "ffprobe", "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=codec_name,profile,pix_fmt,color_space,color_transfer,color_primaries",
+    "-of", "json", path
+], text=True)
+stream = json.loads(raw)["streams"][0]
+
+codec = stream.get("codec_name", "")
+profile = stream.get("profile", "")
+pix_fmt = stream.get("pix_fmt", "")
+primaries = stream.get("color_primaries", "")
+transfer = stream.get("color_transfer", "")
+matrix = stream.get("color_space", "")
+
+print(f"codec={codec} profile={profile} pix_fmt={pix_fmt} "
+      f"primaries={primaries} transfer={transfer} matrix={matrix}")
+
+def fail(message):
+    raise SystemExit(f"{message} (codec={codec} profile={profile} pix_fmt={pix_fmt} "
+                     f"primaries={primaries} transfer={transfer} matrix={matrix})")
+
+if codec != "hevc":
+    fail("HDR master must be HEVC")
+if profile != "Main 10":
+    fail("HDR master must use the HEVC Main 10 profile")
+if pix_fmt != "yuv420p10le":
+    fail("HDR master must carry real 10-bit pixels")
+if primaries not in ("bt2020nc", "bt2020"):
+    fail("HDR master primaries must be Rec.2020")
+if transfer != "arib-std-b67":
+    fail("HDR master transfer must be HLG (arib-std-b67)")
+if matrix not in ("bt2020nc", "bt2020"):
+    fail("HDR master matrix must be Rec.2020")
+
+# Content sanity: a mid-frame must not be black — the compositor rendered real
+# scene pixels through the 10-bit destination, not an empty buffer.
+frame = subprocess.check_output([
+    "ffmpeg", "-v", "error", "-ss", "1.5", "-i", path,
+    "-vf", "scale=1:1", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+])
+if len(frame) < 3 or max(frame[0], frame[1], frame[2]) < 16:
+    fail(f"HDR master mid-frame is near-black (rgb={frame[:3]!r})")
+PY
+)" || { echo "FAIL: HDR depth/tag probe failed (${HDR_PROBE:-no probe})" >&2; rm -rf "$(dirname "$HDR_OVERRIDE_OUT")"; exit 1; }
+rm -rf "$(dirname "$HDR_OVERRIDE_OUT")"
+echo "PASS: explicit hevcHDR master verified on file — real 10-bit Rec.2020/HLG ($HDR_PROBE)"
+
+# SDR regression for the same explicit writer: an SDR delivery profile through
+# the explicit route must stay 8-bit Rec.709 — the HDR increment must not leak
+# depth or color tags into the SDR contract.
+SDR_EXPLICIT_OUT="$(mktemp -d)/sdr_explicit.mp4"
+env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" \
+  MOVIECUT_UITEST_EXPORT_PROFILE=hevc MOVIECUT_UITEST_EXPORT="$SDR_EXPLICIT_OUT" \
+  MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
+SEP=$!; for _ in $(seq 1 180); do [ -s "$SDR_EXPLICIT_OUT" ] && break; sleep 0.5; done; wait "$SEP" 2>/dev/null || true
+[ -s "$SDR_EXPLICIT_OUT" ] || { echo "FAIL: explicit hevc SDR export missing" >&2; exit 1; }
+SDR_PROBE="$(python3 - "$SDR_EXPLICIT_OUT" <<'PY'
+import json, subprocess, sys
+
+path = sys.argv[1]
+raw = subprocess.check_output([
+    "ffprobe", "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=codec_name,pix_fmt,color_space,color_transfer,color_primaries",
+    "-of", "json", path
+], text=True)
+stream = json.loads(raw)["streams"][0]
+
+codec = stream.get("codec_name", "")
+pix_fmt = stream.get("pix_fmt", "")
+primaries = stream.get("color_primaries", "")
+transfer = stream.get("color_transfer", "")
+matrix = stream.get("color_space", "")
+
+print(f"codec={codec} pix_fmt={pix_fmt} primaries={primaries} transfer={transfer} matrix={matrix}")
+
+if codec != "hevc":
+    raise SystemExit(f"SDR explicit export must be HEVC (got {codec})")
+if pix_fmt not in ("yuv420p", "nv12"):
+    raise SystemExit(f"SDR explicit export must stay 8-bit (got {pix_fmt})")
+if primaries != "bt709" or transfer != "bt709" or matrix != "bt709":
+    raise SystemExit(
+        f"SDR explicit export must be tagged Rec.709 end to end "
+        f"(primaries={primaries} transfer={transfer} matrix={matrix})")
+PY
+)" || { echo "FAIL: SDR explicit regression probe failed (${SDR_PROBE:-no probe})" >&2; rm -rf "$(dirname "$SDR_EXPLICIT_OUT")"; exit 1; }
+rm -rf "$(dirname "$SDR_EXPLICIT_OUT")"
+echo "PASS: explicit SDR master unchanged — 8-bit Rec.709 ($SDR_PROBE)"
+
+# capcut-surpass stage-3 increment B: the flag-gated HDR MASTER entry
+# (MOVIECUT_UITEST_EXPORT_HDR → exportHDRMaster) now produces a REAL HDR
+# master — the flag flipped only after the explicit-override probe above
+# verified the 10-bit/Rec.2020/HLG contract on the actual file. The same
+# depth/tag/content probes apply to the UI-path export.
 HDR_OUT="$(mktemp -d)/hdr.mov"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT_HDR="$HDR_OUT" \
   MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 HP=$!; for _ in $(seq 1 180); do [ -s "$HDR_OUT" ] && break; sleep 0.5; done; wait "$HP" 2>/dev/null || true
-if [ ! -s "$HDR_OUT" ]; then
-  rm -rf "$(dirname "$HDR_OUT")"
-  echo "PASS: HDR master refused under FeatureFlag.hdrMaster (no mislabeled output)"
-else
-  HDR_TAGS="$(ffprobe -v error -select_streams v -show_entries stream=pix_fmt,color_transfer,color_primaries -of csv=p=0 "$HDR_OUT" 2>/dev/null || true)"
-  rm -rf "$(dirname "$HDR_OUT")"
-  case "$HDR_TAGS" in
-    *arib-std-b67*|*smpte2084*|*bt2020*|*yuv420p10le*)
-      echo "FAIL: HDR-tagged output emitted from the SDR-only build ($HDR_TAGS)" >&2; exit 1 ;;
-    *) echo "PASS: HDR request produced an untagged SDR fallback (no false HDR labels: $HDR_TAGS)" ;;
-  esac
-fi
+[ -s "$HDR_OUT" ] || { echo "FAIL: flag-gated HDR master missing (flag is ON; the export must succeed)" >&2; exit 1; }
+HDR_FLAG_PROBE="$(python3 - "$HDR_OUT" <<'PY'
+import json, subprocess, sys
+
+path = sys.argv[1]
+raw = subprocess.check_output([
+    "ffprobe", "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=codec_name,profile,pix_fmt,color_space,color_transfer,color_primaries",
+    "-of", "json", path
+], text=True)
+stream = json.loads(raw)["streams"][0]
+
+codec = stream.get("codec_name", "")
+profile = stream.get("profile", "")
+pix_fmt = stream.get("pix_fmt", "")
+primaries = stream.get("color_primaries", "")
+transfer = stream.get("color_transfer", "")
+matrix = stream.get("color_space", "")
+
+print(f"codec={codec} profile={profile} pix_fmt={pix_fmt} "
+      f"primaries={primaries} transfer={transfer} matrix={matrix}")
+
+if codec != "hevc" or profile != "Main 10" or pix_fmt != "yuv420p10le":
+    raise SystemExit(f"flag-gated HDR master must be HEVC Main 10 at true 10-bit "
+                     f"(got {codec}/{profile}/{pix_fmt})")
+if primaries not in ("bt2020nc", "bt2020") or transfer != "arib-std-b67" or matrix not in ("bt2020nc", "bt2020"):
+    raise SystemExit(f"flag-gated HDR master must be tagged Rec.2020/HLG "
+                     f"(primaries={primaries} transfer={transfer} matrix={matrix})")
+frame = subprocess.check_output([
+    "ffmpeg", "-v", "error", "-ss", "1.5", "-i", path,
+    "-vf", "scale=1:1", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+])
+if len(frame) < 3 or max(frame[0], frame[1], frame[2]) < 16:
+    raise SystemExit(f"flag-gated HDR master mid-frame is near-black (rgb={frame[:3]!r})")
+PY
+)" || { echo "FAIL: flag-gated HDR master probe failed (${HDR_FLAG_PROBE:-no probe})" >&2; rm -rf "$(dirname "$HDR_OUT")"; exit 1; }
+rm -rf "$(dirname "$HDR_OUT")"
+echo "PASS: flag-gated HDR master verified on file — real 10-bit Rec.2020/HLG ($HDR_FLAG_PROBE)"
 
 # On-device auto white balance must produce a corrective per-channel gain.
 WB_RESULT="$(mktemp -d)/wb.txt"

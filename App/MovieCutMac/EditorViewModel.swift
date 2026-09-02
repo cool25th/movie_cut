@@ -1416,22 +1416,7 @@ final class EditorViewModel {
     /// Exports a ProRes 422 master to an explicit URL (no save panel). Used by
     /// automation and the harness.
     func exportProResMaster(to url: URL) async {
-        guard ensureAllMediaReachableForExport() else { return }
-        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
-        lastExportURL = nil
-        do {
-            let snapshot = await session.snapshot()
-            lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
-                project: snapshot,
-                to: url,
-                profileOverride: .proRes422,
-                audioProcessing: buildAudioProcessingOptions()
-            )
-            lastErrorMessage = nil
-        } catch {
-            lastExportURL = nil
-            lastErrorMessage = error.localizedDescription
-        }
+        await exportMaster(to: url, profile: .proRes422)
     }
 
     /// Exports a 10-bit HDR master (HEVC Main 10, Rec. 2020 + HLG). CapCut has no
@@ -1460,6 +1445,17 @@ final class EditorViewModel {
             lastErrorMessage = "HDR mastering is not available in this build."
             return
         }
+        await exportMaster(to: url, profile: .hevcHDR)
+    }
+
+    /// Common mastering route behind the explicit-bitrate writer: exports to
+    /// an explicit URL with a profile override and no save panel. This is the
+    /// harness/automation route for every master (ProRes, HDR, and the
+    /// `MOVIECUT_UITEST_EXPORT_PROFILE` verification knob); it deliberately
+    /// skips the delivery settings reconciliation because masters resolve
+    /// their profile here, not from the persisted delivery codec.
+    func exportMaster(to url: URL, profile: VideoCompressionProfile) async {
+        guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {
@@ -1467,7 +1463,7 @@ final class EditorViewModel {
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
                 project: snapshot,
                 to: url,
-                profileOverride: .hevcHDR,
+                profileOverride: profile,
                 audioProcessing: buildAudioProcessingOptions()
             )
             lastErrorMessage = nil

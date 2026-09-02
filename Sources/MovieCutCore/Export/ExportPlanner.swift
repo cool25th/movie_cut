@@ -504,18 +504,19 @@ public struct ExportPlanner: Sendable {
 
         if video.profile.isHDR {
             // Rec. 2020 primaries + HLG transfer for a 10-bit HDR master, encoded
-            // with the HEVC Main 10 profile.
+            // with the HEVC Main 10 profile. The 10-bit SURFACE is requested by
+            // the reader side (ExportEngine picks 420YpCbCr10BiPlanarVideoRange
+            // for HDR profiles); these writer settings must NOT carry
+            // kCVPixelBufferPixelFormatTypeKey — AVAssetWriterInput REJECTS
+            // outputSettings containing a pixel-format key alongside
+            // AVVideoCodecKey (NSInvalidArgumentException, measured by the
+            // stage-3 e2e probe), which kills the export task outright.
             settings[AVVideoColorPropertiesKey] = [
                 AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
             ]
             compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel as String
-            // The writer must request a 10-bit surface, otherwise VideoToolbox
-            // encodes the Main10 profile from 8-bit pixels — a depth lie the
-            // FeatureFlag.hdrMaster gate exists to prevent (capcut-surpass
-            // ac589c2 re-port, adapted to the planner's profile model).
-            settings[kCVPixelBufferPixelFormatTypeKey as String] = Int(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
         } else {
             // SDR outputs are tagged explicitly Rec.709 so the file's color
             // primaries/transfer/matrix match the v1 render pipeline

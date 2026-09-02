@@ -144,6 +144,11 @@ extension EditorViewModel {
     /// - `MOVIECUT_UITEST_EXPORT_RESOLUTION=<rawValue>` — sets `ExportSettings.resolution` before export
     /// - `MOVIECUT_UITEST_EXPORT_FRAMERATE=<fps24|fps30|fps60>` — sets `ExportSettings.frameRate` before export
     ///   (e.g. `p4K`), independent of any platform preset. Used by the 4K perf baseline (S6).
+    /// - `MOVIECUT_UITEST_EXPORT_PROFILE=<h264|hevc|hevcHDR|proRes422|proRes4444>` — routes the
+    ///   `MOVIECUT_UITEST_EXPORT` destination through the explicit-bitrate writer with a profile
+    ///   override (the mastering route), instead of the preset export. Flag-independent on purpose:
+    ///   the e2e HDR depth/tag probe must run before `FeatureFlag.hdrMaster` flips
+    ///   (capcut-surpass stage-3 increment B).
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_CHROMA_KEY=1` — applies the deterministic greenScreen chroma-key default to
@@ -730,7 +735,22 @@ extension EditorViewModel {
             let dest = containerizedExportDestination(for: URL(filePath: exportPath))
             let exportClock = ContinuousClock()
             let exportStart = exportClock.now
-            await exportProject(to: dest.write)
+            // MOVIECUT_UITEST_EXPORT_PROFILE routes the SAME destination
+            // through the explicit-bitrate writer with a profile override —
+            // the mastering/verification route exportMaster(to:profile:) uses
+            // (capcut-surpass stage-3 increment B). Flag-independent on
+            // purpose: the e2e depth/tag probe must be exercisable before
+            // FeatureFlag.hdrMaster flips; no user-facing surface reaches
+            // this branch.
+            if let rawProfile = env["MOVIECUT_UITEST_EXPORT_PROFILE"], !rawProfile.isEmpty {
+                if let profile = VideoCompressionProfile(rawValue: rawProfile) {
+                    await exportMaster(to: dest.write, profile: profile)
+                } else {
+                    lastErrorMessage = "unknown export profile: \(rawProfile)"
+                }
+            } else {
+                await exportProject(to: dest.write)
+            }
             let exportElapsed = exportClock.now - exportStart
             let comps = exportElapsed.components
             let exportSeconds = Double(comps.seconds) + Double(comps.attoseconds) / 1e18

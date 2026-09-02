@@ -506,6 +506,19 @@
 - **부수 발견**: ①BUG-ACC-05의 갭 검출이 **슬롯 교대 트랙의 첫 세그먼트(전환 오버랩)를 갭으로 오판** → 어웨이-앤-백이 디졸브 창 내 오발동·어웨이 프레임 반환(MAD 4.55/8.61) — **전 비디오 트랙 합집합 커버리지 기준으로 수정**(실갑만 검출). ②**normal_delete가 풀스윕 부하에서만 재발**(53.31 — 단독 12연속 통과와 대조): BUG-ACC-05 수정의 어웨이-앤-백이 부하 하에서도 재렌더가 스테일 검정 반환 — 기존 freeze "전체 실행 FAIL vs 단독 PASS"와 동일 부하 민감 클래스.
 - **수정 방향**: 스테일 프레임 공급의 근본(플레이어 비디오 출력의 one-behind 태깅) — BUG-CA12-01 에스컬레이션에 본 증거(격자 정렬 판별기·부하 민감성) 통합 권장. 해결 시 시나리오에 창 내 샘플 재추가.
 
+### BUG-ACC-07 (P2) — run_e2e_export G-25 §8 meter run M "measurement nil" — 등록(2026-09-02, 3-B 증분 e2e 재실측에서 포착·선결함 판정)
+
+- **경위**: capcut-surpass 3-B 증분의 전체 e2e 재실측에서 마지막 섹션(G-25 §8 meter run M: 그래프 마스터 미터 + BGM EQ)만 실패 — `master_meter=0 meter_lufs=silence meter_error=1`·`meter.json = {"eqApplied":true,"error":"measurement nil"}`. **같은 런의 post-check·A/B 런은 전부 PASS**(postcheck_lufs=-19.95 — 실제 오디오 정상) 즉 미터 측정 경로만 침묵.
+- **선결함 판정(소유 실험)**: 3-B 변경을 stash한 빌드에서도 **2/2 동일 재현**(measurement nil) — 이번 증분 무관. 3-B 변경 빌드 4/4 재현. 결정적 재현: 스크립트 M 런 임베드(`open -n -W` + MOVIECUT_UITEST_MASTER_METER/EQ=1).
+- **수정 방향**: 그래프 마스터 미터의 측정치 nil 경로(미터 탭 설치 타이밍·EQ 파생 미디어 반영) 조사 — export에는 영향 없음(계측 전용 경로).
+
+### BUG-ACC-08 (P2) — 하니스 앱 간헐 비종료(산출물 완결 후 NSApp.terminate 불이행) + ShareKit 피커 루프 — 등록(2026-09-02, 3-B 증분 e2e 재실측에서 포착)
+
+- **경위**: 전체 e2e 2회 실행에서 **서로 다른 섹션 3회**(headless-harness·title-template Caption·Kinetic)가 같은 서명으로 행업: ①섹션 산출물(export+result) 전부 완결 ②`flushAutosave` 완료(recovery 파일 타임스탬프) 즉 `NSApp.terminate` 호출 이후 ③앱 생존·전 스레드 유휴(0% CPU) ④`lastExportURL` 노출 후 ShareLink가 **~0.25Hz로 SHKSharingServicePicker 재초기화**(로그 1.8만 줄) — 종료 처리가 피커/재렌더와 경쟁해 불이행되는 것으로 추정.
+- **간헐성 실측**: 동일 커맨드 5회 연속 자발 종료(회피됨) — 대략 10회당 1회 꼴. export를 생산하는 섹션에서만 관찰(ShareLink 조건부 노출과 정합). 소유는 미판정이나 변경 경로(프로파일 env 분기·마스터 리팩터·플래너 writer 설정)와 무관하고 ShareLink/종료 경로는 무접촉.
+- **임시 회수**: 검증 세션에서 사이드카 와치독(0% CPU 120초+ 인스턴스만 kill — 산출물 완결 후)으로 완주. **러너 정식 수정 후보**: 와치독 회수 정석의 e2e 러너 편입(파킹 회수 후보 판정 보존).
+- **수정 방향**: ①NSApp.terminate 지연/취소 조건(ShareKit 피커 초기화 중 종료) 조사 ②ShareLink 재생성 루프(재렌더 유발 관찰자) 특정 — BUG-CA12-01 계열(메인 디스패치/런루프 이벤트 계) 인접 후보.
+
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
 
 - 증상: 4초 8클릭 픽스처는 마커 ≥6(기존 테스트)이나 **60초 120BPM(약 120 온셋)에서 마커 4개**(240BPM 드래프트에서는 6개). 스텝 자체는 통과(마커 존재)하나 대표 작업 관점에서 수율이 비정상적으로 낮음 — 분석 윈도우/최댓값/씬 정규화 의심.

@@ -14,12 +14,16 @@ import Foundation
 public enum FeatureFlag {
     /// HDR mastering (10-bit HEVC Rec.2020/HLG export).
     ///
-    /// OFF for v1 because the render pipeline is 8-bit SDR end to end
-    /// (`RenderColorConfiguration`), so an HDR export would silently re-tag
-    /// 8-bit pixels as HDR — the output would lie about its own depth. Re-enable
-    /// only after a real 10-bit compositor + HDR preview path exist. See the
-    /// Phase 1 render-reliability plan.
-    public static let hdrMaster = false
+    /// ON since capcut-surpass stage-3 increment B (2026-09-02): the explicit
+    /// writer path now produces a VERIFIED 10-bit master — the reader requests
+    /// a 420YpCbCr10BiPlanar surface, both compositors render HDR destinations
+    /// through the Rec.2020 HLG color space, and the e2e probe
+    /// (`run_e2e_export.sh`, `MOVIECUT_UITEST_EXPORT_PROFILE=hevcHDR`)
+    /// confirmed the actual file carries Main 10 / yuv420p10le / bt2020 /
+    /// arib-std-b67 / bt2020nc while SDR stays 8-bit Rec.709. Known limit:
+    /// PREVIEW still renders SDR (the HDR-source preview drift is BUG-CA12-02
+    /// / G-29 scope) — the flag governs the export surface only.
+    public static let hdrMaster = true
 
     /// Standalone card-news authoring (multi-page artboard workflow).
     ///

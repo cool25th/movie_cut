@@ -3,6 +3,18 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (capcut-surpass 3단계 증분 B 완료 — e2e HDR 프로브·writer 결함 수정·FeatureFlag.hdrMaster 플립)
+
+- **배선**: 하니스 `MOVIECUT_UITEST_EXPORT_PROFILE` env → `exportMaster(to:profile:)`(VM 신규 공용 마스터링 루트 — ProRes/HDR가 같은 메서드로 수렴, 중복 제거) → `exportVideoWithExplicitBitrate(profileOverride:)`.
+- **증분 A 결함 포착·수정**: writer outputSettings에 픽셀포맷 키+코덱 키 공존 시 `AVAssetWriterInput`이 NSInvalidArgumentException → Swift 태스크 조용 사망(하니스 무출력 파킹 3/3 결정적). 격리 프로브로 키 조합 특정 후 writer에서 픽셀포맷 키 제거(10-bit 서페이스=reader 책임 계약화) + 유닛 실생성 트립와이어.
+- **실측·플립**: hevcHDR → Main 10/yuv420p10le/bt2020/arib-std-b67/bt2020nc·SDR → yuv420p/bt709×3 무변경 확인 후 **FeatureFlag.hdrMaster ON**(preview SDR 한계는 BUG-CA12-02/G-29 명시). flag 의존 테스트 2종·정적 계약 갱신.
+- **검증**: swift test 1,467/218 PASS·verify_gate **5/5 GATE_PASS**·run_e2e_export **HDR 3섹션 전부 PASS**(명시적·SDR 회귀·flag 게이트).
+- **선결함 2건 등록(백로그 §1.15)**: **BUG-ACC-07** G-25 §8 meter "measurement nil"(stash A/B로 증분 무관 판정 — e2e 유일 FAIL)·**BUG-ACC-08** 하니스 앱 간헐 비종료+ShareKit 루프(3회·와치독 회수로 완주).
+- **정리**: 스크래치 프로브 3종·/tmp 임시 삭제.
+
+### 다음 회차 — 큐
+① **4단계**: thermal(serious 장편 완주율 측정 선행)·iOS preview source policy·ducking/EQ placed-span ② BUG-ACC-07/08 조사(선결함) ③ CODEX-04·소형 큐(STAB-02 취소 E2E·worst-MAD)·통합 브랜치 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-01 세션 (CODEX-20 완료 — RemoveTrack 잠금 가드·병렬 WIP와 무겹침 병행)
 
 - **병렬 판정**: 타 세션 WIP(캔버스 배경 오염 조사 — 컴포지터 3종·CanvasBackground 계열) 78분 경과·프로세스 0 — CODEX-20 파일(Core 커맨드)과 **무겹침**이라 병행 착수(경합 파일 일절 미접촉).

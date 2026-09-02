@@ -153,11 +153,15 @@ run_scenario() {
     --frame-rate "$frame_rate" \
     --tolerance "$tolerance" \
     --size 320x240 \
-    --work-dir "$work"
-  local rc=$?
-  # STAB-08: append this scenario's verdict to the run ledger the history
-  # recorder at the script tail reads.
-  echo "$name $rc" >> "$PARITY_LEDGER"
+    --work-dir "$work" | tee "$work/comparator.out"
+  local rc=${PIPESTATUS[0]}
+  # STAB-08: append the verdict + the comparator's worst MAD (the summary
+  # line prints it unconditionally — the report table shows the run's
+  # largest pixel drift even on PASS) to the ledger the history recorder
+  # reads.
+  local worst_mad
+  worst_mad="$(sed -nE 's/^Worst overall MAD: ([0-9.]+).*/\1/p' "$work/comparator.out" | tail -1)"
+  echo "$name $rc ${worst_mad:-NA}" >> "$PARITY_LEDGER"
   if [ "$rc" -ne 0 ]; then
     echo "    Preserving work dir: $work" >&2
   else
@@ -360,15 +364,25 @@ python3 - "$PARITY_LEDGER" $parity_rc <<'PYEOF'
 import json, sys, time
 ledger, rc = sys.argv[1], int(sys.argv[2])
 scenarios = {}
+worst_mad = None
 for line in open(ledger):
     parts = line.split()
-    if len(parts) == 2:
+    if len(parts) >= 2:
         scenarios[parts[0]] = "PASS" if parts[1] == "0" else "FAIL"
+    # Third field: the comparator's worst MAD (NA on harness-level failure).
+    if len(parts) >= 3 and parts[2] not in ("NA",):
+        try:
+            value = float(parts[2])
+            worst_mad = value if worst_mad is None else max(worst_mad, value)
+        except ValueError:
+            pass
 out = {
     "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "scenarios": scenarios,
     "rc": rc,
 }
+if worst_mad is not None:
+    out["worst_mad"] = worst_mad
 with open(f".build-check/history/parity-{int(time.time())}.json", "w") as f:
     json.dump(out, f)
 PYEOF

@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (STAB-08 잔여 — worst-MAD 캡처·병렬 활성 세션과 게이트 경합 기록)
+
+- **병렬 판정**: 이전 WIP(HDR stage-3 B)는 타 세션이 d43146a로 커밋 후 **새 WIP 진행 중 활성**(IOSExportEngine·PreviewView·IOSSourcePolicyTests — 9분 전 수정) — STAB-02·잠금 UI는 파일 겹침으로 보류, **무겹침 worst-MAD 캡처** 선택.
+- **구현**: 파리티 레코드가 세 번째 필드로 시나리오별 worst MAD 기록(비교기 `Worst overall MAD` 요약 라인 tee 파싱·PIPESTATUS로 rc 보존·NA 가드) → 이력 JSON `worst_mad`(런 최대) → 리포트 표 수치 표시.
+- **실측**: PARITY_ONLY 프로브 이력 `worst_mad: 3.36` 기록·리포트 MAD 컬럼 반영·`--check-reproducible` 2회 동일.
+- **게이트 판정 불가(정직 기록)**: verify_gate 연속 실패 2건 모두 **활성 병렬 세션의 PreviewView.swift WIP**(수정 9분 전 — 실패 정적 계약 2종이 정확히 그 파일 읽음)·iOS 빌드 1회 일시. 제 변경은 스크립트/docs뿌리로 Swift 무영향 — 증분 자체 증거(프로브+재현성)로 판정.
+- **주의**: 커밋이 병렬 세션 체크아웃 브랜치(`codex/integrate-capcut-surpass`)에 착지 — 활성 병렬 작업 중 브랜치 이동은 위험하여 유지(스크립트/docs라 어느 브랜치에도 무해).
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰 ② STAB-02 취소 E2E·잠금 UI 비활성화(병렬 WIP 소진 후)·게이트 정상 판정 1회. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (BUG-ACC-07 완료 — EQ Picker onChange 에코·마스터 미터 침묵)
 
 - **원인 판명(계측 2단계)**: ①미터의 스테일 가드가 재측정 중 무효화되면 값·에러 없이 조용 반환 → 하니스 "measurement nil". ②rev3 무효화의 스택 = **인스펙터 EQ Picker onChange → applyEQPreset 재디스패치 에코** — 커밋 리프레시마다 selectedClipIds didSet → loadSelectedClipProcessingState → selectedEQPreset 재동기화가 프로그램적 EQ 변경을 "사용자 선택"으로 재발화. renderMix ~16s(4s 프로젝트)라 경쟁 창이 커 100% 재현.

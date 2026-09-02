@@ -19,6 +19,10 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeWriter: AVAssetWriter?
     /// G-15: temp segments backing image clips in the CURRENT render plan.
     @ObservationIgnored private var imageRenderURLs: [URL] = []
+    /// Stage-4: temp EQ-derived audio backing EQ'd clips in the CURRENT
+    /// render plan (the shared Core `AudioEqualizerService` DSP, the same
+    /// §0 effective media the Mac graph derives — no live EQ tap).
+    @ObservationIgnored private var eqRenderURLs: [URL] = []
     /// RENDER-02: resolves writer output settings — SDR H.264 tagged
     /// explicitly Rec.709 (the root fix for the preset-path decode drift).
     @ObservationIgnored private let exportPlanner = ExportPlanner()
@@ -866,10 +870,11 @@ final class IOSExportEngine {
     /// Deletes the temp segments from the PREVIOUS plan (see makeRenderPlan).
     private func removeTemporaryImageRenders() {
         let fileManager = FileManager.default
-        for url in imageRenderURLs where fileManager.fileExists(atPath: url.path) {
+        for url in imageRenderURLs + eqRenderURLs where fileManager.fileExists(atPath: url.path) {
             try? fileManager.removeItem(at: url)
         }
         imageRenderURLs.removeAll()
+        eqRenderURLs.removeAll()
     }
 
     private func insertVideoTrack(
@@ -1040,10 +1045,29 @@ final class IOSExportEngine {
                 let mediaAsset = project.mediaLibrary.assets[assetId]
             else { continue }
 
-            // Stage-4 source policy: a video asset's embedded audio follows
-            // the same source as its video (the proxy is a full transcode),
-            // so a proxy preview stays in A/V sync.
-            let asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
+            // Stage-4 EQ: derived effective media — the clip's source audio
+            // runs through the shared Core AudioEqualizerService (the same
+            // DSP the Mac graph's §0 effective media uses) into a temp file,
+            // and the composition inserts from THAT. The render preserves
+            // the source's time layout, so the clip's sourceRange maps 1:1;
+            // preview and export consume the same plan, so parity holds.
+            // Flat/absent EQ inserts the source untouched (byte path
+            // unchanged). Deliberately NOT a live EQ tap (plan: 구형 EQ tap
+            // 복원 금지).
+            let asset: AVURLAsset
+            if let equalizer = clip.equalizer, !equalizer.isFlat {
+                let eqURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("MovieCutiOS-EQ-\(clip.id.uuidString)-\(UUID().uuidString).caf")
+                try await AudioEqualizerService().apply(
+                    preset: equalizer.equalizerPreset,
+                    inputURL: playbackSourceURL(for: mediaAsset),
+                    outputURL: eqURL
+                )
+                eqRenderURLs.append(eqURL)
+                asset = AVURLAsset(url: eqURL)
+            } else {
+                asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
+            }
             try await insertClip(
                 clip,
                 mediaType: .audio,
@@ -1064,6 +1088,15 @@ final class IOSExportEngine {
         let volume: Double
         let fadeInDuration: TimeInterval
         let fadeOutDuration: TimeInterval
+        /// Stage-4 placed-span ducking: the clip's ducking windows in
+        /// CLIP-LOCAL timeline seconds (AudioDuckingPlanner output) and the
+        /// duck level. Placed times differ from these whenever the placement
+        /// is speed-scaled — `makeAudioMix` maps through the span ratio.
+        let duckingRanges: [TimeRange]
+        let duckingLevel: Double?
+        /// The clip's MODEL timeline duration backing this placement, used to
+        /// map clip-local times onto the placed span.
+        let timelineDuration: TimeInterval
     }
 
     /// BUG-IOS-10: audio placements collected while building the composition.
@@ -1197,7 +1230,8 @@ final class IOSExportEngine {
     }
 
     /// BUG-IOS-10: remembers an audio placement for the render plan's
-    /// audioMix (volume + fade ramps), following the real placed span.
+    /// audioMix (volume + fade ramps + stage-4 ducking windows), following
+    /// the real placed span.
     private func recordAudioMixEntry(
         for clip: Clip,
         mediaType: AVMediaType,
@@ -1213,7 +1247,10 @@ final class IOSExportEngine {
                 duration: duration,
                 volume: clip.volume,
                 fadeInDuration: clip.fadeInDuration,
-                fadeOutDuration: clip.fadeOutDuration
+                fadeOutDuration: clip.fadeOutDuration,
+                duckingRanges: clip.duckingRanges,
+                duckingLevel: clip.duckingLevel,
+                timelineDuration: clip.timelineRange.duration
             )
         )
     }
@@ -1222,9 +1259,13 @@ final class IOSExportEngine {
     /// input-parameters object per composition audio track, with the clips'
     /// base volume plus fade-in/fade-out ramps. Nil when no clip carries
     /// audio edits — the untouched mix stays exactly as before.
+    /// Stage-4: clips with ducking metadata get the Mac ducking contract
+    /// (attack 0.12 s / release 0.25 s, ramps held clear of the fade
+    /// windows, merged ranges) mapped onto their REAL placed span.
     private func makeAudioMix(from entries: [AudioMixEntry], composition: AVMutableComposition) -> AVMutableAudioMix? {
         let audibleEntries = entries.filter { entry in
             entry.volume != 1 || entry.fadeInDuration > 0 || entry.fadeOutDuration > 0
+                || entry.duckingLevel.map { $0 < 1 } == true
         }
         guard !audibleEntries.isEmpty else { return nil }
 
@@ -1268,12 +1309,65 @@ final class IOSExportEngine {
                     timeRange: CMTimeRange(start: fadeOutStart, duration: cmTime(fadeOut))
                 )
             }
+            applyDuckingRamps(for: entry, parameters: parameters, baseVolume: volume,
+                              fadeIn: fadeIn, fadeOut: fadeOut)
         }
 
         guard !parametersByTrack.isEmpty else { return nil }
         let mix = AVMutableAudioMix()
         mix.inputParameters = Array(parametersByTrack.values)
         return mix
+    }
+
+    /// Stage-4 ducking, Mac `PlaybackEngine.applyDuckingRamps` contract:
+    /// duckedVolume = base × level, attack/release ramps
+    /// (`AudioDuckingPlanner` constants) with the ducked level HELD between
+    /// them, ranges merged and clipped to the fade-free window. Placed-span
+    /// mapping: ducking windows are clip-local MODEL seconds, so every offset
+    /// and ramp duration scales by placedDuration / timelineDuration (1 at
+    /// 1x — then the ramps are byte-identical to Mac's).
+    private func applyDuckingRamps(
+        for entry: AudioMixEntry,
+        parameters: AVMutableAudioMixInputParameters,
+        baseVolume: Float,
+        fadeIn: TimeInterval,
+        fadeOut: TimeInterval
+    ) {
+        guard let duckingLevel = entry.duckingLevel,
+              duckingLevel < 1,
+              !entry.duckingRanges.isEmpty,
+              entry.timelineDuration > 0
+        else { return }
+
+        let placedDuration = entry.duration.seconds
+        let scale = placedDuration / entry.timelineDuration
+        let duckedVolume = baseVolume * Float(max(0, duckingLevel))
+        let attack = AudioDuckingPlanner.attackDuration * scale
+        let release = AudioDuckingPlanner.releaseDuration * scale
+        // Keep ducking ramps clear of the fade windows so AVFoundation never
+        // receives overlapping volume ramps on one clip (Mac parity).
+        let lowerBound = fadeIn > 0 ? min(fadeIn, placedDuration) : 0
+        let upperBound = placedDuration - (fadeOut > 0 ? min(fadeOut, placedDuration) : 0)
+        guard upperBound > lowerBound else { return }
+
+        for range in AudioDuckingPlanner.mergeOverlapping(entry.duckingRanges) {
+            let start = max(range.start * scale, lowerBound)
+            let end = min(range.end * scale, upperBound)
+            guard end - start > attack + release else { continue }
+
+            let attackStart = CMTimeAdd(entry.start, cmTime(start))
+            parameters.setVolumeRamp(
+                fromStartVolume: baseVolume,
+                toEndVolume: duckedVolume,
+                timeRange: CMTimeRange(start: attackStart, duration: cmTime(attack))
+            )
+            let releaseStart = CMTimeAdd(entry.start, cmTime(end - release))
+            parameters.setVolumeRamp(
+                fromStartVolume: duckedVolume,
+                toEndVolume: baseVolume,
+                timeRange: CMTimeRange(start: releaseStart, duration: cmTime(release))
+            )
+        }
     }
 
     /// Renders a reversed copy of the clip's source range (video only).

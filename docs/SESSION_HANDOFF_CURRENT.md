@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (capcut-surpass 4단계 증분 2 — ducking/EQ placed-span·**4단계 구현 완결**)
+
+- **덕킹**: `AudioMixEntry` 확장(ducking 창·레벨·모델 시간축) → `makeAudioMix`가 Mac `applyDuckingRamps` 계약 그대로 적용(attack 0.12/release 0.25·감쇠 유지·fade 회피·mergeOverlapping) + **placed-span 매핑**(모든 오프셋·램프가 placedDuration/timelineDuration 배율 — 1x는 Mac 동일·2x는 모델 시간 절반 위치).
+- **EQ 파생 유효 미디어**: EQ'd 클립 오디오를 공유 Core `AudioEqualizerService.apply`(Mac 그래프 §0와 동일 DSP)로 오프라인 렌더해 temp 삽입 — EQ tap 복원 없음·시간 배치 보존·프리뷰/export 파리티 자동(eqRenderURLs 수명 주기=imageRenderURLs).
+- **테스트**: 신규 `IOSAudioDuckingEQTests` 5종 — 덕 ≥6dB(Goertzel)·**placed-span 판별기**(2x 매핑 창 감쇠+원시 창 보존 — 원시 시간 버그 잡는 이중 단언)·nil mix·EQ 구조·bassBoost 스펙트럼 행동(저/고 비 ≥2배).
+- **검증**: iOS 시뮬 **80/19 PASS**·Core 1,467/218·verify_gate **GATE_PASS 5/5**. 이로써 4단계 구현 항목 전부 완결 — thermal 측정만 환경 대기.
+- **정리**: 시뮬 임시 export/EQ 파일 테스트 defer 삭제 확인.
+
+### 다음 회차 — 큐
+① BUG-ACC-08 조사(하니스 비종료+ShareKit 루프) ② thermal 측정(환경 대기)·CODEX-04(실기기 대기) ③ 통합 브랜치 병합 결정(사용자)·루프 소형 큐. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (capcut-surpass 4단계 증분 1 — iOS preview source policy·thermal observer)
 
 - **구현**: `IOSExportEngine`에 `IOSSourcePolicy`(originalOnly=export 명시/proxyWhenAvailable=프리뷰) — 플랜이 설정을 안 읽고 호출자가 해석(Mac playbackURL 패리티)·비디오/오디오 삽입 양쪽 동일 해석기(A/V 동기)·export는 원본 명시. 프리뷰는 `ProxyDowngradePolicy`+`ThermalState.current`로 정책 해석 + thermal 알림 onReceive 재구축(S7·Core 정책 재사용, 관찰자 복제 없음).

@@ -66,9 +66,17 @@
 - **검증**: iOS 시뮬 전체 **75테스트/18스위트 PASS**(신규 4 포함)·Core swift test 1,467/218·verify_gate **GATE_PASS 5/5**.
 - **thermal 측정 항목(4-1)은 환경 차단 기록**: serious 상태 장편 완주율 측정이 선행 조건이나 이 Mac mini에서 열 상태를 결정적으로 강제할 방법이 없음(공식 오버라이드 부재·지속 부하 방식은 사용자 voiceagent 활성 중 비현실적) — 조용한/부하 상태에서 측정 창구 확보 시 재개.
 
+## 4단계 증분 2 (2026-09-02) — ducking/EQ placed-span — **4단계 구현 항목 완결**
+
+- **덕킹**: `AudioMixEntry`에 ducking 창(클립-로컬 모델 초)·레벨·모델 시간축 추가 → `makeAudioMix`가 **Mac `PlaybackEngine.applyDuckingRamps` 계약 그대로**(ducked=base×level·attack 0.12s/release 0.25s·램프 사이 감쇠 유지·fade 창 회피·`mergeOverlapping`) 램프 적용. **placed-span 매핑**: 모든 오프셋·램프 길이가 placedDuration/timelineDuration 배율로 환산 — 1x에서 Mac과 동일, 2x에서 모델 시간 절반 위치에 덕 착지(원시 시간 버그 판별기로 실측 고착).
+- **EQ 파생 유효 미디어**: EQ'd 클립의 오디오를 **공유 Core `AudioEqualizerService.apply`**(Mac 그래프 §0 유효 미디어와 동일 DSP — G-25 2C-2 어댑터로 비디오 컨테이너 포함)로 오프라인 렌더해 temp 파일에서 삽입 — 구형 EQ tap 복원 없음, 렌더가 원본 시간 배치 보존으로 sourceRange 1:1 매핑, 프리뷰·export가 같은 플랜 소비로 파리티 자동. 임시 파일은 imageRenderURLs 수명 주기와 동일 관리(eqRenderURLs).
+- **테스트**: 신규 `IOSAudioDuckingEQTests` 5종 — ①덕 감쇠 ≥6dB(Mac e2e 임계값·through-mix Goertzel) ②**placed-span 판별기**(2x — 매핑 창 감쇠 + 원시 시간 창은 그대로 큼) ③무메타데이터 nil mix ④EQ 파생 미디어 구조(세그먼트 소스) ⑤bassBoost export 스펙트럼 행동(저/고 비 ≥2배).
+- **검증**: iOS 시뮬 전체 **80테스트/19스위트 PASS**·Core 1,467/218·verify_gate **GATE_PASS 5/5**.
+- **4단계 상태**: 구현 항목 전부 완결(proxy/thermal source policy + ducking/EQ). thermal 측정(6a58b16 이식 판단)만 환경 대기(serious 강제 불가 — 위 증분 1 기록).
+
 ## 다음 작업
 
-1. ~~3단계 증분 B~~ **완료**.
-2. 4단계 잔여: **ducking/EQ placed-span**(AudioMixEntry가 volume/fade만 처리 → 그래프/DSP 계약에 맞춘 시간축 구현)·thermal(측정 환경 대기).
-3. BUG-ACC-07/08: 07 완료·08 조사 대기.
+1. ~~3단계 증분 B·4단계 구현 항목~~ **완료**.
+2. 남은 4단계: thermal 측정(환경 대기 — 조용한/부하 기기에서 serious 상태 장편 완주율).
+3. BUG-ACC-08 조사·CODEX-04(실기기 대기).
 4. 통합 브랜치 병합 결정(사용자).

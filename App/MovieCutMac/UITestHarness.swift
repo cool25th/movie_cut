@@ -858,6 +858,15 @@ extension EditorViewModel {
         }
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
             NSApp.terminate(nil)
+            // BUG-ACC-08: terminate can COMPLETE (delegate asked, reply now,
+            // willTerminate fired) and still RETURN without exiting — the
+            // ShareKit picker re-init race (ShareLink after an export) spins
+            // a tracking loop that swallows the run-loop stop (measured 2/4
+            // launches). The harness's contract is a deterministic process
+            // end, so once terminate declines, force it. Artifacts and the
+            // crash-recovery autosave are already on disk by this point.
+            AppLog.export.notice("harness: NSApp.terminate returned without exiting (BUG-ACC-08 ShareKit race) — forcing exit(0)")
+            exit(0)
         }
     }
 

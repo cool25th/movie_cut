@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (BUG-ACC-08 하니스 계약 복원 — NSApp.terminate 반환·exit(0) 경화)
+
+- **원인 판명(종료 경로 계측)**: 파킹 시 `NSApp.terminate(nil)`이 shouldTerminate 판정(reply=now)·applicationWillTerminate 발화까지 **전부 완료하고 호출부로 반환** — 원래 반환하지 않는 API. ShareLink 직후 피커 재초기화의 중첩 트래킹 루프가 run-loop 종료 stop을 흡수. 재현 루프(title-template Caption) 수정 전 **2/4 파킹**.
+- **수정**: 하니스 QUIT 경로가 terminate 반환 시 **exit(0) 강제**(산출물·autosave 이미 디스크 — 하니스 계약=결정적 종료·DEBUG/HARNESS 전용).
+- **검증**: 재현 루프 **50/50 자발 종료·파킹 0**·verify_gate **GATE_PASS 5/5**. ShareLink 피커 재초기화 루프 자체는 제품 UI 관찰 항목으로 잔여(백로그 갱신).
+- **정리**: 재현 스크립트·로그 삭제.
+
+### 다음 회차 — 큐
+① thermal 측정(환경 대기)·CODEX-04(실기기 대기) ② 통합 브랜치 병합 결정(사용자)·루프 소형 큐·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (capcut-surpass 4단계 증분 2 — ducking/EQ placed-span·**4단계 구현 완결**)
 
 - **덕킹**: `AudioMixEntry` 확장(ducking 창·레벨·모델 시간축) → `makeAudioMix`가 Mac `applyDuckingRamps` 계약 그대로 적용(attack 0.12/release 0.25·감쇠 유지·fade 회피·mergeOverlapping) + **placed-span 매핑**(모든 오프셋·램프가 placedDuration/timelineDuration 배율 — 1x는 Mac 동일·2x는 모델 시간 절반 위치).

@@ -514,12 +514,14 @@
 - **수정**: `applyEQPreset`에 **멱등 가드** — 재적용할 설정이 클립의 현재 equalizer와 값동일하면 디스패치 스킵(동일 EQ 재적용은 no-op이며, 이 에코는 프로젝트/undo 스택도 오염시켜 왔음).
 - **검증**: 재현 커맨드(M 런 임베드) **3/3 실측치 반환** — `lufs=-19.9456`·`samplePeakDbFs=-15.74`·`error="none"`(export post-check -19.95와 일치 — 그래프 미터↔실출력 정합). A/B 런 재실측 동일 수치(-22.72→-25.87, 솔로 Δ-3.14 LU). Mac 유닛 전체 통과(Master audio freshness G-26 스위트 포함)·Core swift test 1,467/218·verify_gate **GATE_PASS 5/5**. XCUI 3건 실패는 MACUI-01 환경 클래스(선결함·게이트 범위 밖).
 
-### BUG-ACC-08 (P2) — 하니스 앱 간헐 비종료(산출물 완결 후 NSApp.terminate 불이행) + ShareKit 피커 루프 — 등록(2026-09-02, 3-B 증분 e2e 재실측에서 포착)
+### BUG-ACC-08 (P2) — 하니스 앱 간헐 비종료(산출물 완결 후 NSApp.terminate 불이행) + ShareKit 피커 루프 — **하니스 계약 복원 완료(2026-09-02 심야)**
 
-- **경위**: 전체 e2e 2회 실행에서 **서로 다른 섹션 3회**(headless-harness·title-template Caption·Kinetic)가 같은 서명으로 행업: ①섹션 산출물(export+result) 전부 완결 ②`flushAutosave` 완료(recovery 파일 타임스탬프) 즉 `NSApp.terminate` 호출 이후 ③앱 생존·전 스레드 유휴(0% CPU) ④`lastExportURL` 노출 후 ShareLink가 **~0.25Hz로 SHKSharingServicePicker 재초기화**(로그 1.8만 줄) — 종료 처리가 피커/재렌더와 경쟁해 불이행되는 것으로 추정.
-- **간헐성 실측**: 동일 커맨드 5회 연속 자발 종료(회피됨) — 대략 10회당 1회 꼴. export를 생산하는 섹션에서만 관찰(ShareLink 조건부 노출과 정합). 소유는 미판정이나 변경 경로(프로파일 env 분기·마스터 리팩터·플래너 writer 설정)와 무관하고 ShareLink/종료 경로는 무접촉.
-- **임시 회수**: 검증 세션에서 사이드카 와치독(0% CPU 120초+ 인스턴스만 kill — 산출물 완결 후)으로 완주. **러너 정식 수정 후보**: 와치독 회수 정석의 e2e 러너 편입(파킹 회수 후보 판정 보존).
-- **수정 방향**: ①NSApp.terminate 지연/취소 조건(ShareKit 피커 초기화 중 종료) 조사 ②ShareLink 재생성 루프(재렌더 유발 관찰자) 특정 — BUG-CA12-01 계열(메인 디스패치/런루프 이벤트 계) 인접 후보.
+- **경위**: 전체 e2e 2회 실행에서 **서로 다른 섹션 3회**(headless-harness·title-template Caption·Kinetic)가 같은 서명으로 행업: ①섹션 산출물(export+result) 전부 완결 ②`flushAutosave` 완료(recovery 파일 타임스탬프) ③앱 생존·전 스레드 유휴(0% CPU) ④`lastExportURL` 노출 후 ShareLink가 **~0.25Hz로 SHKSharingServicePicker 재초기화** — 종료 처리가 피커/재렌더와 경쟁해 불이행되는 것으로 추정.
+- **간헐성 실측**: 동일 커맨드(title-template Caption) 재현 루프 — 수정 전 **2/4 파킹**. export를 생산하는 섹션에서만 관찰(ShareLink 조건부 노출과 정합). 소유는 미판정이었으나 변경 경로와 무관.
+- **원인 판명(종료 경로 계측)**: `NSApp.terminate(nil)`이 **delegate 판정(shouldTerminate reply=now)·applicationWillTerminate 발화까지 전부 완료하고 호출부로 반환** — terminate는 원래 반환하지 않는 API로, ShareLink 직후 피커 재초기화가 여는 중첩 트래킹 루프가 run-loop 종료 stop을 흡수해 프로세스가 살아남는 것으로 측정.
+- **수정(하니스 종료 경화)**: `runUITestHarnessIfRequested`의 QUIT 처리가 terminate 반환 시 **exit(0) 강제** — 이 시점에 산출물·크래시복구 autosave는 이미 디스크에 있고, 하니스 계약은 결정적 프로세스 종료이므로 정당. DEBUG/HARNESS 하니스 경로 전용(제품 UI 경로 무접촉).
+- **검증**: 재현 루프 재실측 **50/50 자발 종료·파킹 0건**(수정 전 2/4)·verify_gate **GATE_PASS 5/5**.
+- **잔여(관찰 항목으로 유지)**: ShareLink의 주기적 피커 재초기화 루프 자체(재렌더 유발 관찰자)는 제품 UI 관찰 항목 — e2e 러너 와치독(0% CPU 120s+ 회수)은 이제 불필요하나 유지 무해.
 
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
 

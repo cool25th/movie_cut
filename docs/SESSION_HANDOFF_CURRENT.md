@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-02 세션 (BUG-ACC-07 완료 — EQ Picker onChange 에코·마스터 미터 침묵)
+
+- **원인 판명(계측 2단계)**: ①미터의 스테일 가드가 재측정 중 무효화되면 값·에러 없이 조용 반환 → 하니스 "measurement nil". ②rev3 무효화의 스택 = **인스펙터 EQ Picker onChange → applyEQPreset 재디스패치 에코** — 커밋 리프레시마다 selectedClipIds didSet → loadSelectedClipProcessingState → selectedEQPreset 재동기화가 프로그램적 EQ 변경을 "사용자 선택"으로 재발화. renderMix ~16s(4s 프로젝트)라 경쟁 창이 커 100% 재현.
+- **수정**: `applyEQPreset` 멱등 가드 — 값동일 설정 재적용은 디스패치 스킵(no-op). 에코는 프로젝트/undo 스택 오염원이기도 해 제품 결함이었음.
+- **검증**: 재현 커맨드 3/3 실측치 반환(lufs=-19.9456 = export post-check -19.95와 일치 — 미터↔실출력 정합)·A/B 재실측 동일(-22.72→-25.87)·Mac 유닛 통과(G-26 신선도 포함)·Core 1,467/218·verify_gate **GATE_PASS 5/5**. XCUI 3건 실패는 MACUI-01 환경(선결함·범위 밖).
+- **잔여**: e2e 전체 재주회 시 M 섹션 통과 예정(수정 후 미주회 — 재현 커맨드로 3/3·A/B 검증으로 갈음). BUG-ACC-08(비종료+ShareKit 루프)은 미해결.
+
+### 다음 회차 — 큐
+① **4단계**: thermal(serious 장편 완주율 측정 선행)·iOS preview source policy·ducking/EQ placed-span ② BUG-ACC-08 조사 ③ CODEX-04·소형 큐·통합 브랜치 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (capcut-surpass 3단계 증분 B 완료 — e2e HDR 프로브·writer 결함 수정·FeatureFlag.hdrMaster 플립)
 
 - **배선**: 하니스 `MOVIECUT_UITEST_EXPORT_PROFILE` env → `exportMaster(to:profile:)`(VM 신규 공용 마스터링 루트 — ProRes/HDR가 같은 메서드로 수렴, 중복 제거) → `exportVideoWithExplicitBitrate(profileOverride:)`.

@@ -506,11 +506,13 @@
 - **부수 발견**: ①BUG-ACC-05의 갭 검출이 **슬롯 교대 트랙의 첫 세그먼트(전환 오버랩)를 갭으로 오판** → 어웨이-앤-백이 디졸브 창 내 오발동·어웨이 프레임 반환(MAD 4.55/8.61) — **전 비디오 트랙 합집합 커버리지 기준으로 수정**(실갑만 검출). ②**normal_delete가 풀스윕 부하에서만 재발**(53.31 — 단독 12연속 통과와 대조): BUG-ACC-05 수정의 어웨이-앤-백이 부하 하에서도 재렌더가 스테일 검정 반환 — 기존 freeze "전체 실행 FAIL vs 단독 PASS"와 동일 부하 민감 클래스.
 - **수정 방향**: 스테일 프레임 공급의 근본(플레이어 비디오 출력의 one-behind 태깅) — BUG-CA12-01 에스컬레이션에 본 증거(격자 정렬 판별기·부하 민감성) 통합 권장. 해결 시 시나리오에 창 내 샘플 재추가.
 
-### BUG-ACC-07 (P2) — run_e2e_export G-25 §8 meter run M "measurement nil" — 등록(2026-09-02, 3-B 증분 e2e 재실측에서 포착·선결함 판정)
+### BUG-ACC-07 (P2) — run_e2e_export G-25 §8 meter run M "measurement nil" — **완료(2026-09-02, 3-B 다음 세션에서 수정)**
 
 - **경위**: capcut-surpass 3-B 증분의 전체 e2e 재실측에서 마지막 섹션(G-25 §8 meter run M: 그래프 마스터 미터 + BGM EQ)만 실패 — `master_meter=0 meter_lufs=silence meter_error=1`·`meter.json = {"eqApplied":true,"error":"measurement nil"}`. **같은 런의 post-check·A/B 런은 전부 PASS**(postcheck_lufs=-19.95 — 실제 오디오 정상) 즉 미터 측정 경로만 침묵.
-- **선결함 판정(소유 실험)**: 3-B 변경을 stash한 빌드에서도 **2/2 동일 재현**(measurement nil) — 이번 증분 무관. 3-B 변경 빌드 4/4 재현. 결정적 재현: 스크립트 M 런 임베드(`open -n -W` + MOVIECUT_UITEST_MASTER_METER/EQ=1).
-- **수정 방향**: 그래프 마스터 미터의 측정치 nil 경로(미터 탭 설치 타이밍·EQ 파생 미디어 반영) 조사 — export에는 영향 없음(계측 전용 경로).
+- **선결함 판정(소유 실험)**: 3-B 변경을 stash한 빌드에서도 **2/2 동일 재현**(measurement nil) — 이번 증분 무관. 3-B 변경 빌드 4/4 재현.
+- **원인 판명(계측)**: ①`measureMasterLoudness`의 스테일 가드(`isStillCurrent`)는 재측정 중 revision/project가 바뀌면 **조용히 반환** — 에러도 값도 없음(하니스는 "measurement nil"로 보고). ②미터 시나리오의 EQ 적용(`SetClipPropertyCommand`) 직후 0.4초 뒤 rev3 무효화 발생 — 스택 계측으로 **UI 인스펙터 EQ Picker의 `.onChange` → `applyEQPreset` 재디스패치 에코** 판명: 모든 커밋 리프레시가 `selectedClipIds.formIntersection` didSet → `loadSelectedClipProcessingState` → `selectedEQPreset`를 클립에서 재동기화 → Picker onChange가 프로그램적 EQ 변경을 "사용자 선택"으로 재적용. `GraphMixRenderer.renderMix`가 ~16s(4s 프로젝트)라 경쟁 창이 커서 100% 재현.
+- **수정**: `applyEQPreset`에 **멱등 가드** — 재적용할 설정이 클립의 현재 equalizer와 값동일하면 디스패치 스킵(동일 EQ 재적용은 no-op이며, 이 에코는 프로젝트/undo 스택도 오염시켜 왔음).
+- **검증**: 재현 커맨드(M 런 임베드) **3/3 실측치 반환** — `lufs=-19.9456`·`samplePeakDbFs=-15.74`·`error="none"`(export post-check -19.95와 일치 — 그래프 미터↔실출력 정합). A/B 런 재실측 동일 수치(-22.72→-25.87, 솔로 Δ-3.14 LU). Mac 유닛 전체 통과(Master audio freshness G-26 스위트 포함)·Core swift test 1,467/218·verify_gate **GATE_PASS 5/5**. XCUI 3건 실패는 MACUI-01 환경 클래스(선결함·게이트 범위 밖).
 
 ### BUG-ACC-08 (P2) — 하니스 앱 간헐 비종료(산출물 완결 후 NSApp.terminate 불이행) + ShareKit 피커 루프 — 등록(2026-09-02, 3-B 증분 e2e 재실측에서 포착)
 

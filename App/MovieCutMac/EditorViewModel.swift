@@ -4999,6 +4999,16 @@ final class EditorViewModel {
             clipEQPresets[clipId] = presetID.rawValue
         }
 
+        // BUG-ACC-07: every committed refresh re-syncs `selectedEQPreset` from
+        // the clip (selectedClipIds didSet → loadSelectedClipProcessingState),
+        // which re-fires the inspector Picker's onChange for PROGRAMMATIC EQ
+        // changes and re-dispatches this method with the identical settings.
+        // Re-applying the same equalizer is a no-op — skipping the dispatch
+        // keeps the echo from dirtying the project/undo stack and from
+        // invalidating in-flight measurements (the master-loudness meter
+        // raced this echo and discarded its result 4/4).
+        if clip.equalizer == settings { return }
+
         await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
     }
 

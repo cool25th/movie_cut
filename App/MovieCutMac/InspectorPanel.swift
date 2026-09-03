@@ -14,6 +14,14 @@ enum InspectorSubtab: String, CaseIterable, Identifiable {
     case mask = "Mask"
 
     var id: Self { self }
+
+    /// Localized tab title. The rawValue doubles as the catalog key; rendering
+    /// `Text(rawValue)` would skip lookup entirely (SwiftUI treats a runtime
+    /// String as verbatim) — the English-only tab exposure the localization
+    /// review flagged.
+    var displayName: String {
+        NSLocalizedString(rawValue, comment: "Inspector subtab title")
+    }
 }
 
 struct InspectorPanel: View {
@@ -118,7 +126,7 @@ struct InspectorPanel: View {
     private func visualClipInspectorSections(for clip: Clip) -> some View {
         Picker("Inspector section", selection: $viewModel.selectedInspectorSubtab) {
             ForEach(InspectorSubtab.allCases) { subtab in
-                Text(subtab.rawValue).tag(subtab)
+                Text(subtab.displayName).tag(subtab)
             }
         }
         .pickerStyle(.segmented)

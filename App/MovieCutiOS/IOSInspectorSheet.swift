@@ -32,7 +32,7 @@ struct IOSInspectorSheet: View {
 
                         Section("Adjust") {
                             sliderRow(
-                                title: "Opacity",
+                                title: NSLocalizedString("Opacity", comment: "Inspector slider title"),
                                 value: Binding(
                                     get: { viewModel.selectedClip?.opacity ?? clip.opacity },
                                     set: { newValue in
@@ -44,7 +44,7 @@ struct IOSInspectorSheet: View {
                             )
 
                             sliderRow(
-                                title: "Volume",
+                                title: NSLocalizedString("Volume", comment: "Inspector slider title"),
                                 value: Binding(
                                     get: { viewModel.selectedClip?.volume ?? clip.volume },
                                     set: { newValue in
@@ -56,7 +56,7 @@ struct IOSInspectorSheet: View {
                             )
 
                             sliderRow(
-                                title: "Speed",
+                                title: NSLocalizedString("Speed", comment: "Inspector slider title"),
                                 value: Binding(
                                     get: { viewModel.selectedClip?.playbackRate ?? clip.playbackRate },
                                     set: { newValue in
@@ -75,7 +75,7 @@ struct IOSInspectorSheet: View {
                         if clip.kind == .video {
                             Section("Color") {
                                 sliderRow(
-                                    title: "Brightness",
+                                    title: NSLocalizedString("Brightness", comment: "Inspector slider title"),
                                     value: Binding(
                                         get: { brightnessSliderValue(for: clip) },
                                         set: { newValue in
@@ -87,7 +87,7 @@ struct IOSInspectorSheet: View {
                                 )
 
                                 sliderRow(
-                                    title: "Contrast",
+                                    title: NSLocalizedString("Contrast", comment: "Inspector slider title"),
                                     value: Binding(
                                         get: { colorCorrection(for: clip).contrast },
                                         set: { newValue in
@@ -99,7 +99,7 @@ struct IOSInspectorSheet: View {
                                 )
 
                                 sliderRow(
-                                    title: "Saturation",
+                                    title: NSLocalizedString("Saturation", comment: "Inspector slider title"),
                                     value: Binding(
                                         get: { colorCorrection(for: clip).saturation },
                                         set: { newValue in

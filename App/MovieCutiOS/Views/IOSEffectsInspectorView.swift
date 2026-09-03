@@ -12,13 +12,20 @@ struct IOSEffectsInspectorView: View {
         case basic = "Basic"
         case effects = "Effects"
         case audio = "Audio"
+
+        /// Localized tab title — `Text(rawValue)` bypasses catalog lookup
+        /// (runtime String renders verbatim), the bug the localization
+        /// review flagged.
+        var displayName: String {
+            NSLocalizedString(rawValue, comment: "Inspector tab title")
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Picker("Section", selection: $selectedTab) {
                 ForEach(InspectorTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Text(tab.displayName).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
@@ -158,8 +165,8 @@ struct IOSEffectsInspectorView: View {
 
     // MARK: - Effects Section
 
-    private var opacityTitle: String { "Opacity" }
-    private var speedTitle: String { "Speed" }
+    private var opacityTitle: String { NSLocalizedString("Opacity", comment: "Inspector slider title") }
+    private var speedTitle: String { NSLocalizedString("Speed", comment: "Inspector slider title") }
 
     private var effectsSection: some View {
         VStack(alignment: .leading, spacing: 16) {

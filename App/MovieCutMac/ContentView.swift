@@ -393,11 +393,23 @@ struct ContentView: View {
     /// name and the autosave's last-write time. A bare "found a project"
     /// left the user unable to tell which work they were recovering.
     static func recoveryAlertDetail(projectName: String, autosaveDate: Date?) -> String {
-        var detail = "MovieCut found a project from a session that didn't close normally."
+        var detail = NSLocalizedString(
+            "MovieCut found a project from a session that didn't close normally.",
+            comment: "Recovery alert body"
+        )
         let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
-        detail += "\n\nProject: \(trimmed.isEmpty ? "Untitled" : trimmed)"
+        let displayName = trimmed.isEmpty
+            ? NSLocalizedString("Untitled", comment: "Fallback project name")
+            : trimmed
+        detail += "\n\n" + String(
+            format: NSLocalizedString("Project: %@", comment: "Recovery alert project line"),
+            displayName
+        )
         if let autosaveDate {
-            detail += "\nLast autosave: \(autosaveDate.formatted(date: .abbreviated, time: .shortened))"
+            detail += "\n" + String(
+                format: NSLocalizedString("Last autosave: %@", comment: "Recovery alert last-write line"),
+                autosaveDate.formatted(date: .abbreviated, time: .shortened)
+            )
         }
         return detail
     }
@@ -444,13 +456,13 @@ struct ContentView: View {
         guard let recovered else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Recover unsaved work?"
+        alert.messageText = NSLocalizedString("Recover unsaved work?", comment: "Recovery alert title")
         alert.informativeText = Self.recoveryAlertDetail(
             projectName: recovered.name,
             autosaveDate: await viewModel.recoverableAutosaveDate()
         )
-        alert.addButton(withTitle: "Recover")
-        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: NSLocalizedString("Recover", comment: "Recovery alert accept button"))
+        alert.addButton(withTitle: NSLocalizedString("Discard", comment: "Recovery alert decline button"))
         if alert.runModal() == .alertFirstButtonReturn {
             await viewModel.adoptRecoveredProject(recovered)
         } else {

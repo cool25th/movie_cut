@@ -12,7 +12,11 @@ final class IOSExportEngine {
     var lastExportURL: URL?
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
-    @ObservationIgnored private var activeOutputURL: URL?
+    // Internal for the cancel E2E test: the writer path stages its output
+    // here (makeOutputURL) and the cancel contract must be assertable on
+    // the REAL file's absence — private→internal widens visibility within
+    // the same target only (A-class, boundary-separation precedent).
+    @ObservationIgnored var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     // RENDER-02: the tagged-writer export's live reader/writer (cancellation).
     @ObservationIgnored private var activeReaders: [AVAssetReader] = []
@@ -264,27 +268,49 @@ final class IOSExportEngine {
             // (measured 2026-08-26 on simulator: video-pump completion never
             // fired while an audio input existed; no-audio and muted exports
             // were clean; concurrent pumping completes both in seconds).
+            let writerBox = SendableBox(value: writer)
+            // Captured BEFORE the group: the catch paths run on nonisolated
+            // pump tasks and must not touch MainActor state (Mac parity).
+            let readersBox = SendableBox(value: activeReaders)
             try await withThrowingTaskGroup(of: Void.self) { group in
                 if let writerVideoInput, let videoReaderOutput {
                     let videoOutput = SendableBox(value: videoReaderOutput as AVAssetReaderOutput)
                     let videoInput = SendableBox(value: writerVideoInput)
                     group.addTask {
-                        try await self.pumpSamples(
-                            output: videoOutput,
-                            input: videoInput,
-                            totalDuration: totalDuration
-                        )
+                        do {
+                            try await self.pumpSamples(
+                                output: videoOutput,
+                                input: videoInput,
+                                writer: writerBox,
+                                totalDuration: totalDuration
+                            )
+                        } catch {
+                            for reader in readersBox.value {
+                                reader.cancelReading()
+                            }
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
                     }
                 }
                 if let writerAudioInput, let audioReaderOutput {
                     let audioOutputBox = SendableBox(value: audioReaderOutput as AVAssetReaderOutput)
                     let audioInputBox = SendableBox(value: writerAudioInput)
                     group.addTask {
-                        try await self.pumpSamples(
-                            output: audioOutputBox,
-                            input: audioInputBox,
-                            totalDuration: nil
-                        )
+                        do {
+                            try await self.pumpSamples(
+                                output: audioOutputBox,
+                                input: audioInputBox,
+                                writer: writerBox,
+                                totalDuration: nil
+                            )
+                        } catch {
+                            for reader in readersBox.value {
+                                reader.cancelReading()
+                            }
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
                     }
                 }
             }
@@ -293,6 +319,23 @@ final class IOSExportEngine {
                 throw reader.error ?? IOSExportEngineError.exportSessionCreationFailed
             }
 
+            // BUG-ACC-09 (STAB-02 cancel E2E twin): finishWriting on a
+            // cancelled/failed writer is ILLEGAL — AVFoundation raises
+            // NSInternalInconsistencyException ("Cannot call method when
+            // status is 4"), killing the process instead of failing the
+            // export (measured on Mac 2026-09-03: a cancel whose reader
+            // teardown re-invoked the pumps' handlers completed the group
+            // NORMALLY, fell through to finishWriting, and crashed). The
+            // status switch below can never see these states because the
+            // call itself traps first — check BEFORE finishing.
+            switch writer.status {
+            case .cancelled:
+                throw CancellationError()
+            case .failed:
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            default:
+                break
+            }
             await Self.finishWriting(SendableBox(value: writer))
             switch writer.status {
             case .completed:
@@ -321,20 +364,33 @@ final class IOSExportEngine {
     /// Streams sample buffers from a reader output into a writer input,
     /// driving the writer's pull model (Mac ExportEngine.pumpSamples parity).
     /// `totalDuration` non-nil → progress reports by presentation time.
+    ///
+    /// - Parameter writer: the session's writer, for the cancellation poller.
+    /// BUG-ACC-09 (the Mac STAB-02 cancel E2E twin): after `cancelExport()`
+    /// cancels the writer, `requestMediaDataWhenReady` NEVER fires again —
+    /// the handler paths below can't run and the pump leaks its
+    /// continuation, parking the export forever instead of failing cleanly
+    /// (measured on Mac: 93s watchdog kill, CONTINUATION MISUSE logs). The
+    /// poller watches the writer's cancelled/failed status and tears the
+    /// continuation down; the once-box guarantees the handler and the
+    /// poller can't double-resume.
     private nonisolated func pumpSamples(
         output: SendableBox<AVAssetReaderOutput>,
         input: SendableBox<AVAssetWriterInput>,
+        writer: SendableBox<AVAssetWriter>,
         totalDuration: Double?
     ) async throws {
         let queue = DispatchQueue(label: "moviecut.ios.export.writer")
+        let once = PumpContinuationOnce()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            once.set(continuation)
             input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
                 let writerInput = input.value
                 let readerOutput = output.value
                 while writerInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
                         writerInput.markAsFinished()
-                        continuation.resume(returning: ())
+                        once.resumeReturning()
                         return
                     }
 
@@ -349,11 +405,58 @@ final class IOSExportEngine {
                     }
 
                     if !writerInput.append(sampleBuffer) {
-                        continuation.resume(throwing: IOSExportEngineError.exportSessionCreationFailed)
+                        once.resumeThrowing(IOSExportEngineError.exportSessionCreationFailed)
                         return
                     }
                 }
             }
+            Task.detached { [once, writer] in
+                while once.isLive {
+                    let status = writer.value.status
+                    if status == .cancelled || status == .failed {
+                        once.resumeThrowing(CancellationError())
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                }
+            }
+        }
+    }
+
+    /// A once-only resume guard for a pump continuation: the media-data
+    /// handler and the cancellation poller can BOTH attempt to resume, and
+    /// exactly one must win (a leaked or double resume is a runtime trap).
+    /// Mac ExportEngine.PumpContinuationOnce parity.
+    private final class PumpContinuationOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+
+        func set(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.continuation = continuation
+        }
+
+        var isLive: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return continuation != nil
+        }
+
+        func resumeReturning() {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(returning: ())
+        }
+
+        func resumeThrowing(_ error: Error) {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(throwing: error)
         }
     }
 

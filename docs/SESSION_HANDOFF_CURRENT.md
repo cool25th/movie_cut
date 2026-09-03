@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-03 세션 (STAB-02 취소 E2E 완결 — 제품 결함 2건 적발·수리: 펌프 continuation 누수 파킹·취소 writer finishWriting 크래시)
+
+- **증분**: STAB-02 잔여 취소 E2E — 하니스 취소 노브(`MOVIECUT_UITEST_EXPORT_CANCEL_MS`·반복 발사) + `scripts/run_e2e_cancel.sh`(sanity+cancel 두 다리·정직 3조건 판정: UITEST_DONE+error≠none+부분출력 부재) + `ExportCancelMidFlightTests`(유닛 2종 — 취소 실패 단언·부분 삭제·엔진 리셋).
+- **적발·수리한 제품 결함**: ① 취소된 writer는 `requestMediaDataWhenReady` 핸들러를 영구 재호출하지 않음 → 양 펌프 continuation 누수 → 익스포트 **영구 파킹**(93s 와치독 킬·CONTINUATION MISUSE 로그 실측. 1차의 "취소된 리더 copyNext→nil로 재개" 믿음은 취소 케이스에 거짓) → 펌프에 writer 상태 취소 폴러+`PumpContinuationOnce` once-guard 추가 ② 취소된 writer에 `finishWriting` → `NSInternalInconsistencyException`(status 4) **프로세스 사망**(reader 해체 경쟁으로 그룹이 정상 복귀하는 경로) → finishWriting 전 cancelled/failed 선검사.
+- **게이트 도구 결함(수리)**: 구 판정은 "목적지 파일 부재" 단독 — 파킹 앱도 와치독 킬 후 파일 부재로 **가짜 PASS**(실측). 3조건+실패 시 증거 보존으로 교체. `set -e` 무음 사망 1건(`CANCEL_STATUS=$(tail)` — `|| true`).
+- **유닛테스트 함정 판명**: mediaLibrary 딕셔너리 키≠asset.id(구조체 필드·init 기본 무작위 UUID)면 그래프가 `assetMissing(<무작위>)`로 사망 — **키=asset.id는 임포트 파이프라인 불변식**(직접 Project 구성 테스트는 `MediaAsset(id:)` 명시 전달 필수).
+- **검증**: 취소 E2E 게이트 **3/3 PASS**·유닛 스위트 2/2×3회·Mac 유닛 **54/54**(UITests 러너 연결 전 행업 1건 — MACUI-01 계열 환경 판정·유닛 무관)·W 스모크 **5/5(29/29)**·verify_gate **GATE_PASS 5/5**.
+- **스카웃(자기 리뷰 ①)**: iOS `IOSExportEngine` 펌프가 동일 continuation 패턴 + `cancelExport`가 `cancelWriting` 도달 → **BUG-ACC-09 등록(§1.15)** — 다음 소형 증분 최우선 후보.
+- **경합 기록**: 병렬 세션 fb55b0f가 내 취소 노브가 섞인 UITestHarness.swift를 정리 커밋(반복 발사 버전 포함 확인) — ExportEngine·테스트·게이트 스크립트는 이번 커밋으로 분리 완료.
+
+### 다음 회차 — 큐
+① **BUG-ACC-09(iOS 취소 파킹 — 소형·STAB-02 파생)** ② thermal 측정(환경 대기)·CODEX-04(실기기 대기) ③ 통합 브랜치 병합 결정(사용자)·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-03 세션 (전체 코드리뷰 후속 — P2 EQ 캐시·P3 quit 통일/thermal 가드·P4 리네임 + e2e 첫 클린 패스)
 
 - **P2**: iOS `eqDerivations` 캐시(Mac equalizedPreviewAudio 패리티·설정+입력URL 키) — 프리뷰 재구축마다 긴 소스 EQ PCM을 재렌더하던 성능 결함 수습. 캐시 재사용/evict 테스트 추가(iOS 81/19).

@@ -11,8 +11,17 @@ import Testing
 /// drives a REAL ProRes export of a committed fixture, cancels it
 /// mid-flight, and measures the contract: the export fails (not
 /// half-succeeds), the partial file is deleted, and the engine resets.
+/// CI gate: GitHub's macOS runners have no functional audio HAL — the first
+/// CI exposure of this suite (PR #24, 2026-09-04) crashed the test host
+/// mid-export (AudioFileObject open failures → AudioQueue start error −4 →
+/// "Restarting after unexpected exit"); the retry passes, but the launch
+/// crash still fails the step. Live coverage stays on local/loop runs where
+/// the audio stack works.
 @MainActor
-@Suite("Export cancel mid-flight (STAB-02 E2E)")
+@Suite(
+    "Export cancel mid-flight (STAB-02 E2E)",
+    .enabled(if: ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != "1")
+)
 struct ExportCancelMidFlightTests {
     private static let fixtureURL: URL = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // MovieCutMacTests

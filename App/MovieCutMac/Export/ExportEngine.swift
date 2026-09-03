@@ -1607,6 +1607,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             try await self.pumpSamples(
                                 output: output,
                                 input: input,
+                                writer: writerBox,
                                 queueLabel: "moviecut.export.writer.video",
                                 totalDuration: totalDuration,
                                 reportsProgress: true
@@ -1627,6 +1628,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                             try await self.pumpSamples(
                                 output: output,
                                 input: input,
+                                writer: writerBox,
                                 queueLabel: "moviecut.export.writer.audio",
                                 totalDuration: totalDuration,
                                 reportsProgress: false
@@ -1648,6 +1650,22 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
+            // STAB-02 cancel E2E: finishWriting on a cancelled/failed writer
+            // is ILLEGAL — AVFoundation raises NSInternalInconsistencyException
+            // ("Cannot call method when status is 4"), killing the process
+            // instead of failing the export (measured 2026-09-03: a cancel
+            // whose reader teardown re-invoked the pumps' handlers completed
+            // the group NORMALLY, fell through to finishWriting, and crashed).
+            // The status switch below can never see these states because the
+            // call itself traps first — check BEFORE finishing.
+            switch writer.status {
+            case .cancelled:
+                throw CancellationError()
+            case .failed:
+                throw writer.error ?? ExportEngineError.exportSessionCreationFailed
+            default:
+                break
+            }
             await finishWriting(UncheckedSendable(writer))
             switch writer.status {
             case .completed:
@@ -1686,22 +1704,36 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// pump owns them for the duration of the transfer and serializes all access
     /// through the writer's request queue, so they are passed in `@unchecked
     /// Sendable` boxes.
+    ///
+    /// - Parameter writer: the session's writer, for the cancellation poller.
+    /// STAB-02 cancel E2E measured that after `cancelExport()` cancels the
+    /// writer, `requestMediaDataWhenReady` NEVER fires again — the handler
+    /// paths below can't run and both pumps leak their continuations, parking
+    /// the export forever instead of failing cleanly (the "cancelled reader's
+    /// copyNextSampleBuffer → nil" teardown only works if the handler is
+    /// invoked once more, which a cancelled writer input never does). The
+    /// poller watches the writer's cancelled/failed status and tears the
+    /// continuation down; the once-box guarantees the handler and the poller
+    /// can't double-resume.
     private nonisolated func pumpSamples(
         output: UncheckedSendable<AVAssetReaderOutput>,
         input: UncheckedSendable<AVAssetWriterInput>,
+        writer: UncheckedSendable<AVAssetWriter>,
         queueLabel: String,
         totalDuration: Double,
         reportsProgress: Bool
     ) async throws {
         let queue = DispatchQueue(label: queueLabel)
+        let once = PumpContinuationOnce()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            once.set(continuation)
             input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
                 let writerInput = input.value
                 let readerOutput = output.value
                 while writerInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
                         writerInput.markAsFinished()
-                        continuation.resume(returning: ())
+                        once.resumeReturning()
                         return
                     }
 
@@ -1716,11 +1748,57 @@ final class ExportEngine: FlattenedTimelineConsumer {
                     }
 
                     if !writerInput.append(sampleBuffer) {
-                        continuation.resume(throwing: ExportEngineError.exportSessionCreationFailed)
+                        once.resumeThrowing(ExportEngineError.exportSessionCreationFailed)
                         return
                     }
                 }
             }
+            Task.detached { [once, writer] in
+                while once.isLive {
+                    let status = writer.value.status
+                    if status == .cancelled || status == .failed {
+                        once.resumeThrowing(CancellationError())
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                }
+            }
+        }
+    }
+
+    /// A once-only resume guard for a pump continuation: the media-data
+    /// handler and the cancellation poller can BOTH attempt to resume, and
+    /// exactly one must win (a leaked or double resume is a runtime trap).
+    private final class PumpContinuationOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+
+        func set(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.continuation = continuation
+        }
+
+        var isLive: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return continuation != nil
+        }
+
+        func resumeReturning() {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(returning: ())
+        }
+
+        func resumeThrowing(_ error: Error) {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(throwing: error)
         }
     }
 

@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-03 세션 (BUG-ACC-09 완결 — iOS 취소 파킹·크래시 Mac 패턴 포팅)
+
+- **증분**: iOS `IOSExportEngine`에 Mac STAB-02 수리 3종 포팅 — ① 펌프(writer 파라미터 추가)+취소/실패 폴러(20ms)+`PumpContinuationOnce` once-guard ② 그룹 펌프 catch 형제 해체(readersBox 사전 캡처 — MainActor 비격리 접근 회피·Mac 패리티) ③ finishWriting 전 cancelled/failed 선검사. 부수: `activeOutputURL` internal 승격(취소 E2E 단언용·동일 타깯 확대).
+- **신규 `IOSExportCancelMidFlightTests`** 2종: 취소 다리(반복 발사 — 단발은 렌더플랜 단계 no-op, Mac 실측과 동일)가 실패·부분 삭제·엔진 리셋을 단언, sanity 다리(2s 완주). 픽스처 `solid_red_tone_320x240`(내장 오디오 — 양 펌프).
+- **검증**: iOS 전체 **83테스트/20스위트 PASS**·포커스 4회 2/2·verify_gate **GATE_PASS 5/5**·pbxproj 등록 4/4(무경합 창 확인 후).
+- **스카웃: 신규 후보 없음**(BUG-ACC-09 자체가 직전 회차 스카웃 발견·이번 완결). 자기 리뷰: requestMediaDataWhenRecovered 계열 전수(Mac 2+iOS 1) 소진 — 쌍둥이 없음.
+- **관찰 1줄**: iOS 포커스 재실행 1회에서 "1 test"로 집계된 적 있음(상세 실행 로그로 2/2 정상 확인 — xcresult 집계 노이즈 의심, 판정 무영향).
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰·thermal 측정(환경 대기) ② 통합 브랜치 병합 결정(사용자)·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-03 세션 (STAB-02 취소 E2E 완결 — 제품 결함 2건 적발·수리: 펌프 continuation 누수 파킹·취소 writer finishWriting 크래시)
 
 - **증분**: STAB-02 잔여 취소 E2E — 하니스 취소 노브(`MOVIECUT_UITEST_EXPORT_CANCEL_MS`·반복 발사) + `scripts/run_e2e_cancel.sh`(sanity+cancel 두 다리·정직 3조건 판정: UITEST_DONE+error≠none+부분출력 부재) + `ExportCancelMidFlightTests`(유닛 2종 — 취소 실패 단언·부분 삭제·엔진 리셋).

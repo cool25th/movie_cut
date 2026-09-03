@@ -523,12 +523,13 @@
 - **검증**: 재현 루프 재실측 **50/50 자발 종료·파킹 0건**(수정 전 2/4)·verify_gate **GATE_PASS 5/5**.
 - **잔여(관찰 항목으로 유지)**: ShareLink의 주기적 피커 재초기화 루프 자체(재렌더 유발 관찰자)는 제품 UI 관찰 항목 — e2e 러너 와치독(0% CPU 120s+ 회수)은 이제 불필요하나 유지 무해.
 
-### BUG-ACC-09 (P1) — iOS 익스포트 취소 = 펌프 continuation 누수 파킹(Mac STAB-02 2차와 동일 메커니즘·미실측) — 2026-09-03 등록
+### BUG-ACC-09 (P1) — iOS 익스포트 취소 = 펌프 continuation 누수 파킹(Mac STAB-02 2차와 동일 메커니즘) — **수정 완료(2026-09-03 심야)**
 
 - **근거**: Mac STAB-02 취소 E2E(2026-09-03)가 실측한 결함 — `cancelWriting()` 후 `requestMediaDataWhenReady` 핸들러가 **영구 재호출되지 않아** continuation 누수→익스포트 영구 파킹(93s 와치독 킬·"SWIFT TASK CONTINUATION MISUSE" 로그). Mac은 펌프에 writer 상태 취소 폴러+`PumpContinuationOnce` once-guard로 수리 완료.
 - **iOS 동일 패턴 확인(코드 대조)**: `IOSExportEngine` 펌프(:330 `withCheckedThrowingContinuation` + 핸들러 내 resume만 존재·폴러 없음) + `cancelExport()`(:384 `activeWriter?.cancelWriting()` 호출 — 취소가 펌프에 도달함). 동일 메커니즘으로 취소 시 파킹 예상. **writer `.failed` 시에도 핸들러가 멈추므로 실패 경로 파킹 가능성도 공유** — Mac의 finishWriting 전 cancelled/failed 선검사(NSInternalInconsistencyException 방지)도 iOS 적용 검토 필요.
 - **수정 방향(소형 증분)**: Mac `PumpContinuationOnce` 패턴 포팅(폴러+once-guard+finishWriting 선검사) + iOS 하니스/유닛에서 취소 E2E 실측(Mac `run_e2e_cancel.sh`·`ExportCancelMidFlightTests` 3조건 판정 패턴 재사용 — 파일부재 단독 판정은 파킹 앱이 가짜 PASS).
 - **우선순위 근거**: P0 파생(STAB-02) + 사용자 취소 조작이 앱 무응답으로 귀결되는 제품 결함 클래스.
+- **수정(2026-09-03 심야, 등록 직후 회차)**: Mac `PumpContinuationOnce` 패턴 iOS 포팅 3종 — ① 펌프에 `writer:` 파라미터 추가 + 취소/실패 상태 폴러(20ms)+once-guard 박스(핸들러·폴러 이중 resume 방지) ② 그룹 펌프 catch에 형제 해체(리더 cancelReading + writer cancelWriting — Mac 패리티, `readersBox` 사전 캡처로 MainActor 비격리 접근 회피) ③ finishWriting 전 cancelled/failed 선검사(취소된 writer 전달 = NSInternalInconsistencyException 프로세스 사망 방지). 부수: `activeOutputURL` private→internal 승격(동일 타깯 가시성 확대만 — 취소 E2E의 산출물 부재 단언용). 검증: **신규 `IOSExportCancelMidFlightTests` 2종(취소 실패·부분 삭제·엔진 리셋 / 무취소 sanity 2s 완주) + iOS 전체 83테스트/20스위트 PASS + 포커스 4회 2/2 + verify_gate 5/5.** 취소 E2E는 반복 발사 패턴(단발은 렌더플랜 단계 no-op — Mac 실측과 동일).
 
 ### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
 

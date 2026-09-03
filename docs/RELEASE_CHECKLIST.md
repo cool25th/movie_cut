@@ -9,7 +9,7 @@
 ## 0. 전제 (이미 완료됨)
 
 - [x] Mac App Store 단독 배포 결정 (공증/Developer-ID 불필요)
-- [x] `scripts/release.sh` — verify_gate(4단계) → archive(Release, 서명) → export(app-store-connect) → 선택 업로드, 자격증명 없으면 **fail-loud**
+- [x] `scripts/release.sh` — verify_gate(5단계) → archive(Release, 서명) → export(app-store-connect) → 선택 업로드, 자격증명 없으면 **fail-loud**
 - [x] `.github/workflows/release.yml` — 수동 트리거(Actions → Release → Run workflow)
 
 ## 1. Apple Developer 자격 확보 (사용자)
@@ -34,7 +34,7 @@
 MOVIECUT_TEAM_ID=XXXXXXXXXX bash scripts/release.sh
 ```
 
-- [ ] verify_gate 4단계(build/1177테스트/Mac/iOS) 통과 후 archive → export까지 `S5 RELEASE PIPELINE OK` 출력 확인
+- [ ] verify_gate 5단계(swift build·swift test 전체·Mac 빌드·iOS 빌드·lint) 통과 후 archive → export까지 `S5 RELEASE PIPELINE OK` 출력 확인
 - 실패 시: `.build-check/last_gate.log` (게이트) 또는 `build/release/` 로그 — 서명 오류면 Xcode 계정(§1)부터 재확인
 - 생성물: `build/release/export/MovieCutMac.app`
 
@@ -60,12 +60,12 @@ bash scripts/release.sh
 
 - [ ] App Store Connect → TestFlight → 빌드 선택 → 그룹 생성(내부 테스터 10~20명)
 - [ ] 테스터에게 `docs/BETA_GUIDE.md` 전달 (6단계 과제 + 정성 메트릭 시트)
-- [ ] 베타 전 사전 점검: `bash scripts/run_beta_scenarios.sh` PASS 확인 (호스트에서 1회)
+- [x] 베타 전 사전 점검: `bash scripts/run_beta_scenarios.sh` PASS 확인 (호스트에서 1회) — **실행 완료(2026-09-04 루프, 2회 연속 4/4 PASS)**: ①임포트→첫 컷→출력(dur=3.000s·1920x1080) ②색 보정→출력 ③9:16 세로 출력(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). 각 단계 wall-clock 3.2~4.1s·ffprobe 검증. 루트 커밋 시점 HEAD에서 측정.
 - [ ] 회수 기한 1주 후 메트릭 취합 → 출시/차기 우선순위 판단 (가이드 §5 기준)
 
 ## 6. 심사 제출 (사용자)
 
-- [ ] App Store 정보: 스크린샷(1920×1080 이상), 설명, 키워드, 지원 URL, 개인정보 처리방침 URL
+- [ ] App Store 정보: 스크린샷 — **macOS는 16:10 비율 4종 규격만 허용(1280×800 · 1440×900 · 2560×1600 · 2880×1800, 1~10장). 1920×1080(16:9)은 업로드 거부됨 — 2026-09-03 정정, 구문 "1920×1080 이상"은 오류였음** —, 설명, 키워드, 지원 URL, 개인정보 처리방침 URL
 - [ ] 개인정보 응답: 데이터 수집 없음 (온디바이스 전 처리 — `PrivacyInfo.xcprivacy`와 일치)
 - [ ] 연령 등급 설문 (영상 편집 — 통상 4+)
 - [ ] 제출 → 심사 대기 (통상 1~3일)

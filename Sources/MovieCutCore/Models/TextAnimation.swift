@@ -272,13 +272,13 @@ public struct TextAnimation: Codable, Sendable, Equatable {
         let clipDuration = clipDuration.isFinite && clipDuration > 0 ? clipDuration : .infinity
         let animationDuration = max(duration, 1.0e-6)
         let delay = max(delay, 0)
-        let enterProgress = clamp((localTime - delay) / animationDuration)
+        let enterProgress = ((localTime - delay) / animationDuration).clamped(to: 0...1, fallback: 0)
         let exitStart = clipDuration.isFinite
             ? max(0, clipDuration - animationDuration)
             : delay
-        let exitProgress = clamp((localTime - exitStart) / animationDuration)
+        let exitProgress = ((localTime - exitStart) / animationDuration).clamped(to: 0...1, fallback: 0)
         let lifetimeProgress = clipDuration.isFinite
-            ? clamp(localTime / max(clipDuration, 1.0e-6))
+            ? (localTime / max(clipDuration, 1.0e-6)).clamped(to: 0...1, fallback: 0)
             : enterProgress
 
         var state = TextAnimationRenderState(visibleText: text)
@@ -292,7 +292,7 @@ public struct TextAnimation: Codable, Sendable, Equatable {
             state.rotationDegrees += sin(wavePhase) * 3
         }
 
-        state.opacity = clamp(state.opacity)
+        state.opacity = state.opacity.clamped(to: 0...1, fallback: 0)
         state.scale = max(state.scale, 0.001)
         return state
     }
@@ -405,7 +405,7 @@ public struct TextAnimation: Codable, Sendable, Equatable {
     }
 
     private func popScale(_ progress: Double) -> Double {
-        let progress = clamp(progress)
+        let progress = progress.clamped(to: 0...1, fallback: 0)
         if progress < 0.72 {
             let phaseProgress = progress / 0.72
             return 0.45 + easeOutCubic(phaseProgress) * 0.72
@@ -415,22 +415,18 @@ public struct TextAnimation: Codable, Sendable, Equatable {
         return 1.17 - easeOutCubic(settleProgress) * 0.17
     }
 
-    private func clamp(_ value: Double) -> Double {
-        min(max(value.isFinite ? value : 0, 0), 1)
-    }
-
     private func easeOutCubic(_ progress: Double) -> Double {
-        let p = clamp(progress)
+        let p = progress.clamped(to: 0...1, fallback: 0)
         return 1 - pow(1 - p, 3)
     }
 
     private func easeInCubic(_ progress: Double) -> Double {
-        let p = clamp(progress)
+        let p = progress.clamped(to: 0...1, fallback: 0)
         return p * p * p
     }
 
     private func easeOutBack(_ progress: Double) -> Double {
-        let p = clamp(progress)
+        let p = progress.clamped(to: 0...1, fallback: 0)
         let c1 = 1.70158
         let c3 = c1 + 1
         return 1 + c3 * pow(p - 1, 3) + c1 * pow(p - 1, 2)

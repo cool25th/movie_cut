@@ -3,13 +3,13 @@ import Foundation
 import Testing
 @testable import MovieCutCore
 
-/// Behavioral tests for the v1 HDR feature gate and SDR output tagging.
+/// Behavioral tests for the HDR feature gate and SDR output tagging.
 ///
 /// These are NOT static-contract tests — they exercise the real `ExportPlanner`
 /// and inspect the resolved plan and the `AVAssetWriter` output settings. They
-/// pin the two render-reliability guarantees for v1:
-///   1. HDR export cannot produce a mislabeled file when `FeatureFlag.hdrMaster`
-///      is off (the 8-bit SDR pipeline would tag 8-bit pixels as HDR).
+/// pin the render-reliability guarantees:
+///   1. The HDR flag is ON only because the stage-3 e2e probe verified a real
+///      10-bit Rec.2020/HLG master; delivery planning stays SDR-only.
 ///   2. SDR exports are explicitly tagged Rec.709, so players don't guess the
 ///      color space (previously outputs were untagged — a preview↔export and
 ///      cross-player drift source).
@@ -23,28 +23,18 @@ struct HDRProfileGatingTests {
 
     // MARK: - HDR gate
 
-    @Test("HDR profile is downgraded to SDR when the flag is off (v1)")
-    func hdrProfileIsDowngradedWhenFlagOff() {
-        // The v1 default: flag off. If this assertion fails because the flag
-        // was flipped on, the rest of v1's 8-bit SDR pipeline must be updated
-        // first (10-bit compositor + HDR preview).
-        #expect(FeatureFlag.hdrMaster == false,
-                "This v1 test assumes the HDR flag is off; re-evaluate the gate before flipping it.")
-
-        let settings = makeVideoSettings()
-        let canvas = CanvasPreset(aspectRatio: .landscape16x9)
-        let plan = planner.plan(
-            settings: settings,
-            canvas: canvas,
-            options: ExportPlanOptions(videoProfileOverride: .hevcHDR)
-        )
-
-        guard let video = plan.video else {
-            Issue.record("video plan was nil"); return
-        }
-        // The HDR override must NOT survive planning under the v1 gate.
-        #expect(!video.profile.isHDR,
-                "HDR profile survived planning with FeatureFlag.hdrMaster off: \(video.profile). The 8-bit SDR pipeline would mislabel the output.")
+    @Test("HDR flag is ON after the stage-3 e2e verification; explicit overrides remain the mastering route")
+    func hdrFlagFlippedAfterE2EVerification() {
+        // Flipped in capcut-surpass stage-3 increment B (2026-09-02) after the
+        // e2e probe verified a REAL 10-bit Rec.2020/HLG master end to end
+        // (run_e2e_export.sh: Main 10 / yuv420p10le / bt2020 / arib-std-b67 /
+        // bt2020nc, SDR regression 8-bit bt709 intact). The persisted delivery
+        // path stays SDR (ExportCodec has no HDR member), so the UI HDR Master
+        // entry — the only consumer of this flag — exposes the verified
+        // mastering output. If this assertion fails because the flag went back
+        // OFF, re-check what regressed; do not flip it back without evidence.
+        #expect(FeatureFlag.hdrMaster == true,
+                "The HDR gate was flipped ON after the stage-3 e2e verification; an OFF value needs a regression reason.")
     }
 
     // MARK: - SDR color tagging

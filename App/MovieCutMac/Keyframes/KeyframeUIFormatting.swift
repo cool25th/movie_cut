@@ -18,6 +18,18 @@ extension AnimatableProperty {
             return .green
         }
     }
+
+    /// Whether the rendered value is clamped to a fixed range. Overshoot bezier
+    /// presets are only meaningful on unclamped properties — opacity/volume
+    /// clip to [0,1] at the compositor, so an overshoot curve is misleading.
+    var isValueClamped: Bool {
+        switch self {
+        case .opacity, .volume:
+            return true
+        case .positionX, .positionY, .scaleX, .scaleY, .rotation:
+            return false
+        }
+    }
 }
 
 extension InterpolationMode {

@@ -65,6 +65,16 @@ run_export() { # $1 = run index → writes $WORK/run$1.{mp4,rss,wall} + result
   local pid=$!
   ( sleep "$WATCHDOG_S"; kill "$pid" 2>/dev/null; pkill -f "MovieCutMac.app/Contents/MacOS/MovieCutMac" 2>/dev/null; true ) &
   local wd=$!
+  # STAB-01: record the watchdog subshell's inner sleep PID while the
+  # subshell is alive — after `kill $wd` the sleep re-parents to launchd and
+  # `pkill -P` sees nothing (worst case left a ${WATCHDOG_S}s orphan per
+  # run). Canonical held-PID reaping per the stabilization plan.
+  local wd_sleep=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    wd_sleep="$(pgrep -P "$wd" -x sleep 2>/dev/null | head -1 || true)"
+    if [ -n "$wd_sleep" ]; then break; fi
+    sleep 0.05
+  done
   local maxrss=0 rss
   while kill -0 "$pid" 2>/dev/null; do
     rss="$(ps -o rss= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
@@ -73,8 +83,15 @@ run_export() { # $1 = run index → writes $WORK/run$1.{mp4,rss,wall} + result
   done
   wait "$pid" 2>/dev/null || true
   kill "$wd" 2>/dev/null || true
-  pkill -P "$wd" 2>/dev/null || true
+  if [ -n "$wd_sleep" ]; then
+    kill "$wd_sleep" 2>/dev/null || true
+  fi
   wait "$wd" 2>/dev/null || true
+  # STAB-01 evidence: the recorded sleep must be gone after reaping.
+  if [ -n "$wd_sleep" ] && kill -0 "$wd_sleep" 2>/dev/null; then
+    echo "[soak] run $idx FAIL: watchdog sleep orphaned (pid $wd_sleep)"
+    return 1
+  fi
   local end
   end=$(python3 -c 'import time; print(time.time())')
 

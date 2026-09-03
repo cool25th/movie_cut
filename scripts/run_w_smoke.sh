@@ -1,16 +1,22 @@
 #!/bin/bash
-# W representative-job scenarios (development direction §1, plan §4's
-# "대표 작업 성공률 90%+" measurement window) — each W is a real user job
-# driven through the app's shipped feature paths by the in-app harness
-# (MOVIECUT_UITEST_W_SCENARIO), finishing with its own export. This script
-# runs W1-W5, reports per-step success + durations, and gates on:
-#   - overall step success rate >= 90%
-#   - every scenario produced a non-empty export
+# W SMOKE scenarios (STAB-04 renamed from run_w_scenarios.sh) — fast
+# regression coverage of the five W workflows through the app's shipped
+# feature paths (in-app harness MOVIECUT_UITEST_W_SCENARIO), using the
+# small 2-4 s synthetic fixtures. Gates on workflow success (all required
+# steps + export) >= 90%.
+#
+# This is NOT the representative-job acceptance gate: the fixtures here are
+# deliberately tiny, W1's STT step passes headless without transcribing
+# (user-TCC-gated), and ducking uses deterministic planner-style ranges.
+# Representative-length jobs (60 s talking head with real speech and STT
+# actually running, 5-minute multitrack ProRes master, real ducking
+# analysis) are measured by scripts/run_w_acceptance.sh — the W workflow
+# success-rate gate counts only acceptance results.
 #
 # W4 runs its Phase-1 variant: grading + audio mix + ProRes (the direction
 # doc's adjustment layer is G-03, explicitly Phase-2 — reported as a delta).
 #
-# Usage: bash scripts/run_w_scenarios.sh [scenario ...]   # e.g. w1 w3
+# Usage: bash scripts/run_w_smoke.sh [scenario ...]   # e.g. w1 w3
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,18 +79,47 @@ run_scenario() {
   local pid=$!
   ( sleep 360; kill "$pid" 2>/dev/null; pkill -x MovieCutMac 2>/dev/null; true ) &
   local watchdog=$!
+  # STAB-01: record the watchdog subshell's inner sleep PID while the
+  # subshell is STILL ALIVE. After `kill $watchdog` the sleep re-parents to
+  # launchd and `pkill -P` can no longer see it (the previous "remediation"
+  # reaped nothing and left a 360s orphan per scenario). Held PIDs are the
+  # canonical fix per the stabilization plan.
+  local watchdog_sleep=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    watchdog_sleep="$(pgrep -P "$watchdog" -x sleep 2>/dev/null | head -1 || true)"
+    if [ -n "$watchdog_sleep" ]; then break; fi
+    sleep 0.05
+  done
   for _ in $(seq 1 600); do
     grep -q "W_DONE" "$dir/status.txt" 2>/dev/null && break
+    kill -0 "$pid" 2>/dev/null || break
     sleep 0.5
   done
+  if ! grep -q "W_DONE" "$dir/status.txt" 2>/dev/null && kill -0 "$pid" 2>/dev/null; then
+    # The scenario overran its window (parked continuation) — the runner
+    # itself must reap the app, not only the watchdog subshell (STAB-04:
+    # measured 2026-08-29 — the old flow killed the watchdog first and then
+    # blocked forever on `wait $pid`).
+    echo "$scenario status=KILL detail=app_overran_300s" >&2
+    kill "$pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.5
+    done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
   kill "$watchdog" 2>/dev/null || true
-  # Review P2: killing the subshell orphaned its inner `sleep`, which held
-  # the stdout pipe for the full 360s and kept the script alive ~6 minutes
-  # after the last result. Reap the subshell's children (the sleep) and the
-  # subshell itself before waiting on the app.
-  pkill -P "$watchdog" 2>/dev/null || true
+  if [ -n "$watchdog_sleep" ]; then
+    kill "$watchdog_sleep" 2>/dev/null || true
+  fi
   wait "$watchdog" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
+  # STAB-01 evidence: the recorded sleep must be gone after reaping — an
+  # alive PID here means an orphan survived the cleanup.
+  if [ -n "$watchdog_sleep" ] && kill -0 "$watchdog_sleep" 2>/dev/null; then
+    echo "$scenario status=FAIL detail=watchdog_sleep_orphaned pid=$watchdog_sleep"
+    return 1
+  fi
 
   [ -s "$dir/w.json" ] || { echo "$scenario status=FAIL detail=no_result_json"; return 1; }
 }
@@ -153,4 +188,37 @@ if rate < 90.0:
     sys.exit(1)
 sys.exit(rate_fail)
 PY
-echo "W SCENARIOS PASS"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  echo "W SCENARIOS PASS"
+fi
+# STAB-08: record this run into the history ledger the LOOP_STATE report
+# generator reads. Captures per-workflow verdicts + step totals; appended
+# only on completion (either verdict), never on an aborted run.
+mkdir -p "$ROOT/.build-check/history"
+python3 - "$WORK/all.log" $rc <<'PYEOF'
+import json, re, sys, time
+log, rc = sys.argv[1], int(sys.argv[2])
+workflows = {}
+steps_ok = steps_total = 0
+for line in open(log):
+    # WORKFLOW verdicts print to stdout (not all.log) — derive them from the
+    # SUMMARY lines with the final block's exact rule: every step ok AND a
+    # non-empty export.
+    m = re.match(r"SUMMARY (\w+) (\d+) (\d+) (\d+)", line)
+    if m:
+        name, ok, total, export_bytes = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+        steps_ok += ok
+        steps_total += total
+        workflows[name] = "PASS" if (ok == total and export_bytes > 0) else "FAIL"
+out = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "workflows": workflows,
+    "steps_ok": steps_ok,
+    "steps_total": steps_total,
+    "rc": rc,
+}
+with open(f".build-check/history/w-smoke-{int(time.time())}.json", "w") as f:
+    json.dump(out, f)
+PYEOF
+exit $rc

@@ -142,7 +142,13 @@ extension EditorViewModel {
     ///   (`Basic` / `Speed` / `Animation` / `Adjustment` / `Mask`) so the dhash golden states
     ///   can capture each inspector section as a distinct editor state.
     /// - `MOVIECUT_UITEST_EXPORT_RESOLUTION=<rawValue>` — sets `ExportSettings.resolution` before export
+    /// - `MOVIECUT_UITEST_EXPORT_FRAMERATE=<fps24|fps30|fps60>` — sets `ExportSettings.frameRate` before export
     ///   (e.g. `p4K`), independent of any platform preset. Used by the 4K perf baseline (S6).
+    /// - `MOVIECUT_UITEST_EXPORT_PROFILE=<h264|hevc|hevcHDR|proRes422|proRes4444>` — routes the
+    ///   `MOVIECUT_UITEST_EXPORT` destination through the explicit-bitrate writer with a profile
+    ///   override (the mastering route), instead of the preset export. Flag-independent on purpose:
+    ///   the e2e HDR depth/tag probe must run before `FeatureFlag.hdrMaster` flips
+    ///   (capcut-surpass stage-3 increment B).
     /// - `MOVIECUT_UITEST_TEXT_ANIMATION_PRESET=<rawValue>` — adds a 2s animated text clip before export.
     /// - `MOVIECUT_UITEST_HSL_CURVES=1` — applies a non-3-way HSL/curve grade to the selected clip.
     /// - `MOVIECUT_UITEST_CHROMA_KEY=1` — applies the deterministic greenScreen chroma-key default to
@@ -177,6 +183,20 @@ extension EditorViewModel {
         ///   the ACTUAL output file and the project's preview mix (the reference the audio-mix path
         ///   produces today), compares lengths/RMS, and measures decoded LUFS-I/true-peak/clipping with
         ///   the shared Core functions; writes a JSON artifact to <path>.
+    /// The harness's deterministic quit. BUG-ACC-08: `NSApp.terminate` can
+    /// COMPLETE the full AppKit flow (delegate asked, reply now, willTerminate
+    /// fired) and still RETURN without exiting — the ShareKit picker re-init
+    /// race (ShareLink becomes visible once an export sets lastExportURL)
+    /// spins a nested tracking loop that swallows the run-loop stop (measured
+    /// 2/4 launches parked). Every harness quit site funnels through here so
+    /// no scenario can outlive its artifacts. By this point the run's
+    /// artifacts and the crash-recovery autosave are already on disk.
+    static func terminateHarnessProcess() {
+        NSApp.terminate(nil)
+        AppLog.export.notice("harness: NSApp.terminate returned without exiting (BUG-ACC-08 ShareKit race) — forcing exit(0)")
+        exit(0)
+    }
+
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -600,6 +620,17 @@ extension EditorViewModel {
             }
         }
 
+        // Export frame-rate override (LF-ACTION-05, 24fps long-form
+        // deliveries). Rides the same SetProjectExportSettingsCommand path
+        // as the inspector so the harness exercises the real setting.
+        if let rawFrameRate = env["MOVIECUT_UITEST_EXPORT_FRAMERATE"], !rawFrameRate.isEmpty {
+            if let frameRate = ExportFrameRate(rawValue: rawFrameRate) {
+                await updateExportSettings(frameRate: frameRate)
+            } else {
+                lastErrorMessage = "unknown export frame rate: \(rawFrameRate)"
+            }
+        }
+
         var textAnimationSuffix = ""
         if let rawTextAnimationPreset = env["MOVIECUT_UITEST_TEXT_ANIMATION_PRESET"] {
             if let preset = TextAnimationPreset(rawValue: rawTextAnimationPreset) {
@@ -718,7 +749,44 @@ extension EditorViewModel {
             let dest = containerizedExportDestination(for: URL(filePath: exportPath))
             let exportClock = ContinuousClock()
             let exportStart = exportClock.now
-            await exportProject(to: dest.write)
+            // MOVIECUT_UITEST_EXPORT_PROFILE routes the SAME destination
+            // through the explicit-bitrate writer with a profile override —
+            // the mastering/verification route exportMaster(to:profile:) uses
+            // (capcut-surpass stage-3 increment B). Flag-independent on
+            // purpose: the e2e depth/tag probe must be exercisable before
+            // FeatureFlag.hdrMaster flips; no user-facing surface reaches
+            // this branch.
+            if let rawProfile = env["MOVIECUT_UITEST_EXPORT_PROFILE"], !rawProfile.isEmpty {
+                if let profile = VideoCompressionProfile(rawValue: rawProfile) {
+                    // STAB-02 cancel E2E: cancel the writer-path export
+                    // mid-flight (the pump-parallelization contract —
+                    // cancelExport tears readers/writer down, the pumps fail
+                    // into the catch path, the partial output is deleted).
+                    // Measured trap: a single early shot is a NO-OP because
+                    // it lands during the audio-graph phase BEFORE the
+                    // writer session is registered (~1s of the ~1.3s wall),
+                    // and cancelExport() falsifies isExporting even when it
+                    // cancelled nothing — so the loop runs a fixed span and
+                    // stops when the export task ends, not by polling flags.
+                    var cancelTask: Task<Void, Never>?
+                    if let cancelMsRaw = env["MOVIECUT_UITEST_EXPORT_CANCEL_MS"],
+                       let cancelMs = Double(cancelMsRaw), cancelMs > 0 {
+                        cancelTask = Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: UInt64(cancelMs * 1_000_000))
+                            while !Task.isCancelled {
+                                self.exportEngine.cancelExport()
+                                try? await Task.sleep(nanoseconds: 100_000_000)
+                            }
+                        }
+                    }
+                    await exportMaster(to: dest.write, profile: profile)
+                    cancelTask?.cancel()
+                } else {
+                    lastErrorMessage = "unknown export profile: \(rawProfile)"
+                }
+            } else {
+                await exportProject(to: dest.write)
+            }
             let exportElapsed = exportClock.now - exportStart
             let comps = exportElapsed.components
             let exportSeconds = Double(comps.seconds) + Double(comps.attoseconds) / 1e18
@@ -825,7 +893,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1150,7 +1218,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1237,7 +1305,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1411,7 +1479,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -2647,7 +2715,7 @@ extension EditorViewModel {
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -2756,12 +2824,12 @@ extension EditorViewModel {
                     + " project_open_ms=\(String(format: "%.2f", openMs))"
             )
             if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-                NSApp.terminate(nil)
+                Self.terminateHarnessProcess()
             }
         } catch {
             status("latency_checkpoint stage=error error=\(error.localizedDescription)")
             if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-                NSApp.terminate(nil)
+                Self.terminateHarnessProcess()
             }
         }
     }
@@ -3692,7 +3760,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -3749,38 +3817,65 @@ extension EditorViewModel {
                 guard let voice = fixtures.voice, let bgm = fixtures.bgm else {
                     throw NSError(domain: "W", code: 1, userInfo: [NSLocalizedDescriptionKey: "w1 requires W_VOICE + W_BGM"])
                 }
+                // STAB-04: acceptance mode (W_STRICT=1) also imports the
+                // portrait talking-head video — the representative W1 job is
+                // a 60 s vertical video with speech, not audio-only. Smoke
+                // shares the W_VIDEO env var, so this MUST be strict-gated
+                // (an unguarded import changed smoke's historical shape and
+                // parked — measured 2026-08-29).
+                let strict = environment["MOVIECUT_UITEST_W_STRICT"] == "1"
+                if strict, let portraitVideo = fixtures.video {
+                    await importMediaAndAddToTimeline([portraitVideo], startTime: 0)
+                }
                 await importMediaAndAddToTimeline([voice], startTime: 0)
                 await importMediaAndAddToTimeline([bgm], startTime: 0)
                 let voiceClip = firstClip(ofKind: .audio)
                 let bgmClip = currentProject.timeline.tracks.flatMap(\.clips).last { $0.kind == .audio }
-                step("import", ok: voiceClip != nil && bgmClip != nil)
+                let videoClip = firstClip(ofKind: .video)
+                step("import", ok: voiceClip != nil && bgmClip != nil && (!strict || videoClip != nil))
                 if let voiceClip {
                     do { try await applyNoiseReduction(for: voiceClip.id); step("denoise", ok: true) }
                     catch { step("denoise", ok: false, detail: error.localizedDescription) }
                 }
                 if let bgmClip {
-                    // The ducking harness's established deterministic path:
-                    // explicit planner-style ranges through the real command
-                    // (applyDucking derives ranges from live silence analysis).
-                    await apply(SetAudioDuckingCommand(
-                        duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
-                        level: 0.25
-                    ))
-                    let ducked = currentProject.timeline.tracks.flatMap(\.clips)
-                        .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
-                    step("ducking", ok: ducked)
+                    if strict {
+                        // STAB-04: acceptance runs the REAL user path (F-14
+                        // autoDuckOtherAudio) — silence analysis of the
+                        // actual speech derives the ducking ranges; the smoke
+                        // gate keeps deterministic planner-style ranges.
+                        selectedClipId = voiceClip?.id
+                        await autoDuckOtherAudio(duckLevel: 0.25)
+                        let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                            .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                        step("ducking", ok: ducked, detail: "path=analysis")
+                    } else {
+                        // The ducking harness's established deterministic path:
+                        // explicit planner-style ranges through the real command
+                        // (applyDucking derives ranges from live silence analysis).
+                        await apply(SetAudioDuckingCommand(
+                            duckingRangesByClip: [bgmClip.id: [TimeRange(start: 0.5, duration: 1.0)]],
+                            level: 0.25
+                        ))
+                        let ducked = currentProject.timeline.tracks.flatMap(\.clips)
+                            .contains { $0.duckingLevel != nil && $0.duckingRanges.isEmpty == false }
+                        step("ducking", ok: ducked)
+                    }
                 } else {
                     step("ducking", ok: false, detail: "no bgm clip")
                 }
                 // STT is user-TCC-gated — calling it headless hard-crashes
                 // the process on privacy violation, so PROBE availability:
                 // with the user's grant the real transcription runs; without
-                // it the step records the permission gate (not a defect).
+                // it the smoke step records the permission gate. STAB-04:
+                // acceptance (W_STRICT=1) must NOT pass without STT actually
+                // running — the gate is surfaced as a step failure instead.
                 selectedClipId = voiceClip?.id
                 let speechAvailable = await SpeechTranscriptionProvider().isAvailable
                 if speechAvailable {
                     await generateSubtitles()
                     step("subtitles", ok: lastErrorMessage == nil, detail: "clips=\(currentProject.timeline.tracks.flatMap(\.clips).filter { $0.kind == .text }.count)")
+                } else if strict {
+                    step("subtitles", ok: false, detail: "stt=user_tcc_required_for_acceptance")
                 } else {
                     step("subtitles", ok: true, detail: "stt=user_tcc_gated_headless")
                 }
@@ -3933,19 +4028,29 @@ extension EditorViewModel {
             let exportURL = dir.appendingPathComponent("\(scenario).mp4")
             await exportProject(to: exportURL)
             if scenario == "w4" {
-                // The ProRes writer path with video+audio together is a
-                // KNOWN hang (reader side — LOOP_STATE defect family);
-                // race it against a timeout so the defect is RECORDED
-                // instead of wedging the measurement. The abandoned task
-                // dies with the process at quit.
-                let proresDone = await Self.raceWithTimeout(seconds: 90) {
+                // The ProRes race budget must scale with the job: 90 s fits
+                // the smoke fixture, but a representative 5-minute master
+                // needs minutes of encode even at a healthy RTF (STAB-04 —
+                // a fixed budget is exactly the "gate weaker than the real
+                // job" failure the external review flagged). The abandoned
+                // task still dies with the process at quit.
+                let strictBudget = environment["MOVIECUT_UITEST_W_STRICT"] == "1"
+                let proresBudget: TimeInterval = strictBudget
+                    ? max(90, currentProject.timeline.duration * 2.0)
+                    : 90
+                let proresDone = await Self.raceWithTimeout(seconds: proresBudget) {
                     await self.exportProResMaster(to: dir.appendingPathComponent("w4-prores.mov"))
                 }
-                step("prores", ok: proresDone, detail: proresDone ? "" : "timeout_known_defect")
+                // BUG-ACC-04: exportProResMaster can return early with the
+                // error only in lastErrorMessage — surface it in the dump so
+                // a false-OK step carries its cause.
+                step("prores", ok: proresDone, detail: proresDone
+                    ? (lastErrorMessage.map { "err=\($0)" } ?? "")
+                    : "timeout_known_defect")
             }
             let bytes = (try? FileManager.default.attributesOfItem(atPath: exportURL.path)[.size] as? Int) ?? 0
             dump.exportBytes = bytes ?? 0
-            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)")
+            step("export", ok: (bytes ?? 0) > 0, detail: "bytes=\(bytes ?? 0)\(lastErrorMessage.map { ", err=\($0)" } ?? "")")
         } catch {
             dump.error = error.localizedDescription
         }
@@ -3962,7 +4067,7 @@ extension EditorViewModel {
             writeHarnessStatus("W_DONE \(lastStatusMessage ?? "")", to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4284,7 +4389,7 @@ extension EditorViewModel {
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4340,7 +4445,19 @@ extension EditorViewModel {
         }
 
         // 4. Transition on the selected clip — covers "2 clips + cross dissolve".
+        // TRANSITION_TARGET=first moves the selection to the FIRST timeline
+        // video clip first: the transition rides the OUTGOING clip (the
+        // pair's makeTransitionEffects contract), but a comma import leaves
+        // the selection on the LAST imported clip — without this knob the
+        // transition would gate a pair that doesn't exist.
         if let transitionRaw = environment["MOVIECUT_UITEST_TRANSITION"] {
+            if environment["MOVIECUT_UITEST_TRANSITION_TARGET"] == "first",
+               let firstVideoClip = currentProject.timeline.tracks
+                   .sorted(by: { $0.zIndex < $1.zIndex })
+                   .flatMap(\.clips)
+                   .first(where: { $0.kind == .video || $0.kind == .image }) {
+                selectedClipId = firstVideoClip.id
+            }
             let type = TransitionType(rawValue: transitionRaw) ?? .crossDissolve
             await updateSelectedTransition(Transition(type: type, duration: 0.5))
         }
@@ -4696,7 +4813,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4781,7 +4898,7 @@ extension EditorViewModel {
             writeHarnessStatus(line, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 }

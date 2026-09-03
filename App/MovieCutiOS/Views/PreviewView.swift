@@ -8,6 +8,9 @@ struct PreviewView: View {
     @State private var player = AVPlayer()
     @State private var playerItem: AVPlayerItem?
     @State private var timeObserverToken: Any?
+    // STAB-03②: end-of-playback comes from the deterministic
+    // AVPlayerItemDidPlayToEndTime notification, not the periodic observer.
+    @State private var endTimeObserver: NSObjectProtocol?
     @State private var hasPlayableMedia = false
     // RACE-01 (리뷰 2026-08-26): 재생성 경합 방지 — 빌드 Task를 추적·취소하고
     // 세대 토큰으로 stale 설치를 차단한다. 느린 이전 빌드(reverse·대형
@@ -15,6 +18,23 @@ struct PreviewView: View {
     // PlaybackEngine 164-168·216-236 패리티).
     @State private var compositionBuildTask: Task<Void, Never>?
     @State private var compositionGeneration = 0
+    /// Stage-4: the proxy policy the CURRENT installed plan was built with.
+    /// Thermal notifications only matter when they flip this value (Mac's
+    /// ThermalStateObserver skips redundant rebuilds the same way) — a
+    /// nominal↔fair transition that keeps the policy unchanged must not pay
+    /// for a full plan rebuild (EQ'd clips derive media per build).
+    @State private var lastResolvedProxyPolicy: Bool?
+
+    /// The preview's source policy for the current project + thermal state
+    /// (the caller-resolved half of the stage-4 policy; the engine applies
+    /// it per asset).
+    private func resolvedUseProxyPlayback(_ project: Project) -> Bool {
+        project.playbackSettings.useProxyPlayback
+            || ProxyDowngradePolicy.shouldAutoDowngrade(
+                thermalState: ThermalState.current,
+                autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
+            )
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -109,11 +129,40 @@ struct PreviewView: View {
         .onChange(of: viewModel.currentProject.timeline) { _, _ in
             rebuildComposition()
         }
+        // CODEX-07: relink swaps the asset backing existing clips without
+        // touching the timeline — the plan built while the asset was
+        // missing kept empty/partial tracks until an unrelated timeline
+        // edit (or view recreation) rebuilt it. Any mediaLibrary change
+        // now rebuilds too; the generation guard inside
+        // rebuildComposition makes the double fire on import+timeline
+        // changes harmless.
+        .onChange(of: viewModel.currentProject.mediaLibrary) { _, _ in
+            rebuildComposition()
+        }
+        // capcut-surpass stage-4: thermal transitions re-resolve the preview
+        // source policy — serious/critical pressure drops to proxy playback
+        // (when the user allows the safety net), cooling restores the
+        // original. Same S7 ladder Mac's ThermalStateObserver drives; the
+        // decision itself lives in the shared Core ProxyDowngradePolicy, so
+        // this only needs to trigger a rebuild.
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            // Skip when the transition didn't change the resolved policy —
+            // a full rebuild (incl. EQ media derivation) buys nothing.
+            guard resolvedUseProxyPlayback(viewModel.currentProject) != lastResolvedProxyPolicy else { return }
+            rebuildComposition()
+        }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
             syncPlayback(isPlaying: isPlaying)
         }
         .onChange(of: viewModel.playheadTime) { _, newTime in
             seekPlayerIfNeeded(to: newTime)
+        }
+        // STAB-03①: an explicit frame step (~1/fps ≈ 0.033 s) is smaller
+        // than the observer-coalescing threshold below — observe the step
+        // tick and force a zero-tolerance seek so the rendered frame always
+        // follows the playhead number.
+        .onChange(of: viewModel.frameStepTick) { _, _ in
+            seekPlayer(to: viewModel.playheadTime, coalescingSmallMoves: false)
         }
     }
 
@@ -133,7 +182,17 @@ struct PreviewView: View {
         let requestedGeneration = compositionGeneration
         compositionBuildTask = Task { @MainActor in
             let project = viewModel.currentProject
-            let plan = try? await renderPlanEngine.makeRenderPlan(for: project)
+            // Stage-4 preview-only source policy: proxy playback under the
+            // user's explicit preference OR the thermal safety net (S7,
+            // ProxyDowngradePolicy parity with Mac). The export always reads
+            // originals — the plan-level policy is resolved HERE, never from
+            // settings inside the engine.
+            let useProxyPlayback = resolvedUseProxyPlayback(project)
+            lastResolvedProxyPolicy = useProxyPlayback
+            let plan = try? await renderPlanEngine.makeRenderPlan(
+                for: project,
+                sourcePolicy: useProxyPlayback ? .proxyWhenAvailable : .originalOnly
+            )
 
             // A newer rebuild superseded this one — never install stale
             // state, on EITHER the success or the empty-media path.
@@ -175,19 +234,25 @@ struct PreviewView: View {
             let seconds = time.seconds
             guard seconds.isFinite else { return }
 
-            viewModel.playheadTime = min(max(0, seconds), max(viewModel.currentProject.timeline.duration, 0))
-
-            if viewModel.isPlaying,
-               viewModel.currentProject.timeline.duration > 0,
-               seconds >= viewModel.currentProject.timeline.duration {
-                if viewModel.isLooping {
-                    // Phase-1 (review #3): loop playback restarts at zero.
-                    player.seek(to: .zero)
-                    viewModel.playheadTime = 0
+            // STAB-03②: this observer only syncs the playhead number —
+            // loop/stop at the end is handled by the end notification, which
+            // is guaranteed to fire (a periodic observer can miss the exact
+            // end instant).
+            MainActor.assumeIsolated {
+                viewModel.playheadTime = min(max(0, seconds), max(viewModel.currentProject.timeline.duration, 0))
+            }
+        }
+        endTimeObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { [viewModel] _ in
+            Task { @MainActor in
+                let wasLooping = viewModel.isLooping
+                viewModel.handlePlaybackReachedEnd()
+                if wasLooping {
+                    player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
                     player.play()
-                } else {
-                    player.pause()
-                    viewModel.isPlaying = false
                 }
             }
         }
@@ -197,6 +262,10 @@ struct PreviewView: View {
         if let timeObserverToken {
             player.removeTimeObserver(timeObserverToken)
             self.timeObserverToken = nil
+        }
+        if let endTimeObserver {
+            NotificationCenter.default.removeObserver(endTimeObserver)
+            self.endTimeObserver = nil
         }
     }
 
@@ -222,12 +291,20 @@ struct PreviewView: View {
         isPlaying ? player.play() : player.pause()
     }
 
+    /// Observer-driven sync skips sub-threshold moves (the periodic
+    /// playhead callback fires ~15×/s during playback — re-seeking each
+    /// tick would stutter). STAB-03①: explicit frame steps bypass the
+    /// threshold via `coalescingSmallMoves: false`.
     private func seekPlayerIfNeeded(to time: TimeInterval) {
+        seekPlayer(to: time, coalescingSmallMoves: true)
+    }
+
+    private func seekPlayer(to time: TimeInterval, coalescingSmallMoves: Bool) {
         guard hasPlayableMedia else { return }
         let clampedTime = min(max(0, time), max(viewModel.currentProject.timeline.duration, 0))
         let currentSeconds = player.currentTime().seconds
 
-        if currentSeconds.isFinite, abs(currentSeconds - clampedTime) < 0.25 {
+        if coalescingSmallMoves, currentSeconds.isFinite, abs(currentSeconds - clampedTime) < 0.25 {
             return
         }
 

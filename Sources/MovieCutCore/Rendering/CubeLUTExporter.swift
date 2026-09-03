@@ -126,16 +126,12 @@ public enum CubeLUTExporter {
         data.reserveCapacity(width * height * 4)
         for index in 0..<(width * height) {
             let offset = index * 4
-            data.append(clamp(Float(output[offset])))
-            data.append(clamp(Float(output[offset + 1])))
-            data.append(clamp(Float(output[offset + 2])))
+            data.append(Float(output[offset]).clamped(to: 0...1))
+            data.append(Float(output[offset + 1]).clamped(to: 0...1))
+            data.append(Float(output[offset + 2]).clamped(to: 0...1))
             data.append(1)
         }
         return CubeLUT(dimension: dimension, data: data)
-    }
-
-    private static func clamp(_ value: Float) -> Float {
-        Swift.min(Swift.max(value, 0), 1)
     }
 
     private static func fmt(_ value: Float) -> String {

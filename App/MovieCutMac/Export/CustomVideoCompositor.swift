@@ -52,6 +52,12 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
     let clipEffects: [CustomCompositionClipEffect]
     let transitionEffects: [CustomCompositionTransitionEffect]
     let canvasBackground: CanvasBackground?
+    /// LF-ACTION-02: true only for alpha-capable mastering (ProRes 4444) —
+    /// the canvas must stay transparent there. Every opaque delivery
+    /// (H.264/HEVC/ProRes 422, preview) leaves it false so the nil-background
+    /// canvas composites over opaque black and recycled codec buffers
+    /// cannot leak the previous scene into aspect-fit bands.
+    let preservesCanvasAlpha: Bool
     let prefersFastSegmentation: Bool
 
     init(
@@ -68,6 +74,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         mask: Mask? = nil,
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         prefersFastSegmentation: Bool = false
     ) {
         self.timeRange = timeRange
@@ -87,6 +94,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = []
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.preservesCanvasAlpha = preservesCanvasAlpha
         self.prefersFastSegmentation = prefersFastSegmentation
     }
 
@@ -96,6 +104,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         clipEffects: [CustomCompositionClipEffect],
         transitionEffects: [CustomCompositionTransitionEffect] = [],
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         prefersFastSegmentation: Bool = false,
         adjustmentClips: [Clip]? = nil
     ) {
@@ -116,6 +125,7 @@ final class CustomCompositionInstruction: NSObject, AVVideoCompositionInstructio
         self.clipEffects = clipEffects
         self.transitionEffects = transitionEffects
         self.canvasBackground = canvasBackground
+        self.preservesCanvasAlpha = preservesCanvasAlpha
         self.prefersFastSegmentation = prefersFastSegmentation
     }
 
@@ -346,7 +356,8 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 transitionedImage = CanvasBackgroundPixelProcessor.compose(
                     frame: transitionedImage,
                     over: instruction.canvasBackground,
-                    renderSize: request.renderContext.size
+                    renderSize: request.renderContext.size,
+                    fillPolicy: instruction.preservesCanvasAlpha ? .alphaPreserving : .opaqueDelivery
                 )
                 self.finishRequest(request, with: transitionedImage)
                 return
@@ -354,6 +365,21 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
 
             let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction
             guard let (trackID, sourceBuffer) = self.firstSourceFrame(in: request, instruction: instruction) else {
+                // BUG-ACC-04 diagnosis: the -1 failure fires intermittently on
+                // the 5-minute master (2-of-4). Adjudicates track-coverage gap
+                // (①) vs source-reader starvation (②): log the request time
+                // against the instruction's range and the tracks that were
+                // asked, so ONE reproduction identifies the nil's cause.
+                let time = request.compositionTime.seconds
+                let range = instruction?.timeRange
+                let active = instruction?.activeSourceTrackIDs(at: request.compositionTime).map(String.init) ?? []
+                let all = request.sourceTrackIDs.map { String($0.int32Value) }
+                AppLog.export.error("""
+                    compositor nil source frame: t=\(time, privacy: .public) \
+                    instruction=[\(range?.start.seconds ?? -1, privacy: .public)..\(range?.end.seconds ?? -1, privacy: .public)] \
+                    active=[\(active.joined(separator: ","), privacy: .public)] \
+                    sourceTrackIDs=[\(all.joined(separator: ","), privacy: .public)]
+                    """)
                 request.finish(with: NSError(domain: "MovieCut", code: -1, userInfo: nil))
                 return
             }
@@ -412,6 +438,15 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                 image = CanvasBackgroundPixelProcessor.compose(
                     frame: image,
                     over: instruction.canvasBackground,
+                    renderSize: request.renderContext.size,
+                    fillPolicy: instruction.preservesCanvasAlpha ? .alphaPreserving : .opaqueDelivery
+                )
+            } else {
+                // No instruction → no project background to honor; the
+                // opaque default decides every canvas pixel (LF-ACTION-01).
+                image = CanvasBackgroundPixelProcessor.compose(
+                    frame: image,
+                    over: nil,
                     renderSize: request.renderContext.size
                 )
             }
@@ -581,6 +616,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         let clipEffects = effect?.effects ?? []
         let isBackgroundRemoved = effect?.isBackgroundRemoved ?? false
 
+
         if !clipEffects.isEmpty {
             image = VisualEffectPixelProcessor.apply(clipEffects, to: image)
         }
@@ -685,7 +721,22 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             return
         }
 
-        ciContext.render(image, to: outputBuffer)
+        // HDR masters get a 10-bit destination surface from the writer; render
+        // through the Rec.2020 HLG color space so the transfer function is
+        // applied for real instead of re-tagging 8-bit pixels (capcut-surpass
+        // ac589c2 idea, re-cut for this compositor). SDR keeps the original
+        // 2-arg render byte-for-byte.
+        if CVPixelBufferGetPixelFormatType(outputBuffer) == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+           let hdrColorSpace = CGColorSpace(name: CGColorSpace.itur_2100_HLG) {
+            ciContext.render(
+                image,
+                to: outputBuffer,
+                bounds: CGRect(origin: .zero, size: image.extent.size),
+                colorSpace: hdrColorSpace
+            )
+        } else {
+            ciContext.render(image, to: outputBuffer)
+        }
         request.finish(withComposedVideoFrame: outputBuffer)
     }
 

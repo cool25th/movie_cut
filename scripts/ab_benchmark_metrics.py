@@ -26,7 +26,7 @@ always reports the family together:
   --self-test
       Deterministic synthetic checks of every metric primitive.
 
-Dependencies: numpy + ffmpeg/ffprobe (same as scripts/capcut_parity_metrics.py).
+Dependencies: numpy + ffmpeg/ffprobe.
 Frame sampling for `single` and `pair` is timestamp-based (default 9 evenly
 spaced points); the sample count is recorded in every JSON output so numbers
 are always read with their sampling conditions (§1.4 condition-field rule).
@@ -484,7 +484,12 @@ def cmd_blind(args: argparse.Namespace) -> int:
     for i, fid in enumerate(fixture_ids, start=1):
         x_is_a = rng.random() < 0.5
         mapping[fid] = {"X": "A" if x_is_a else "B", "Y": "B" if x_is_a else "A"}
-        rows.append(f"| {i} | {fid} | {fid}_{'X' if x_is_a else 'Y'}.mp4 | {fid}_{'Y' if x_is_a else 'X'}.mp4 |")
+        # CODEX-10: the ballot's X column must point at <fid>_X.mp4 (what the
+        # materialization step actually produced) — the mapping table is the
+        # ONLY place X/Y decode to A/B. Swapping the file names here made an
+        # evaluator's X vote tally as the opposite editor whenever x_is_a
+        # was false.
+        rows.append(f"| {i} | {fid} | {fid}_X.mp4 | {fid}_Y.mp4 |")
 
     # Materialize the shuffled copies so the viewer never sees original names.
     materialize: list[str] = []
@@ -509,10 +514,11 @@ def cmd_blind(args: argparse.Namespace) -> int:
         "",
         f"Seed: {args.seed} — sides are randomized per fixture.",
         "",
-        "For each row, watch X and Y (same fixture, two editors), then record",
-        "the preferred side in responses.csv (X | Y | tie) plus a 1-5",
-        "confidence. Evaluate picture quality only (sharpness, artifacts,",
-        "banding, color). Do not open blind_key.json before finishing.",
+        "For each row, watch X (`<fixture>_X.mp4`) and Y (`<fixture>_Y.mp4`)",
+        "(same fixture, two editors), then record the preferred side in",
+        "responses.csv (X | Y | tie) plus a 1-5 confidence. Evaluate picture",
+        "quality only (sharpness, artifacts, banding, color). Do not open",
+        "blind_key.json before finishing.",
         "",
         *rows,
     ]
@@ -609,6 +615,56 @@ def cmd_self_test(_: argparse.Namespace) -> int:
     m1 = {fid: (r1.random() < 0.5) for fid in range(20)}
     m2 = {fid: (r2.random() < 0.5) for fid in range(20)}
     check("blind seed determinism", m1 == m2)
+
+    # Blind label/materialization/tally round trip (CODEX-10): the ballot's
+    # X column must point at <fid>_X.mp4, the materialized files must match
+    # the mapping's sides byte-for-byte, and an all-X ballot must tally to
+    # whichever side the mapping says X is — covering BOTH x_is_a outcomes.
+    import tempfile
+    a_payload = b"A-SIDE-" + bytes(range(256)) * 4
+    b_payload = b"B-SIDE-" + bytes(255 - i for i in range(256)) * 4
+    x_is_a_seen = {True: 0, False: 0}
+    label_ok = mat_ok = True
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        for seed in range(12):
+            a_dir, b_dir, out_dir = tdp / f"a{seed}", tdp / f"b{seed}", tdp / f"out{seed}"
+            a_dir.mkdir(); b_dir.mkdir()
+            fids = ("fx01", "fx02", "fx03", "fx04")
+            for fid in fids:
+                (a_dir / f"{fid}.mp4").write_bytes(a_payload)
+                (b_dir / f"{fid}.mp4").write_bytes(b_payload)
+            rc = cmd_blind(argparse.Namespace(
+                tally=None, key=None, a_dir=str(a_dir), b_dir=str(b_dir),
+                out=str(out_dir), seed=seed))
+            if rc != 0:
+                label_ok = mat_ok = False
+                break
+            key = json.loads((out_dir / "blind_key.json").read_text())
+            ballot = (out_dir / "ballot.md").read_text()
+            for fid in fids:
+                side = key["mapping"][fid]
+                x_is_a_seen[side["X"] == "A"] += 1
+                if not re.search(rf"\| {fid}_X\.mp4 \| {fid}_Y\.mp4 \|", ballot):
+                    label_ok = False
+                expected_x = a_payload if side["X"] == "A" else b_payload
+                expected_y = b_payload if side["X"] == "A" else a_payload
+                if (out_dir / f"{fid}_X.mp4").read_bytes() != expected_x \
+                        or (out_dir / f"{fid}_Y.mp4").read_bytes() != expected_y:
+                    mat_ok = False
+            # All-X ballots decode through the mapping: wins land on each
+            # side exactly as often as X maps to it in this seed.
+            (out_dir / "responses.csv").write_text(
+                "fixture,preferred,confidence(1-5),notes\n" +
+                "".join(f"{fid},X,3,\n" for fid in fids))
+            blind_tally(out_dir / "responses.csv", out_dir / "blind_key.json", out_dir)
+            result = json.loads((out_dir / "blind_result.json").read_text())
+            want_a = sum(1 for fid in fids if key["mapping"][fid]["X"] == "A")
+            if result["wins_a"] != want_a or result["wins_b"] != len(fids) - want_a:
+                mat_ok = False
+    check("blind ballot labels always <fid>_X/<fid>_Y", label_ok)
+    check("blind materialization + tally match mapping (both x_is_a outcomes)",
+          mat_ok and x_is_a_seen[True] > 0 and x_is_a_seen[False] > 0)
 
     # chroma subsampling parsing.
     check("chroma yuv420p -> 4:2:0", chroma_subsampling("yuv420p") == "4:2:0")

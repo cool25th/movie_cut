@@ -301,7 +301,14 @@ final class IOSEditorViewModel {
 
     func updateSelectedPlaybackRate(_ rate: Double) async {
         guard let selectedClipId else { return }
-        await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .playbackRate(rate)))
+        // CODEX-21: SetClipSpeedCommand retimes the clip's rendered
+        // timeline span (and ripples the magnetic track) in the same undo
+        // step — the raw property write left timelineRange.duration stale
+        // while preview/export rendered the canonical mapping, drifting
+        // the timeline width, snap points, and downstream clips out of
+        // sync with the render (Mac parity; the command's own header
+        // documents this defect class).
+        await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
     }
 
     func updateSelectedColorCorrection(_ correction: ColorCorrection) async {
@@ -1071,7 +1078,15 @@ final class IOSEditorViewModel {
         }
     }
 
-    func trimClip(clipId: UUID, newStart: TimeInterval, newDuration: TimeInterval) async {
+    /// CODEX-17: `sourceRange` is optional — the playhead trims pass the
+    /// canonical `ClipTrimMath` result (rates/ramps/reverse handled); other
+    /// callers keep the legacy 1s==1s derivation.
+    func trimClip(
+        clipId: UUID,
+        newStart: TimeInterval,
+        newDuration: TimeInterval,
+        sourceRange: TimeRange? = nil
+    ) async {
         guard newStart.isFinite, newDuration.isFinite, newDuration >= 0 else { return }
 
         let trackAndClip = currentProject.timeline.tracks.compactMap { track -> (Track, Clip)? in
@@ -1080,11 +1095,16 @@ final class IOSEditorViewModel {
         }.first
         guard let (track, clip) = trackAndClip else { return }
 
-        let sourceStartDelta = newStart - clip.timelineRange.start
-        let sourceRange = TimeRange(
-            start: max(0, clip.sourceRange.start + sourceStartDelta),
-            duration: newDuration
-        )
+        let derivedSourceRange: TimeRange
+        if let sourceRange {
+            derivedSourceRange = sourceRange
+        } else {
+            let sourceStartDelta = newStart - clip.timelineRange.start
+            derivedSourceRange = TimeRange(
+                start: max(0, clip.sourceRange.start + sourceStartDelta),
+                duration: newDuration
+            )
+        }
         let timelineRange = TimeRange(start: newStart, duration: newDuration)
 
         do {
@@ -1092,7 +1112,7 @@ final class IOSEditorViewModel {
                 TrimClipCommand(
                     clipId: clipId,
                     trackId: track.id,
-                    newSourceRange: sourceRange,
+                    newSourceRange: derivedSourceRange,
                     newTimelineRange: timelineRange
                 )
             )
@@ -1141,21 +1161,21 @@ final class IOSEditorViewModel {
         // BUG-IOS-01: route through the session command — the previous direct
         // `currentProject.canvas = preset` mutation was invisible to the
         // EditorSession, so the next dispatch or undo reverted it.
+        // Review P1: keep the export frame rate in lockstep with the canvas
+        // selection (IOSExportEngine reads exportSettings.frameRate).
+        // CODEX-18: ONE atomic command — the previous two dispatches meant
+        // undo stepped twice, and a single undo restored only the export
+        // rate while the canvas/timeline kept the new fps (exactly the
+        // drift the lockstep was preventing).
         do {
-            try await session.dispatch(SetProjectCanvasCommand(canvas: preset))
-            // Review P1: the Frame Rate picker lives on this sheet but only
-            // moved the canvas/timeline rate — IOSExportEngine reads
-            // project.exportSettings.frameRate, so the selected rate never
-            // reached the output. Keep the export frame rate in lockstep
-            // with the canvas selection from this surface.
-            let snapshot = await session.snapshot()
-            var exportSettings = snapshot.exportSettings
-            if exportSettings.frameRate != preset.frameRate {
-                exportSettings.frameRate = preset.frameRate
-                try await session.dispatch(
-                    SetProjectExportSettingsCommand(exportSettings: exportSettings)
+            var exportSettings = currentProject.exportSettings
+            exportSettings.frameRate = preset.frameRate
+            try await session.dispatch(
+                SetProjectCanvasAndExportSettingsCommand(
+                    canvas: preset,
+                    exportSettings: exportSettings
                 )
-            }
+            )
             await refreshFromSession()
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -1231,12 +1251,32 @@ final class IOSEditorViewModel {
     /// Steps the playhead one frame in either direction at the project frame
     /// rate, clamped to the timeline span. Pause first so stepping while
     /// playing doesn't fight the time observer.
+    /// STAB-03①: explicit frame steps must reach the player even when the
+    /// move is smaller than PreviewView's 0.25 s observer-coalescing
+    /// threshold — each step bumps this tick so the view issues a forced,
+    /// zero-tolerance seek instead of skipping it as a sub-threshold move.
+    private(set) var frameStepTick = 0
+
     func stepFrame(forward: Bool) {
         isPlaying = false
         let fps = currentProject.timeline.frameRate.doubleValue
         let step = fps.isFinite && fps > 0 ? 1.0 / fps : 1.0 / 30.0
         let duration = currentProject.timeline.duration
         playheadTime = min(max(0, playheadTime + (forward ? step : -step)), max(0, duration))
+        frameStepTick += 1
+    }
+
+    /// STAB-03②: PreviewView forwards AVPlayerItemDidPlayToEndTime here — a
+    /// periodic time observer cannot be relied on to sample the exact end,
+    /// so loop restart / stop is decided from the deterministic end
+    /// notification. The view performs the player-side seek/resume.
+    func handlePlaybackReachedEnd() {
+        guard currentProject.timeline.duration > 0 else { return }
+        if isLooping {
+            playheadTime = 0
+        } else {
+            isPlaying = false
+        }
     }
 
     // MARK: Track management (review #3 — create/delete/mute/lock UI)
@@ -1322,46 +1362,87 @@ final class IOSEditorViewModel {
 
     // MARK: - Playhead trim (review P0 — the Trim toolbar button was a no-op)
 
+    /// CODEX-17: the source asset's real duration, used by the shared trim
+    /// math to guard against trimming past the asset's end. Nil for image
+    /// clips (unbounded) and clips without an asset — Mac parity.
+    private func assetDuration(for clip: Clip) -> TimeInterval? {
+        guard let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            return nil
+        }
+        return asset.duration
+    }
+
+    /// Mac parity minimum (EditorViewModel.minimumTimelineClipDuration).
+    private static let minimumTimelineClipDuration: TimeInterval = 0.1
+
     /// Trims the selected clip's START to the playhead (Mac
     /// trimSelectedClipEndToPlayhead's sibling): the clip begins playing at
-    /// the playhead, keeping its end fixed. Routes through the same
-    /// `trimClip` engine math (source range follows the timeline delta).
+    /// the playhead, keeping its end fixed. CODEX-17: routed through the
+    /// shared `ClipTrimMath.compute` — the previous `trimClip` handoff
+    /// assumed timeline 1s == source 1s, so a 2x-speed clip trimmed 0.5s
+    /// kept only 0.5s of source instead of the correct 1.0s, and reverse
+    /// start-trims moved the wrong source edge.
     func trimSelectedClipStartToPlayhead() async {
         guard let clip = selectedClip else {
             lastErrorMessage = "Select a clip to trim."
             return
         }
-        let playhead = playheadTime
-        guard playhead > clip.timelineRange.start + 0.05,
-              playhead < clip.timelineRange.end else {
+        // `ClipTrimMath.compute` CLAMPS an outside target into the trimmable
+        // region (the drag contract); the playhead contract rejects it —
+        // keep the pre-guard so a parked-far-out playhead cannot silently
+        // clamp-trim.
+        guard playheadTime > clip.timelineRange.start + Self.minimumTimelineClipDuration,
+              playheadTime < clip.timelineRange.end else {
             lastErrorMessage = "Move the playhead inside the clip to trim its start."
             return
         }
-        let delta = playhead - clip.timelineRange.start
+        guard let result = ClipTrimMath.compute(
+            clip: clip,
+            edge: .start,
+            targetTimelineTime: playheadTime,
+            assetDuration: assetDuration(for: clip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its start."
+            return
+        }
         await trimClip(
             clipId: clip.id,
-            newStart: playhead,
-            newDuration: clip.timelineRange.duration - delta
+            newStart: result.timeline.start,
+            newDuration: result.timeline.duration,
+            sourceRange: result.source
         )
     }
 
     /// Trims the selected clip's END to the playhead: the clip stops at the
-    /// playhead, keeping its start fixed.
+    /// playhead, keeping its start fixed. CODEX-17: `ClipTrimMath.compute`
+    /// like the start edge (rates, ramps, and reverse included).
     func trimSelectedClipEndToPlayhead() async {
         guard let clip = selectedClip else {
             lastErrorMessage = "Select a clip to trim."
             return
         }
-        let playhead = playheadTime
-        guard playhead > clip.timelineRange.start + 0.05,
-              playhead < clip.timelineRange.end else {
+        guard playheadTime > clip.timelineRange.start + Self.minimumTimelineClipDuration,
+              playheadTime < clip.timelineRange.end else {
+            lastErrorMessage = "Move the playhead inside the clip to trim its end."
+            return
+        }
+        guard let result = ClipTrimMath.compute(
+            clip: clip,
+            edge: .end,
+            targetTimelineTime: playheadTime,
+            assetDuration: assetDuration(for: clip),
+            minimumDuration: Self.minimumTimelineClipDuration
+        ) else {
             lastErrorMessage = "Move the playhead inside the clip to trim its end."
             return
         }
         await trimClip(
             clipId: clip.id,
-            newStart: clip.timelineRange.start,
-            newDuration: playhead - clip.timelineRange.start
+            newStart: result.timeline.start,
+            newDuration: result.timeline.duration,
+            sourceRange: result.source
         )
     }
 

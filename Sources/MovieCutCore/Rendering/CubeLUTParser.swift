@@ -82,17 +82,13 @@ public enum CubeLUTParser {
         var data = [Float]()
         data.reserveCapacity(expected * 4)
         for entry in entries {
-            data.append(clamp(entry.0))
-            data.append(clamp(entry.1))
-            data.append(clamp(entry.2))
+            data.append(entry.0.clamped(to: 0...1))
+            data.append(entry.1.clamped(to: 0...1))
+            data.append(entry.2.clamped(to: 0...1))
             data.append(1.0)
         }
 
         return CubeLUT(dimension: dimension, data: data)
-    }
-
-    private static func clamp(_ value: Float) -> Float {
-        Swift.min(Swift.max(value, 0), 1)
     }
 }
 

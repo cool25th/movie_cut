@@ -9,14 +9,9 @@ public enum HSLCubeBuilder {
         public var blue: Double
 
         public init(red: Double, green: Double, blue: Double) {
-            self.red = Self.clamp(red)
-            self.green = Self.clamp(green)
-            self.blue = Self.clamp(blue)
-        }
-
-        private static func clamp(_ value: Double) -> Double {
-            guard value.isFinite else { return 0 }
-            return Swift.min(Swift.max(value, 0), 1)
+            self.red = red.clamped(to: 0...1, fallback: 0)
+            self.green = green.clamped(to: 0...1, fallback: 0)
+            self.blue = blue.clamped(to: 0...1, fallback: 0)
         }
     }
 
@@ -72,8 +67,8 @@ public enum HSLCubeBuilder {
         guard totalWeight > 0 else { return rgb }
         let normalizer = min(totalWeight, 1)
         hsl.hue = wrappedHue(hsl.hue + hueShift / totalWeight * normalizer)
-        hsl.saturation = clamp(hsl.saturation + saturationDelta / totalWeight * normalizer)
-        hsl.luminance = clamp(hsl.luminance + luminanceDelta / totalWeight * normalizer)
+        hsl.saturation = (hsl.saturation + saturationDelta / totalWeight * normalizer).clamped(to: 0...1, fallback: 0)
+        hsl.luminance = (hsl.luminance + luminanceDelta / totalWeight * normalizer).clamped(to: 0...1, fallback: 0)
         return toRGB(hsl)
     }
 
@@ -102,7 +97,7 @@ public enum HSLCubeBuilder {
         } else {
             hue = 60 * (((rgb.red - rgb.green) / delta) + 4)
         }
-        return HSL(hue: wrappedHue(hue), saturation: clamp(saturation), luminance: clamp(luminance))
+        return HSL(hue: wrappedHue(hue), saturation: saturation.clamped(to: 0...1, fallback: 0), luminance: luminance.clamped(to: 0...1, fallback: 0))
     }
 
     private static func toRGB(_ hsl: HSL) -> RGB {
@@ -130,10 +125,5 @@ public enum HSLCubeBuilder {
     private static func wrappedHue(_ hue: Double) -> Double {
         let wrapped = hue.truncatingRemainder(dividingBy: 360)
         return wrapped < 0 ? wrapped + 360 : wrapped
-    }
-
-    private static func clamp(_ value: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return Swift.min(Swift.max(value, 0), 1)
     }
 }

@@ -25,6 +25,19 @@ struct KeyframeListView: View {
 
                             ForEach(keyframes) { keyframe in
                                 keyframeRow(keyframe)
+                                // When the selected keyframe uses a custom curve,
+                                // reveal the bezier handle editor beneath its row.
+                                if keyframe.id == selectedKeyframeId, keyframe.interpolation == .custom {
+                                    BezierCurveEditorView(
+                                        control: keyframe.customCurve ?? CubicBezierControl(x1: 0.42, y1: 0, x2: 0.58, y2: 1),
+                                        property: keyframe.property,
+                                        onChange: { newCurve in
+                                            setCustomCurve(keyframeId: keyframe.id, curve: newCurve)
+                                        }
+                                    )
+                                    .padding(.leading, 14)  // align under the row, past the selection dot
+                                    .padding(.top, 2)
+                                }
                             }
                         }
                     }
@@ -103,9 +116,23 @@ struct KeyframeListView: View {
                 var keyframes = clip.keyframes
                 guard let index = keyframes.firstIndex(where: { $0.id == id }) else { return }
                 keyframes[index].interpolation = mode
+                // Seed a sensible default curve when switching to .custom so the
+                // editor has something to render and drag; otherwise leave nil.
+                if mode == .custom, keyframes[index].customCurve == nil {
+                    keyframes[index].customCurve = CubicBezierControl(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
+                }
                 onChange(keyframes)
             }
         )
+    }
+
+    /// Writes a new bezier control to the selected keyframe via the undo-able
+    /// `onChange` path (same route as every other keyframe edit).
+    private func setCustomCurve(keyframeId: UUID, curve: CubicBezierControl) {
+        var keyframes = clip.keyframes
+        guard let index = keyframes.firstIndex(where: { $0.id == keyframeId }) else { return }
+        keyframes[index].customCurve = curve
+        onChange(keyframes)
     }
 
     private func deleteKeyframe(_ id: UUID) {

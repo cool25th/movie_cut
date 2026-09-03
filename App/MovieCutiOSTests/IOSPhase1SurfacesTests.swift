@@ -37,10 +37,15 @@ struct IOSPhase1SurfacesTests {
         vm.playheadTime = 1.0
         vm.stepFrame(forward: true)
         #expect(abs(vm.playheadTime - (1.0 + 1.0 / 30.0)) < 0.0001)
-
+        // STAB-03①: every explicit step bumps the tick the view observes
+        // with a forced zero-tolerance seek — otherwise a ~0.033 s move is
+        // swallowed by the 0.25 s observer-coalescing threshold and the
+        // rendered frame stays behind the playhead number.
+        #expect(vm.frameStepTick == 1)
         vm.stepFrame(forward: false)
         vm.stepFrame(forward: false)
         #expect(abs(vm.playheadTime - (1.0 - 1.0 / 30.0)) < 0.0001)
+        #expect(vm.frameStepTick == 3)
 
         // Stepping pauses playback rather than fighting the time observer.
         vm.isPlaying = true
@@ -64,6 +69,34 @@ struct IOSPhase1SurfacesTests {
         #expect(vm.isLooping == false)
         vm.isLooping = true
         #expect(vm.isLooping == true)
+    }
+
+    // STAB-03②: end-of-playback is decided from the deterministic
+    // AVPlayerItemDidPlayToEndTime notification (forwarded by PreviewView),
+    // not from the periodic observer sampling the exact end.
+    @Test("playback end handler loops to zero or stops")
+    func playbackEndHandling() async throws {
+        let vm = freshViewModel()
+        let asset = MediaImporter.probe(url: Self.fixtureURL)
+        await vm.importMedia(from: Self.fixtureURL)
+        await vm.addClipToTimeline(asset: asset)
+        let duration = vm.currentProject.timeline.duration
+        #expect(duration > 1.9)
+
+        // Non-looping: playback stops.
+        vm.playheadTime = duration
+        vm.isPlaying = true
+        vm.handlePlaybackReachedEnd()
+        #expect(vm.isPlaying == false)
+
+        // Looping: playhead resets to zero and stays "playing" — the view
+        // performs the player-side seek and resume.
+        vm.isLooping = true
+        vm.isPlaying = true
+        vm.playheadTime = duration
+        vm.handlePlaybackReachedEnd()
+        #expect(vm.playheadTime == 0)
+        #expect(vm.isPlaying == true)
     }
 
     // MARK: Track management
@@ -92,6 +125,16 @@ struct IOSPhase1SurfacesTests {
         await vm.setTrackLocked(trackId, true)
         #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId }?.isLocked == true)
 
+        // CODEX-20 contract: RemoveTrackCommand honors the track lock (the
+        // same guard every other mutating command applies) — a locked track
+        // refuses removal, so both the track and the count survive.
+        await vm.deleteTrack(trackId)
+        #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId } != nil,
+                "a locked track must refuse deletion")
+        #expect(vm.currentProject.timeline.tracks.count == before + 2)
+
+        // Unlocked, the same delete goes through.
+        await vm.setTrackLocked(trackId, false)
         await vm.deleteTrack(trackId)
         #expect(vm.currentProject.timeline.tracks.first { $0.id == trackId } == nil)
         #expect(vm.currentProject.timeline.tracks.count == before + 1)

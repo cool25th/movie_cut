@@ -101,8 +101,11 @@ struct IOSParityMatrixStaticContractTests {
 
         // RENDER-01: the preview delegates ALL processing to the shared
         // render plan (the compositor above carries the processors); it must
-        // not reimplement any pipeline inline.
-        #expect(iosPreview.contains("makeRenderPlan(for: project)"))
+        // not reimplement any pipeline inline. Stage-4: the preview passes an
+        // explicit source policy (proxy preview vs original export) — the
+        // delegation is unchanged, the plan call just gained a parameter.
+        #expect(iosPreview.contains("makeRenderPlan("))
+        #expect(iosPreview.contains("sourcePolicy: useProxyPlayback ? .proxyWhenAvailable : .originalOnly"))
         #expect(!iosPreview.contains("applyFilterPipeline"))
         #expect(!iosPreview.contains("ColorCorrectionPixelProcessor.apply"))
     }

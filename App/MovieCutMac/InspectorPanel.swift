@@ -14,6 +14,14 @@ enum InspectorSubtab: String, CaseIterable, Identifiable {
     case mask = "Mask"
 
     var id: Self { self }
+
+    /// Localized tab title. The rawValue doubles as the catalog key; rendering
+    /// `Text(rawValue)` would skip lookup entirely (SwiftUI treats a runtime
+    /// String as verbatim) — the English-only tab exposure the localization
+    /// review flagged.
+    var displayName: String {
+        NSLocalizedString(rawValue, comment: "Inspector subtab title")
+    }
 }
 
 struct InspectorPanel: View {
@@ -90,8 +98,7 @@ struct InspectorPanel: View {
     private func selectedClipInspectorSections(for clip: Clip) -> some View {
         switch clip.kind {
         case .audio:
-            InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
-                .movieCutInspectorSelectedFlatRow()
+            audioClipInspectorSections(for: clip)
         case .text:
             InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.text)
                 .movieCutInspectorSelectedFlatRow()
@@ -100,13 +107,26 @@ struct InspectorPanel: View {
         }
     }
 
+    /// Audio clips show the basic section plus the offline vocal-separation
+    /// section. The vocal section's VM/Renderer/`ImportAndSetClipSourceCommand`
+    /// path is fully implemented; this is its host surface (the section was
+    /// previously compiled but never instantiated).
+    @ViewBuilder
+    private func audioClipInspectorSections(for clip: Clip) -> some View {
+        InspectorBasicSection(viewModel: viewModel, clip: clip, mode: InspectorBasicMode.audio)
+            .movieCutInspectorSelectedFlatRow()
+
+        InspectorVocalSection(viewModel: viewModel, clip: clip)
+            .movieCutInspectorSelectedFlatRow()
+    }
+
     /// R4-02: visual clips use Inspector subtabs instead of rendering every
     /// visual/effects/mask/animation control at once.
     @ViewBuilder
     private func visualClipInspectorSections(for clip: Clip) -> some View {
         Picker("Inspector section", selection: $viewModel.selectedInspectorSubtab) {
             ForEach(InspectorSubtab.allCases) { subtab in
-                Text(subtab.rawValue).tag(subtab)
+                Text(subtab.displayName).tag(subtab)
             }
         }
         .pickerStyle(.segmented)

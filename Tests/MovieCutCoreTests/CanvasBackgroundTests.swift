@@ -82,13 +82,31 @@ struct CanvasBackgroundTests {
 
     // MARK: - Pixel processor
 
-    @Test("nil background passes the frame through unchanged")
-    func nilBackgroundIsPassthrough() {
+    @Test("nil background under opaque delivery composites over an opaque black canvas")
+    func nilBackgroundOpaqueDeliveryFillsCanvas() {
         let frame = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 60, width: 108, height: 72))
         let composed = CanvasBackgroundPixelProcessor.compose(
             frame: frame,
             over: nil,
             renderSize: renderSize
+        )
+        // LF-ACTION-01: every canvas pixel is decided by the current frame —
+        // full-canvas extent, and the letterbox band is opaque black rather
+        // than transparent (transparent bands let recycled codec buffers
+        // leak the previous scene).
+        #expect(composed.extent == CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
+        let band = samplePixel(from: composed, at: CGPoint(x: 54, y: 10))
+        #expect(band.a != 0 ? (band.r < 8 && band.g < 8 && band.b < 8) : true)
+    }
+
+    @Test("nil background with alpha-preserving policy passes the frame through unchanged")
+    func nilBackgroundAlphaPreservingIsPassthrough() {
+        let frame = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 60, width: 108, height: 72))
+        let composed = CanvasBackgroundPixelProcessor.compose(
+            frame: frame,
+            over: nil,
+            renderSize: renderSize,
+            fillPolicy: .alphaPreserving
         )
         #expect(composed === frame || composed.extent == frame.extent)
     }

@@ -1,6 +1,6 @@
 # Mac ↔ iOS 플랫폼 파리티 매트릭스 (G-09 Inc 2)
 
-> 작성일: 2026-07-04 재감사 / 결정: Mac + iOS 동시 파리티 유지.
+> 작성일: 2026-07-04 재감사 · **2026-09-03 capcut-surpass 통합 반영(§8)** / 결정: Mac + iOS 동시 파리티 유지.
 > 목적: G-09 Inc 2 요구사항에 따라 기능 × {Core, Mac UI, iOS UI, Mac compositor/export/preview, iOS compositor/export/preview} 상태를 정직하게 재감사하고, Mac-only 또는 iOS defer 항목마다 사유 1줄을 남긴다.
 > 검증 성격: 코드 정적 감사 + 빌드 검증. iOS simulator W1 녹화는 아직 미수행이며, DoD 완료 증거로 과장하지 않는다.
 
@@ -121,18 +121,18 @@
 - 오디오 덕킹
   - Core: ✅ `AudioDuckingPlanner`, clip ducking ranges
   - Mac UI: ✅ inspector command path
-  - iOS UI: ❌ 동등 duck/clear action 미확인
+  - iOS UI: ❌ duck/clear action 표면 없음(2026-09-03 확인 — 엔진·프리뷰는 모델 필드 `duckingRanges`/`duckingLevel` 소비)
   - Mac preview/export: ✅ app E2E RMS proof 있음
-  - iOS preview/export: 🟡 audio composition 기본 insert만 확인
-  - 상태: 🟡 iOS defer — 사유: iOS UI/action 및 ramped volume parameter parity 미검증
+  - iOS preview/export: ✅(렌더 경로) stage-4(2026-09-02) placed-span 덕킹 — Mac `applyDuckingRamps` 계약과 동일 램프(attack 0.12s·release 0.25s)를 공유 오디오 믹스 플랜에 적용, 프리뷰·export가 같은 플랜 소비. `IOSAudioDuckingEQTests` 5종(감쇠 ≥6dB·2x placed-span 판별기)
+  - 상태: 🟡 렌더 parity 확보·iOS UI action 표면 없음 — 사유: 덕 창/레벨은 Core 모델 필드로 존재하나 iOS 시트에 발동 액션이 없어 사용자가 iOS에서 설정 불가
 
 - EQ
   - Core: ✅ `AudioEqualizerService` real DSP
   - Mac UI: ✅ preset + five bands
-  - iOS UI: ❌ 동등 EQ controls 미확인
+  - iOS UI: ❌ EQ controls 표면 없음(2026-09-03 확인)
   - Mac preview/export: ✅ app E2E spectrum proof 있음
-  - iOS preview/export: ❌ real EQ apply/export path 미확인
-  - 상태: 🟡 iOS defer — 사유: S0에서 Mac real DSP를 복구했지만 iOS action/export parity는 아직 없음
+  - iOS preview/export: ✅(렌더 경로) stage-4(2026-09-02) EQ'd 클립 오디오를 공유 Core `AudioEqualizerService.apply`로 오프라인 파생해 삽입(원본 시간 배치 보존 — sourceRange 1:1)·`eqDerivations` 캐시는 Mac `equalizedPreviewAudio` 패리티. bassBoost 저/고 비 ≥2배 스펙트럼 행동 테스트
+  - 상태: 🟡 렌더 parity 확보·iOS UI 표면 없음 — 사유: iOS에 EQ 프리셋/밴드 편집 시트가 없음(렌더는 프로젝트 메타데이터 기반으로만 동작)
 
 - 노이즈감소 apply
   - Core: ✅ `NoiseReductionService` real DSP
@@ -168,22 +168,22 @@
   - Mac UI: ✅ 라이브러리 생성 버튼/상태 + Inspector 재생 토글 + **해상도 선택 4단**(720p 권장 표시) + **타임라인 클립 배지**(idle/active 2상태)
   - iOS UI: ❌ 없음
   - Mac preview/export: ✅ preview가 프록시 소비, export는 원본 유지(B-I7 요구사항)
-  - iOS preview/export: ❌ `IOSPlaybackEngine`/`IOSExportEngine`에 프록시 분기 없음
-  - 상태: 🟡 iOS defer — 사유: Mac은 생성·소비·표시가 모두 배선됐으나 iOS는 프록시 경로 자체가 없음. 실앱 증거: `proxy_generated=1 proxy_playback=0 proxy_badge=idle` / `proxy_playback=1 proxy_badge=active` (2026-07-30, `MOVIECUT_UITEST_PROXY_BADGE`)
+  - iOS preview/export: 🟡 stage-4-1(2026-09-02) `IOSSourcePolicy` — 프리뷰는 `.proxyWhenAvailable` 정책으로 프록시 소비 가능(프록시 존재 시 원본 판독 행동 증명·`IOSSourcePolicyTests`), export는 `.originalOnly` 명시 고정(마스터 다운스케일 방지)
+  - 상태: 🟡 iOS defer — 사유: 프리뷰 소비 정책은 배선됐으나 **프록시 생성 경로와 iOS 타임라인 배지 표면이 없음**. 실앱 증거: `proxy_generated=1 proxy_playback=0 proxy_badge=idle` / `proxy_playback=1 proxy_badge=active` (2026-07-30, `MOVIECUT_UITEST_PROXY_BADGE`)
 
 ## 3. Mac-only 또는 iOS defer 항목
 
 - Mac-only 또는 iOS defer 항목: 3-way color grade advanced UI — 사유: iOS render는 shared이나 wheel/scope editing surface가 Mac 대비 얕음.
 - Mac-only 또는 iOS defer 항목: LUT/필터 full processor-only path — 사유: iOS compositor에 legacy CIFilter switch가 병존.
-- Mac-only 또는 iOS defer 항목: 크로마키 shared processor — 사유: iOS compositor가 `ChromaKeyPixelProcessor`를 직접 위임하지 않음.
-- Mac-only 또는 iOS defer 항목: 전환 two-source — 사유: iOS compositor/export에 `TransitionPixelProcessor` 및 two-source instruction path 미배선.
-- Mac-only 또는 iOS defer 항목: 배경제거 shared compositor — 사유: iOS가 `PersonSegmentationCompositor` 미사용.
-- Mac-only 또는 iOS defer 항목: 정지프레임 — 사유: iOS UI/action/export special-case 미배선.
-- Mac-only 또는 iOS defer 항목: speed ramp — 사유: iOS preview/export가 `SpeedRampCurve` 미사용.
-- Mac-only 또는 iOS defer 항목: 역재생 — 사유: iOS preview/export가 `isReversed` 미소비.
-- Mac-only 또는 iOS defer 항목: 오디오 덕킹 — 사유: iOS duck/clear UI와 ramped volume parameter 검증 없음.
-- Mac-only 또는 iOS defer 항목: 프록시 재생 + 타임라인 배지 — 사유: iOS playback/export에 프록시 URL 분기가 없고 iOS 타임라인에 배지 표면이 없음. Core `ProxyBadgeState.resolve`는 플랫폼 중립이라 iOS 배선 시 재사용 가능.
-- Mac-only 또는 iOS defer 항목: EQ — 사유: iOS real EQ action/export path 없음.
+- Mac-only 또는 iOS defer 항목: 크로마키 preview/행동검증 — 사유: iOS **export는 full settings로 `ChromaKeyPixelProcessor` 위임 완료**(ed449f8, build-verified)·iOS preview 크로마 렌더링과 행동 검증(9.2) 잔여.
+- Mac-only 또는 iOS defer 항목: 전환 two-source — 사유: iOS compositor/export에 `TransitionPixelProcessor` 및 two-source instruction path 미배선(2026-09-03 확인 — 여전).
+- Mac-only 또는 iOS defer 항목: 배경제거 행동검증 — 사유: iOS **export가 `PersonSegmentationCompositor` 사용 완료**(ed449f8, build-verified)·행동 검증(9.2) 잔여.
+- Mac-only 또는 iOS defer 항목: 정지프레임 — 사유: iOS export freeze branch는 구현(§6 Step 7)·UI action 표면과 시뮬레이터 E2E 미수행.
+- Mac-only 또는 iOS defer 항목: speed ramp — 사유: iOS export `applySpeedRamp`는 구현(§6 Step 7)·동등 에디터 UI와 시뮬레이터 E2E 미수행.
+- Mac-only 또는 iOS defer 항목: 역재생 — 사유: iOS export `renderReversedAsset`은 구현(§6 Step 7)·action 표면과 시뮬레이터 E2E 미수행.
+- Mac-only 또는 iOS defer 항목: 오디오 덕킹 — 사유: iOS duck/clear UI 표면 없음(렌더 placed-span parity는 2026-09-02 stage-4 완료 — 위 행 참조).
+- Mac-only 또는 iOS defer 항목: 프록시 재생 + 타임라인 배지 — 사유: 프리뷰 소비 정책은 stage-4-1 배선(`IOSSourcePolicy`)·프록시 **생성 경로와 배지 표면** 없음. Core `ProxyBadgeState.resolve`는 플랫폼 중립이라 iOS 배선 시 재사용 가능.
+- Mac-only 또는 iOS defer 항목: EQ — 사유: iOS EQ UI 표면 없음(렌더 파생·캐시는 2026-09-02 stage-4 완료 — 위 행 참조).
 - Mac-only 또는 iOS defer 항목: 노이즈감소 apply — 사유: iOS destructive denoise/source replacement action 없음.
 - Mac-only 또는 iOS defer 항목: 자동저장/크래시 복구 — 사유: iOS lifecycle autosave/recovery UX 미배선.
 - Mac-only 또는 iOS defer 항목: ProRes/GIF/스틸 export — 사유: iOS export는 `.mov` HighestQuality 중심, Pro 출력은 Mac 우선 범위로 defer.
@@ -232,3 +232,8 @@
 - iOS autosave/crash recovery lifecycle
 - `IOSPlaybackEngine` (dead code — ✅ 제거됨, `7b5b2ad`)
 - CoreSimulator out-of-date 경고는 Mac build/E2E 중 simulator device support 경고로 계속 나타난다. iOS generic device build는 `CODE_SIGNING_ALLOWED=NO`로 검증한다.
+
+## 8. capcut-surpass 통합 재감사 (2026-09-03, 문서 갱신)
+
+> `codex/integrate-capcut-surpass` stage-4 완료(2026-09-02) 이후 문서 재감사 — 덕킹·EQ·프록시 행과 §3 사유를 현재 코드 상태로 갱신했다. 근거: `IOSExportEngine` placed-span 덕킹/EQ 파생 + `eqDerivations` 캐시 · `IOSSourcePolicy` · 테스트 `IOSAudioDuckingEQTests`/`IOSSourcePolicyTests`(iOS 시뮬 전체 83/20 PASS — 2026-09-03 BUG-ACC-09 종료 시점).
+> 유의: 이번에 렌더 경로로 표시된 iOS 항목은 시뮬레이터 유닛/구조 테스트 기반이다. 실기기 행동 검증은 G-27 잔여(1/3 완료 — iPhone 13 Pro 2026-08-22), two-source transition은 여전 미배선. 상세 경위: `CAPCUT_SURPASS_INTEGRATION_PROGRESS.md` 4단계.

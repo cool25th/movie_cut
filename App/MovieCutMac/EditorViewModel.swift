@@ -154,6 +154,9 @@ final class EditorViewModel {
     @ObservationIgnored var desiredMasterAudioProcessing: MasterAudioProcessing?
     @ObservationIgnored var masterAudioProcessingMutationGeneration: UInt64 = 0
     @ObservationIgnored var masterAudioProcessingMutationTask: Task<Void, Never>?
+    /// CA-25 onboarding instrumentation (first launch/import/export/quick tools).
+    let onboardingMetrics = OnboardingMetrics()
+
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
@@ -218,27 +221,63 @@ final class EditorViewModel {
     /// user must know crash recovery stopped backing their edits up. Still
     /// non-blocking: editing continues, and the warning clears on the next
     /// successful autosave.
+    // Coalescing state (capcut-surpass 9304e8b, rewritten for this tree's
+    // error-surfacing contract): rapid edits debounce into ONE disk write,
+    // saves run serially (never interleaved temp-file replaces), and a save
+    // requested while one is in flight re-fires with the LATEST snapshot
+    // afterwards — last snapshot always wins.
+    @ObservationIgnored private var pendingAutosaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autosaveSaveInFlight = false
+    @ObservationIgnored private var autosaveDirty = false
+    @ObservationIgnored private var lastAutosavedProject: Project?
+
     private func scheduleAutosave() {
+        // A no-op re-publish of identical content skips the write entirely.
+        if let lastAutosavedProject, lastAutosavedProject == currentProject, !autosaveSaveInFlight {
+            return
+        }
+        pendingAutosaveTask?.cancel()
+        pendingAutosaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 750_000_000) // 0.75 s debounce
+            guard !Task.isCancelled else { return }
+            await self?.performAutosave()
+        }
+    }
+
+    /// Serial, latest-snapshot-wins autosave. Recommitted after an in-flight
+    /// save when an edit landed mid-save (autosaveDirty).
+    private func performAutosave() async {
+        if autosaveSaveInFlight {
+            autosaveDirty = true
+            return
+        }
         let snapshot = currentProject
-        Task { [projectStore, weak self] in
-            do {
-                try await projectStore.saveAutosave(snapshot)
-                self?.autosaveSaveSucceeded()
-            } catch {
-                self?.autosaveSaveFailed(FileOperationError.classify(error))
-            }
+        if let lastAutosavedProject, lastAutosavedProject == snapshot {
+            autosaveDirty = false
+            return
+        }
+        autosaveSaveInFlight = true
+        defer { autosaveSaveInFlight = false }
+        do {
+            try await projectStore.saveAutosave(snapshot)
+            lastAutosavedProject = snapshot
+            autosaveSaveSucceeded()
+        } catch {
+            autosaveSaveFailed(FileOperationError.classify(error))
+        }
+        if autosaveDirty {
+            autosaveDirty = false
+            await performAutosave()
         }
     }
 
     /// Awaitable autosave flush (used by automation to deterministically persist
     /// recovery state before quitting; same path as the edit-driven autosave).
+    /// Cancels any pending debounced save and writes the latest snapshot now.
     func flushAutosave() async {
-        do {
-            try await projectStore.saveAutosave(currentProject)
-            autosaveSaveSucceeded()
-        } catch {
-            autosaveSaveFailed(FileOperationError.classify(error))
-        }
+        pendingAutosaveTask?.cancel()
+        pendingAutosaveTask = nil
+        await performAutosave()
     }
 
     /// Non-blocking crash-recovery warning. nil while autosaves succeed;
@@ -274,6 +313,12 @@ final class EditorViewModel {
     /// instead of the previous silent `try?` swallow.
     func autosaveLoadFailure() async -> FileOperationError? {
         await projectStore.lastAutosaveLoadFailure
+    }
+
+    /// When the crash-recovery autosave was last written, for the launch
+    /// recovery prompt's identification line (project name + backup time).
+    func recoverableAutosaveDate() async -> Date? {
+        await projectStore.autosaveModificationDate()
     }
 
     /// Removes the crash-recovery autosave (clean quit or after a manual save).
@@ -629,6 +674,15 @@ final class EditorViewModel {
         return Self.isTranscribable(selectedAsset)
     }
 
+    /// Whether the editor shows the card-news surface instead of the timeline.
+    ///
+    /// Dormant-by-design in v1 (audit 2026-09-03): NO UI creates a
+    /// cardDocument — the card editor is reached only by OPENING a
+    /// `.moviecut` project that already carries one (or the DEBUG harness
+    /// scenarios/e2e G-18/G-19, which keep the surface exercised and tested).
+    /// The Core CardNews models + commands stay for the later authoring
+    /// feature; until an entry ships, this exists so those project files
+    /// still open into their editor.
     var isCardEditorMode: Bool {
         currentProject.cardDocument != nil
     }
@@ -1045,6 +1099,59 @@ final class EditorViewModel {
         }
     }
 
+    /// CA-25: opens the bundled sample project (W1-mini talking-head template
+    /// shipped in the app bundle — fully offline). Mirrors `importProjectPackage`
+    /// but sources the package from the bundle instead of a panel. Returns true
+    /// when the sample loaded.
+    @discardableResult
+    func openBundledSampleProject() async -> Bool {
+        guard let url = Bundle.main.url(forResource: "SampleProject", withExtension: ProjectPackage.fileExtension) else {
+            lastErrorMessage = NSLocalizedString(
+                "The sample project isn't available in this build.",
+                comment: "Error when the bundled sample template is missing"
+            )
+            return false
+        }
+        guard await confirmDiscardUnsavedChanges() else { return false }
+        do {
+            let project = try ProjectPackage.load(from: url)
+            session = EditorSession(project: project)
+            currentProject = project
+            invalidateMasterLoudnessContext()
+            resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
+            currentProjectURL = nil
+            canvasSelection = project.canvas.aspectRatio
+            syncExportUI(from: project.exportSettings)
+            selectedClipId = nil
+            selectedAssetId = nil
+            playbackEngine.clear()
+            playheadTime = 0
+            clearGeneratedSubtitles()
+            clearClipProcessingState()
+            recentAnalysisResults = []
+            lastExportURL = nil
+            lastErrorMessage = nil
+            lastStatusMessage = NSLocalizedString(
+                "Sample project loaded. Try: cut the clip, add subtitles, then export.",
+                comment: "Status after opening the bundled sample project"
+            )
+            // The loaded sample is the clean baseline for this session.
+            lastSavedProject = project
+            isDirty = false
+            onboardingMetrics.record(.sampleOpened)
+            return true
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not open the sample project: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// CA-25 metric: first Quick Tools action (freeze / reverse) on this install.
+    func noteQuickToolUsed() {
+        onboardingMetrics.record(.quickToolsUsed)
+    }
+
     func saveProject() async {
         // Deterministic path injection for the ungated home relaunch XCUITest.
         // This does not enable MOVIECUT_UITEST or alter app routing; it only
@@ -1326,6 +1433,7 @@ final class EditorViewModel {
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1359,6 +1467,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1380,22 +1489,7 @@ final class EditorViewModel {
     /// Exports a ProRes 422 master to an explicit URL (no save panel). Used by
     /// automation and the harness.
     func exportProResMaster(to url: URL) async {
-        guard ensureAllMediaReachableForExport() else { return }
-        exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
-        lastExportURL = nil
-        do {
-            let snapshot = await session.snapshot()
-            lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
-                project: snapshot,
-                to: url,
-                profileOverride: .proRes422,
-                audioProcessing: buildAudioProcessingOptions()
-            )
-            lastErrorMessage = nil
-        } catch {
-            lastExportURL = nil
-            lastErrorMessage = error.localizedDescription
-        }
+        await exportMaster(to: url, profile: .proRes422)
     }
 
     /// Exports a 10-bit HDR master (HEVC Main 10, Rec. 2020 + HLG). CapCut has no
@@ -1424,6 +1518,17 @@ final class EditorViewModel {
             lastErrorMessage = "HDR mastering is not available in this build."
             return
         }
+        await exportMaster(to: url, profile: .hevcHDR)
+    }
+
+    /// Common mastering route behind the explicit-bitrate writer: exports to
+    /// an explicit URL with a profile override and no save panel. This is the
+    /// harness/automation route for every master (ProRes, HDR, and the
+    /// `MOVIECUT_UITEST_EXPORT_PROFILE` verification knob); it deliberately
+    /// skips the delivery settings reconciliation because masters resolve
+    /// their profile here, not from the persisted delivery codec.
+    func exportMaster(to url: URL, profile: VideoCompressionProfile) async {
+        guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
         do {
@@ -1431,9 +1536,10 @@ final class EditorViewModel {
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
                 project: snapshot,
                 to: url,
-                profileOverride: .hevcHDR,
+                profileOverride: profile,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1463,6 +1569,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1487,6 +1594,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1512,6 +1620,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1758,10 +1867,12 @@ final class EditorViewModel {
 
     private func reportMediaLibraryDropSuccess(count: Int) {
         setDropStatus(Self.DropFeedbackMessage.importedMediaFiles(count))
+        onboardingMetrics.record(.firstImport)
     }
 
     private func reportTimelineFileDropSuccess(count: Int) {
         setDropStatus(Self.DropFeedbackMessage.addedMediaFilesToTimeline(count))
+        onboardingMetrics.record(.firstImport)
     }
 
     private func reportTimelineLibraryAssetDropSuccess(count: Int) {
@@ -2584,10 +2695,15 @@ final class EditorViewModel {
         canvas: CanvasPreset,
         exportSettings: ExportSettings
     ) async {
-        await apply(SetProjectCanvasCommand(canvas: canvas))
-        guard lastErrorMessage == nil else { return }
-
-        await apply(SetProjectExportSettingsCommand(exportSettings: exportSettings))
+        // CODEX-18 (same class as the iOS fps preset): canvas + export
+        // settings land as ONE command so a single undo restores both —
+        // the previous back-to-back applies stepped undo twice and one
+        // undo left the canvas/timeline at the new preset while only the
+        // export settings reverted.
+        await apply(SetProjectCanvasAndExportSettingsCommand(
+            canvas: canvas,
+            exportSettings: exportSettings
+        ))
         guard lastErrorMessage == nil else { return }
 
         reportQuickToolSuccess("Applied \(name) export preset.")
@@ -3436,11 +3552,17 @@ final class EditorViewModel {
         var first = segment
         first.text = firstText
         first.endTime = midTime
+        // Split word timings at midTime so both halves stay karaoke-capable.
+        // Without this the split demotes a karaoke caption to plain text.
+        if let halves = SubtitleGenerator.splitWordTimings(segment.words, at: midTime) {
+            first.words = halves.first
+        }
         let second = TranscriptionSegment(
             text: secondText,
             startTime: midTime,
             endTime: segment.endTime,
-            confidence: segment.confidence
+            confidence: segment.confidence,
+            words: SubtitleGenerator.splitWordTimings(segment.words, at: midTime)?.second
         )
         generatedSubtitleSegments.replaceSubrange(index...index, with: [first, second])
         await rebuildPendingSubtitleClips()
@@ -3461,6 +3583,9 @@ final class EditorViewModel {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         merged.endTime = max(merged.endTime, next.endTime)
+        // Merge word timings so the combined segment stays karaoke-capable.
+        // Without this the merge demotes a karaoke caption to plain text.
+        merged.words = SubtitleGenerator.mergedWordTimings(merged.words, next.words)
         generatedSubtitleSegments.replaceSubrange(index...(index + 1), with: [merged])
         await rebuildPendingSubtitleClips()
         lastStatusMessage = "Merged subtitle segment with the next one."
@@ -4952,6 +5077,16 @@ final class EditorViewModel {
             settings = .settings(for: presetID)
             clipEQPresets[clipId] = presetID.rawValue
         }
+
+        // BUG-ACC-07: every committed refresh re-syncs `selectedEQPreset` from
+        // the clip (selectedClipIds didSet → loadSelectedClipProcessingState),
+        // which re-fires the inspector Picker's onChange for PROGRAMMATIC EQ
+        // changes and re-dispatches this method with the identical settings.
+        // Re-applying the same equalizer is a no-op — skipping the dispatch
+        // keeps the echo from dirtying the project/undo stack and from
+        // invalidating in-flight measurements (the master-loudness meter
+        // raced this echo and discarded its result 4/4).
+        if clip.equalizer == settings { return }
 
         await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
     }

@@ -632,5 +632,5 @@ private func hasMeaningfulTextAnimationDelta(_ states: [TextAnimationRenderState
 }
 
 @Test func interpolationModeAllCases() {
-    #expect(InterpolationMode.allCases.count == 5)
+    #expect(InterpolationMode.allCases.count == 6)  // .custom added (G-06 Inc 2)
 }

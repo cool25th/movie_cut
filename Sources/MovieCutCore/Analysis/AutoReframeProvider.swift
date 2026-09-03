@@ -135,14 +135,10 @@ public final class AutoReframeProvider: AnalysisProvider {
         )
 
         return CGRect(
-            x: clamp(subjectCenter.x - cropSize.width / 2, lower: 0, upper: 1 - cropSize.width),
-            y: clamp(subjectCenter.y - cropSize.height / 2, lower: 0, upper: 1 - cropSize.height),
+            x: (subjectCenter.x - cropSize.width / 2).clamped(to: 0...(1 - cropSize.width)),
+            y: (subjectCenter.y - cropSize.height / 2).clamped(to: 0...(1 - cropSize.height)),
             width: cropSize.width,
             height: cropSize.height
         )
-    }
-
-    private static func clamp(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
-        min(max(value, lower), max(lower, upper))
     }
 }

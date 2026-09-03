@@ -320,7 +320,9 @@
 - 증상: 파리티 경로(`MOVIECUT_UITEST_PARITY=1`)에서 `MOVIECUT_UITEST_DUCKING_*` 게이트 적용 직후 태스크가 재개되지 않음 — 체크포인트 `scenarios_applied`에서 영구 정지(0% CPU·메인 스레드 런루프 유휴). **결정론 재현**: `WATCHDOG_S=180 bash scripts/run_ca12_ab_benchmark.sh ab09`.
 - **조사 결과(2026-08-27 심화)**: ①파킹은 composition 재구성 이후 **첫 필수 서스펜션 지점마다 이동** — 순서 재배열(덕킹을 비억제 창에서 먼저 실행)로 composition_ready까지는 통과하지만 스냅샷 대기 루프에서 동일 파킹(→재배열은 폐기). ②`Task.sleep`·`Task.yield` 모두 재개 안 됨(시계 문제 아님). ③**`DispatchQueue.main.async` 블록도 전달 안 됨(GCD 레벨)** — 반면 앱 활성화 등 런루프 이벤트는 계속 처리됨(메인 런루프 모드 kCFRunLoopDefaultMode 정상·lldb 확인). ④전역 협력 풀은 생존(detached 하트비트 1틱 기록) — 이후 MainActor.run 홉에서 정지. ⑤덕킹 **램프 적용(APPLY)과 무관**(오디오 트랙 존재 자체가 트리거)·크로마키 게이트는 무관·일반 경로 덕킹 E2E는 통과. 종합: **메인 디스패치 큐의 전달이 영구 정지하는 OS/AVFoundation 계열 결함**(W4 ProRes 교찰의 "once-continuation 파킹(Apple측)"과 같은 부류로 추정) — 루프 내 도구로는 근본 원인 특정 불가.
 - 부산물(유지): `snapshotFrame`의 seek completion 누수 방어 와치독(2s 경합·1회 재개 보장 — AVPlayer 공식 문서상 완전 핸들러 미보장 클래스). 파리티 스윕 13/13 무회귀 확인.
-- 잔여: 재현은 1커맨드로 고정됨(ab09). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
+- **재현 경로 추가(2026-08-29, BUG-ACC-02에서 병합 — 메인 세션)**: W1 acceptance 실덕킹 경로에서 동일 파킹 — `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 60초 실발화(say 생성)에서 메인 런루프 유휴·워커 부재·첫 스텝조차 미기록(스택 샘플 2026-08-29 — 메인 스레드 mach_msg 대기만 존재). **1커맨드 재현: `bash scripts/run_w_acceptance.sh w1`**(STRICT — ducking 스텝 `path=analysis` 직후 무출력, 러너 900초 회수). 파리티×덕킹 '조합'이 아니라 덕킹 **분석 경로 자체**가 트리거일 가능성 — 에스컬레이션 조사 범위에 SilenceDetectionProvider.analyze의 continuation 포함 권장.
+- 잔여: 재현은 1커맨드로 고정됨(ab09 + 위 acceptance w1 경로 2종). 근본 수정은 AVFoundation/OS 상호작용 추적 필요(별도 증분 — 상위 도구·에스컬레이션 후보). CA-12 fixture ⑨ 수치 공백 유지.
+- **증거 통합(2026-08-31, 루프 회차 — BUG-ACC-06 계열 확정·판별기 확보)**: STAB-05의 잔여 플래이크(motion·freeze·normal_delete 부하 재발·디졸브 창)가 전부 본 계열(플레이어 비디오 출력의 one-behind 스테일 프레임 태깅)로 수렴. **프레임 격자 정렬 판별기**: 샘플 시각을 30fps 격자(예: 1.7667s)에 맞추면 위상차(MAD 4.55)와 스테일(MAD 35.26)이 분리 — 스테일은 4/4 결정적. normal_delete는 단독 12연속 통과 vs 풀스윕 부하 재발(53.31)로 부하 민감성 확정. 재현 레시피: `PARITY_ONLY=cross_dissolve bash scripts/run_core_editing_parity.sh`(샘플 1.7667로 수동 지정) 또는 풀스윕 후 normal_delete. 상위 도구 조사 시 우선 사용 권장.
 
 ### BUG-CA12-02 (P1 후보) — HDR(BT.2020+PQ) 태그 소스의 preview↔export 픽셀 발산 — 미수정(메커니즘 확정·G-29 연계)
 
@@ -333,6 +335,15 @@
 
 > 원천: 스택 PR #19~#23(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만, 기존 등록과 중복=상호 참조). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.
 
+### STAB-05 잔여 측정(2026-08-30 21:0x, 메인 세션 — 플래이크 재판정) — motion_tracking은 결정적 결함으로 전환
+
+- **4회 전체 스위트 연속(동일 빌드) 결과 전부 소수점까지 동일**: freeze_frame t=3.0 **PASS(0.99×4)** — BUG-ACC-05 수정(어웨이-앤-백)의 부수 효과로 판명. motion_tracking t=0.3/1.7 **FAIL(5.46/12.03×4 — R=G=B 동일 시프트 + A=78.9/66.1)**. 즉 "백투백 플래이크·빌드 간 수치 변동"의 정체는 **오전 관측이 ACC-05 수정 전 빌드**였던 것 — 현재 빌드에서 둘 다 결정적.
+- **메커니즘 확정·1차 처방 불발(2026-08-30 22:1x, 메인 세션 — 계측 판정)**: 컴포지터 kf-eval 로그로 **프리뷰의 평가는 매 요청 정확**(t=0.3→posX −421·t=1.7→+248 — 기대와 일치)하나 PNG는 스테일 — **스냅숏이 한 세크 뒤진 프레임을 "빠른 new 성공"(~34ms)으로 반환** (루프 4차 관측과 동일 양상). 폴백 직전 어웨이-앤-백 재렌더 적용했으나 **발동 안 함 3/3**(폴링이 빠르게 성공하기 때문) — MAD 불변. 잔여: 빠른 성공 자체를 의심해야 하나 전범위 불신은 루프 실측 회귀(0.05→4.33) — **다음 처방 후보: 같은 덤프 시퀀스 내 직전 스냅숓과의 불일치 검출(순서 인지 검증) 또는 렌더 세대 토큰 동기화**. 계측은 제거(본 기록으로 충분).
+- **판정 정정(2026-08-30 21:5x, 메인 세션 — 5점 궤적 실측)**: 시각 5점(0.1/0.5/0.9/1.3/1.7) 수동 실행에서 **프리뷰·export 피사체 x가 전 점 완전 일치**(20.3/64.0/121.6/178.5/234.5±0.1). 이전 "결정적 결함" 판정 **철회** — 실제는: **export는 안정적으로 정확**(캔버스 px 도메인 재검증: 함의 보정 −421/+245 ≪ 기대 kf −411/+261 — 2~6% 오차 일치), **프리뷰만 간헐 오류**(실패 run의 궤적은 더 이른 시각의 값 — t=1.7에서 τ≈0.3의 위치 관측. 스위트 문맥 4연속 실패 vs 단독 실행 통과 = 컨텍스트 의존). 후보: **스냅숏/컴포지션 스테일니스**(BUG-ACC-05와 같은 계열이나 갭 게이트가 비갭 시나리오를 커버 못함 — 키프레임 디스패치 직후 첫 스냅숏이 재구성 전 렌더를 잡을 가능성). 다음 조치: 재구성 완료 대기 강화(키 존재 클립의 첫 스냅숏 재렌더) 또는 스냅숏-리빌드 경합 계측.
+- **키프레임 공식·기대값 판정(2026-08-30 21:4x, 메인 세션 — 루트 접근)**: 생성식은 `motionTrackingKeyframes` — `posX=(rect.midX-0.5)×캔버스폭`(캔버스 px·클립 로컬 시간). 실측 소스 중심(91.5/203.5@320 → 노멀라이즈 0.286/0.636)으로 **기대 보정 = -411→+261**(1920 캔버스 px). 실측 함의 보정: **export -239/+135**(부호 패턴만 일치·크기 52~58%)·**프리뷰 -349/-741**(t=1.7 부호 반대). 결론: **양 엔진 모두 키프레임 이동을 서로 다르게 오적용** — 캔버스 px↔렌더 px↔노멀 단위 변환 계층 의심(양 빌더의 fit/base 변환과 ClipAnimationCompositor affineTransform 결합 순서 차이). **수정 접근**: 컴포지터 레벨 단위테스트(기지 키프레임 → 기지 출력 px)로 기준 확정 후 양 빌더 통일. 커버리지 배경: motion_tracking이 키프레임 전송을 실측하는 유일 시나리오(지속 은폐 원인).
+- **엔진별 보정 산출(2026-08-30 21:3x, 메인 세션 — 원본 대비 델타)****: 원본 소스 피사체 x = 91.5(t=0.3)/203.5(t=1.7). 이상적 추적 보정(피사체를 초기 rect 중심 68에 고정) = **-23.5/-135.5**. 실측 함의 보정: 프리뷰 **-77.4/-164.9**(추적 방향은 맞으나 초반 ~3배 과잉), export **-53.0/+30.0**(**t=1.7에서 부호 반전 — 추적 반대 방향, 정성적으로 깨짐**). 양 엔진이 같은 컴포지터·같은 평가기(CustomCompositionClipEffect.animationState — 클립 로컬 시간 해석)를 쓰므로 **빌더의 변환 파이프라인 차이**가 갈림길: 프리뷰는 layer instruction 변환과 컴포지터 변환의 이중 적용(BUG-07 계열), export는 베이스 변환·effect.timeRange 구성 의심. 부수: `MOTION_TRACKING_DUMP` 경로가 이번 실행에서 파일을 안 만듦(하니스 갭 — 키프레임 실값 확보 시 정식 판정 가능).
+- **정밀 측정(2026-08-30 21:2x, 메인 세션 — 피사체 중심 추적)**: 밝은 피사체 중심 x가 t=0.3에서 프리뷰 14.1 vs export 38.5, t=1.7에서 프리뷰 **38.6** vs export 233.4. **프리뷰 t=1.7의 피사체(38.6) ≡ export t=0.3의 피사체(38.5)** — 단순 시프트(±40px 탐색)로도 설명 안 됨. 강한 후보: **프리뷰의 키프레임(추적 위치) 평가가 다른 시계를 사용**(소스 시간 vs 타임라인 시간 매핑 어긋남 등 — 보존 workdir motion_tracking.49Bu58).
+- **조사 방향 갱신**: motion_tracking은 플래이크가 아니라 **결정적 프리뷰↔export 불일치** — 특성(채널 균등 시프트+알파 차이)이 오버레이/마스크 경로 의심. 프리뷰만 그리는 트래킹 시각화 오버레이를 비교기가 잡는 '측정 정의' 문제일 수도 있으므로 시나리오 정의(오버레이 여부) 우선 확인 권고.
 ### CODEX-01 (P2) — 타임코드 표시 프레임 양자화 하방 드리프트 — 미수정
 
 - 증상: 프레임 정렬 시각에서 부동소수 오차로 곱이 정수보다 약간 작아 `Int` 절단이 이전 프레임으로 내려감 — 예: 30fps에서 `00:01:02` 입력은 `1 + 2/30`로 시크하나 표시 계산이 `1.9999999999999996`을 산출해 즉시 `00:01:01` 표시. 파서↔표시 왕복(CA-27 계약)이 다수 프레임값에서 깨짐. 위치: `App/MovieCutMac/PreviewPanel.swift` L850 부근.
@@ -343,10 +354,10 @@
 - 증상: 기존 대상 경로 선택 + 관리 LUT 원본 결측 또는 후속 복사 실패 시, export 오류를 보고하기 전에 사용자의 기존 파일을 제거 — 실패한 export가 이전 LUT를 파괴(데이터 손실 인접). 위치: `App/MovieCutMac/EditorViewModel.swift` L5204 부근(CA-26 경로).
 - 수정 방향: 임시 형제 파일에 기록/복사 후 새 파일 완성 뒤에만 원자적 치환 — ProjectStore ENOSPC fail-closed(2026-08-27)와 동일 패턴.
 
-### CODEX-03 (P2·A류) — verify_doc_paths 백틱 경로 누수 — 미수정
+### CODEX-03 (P2·A류) — verify_doc_paths 백틱 경로 누수 — **수정 완료(2026-08-30, 메인 세션)**
 
-- 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 `` `docs/DOES_NOT_EXIST.md` `` 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
-- 수정 방향: 닫는 백틱까지 매칭. **A류(계측 스크립트 개선) — 루프 자율 실행 가능.**
+- 증상: 추출 정규식이 슬래시 끝 매칭을 요구해 "docs/DOES_NOT_EXIST.md" 형태가 `docs/`로만 추출되고, 인식된 확장자 부재로 `check_backtick`이 무시 — 차단 CI 검사가 도입 취지인 백틱 파일 참조 검증을 놓침. 위치: `scripts/verify_doc_paths.sh` L78 부근.
+- 수정 완료(2026-08-30): 정규식 슬래시 종결 폐지(백틱까지 매치) — 개방 즉시 기존 문서의 낡은 참조 27건 노출(아카이브·Core 이동분) → 명시적 허용목록으로 게이트 녹색 유지(신규 깨짐은 여전히 FAIL — 탐침 양방향 증명). 허용목록 정리는 별도 소형.
 
 ### CODEX-04 (P1) — PhotosPicker URL transferable가 라이브러리 선택에서 nil 반환 가능 — 미수정 (PR #20)
 
@@ -358,35 +369,35 @@
 - 증상: `cancelExport()`가 즉시 `isExporting=false`로 돌려 UI가 새 export를 시작할 수 있음. 새 export가 공유 `activeOutputURL`을 교체한 뒤 이전 취소 호출의 catch가 `removePartialOutput()`에 도달하면 **새 export의 출력 파일을 삭제**하고 엔진 상태를 초기화. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L335-364.
 - 수정 방향: 실패한 호출의 국소 URL 또는 export 세대(generation) 번호로 정리 결합.
 
-### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — 미수정 (PR #20)
+### CODEX-06 (P2·기능 회귀) — 정상 AIFF가 임포트 거부(BUG-02 경화 회귀) — **수정 완료(2026-08-30, 메인 세션)**
 
 - 증상: `.aif`/`.aiff`는 audioExtensions에 있으나 knownSignatures에 IFF `FORM` 시그니처 부재·weakMagic 예외(mp3/aac만)도 아님 → 유효한 AIFF도 `.unrecognizedContent`로 기각. 2026-08-24 BUG-02 스니핑 도입의 회귀(이전엔 임포트됨). 위치: `Sources/MovieCutCore/Media/MediaImporter.swift` L107-167(헤더 창 매칭 실패 = 무조건 throw 경로 실측 확인).
-- 수정 방향: RIFF와 동일 패턴으로 `FORM` 시그니처 추가(종류는 확장자로 판정) + 실제 AIFF 픽스처 왕복 단위테스트. 기존 지원 포맷 회귀라 P2 상단 배치.
+- 수정 완료(2026-08-30): `FORM` 시그니처 추가(오디오 종류·RIFF 패턴) + 왕복 3단언 테스트(aiff·aif 통과, FORM↔mp4 라벨 오용 기각) — 임포터 스위트 8/8·verify_gate 5/5.
 
-### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — 미수정 (PR #21)
+### CODEX-07 (P1) — relink 후 iOS 프리뷰가 재구축되지 않음 — **수정 완료(2026-09-01)**
 
 - 증상: `relinkMedia`는 `currentProject.mediaLibrary`만 갱신하는데 `PreviewView`는 `.onChange(of: currentProject.timeline)`(L109)에서만 렌더 플랜을 재구축 — 원본 결측 상태에서 만든 플랜의 빈/부분 `AVPlayerItem`이 그대로 남아 relink된 클립이 무관한 타임라인 편집·뷰 재생성 전까지 재생 불가. 위치: `App/MovieCutiOS/Views/PreviewView.swift` L109·`IOSEditorViewModel.swift` L570.
-- 수정 방향: mediaLibrary 변경(또는 relink 완료) 시 플랜 재구축 트리거 — SURV-01 왕복 테스트에 "relink 후 프리뷰 재생" 다리 추가로 고착.
+- 수정 완료(2026-09-01): PreviewView에 **`.onChange(of: currentProject.mediaLibrary)` → 재구축 트리거 추가** — MediaLibrary는 Core Equatable이라 relink의 URL 교체가 관찰 발화. `rebuildComposition`의 generation 가드가 임포트+타임라인 동시 변경 시 이중 발화를 무해화. SURV-01 왕복 테스트에 **"relink가 mediaLibrary 값을 실제로 변경(Equatable≠)" 단언 다리 추가** — onChange 발화 전제 고정. **SwiftUI 배선 자체는 유닛테스트 불가(STAB-03 선례) — 실기기/수동 확인 항목으로 잔여**(G-27 연계). iOS 15스위트 통과·verify_gate 5/5.
 
-### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — 미수정 (PR #21)
+### CODEX-08 (P1) — 혼합 회전 트랙에서 클립별 orientation이 트랙 단위로 덮어씌워짐 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
-- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift L560-562)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정(L1032-1033) — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
-- 수정 방향: 클립 소유의 `AVAssetTrack.preferredTransform`을 클립별로 로드해 이펙트에 전달(트랙 pt는 외부 플레이어 메타데이터로만 유지) + **혼합 회전(가로+세로) 트랙 픽스처**로 upright 실측.
+- 증상: 클립 이펙트의 `sourcePreferredTransform` 소스가 composition **트랙의** `preferredTransform`(IOSExportEngine.swift)인데, 이 값은 `insertClip`이 **첫 비디오 소스** 삽입 시만 설정 — 같은 트랙에 회전 메타데이터가 다른 클립이 뒤따르면 첫 클립의 방향을 상속해 옆으로 눕거나 잘못 회전. BUG-IOS-08 수정이 단일 회전 픽스처로만 검증돼 혼합 케이스가 빠짐. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L560·L1032.
+- 수정 완료(2026-08-31): BUG-IOS-10 audioMixEntries와 동일한 **수집-소비 패턴**으로 `sourceOrientations[clip.id]`를 `insertClip`이 effective 소스(원본·리버스 렌더·이미지 프리렌더 전부 자연 커버)에서 기록 → 클립 이펙트가 자기 pt 수신(누락 시 기존 트랙 pt 폴백) → 플랜 종료 시清除. **트랙 pt는 외부 플레이어 메타데이터로 유지**(first-writer-wins). **발현 조건 정밀화(재현에서 판명)**: 설정 조건이 `pt == .identity`일 때만이라 가로(첫)→세로(둘째)는 트랙이 identity에 머물러 둘째 삽입 시 재설정이 우연히 동작(올바르지만 취약) — **세로(첫, 90°)→가로(둘째)에서만 뒤따르는 클립이 90°를 상속해 옆으로 눕는다.** 테스트 2건: ①구조 단언(세로→가로 — 수정 전 RED: 둘째 이펙트 pt 90° → 수정 후 identity·첫 클립은 90° 유지) ②픽셀 밴드 단언(가로→세로 upright 고정 — 우연 동작의 회귀 방지). iOS 15스위트 통과·verify_gate 5/5.
 
-### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — 미수정 (PR #21)
+### CODEX-09 (P1) — 전환 배치는 raw 지속시간·이펙트 창은 클램프 — 초과 시 클립 무음 드랍 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
 - 증상: 백타이밍 배치가 요청한 `transition.duration` 그대로 시작을 당김(L878-884)하나 이펙트 창은 인접 클립 길이로 클램프(L758-762) — 요청이 인접 클립보다 길면 배치가 실제 오버랩보다 앞서 커서가 역전하고, `insertClip`의 `timelineStart >= cursor` 가드(L1020)가 **셋째 클립을 조용히 반환(드랍)**. 짧은 3클립 + 긴 전환 조합에서 발생. 위치: `App/MovieCutiOS/Export/IOSExportEngine.swift` L758·L878·L1020.
-- 수정 방향: 배치와 이펙트가 동일한 클램프된 지속시간을 사용(단일 계산 함수로) + 초과 전환 픽스처로 3클립 완주·드랍 0 단언.
+- 수정 완료(2026-08-31): 단일 클램프 계산 `clampedTransitionDuration`(+ 백타이밍 래퍼 `clampedOverlapPull`) 신설 — **배치(`insertVideoTrack`)·이펙트 timeRange(`makeVideoComposition`)·전환 창(`makeTransitionEffects`) 3경로가 동일한 클램프된 지속시간 사용**. 초과 전환 픽스처(red·blue·red 3×1s 클립 + 2s crossDissolve 2개)로 3클립 완주·드랍 0 단언: 수정 전 재현(미디어 세그먼트 2/3·composition 1.0s·t=1.9 프레임 생성 불가 -11832) → 수정 후 세그먼트 3/3·2.0s·t=1.9 red-dominant 블렌드. iOS 전체 15스위트 통과·전환 스위트 5회 연속 통과·verify_gate 5/5. **Mac ExportEngine도 동일 구조(백타이밍 raw L412·창 클램프 L872-877)지만 cursor 가드가 아닌 절대 시각 삽입이라 드랍 경로는 다름 — Mac은 별도 관찰 항목으로 잔여.**
 
-### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — 미수정 (PR #22)
+### CODEX-10 (P1·A류) — 블라인드 투표 라벨이 구현화 파일과 불일치 — 약 반수에서 반대 편집기로 집계 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
 - 증상: `x_is_a=False` 시 `_X.mp4`=B측·`_Y.mp4`=A측으로 구현화는 정상인데 투표표의 X열이 `_Y.mp4`(=A측)를 안내 — 평가자의 X 선호가 mapping(X↔B)에 따라 **반대 편집기로 집계**. 블라인드 비교 결과를 왜곡. 위치: `scripts/ab_benchmark_metrics.py` L485-487.
-- 수정 방향: 투표표는 항상 `<fixture>_X.mp4`를 X열에 고정(해독은 mapping 테이블이 담당) + 라벨/구현화 정합 셀프테스트. **A류(계측 스크립트) — 루프 자율 실행 가능.** B측 블라인드 평가 개시 전 필수.
+- 수정 완료(2026-08-31): **투표표 X/Y열을 항상 `{fid}_X.mp4`/`{fid}_Y.mp4`로 고정** — X↔A/B 해독은 mapping 테이블(blind_key.json·`--tally`)이 유일 담당. ballot 안내문에 파일 대응 명시. **셀프테스트 2건 추가**: ①투표표 라벨 정합(전 row `_X`/`_Y`) ②구현화 바이트==mapping 측 + all-X 투표 tally 왕복 — 12시드×4fixture로 **x_is_a 양 분기 커버**. **반전 실증(pre/post)**: A를 4번 전부 선호한 정직한 평가자(투표표 파일 열 파싱 기준)가 수정 전 2/2로 절반 오집계(x_is_a=False 비율만큼 — 원 서술 "약 반수"와 정확 일치) → 수정 후 4/0 정확. self-test 전체 PASS.
 
-### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — 미수정 (PR #22)
+### CODEX-11 (P1·A류) — REPS>1이 전부 실행되나 baseline은 rep1만 읽음 — **수정 완료(2026-08-31, CODEX P1 세션)**
 
-- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
-- 수정 방향: `rep_results` 전부 소비해 median/p95 산출 + 단일 rep 시 명시. **A류 — 루프 자율 실행 가능.**
+- 증상: `REPS>1`이면 전 반복 실행·조건 필드에 반복 수 기록하나 `baseline.json`은 rep1만 집계(L283-284) — 중앙값/p95를 기록한다는 조건 노트(L133-134)와 달리 **단일 표본을 통계 집계처럼 보고**. 위치: `scripts/run_ca12_ab_benchmark.sh` L272-284·L321.
+- 수정 완료(2026-08-31): fixture별 집계가 **모든 rep 디렉터리를 소비** — `repetition_stats`(타이밍 전 필드 median/p95[nearst-rank·작은 n에서 정직]/min/max/n)·`reps_recorded`·실패 rep는 `failed_reps`로 은폐 없이 기록·기대 불일치 시 `reps_expected` 마커. **n=1은 `single_rep:true`+`p95:null`로 명시**(단일 표본을 통계로 위장하지 않음). rep1 엔트리(timing·single·pair·error)는 하위호환 대표 레코드로 유지. 검증: 합성 rep 디렉터리 4케이스 단위 검증(n=3 통계·n=1 명시·실패 rep·불일치 마커) + **종단 실증 REPS=2 ab05 — 양 rep 값(min 1.628/max 4.296)이 전부 소수되고 5필드 median/p95 기록**(수정 전이면 rep1만 남았을 것)·`conditions.repetitions=2`·status=0. 검증 run·스테이징 카피 296KB 즉시 정리.
 
 ### CODEX-12 (P2) — 레거시 AVFoundation 취소가 취소로 분류 안 됨 — 미수정 (PR #22)
 
@@ -413,25 +424,117 @@
 - 증상: 각 틱의 오프셋이 순차 HStack 셀에서 측정(`IOSTimelineView.swift` L73-76) — 앞선 마커마다 2pt씩 표시 위치가 누적 이동(밀집 곡에서 큰 드리프프), 트랙 헤더 76pt·행 간격 미반영으로 전체가 좌측 편이. 장식용(비인터랙티브)이라 기능 영향은 없으나 시각적으로 마커 위치와 불일치.
 - 수정 방향: 공통 ZStack/canvas 좌표계에 배치 + 헤더 원점 반영.
 
-### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — 미수정 (PR #23)
+### CODEX-17 (P1) — iOS 플레이헤드 트림이 비정규 시간 매핑 사용 — **수정 완료(2026-09-01)**
+
+- **수정**: 양 플레이헤드 트림(`trimSelectedClipStart/EndToPlayhead`)이 **`ClipTrimMath.compute` 경유**(Mac 4경로 패리티 — assetDuration 가드·0.1s 최소길이·속도/램프/리버스 정규 매핑). `trimClip`은 `sourceRange` 선택 파라미터로 정규 결과를 직접 받음(기존 1s==1s 델타 파생은 다른 호출부 호환 유지). **플레이헤드 사전 가드 유지** — compute가 밖的目标을 클램프하는 드래그 계약과 달리 플레이헤드 계약은 거부(+안내 메시지).
+- **검증**: `IOSPlayheadTrimMathTests` 3종 신설 — ①2x 속도 END 트림이 **매핑 기준 ~2.0s 소스 보존**(레거시는 1.0s 절단 — 실측 픽스처 AVAssetWriter 생성) ②1x 리버스 START 트림 반대 엣지 수축 ③플레이헤드 밖 거부. iOS 전체 **68테스트/16스위트 2회 연속 PASS**(전환 rotated-outgoing 1회 실패는 3회 재측 정상 — 풀 번들 부하 플래이크·후속 관찰). verify_gate 5/5.
 
 - 증상: `trimSelectedClipStartToPlayhead`·`trimSelectedClipEndToPlayhead`(`IOSEditorViewModel.swift` L1329·L1350)가 `trimClip`(L1074)에 위임 — 타임라인 1초=소스 1초 가정이라 2x 속도 클립을 0.5초 트림하면 실제 1.0초가 남아야 하나 0.5초만 남겨 조기 절단·갭 발생, 리버스 시작 트림도 반대 소스 엣지 이동. **iOS 전체에 ClipTrimMath 사용 0건(Mac은 4경로 사용) 실측.**
 - 수정 방향: 양 플레이헤드 동작을 `ClipTrimMath.compute` 경유로 전환(Mac 패리티) + 속도 램프·리버스 픽스처 트림 왕복 테스트.
 
-### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — 미수정 (PR #23)
+### CODEX-18 (P2) — fps 프리셋 변경이 undo 2단위 — **수정 완료(2026-09-01)**
+
+- **수정**: Core `SetProjectCanvasAndExportSettingsCommand` 신규(캔버스 재바인딩[timeline size/aspect/frameRate — SetProjectCanvasCommand와 동일] + exportSettings를 **하나의 apply/undo 엔트리**로). iOS `updateCanvasPreset`(L1160)·**Mac `applyExportPreset`(동일 결함 클래스 — 자기 리뷰 발견) 전환**. 검증: `IOSFpsPresetAtomicUndoTests` 2종 — **undo 1회가 캔버스·타임라인 재바인딩·export fps 전체 왕복**(구 2-디스패치는 export만 복원)·redo 왕복. iOS 전체 71테스트/17스위트 PASS·게이트 5/5.
 
 - 증상: 프리셋 선택이 `SetProjectCanvasCommand`(`IOSEditorViewModel.swift` L1145)와 `SetProjectExportSettingsCommand`(L1156)를 개별 dispatch — undo 1회가 exportSettings.frameRate만 복원해 캔버스·타임라인은 새 fps에 남아, 이 동기화가 막으려던 불일치가 undo로 재발.
 - 수정 방향: 단일 커맨드 원자화(또는 세션 트랜잭션) + undo 1회 전체 왕복 테스트.
 
-### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — 미수정 (PR #23)
+### CODEX-19 (P2) — 트랙 z-index가 tracks.count 배정 — 삭제 후 중복·레이어 순서 비결정론 — **수정 완료(2026-09-01)**
+
+- **수정(원천 해법)**: `CreateTrackCommand.apply`이 추가 시점에 **충돌하는 z-index를 max+1로 정규화** — 양플랫폼 caller(iOS L425 외 4곳·Mac L4515)가 `tracks.count`를 배정하지만, 커맨드가 모든 표면의 단일 초이크 포인트라 여기서 방어(이미 고유한 명시적 z-index는 보존 — 의도적 레이어 배치 생존). caller 수정 불필요.
+- **검증**: `CreateTrackZIndexNormalizationTests` 4종 — ①충돌 시 max+1(0/1/2→삭제→2 재추가 → 3) ②비충돌 명시 z(7) 보존 ③**정확한 결함 시퀀스**(0/1/2→z0 삭제→tracks.count 재추가 → 유일성) ④undo 왕복. Core 전체 **1,433테스트/213스위트 PASS**·게이트 5/5.
 
 - 증상: `CreateTrackCommand.apply`가 caller가 준 z-index를 정규화 없이 append — iOS(`IOSEditorViewModel.swift` L418)·**Mac(`EditorViewModel.swift` L4510) 모두** `zIndex: tracks.count` 배정. 기본 0/1/2에서 z0 삭제 시 잔여 2트랙 상태로 다음 추가가 2로 중복 → 프리뷰·export가 zIndex 정렬만 하므로 겹침 레이어 순서가 비결정론화.
 - 수정 방향: 삭제 시 전체 재정규화 또는 max+1 배정 + 중복 z-index 0 단언 테스트(양 플랫폼).
 
-### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — 미수정 (PR #23)
+### CODEX-20 (P2) — RemoveTrackCommand가 트랙 잠금을 무시 — **수정 완료(2026-09-01)**
+
+- **수정**: `RemoveTrackCommand.apply`가 제거 전 **`ensureTrackIsEditable` 가드** 호출(다른 모든 변경 커맨드와 동일 — SlideClip·trim·append-effect 전부 검사 사용) — 잠긴 트랙의 스와이프 삭제가 이제 `trackLocked` 거부. iOS VM `apply`가 이미 오류를 표면화하므로 caller 무수정.
+- **검증**: 신설 3종 — ①잠긴 트랙 거부(트랙·클립 전부 생존) ②미잠금 정상 제거 ③세션 경로(거부 후 상태 불변·**undo 스택 무오염** — 빈 스택 undo는 nothingToUndo). Core 전체 **1,437테스트/214스위트 PASS**·게이트 5/5.
 
 - 증상: `RemoveTrackCommand.apply`(`CreateTrackCommand.swift` 내 정의)가 index 제거만 하고 `ensureTrackIsEditable` 미호출 — 트랙 관리 시트의 스와이프 삭제가 잠긴 트랙과 클립 전체를 삭제(RippleDelete·SlideClip 등 다른 커맨드는 검사 사용). `Track.isLocked`의 보호 의도와 모순.
 - 수정 방향: 제거 전 잠금 거부(또는 잠금 시 UI 삭제 비활성) + 잠금 트랙 삭제 거부 테스트.
+
+### CODEX-21 (P1) — iOS 속도 UI가 raw 프로퍼티 기록이라 재타이밍 없음 — **수정 완료(2026-09-01)**
+
+- 증상: `updateSelectedPlaybackRate`(`IOSEditorViewModel.swift` L302)가 raw `SetClipPropertyCommand(.playbackRate)` 사용 — `timelineRange.duration`이 stale로 남아 타임라인 폭·스냅·마커·전환/페이드·덕킹 범위·마그네틱 트랙의 뒤 클립 시작이 프리뷰/익스포트가 실제 렌더하는 것과 어긋남(결함 클래스는 `SetClipSpeedCommand` 헤더 주석이 스스로 서술). Mac은 `SetClipSpeedCommand`(.constantRate/.rampPoints) 사용 — CODEX-17 세션(5100d22) 발견. iOS 속도 UI는 슬라이더(램프 없음)라 constantRate만 해당.
+- 수정 완료(2026-09-01): `SetClipSpeedCommand(.constantRate)` 경유 전환(Mac 패리티 — 재타이밍+마그네틱 ripple이 같은 undo 스텝에 원자 포함). 테스트: 4s 클립 rate 2x → 타임라인 스팬 ~2.0s 수축 단언(수정 전 4.0 stale 재현) + **undo 1회에 rate·스팬 동시 왕복** 단언. CODEX-17 speedEndTrim은 무영향 통과(수축된 [0,2] 스팬 내 트림·결과 동일 — 낡은 주석만 갱신). iOS 15스위트 통과·verify_gate 5/5.
+
+## 1.15 W acceptance 게이트 발견 결함 (2026-08-29 등록)
+
+> 원천: STAB-04 1차 — 실길이 대표 작업 게이트(`run_w_acceptance.sh`·W_STRICT 하니스 모드) 구축 직후 실측. 스모크(2~4초 픽스처)가 구조적으로 가리고 있던 결함들 — 외부 리뷰 #2 "게이트가 실제 작업보다 약하다" 지적의 실증.
+
+### BUG-ACC-01 (P1) — ProRes·명시적 비트레이트 출력에서 겹치는 오디오의 길이가 합산됨 — **수정 완료(2026-08-29)**
+
+- **원인 판명(실측 이분법)**: 그래프 빌더·렌더러·audibleSampleEnd는 전부 배치 정상 — 범인은 **조정 레이어가 오디오 스트립으로 편입**된 것. w4의 조정 클립(자산 ID 차용·G-03 그레이딩 컨테이너)이 자기 압축으로 가시 클립 뒤 [2,6]으로 밀린 뒤 carriesAudio 필터를 통과(자산=비디오) → audible 범위가 2s+4s=6s로 팽창. 비디오 스트림은 조정 클립이 export에서 필터돼 2s 유지 — 오디오만 6s인 실측과 완전 정합. (일반 콤마 임포트의 6s는 멀티 URL 루프의 의도적 순차 배치 — 드롭 UX, 결함 아님.)
+- **수정**: `AudioGraphProjectBuilder`가 `isAdjustmentLayer` 클립을 오디오 스트립에서 제외(G-03 "콘텐츠 렌더 없음"의 오디오 대응). 검증: Core 유닛(조정 레이어 무편입·audible ≤4s 단언) + 스모크 w4 실측 **6.000s→4.000s(프리셋·ProRes 양 경로)** + 스모크 W 5/5·29/29 + acceptance w4의 duration/audio/av_sync 어설션 통과(export 성공 시). 게이트 5/5.
+
+- 증상: 2초 영상 + 4초 BGM(오버레이) 타임라인의 ProRes 출력이 **6.000초**(2+4 합산) — 프리셋/프리뷰 경로는 정상 오버레이. 300초+300초 실측에서도 600초 재현. 코덱 자체는 정상(prores·1920x1080·aac). **W4 acceptance 게이트가 이 계약 위반으로 RED 유지 중**(`duration` 어설션).
+- 추정 원인: writer 경로의 오디오 그래프 믹스다운(graphAudioURL 생성)이 타임라인 배치(병렬) 대신 클립 순차 이어붙임으로 렌더 — 그래프 빌더의 배치 해석 조사 필요.
+- 수정 방향: 그래프 믹스다운이 타임라인 배치를 존중하도록 수정 + 2초+4초 오버레이 픽스처로 4초 단언(프리셋 경로 패리티).
+
+### BUG-ACC-04 (P1) — 5분 마스터 출력이 간헐적으로 전면 실패(양 경로 0바이트·오류 무표면) — **수정 완료(2026-08-29 — 자기 압축 동률 UUID 코인플립, 조정 레이어 동률 규칙으로 폐지)**
+
+- 증상: acceptance w4(5분 마스터)에서 프리셋 export가 **4회 중 2회 bytes=0** — w4.mp4·w4-prores.mov 모두 미생성, dump.error=none(오류 무표면), **prores 스텝만 거짓 OK**(exportProResMaster가 조용히 조기 반환 — 오류 상태 전파 결함 의심). 성공 시 395MB·300.00s·A/V 0.000 정상. 실패 run elapsed ~170s(성공 ~211-242s) — 조기 사망.
+- 조사 재료: acceptance 러너가 앱 stdout/stderr를 버려 원인 불명이었음 → 러너에 `app.log` 보존·실패 시 워크디렉터리 유지·ffprobe 탐침 재시도(인코직 직후 조기 공탐 — 보존 파일 재탐침 정상)를 이미 보강. 다음 재현의 app.log로 BUG-CA12-01(메인 디스패치 정지) 계열 여부 판정. STAB-04 2차 관련.
+- **수정 완료(2026-08-29 23:1x, 메인 세션)**: `CommandSupport.clipTimelineOrder` 동률 최종단계(UUID 비교) 앞에 **조정 레이어 동률 규칙**(content 우선) 삽입 — 동률 시 오버레이가 실제 콘텐츠를 밀지 않음. 단위테스트 2종(비교자 — 조정이 작은 UUID를 가져도 content 우선 / 압축 — 최악 입력 순서에서도 content [0,300]·adj [300,600] 결정성) + verify_gate 5/5. **실측: 수정 후 w4 2연속 완주(300.00s·보존 파일 사후 검증 전부 `codec=prores` — 게이트상 FAIL은 탐침 공탐)**, 3째 run은 보존 디렉터리 누적(~18GB)의 ENOSPC(환경). **잔여 계측 3건 — 완료(2026-08-30, 메인 세션)**: ①탐침 공탐의 정체 판명 — ffprobe `-show_entries`에 호출부가 **섹션 접두사 없는 필드명**을 전달(`codec_name`)해 rc=1 "No match for section"이 매번 발생, 재시도가 20초를 태우고 공탐 반환(세틀링 가설은 오판이었음 — 수동 검증은 `stream=codec_name` 올바른 문법이라 통과). 접두사 부여 + rc≠0 즉시 실패화로 해결 — **probe 후 w4 `codec=prores` 정상 탐침** ②사전 디스크 검사(~8GB)+보존 위생(24h 경과 삭제·최신 2개 초과 정리) 적용 ③디스크 검사로 ENOSCC 사전 차단. 부수: sync 플러시 추가(무해 유지). 
+- **판정 완료(2026-08-29 22:4x, 메인 세션 — 3차 재현 1회차 적중, LbbKfC 보존)**: 프로젝트 원형 라인이 직접 판정. 통과 run `video:[0..300, 300..600adj]` vs 실패 run **`video:[0..300adj, 300..600]`** — **같은 비디오 트랙에서 조정 클립과 실제 영상 클립의 순서가 뒤집힘**(양 add는 await 순차지만 magnetic 압축/배치의 순서가 비결정 — 무순서 컬렉션 순회 의심). 뒤집힌 경우 실제 영상이 [300,600]으로 밀려 컴포지션·그래프 600s 팽창 + **t=0을 덮는 클립이 조정 레이어뿐(`sourceTrackIDs=[]`인 요청 — 22:47:25 진단 라인)** → firstSourceFrame nil → `-1` → 양 export 사망. **수정 방향 확정**: ①본수정 = 배치/압축 순서 결정화(무순서 순회 지점 색출 — 순서가 뒤집혀도 실제 영상은 항상 [0,300]) ②방어 = 컴포지터가 빈 소스 요청을 에러 대신 캔버스 프레임으로 완료(전면 사망→완주). ①만이 정확한 출력(현 결함은 완주해도 영상이 뒤쪽 절반에 재생됨)을 보장.
+- **원에러 특정·루트 사이트 고정(2026-08-29 21:4x, 메인 세션)**: 계기 적용 직후 재현(5인스턴스차 — FfaJav 보존·하니스 전파 개선도 작동 확인 `prores (err=...)`) 후 raw 로그 확보: **`Error Domain=MovieCut Code=-1 "(null)"`** — 이 도메인의 유일한 생성처는 **커스텀 컴포지터의 실패 전달**(`CustomVideoCompositor.swift` L357·`ChromaKeyCompositor.swift` L22의 `request.finish(with: NSError(domain:"MovieCut", code:-1))`). L357의 트리거 조건: **`firstSourceFrame(in:instruction:)`이 nil** — 해당 구간에 소스 프레임이 없거나 준비되지 않은 요청. 즉 5분 마스터 렌더 중 컴포지터가 특정 구간에서 소스 프레임을 못 얻어 export 전체가 사망. **2차 조사(2026-08-29 22시 루프 회차 — 진단 로깅 실장·팽창원 실측)**: nil 경로 상태 로깅 + 패키지 형상 로깅(`pkg shape`·`pkg project clips`, `diagLogCompositionShape` 플래그 — 수정 후 제거)을 실장하고 재현 6회(실패 2·통과 4). **핵심 실측**: 실패 run은 `composition=600s graphAudio=600s tracks=[vide:0..600 soun:0..600]` — 그래프 믹스가 600s(300+300 순차 재래)로 렌더되고 비디오 트랙까지 600s로 팽창. 통과 run은 전부 300s·프로젝트 원형 결정적(`video:[0..300, 300..600adj] audio:[0..300]` — 조정 클립은 항상 자기 압축으로 [300,600]·BUG-ACC-01 가드로 무해). **잔여 판정**: 간헐 변수는 프로젝트/세션 수준에서 BGM이 [0,300] 오버레이 대신 [300,600] 순차로 놓이는 것(또는 동등한 audible-600 상태) — 하니스 배치 코드는 결정적으로 보이므로 **다음 실패 재현의 `pkg project clips` 라인이 배치 vs 그 외를 직접 판정**(로깅 이미 실장·재현 레시피: `bash scripts/run_w_acceptance.sh w4` 반복 + `/usr/bin/log show --last 10m --predicate 'processImagePath CONTAINS "MovieCutMac" AND eventMessage CONTAINS "pkg"' --info`). 평탄화(FlattenedTimeline)는 무죄 확인(단순 통과·w4엔 컴파운드 없음). 부수: 탐침 재시도 보강(rc 기반 6×1s — 통과 run에서도 prores_codec 공탐 지속 관찰).
+- **진단 돌파(2026-08-29 21:3x, 메인 세션 — unified log 사후 추출 성공)**: 셸 builtin `log`와의 충돌로 `/usr/bin/log` 직접 호출 필요(이전 공탐의 진짜 원인). 18:00-19:00 창 40,661줄 회복 — **실패 8라인 전부 `[com.moviecut.mac:export] export failed: 작업을 완료할 수 없습니다.(MovieCut 오류 -1.)`**(18:21·18:23·18:26·18:28·18:35·18:37·18:45·18:46 — 4 PID × 2회 = **메인+ProRes 동시 실패 실증**, 루프 run + 메인 run 포함). 판정: ① 앱은 catch에서 로깅하고 있었음 — w.json `error=none`은 **하니스가 lastErrorMessage을 dump에 전파하지 않은 것**(개선 1: dump.error에 lastErrorMessage 포함) ② "MovieCut 오류 -1"은 FileOperationError.classify가 **원 에러를 삼킨 래핑** — ExportEngineError/GraphMixRenderer 어느 케이스인지 로그상 판별 불가(**개선 2: catch에서 classified와 함께 원 에러 로깅** — 1차 조치 후 재현 1회로 케이스 확정) ③ 양 경로 동시 실패 → 공통 선행 단계(`renderGraphAudio`) 또는 그 하류 세션 생성이 후보 ④ 디스크 가설 약화(현재 23Gi 여유 — 단 4연속 run × 3.3GB transients의 일시 고갈 가능성은 유지 관찰). STAB-04 2차에서 개선 1·2 적용 후 재현.
+- **조사 상태(2026-08-29 밤, 메인 세션)**: 재현 누적 4인스턴스(루프 2/4 + idZ3QA + BUUQJL — 후자 2건 보존). **캡처 방법론 교정**: app.log(stdout)는 구조적으로 공탐 — AppLog는 OSLog로 발행되어 stdout에 안 나옴. 유효 캡처는 재현 직후 `log show --last 15m --predicate 'processImagePath CONTAINS "MovieCutMac"'` 사후 추출(병행 `log stream` 시도는 1줄만 확보 — 권한/버퍼 의심). 부수 성과: 통과 run(6ypaHX 보존분)에서 **BUG-ACC-01 수정이 300초 실스케일 확증**(w4-prores.mov·w4.mp4 모두 300.000000s·코덱 prores). 실패 run elapsed ~170s 패턴은 유지 관찰.
+
+### BUG-ACC-02 (P1) — 실제 덕킹 분석 경로가 60초 실발화에서 continuation 파킹 — **BUG-CA12-01 병합 완료(2026-08-29)**
+
+- 증상: W_STRICT의 w1에서 `autoDuckOtherAudio`(SilenceDetectionProvider 실분석) 호출 직후 앱 파킹 — 메인 런루프 유휴·워커 스레드 부재·w.json 미기록(첫 스텝도 디스크에 없음). 12분 관찰·스택 샘플로 확인. **BUG-CA12-01(메인 디스패치 전달 정지 계열)의 새 재현 경로** — 스모크의 하드코딩 범위 경로는 이 결함을 가림.
+- 병합: 재현 경로·스택 증거가 §1.13 BUG-CA12-01 에스컬레이션 기록에 통합됨(아래 "재현 경로 추가" 불릿). 본 행은 동일 계열로 통합 관리 — 별도 수정 없이 근본 에스컬레이션(BUG-CA12-01) 해법을 따름. W1 acceptance는 이 계열 해소 전까지 RED 유지.
+
+### BUG-ACC-05 (P1) — 실제 갭 이후 잔존 클립 구간을 프리뷰가 BLACK으로 렌더 (export는 정상) — **수정 완료(2026-08-30, 5차 — 어웨이-앤-백 재렌더)**
+
+- **수정(5차)**: `snapshotFrame`이 **갭 직후 0.5s 창**에서 attempt 0의 지나치게 빠른 성공(<150ms)을 불신하고 어웨이-앤-백 재렌더(t±0.05 시크→120ms 정착→t 재시크→재폴링 1.5s) 후 두 번째 프레임 선호. 갭 검출은 컴포지션 비디오 트랙의 세그먼트 표에서 직전 세그먼트가 빈 삽입(source duration 0)이거나 비연속인 세그먼트 시작으로 판정. **전범위 불신은 기각** — 휴면 캐시의 "빠르고 정상" 프레임까지 재렌더하면 motion_tracking이 회귀(0.05→4.33)함.
+- **검증**: normal_delete **5+5+2회 전부 t=2.5 MAD 1.65 통과**(수정 직후·갭 검출 정밀화 후·로그 제거 후 각 5/5/2회)·재렌더 경로 발동 로그 확인(6.4ms 검정 반환→RERENDER→정상 프레임)·W 스모크 5/5·29/29·verify_gate 5/5. motion_tracking·freeze_frame 실패는 **기존 STAB-05 플래이크임을 소유 판정**(수정·기준선 양쪽 3/3 동일 수치 — 제 회귀 아님).
+- 부수: 진단 계측 전부 제거(컴포지터 요청 로그·스냅숏 경로 로그·ExportEngine 형상 로그+플래그 — BUG-ACC-04·05 종료).
+
+- 증상: 비후행 클립 삭제(간극 보존 DeleteClipCommand — A[0,2] 삭제, B bars[2,5] 잔존) 후 **프리뷰 덤프가 t=2.5 잔존 클립 구간에서 완전 검정**(평균 RGB 0,0,0) — export는 같은 시점에 B 정상 렌더(평균 51/51/58). 갭 내부 t=0.5는 양쪽 모두 검정(정상). 결정적 재현(3/3 동일 MAD 53.31) — 시나리오: `run_core_editing_parity.sh` Scenario 8(실갑 normal_delete, STAB-05에서 갭 미생성 폐지 후 즉시 노출 — 리뷰 #7이 지적한 은폐의 실증).
+- **정밀화(2026-08-30 10:0x, 메인 세션)**: ①t=3.5(잔존 클립 내부)는 **통과** — 검정은 **잔존 클립 시작 ~0.5초 구간(t=2.5) 한정** ②파리티 실행 창 unified log에서 **컴포지터 nil-source 로그 0건** — 에러 경로 아님 ③프리뷰 컴포지션 명령은 전체 길이·트랙 ID 포함으로 정상 구축. → 의심: **빈 구간(empty time range) 직후 세그먼트 시작에서 AVPlayer 비디오 출력이 프레임을 늦게 공급**하고 snapshotFrame 폴링(재시도 2×2s 포함)이 놓친 뒤 검정 폴백 — export(리더 기반·프리롤 있음)는 무영향.
+- **3차 조사(2026-08-30 루프 회차 — 공급 지연 가설 기각·렌더 쪽으로 판정 반전)**: ①프리롤 웜업 시크(t−0.2 콘텐츠 내부 프라이밍 + 150ms/400ms 정착)는 비결정적 부분 통과(2/3·1/3)뿐 — 수정 아님, 원복. ②**결정적 실측**: `hasNewPixelBuffer` 게이트 없이 `copyPixelBuffer(forItemTime: t=2.5)`를 직접 호출하면 **복사가 성공하고 검정 픽셀을 반환(4/4)** — 해당 item time에 검정 버퍼가 존재함. 즉 프레임 공급 지연이 아니라 **렌더 산출 자체가 검정**(또는 갭 시절 검정이 해당 item time으로 태그됨) — `hasNewPixelBuffer` 플래그는 낡은/검정 복사에 대한 필수 방어로 확인. **4차 조사(2026-08-30 루프 회차 — 발동 조건 판명)**: ①컴포지터 요청 로그 **0건** = 이 시나리오(효과 없음)는 **평문 AVVideoComposition 경로** — 커스텀 컴포지터 무관(2차의 "nil-source 0건"은 무관 확인이었음). ②opacity 앵커 미러링(export의 setOpacity(0,at:.zero)+start 점)도 **3/3 실패·기각**·원복. ③병렬 WIP(플래그 제거 — "한발 뒤 도착" 가설) 인수 검증 **5/5 실패·기각**·미커밋 원복. ④**결정적**: 스냅숏 경로 계측에서 t=2.5는 **폴링 attempt 0에서 34ms 만에 성공**(직전 덤프와 34ms 차) — `hasNewPixelBuffer`가 참, `copyPixelBuffer`가 **검정 버퍼를 "새 것"으로 즉시 반환**. 즉 시크 직후 소스 미프라임 상태에서 평문 컴포지터가 **검정으로 렌더를 완결**하고 재렌더가 없으며, **모든 재시도/프리롤 변형은 "attempt 0 성공" 때문에 발동 자체를 안 했던 것**. "다음 시크(3.5)에서 정상" = 새 시크가 프라임된 소스로 재렌더. **5차 수정 방향(정밀)**: 성공 반환의 신뢰성 검증 — attempt 0이 지나치게 빠르면(예: <150ms·신선한 제로톨러런스 시크 직후) 의심 상태로 간주해 **어웨이-앤-백 재렌더**(t±0.05 시크→정착→재시크 t) 후 두 번째 프레임 선호, 또는 스냅숏 전 플레이 넛지(1프레임 재생→정지)로 파이프라인 강제 구동. 갭의 정당한 검정과 구분 불가 문제는 시나리오 컨텍스트(잔존 클립 존재) 없이는 불가 — 스냅숏 API 호출부(하니스·PreviewPanel)의 의미론 결정 필요. 수정 방향: 세그먼트 경계 직후 시점의 스냅숏 사전 웜업(목표 시각 직전 시크 후 재시크) 또는 폴링 연장·hasNewPixelBuffer 외 복사 경로.
+- 의심 메커니즘(초기): 컴포지터 nil-source 계열의 세 번째 발현 가능성으로 추정했으나 로그 0건으로 **기각**.
+- 수정 방향: CustomVideoCompositor의 소스 프레임 대기/재시의(현재는 nil 즉시 -1 또는 검정 종결) + 갭 이후 첫 요청의 sourceFrame 전달 시점 조사. 보존 증거: `~/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-parity/normal_delete.*`(n2vUAu·iplqXt).
+
+### BUG-ACC-06 (P1) — 디졸브 창 프리뷰 파리티가 스테일 프레임 공급 클래스에 차단 — 등록(2026-08-31, STAB-05 재편입에서 포착)
+
+- **경위**: STAB-05의 cross-dissolve 시나리오 재편입(스크립트 태생 스킵 해제 — 행업은 STAB-02 순차 펌프 병렬화로 이미 소멸, duration 4.5s 백타이밍·양 소스 구조·경계 밖 샘플 t=0.5/2.6 **3/3 결정적 통과 MAD 1.39/3.36**). **디졸브 창 t≈1.75 샘플에서 차단**: 프리뷰가 순수 A(블렌드 아님) 프레임을 "신규"로 반환 — **BUG-CA12-01 인접 스테일 공급 클래스**. 측정: t=1.75→4.55/35.26 이분(빌드별 결정적), **t=1.7667(프레임 격자 정렬)→35.26 4/4 결정적** — 격자 정렬이 위상차(4.55)와 스테일(35.26)을 분리하는 판별기.
+- **부수 발견**: ①BUG-ACC-05의 갭 검출이 **슬롯 교대 트랙의 첫 세그먼트(전환 오버랩)를 갭으로 오판** → 어웨이-앤-백이 디졸브 창 내 오발동·어웨이 프레임 반환(MAD 4.55/8.61) — **전 비디오 트랙 합집합 커버리지 기준으로 수정**(실갑만 검출). ②**normal_delete가 풀스윕 부하에서만 재발**(53.31 — 단독 12연속 통과와 대조): BUG-ACC-05 수정의 어웨이-앤-백이 부하 하에서도 재렌더가 스테일 검정 반환 — 기존 freeze "전체 실행 FAIL vs 단독 PASS"와 동일 부하 민감 클래스.
+- **수정 방향**: 스테일 프레임 공급의 근본(플레이어 비디오 출력의 one-behind 태깅) — BUG-CA12-01 에스컬레이션에 본 증거(격자 정렬 판별기·부하 민감성) 통합 권장. 해결 시 시나리오에 창 내 샘플 재추가.
+
+### BUG-ACC-07 (P2) — run_e2e_export G-25 §8 meter run M "measurement nil" — **완료(2026-09-02, 3-B 다음 세션에서 수정)**
+
+- **경위**: capcut-surpass 3-B 증분의 전체 e2e 재실측에서 마지막 섹션(G-25 §8 meter run M: 그래프 마스터 미터 + BGM EQ)만 실패 — `master_meter=0 meter_lufs=silence meter_error=1`·`meter.json = {"eqApplied":true,"error":"measurement nil"}`. **같은 런의 post-check·A/B 런은 전부 PASS**(postcheck_lufs=-19.95 — 실제 오디오 정상) 즉 미터 측정 경로만 침묵.
+- **선결함 판정(소유 실험)**: 3-B 변경을 stash한 빌드에서도 **2/2 동일 재현**(measurement nil) — 이번 증분 무관. 3-B 변경 빌드 4/4 재현.
+- **원인 판명(계측)**: ①`measureMasterLoudness`의 스테일 가드(`isStillCurrent`)는 재측정 중 revision/project가 바뀌면 **조용히 반환** — 에러도 값도 없음(하니스는 "measurement nil"로 보고). ②미터 시나리오의 EQ 적용(`SetClipPropertyCommand`) 직후 0.4초 뒤 rev3 무효화 발생 — 스택 계측으로 **UI 인스펙터 EQ Picker의 `.onChange` → `applyEQPreset` 재디스패치 에코** 판명: 모든 커밋 리프레시가 `selectedClipIds.formIntersection` didSet → `loadSelectedClipProcessingState` → `selectedEQPreset`를 클립에서 재동기화 → Picker onChange가 프로그램적 EQ 변경을 "사용자 선택"으로 재적용. `GraphMixRenderer.renderMix`가 ~16s(4s 프로젝트)라 경쟁 창이 커서 100% 재현.
+- **수정**: `applyEQPreset`에 **멱등 가드** — 재적용할 설정이 클립의 현재 equalizer와 값동일하면 디스패치 스킵(동일 EQ 재적용은 no-op이며, 이 에코는 프로젝트/undo 스택도 오염시켜 왔음).
+- **검증**: 재현 커맨드(M 런 임베드) **3/3 실측치 반환** — `lufs=-19.9456`·`samplePeakDbFs=-15.74`·`error="none"`(export post-check -19.95와 일치 — 그래프 미터↔실출력 정합). A/B 런 재실측 동일 수치(-22.72→-25.87, 솔로 Δ-3.14 LU). Mac 유닛 전체 통과(Master audio freshness G-26 스위트 포함)·Core swift test 1,467/218·verify_gate **GATE_PASS 5/5**. XCUI 3건 실패는 MACUI-01 환경 클래스(선결함·게이트 범위 밖).
+
+### BUG-ACC-08 (P2) — 하니스 앱 간헐 비종료(산출물 완결 후 NSApp.terminate 불이행) + ShareKit 피커 루프 — **하니스 계약 복원 완료(2026-09-02 심야)**
+
+- **경위**: 전체 e2e 2회 실행에서 **서로 다른 섹션 3회**(headless-harness·title-template Caption·Kinetic)가 같은 서명으로 행업: ①섹션 산출물(export+result) 전부 완결 ②`flushAutosave` 완료(recovery 파일 타임스탬프) ③앱 생존·전 스레드 유휴(0% CPU) ④`lastExportURL` 노출 후 ShareLink가 **~0.25Hz로 SHKSharingServicePicker 재초기화** — 종료 처리가 피커/재렌더와 경쟁해 불이행되는 것으로 추정.
+- **간헐성 실측**: 동일 커맨드(title-template Caption) 재현 루프 — 수정 전 **2/4 파킹**. export를 생산하는 섹션에서만 관찰(ShareLink 조건부 노출과 정합). 소유는 미판정이었으나 변경 경로와 무관.
+- **원인 판명(종료 경로 계측)**: `NSApp.terminate(nil)`이 **delegate 판정(shouldTerminate reply=now)·applicationWillTerminate 발화까지 전부 완료하고 호출부로 반환** — terminate는 원래 반환하지 않는 API로, ShareLink 직후 피커 재초기화가 여는 중첩 트래킹 루프가 run-loop 종료 stop을 흡수해 프로세스가 살아남는 것으로 측정.
+- **수정(하니스 종료 경화)**: `runUITestHarnessIfRequested`의 QUIT 처리가 terminate 반환 시 **exit(0) 강제** — 이 시점에 산출물·크래시복구 autosave는 이미 디스크에 있고, 하니스 계약은 결정적 프로세스 종료이므로 정당. DEBUG/HARNESS 하니스 경로 전용(제품 UI 경로 무접촉).
+- **검증**: 재현 루프 재실측 **50/50 자발 종료·파킹 0건**(수정 전 2/4)·verify_gate **GATE_PASS 5/5**.
+- **잔여(관찰 항목으로 유지)**: ShareLink의 주기적 피커 재초기화 루프 자체(재렌더 유발 관찰자)는 제품 UI 관찰 항목 — e2e 러너 와치독(0% CPU 120s+ 회수)은 이제 불필요하나 유지 무해.
+
+### BUG-ACC-09 (P1) — iOS 익스포트 취소 = 펌프 continuation 누수 파킹(Mac STAB-02 2차와 동일 메커니즘) — **수정 완료(2026-09-03 심야)**
+
+- **근거**: Mac STAB-02 취소 E2E(2026-09-03)가 실측한 결함 — `cancelWriting()` 후 `requestMediaDataWhenReady` 핸들러가 **영구 재호출되지 않아** continuation 누수→익스포트 영구 파킹(93s 와치독 킬·"SWIFT TASK CONTINUATION MISUSE" 로그). Mac은 펌프에 writer 상태 취소 폴러+`PumpContinuationOnce` once-guard로 수리 완료.
+- **iOS 동일 패턴 확인(코드 대조)**: `IOSExportEngine` 펌프(:330 `withCheckedThrowingContinuation` + 핸들러 내 resume만 존재·폴러 없음) + `cancelExport()`(:384 `activeWriter?.cancelWriting()` 호출 — 취소가 펌프에 도달함). 동일 메커니즘으로 취소 시 파킹 예상. **writer `.failed` 시에도 핸들러가 멈추므로 실패 경로 파킹 가능성도 공유** — Mac의 finishWriting 전 cancelled/failed 선검사(NSInternalInconsistencyException 방지)도 iOS 적용 검토 필요.
+- **수정 방향(소형 증분)**: Mac `PumpContinuationOnce` 패턴 포팅(폴러+once-guard+finishWriting 선검사) + iOS 하니스/유닛에서 취소 E2E 실측(Mac `run_e2e_cancel.sh`·`ExportCancelMidFlightTests` 3조건 판정 패턴 재사용 — 파일부재 단독 판정은 파킹 앱이 가짜 PASS).
+- **우선순위 근거**: P0 파생(STAB-02) + 사용자 취소 조작이 앱 무응답으로 귀결되는 제품 결함 클래스.
+- **수정(2026-09-03 심야, 등록 직후 회차)**: Mac `PumpContinuationOnce` 패턴 iOS 포팅 3종 — ① 펌프에 `writer:` 파라미터 추가 + 취소/실패 상태 폴러(20ms)+once-guard 박스(핸들러·폴러 이중 resume 방지) ② 그룹 펌프 catch에 형제 해체(리더 cancelReading + writer cancelWriting — Mac 패리티, `readersBox` 사전 캡처로 MainActor 비격리 접근 회피) ③ finishWriting 전 cancelled/failed 선검사(취소된 writer 전달 = NSInternalInconsistencyException 프로세스 사망 방지). 부수: `activeOutputURL` private→internal 승격(동일 타깯 가시성 확대만 — 취소 E2E의 산출물 부재 단언용). 검증: **신규 `IOSExportCancelMidFlightTests` 2종(취소 실패·부분 삭제·엔진 리셋 / 무취소 sanity 2s 완주) + iOS 전체 83테스트/20스위트 PASS + 포커스 4회 2/2 + verify_gate 5/5.** 취소 E2E는 반복 발사 패턴(단발은 렌더플랜 단계 no-op — Mac 실측과 동일).
+
+### BUG-ACC-03 (P2) — 비트 감지 마커 수율이 길이에 반비례 — 조사
+
+- 증상: 4초 8클릭 픽스처는 마커 ≥6(기존 테스트)이나 **60초 120BPM(약 120 온셋)에서 마커 4개**(240BPM 드래프트에서는 6개). 스텝 자체는 통과(마커 존재)하나 대표 작업 관점에서 수율이 비정상적으로 낮음 — 분석 윈도우/최댓값/씬 정규화 의심.
+- 수정 방향: BeatDetectionProvider의 긴 입력 처리 조사(윈도우 한계·얇기 규칙) + 60초 픽스처 기대치 문서화 후 게이트 강화.
 
 ---
 

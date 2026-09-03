@@ -83,34 +83,21 @@ extension EditorViewModel {
         await apply(SetClipPropertyCommand(clipId: selectedClipId, property: .colorGrade(colorGrade)))
     }
 
+    /// On-device one-tap auto enhance, used by the "AI Assistant" section.
+    /// Delegates to the real `AutoColorAnalyzer` (gray-world white balance +
+    /// percentile levels) so the Assistant and the Effects section agree.
     func autoEnhance() async {
-        guard let clipId = selectedClipId else { return }
-        try? await autoColorCorrect(for: clipId)
+        await autoEnhanceSelectedClip()
     }
 
+    /// On-device auto color correct, used by the "AI Assistant" section.
+    /// Delegates to the real `AutoColorAnalyzer.autoWhiteBalanceGrade` so the
+    /// Assistant button matches the Effects-section button (both run real
+    /// pixel analysis, no hardcoded constants). Previously this applied fixed
+    /// brightness/contrast/saturation values to `ColorCorrection` — a stub
+    /// that diverged from the on-device analyzer the Effects path used.
     func autoColorCorrect() async {
-        guard let clipId = selectedClipId else { return }
-        try? await autoColorCorrect(for: clipId)
-    }
-
-    func autoColorCorrect(for clipId: UUID) async throws {
-        let snapshot = await session.snapshot()
-        var found: Clip?
-        outer: for track in snapshot.timeline.tracks {
-            for c in track.clips {
-                if c.id == clipId { found = c; break outer }
-            }
-        }
-        guard let clip = found else {
-            throw EditorCommandError.invalidCommand("Clip not found")
-        }
-        var colorCorrection = clip.colorCorrection ?? ColorCorrection()
-        colorCorrection.brightness = 0.05
-        colorCorrection.contrast = 1.1
-        colorCorrection.saturation = 1.1
-
-        try await session.dispatch(SetColorCorrectionCommand(clipId: clipId, colorCorrection: colorCorrection))
-        try await refreshFromSession()
+        await autoColorSelectedClip()
     }
 
     func updateSelectedMask(_ mask: Mask?) async {

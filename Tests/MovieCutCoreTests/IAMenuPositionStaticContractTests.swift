@@ -112,7 +112,7 @@ struct IAMenuPositionStaticContractTests {
             "Task { await viewModel.duplicateSelectedClips() }",
             "viewModel.snapPlayheadToSelectedClipStart()",
             "viewModel.snapPlayheadToSelectedClipEnd()",
-            "Task { await viewModel.freezeSelectedFrame() }",
+            "Task { viewModel.noteQuickToolUsed(); await viewModel.freezeSelectedFrame() }",
             "await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)",
             #"accessibilityLabel(NSLocalizedString("Timeline edit tools", comment: ""))"#
         ] {

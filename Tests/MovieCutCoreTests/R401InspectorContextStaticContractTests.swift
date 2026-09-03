@@ -22,6 +22,30 @@ struct R401InspectorContextStaticContractTests {
         return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
+    @Test("Vocal separation section is hosted for audio clips only")
+    func vocalSectionHostedForAudioClipsOnly() throws {
+        let panel = try source("App/MovieCutMac/InspectorPanel.swift")
+
+        // The audio helper hosts the basic section plus the vocal section.
+        let audioHelper = try section(
+            in: panel,
+            from: "private func audioClipInspectorSections(for clip: Clip) -> some View",
+            to: "    }\n"
+        )
+        #expect(audioHelper.contains("mode: InspectorBasicMode.audio"))
+        #expect(audioHelper.contains("InspectorVocalSection(viewModel: viewModel, clip: clip)"))
+
+        // No other clip kind surfaces the vocal section.
+        let textBranch = try section(in: panel, from: "case .text:", to: "case .video, .image:")
+        #expect(!textBranch.contains("InspectorVocalSection"))
+        let visualBranch = try section(
+            in: panel,
+            from: "case .video, .image:",
+            to: "    }\n\n    /// Audio clips"
+        )
+        #expect(!visualBranch.contains("InspectorVocalSection"))
+    }
+
     @Test("InspectorPanel swaps selected clip sections by ClipKind")
     func inspectorPanelSwapsSelectedClipSectionsByClipKind() throws {
         let panel = try source("App/MovieCutMac/InspectorPanel.swift")
@@ -33,7 +57,7 @@ struct R401InspectorContextStaticContractTests {
         #expect(panel.contains("case .video, .image:"))
 
         let audioBranch = try section(in: panel, from: "case .audio:", to: "case .text:")
-        #expect(audioBranch.contains("mode: InspectorBasicMode.audio"))
+        #expect(audioBranch.contains("audioClipInspectorSections(for: clip)"))
         #expect(!audioBranch.contains("InspectorEffectsSection"))
         #expect(!audioBranch.contains("InspectorAnalysisSection"))
 

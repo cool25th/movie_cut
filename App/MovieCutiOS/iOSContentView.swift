@@ -359,9 +359,16 @@ struct IOSContentView: View {
                 allowsMultipleSelection: false
             ) { result in
                 if case .success(let urls) = result, let url = urls.first {
-                    let secured = url.startAccessingSecurityScopedResource()
-                    defer { if secured { url.stopAccessingSecurityScopedResource() } }
-                    Task { await viewModel.openProject(from: url) }
+                    // STAB-03③: the security scope must stay open for the
+                    // WHOLE async load — a `defer` in this synchronous
+                    // callback fires right after the Task is scheduled, so
+                    // Files/iCloud-backed URLs lose access before
+                    // ProjectStore.load reaches them.
+                    Task {
+                        let secured = url.startAccessingSecurityScopedResource()
+                        defer { if secured { url.stopAccessingSecurityScopedResource() } }
+                        await viewModel.openProject(from: url)
+                    }
                 }
             }
             // Phase-1 (review #3): project save — default filename from the
@@ -372,9 +379,11 @@ struct IOSContentView: View {
                 contentType: moviecutType,
                 defaultFilename: viewModel.currentProject.name
             ) { result in
-                if case .success(let url) = result {
-                    Task { await viewModel.saveProject(to: url) }
-                } else if case .failure(let error) = result {
+                // STAB-03④: on success the exporter has ALREADY written the
+                // document — re-saving through saveProject(to:) writes the
+                // same URL a second time and can surface a spurious failure
+                // for a save that succeeded.
+                if case .failure(let error) = result {
                     viewModel.lastErrorMessage = "Could not save project: \(error.localizedDescription)"
                 }
             }

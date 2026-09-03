@@ -1,0 +1,121 @@
+{
+  "appVersion" : "0.1.0",
+  "canvas" : {
+    "aspectRatio" : "portrait9x16",
+    "frameRate" : "fps30"
+  },
+  "createdAt" : "2026-05-28T20:26:40Z",
+  "exportSettings" : {
+    "audioCodec" : "aac",
+    "codec" : "h264",
+    "containerFormat" : "mp4",
+    "frameRate" : "fps30",
+    "includeBeatChapters" : false,
+    "includeChapters" : true,
+    "quality" : "high",
+    "resolution" : "p1080"
+  },
+  "id" : "415066A9-B4D0-44A5-BB9A-960A49AFCECF",
+  "markers" : [
+
+  ],
+  "mediaLibrary" : {
+    "assets" : [
+      "00000000-0000-0000-0000-00000000C25A",
+      {
+        "duration" : 12,
+        "id" : "00000000-0000-0000-0000-00000000C25A",
+        "kind" : "video",
+        "metadata" : {
+
+        },
+        "originalURL" : "file:\/\/\/Users\/cool-mini4\/MyDev\/automation\/movie_cut\/media\/00000000-0000-0000-0000-00000000C25A.mov"
+      }
+    ]
+  },
+  "name" : "MovieCut Sample — Talking Head",
+  "playbackSettings" : {
+    "autoProxyOnThermalPressure" : true,
+    "proxyResolution" : "p540",
+    "useProxyPlayback" : false
+  },
+  "schemaVersion" : 8,
+  "timeline" : {
+    "aspectRatio" : "portrait9x16",
+    "canvasSize" : [
+      720,
+      1280
+    ],
+    "frameRate" : {
+      "denominator" : 1,
+      "numerator" : 30
+    },
+    "id" : "1ABFB20F-13CE-4C84-B3EA-92FC32BD2CC8",
+    "markers" : [
+
+    ],
+    "tracks" : [
+      {
+        "clips" : [
+          {
+            "assetId" : "00000000-0000-0000-0000-00000000C25A",
+            "effects" : [
+
+            ],
+            "fadeInDuration" : 0,
+            "fadeOutDuration" : 0,
+            "id" : "37BB89E3-AE60-4A10-ADA7-F35A6514D674",
+            "isReversed" : false,
+            "keyframes" : [
+
+            ],
+            "kind" : "video",
+            "opacity" : 1,
+            "playbackRate" : 1,
+            "sourceRange" : {
+              "duration" : 12,
+              "start" : 0
+            },
+            "speedRampPoints" : [
+
+            ],
+            "timelineRange" : {
+              "duration" : 12,
+              "start" : 0
+            },
+            "transform" : {
+              "anchorPoint" : [
+                0.5,
+                0.5
+              ],
+              "offset" : [
+                0,
+                0
+              ],
+              "position" : [
+                0,
+                0
+              ],
+              "rotation" : 0,
+              "scale" : [
+                1,
+                1
+              ]
+            },
+            "volume" : 1,
+            "zIndex" : 0
+          }
+        ],
+        "id" : "F2AAD835-054B-4A17-B6FE-AAC3AC540F43",
+        "isHidden" : false,
+        "isLocked" : false,
+        "isMuted" : false,
+        "isSolo" : false,
+        "kind" : "video",
+        "name" : "Sample Clip",
+        "zIndex" : 0
+      }
+    ]
+  },
+  "updatedAt" : "2026-05-28T20:26:40Z"
+}

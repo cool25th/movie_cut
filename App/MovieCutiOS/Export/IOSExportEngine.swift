@@ -12,7 +12,11 @@ final class IOSExportEngine {
     var lastExportURL: URL?
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
-    @ObservationIgnored private var activeOutputURL: URL?
+    // Internal for the cancel E2E test: the writer path stages its output
+    // here (makeOutputURL) and the cancel contract must be assertable on
+    // the REAL file's absence — private→internal widens visibility within
+    // the same target only (A-class, boundary-separation precedent).
+    @ObservationIgnored var activeOutputURL: URL?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     // RENDER-02: the tagged-writer export's live reader/writer (cancellation).
     @ObservationIgnored private var activeReaders: [AVAssetReader] = []
@@ -37,14 +41,51 @@ final class IOSExportEngine {
         let audioMix: AVMutableAudioMix?
     }
 
+    /// capcut-surpass stage-4: which asset URL a render plan reads. Exports
+    /// must ALWAYS read originals (a master transcoded from a proxy would
+    /// bake the proxy's downscale artifacts into the delivery); the editing
+    /// preview may read a generated proxy for smoother playback under heavy
+    /// media or thermal pressure (S7). Mirrors Mac's
+    /// `PlaybackEngine.playbackURL(for:)` decision; the CALLER resolves the
+    /// policy so the plan never reads settings or `ProcessInfo` itself.
+    enum IOSSourcePolicy: Equatable {
+        /// Masters read the original media — the explicit export/harness mode.
+        case originalOnly
+        /// The editing preview reads each asset's generated proxy when one
+        /// exists, falling back to the original per asset.
+        case proxyWhenAvailable
+    }
+
+    /// The source policy the plan currently being built reads (transient,
+    /// cleared when the plan completes — same lifetime as `audioMixEntries`).
+    @ObservationIgnored private var activeSourcePolicy: IOSSourcePolicy = .originalOnly
+
+    /// Resolves the URL a plan reads for an asset under the active policy.
+    /// Proxies are video-only (CA-22 generation is video-scoped), so audio and
+    /// image assets naturally fall back to their original.
+    private func playbackSourceURL(for mediaAsset: MediaAsset) -> URL {
+        guard activeSourcePolicy == .proxyWhenAvailable,
+              mediaAsset.kind == .video,
+              let proxyURL = mediaAsset.proxy?.proxyURL
+        else { return mediaAsset.originalURL }
+        return proxyURL
+    }
+
     /// Builds the shared render plan. Throws when the project has no
     /// exportable media (preview callers treat that as "nothing to play").
-    func makeRenderPlan(for project: Project) async throws -> IOSRenderPlan {
+    /// The default source policy is `.originalOnly` so existing callers
+    /// (export, harness) keep masters on originals; the preview passes its
+    /// resolved policy explicitly.
+    func makeRenderPlan(
+        for project: Project,
+        sourcePolicy: IOSSourcePolicy = .originalOnly
+    ) async throws -> IOSRenderPlan {
         // G-15: image clips pre-render into temp video segments. Drop the
         // PREVIOUS plan's segments first so repeated preview rebuilds don't
         // accumulate — the newest plan owns the live set (plans start on the
         // main actor, so a segment list only ever contains finished plans).
         removeTemporaryImageRenders()
+        activeSourcePolicy = sourcePolicy
         let composition = try await makeComposition(for: project)
         // A video track whose sources carry no embedded audio leaves an
         // EMPTY audio composition track — the export session fails with
@@ -69,6 +110,8 @@ final class IOSExportEngine {
         // BUG-IOS-10: audio edits ride the same plan the preview consumes.
         let audioMix = makeAudioMix(from: audioMixEntries, composition: composition)
         audioMixEntries.removeAll()
+        sourceOrientations.removeAll()
+        activeSourcePolicy = .originalOnly
         return IOSRenderPlan(
             composition: composition,
             videoComposition: videoComposition,
@@ -87,7 +130,9 @@ final class IOSExportEngine {
         lastExportURL = nil
 
         do {
-            let plan = try await makeRenderPlan(for: project)
+            // Stage-4: the export is EXPLICITLY original-only — a master
+            // transcoded from a proxy would bake the downscale artifacts in.
+            let plan = try await makeRenderPlan(for: project, sourcePolicy: .originalOnly)
             let composition = plan.composition
 
             // RENDER-02: the export drives an AVAssetWriter with the planner's
@@ -223,27 +268,49 @@ final class IOSExportEngine {
             // (measured 2026-08-26 on simulator: video-pump completion never
             // fired while an audio input existed; no-audio and muted exports
             // were clean; concurrent pumping completes both in seconds).
+            let writerBox = SendableBox(value: writer)
+            // Captured BEFORE the group: the catch paths run on nonisolated
+            // pump tasks and must not touch MainActor state (Mac parity).
+            let readersBox = SendableBox(value: activeReaders)
             try await withThrowingTaskGroup(of: Void.self) { group in
                 if let writerVideoInput, let videoReaderOutput {
                     let videoOutput = SendableBox(value: videoReaderOutput as AVAssetReaderOutput)
                     let videoInput = SendableBox(value: writerVideoInput)
                     group.addTask {
-                        try await self.pumpSamples(
-                            output: videoOutput,
-                            input: videoInput,
-                            totalDuration: totalDuration
-                        )
+                        do {
+                            try await self.pumpSamples(
+                                output: videoOutput,
+                                input: videoInput,
+                                writer: writerBox,
+                                totalDuration: totalDuration
+                            )
+                        } catch {
+                            for reader in readersBox.value {
+                                reader.cancelReading()
+                            }
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
                     }
                 }
                 if let writerAudioInput, let audioReaderOutput {
                     let audioOutputBox = SendableBox(value: audioReaderOutput as AVAssetReaderOutput)
                     let audioInputBox = SendableBox(value: writerAudioInput)
                     group.addTask {
-                        try await self.pumpSamples(
-                            output: audioOutputBox,
-                            input: audioInputBox,
-                            totalDuration: nil
-                        )
+                        do {
+                            try await self.pumpSamples(
+                                output: audioOutputBox,
+                                input: audioInputBox,
+                                writer: writerBox,
+                                totalDuration: nil
+                            )
+                        } catch {
+                            for reader in readersBox.value {
+                                reader.cancelReading()
+                            }
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
                     }
                 }
             }
@@ -252,6 +319,23 @@ final class IOSExportEngine {
                 throw reader.error ?? IOSExportEngineError.exportSessionCreationFailed
             }
 
+            // BUG-ACC-09 (STAB-02 cancel E2E twin): finishWriting on a
+            // cancelled/failed writer is ILLEGAL — AVFoundation raises
+            // NSInternalInconsistencyException ("Cannot call method when
+            // status is 4"), killing the process instead of failing the
+            // export (measured on Mac 2026-09-03: a cancel whose reader
+            // teardown re-invoked the pumps' handlers completed the group
+            // NORMALLY, fell through to finishWriting, and crashed). The
+            // status switch below can never see these states because the
+            // call itself traps first — check BEFORE finishing.
+            switch writer.status {
+            case .cancelled:
+                throw CancellationError()
+            case .failed:
+                throw writer.error ?? IOSExportEngineError.exportSessionCreationFailed
+            default:
+                break
+            }
             await Self.finishWriting(SendableBox(value: writer))
             switch writer.status {
             case .completed:
@@ -280,20 +364,33 @@ final class IOSExportEngine {
     /// Streams sample buffers from a reader output into a writer input,
     /// driving the writer's pull model (Mac ExportEngine.pumpSamples parity).
     /// `totalDuration` non-nil → progress reports by presentation time.
+    ///
+    /// - Parameter writer: the session's writer, for the cancellation poller.
+    /// BUG-ACC-09 (the Mac STAB-02 cancel E2E twin): after `cancelExport()`
+    /// cancels the writer, `requestMediaDataWhenReady` NEVER fires again —
+    /// the handler paths below can't run and the pump leaks its
+    /// continuation, parking the export forever instead of failing cleanly
+    /// (measured on Mac: 93s watchdog kill, CONTINUATION MISUSE logs). The
+    /// poller watches the writer's cancelled/failed status and tears the
+    /// continuation down; the once-box guarantees the handler and the
+    /// poller can't double-resume.
     private nonisolated func pumpSamples(
         output: SendableBox<AVAssetReaderOutput>,
         input: SendableBox<AVAssetWriterInput>,
+        writer: SendableBox<AVAssetWriter>,
         totalDuration: Double?
     ) async throws {
         let queue = DispatchQueue(label: "moviecut.ios.export.writer")
+        let once = PumpContinuationOnce()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            once.set(continuation)
             input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
                 let writerInput = input.value
                 let readerOutput = output.value
                 while writerInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
                         writerInput.markAsFinished()
-                        continuation.resume(returning: ())
+                        once.resumeReturning()
                         return
                     }
 
@@ -308,11 +405,58 @@ final class IOSExportEngine {
                     }
 
                     if !writerInput.append(sampleBuffer) {
-                        continuation.resume(throwing: IOSExportEngineError.exportSessionCreationFailed)
+                        once.resumeThrowing(IOSExportEngineError.exportSessionCreationFailed)
                         return
                     }
                 }
             }
+            Task.detached { [once, writer] in
+                while once.isLive {
+                    let status = writer.value.status
+                    if status == .cancelled || status == .failed {
+                        once.resumeThrowing(CancellationError())
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                }
+            }
+        }
+    }
+
+    /// A once-only resume guard for a pump continuation: the media-data
+    /// handler and the cancellation poller can BOTH attempt to resume, and
+    /// exactly one must win (a leaked or double resume is a runtime trap).
+    /// Mac ExportEngine.PumpContinuationOnce parity.
+    private final class PumpContinuationOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+
+        func set(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.continuation = continuation
+        }
+
+        var isLive: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return continuation != nil
+        }
+
+        func resumeReturning() {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(returning: ())
+        }
+
+        func resumeThrowing(_ error: Error) {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(throwing: error)
         }
     }
 
@@ -531,12 +675,19 @@ final class IOSExportEngine {
                     // BUG-IOS-09: effect timeRanges follow the SAME adjusted
                     // (back-timed) starts the composition inserts with, so
                     // instruction boundaries and the transition window line up
-                    // with the real track content.
+                    // with the real track content. CODEX-09: the pull is
+                    // clamped to the shorter neighbor like the effect window.
                     var adjustedStart = clip.timelineRange.start
                     if clipIndex > 0,
                        let transition = sortedClips[clipIndex - 1].transition,
                        transition.duration > 0 {
-                        adjustedStart = max(0, adjustedStart - transition.duration)
+                        let overlap = Self.clampedOverlapPull(
+                            predecessorTransition: transition,
+                            predecessorDuration: sortedClips[clipIndex - 1].timelineRange.duration,
+                            clipTimelineStart: clip.timelineRange.start,
+                            clipDuration: clip.timelineRange.duration
+                        )
+                        adjustedStart = max(0, adjustedStart - overlap)
                     }
                     let timeRange = CMTimeRange(
                         start: cmTime(adjustedStart),
@@ -553,12 +704,14 @@ final class IOSExportEngine {
 
                     // BUG-IOS-08: composition source frames arrive in STORAGE
                     // orientation — the compositor orients them upright via
-                    // this transform before the canvas fit (Mac BUG-07 parity;
-                    // the composition track carries the same pt only as output
-                    // metadata for external players).
-                    let sourcePreferredTransform = composition.track(
-                        withTrackID: trackID
-                    )?.preferredTransform ?? .identity
+                    // this transform before the canvas fit (Mac BUG-07 parity).
+                    // CODEX-08: the transform is the clip's OWN (recorded at
+                    // insert time from its effective source); the composition
+                    // track's pt is first-writer-wins metadata and mis-orients
+                    // mixed-rotation tracks when read back per clip.
+                    let sourcePreferredTransform = sourceOrientations[clip.id]
+                        ?? composition.track(withTrackID: trackID)?.preferredTransform
+                        ?? .identity
 
                     // BUG-08: a plain clip with no visual edits must still
                     // produce an effect — without it the track never joins
@@ -717,6 +870,36 @@ final class IOSExportEngine {
         let transition: Transition?
     }
 
+    /// CODEX-09: the placement back-timing and the transition effect window
+    /// must share ONE clamped duration. The effect window clamps the request
+    /// to the shorter neighboring clip, but placement pulled by the RAW
+    /// request — an oversized transition put the next clip before its slot
+    /// cursor, where insertClip's `timelineStart >= cursor` guard silently
+    /// dropped it from the export.
+    static func clampedTransitionDuration(
+        _ transition: Transition,
+        outgoingDuration: TimeInterval,
+        incomingDuration: TimeInterval
+    ) -> TimeInterval {
+        max(0, min(transition.duration, outgoingDuration, incomingDuration))
+    }
+
+    /// CODEX-09: overlap pull for a clip whose PREDECESSOR carries a
+    /// transition — the clamped twin of the raw subtraction the effect
+    /// window has always used.
+    static func clampedOverlapPull(
+        predecessorTransition: Transition,
+        predecessorDuration: TimeInterval,
+        clipTimelineStart: TimeInterval,
+        clipDuration: TimeInterval
+    ) -> TimeInterval {
+        clampedTransitionDuration(
+            predecessorTransition,
+            outgoingDuration: predecessorDuration,
+            incomingDuration: clipDuration
+        )
+    }
+
     /// BUG-IOS-09 (Mac ExportEngine parity, ExportEngine.swift:831-882):
     /// pairs consecutive clips within each timeline track where the OUTGOING
     /// clip carries a two-source transition. The window is the outgoing
@@ -754,11 +937,11 @@ final class IOSExportEngine {
                     return nil
                 }
 
-                let requestedDuration = CMTime(seconds: transition.duration, preferredTimescale: 600)
-                let transitionDuration = min(
-                    requestedDuration,
-                    min(outgoingClip.timeRange.duration, incomingClip.timeRange.duration)
-                )
+                let transitionDuration = cmTime(Self.clampedTransitionDuration(
+                    transition,
+                    outgoingDuration: outgoingClip.timeRange.duration.seconds,
+                    incomingDuration: incomingClip.timeRange.duration.seconds
+                ))
                 guard transitionDuration > .zero else {
                     return nil
                 }
@@ -873,17 +1056,28 @@ final class IOSExportEngine {
                 imageRenderURLs.append(imageVideoURL)
                 asset = AVURLAsset(url: imageVideoURL)
             } else {
-                asset = AVURLAsset(url: mediaAsset.originalURL)
+                // Stage-4 source policy: preview plans may read the generated
+                // proxy; exports always read the original.
+                asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
             }
 
             // BUG-IOS-09: overlap back-timing — the incoming clip starts
             // transition-duration earlier so both sources are live during
-            // the transition window (Mac ExportEngine parity).
+            // the transition window (Mac ExportEngine parity). CODEX-09: the
+            // pull is clamped to the shorter neighbor, matching the effect
+            // window — the raw pull put oversized transitions before the
+            // slot cursor and insertClip silently dropped the clip.
             var adjustedStart = clip.timelineRange.start
             if clipIndex > 0,
                let transition = playableClips[clipIndex - 1].transition,
                transition.duration > 0 {
-                adjustedStart = max(0, adjustedStart - transition.duration)
+                let overlap = Self.clampedOverlapPull(
+                    predecessorTransition: transition,
+                    predecessorDuration: playableClips[clipIndex - 1].timelineRange.duration,
+                    clipTimelineStart: clip.timelineRange.start,
+                    clipDuration: clip.timelineRange.duration
+                )
+                adjustedStart = max(0, adjustedStart - overlap)
             }
 
             if !videoTracks.isEmpty {
@@ -949,7 +1143,30 @@ final class IOSExportEngine {
                 let mediaAsset = project.mediaLibrary.assets[assetId]
             else { continue }
 
-            let asset = AVURLAsset(url: mediaAsset.originalURL)
+            // Stage-4 EQ: derived effective media — the clip's source audio
+            // runs through the shared Core AudioEqualizerService (the same
+            // DSP the Mac graph's §0 effective media uses) into a temp file,
+            // and the composition inserts from THAT. The render preserves
+            // the source's time layout, so the clip's sourceRange maps 1:1;
+            // preview and export consume the same plan, so parity holds.
+            // Flat/absent EQ inserts the source untouched (byte path
+            // unchanged). Deliberately NOT a live EQ tap (plan: 구형 EQ tap
+            // 복원 금지).
+            let asset: AVURLAsset
+            if let equalizer = clip.equalizer, !equalizer.isFlat {
+                let inputURL = playbackSourceURL(for: mediaAsset)
+                asset = AVURLAsset(url: try await derivedEQMediaURL(
+                    for: clip, settings: equalizer, inputURL: inputURL
+                ))
+            } else {
+                // No EQ anymore — the clip's cached derivation (if any) is
+                // dead media; reclaim it so the cache tracks exactly the
+                // clips that still derive.
+                if let evicted = eqDerivations.removeValue(forKey: clip.id) {
+                    try? FileManager.default.removeItem(at: evicted.outputURL)
+                }
+                asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
+            }
             try await insertClip(
                 clip,
                 mediaType: .audio,
@@ -958,6 +1175,52 @@ final class IOSExportEngine {
                 cursor: &audioCursor
             )
         }
+    }
+
+    /// A cached EQ derivation. The temp files OUTLIVE plan rebuilds on
+    /// purpose — preview rebuilds fire on every committed edit, and
+    /// re-rendering the whole source's PCM each time is prohibitive (the Mac
+    /// hit the same wall and caches identically in
+    /// `PlaybackEngine.equalizedPreviewAudio`).
+    private struct EQDerivation {
+        let settings: ClipEqualizerSettings
+        let inputURL: URL
+        let outputURL: URL
+    }
+
+    /// EQ-derived media per clip, cached while the settings AND the source
+    /// URL are unchanged. Keyed on the input URL as well as the preset so a
+    /// proxy↔original swap (thermal downgrade) never reuses a derivation
+    /// rendered from the other source.
+    @ObservationIgnored private var eqDerivations: [UUID: EQDerivation] = [:]
+
+    /// Returns the cached derivation for the clip, rendering it on first use
+    /// or when the settings/source changed (deleting the evicted temp file).
+    private func derivedEQMediaURL(
+        for clip: Clip,
+        settings: ClipEqualizerSettings,
+        inputURL: URL
+    ) async throws -> URL {
+        if let cached = eqDerivations[clip.id],
+           cached.settings == settings,
+           cached.inputURL == inputURL {
+            return cached.outputURL
+        }
+        let evicted = eqDerivations[clip.id]?.outputURL
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOS-EQ-\(clip.id.uuidString)-\(UUID().uuidString).caf")
+        try await AudioEqualizerService().apply(
+            preset: settings.equalizerPreset,
+            inputURL: inputURL,
+            outputURL: outputURL
+        )
+        eqDerivations[clip.id] = EQDerivation(
+            settings: settings, inputURL: inputURL, outputURL: outputURL
+        )
+        if let evicted {
+            try? FileManager.default.removeItem(at: evicted)
+        }
+        return outputURL
     }
 
     /// Per-clip audio placement captured during insertion (BUG-IOS-10): the
@@ -970,10 +1233,27 @@ final class IOSExportEngine {
         let volume: Double
         let fadeInDuration: TimeInterval
         let fadeOutDuration: TimeInterval
+        /// Stage-4 placed-span ducking: the clip's ducking windows in
+        /// CLIP-LOCAL timeline seconds (AudioDuckingPlanner output) and the
+        /// duck level. Placed times differ from these whenever the placement
+        /// is speed-scaled — `makeAudioMix` maps through the span ratio.
+        let duckingRanges: [TimeRange]
+        let duckingLevel: Double?
+        /// The clip's MODEL timeline duration backing this placement, used to
+        /// map clip-local times onto the placed span.
+        let timelineDuration: TimeInterval
     }
 
     /// BUG-IOS-10: audio placements collected while building the composition.
     @ObservationIgnored private var audioMixEntries: [AudioMixEntry] = []
+
+    /// CODEX-08: each video clip's EFFECTIVE source orientation (original,
+    /// reversed, or image pre-render asset), recorded by insertClip while
+    /// building the composition. The composition track's preferredTransform
+    /// is first-writer-wins output metadata for external players and cannot
+    /// orient mixed-rotation tracks — the per-clip effect must carry the
+    /// clip's own transform.
+    @ObservationIgnored private var sourceOrientations: [UUID: CGAffineTransform] = [:]
 
     @discardableResult
     private func insertClip(
@@ -1029,8 +1309,17 @@ final class IOSExportEngine {
 
         let placedStart = cursor
 
-        if mediaType == .video, compositionTrack.preferredTransform == .identity {
-            compositionTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+        if mediaType == .video {
+            // CODEX-08: record THIS clip's source orientation for its effect.
+            // The track-level pt below stays first-writer-wins metadata for
+            // external players — a mixed-rotation track must not read it
+            // back per clip (the second clip inherited the first clip's
+            // orientation and rendered sideways).
+            let sourceTransform = try await sourceTrack.load(.preferredTransform)
+            sourceOrientations[clip.id] = sourceTransform
+            if compositionTrack.preferredTransform == .identity {
+                compositionTrack.preferredTransform = sourceTransform
+            }
         }
 
         // Step 7: freeze-frame handling. A tiny source range held over a long
@@ -1086,7 +1375,8 @@ final class IOSExportEngine {
     }
 
     /// BUG-IOS-10: remembers an audio placement for the render plan's
-    /// audioMix (volume + fade ramps), following the real placed span.
+    /// audioMix (volume + fade ramps + stage-4 ducking windows), following
+    /// the real placed span.
     private func recordAudioMixEntry(
         for clip: Clip,
         mediaType: AVMediaType,
@@ -1102,7 +1392,10 @@ final class IOSExportEngine {
                 duration: duration,
                 volume: clip.volume,
                 fadeInDuration: clip.fadeInDuration,
-                fadeOutDuration: clip.fadeOutDuration
+                fadeOutDuration: clip.fadeOutDuration,
+                duckingRanges: clip.duckingRanges,
+                duckingLevel: clip.duckingLevel,
+                timelineDuration: clip.timelineRange.duration
             )
         )
     }
@@ -1111,9 +1404,13 @@ final class IOSExportEngine {
     /// input-parameters object per composition audio track, with the clips'
     /// base volume plus fade-in/fade-out ramps. Nil when no clip carries
     /// audio edits — the untouched mix stays exactly as before.
+    /// Stage-4: clips with ducking metadata get the Mac ducking contract
+    /// (attack 0.12 s / release 0.25 s, ramps held clear of the fade
+    /// windows, merged ranges) mapped onto their REAL placed span.
     private func makeAudioMix(from entries: [AudioMixEntry], composition: AVMutableComposition) -> AVMutableAudioMix? {
         let audibleEntries = entries.filter { entry in
             entry.volume != 1 || entry.fadeInDuration > 0 || entry.fadeOutDuration > 0
+                || entry.duckingLevel.map { $0 < 1 } == true
         }
         guard !audibleEntries.isEmpty else { return nil }
 
@@ -1157,12 +1454,65 @@ final class IOSExportEngine {
                     timeRange: CMTimeRange(start: fadeOutStart, duration: cmTime(fadeOut))
                 )
             }
+            applyDuckingRamps(for: entry, parameters: parameters, baseVolume: volume,
+                              fadeIn: fadeIn, fadeOut: fadeOut)
         }
 
         guard !parametersByTrack.isEmpty else { return nil }
         let mix = AVMutableAudioMix()
         mix.inputParameters = Array(parametersByTrack.values)
         return mix
+    }
+
+    /// Stage-4 ducking, Mac `PlaybackEngine.applyDuckingRamps` contract:
+    /// duckedVolume = base × level, attack/release ramps
+    /// (`AudioDuckingPlanner` constants) with the ducked level HELD between
+    /// them, ranges merged and clipped to the fade-free window. Placed-span
+    /// mapping: ducking windows are clip-local MODEL seconds, so every offset
+    /// and ramp duration scales by placedDuration / timelineDuration (1 at
+    /// 1x — then the ramps are byte-identical to Mac's).
+    private func applyDuckingRamps(
+        for entry: AudioMixEntry,
+        parameters: AVMutableAudioMixInputParameters,
+        baseVolume: Float,
+        fadeIn: TimeInterval,
+        fadeOut: TimeInterval
+    ) {
+        guard let duckingLevel = entry.duckingLevel,
+              duckingLevel < 1,
+              !entry.duckingRanges.isEmpty,
+              entry.timelineDuration > 0
+        else { return }
+
+        let placedDuration = entry.duration.seconds
+        let scale = placedDuration / entry.timelineDuration
+        let duckedVolume = baseVolume * Float(max(0, duckingLevel))
+        let attack = AudioDuckingPlanner.attackDuration * scale
+        let release = AudioDuckingPlanner.releaseDuration * scale
+        // Keep ducking ramps clear of the fade windows so AVFoundation never
+        // receives overlapping volume ramps on one clip (Mac parity).
+        let lowerBound = fadeIn > 0 ? min(fadeIn, placedDuration) : 0
+        let upperBound = placedDuration - (fadeOut > 0 ? min(fadeOut, placedDuration) : 0)
+        guard upperBound > lowerBound else { return }
+
+        for range in AudioDuckingPlanner.mergeOverlapping(entry.duckingRanges) {
+            let start = max(range.start * scale, lowerBound)
+            let end = min(range.end * scale, upperBound)
+            guard end - start > attack + release else { continue }
+
+            let attackStart = CMTimeAdd(entry.start, cmTime(start))
+            parameters.setVolumeRamp(
+                fromStartVolume: baseVolume,
+                toEndVolume: duckedVolume,
+                timeRange: CMTimeRange(start: attackStart, duration: cmTime(attack))
+            )
+            let releaseStart = CMTimeAdd(entry.start, cmTime(end - release))
+            parameters.setVolumeRamp(
+                fromStartVolume: duckedVolume,
+                toEndVolume: baseVolume,
+                timeRange: CMTimeRange(start: releaseStart, duration: cmTime(release))
+            )
+        }
     }
 
     /// Renders a reversed copy of the clip's source range (video only).

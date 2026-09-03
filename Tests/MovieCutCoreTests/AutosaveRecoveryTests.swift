@@ -125,4 +125,22 @@ struct AutosaveRecoveryTests {
         #expect(recovered != nil)
         #expect(await store.lastAutosaveLoadFailure == nil, "a successful load must clear the recorded failure")
     }
+
+    @Test("autosave modification date is exposed for the recovery prompt")
+    func autosaveModificationDateExposed() async throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ProjectStore(autosaveDirectory: dir)
+
+        #expect(await store.autosaveModificationDate() == nil, "no autosave on disk → no date")
+
+        let before = Date()
+        try await store.saveAutosave(makeProject(name: "Stamped"))
+        let date = await store.autosaveModificationDate()
+        #expect(date != nil, "an existing autosave must expose its last-write time")
+        #expect(date!.timeIntervalSince(before) > -5, "exposed date should reflect the write just performed")
+
+        await store.clearAutosave()
+        #expect(await store.autosaveModificationDate() == nil, "cleared autosave → no date")
+    }
 }

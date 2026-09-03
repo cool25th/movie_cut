@@ -3,6 +3,342 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-04 세션 (3-A 검증 매트릭스 측정 완결 — 디스크 풀 실ENOSPC 게이트 신규)
+
+- **증분**: STABILIZATION_PLAN §3 Phase 3-A의 잔여 미측정 축(디스크 부족)을 실측으로 승격 — 신규 `scripts/run_diskfull_gate.sh`: 1MB 스크래치 DMG 볼륨(hdiutil·생성/마운트/분리/삭제 전부 스크립트 소유)에 ~1.64MB ProRes 익스포트로 **실 ENOSPC 미드플라이트 유발**. 판정은 3조건(UITEST_DONE+error≠none+공유 가능한 부분산물 부재)+CONTINUATION MISUSE 0건.
+- **측정**: **2/2 PASS** — `error=디스크 가득참` 분류 메시지 표면·목적지 클린·앱 정상 종료(파킹/크래시 없음·wall 0.9s대) + verify_gate GATE_PASS 5/5. CA05 11행(디스크 풀)의 종이 주장은 12행(취소·거짓 판명)과 달리 **실측으로 참** 확인.
+- **매트릭스 원장**: `PHASE3A_VERIFICATION_MATRIX_20260904.md` — 5축(백그라운드·디스크 부족·취소·재열기·외장 미디어) 전부 측정 증거 또는 명시적 불가 사유(파괴적·실기기)로 판정 완결. STABILIZATION_PLAN 3-A 행 ✅ 반영.
+- **스카웃: 신규 후보 없음**(직전 증분은 측정·타이밍 무이상). 자기 리뷰: ENOSPC는 취소와 달리 append-실패 핸들러 경로로 정상 복귀(폴러 불필요) 실측 확인 — 추가 트윈 없음. 부기: 게이트 러너의 와치독 종료 잡 제어 메시지 1건(판정 무영향).
+- **잔여 3-A는 전부 사용자/환경 대기**: 실기기 3/3·signed archive 실증(계정 전제)·베타 그룹.
+
+### 다음 회차 — 큐
+① 백로그 §0.5.1 실행 가능 잔여 스캔 — **CA-21(Edit Detection precision/recall 측정 — 측정 단계 승인됨·SceneChangeProvider 코드 존재)**가 다음 후보, CA-20(roles — 방향 문서 §3 반영 확인 후) ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
+## 2026-09-04 세션 (베타 전 사전 점검 실행 — 체크리스트 §5 해당 행 완결·ko 갭 소멸 정정)
+
+- **증분(측정 증분·코드 변경 없음)**: `run_beta_scenarios.sh` **2회 연속 4/4 PASS** — ①임포트→첫 컷→출력(dur=3.000s·1920x1080·ffprobe) ②색 보정→출력 ③9:16 세로(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). wall 3.2~4.1s/단계. verify_gate GATE_PASS 5/5 동반. RELEASE_CHECKLIST §5 해당 행 [x] 완결(일시·근거 기록).
+- **부수 실측(낡은 수치 정정)**: 현지화 ko 갭 **소멸** — `verify_localization_keys.py` Mac 343 코드 키 0누락·카탈로그 476 전 항목 ko 보유, iOS 436 전 항목 ko 보유. 이전 보고 'ko 106키'는 낡은 수치(25f9286 등에서 폐쇄).
+- **스카웃: 신규 후보 없음** — 직전 증분(로드맵 배치·iOS 포팅) 파생 결함 클래스 미발견, 베타 4 시나리오가 현 빌드 최광역 스캔 역할 수행.
+- **잔여 베타 항목은 전부 사용자 단계**: TestFlight 그룹 생성·BETA_GUIDE 전달·메트릭 회수. 스크린샷 4종 규격은 정정 완료(콘텐츠 선택=사용자).
+
+### 다음 회차 — 큐
+① 백로그 §0.5.1·STABILIZATION_PLAN §3 Phase 3+에서 루프 실행 가능 항목 재스캔(없으면 대기 보고 후 종료) ② CODEX-04·07(실기기 대기)·CODEX-21 관찰·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
+## 2026-09-03 세션 (BUG-ACC-09 완결 — iOS 취소 파킹·크래시 Mac 패턴 포팅)
+
+- **증분**: iOS `IOSExportEngine`에 Mac STAB-02 수리 3종 포팅 — ① 펌프(writer 파라미터 추가)+취소/실패 폴러(20ms)+`PumpContinuationOnce` once-guard ② 그룹 펌프 catch 형제 해체(readersBox 사전 캡처 — MainActor 비격리 접근 회피·Mac 패리티) ③ finishWriting 전 cancelled/failed 선검사. 부수: `activeOutputURL` internal 승격(취소 E2E 단언용·동일 타깯 확대).
+- **신규 `IOSExportCancelMidFlightTests`** 2종: 취소 다리(반복 발사 — 단발은 렌더플랜 단계 no-op, Mac 실측과 동일)가 실패·부분 삭제·엔진 리셋을 단언, sanity 다리(2s 완주). 픽스처 `solid_red_tone_320x240`(내장 오디오 — 양 펌프).
+- **검증**: iOS 전체 **83테스트/20스위트 PASS**·포커스 4회 2/2·verify_gate **GATE_PASS 5/5**·pbxproj 등록 4/4(무경합 창 확인 후).
+- **스카웃: 신규 후보 없음**(BUG-ACC-09 자체가 직전 회차 스카웃 발견·이번 완결). 자기 리뷰: requestMediaDataWhenRecovered 계열 전수(Mac 2+iOS 1) 소진 — 쌍둥이 없음.
+- **관찰 1줄**: iOS 포커스 재실행 1회에서 "1 test"로 집계된 적 있음(상세 실행 로그로 2/2 정상 확인 — xcresult 집계 노이즈 의심, 판정 무영향).
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰·thermal 측정(환경 대기) ② 통합 브랜치 병합 결정(사용자)·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-03 세션 (STAB-02 취소 E2E 완결 — 제품 결함 2건 적발·수리: 펌프 continuation 누수 파킹·취소 writer finishWriting 크래시)
+
+- **증분**: STAB-02 잔여 취소 E2E — 하니스 취소 노브(`MOVIECUT_UITEST_EXPORT_CANCEL_MS`·반복 발사) + `scripts/run_e2e_cancel.sh`(sanity+cancel 두 다리·정직 3조건 판정: UITEST_DONE+error≠none+부분출력 부재) + `ExportCancelMidFlightTests`(유닛 2종 — 취소 실패 단언·부분 삭제·엔진 리셋).
+- **적발·수리한 제품 결함**: ① 취소된 writer는 `requestMediaDataWhenReady` 핸들러를 영구 재호출하지 않음 → 양 펌프 continuation 누수 → 익스포트 **영구 파킹**(93s 와치독 킬·CONTINUATION MISUSE 로그 실측. 1차의 "취소된 리더 copyNext→nil로 재개" 믿음은 취소 케이스에 거짓) → 펌프에 writer 상태 취소 폴러+`PumpContinuationOnce` once-guard 추가 ② 취소된 writer에 `finishWriting` → `NSInternalInconsistencyException`(status 4) **프로세스 사망**(reader 해체 경쟁으로 그룹이 정상 복귀하는 경로) → finishWriting 전 cancelled/failed 선검사.
+- **게이트 도구 결함(수리)**: 구 판정은 "목적지 파일 부재" 단독 — 파킹 앱도 와치독 킬 후 파일 부재로 **가짜 PASS**(실측). 3조건+실패 시 증거 보존으로 교체. `set -e` 무음 사망 1건(`CANCEL_STATUS=$(tail)` — `|| true`).
+- **유닛테스트 함정 판명**: mediaLibrary 딕셔너리 키≠asset.id(구조체 필드·init 기본 무작위 UUID)면 그래프가 `assetMissing(<무작위>)`로 사망 — **키=asset.id는 임포트 파이프라인 불변식**(직접 Project 구성 테스트는 `MediaAsset(id:)` 명시 전달 필수).
+- **검증**: 취소 E2E 게이트 **3/3 PASS**·유닛 스위트 2/2×3회·Mac 유닛 **54/54**(UITests 러너 연결 전 행업 1건 — MACUI-01 계열 환경 판정·유닛 무관)·W 스모크 **5/5(29/29)**·verify_gate **GATE_PASS 5/5**.
+- **스카웃(자기 리뷰 ①)**: iOS `IOSExportEngine` 펌프가 동일 continuation 패턴 + `cancelExport`가 `cancelWriting` 도달 → **BUG-ACC-09 등록(§1.15)** — 다음 소형 증분 최우선 후보.
+- **경합 기록**: 병렬 세션 fb55b0f가 내 취소 노브가 섞인 UITestHarness.swift를 정리 커밋(반복 발사 버전 포함 확인) — ExportEngine·테스트·게이트 스크립트는 이번 커밋으로 분리 완료.
+
+### 다음 회차 — 큐
+① **BUG-ACC-09(iOS 취소 파킹 — 소형·STAB-02 파생)** ② thermal 측정(환경 대기)·CODEX-04(실기기 대기) ③ 통합 브랜치 병합 결정(사용자)·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-03 세션 (전체 코드리뷰 후속 — P2 EQ 캐시·P3 quit 통일/thermal 가드·P4 리네임 + e2e 첫 클린 패스)
+
+- **P2**: iOS `eqDerivations` 캐시(Mac equalizedPreviewAudio 패리티·설정+입력URL 키) — 프리뷰 재구축마다 긴 소스 EQ PCM을 재렌더하던 성능 결함 수습. 캐시 재사용/evict 테스트 추가(iOS 81/19).
+- **P3**: 하니스 12곳 quit 사이트 `terminateHarnessProcess()` 통일(exit(0) 폴백 전 커버)·PreviewView thermal 불변 시 재구축 스킵(Mac 패리티).
+- **P4**: e2e flag-gated HDR `.mov`→`.mp4` 리네임.
+- **검증**: iOS 81/19·verify_gate **5/5**·**e2e 전체 클린 패스(`E2E check OK` — BUG-ACC-07/08 수정 후 첫 풀 그린·HDR 3섹션+G-25 미터 포함)**.
+- **경합 기록**: e2e 4회 실패 전부 병렬 루프 증분 버스트의 SIGTERM 경합(광학흐름 ~21s 사망·단독 항상 통과) — 재시도로 클린 창 확보. **병렬 세션 WIP(Mac ExportEngine STAB-02 취소 E2E) 무접촉·미포함.**
+
+### 다음 회차 — 큐
+① thermal 측정(환경 대기)·CODEX-04(실기기 대기) ② 통합 브랜치 병합 결정(사용자)·루프 소형 큐·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (BUG-ACC-08 하니스 계약 복원 — NSApp.terminate 반환·exit(0) 경화)
+
+- **원인 판명(종료 경로 계측)**: 파킹 시 `NSApp.terminate(nil)`이 shouldTerminate 판정(reply=now)·applicationWillTerminate 발화까지 **전부 완료하고 호출부로 반환** — 원래 반환하지 않는 API. ShareLink 직후 피커 재초기화의 중첩 트래킹 루프가 run-loop 종료 stop을 흡수. 재현 루프(title-template Caption) 수정 전 **2/4 파킹**.
+- **수정**: 하니스 QUIT 경로가 terminate 반환 시 **exit(0) 강제**(산출물·autosave 이미 디스크 — 하니스 계약=결정적 종료·DEBUG/HARNESS 전용).
+- **검증**: 재현 루프 **50/50 자발 종료·파킹 0**·verify_gate **GATE_PASS 5/5**. ShareLink 피커 재초기화 루프 자체는 제품 UI 관찰 항목으로 잔여(백로그 갱신).
+- **정리**: 재현 스크립트·로그 삭제.
+
+### 다음 회차 — 큐
+① thermal 측정(환경 대기)·CODEX-04(실기기 대기) ② 통합 브랜치 병합 결정(사용자)·루프 소형 큐·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (capcut-surpass 4단계 증분 2 — ducking/EQ placed-span·**4단계 구현 완결**)
+
+- **덕킹**: `AudioMixEntry` 확장(ducking 창·레벨·모델 시간축) → `makeAudioMix`가 Mac `applyDuckingRamps` 계약 그대로 적용(attack 0.12/release 0.25·감쇠 유지·fade 회피·mergeOverlapping) + **placed-span 매핑**(모든 오프셋·램프가 placedDuration/timelineDuration 배율 — 1x는 Mac 동일·2x는 모델 시간 절반 위치).
+- **EQ 파생 유효 미디어**: EQ'd 클립 오디오를 공유 Core `AudioEqualizerService.apply`(Mac 그래프 §0와 동일 DSP)로 오프라인 렌더해 temp 삽입 — EQ tap 복원 없음·시간 배치 보존·프리뷰/export 파리티 자동(eqRenderURLs 수명 주기=imageRenderURLs).
+- **테스트**: 신규 `IOSAudioDuckingEQTests` 5종 — 덕 ≥6dB(Goertzel)·**placed-span 판별기**(2x 매핑 창 감쇠+원시 창 보존 — 원시 시간 버그 잡는 이중 단언)·nil mix·EQ 구조·bassBoost 스펙트럼 행동(저/고 비 ≥2배).
+- **검증**: iOS 시뮬 **80/19 PASS**·Core 1,467/218·verify_gate **GATE_PASS 5/5**. 이로써 4단계 구현 항목 전부 완결 — thermal 측정만 환경 대기.
+- **정리**: 시뮬 임시 export/EQ 파일 테스트 defer 삭제 확인.
+
+### 다음 회차 — 큐
+① BUG-ACC-08 조사(하니스 비종료+ShareKit 루프) ② thermal 측정(환경 대기)·CODEX-04(실기기 대기) ③ 통합 브랜치 병합 결정(사용자)·루프 소형 큐. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (capcut-surpass 4단계 증분 1 — iOS preview source policy·thermal observer)
+
+- **구현**: `IOSExportEngine`에 `IOSSourcePolicy`(originalOnly=export 명시/proxyWhenAvailable=프리뷰) — 플랜이 설정을 안 읽고 호출자가 해석(Mac playbackURL 패리티)·비디오/오디오 삽입 양쪽 동일 해석기(A/V 동기)·export는 원본 명시. 프리뷰는 `ProxyDowngradePolicy`+`ThermalState.current`로 정책 해석 + thermal 알림 onReceive 재구축(S7·Core 정책 재사용, 관찰자 복제 없음).
+- **테스트**: 신규 `IOSSourcePolicyTests` 4종(구조 2·**행동 1**: 프록시 있어도 export mid-frame 적색=원본 판독·정책표 1)·`IOSPhase1SurfacesTests` 트랙 테스트 CODEX-20 잠금 계약 갱신(CODEX-20 세션이 iOS 스위트 미실행으로 방치됨)·정적 계약 2건 갱신.
+- **검증**: iOS 시뮬 **75/18 PASS**·Core 1,467/218·verify_gate **GATE_PASS 5/5**.
+- **thermal(4-1) 환경 차단 기록**: serious 강제 불가(공식 오버라이드 부재·사용자 프로세스 활성) — 측정 창구 대기.
+
+### 다음 회차 — 큐
+① **4단계 잔여 ducking/EQ placed-span**(AudioMixEntry 확장 — 그래프/DSP 계약 준수) ② BUG-ACC-08 조사 ③ thermal 측정(환경 대기)·CODEX-04·통합 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (STAB-08 잔여 — worst-MAD 캡처·병렬 활성 세션과 게이트 경합 기록)
+
+- **병렬 판정**: 이전 WIP(HDR stage-3 B)는 타 세션이 d43146a로 커밋 후 **새 WIP 진행 중 활성**(IOSExportEngine·PreviewView·IOSSourcePolicyTests — 9분 전 수정) — STAB-02·잠금 UI는 파일 겹침으로 보류, **무겹침 worst-MAD 캡처** 선택.
+- **구현**: 파리티 레코드가 세 번째 필드로 시나리오별 worst MAD 기록(비교기 `Worst overall MAD` 요약 라인 tee 파싱·PIPESTATUS로 rc 보존·NA 가드) → 이력 JSON `worst_mad`(런 최대) → 리포트 표 수치 표시.
+- **실측**: PARITY_ONLY 프로브 이력 `worst_mad: 3.36` 기록·리포트 MAD 컬럼 반영·`--check-reproducible` 2회 동일.
+- **게이트 판정 불가(정직 기록)**: verify_gate 연속 실패 2건 모두 **활성 병렬 세션의 PreviewView.swift WIP**(수정 9분 전 — 실패 정적 계약 2종이 정확히 그 파일 읽음)·iOS 빌드 1회 일시. 제 변경은 스크립트/docs뿌리로 Swift 무영향 — 증분 자체 증거(프로브+재현성)로 판정.
+- **주의**: 커밋이 병렬 세션 체크아웃 브랜치(`codex/integrate-capcut-surpass`)에 착지 — 활성 병렬 작업 중 브랜치 이동은 위험하여 유지(스크립트/docs라 어느 브랜치에도 무해).
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰 ② STAB-02 취소 E2E·잠금 UI 비활성화(병렬 WIP 소진 후)·게이트 정상 판정 1회. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (BUG-ACC-07 완료 — EQ Picker onChange 에코·마스터 미터 침묵)
+
+- **원인 판명(계측 2단계)**: ①미터의 스테일 가드가 재측정 중 무효화되면 값·에러 없이 조용 반환 → 하니스 "measurement nil". ②rev3 무효화의 스택 = **인스펙터 EQ Picker onChange → applyEQPreset 재디스패치 에코** — 커밋 리프레시마다 selectedClipIds didSet → loadSelectedClipProcessingState → selectedEQPreset 재동기화가 프로그램적 EQ 변경을 "사용자 선택"으로 재발화. renderMix ~16s(4s 프로젝트)라 경쟁 창이 커 100% 재현.
+- **수정**: `applyEQPreset` 멱등 가드 — 값동일 설정 재적용은 디스패치 스킵(no-op). 에코는 프로젝트/undo 스택 오염원이기도 해 제품 결함이었음.
+- **검증**: 재현 커맨드 3/3 실측치 반환(lufs=-19.9456 = export post-check -19.95와 일치 — 미터↔실출력 정합)·A/B 재실측 동일(-22.72→-25.87)·Mac 유닛 통과(G-26 신선도 포함)·Core 1,467/218·verify_gate **GATE_PASS 5/5**. XCUI 3건 실패는 MACUI-01 환경(선결함·범위 밖).
+- **잔여**: e2e 전체 재주회 시 M 섹션 통과 예정(수정 후 미주회 — 재현 커맨드로 3/3·A/B 검증으로 갈음). BUG-ACC-08(비종료+ShareKit 루프)은 미해결.
+
+### 다음 회차 — 큐
+① **4단계**: thermal(serious 장편 완주율 측정 선행)·iOS preview source policy·ducking/EQ placed-span ② BUG-ACC-08 조사 ③ CODEX-04·소형 큐·통합 브랜치 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-02 세션 (capcut-surpass 3단계 증분 B 완료 — e2e HDR 프로브·writer 결함 수정·FeatureFlag.hdrMaster 플립)
+
+- **배선**: 하니스 `MOVIECUT_UITEST_EXPORT_PROFILE` env → `exportMaster(to:profile:)`(VM 신규 공용 마스터링 루트 — ProRes/HDR가 같은 메서드로 수렴, 중복 제거) → `exportVideoWithExplicitBitrate(profileOverride:)`.
+- **증분 A 결함 포착·수정**: writer outputSettings에 픽셀포맷 키+코덱 키 공존 시 `AVAssetWriterInput`이 NSInvalidArgumentException → Swift 태스크 조용 사망(하니스 무출력 파킹 3/3 결정적). 격리 프로브로 키 조합 특정 후 writer에서 픽셀포맷 키 제거(10-bit 서페이스=reader 책임 계약화) + 유닛 실생성 트립와이어.
+- **실측·플립**: hevcHDR → Main 10/yuv420p10le/bt2020/arib-std-b67/bt2020nc·SDR → yuv420p/bt709×3 무변경 확인 후 **FeatureFlag.hdrMaster ON**(preview SDR 한계는 BUG-CA12-02/G-29 명시). flag 의존 테스트 2종·정적 계약 갱신.
+- **검증**: swift test 1,467/218 PASS·verify_gate **5/5 GATE_PASS**·run_e2e_export **HDR 3섹션 전부 PASS**(명시적·SDR 회귀·flag 게이트).
+- **선결함 2건 등록(백로그 §1.15)**: **BUG-ACC-07** G-25 §8 meter "measurement nil"(stash A/B로 증분 무관 판정 — e2e 유일 FAIL)·**BUG-ACC-08** 하니스 앱 간헐 비종료+ShareKit 루프(3회·와치독 회수로 완주).
+- **정리**: 스크래치 프로브 3종·/tmp 임시 삭제.
+
+### 다음 회차 — 큐
+① **4단계**: thermal(serious 장편 완주율 측정 선행)·iOS preview source policy·ducking/EQ placed-span ② BUG-ACC-07/08 조사(선결함) ③ CODEX-04·소형 큐(STAB-02 취소 E2E·worst-MAD)·통합 브랜치 병합 결정(사용자). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-20 완료 — RemoveTrack 잠금 가드·병렬 WIP와 무겹침 병행)
+
+- **병렬 판정**: 타 세션 WIP(캔버스 배경 오염 조사 — 컴포지터 3종·CanvasBackground 계열) 78분 경과·프로세스 0 — CODEX-20 파일(Core 커맨드)과 **무겹침**이라 병행 착수(경합 파일 일절 미접촉).
+- **수정**: `RemoveTrackCommand.apply`에 제거 전 **`ensureTrackIsEditable` 가드** — 다른 모든 변경 커맨드(SlideClip·trim·append-effect)와 계약 통일. 잠긴 트랙 스와이프 삭제가 `trackLocked` 거부로 전환, iOS VM `apply`가 이미 오류 표면화라 caller 무수정.
+- **실측**: 신설 3종 — ①잠긴 트랙 거부(트랙·클립 전부 생존) ②미잠금 정상 제거 ③세션 경로(거부 후 상태 불변·**undo 스택 무오염** — 빈 스택 undo는 nothingToUndo로 계약 확인). Core 전체 **1,437/214 PASS**·게이트 5/5.
+- **자기 리뷰**: ①커맨드 계약 통일 완료(모든 변경 경로가 이제 잠금 검사) ②잠금 UI 비활성화(삭제 버튼 disable)는 UI 증분 후보로 기록 ③계측 무결(빈 undo 스택의 nothingToUndo는 정상 계약 — 첫 기대치 오류 수정).
+- **주의**: `5m/` 루트 디렉터리가 타 세션 스크래치로 추정 — 미접촉·소유 세션 정리 대기.
+
+### 다음 회차 — 큐
+① CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰 ② STAB-02 취소 E2E·worst-MAD 캡처·잠금 UI 비활성화(소형). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-19 완료 — z-index 정규화·커맨드 원천 해법)
+
+- **스카웃·챌린지**: 큐 그대로 CODEX-19(양플랫폼·유닛 검증 가능) — 반박 근거 없음.
+- **수정(원천 해법)**: `CreateTrackCommand.apply`가 **충돌 z-index를 max+1로 정규화** — 커맨드가 모든 표면의 단일 초이크 포인트라 양플랫폼 caller(iOS 4곳·Mac 1곳의 `tracks.count` 배정) 수정 없이 결함 차단. 비충돌 명시 z는 보존(의도적 레이어 배치 생존).
+- **실측**: 신설 4종 — ①충돌 범프(2→3) ②명시 z(7) 보존 ③**정확한 결함 시퀀스**(0/1/2→z0 삭제→tracks.count 재추가→유일성) ④undo 왕복. Core 전체 **1,433/213 PASS**·게이트 5/5.
+- **자기 리뷰**: ①같은 클래스 후보 — `RemoveTrackCommand`는 삭제 후 재정규화 없이 제거만(추가 시 정규화가 상쇄하므로 비결함화 — 다만 z 구멍은 잔존·관찰) ②CODEX-20(RemoveTrack 잠금 무시 P2)이 다음 CODEX 잔여 ③계측 — `swift test --filter`가 새 스위트를 못 찾는 선행 필터 함정(전체 실행으로 검증 — 정규식 이스케이프 의심).
+
+### 다음 회차 — 큐
+① CODEX-20(RemoveTrack 잠금 무시·P2·유닛 검증 가능) ② CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-18 완료 — fps 프리셋 원자 undo·Mac 동일 클래스 동시 수습)
+
+- **큐 챌린지**: CODEX-04(실기기 검증 대기 — 측정 불가) 대신 **CODEX-18**(완전 유닛 검증 가능) 선택.
+- **수정**: Core `SetProjectCanvasAndExportSettingsCommand` 신규 — 캔버스 재바인딩+exportSettings를 **하나의 undo 엔트리**로. iOS `updateCanvasPreset` 전환(스냅숏 왕往返 부수 제거) + **Mac `applyExportPreset` 동일 결함 클래스**를 자기 리뷰 ①문항으로 발견해 동시 수습.
+- **실측**: 신설 2종 — 60fps 정사각 프리셋 후 **undo 1회가 캔버스·타임라인 재바인딩·export fps 전체 왕복**(구 2-디스패치는 export만 복원)·redo 왕복. iOS 71테스트/17스위트 PASS·게이트 5/5.
+- **자기 리뷰**: ①동일 클래스 Mac까지 수습 완료 ②CODEX-19(z-index)가 같은 "커맨드 정합성" 묶음 — 다음 후보 ③계측 무결(첫 테스트의 프리셋 기본 fps30 가정 오탐 — 명시 fps60으로 수정).
+
+### 다음 회차 — CODEX 큐
+① **CODEX-19**(P2 — z-index tracks.count 중복·양플랫폼·유닛 검증 가능) ② CODEX-04·07(실기기 검증 권장)·CODEX-21 회귀 관찰·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-21 등록+수정 완료 — iOS 속도 UI 재타이밍·SetClipSpeedCommand 패리티)
+
+- **본체**: iOS `updateSelectedPlaybackRate`가 raw `SetClipPropertyCommand(.playbackRate)` 사용 — `timelineRange.duration`이 stale로 남아 타임라인 폭·스냅·전환/페이드·덕킹·마그네틱 후속 클립이 렌더와 어긋남(결함 클래스는 `SetClipSpeedCommand` 헤더가 스스로 서술하는 그 것). **`SetClipSpeedCommand(.constantRate)` 경유 전환**(Mac 패리티 — 재타이밍+ripple이 같은 undo 스텝에 원자 포함. iOS 속도 UI는 슬라이더라 constantRate만 해당). 백로그 **CODEX-21로 등록 후 완료 처리**(20은 기존 RemoveTrackCommand 항목이 사용 중 — 번호 충돌 회피).
+- **검증**: 신규 테스트 — 4s 클립 2x → 타임라인 스팬 ~2.0s 수축 단언(수정 전 4.0 stale로 RED 재현) + **undo 1회에 rate·스팬 동시 왕복** 단언. CODEX-17 `speedEndTrim` 무영향 통과(수축된 [0,2] 스팬 내 트림·결과 동일 — 낡은 "stays 4s" 주석만 갱신). **iOS 15스위트 전부 통과**·**verify_gate 5/5 GATE_PASS**.
+- **경과**: CODEX P1 잔여 **1건**(04 PhotosPicker — 실기기 검증 필수·코드 수정만 가능). iOS 속도·트림·회전·전환·relink 결함(CODEX-07/08/09/17/21) 소진.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-04 코드 수정 선행**(PhotosPicker FileRepresentation 전환 — 검증은 G-27 실기기 대기·하니스는 시뮬레이터 파일 URL로 못 잡음을 문서에 명시) 또는 **CODEX-18/19(P2)**·STAB-02 취소 E2E·worst-MAD 캡처 소형. **사용자 대기**: 실기기 2종(G-27 — CODEX-04/07 배선 확인 포함)·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-07 수정 완료 — relink 후 iOS 프리뷰 재구축 트리거)
+
+- **스카웃**: 큐 1번 CODEX-17은 **병렬 세션이 이미 완료**(5100d22+586f356 — 코드·백로그·핸드오프 전부 갱신·CODEX-20 속도 UI 재타이밍 후보 플래그) → 반복 제외. CODEX-04는 실기기 없이 검증 불가(시뮬레이터가 못 잡는 결함) → **CODEX-07** 선택(수정 방향 명확·SURV-01 왕복으로 고착 가능).
+- **본체**: `relinkMedia`는 mediaLibrary만 갱신하는데 PreviewView는 timeline만 관찰 — 결측 상태에서 만든 플랜이 relink 후에도 남아 재생 불가. **`.onChange(of: currentProject.mediaLibrary)` → 재구축 트리거 추가**(MediaLibrary는 Core Equatable — relink의 URL 교체가 발화). generation 가드가 이중 발화 무해화.
+- **검증**: SURV-01 왕복 테스트에 **"relink가 mediaLibrary 값을 실제로 변경(Equatable≠)" 단언 다리** 추가(onChange 발화 전제 고정) — 스위트 통과. iOS 15스위트 전부·**verify_gate 5/5 GATE_PASS**. **정직 잔여: SwiftUI 배선 자체는 유닛테스트 불가(STAB-03 선례) — 실기기/수동 확인 항목(G-27 연계)**.
+- **경과**: CODEX P1 잔여 **2건**(04 PhotosPicker — 실기기 검증 필수·코드 수정만 가능 / 20-신규후보 속도 UI 재타이밍 — 미등록, 번호 주의: CODEX-20은 기존 RemoveTrackCommand 항목이 사용 중 → 신규는 CODEX-21로 등록 권장). iOS 엔진+VM 결함(CODEX-07·08·09·17) 소진.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-21 등록+수정(속도 UI 재타이밍)** — iOS 속도 UI가 raw `SetClipPropertyCommand(.playbackRate)`(재타이밍 없음) vs Mac `SetClipSpeedCommand` — Mac 구현 포팅이라 자율 실행·검증 용이(CODEX-17 세션 발견) ② CODEX-04(코드 수정 선행 — 실기기 검증은 G-27 대기)·CODEX-18/19(P2) ③ STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-09-01 세션 (CODEX-17 완료 — iOS 플레이헤드 트림 정규 매핑 전환)
+
+- **스카웃·챌린지**: CODEX-08 커밋(51dd431) 확인·활성 세션 부재 → 큐 그대로 CODEX-17 착수(반박 근거 없음).
+- **수정**: 양 플레이헤드 트림이 `ClipTrimMath.compute` 경유(Mac 4경로 패리티 — iOS는 그동안 사용 0건). `trimClip`에 `sourceRange` 선택 파라미터(정규 결과 직접 전달·레거시 호출부 무변경). **플레이헤드 사전 가드 유지** — compute는 드래그 계약(클램프)이라 밖 目标도 조용히 클램프 트림하는데, 플레이헤드 계약은 거부+안내가 옳음(계약 차등 명시).
+- **실측**: 신설 3종(실 AVAssetWriter 비대칭 픽스처·실 임포트→타임라인→속도 커맨드→트림 경로) — ①2x END 트림 **매핑 기준 ~2.0s 소스 보존**(레거시 1.0s 절단 실측) ②1x 리버스 START 반대 엣지 ③밖 거부. **iOS 68테스트/16스위트 2회 연속 PASS**·verify_gate 5/5.
+- **자기 리뷰**: ①iOS 속도 UI가 raw `SetClipPropertyCommand(.playbackRate)`(재타이밍 없음) vs Mac `SetClipSpeedCommand` — **CODEX-20 후보 등록 권장**(매핑 비일관 모델) ②CODEX-08 rotated-outgoing 전환 테스트 1회 플래이크(풀 번들 부하 — 3회 재측·2회 풀 정상) 후속 관찰 ③계측 무결.
+
+### 다음 회차 — CODEX 큐
+① **CODEX-04·07**(코드 수정先行 — 실기기 검증 권장)·CODEX-18/19(P2)·CODEX-20(속도 UI 재타이밍 — 이번 발견) ② STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력.
+
+## 2026-08-31 세션 (CODEX-08 수정 완료 — 혼합 회전 트랙 클립별 orientation·발현 조건 정밀화)
+
+- **본체**: iOS 클립 이펙트의 `sourcePreferredTransform`이 composition **트랙의** pt를 읽어 혼합 회전 트랙에서 뒤따르는 클립이 첫 클립 방향을 상속. BUG-IOS-10 audioMixEntries와 동일한 **수집-소비 패턴**으로 전환 — `insertClip`이 effective 소스(원본·리버스 렌더·이미지 프리렌더)에서 클립별 pt를 `sourceOrientations[clip.id]`에 기록, 이펙트가 자기 pt 수신, 플랜 종료 시清除. 트랙 pt는 외부 플레이어 메타데이터로 유지(first-writer-wins).
+- **발현 조건 정밀화(재현에서 판명 — 원 서술보다 좁음)**: 설정 조건이 `pt == .identity`일 때만이라 **가로(첫)→세로(둘째)는 트랙이 identity에 머물러 둘째 삽입 시 재설정이 우연히 동작**(결과는 올바르지만 취약) — **세로(첫, 90°)→가로(둘째)에서만** 뒤따르는 클립이 90° 상속으로 옆으로 눕는다. 테스트 2건: 구조 단언(세로→가로·수정 전 RED → 후 GREEN: 둘째 이펙트 identity·첫 클립은 90° 유지) + 픽셀 밴드 단언(가로→세로 upright 고정 — 우연 동작의 회귀 방지).
+- **검증**: 전환 스위트 **4회 연속 통과**(GREEN 직후 + 백투백 3 — rotatedOutgoing 플레이크 재발 0)·**iOS 15스위트 전부 통과**(렌더/익스포트 골든 포함 — 회전 변경 무회귀)·**verify_gate 5/5 GATE_PASS**(Core 1,429/212·양 빌드·lint)·LOOP_STATE 재생성.
+- **경과**: CODEX P1 잔여 **3건**(04·07 — 실기기 검증 권장·17 — iOS 트림 ClipTrimMath). iOS 엔진 결함 CODEX-08·09 소진.
+
+### 다음 회차 — STAB 큐
+① **CODEX-17** (P1 — iOS 플레이헤드 트림이 비정규 시간 매핑 사용, `IOSEditorViewModel.swift` L1329·L1350 → `trimClip` L1074 — 양 플레이헤드 동작 `ClipTrimMath.compute` 경유 전환[Mac 4경로 패리티] + 속도 램프·리버스 픽스처 왕복 테스트. VM 로직·실기기 불필요) → CODEX-04·07(실기기 검증 권장 — 코드 수정만 먼저 가능)·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력(블라인드 평가 개시 조건).
+
+## 2026-08-31 세션 (CODEX-10 수정 완료 — 블라인드 투표 라벨 반전·B측 평가 전제 전부 정리)
+
+- **본체**: `ab_benchmark_metrics.py` blind 프로토콜에서 `x_is_a=False` 시 구현화는 `_X.mp4`←B측로 정상인데 **투표표 rows만 X열에 `_Y.mp4`(=A측)를 안내** — X↔A/B 해독을 tally의 mapping이 담당하는 구조와 충돌해 평가자의 X 선호가 반대 편집기로 집계. **투표표 X/Y열을 항상 `{fid}_X.mp4`/`{fid}_Y.mp4`로 고정**(해독은 mapping이 유일 담당) + ballot 안내문에 파일 대응 명시.
+- **검증**: ①셀프테스트 2건 추가 — 투표표 라벨 정합 + 구현화 바이트==mapping 측·all-X tally 왕복(12시드×4fixture로 x_is_a 양 분기 커버) — self-test 전체 PASS ②**반전 실증(pre/post)**: A를 4번 전부 선호한 정직한 평가자(투표표 파일 열 파싱 기준 투표)가 수정 전 **2/2 절반 오집계**(x_is_a=False 비율 — 원 서술 "약 반수"와 일치) → 수정 후 4/0. ③함정 2건(정직 기록): 재현 스크립트가 mapping 기준으로 투표를 생성하면 tally와 같은 규칙이라 반전이 안 보임(평가자 시점=투표표 파일 열 파싱으로 수정)·all-X 투표의 우연한 정합(2/2)은 결함 부재가 아님.
+- **경과**: CODEX P1 잔여 **4건**(04·07·08·17). **CODEX-10/11 완료로 B측 블라인드 평가의 계측 전제 정리 완료** — 남은 것은 경쟁사 출력 확보(사용자/수동) 후 `--blind` 실행.
+
+### 다음 회차 — STAB 큐
+① **CODEX-08** (P1 — 혼합 회전 트랙 orientation, `IOSExportEngine.swift` L560·L1032 — 클립별 `AVAssetTrack.preferredTransform` 전달 + 혼합 회전 픽스처. 엔진 로직·실기기 불필요) → CODEX-17(iOS 트림 ClipTrimMath 전환)·04·07(실기기 검증 권장)·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·push 후 원격 CI 관찰·경쟁사 B측 출력(블라인드 평가 개시 조건).
+
+## 2026-08-31 세션 (STAB-07 제안 상신 + CODEX-11 수정 — REPS 집계·B측 블라인드 평가 전제 정리)
+
+- **STAB-07(제안 작성 완료·사용자 결정 대기)**: `DECISIONS_20260822.md`에 **Q13 상신** — 안 A(온디바이스 `MXMetricManager` 구독 한정 채택·네트워크/서버 코드 추가 0·미디어·편집 데이터 전송 없음·진단은 Apple 익명 집계 경유 + OS 수준 옵트인 기본 OFF가 §13.10 "외부 처리 명시·기본 OFF" 원칙과 정합·macOS 12+로 Q3 macOS 14와 호환)·안 B(§13.8 요구 폐기 — 크래시 가시성이 사용자 수동 의존으로 약화)·안 C(베타 후 재검토) 3안·권고 A. 사실 관계(전송 범위·플랫폼·옵트인 구조) 명시 — 단 전력 지표의 macOS 가용성·Privacy Label 영향은 도입 시 실험 확인 필요로 신중 표기. **결정 전 구현 없음.**
+- **CODEX-11 수정(A류 계측)**: `run_ca12_ab_benchmark.sh`의 fixture별 집계가 rep1만 읽던 것을 **모든 rep 소비**로 교체 — `repetition_stats`(median/p95/min/max/n)·`reps_recorded`·`failed_reps`(실패 은폐 없음)·`reps_expected` 불일치 마커·**n=1은 `single_rep`+`p95:null` 명시**(단일 표본의 통계 위장 폐지 — 조건 노트의 "median/p95 recorded" 약속 이행). rep1 엔트리는 하위호환 대표로 유지. 검증: 합성 4케이스 단위 검증 + **REPS=2 ab05 종단 실증 — 양 rep 값(min 1.628/max 4.296) 전부 소비·5필드 통계 기록·status=0**. 검증 잔여물 296KB 즉시 정리·lint 게이트 PASS.
+- **경과**: CODEX P1 잔여 **5건**(04·07·08·10·17). STAB 계획의 루프 실행 가능 항목 중 미완료는 **worst-MAD 캡처 소형과 CODEX P1·STAB-02 취소 E2E 소형뿐** — STAB-07 제안은 상신 완료로 루트 닫힘(결정은 사용자).
+
+### 다음 회차 — STAB 큐
+① **CODEX-10** (P1·A류 — 블라인드 투표 라벨 불일치, `ab_benchmark_metrics.py` L485-487·셀프테스트 보강으로 자율 실행 가능·**CODEX-11과 같은 B측 평가 전제**) → CODEX P1 잔여(08 혼합 회전 — 엔진 로직·실기기 불필요 / 17 iOS 트림 ClipTrimMath / 04·07은 실기기 검증 권장)·STAB-02 취소 E2E·worst-MAD 캡처. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·**STAB-07(Q13) 결정**·push 후 원격 CI 관찰.
+
+## 2026-08-31 세션 (CODEX-09 수정 완료 — iOS 초과 전환 클립 무음 드랍·배치/이펙트 단일 클램프 통일)
+
+- **스카웃**: STAB-05 루트(스테일 공급=BUG-CA12-01 에스컬레이션 대기)·STAB-06 원격(사용자 push 대기)·STAB-04 w1(STT TCC 대기)는 전부 대기 → CODEX P1 7건 중 **CODEX-09** 선택(데이터 손실급 제품 결함·엔진 로직으로 결정적 재현 가능·실기기 불필요). CODEX-04는 시뮬레이터가 못 잡는 결함이라 이번 세션 제외.
+- **본체**: iOS `IOSExportEngine`의 백타이밍 배치 2경로(`insertVideoTrack`·`makeVideoComposition` 이펙트 timeRange)가 **raw `transition.duration`** 으로 시작을 당기는 동안 전환 창(`makeTransitionEffects`)만 인접 클립 길이로 클램프 — 요청이 이웃보다 길면 커서 역전 → `insertClip`의 `timelineStart >= cursor` 가드가 꼬리 클립을 조용히 드랍. **단일 클램프 계산 `clampedTransitionDuration`(+래퍼 `clampedOverlapPull`) 신설, 3경로 전환이 동일 값 사용.** 초과 전환 픽스처(3×1s red·blue·red + 2s crossDissolve×2): 수정 전 미디어 세그먼트 2/3·composition 1.0s·t=1.9 프레임 생성 불가(AVF -11832) 재현 → 수정 후 3/3·2.0s·t=1.9 red-dominant 블렌드.
+- **검증**: iOS 전체 **15스위트 통과**(상태 4·렌더/익스포트 5·파이프라인/접근성 6 — STAB-06 분할과 동일 그룹핑)·전환 스위트 **5회 연속 통과**·**verify_gate 5/5 GATE_PASS**(Core 1,429/212·Mac/iOS 빌드·lint)·LOOP_STATE `--check-reproducible` 후 `--write` 재생성.
+- **관찰 2건(정직 기록)**: ①`rotatedOutgoingTransitionsUpright`가 수정 전 빌드 첫 실행에서 1회 실패(after.r=87.7 vs <50) — 이후 재발 0(5회). 0.6s 전환은 클램프 미발동 경로로 본 수정과 무관·원인 미상 — STAB-05 "빌드 간 수치 변동" 클래스 인접 관찰로 남김. ②**Mac ExportEngine도 동일 구조(백타이밍 raw·창 클램프)** — 단 Mac은 cursor 가드가 아닌 절대 시각 삽입이라 초과 전환 시 드랍이 아닌 겹침 삽입 동작(별개 결함 가능성) — CODEX-09의 Mac 측은 별도 관찰 항목.
+
+### 다음 회차 — STAB 큐
+① **STAB-07 MetricKit 제안 작성**(제안만·결정은 사용자 — DECISIONS 상신) → 소형(**CODEX P1 잔여 04·07·08·10·11·17** — 10/11은 A류 계측·B측 블라인드 평가 개시 전 필수, 08·17은 엔진/VM 로직으로 실기기 불필요, 04·07은 실기기 검증 권장·코드 수정만 가능 — STAB-02 취소 E2E·worst-MAD 캡처). STAB-05 루트·STAB-06 원격 = 대기. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07 결정·push 후 원격 CI 관찰.
+
+## 2026-08-31 세션 (STAB-08 완료 — LOOP_STATE 자동 생성·이력 레코더 + Part 9 재감사)
+
+- **본체**: 3게이트(verify_gate·W smoke·파리티)가 종료 시 `.build-check/history/*.json`으로 판정을 append-only 기록 → `gen_loop_state_report.py`가 최근 3회를 `docs/LOOP_STATE_REPORT.md`로 생성(수작업 편집 금지 마킹). **재현성 DoD 실측**(`--check-reproducible` 2회 렌더 동일). 등록 플래이크는 이름으로 표기 — "측정된 것을 보여준다".
+- **계측 도구 결함 2건 발견·수정(자기 리뷰 ③문항의 값)**: ①파리티 스크립트가 `--export_mp4`(언더스코어)로 비교기를 호출 — argparse가 전 시나리오 기각(전 스윕 오염 이력은 삭제) ②게이트 이력 파서가 xcodebuild Mac/iOS 라인 누락(소문자 전용 charset)·따옴표 값 기각 — 수정 후 4스텝 전부 기록.
+- **Part 9 재감사(STAB-08 후반)**: M1~M4 정정 상태 확인·**MC-07 갱신** — 19시나리오 파리티 상시 게이트화(CI nightly 포함)·스테일 클래스 4시나리오 잔여 명시.
+- **측정 스냅샷**: 게이트 5/5(기록됨)·W smoke 5/5(29/29)·파리티 15/19(cross_dissolve·normal_delete·freeze·motion = 등록 스케일 클래스, 부하 하 FAIL — 리포트에 그대로).
+- 잔여 소형 등록: worst MAD 캡처(레코더 파싱 확장). 스카웃: 파리티 타입수정은 계측 도구 결함의 실례 — 타 게이트 스크립트의 argparse 인자 접두사 정합 검사 후보(저우선).
+
+### 다음 회차 — STAB 큐
+① **STAB-07 MetricKit 제안 작성**(제안만·결정은 사용자 — DECISIONS 상신) → 소형(STAB-02 취소 E2E·CODEX P1 7건·worst-MAD 캡처). STAB-05 루트·STAB-06 원격 = 대기. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07 결정·push 후 원격 CI 관찰.
+
+## 2026-08-31 세션 (STAB-06 로컬 완료 — CI iOS 잡 분할·nightly W smoke + BUG-ACC-06 증거 통합)
+
+- **스카웃**: STAB-05 잔여의 근본(스테일 공급)이 전 플래이크로 수렴했으나 BUG-CA12-01 에스컬레이션 대기 — 루프가 즉시 실행 불가. **큐 챌린지**: STAB-06(완전 실행 가능·원격 CI 관찰 창구 직결)으로 전환, BUG-ACC-06 증거 통합을 소형 병행.
+- **STAB-06**: iOS 잡 3분할 — `ios-fast-tests`(상태 4스위트·**14테스트 0.55s 실측**·20m)·`ios-av-tests`(AV 11스위트 **2직렬 스텝 개별 타임아웃**·렌더/익스포트 22테스트 40.2s@20m 선행 → 파이프라인/접근성 26테스트 5.0s@15m). **분할 커버리지 4+11=15 diff 실증**·`-only-testing`명↔@Suite 파일 매핑 15/15·yaml 파싱·3그룹 전부 로컬 PASS. nightly에 W smoke 추가(파리티 스윕·E2E·퍼즈는 기존 포함)·cross-dissolve "스킵" 낡은 주석 갱신.
+- **BUG-ACC-06 증거 §1.13 BUG-CA12-01 통합**: 격자 정렬 판별기(1.7667→35.26 4/4 결정적 vs 1.75 이분)·normal_delete 부하 민감성(단독 12연속 vs 스윕 53.31)·재현 레시피 — 상위 도구 조사 시 우선 사용 권장.
+- **자기 리뷰**: ①같은 패턴 — 원격 CI의 나머지 잡(build-and-test 15m Core 타임아웃 등)은 현행 유지(실행 증거 없는 선조정 금지) ②release.yml은 미점검 — 관찰 항목 ③측정 도구 — grep 클래스명 패턴이 숫자 포함 이름(IOSPhase1Surfaces)을 잘라 "MISSING" 오탐 → [A-Za-z0-9] 교훈화.
+- 게이트 5/5. **원격 검증은 사용자 push 후 관찰**(STAB-06 DoD의 사용자 절반).
+
+### 다음 회차 — STAB 큐
+① **STAB-08 LOOP_STATE 자동 생성**(게이트 JSON 기반 상태표·재현성) → STAB-07 MetricKit 제안 + 소형(STAB-02 취소 E2E·CODEX P1 7건). STAB-05 잔여·STAB-06 원격 = 대기. 스카웃: release.yml CI 미점검(관찰). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07 결정·**push 후 원격 CI 관찰(STAB-06 검증)**.
+
+## 2026-08-31 세션 (STAB-05 3차 — cross-dissolve 재편입·BUG-ACC-06 등록·갭 검출 슬롯 오판 수정)
+
+- **스카웃**: 스킵 주석(L167)이 STAB-02 이전 작성 — 행업이 순차 펌프 기아 동일 클래스일 가능성 → 재편입 프로브 선택(큐 챌린지: motion 심층보다 저비용·+1 시나리오 직결).
+- **재편입**: 하니스 `MOVIECUT_UITEST_TRANSITION_TARGET=first` 노브 신설(콤마 임포트 선택=마지막 클립 → 전환 무효 문제 해결) + 시나리오 1 실장. **행업 소멸 실증**(STAB-02 부수 효과)·duration 4.5s 백타이밍 정확·**구조 검증형 3/3 결정적 통과**(t=0.5/2.6 MAD 1.39/3.36).
+- **BUG-ACC-06 등록(P1)**: 디졸브 창(t≈1.75)은 프리뷰가 순수 A 프레임을 "신규" 반환하는 **스테일 공급 클래스(BUG-CA12-01 인접)**에 차단 — **프레임 격자 정렬 판별기**(1.7667→35.26 4/4 결정적 vs 1.75 이분) 확보. normal_delete의 부하 민감 재발(스윕 53.31 vs 단독 12연속 통과)도 동일 클래스로 기록.
+- **부수 수정**: BUG-ACC-05 갭 검출이 슬롯 교대 첫 세그먼트(전환 오버랩)를 갭으로 오판 → 어웨이-앤-백 오발동 → **전 비디오 트랙 합집합 커버리지 기준으로 수정**.
+- **자기 리뷰**: ①iOS 스냅숏 경로는 copyPixelBuffer 미사용(영향 없음 확인) ②디졸브 창 단언은 BUG-ACC-06로 이관 ③측정 함정 — comparator 출력은 시각을 3자리로 반올림(`t=1.7667`→`t=1.767`): grep 패턴 주의.
+- 게이트 5/5·풀스윕 cross_dissolve 통과(잔여 실패=기존 플래이크). 스크래치 14MB 정리(디스크 11Gi 여유).
+
+### 다음 회차 — STAB 큐
+① **STAB-05 잔여**(플래이크의 근본 = 스테일 공급 — BUG-CA12-01 에스컬레이션에 BUG-ACC-06 증거·격자 판별기 통합 권장) → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). 스카웃: 신규 후보 없음(BUG-ACC-06이 이번 스카웃 발견). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-30 세션 (BUG-ACC-05 수정 완료 — 5차 어웨이-앤-백 재렌더·갭 한정 게이트)
+
+- **수정**: `snapshotFrame`이 **갭 직후 0.5s 창**에서 attempt 0의 빠른 성공(<150ms)을 불신 → 어웨이-앤-백(t±0.05 시크→120ms 정착→t 재시크) 재렌더 후 두 번째 프레임 선호. 갭 검출: 컴포지션 비디오 트랙 세그먼트 표에서 직전 세그먼트가 **빈 삽입(source duration 0)**이거나 비연속인 시작(빈 채움 세그먼트가 있는 실갑 식별 — 첫 판정 로직의 함정).
+- **전범위 불신 기각(중요 함정)**: 휴면 캐시의 "빠르고 정상"까지 재렌더하면 motion_tracking 회귀(0.05→4.33) — 갭 근접 게이트가 필수.
+- **검증**: normal_delete **12회 연속 t=2.5 MAD 1.65**(5+5+2 — 수정 직후·게이트 정밀화 후·계측 제거 후)·재렌더 발동 확인(6.4ms 검정→RERENDER→정상)·W 스모크 5/5·29/29·verify_gate 5/5.
+- **소유 판정**: motion_tracking(5.46/12.03)·freeze(9.69) 실패는 수정·기준선 양쪽 3/3 동일 — **STAB-05 기존 플래이크**(빌드 간 수치 변동 관찰 — 다음 조사 단서).
+- 진단 계측 전부 제거(컴포지터 요청·스냅숏 경로·ExportEngine 형상+플래그 — BUG-ACC-04·05 종료).
+
+### 다음 회차 — STAB 큐
+① **STAB-05 잔여**(freeze/motion 백투백 플래이크 — 빌드 간 수치 변동 단서 포함·cross-dissolve 재편입·18/18×3) → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-30 세션 (BUG-ACC-05 4차 — 재시도 변형은 발동 불발이었음 판명·병렬 WIP 인수 검증)
+
+- **병렬 WIP 인수 검증(LI-003 — 3h17m 경과·프로세스 0)**: `hasNewPixelBuffer` 게이트 제거("한발 뒤 도착" 가설) — **5/5 실패 실측으로 기각·미커밋 원복**.
+- **3가설 기각(전부 실측)**: ①컴포지터 요청 로그 0건 = 평문 AVVideoComposition 경로(커스텀 컴포지터 무관 — 2차 "nil-source 0건"의 재해석) ②opacity 앵커 미러링(export 구성 복제) 3/3 실패·원복 ③위 게이트 제거.
+- **결정적 실측**: 스냅숏 경로 계측 — t=2.5가 **폴링 attempt 0에서 34ms 만에 성공**(검정 버퍼가 "신규"로 태깅). 시크 직후 소스 미프라임 상태에서 평문 컴포지터가 **검정으로 렌더 완결 + 재렌더 없음** — 프리롤/재시도 전부 "attempt 0 성공"이라 **발동 불발**이었던 것. 다음 시크(3.5)의 신규 렌더가 항상 정상인 것과 정합.
+- **5차 방향(백로그 §1.15)**: attempt 0의 지나치게 빠른 성공(<~150ms·신선한 제로톨러런스 시크 직후)은 불신 → 어웨이-앤-백 재렌더(t±0.05→정착→재시크) 또는 1프레임 플레이 넛지 후 두 번째 프레임 선호. 갭의 정당한 검정과 구분은 스냅숏 호출부 의미론 필요.
+- 게이트 5/5. 계측은 `diagLogCompositionRequests`·스냅숏 경로 로그로 잔류(수정 후 제거).
+
+### 다음 회차 — STAB 큐
+① **BUG-ACC-05 5차**(어웨이-앤-백/플레이 넛지 수정·측정) → STAB-05 잔여(freeze 백투백·cross-dissolve·18/18×3) → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-30 세션 (BUG-ACC-05 3차 조사 — 공급 지연 가설 기각·렌더 쪽 판정 반전)
+
+- **시도·원복**: 기록된 수정 방향(프리롤 웜업 — t−0.2 콘텐츠 내부 프라이밍 후 정착 150/400ms·재시크)은 비결정적 부분 통과(2/3·1/3)만 달성 — 가짜 수정으로 원복, `snapshotFrame` 동작 바이트 동일(측정 주석만 추가).
+- **결정적 실측**: 재시도에서 `hasNewPixelBuffer` 게이트 제거 시 `copyPixelBuffer(forItemTime: t=2.5)`가 **성공하고 검정 픽셀 반환(4/4 결정적)** — 갱 직후 item time에 검정 버퍼가 실재. 프레임이 늦은 게 아니라 **렌더 산출 자체가 검정**(또는 갭의 낡은 검정이 태깅) — 플래그는 낡은/검정 복사의 필수 방어로 확인.
+- **4차 방향(백로그 §1.15 기록)**: 컴포지터 요청 단위 계측 — 갭 직후 요청의 `sourceFrame(byTrackID:)` 반환 버퍼 귀속 + 합성 출력 평균 휘도 로깅으로 "컴포지터가 검정 합성" vs "플레이어가 낡은 검정 태깅" 판정.
+- 게이트 5/5·기준선 보존(53.31 MAD 재현 확인).
+
+### 다음 회차 — STAB 큐
+① **BUG-ACC-05 4차**(컴포지터 계측→수정) → STAB-05 잔여(freeze 백투백 플래이크·cross-dissolve 재편입·18/18×3) → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (BUG-ACC-04 2차 조사 — 팽창원 실측·진단 실장, 판정 재현 1회 남음)
+
+- **진단 실장**: nil 소스 프레임 경로(요청 시각·명령 범위·활성/소스 트랙 ID) + `makeExportPackage` 형상(컴포지션 길이·트랙별 범위·**그래프 오디오 길이**·**프로젝트 클립 원형**) 로깅 — `diagLogCompositionShape` 플래그(수정 후 제거 대상).
+- **핵심 실측(재현 6회·실패 2)**: 실패 run `composition=600s graphAudio=600s tracks=[vide:0..600 soun:0..600]` — **그래프 믹스가 300+300 순차**로 렌더되고 비디오 트랙까지 팽창. 통과 run 전부 300s·프로젝트 원형 결정적(`video:[0..300, 300..600adj] audio:[0..300]` — 조정 클립은 항상 자기 압축 [300,600]에 있으나 BUG-ACC-01 가드로 무해 확인). 평탄화 무죄(단순 통과·컴파운드 없음).
+- **잔여(3차)**: 간헐 변수 = BGM이 [0,300] 오버레이 대신 [300,600] 순차로 놓이는 것(또는 동등 audible-600). 하니스 배치 코드는 결정적으로 보임 — **다음 실패 재현의 `pkg project clips` 라인이 직접 판정**. 재현: `bash scripts/run_w_acceptance.sh w4` 반복(약 50%) + `/usr/bin/log show --last 10m --predicate 'processImagePath CONTAINS "MovieCutMac" AND eventMessage CONTAINS "pkg"' --info`.
+- 부수: 탐침 재시도 rc 기반 6×1s 보강(통과 run에서도 prores_codec 공탐 지속 — 관찰). 게이트 5/5.
+
+### 다음 회차 — STAB 큐
+① ~~BUG-ACC-04~~ **수정 완료(2026-08-29 23:0x 메인 세션 — 자기 압축 동률 UUID 코인플립 판정·조정 레이어 동률 규칙 폐지·w4 2연속 300.00s 완주·사후 검증 prores 6/6)** → 소형 A류: 러너 계측 3건(탐침 출력-빈-재시도·사전 디스크 검사 ~8GB·보존 상한) ② STAB-04 2차(acceptance 5/5×3) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·CODEX P1). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (BUG-ACC-01 완료 — 조정 레이어 오디오 편입 판명·w4 4s 복원 + BUG-ACC-04 등록)
+
+- **원인 판명(실측 이분법)**: 그래프 빌더·렌더러·audibleSampleEnd 전부 배치 정상 — 하니스 상태 라인 `video:0-2, audio:2-6`이 결정적 단서. **조정 레이어**(자산 ID 차용·G-03 컨테이너)가 자기 압축으로 [2,6]에 밀린 뒤 `carriesAudio` 필터를 통과해 오디오 스트립으로 편입 → audible 범위 2s+4s=6s 팽창(비디오 스트림은 export 필터로 2s 유지 — 오디오만 6s인 실측과 정합). 일반 콤마 임포트의 6s는 멀티 URL 루프의 의도적 순차 배치(결함 아님).
+- **수정·검증**: 빌더가 `isAdjustmentLayer` 클립 제외 + Core 유닛(w4 형태 2스트립·audible ≤4s 단언) + **스모크 w4 6.000s→4.000000s(프리셋·ProRes 양 경로)** + 스모크 W 5/5·29/29 + 게이트 5/5.
+- **acceptance 러너 보강(A류)**: 실패 시 워크디렉터리 보존(경로 출력)·ffprobe 탐침 재시도(5분 인코직 직후 조기 공탐 — 보존 파일 재탐침 즉시 정상)·앱 stdout을 `app.log`로 캡처.
+- **BUG-ACC-04 등록(P1)**: 5분 마스터 출력이 **4회 중 2회 전면 실패**(양 export 0바이트·오류 무표면·prores 스텝 거짓 OK — exportProResMaster 조기 반환). app.log 캡처가 다음 재현 판정용(BUG-CA12-01 계열 여부).
+
+### 다음 회차 — STAB 큐
+① ~~BUG-ACC-02 병합~~ 완료(2026-08-29 메인 세션 — 백로그 §1.13에 재현 경로·스택 증거 통합, 1커맨드 재현 `run_w_acceptance.sh w1` 문서화) ② STAB-04 2차(acceptance 5/5×3 — BUG-ACC-04 app.log 조사 포함) → STAB-05 파리티 통합 → STAB-06 CI 분할 → STAB-08·07 + 소형(STAB-02 취소 E2E·**CODEX P1 7건 — 04·07·08·09·10·11·17**, 04·PhotosPicker는 기존 열거 누락 보강 2026-08-29). **STAB 창구 종료 후 복귀 큐는 STABILIZATION_PLAN §3 Phase 3+ 체크리스트로 원장화됨**(리뷰 권장 2~4단계 전항 — 베타 검증 매트릭스·CapCut 속도 지표·FCP 품질 지표·경계 분해 복귀·백로그 §K 카드뉴스 G-20/21/22·U-10 연결). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT용 음성인식 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (STAB-04 1차 완료 — W 측정 양분화·실결함 3건 포착, 메인 세션 수동 3연속 회차)
+
+- **STAB-04 1차**: ① `run_w_scenarios.sh` → **`run_w_smoke.sh`** 개명(헤더에 "대표 작업 게이트 아님·STT 무실행 허용·하드코딩 덕킹" 명시) ② 하니스 **`MOVIECUT_UITEST_W_STRICT=1`** 모드 — w1 세로 영상 임포트(strict 게이트 — 비게이트 시 스모크 형상 변형·파킹 실측)·**STT 미실행 시 ok=false**(`stt=user_tcc_required_for_acceptance` — 외부 리뷰 "STT 못 돌아도 성공" 폐지)·덕킹 실분석 경로(`autoDuckOtherAudio` F-14) ③ **ProRes 레이스 예산 90초 고정 → STRICT에서 `max(90, duration*2)`** — 고정 90초는 "게이트<실작업"의 사례 그 자체(300초 마스터가 RTF 정상이어도 타임아웃) ④ `make_w_acceptance_fixtures.sh`(say 실발화 60s — 문장 pauses로 덕킹 분석 유도·720x1280 세로·5분 마스터·120BPM) ⑤ `run_w_acceptance.sh`(와치독 held-PID + **앱 파킹 시 러너 직접 회수**·ffprobe 검증: 세로 기하·길이±·prores 코덱·A/V 싱크≤1프레임·시간 예산).
+- **게이트 즉시 포착 — 백로그 §1.15 등록**: **BUG-ACC-01 (P1)** ProRes·명시적 비트레이트 출력에서 겹치는 오디오 길이 **합산**(2s 영상+4s BGM→6.000s·300+300→600s — 프리셋/프리뷰 경로는 정상 오버레이. 코덱 prores 정상) — 그래프 믹스다운 배치 의심. **BUG-ACC-02 (P1)** `autoDuckOtherAudio` 실분석이 60초 실발화에서 continuation 파킹(메인 런루프 유휴·워커 부재·w.json 미기록·12분 스택 샘플) — **BUG-CA12-01 계열 신규 재현 경로**(1커맨드 재현 가능). **BUG-ACC-03 (P2)** 비트 마커 수율(4s 8클릭≥6개 vs 60s 120BPM→4개).
+- **함정 3건(정직 기록)**: ① 세로 임포트를 strict가 아닌 픽스처 존재로 걸어 스모크 w1 형상 변형→파킹(40분 소모 후 strict 가드로 회복 — 스모크 W 5/5·29/29·40s 재실측) ② 스모크/acceptance 러너 공통의 "와치독만 앱을 죽이는" 구조 — 파킹 시 `wait $pid` 영구 블록(양쪽 모두 러너 직접 회수로 보강) ③ bash `set -e` + `[ $? -ne 0 ] && FAIL=1` 무음 사망(acceptance 러너 — `if !` 형태로 수정, CA-01 함정 재발).
+- **검증**: 스모크 W 5/5·29/29(무회귀)·verify_gate 5/5. acceptance는 현재 정직하게 RED(w1=STT TCC 대기+BUG-ACC-02·w2=마커 수율 약어셜션·w4=BUG-ACC-01 duration) — **BUG-ACC-01/02 수정 후 5/5×3이 STAB-04 2차 완료 기준**.
+- **경과**: STAB 진도 4/8(1차). Phase 2(측정 재설계) 착수 — 게이트가 이미 결함을 잡기 시작함(외부 리뷰 요구의 실증).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **BUG-ACC-01 (P1)** ProRes/명시적 비트레이트 오디오 길이 합산 수정(그래프 믹스다운 배치 — 재현: 2s 영상+4s BGM 오버레이→ProRes 6s·수정 후 4s 단언 + 프리셋 경로 패리티) ② BUG-ACC-02 재현 경로 BUG-CA12-01 에스컬레이션 병합 + STAB-04 2차(acceptance 재실측) ③ STAB-05 파리티 통합. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·**W1 STT용 음성인식 TCC 승인(시스템 설정→개인정보→음성 인식 — 무인 acceptance가 실전 STT를 돌리는 전제)**·STAB-07 결정.
+
+## 2026-08-29 세션 (STAB-03 완료 — iOS 제품 결함 4건, 메인 세션 수동 회차)
+
+- **STAB-03(메인 세션 수동 회차 — 연속 2회차)**: ① stepFrame이 `frameStepTick` 발행 → PreviewView가 해당 틱을 관찰해 **0.25s 공산 임계값을 우회한 강제 시크**(zero-tolerance) — ~0.033s 스텝이 재생헤드 숫자만 바꾸고 렌더 프레임이 남던 결함 폐지. 시크 함수를 `coalescingSmallMoves` 파라미터로 분리(일반 observer 동기화는 기존 0.25s 공산 유지 — 재생 중 15Hz 재시크 스퍼터 방지 목적 보존) ② 루프/정지 판단을 periodic observer의 종료 샘플링(미보장)에서 **AVPlayerItemDidPlayToEndTime 알림**으로 이관 — VM `handlePlaybackReachedEnd()`(루프→playhead 0·유지 / 비루프→정지) + 뷰가 시크·재개 수행. observer 클로저는 `MainActor.assumeIsolated`로 격리 명시 ③ fileImporter의 security scope을 **Task 내부**에서 열고 닫기(기존 defer는 Task 예약 직후 종료 — Files/iCloud URL 권한 조기 상실) ④ fileExporter 성공 후 중복 `saveProject` 제거(성공 저장의 2차 쓰기 실패가 오류로 표시되던 경로).
+- **검증**: iOS 전체 **62테스트/15스위트 PASS**(신규 `playbackEndHandling` — 엔드 핸들러 루프/정지 분기·`frameStepTick` 단언 포함)·verify_gate 5/5.
+- **정직 기록**: 틱→강제 시크 배선과 알림 등록은 SwiftUI 뷰 코드로 유닛테스트 불가 — **실기기/수동 확인 항목(G-27 연계)**으로 남김. VM 로직(틱·엔드 판단)은 단위테스트로 고착.
+- **경과**: STAB 진도 3/8. Phase 1(제품 결함) 전 증분 완료 — Phase 2(측정 재설계) 진입.
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-04 W 측정 양분화** — 현행 스크립트를 `run_w_smoke.sh`로 개명 + `run_w_acceptance.sh` 신설(60초 토킹헤드 STT[TCC 전제]·5분 멀티트랙 ProRes·카드뉴스 문서 편집기·덕킹 실제 감지·작업시간·출력 품질 검증 — 설계 문서화 후 구현) ② STAB-05 파리티 통합(freeze-frame 플래이크·normal_delete 실제 gap·cross-dissolve 재편입). **소형 병행 후보**: STAB-02 잔여(취소 E2E)·CODEX-06(AIFF)·CODEX-17(iOS 트림 ClipTrimMath 전환). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (STAB-02 완료 — Mac 펌프 병렬화·W 측정 분쟁 판정, 메인 세션 수동 회차)
+
+- **STAB-02(메인 세션이 수동 실행 — 16:00 회차 전 유창)**: `ExportEngine.exportVideoWithExplicitBitrate`의 순차 pump(Video 완전 종료 후 Audio)를 **태스크그룹 병렬 pump로 교체**(iOS RENDER-02 패턴 포팅). 실패 전파 설계: 펌프 하나가 throw하면 즉시 양 reader+writer 해체 — 취소된 리더의 `copyNextSampleBuffer→nil`로 형제 pump continuation이 재개됨(`withThrowingTaskGroup`은 자식 전원 완료를 기다리므로, 해체 없으면 그룹 대기 자체가 교착 — continuation 기반 pump는 태스크 취소에 반응하지 않음). 부수: writer `.cancelled`→`CancellationError` 매핑, 활성 writer 세션 추적(`activeWriterSessionReaders/Writer`) + `cancelExport()` 확장 — 제품 경로 취소 배관(프리셋 경로와 동일 지위).
+- **W 측정 분쟁 판정(§0 원칙 이행)**: STAB-01+02 완료 상태에서 **W4 3회 연속(84,957B 동일) + W 전체 5/5 × 3회 연속(15/15 워크플로·29/29 스텝·고아 0)** — 외부 리뷰의 W 4/5(W4 ProRes timeout)는 재현되지 않았고, 구조적 교착 원인은 코드에서 제거됨. **내부 5/5로 확정.**
+- **검증**: verify_gate 5/5(Core 1,425/211스위트·Mac/iOS 빌드·lint).
+- **함정 2건(정직 기록)**: ① 취소 E2E 단위테스트는 라이브 export 테스트 인프라가 부재해(기존은 정적 계약만) 이번 증분에 넣지 못함 — STAB 잔여로 등록. ② `MovieCutMacUITests/ImportExportE2ETests.testImportThenExportProducesAMovieFile` 2회 연속 실패(124s·아티팩트 0B·로그: 미디어 오픈 실패 AVFoundation -11829/-12848 + 오디오 HAL 프록시 오류) — **부모 커밋(stash)에서 동일 실패로 선결함·환경 판정**(MACUI-01 계열·voiceagent 오디오 점유 의심). verify_gate 대상 아님. 후속 관찰 등록.
+- **경과**: STAB 진도 2/8. Phase 1(제품 결함) 잔여 = STAB-03(iOS 4건).
+
+### 다음 회차 — LOOP_STATE 우선순위
+① **STAB-03** iOS 4건 — 프레임 스텝이 0.25s seek 임계값 우회(PreviewView.swift:230 — VM 숫자가 아닌 AVPlayer 실제 프레임 실측)·루프/정지를 `AVPlayerItemDidPlayToEndTime` 알림으로(observer 추정 폐지)+MainActor 격리 명시·security scope를 Task 내부에서 열고 닫기(iOSContentView.swift:361-365)·fileExporter 성공 후 중복 `saveProject` 제거 ② STAB-04 W 측정 양분화. **소형 병행 후보**: STAB-02 잔여(취소 E2E)·CODEX-06(AIFF)·CODEX-17(iOS 트림 ClipTrimMath 전환 — STAB-03과 같은 파일군). **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정. STAB 증분 커밋 후 push는 루프 금지 — 메인 세션/사용자가 반영.
+
 ## 2026-08-29 세션 (외부 리뷰 #2 병합 — 안정화 계획 등록, docs 전용)
 
 - **입력**: 사용자 제공 외부 종합 리뷰(2026-08-29, 판정 "후기 알파·베타 진입 전 안정화"). 핵심 주장 전부 코드 대조로 확인: Mac ExportEngine A/V 순차 펌프(ExportEngine.swift L1561-1578)·W 시나리오 2~4초 픽스처·iOS stepFrame 0.25초 seek 임계값 흡수(PreviewView.swift L230)·security scope Task 앞 조기 종료(iOSContentView.swift L361-365)·fileExporter 이중 저장·watchdog "수습" 주석의 순서 오류(kill 후 pkill -P — 재부모화된 sleep 미포획)·cross-dissolve 통합 스킵(run_core_editing_parity.sh L167-173)·freeze-frame 순서 의존 플래이크·CI 30분 제한 하 iOS 61테스트 미완주·MetricKit 요구 충돌(REQUIREMENTS §13.8 vs AppLog 미도입 정책)·122커밋 원격 미푸시.
@@ -21,7 +357,17 @@
 - **환경 오염 발견·중단(정직 기록)**: run2부터 기기 부하 평균 41~55 급등 — **사용자 `.voiceagent` 어댑터 3종**(senseVoice·diarization·parakeet, 측정 중 시작)이 CPU 상당량 점유 + 데이터 볼륨 98%(4.7Gi). 앱 결함 아님 — 앱은 유휴 수준까지 느려졌을 뿐. 사용자 프로세스는 건드리지 않고 측정 중단. **재생 가능 아티팩트 2.3GB 정리**(CA-12 기준 baseline.json은 보존)로 11Gi 회복.
 - **재실행(1커맨드·조용한 기기에서)**: `bash scripts/run_longform_soak.sh 2` — 사용자가 voiceagent 일시 중지 + 디스크 여유 확보 후.
 
-### 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
+### 2026-08-29 세션 (STAB-01 완료 — watchdog 고아 sleep 재수습 + soak 2run 확증 달성)
+
+- **STAB-01(양 스크립트 재수습)**: `run_w_scenarios.sh`·`run_longform_soak.sh` 모두 (sleep N; kill…) subshell watchdog를 `kill $wd`로 죽인 뒤 `pkill -P $wd`를 호출 — subshell 사망 시 내부 sleep이 launchd로 재부모화돼 **빈 결과**(구 "수습"은 무효, 시나리오당 360s·런당 2400s 고아 잔류). 정석 수정: **spawn 직후 내부 sleep PID를 pgrep -P로 기록**(subshell 생존 중·유계 재시도) → 완료 시 watchdog·sleep PID 둘 다 kill → `kill -0 $sleep` 사후 단언(생존 시 FAIL).
+- **실측**: W 스위트 5/5 완주(워크플로 29/29 스텝·내장 단언 5회 통과) + **soak 2런 완주 — run1 wall 803.2s/RSS 1,476MB·run2 700.5s/1,080MB·RSS 성장 0.0%(게이트 ≤15%)·결정성 9/9 프레임 해시·A/V Δ0.0 — LONGFORM SOAK GATE PASS**(내장 단언 2회) + **외부 교차검증: `sleep 360/2400` 고아 0건**(pgrep -x sleep→argv 정밀 매칭 — -f 패턴은 탐침 자기오탐 함정).
+- **부수 성과**: 기기가 조용해진 시점에 재수습 코드가 탑재된 채 2런이 돌아 **사용자 대기 항목이었던 soak 2run 확증을 이번에 달성** — STAB 계획서 §2·LOOP_STATE 대기 목록에서 완료 처리.
+- **검증**: verify_gate 5/5(Core 1,425·Mac/iOS 빌드·lint).
+
+### 다음 회차 — STAB Phase 0 계속
+① **STAB-02**(P0 — Mac ExportEngine A/V 펌프 병렬화, iOS RENDER-02 태스크그룹 참조 구현 포팅 + 취소·부분파일 정리) ② STAB-06(CI 분할 yaml) — Phase 0 잔여. 이후 STAB-03(iOS 4건) → Phase 2. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·STAB-07 결정.
+
+## 2026-08-29 세션 (경계 분리 2차 — 분해 한계 해제: 공유 헬퍼 승격 이동 + F-20 하이라이트 이동)
 
 - **soak 2run 재차단**: voiceagent 활성(어댑터 구성만 교체 — diarization-adapter)·로드 29+ — 사용자 워크플로 존중, 조용한 기기 대기 유지. G-29(3단계 기간 위반)·블라인드 A/B(2단계+사람 패널)도 자율 부적 판정.
 - **전회차 "분해 한계" 해제 증분(8919f3c)**: 공유 file-private 헬퍼 4종(`sourceClipAndAsset`·`timelineMapping`·`recordAnalysisResult`+`clipDescription`·`isTranscribable`)을 `EditorViewModel+AnalysisSupport.swift`로 이동, 공유 4종은 private→internal 승격(**동일 타깃 가시성 확대만 — 스코프·공개 표면·호출부 불변**, A류 경계 정리 성격으로 큐 운영자 승인 하 실행). `ensureDefaultTracks` 동일 승격. F-20 하이라이트 메서드(+shift)가 `EditorViewModel+AutoHighlights.swift`로 뒤따름 — 본체 **5,443→5,206줄**. `HighlightsStaticContract` 소스 경로만 새 파일로 추적(기대치 5종 불변).

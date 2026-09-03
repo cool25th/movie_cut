@@ -375,7 +375,13 @@ public struct ExportPlanner: Sendable {
         // tag 8-bit pixels as HDR — the output would lie about its depth. When
         // the flag is off, downgrade any HDR profile to the SDR delivery
         // profile for the same codec instead of producing a mislabeled file.
-        if profile.isHDR && !FeatureFlag.hdrMaster {
+        // The flag governs what the PRODUCT offers: a persisted delivery
+        // codec (the UI path, gated in EditorViewModel/ContentView) is
+        // downgraded so v1 never ships a mislabeled HDR file. An EXPLICIT
+        // profile override is the developer/mastering path — it passes
+        // through so the 10-bit writer contract and e2e verification can be
+        // exercised before the flag flips (capcut-surpass stage-3 port).
+        if options.videoProfileOverride == nil, profile.isHDR, !FeatureFlag.hdrMaster {
             profile = VideoCompressionProfile.deliveryProfile(for: settings.codec)
         }
         let size = renderSize(for: settings.resolution, canvas: canvas)
@@ -498,7 +504,13 @@ public struct ExportPlanner: Sendable {
 
         if video.profile.isHDR {
             // Rec. 2020 primaries + HLG transfer for a 10-bit HDR master, encoded
-            // with the HEVC Main 10 profile.
+            // with the HEVC Main 10 profile. The 10-bit SURFACE is requested by
+            // the reader side (ExportEngine picks 420YpCbCr10BiPlanarVideoRange
+            // for HDR profiles); these writer settings must NOT carry
+            // kCVPixelBufferPixelFormatTypeKey — AVAssetWriterInput REJECTS
+            // outputSettings containing a pixel-format key alongside
+            // AVVideoCodecKey (NSInvalidArgumentException, measured by the
+            // stage-3 e2e probe), which kills the export task outright.
             settings[AVVideoColorPropertiesKey] = [
                 AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,

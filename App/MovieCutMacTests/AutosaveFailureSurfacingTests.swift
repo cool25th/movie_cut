@@ -109,3 +109,66 @@ struct AutosaveFailureSurfacingTests {
         #expect(vm.lastErrorMessage == nil, "the warning is non-blocking")
     }
 }
+
+/// Coalescing semantics (capcut-surpass 9304e8b rewrite): a burst of edits
+/// must settle into the LATEST snapshot, and `flushAutosave()` must persist
+/// immediately without waiting out the debounce. Exact write-counting needs
+/// store injection; these pin the externally observable contract against the
+/// real recovery file.
+@MainActor
+@Suite("Autosave coalescing (capcut-surpass 9304e8b)")
+struct AutosaveCoalescingTests {
+    private func makeViewModel(autosaveDirectory: URL) -> EditorViewModel {
+        EditorViewModel(project: Project(
+            name: "autosave-coalesce",
+            mediaLibrary: MediaLibrary(assets: [:]),
+            timeline: Timeline(canvasSize: CGSize(width: 100, height: 100), tracks: [])
+        ), autosaveDirectory: autosaveDirectory)
+    }
+
+    private func recoveryJSON(in dir: URL) throws -> Data {
+        try Data(contentsOf: dir.appendingPathComponent("recovery.moviecut"))
+    }
+
+    @Test("a burst of edits settles into the latest snapshot")
+    func burstSettlesIntoLatestSnapshot() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cc-coalesce-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let vm = makeViewModel(autosaveDirectory: dir)
+        // Three rapid timeline mutations, no waiting between them — the
+        // debounce must coalesce them; the recovery file must end up with
+        // the final name, not an intermediate one.
+        for name in ["first", "second", "third"] {
+            var renamed = vm.currentProject
+            renamed.name = name
+            await vm.apply(ReplaceProjectCommand(project: renamed))
+        }
+        // Settle past the 0.75 s debounce.
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        let json = try String(decoding: recoveryJSON(in: dir), as: UTF8.self)
+        #expect(json.contains("\"name\" : \"third\""),
+                "latest snapshot must win after a coalesced burst")
+        #expect(vm.autosaveFailureMessage == nil)
+    }
+
+    @Test("flushAutosave persists immediately without waiting for the debounce")
+    func flushPersistsImmediately() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cc-flush-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let vm = makeViewModel(autosaveDirectory: dir)
+        var flushed = vm.currentProject
+        flushed.name = "flushed"
+        await vm.apply(ReplaceProjectCommand(project: flushed))
+        // Flush right away — no debounce wait.
+        await vm.flushAutosave()
+        let json = try String(decoding: recoveryJSON(in: dir), as: UTF8.self)
+        #expect(json.contains("\"name\" : \"flushed\""),
+                "flush must write the latest snapshot synchronously")
+    }
+}

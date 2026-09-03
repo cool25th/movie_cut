@@ -31,7 +31,8 @@ public enum KeyframeGraphMath {
                     from: left.value,
                     to: right.value,
                     progress: progress,
-                    mode: left.interpolation
+                    mode: left.interpolation,
+                    customCurve: left.customCurve
                 )
             }
         }
@@ -58,7 +59,7 @@ public enum KeyframeGraphMath {
                 points.append((right.time, right.value))
             case .linear:
                 points.append((right.time, right.value))
-            case .easeIn, .easeOut, .easeInOut:
+            case .easeIn, .easeOut, .easeInOut, .custom:
                 let count = max(samplesPerSegment, 2)
                 for step in 1...count {
                     let progress = Double(step) / Double(count)

@@ -50,16 +50,41 @@ public enum CanvasBackgroundPixelProcessor {
         }
     }
 
-    /// Composites a frame over the configured background. Returns the frame
-    /// unchanged when no background is configured, preserving the existing
-    /// render pipeline output byte-for-byte.
+    /// How the canvas treats pixels the composited frame does not decide
+    /// (aspect-fit letter/pillarbox bands, alpha-keyed holes).
+    ///
+    /// `.opaqueDelivery` fills them with the opaque canvas color so every
+    /// output pixel is determined by the current frame — recycled codec
+    /// buffers cannot leak the previous scene through transparent bands
+    /// (LF-ACTION-01, 2026-09-01 longform blocker).
+    ///
+    /// `.alphaPreserving` keeps the frame's transparency for alpha-capable
+    /// codecs (ProRes 4444 mastering).
+    public enum CanvasFillPolicy: Sendable, Equatable {
+        case opaqueDelivery
+        case alphaPreserving
+    }
+
+    /// Composites a frame over the configured background. With no background
+    /// configured, the `fillPolicy` decides: `.opaqueDelivery` composites the
+    /// frame over an opaque black canvas (the invariant that every output
+    /// pixel is decided by the current frame — LF-ACTION-01);
+    /// `.alphaPreserving` returns the frame unchanged so alpha-capable
+    /// exports keep their transparency.
     public static func compose(
         frame: CIImage,
         over background: CanvasBackground?,
-        renderSize: CGSize
+        renderSize: CGSize,
+        fillPolicy: CanvasFillPolicy = .opaqueDelivery
     ) -> CIImage {
         guard background != nil else {
+            if fillPolicy == .alphaPreserving {
+                return frame
+            }
+            let canvasRect = CGRect(origin: .zero, size: renderSize)
             return frame
+                .composited(over: solid(color: CIColor.black, in: canvasRect))
+                .cropped(to: canvasRect)
         }
 
         let backgroundImage = backgroundImage(

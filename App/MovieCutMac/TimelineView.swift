@@ -444,7 +444,7 @@ struct TimelineView: View {
                     hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.",
                     isDisabled: !selectedClipSupportsVisualTimelineEffect
                 ) {
-                    Task { await viewModel.freezeSelectedFrame() }
+                    Task { viewModel.noteQuickToolUsed(); await viewModel.freezeSelectedFrame() }
                 }
 
                 timelineToolbarIconButton(
@@ -455,6 +455,7 @@ struct TimelineView: View {
                 ) {
                     Task {
                         guard let selectedClip = viewModel.selectedClip else { return }
+                        viewModel.noteQuickToolUsed()
                         await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)
                     }
                 }

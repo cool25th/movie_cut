@@ -346,36 +346,124 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 body()
             }
         }
-        let resumeOnce = ResumeOnce()
-        await withCheckedContinuation { continuation in
-            player.seek(
-                to: itemTime,
-                toleranceBefore: .zero,
-                toleranceAfter: .zero
-            ) { _ in
-                resumeOnce.run { continuation.resume() }
-            }
-            Task {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                resumeOnce.run { continuation.resume() }
+        // STAB-05 (freeze_frame flake): under full-suite load the exact
+        // frame can miss the 2 s poll window; falling straight back to the
+        // CURRENT frame then returns a stale/wrong frame (measured MAD
+        // 9.69 vs 0.99 standalone at a freeze boundary — the parity
+        // "order/resource dependent" flake). Retry the whole zero-tolerance
+        // seek + poll once before accepting the current-frame fallback.
+        func seekWithWatchdog(to time: CMTime) async {
+            let resume = ResumeOnce()
+            await withCheckedContinuation { continuation in
+                player.seek(
+                    to: time,
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero
+                ) { _ in
+                    resume.run { continuation.resume() }
+                }
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    resume.run { continuation.resume() }
+                }
             }
         }
-
-        // Poll the exact requested item time. Custom-compositor frames can take
-        // longer than a decoded passthrough frame on their first request, and
-        // host-time lookup is ambiguous while the player is paused after seek.
-        let frameDeadline = Date().addingTimeInterval(2)
-        while Date() < frameDeadline {
-            if let output = previewVideoOutput,
-               output.hasNewPixelBuffer(forItemTime: itemTime),
-               let pixelBuffer = output.copyPixelBuffer(
-                   forItemTime: itemTime,
-                   itemTimeForDisplay: nil
-               ),
-               let image = Self.cgImage(from: pixelBuffer) {
+        func pollFrame(at time: CMTime, limit: TimeInterval) -> CGImage? {
+            guard let output = previewVideoOutput else { return nil }
+            let deadline = Date().addingTimeInterval(limit)
+            while Date() < deadline {
+                if output.hasNewPixelBuffer(forItemTime: time),
+                   let pixelBuffer = output.copyPixelBuffer(
+                       forItemTime: time,
+                       itemTimeForDisplay: nil
+                   ),
+                   let image = Self.cgImage(from: pixelBuffer) {
+                    return image
+                }
+                Thread.sleep(forTimeInterval: 0.03)
+            }
+            return nil
+        }
+        // BUG-ACC-05 (5th pass): right after a zero-tolerance seek out of an
+        // empty time range, the plain compositor can complete a render while
+        // the source is still unprimed — BLACK pixels tagged NEW for the
+        // requested item time, returned by the poll in ~34 ms (4th-pass
+        // measurement). Distrust a fast attempt-0 success ONLY within 0.5 s
+        // after a REAL gap: a time not covered by ANY video segment (the
+        // union across ALL tracks — transition slot alternation makes a
+        // single track's first segment start mid-timeline WITHOUT any gap
+        // existing; treating that as a gap mis-fired the away-and-back inside
+        // the dissolve window and returned the away-frame — cross_dissolve
+        // parity MAD 4.55/8.61 bimodal, deterministic per run). Distrusting
+        // every fast success regressed motion_tracking (0.05→4.33).
+        func snapshotIsJustAfterGap() async -> Bool {
+            guard let item = playerItem,
+                  let tracks = try? await item.asset.loadTracks(withMediaType: .video),
+                  !tracks.isEmpty
+            else { return false }
+            // Union of every track's segment coverage.
+            var covered: [(start: Double, end: Double)] = []
+            for track in tracks {
+                for segment in track.segments {
+                    let start = CMTimeGetSeconds(segment.timeMapping.target.start)
+                    let end = start + CMTimeGetSeconds(segment.timeMapping.target.duration)
+                    if end > start { covered.append((start, end)) }
+                }
+            }
+            guard !covered.isEmpty else { return false }
+            covered.sort { $0.start < $1.start }
+            // Real gaps = uncovered intervals after merging the union.
+            var gapEnds: [Double] = []
+            var cursor = 0.0
+            for interval in covered {
+                if interval.start > cursor + 0.01 {
+                    gapEnds.append(interval.start)
+                }
+                cursor = max(cursor, interval.end)
+            }
+            return gapEnds.contains { gapEnd in
+                targetTime > gapEnd && targetTime - gapEnd <= 0.5
+            }
+        }
+        let distrustFastSuccess = await snapshotIsJustAfterGap()
+        let fastSuccessWindow: TimeInterval = 0.150
+        let awayOffset: TimeInterval = 0.05
+        for attempt in 0..<2 {
+            await seekWithWatchdog(to: itemTime)
+            let pollStart = Date()
+            if let image = pollFrame(at: itemTime, limit: 2) {
+                let elapsed = Date().timeIntervalSince(pollStart)
+                if attempt == 0, distrustFastSuccess, elapsed < fastSuccessWindow {
+                    let awaySeconds = targetTime > awayOffset ? targetTime - awayOffset : targetTime + awayOffset
+                    let awayTime = CMTime(seconds: min(max(0, awaySeconds), max(duration, awaySeconds)), preferredTimescale: 600)
+                    await seekWithWatchdog(to: awayTime)
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    await seekWithWatchdog(to: itemTime)
+                    if let refreshed = pollFrame(at: itemTime, limit: 1.5) {
+                        return refreshed
+                    }
+                }
                 return image
             }
-            try? await Task.sleep(nanoseconds: 30_000_000)
+        }
+        // STAB-05 (motion parity): both poll attempts starved — under the
+        // suite-context load the custom compositor's render for THIS seek can
+        // still be in flight, and snapshotCurrentFrame() then hands back the
+        // PREVIOUS seek's frame (measured: the t=0.3 request returned the
+        // t≈0 frame, t=1.7 returned the freshly-arrived t=0.3 frame — while
+        // the compositor's own keyframe evaluations logged CORRECT values for
+        // every request). Re-render via away-and-back BEFORE accepting the
+        // stale fallback: this costs nothing on healthy paths (the poll
+        // succeeded above) and, unlike distrusting fast successes (which
+        // regressed warm-cache scenarios 0.05→4.33), only fires when the
+        // snapshot would otherwise return a provably-stale frame.
+        let awaySeconds = targetTime > awayOffset ? targetTime - awayOffset : targetTime + awayOffset
+        let awayTime = CMTime(seconds: min(max(0, awaySeconds), max(duration, awaySeconds)), preferredTimescale: 600)
+        await seekWithWatchdog(to: awayTime)
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        await seekWithWatchdog(to: itemTime)
+        if let refreshed = pollFrame(at: itemTime, limit: 2) {
+            return refreshed
         }
         return snapshotCurrentFrame()
     }
@@ -1363,6 +1451,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 uniqueKeysWithValues: zip(sortedVideoCompositionTracks.map { $0.track.trackID }, layerInstructions)
             )
 
+            // BUG-ACC-05 (measured 2026-08-30, 4th pass): mirroring the
+            // export path's explicit opacity anchors — setOpacity(0, at:
+            // .zero) per instruction + the clip's opacity at its start —
+            // does NOT fix the post-gap black (3/3 fail identical). Opacity
+            // points are NOT the mechanism; instrumentation continues on the
+            // snapshot delivery path.
             for clipInstruction in videoClipInstructions {
                 guard let layerInstruction = layerInstructionsByTrackID[clipInstruction.trackID] else {
                     continue

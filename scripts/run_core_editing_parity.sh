@@ -153,8 +153,15 @@ run_scenario() {
     --frame-rate "$frame_rate" \
     --tolerance "$tolerance" \
     --size 320x240 \
-    --work-dir "$work"
-  local rc=$?
+    --work-dir "$work" | tee "$work/comparator.out"
+  local rc=${PIPESTATUS[0]}
+  # STAB-08: append the verdict + the comparator's worst MAD (the summary
+  # line prints it unconditionally — the report table shows the run's
+  # largest pixel drift even on PASS) to the ledger the history recorder
+  # reads.
+  local worst_mad
+  worst_mad="$(sed -nE 's/^Worst overall MAD: ([0-9.]+).*/\1/p' "$work/comparator.out" | tail -1)"
+  echo "$name $rc ${worst_mad:-NA}" >> "$PARITY_LEDGER"
   if [ "$rc" -ne 0 ]; then
     echo "    Preserving work dir: $work" >&2
   else
@@ -164,13 +171,27 @@ run_scenario() {
 }
 
 FAIL=0
-# NOTE: Scenario 1 (two clips + cross dissolve) is intentionally skipped in
-# this script. It requires CustomVideoCompositor two-source transitions, whose
-# composition build does not complete reliably under the headless harness on
-# this host (the app hangs in buildComposition). The transition pixel path is
-# instead covered by TransitionPixelProcessorTests under the software renderer
-# (Step 6-A). Re-enable here once a CI/host with a working GPU compositor is
-# available. Tracked as a Step 6 caveat.
+# STAB-08: per-scenario verdict ledger for the history recorder at the tail.
+PARITY_LEDGER="$(mktemp /tmp/moviecut-parity-ledger.XXXXXX)"
+export PARITY_LEDGER
+echo "Scenario 1: two clips + cross dissolve (STAB-05 re-entry)"
+# Skipped from the script's inception (headless buildComposition hang on this
+# host). That hang class matched the sequential A/V pump starvation STAB-02
+# cured (2026-08-29 task-group parallel pumps), so the scenario is re-entered
+# as a MEASURED probe: sequential comma import A[0,2]+B[2,5], 0.5s cross
+# dissolve on the OUTGOING clip (TRANSITION_TARGET=first — the harness knob
+# this scenario added; a comma import leaves selection on the LAST clip,
+# where a transition gates no pair). v1 samples OUTSIDE the dissolve window
+# (t=0.5 pure A, t=2.6 pure B): the back-timed two-slot STRUCTURE (4.5s
+# duration, overlap, both sources alive) is asserted end-to-end. The
+# dissolve-window sample (t≈1.75) is BLOCKED by the stale-frame supply class
+# (BUG-CA12-01 adjacent — preview returns a one-behind/pure-A frame tagged
+# new, deterministic per instant: 1.7667→35.26 4/4, 1.75→4.55/35.26 bimodal;
+# measured 2026-08-31). Re-add the in-window time when that root is fixed.
+run_scenario "cross_dissolve" "0.5,2.6" 4.5 \
+  "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
+  "MOVIECUT_UITEST_TRANSITION=crossDissolve" \
+  "MOVIECUT_UITEST_TRANSITION_TARGET=first" || FAIL=1
 
 echo "Scenario 2: 2x clip split"
 # 2s source at 2x -> ~1.0s export; the old "0.5,1.5" requested a 1.5s frame
@@ -209,18 +230,16 @@ echo "Scenario 7: image + video mixed"
 run_scenario "image_video_mixed" "0.5,2.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$IMAGE,$VIDEO_A" || FAIL=1
 
-echo "Scenario 8: normal delete (gap preserved)"
-# The harness deletes the *last-imported* clip (VIDEO_B), leaving only VIDEO_A
-# at [0, 2], so the export is 2.0s. The old "0.5,2.5" requested a 2.5s frame
-# past the end, which now fails cleanly (out-of-range guard) instead of
-# crashing. Sample inside the 2.0s export.
-# NOTE: because deleteClip() always removes the selected (last) clip, this
-# scenario does not actually leave an on-timeline gap — it just tests that
-# Preview matches Export for the remaining clip after a delete. Exercising a
-# real gap would require a harness change to delete a non-trailing clip.
-run_scenario "normal_delete" "0.5,1.5" 2.0 \
+echo "Scenario 8: normal delete (REAL gap preserved)"
+# STAB-05: delete the FIRST clip (timeline index 0 = VIDEO_A) through the
+# harness's index-targeted path (same gap-preserving DeleteClipCommand the
+# menu uses) — VIDEO_B stays at [2, 4] with a REAL [0, 2] gap. Sample the
+# gap interior (0.5 — canvas background in both engines) and inside the
+# surviving clip (2.5, 3.5). Export stays 4.0s: gap-preserving, not ripple.
+run_scenario "normal_delete" "0.5,2.5,3.5" 2.0 \
   "MOVIECUT_UITEST_IMPORT=$VIDEO_A,$VIDEO_B" \
-  "MOVIECUT_UITEST_NORMAL_DELETE=1" || FAIL=1
+  "MOVIECUT_UITEST_NORMAL_DELETE=1" \
+  "MOVIECUT_UITEST_DELETE_CLIP_INDEX=0" || FAIL=1
 
 # ---------------------------------------------------------------------------
 # Task 7.2 — additional editing-operation parity scenarios (requirement 2.1,
@@ -330,10 +349,42 @@ run_scenario "motion_tracking" "0.3,1.7" 2.0 \
   "MOVIECUT_UITEST_MOTION_TRACKING=1" || FAIL=1
 
 echo ""
+# STAB-08: record per-scenario verdicts into the history ledger the
+# LOOP_STATE report generator reads (scenarios that were skipped by
+# PARITY_ONLY never reach the ledger — the table shows what ran).
+parity_rc=0
 if [ "$FAIL" -eq 0 ]; then
   echo "RESULT: ALL PARITY SCENARIOS PASSED"
-  exit 0
 else
   echo "RESULT: ONE OR MORE PARITY SCENARIOS FAILED"
-  exit 1
+  parity_rc=1
 fi
+mkdir -p "$ROOT/.build-check/history"
+python3 - "$PARITY_LEDGER" $parity_rc <<'PYEOF'
+import json, sys, time
+ledger, rc = sys.argv[1], int(sys.argv[2])
+scenarios = {}
+worst_mad = None
+for line in open(ledger):
+    parts = line.split()
+    if len(parts) >= 2:
+        scenarios[parts[0]] = "PASS" if parts[1] == "0" else "FAIL"
+    # Third field: the comparator's worst MAD (NA on harness-level failure).
+    if len(parts) >= 3 and parts[2] not in ("NA",):
+        try:
+            value = float(parts[2])
+            worst_mad = value if worst_mad is None else max(worst_mad, value)
+        except ValueError:
+            pass
+out = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    "scenarios": scenarios,
+    "rc": rc,
+}
+if worst_mad is not None:
+    out["worst_mad"] = worst_mad
+with open(f".build-check/history/parity-{int(time.time())}.json", "w") as f:
+    json.dump(out, f)
+PYEOF
+rm -f "$PARITY_LEDGER"
+exit $parity_rc

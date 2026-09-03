@@ -51,11 +51,17 @@ jobs:
       - name: Preview↔Export parity sweep
         run: scripts/run_parity_sweep.sh
 
-      # Core editing parity: 12 scenarios at a tighter MAD ≤ 2. Skips the
-      # cross-dissolve transition case (headless GPU compositor caveat noted
-      # in the script); the rest must pass.
+      # Core editing parity: the full scenario set at MAD ≤ 2 per scenario,
+      # including the cross-dissolve transition case re-entered 2026-08-31
+      # (structure-scoped; the dissolve-window sample waits on BUG-ACC-06).
       - name: Core editing parity
         run: scripts/run_core_editing_parity.sh
+
+      # STAB-06: the W smoke suite — five representative workflows (VO edit,
+      # beat sync, multi-cam, master grading, card news) driven through the
+      # real app with per-step assertions. Fast enough for nightly signal.
+      - name: W smoke suite (representative workflows)
+        run: scripts/run_w_smoke.sh
 
       # End-to-end export across ~33 feature sections, asserting real movie
       # files are produced with correct duration/fps/codec/audio.

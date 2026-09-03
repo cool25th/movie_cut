@@ -80,9 +80,15 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-  ios-tests:
+  # STAB-06: the single 30-min iOS job previously died mid-run (8 PASS at
+  # 1,047.8s then cancelled). Split by measured runtime — the state suites
+  # finish in under a second of test time (14 tests / 0.55s local), so they
+  # give fast signal while the AVFoundation suites (render/export/pipelines,
+  # 48 tests / ~45s local) run as their own serial steps with individual
+  # timeouts. Suite names measured locally 2026-08-31.
+  ios-fast-tests:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -91,7 +97,7 @@ jobs:
           echo "Selecting: $NEWEST"
           sudo xcode-select -s "$NEWEST/Contents/Developer"
           swift --version
-      - name: Run iOS unit tests (simulator)
+      - name: Run iOS state tests (fast signal)
         run: |
           SIM="$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')"
           if [ -z "$SIM" ]; then
@@ -102,7 +108,60 @@ jobs:
           xcodebuild -project MovieCut.xcodeproj \
             -scheme MovieCutiOS \
             -destination "platform=iOS Simulator,name=$SIM" \
-            -only-testing:MovieCutiOSTests \
+            -only-testing:MovieCutiOSTests/IOSPersistenceTests \
+            -only-testing:MovieCutiOSTests/IOSMediaSurvivabilityTests \
+            -only-testing:MovieCutiOSTests/IOSSessionStateTests \
+            -only-testing:MovieCutiOSTests/IOSUITestHarnessRunScopingTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+  ios-av-tests:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          NEWEST="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST/Contents/Developer"
+          swift --version
+      - name: Resolve simulator once
+        run: |
+          SIM="$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')"
+          if [ -z "$SIM" ]; then
+            echo "::error::no available iPhone simulator"
+            exit 1
+          fi
+          echo "SIM=$SIM" >> "$GITHUB_ENV"
+      # The render/export suites are the heavy half (22 tests / ~40s local);
+      # they run first with their own timeout so a hang cannot burn the whole
+      # job before the lighter pipelines report.
+      - name: iOS render/export suites
+        timeout-minutes: 20
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -destination "platform=iOS Simulator,name=$SIM" \
+            -only-testing:MovieCutiOSTests/IOSCanvasRatioGoldenTests \
+            -only-testing:MovieCutiOSTests/IOSAudioMixPipelineTests \
+            -only-testing:MovieCutiOSTests/IOSExportEngineBehaviorTests \
+            -only-testing:MovieCutiOSTests/IOSExportEngineGateTests \
+            -only-testing:MovieCutiOSTests/IOSRenderPlanParityTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+      - name: iOS pipeline/accessibility suites
+        timeout-minutes: 15
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -destination "platform=iOS Simulator,name=$SIM" \
+            -only-testing:MovieCutiOSTests/IOSBeatDetectionTests \
+            -only-testing:MovieCutiOSTests/IOSImageClipPipelineTests \
+            -only-testing:MovieCutiOSTests/IOSPhase1SurfacesTests \
+            -only-testing:MovieCutiOSTests/IOSTransitionPipelineTests \
+            -only-testing:MovieCutiOSTests/IOSInspectorAccessibilityContractTests \
+            -only-testing:MovieCutiOSTests/IOSReviewP0FixesTests \
             CODE_SIGNING_ALLOWED=NO \
             test
 

@@ -54,6 +54,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
     var backgroundRemovedClipIds: Set<UUID> = []
 
     @ObservationIgnored private var activeExportSession: AVAssetExportSession?
+    // STAB-02: the explicit-bitrate/ProRes writer path registers its live
+    // session so cancelExport() reaches it (the preset path goes through
+    // activeExportSession above).
+    @ObservationIgnored private var activeWriterSessionReaders: [AVAssetReader] = []
+    @ObservationIgnored private var activeWriterSessionWriter: AVAssetWriter?
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     /// Security scopes held open for the duration of an export so source
     /// assets stay reachable under App Sandbox. (S2)
@@ -133,6 +138,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             signposter.endInterval("export.preset", signpostState, "\(classified.userMessage, privacy: .public)")
             finishExport()
@@ -270,7 +280,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
         for project: Project,
         audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions(),
         graphAudio: URL? = nil,
-        includeAudioTrack: Bool = true
+        includeAudioTrack: Bool = true,
+        preservesCanvasAlpha: Bool = false
     ) async throws -> ExportPackage {
         let composition = AVMutableComposition()
         var videoCompositionTracks: [AVCompositionTrack] = []
@@ -570,6 +581,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
             canvas: project.canvas,
             exportSettings: project.exportSettings,
             canvasBackground: project.canvasBackground,
+            preservesCanvasAlpha: preservesCanvasAlpha,
             project: project
         )
 
@@ -593,6 +605,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
         canvas: CanvasPreset,
         exportSettings: ExportSettings,
         canvasBackground: CanvasBackground? = nil,
+        preservesCanvasAlpha: Bool = false,
         project: Project
     ) -> AVMutableVideoComposition? {
         guard !tracks.isEmpty else { return nil }
@@ -813,6 +826,7 @@ final class ExportEngine: FlattenedTimelineConsumer {
                     },
                     transitionEffects: transitionEffects,
                     canvasBackground: canvasBackground,
+                    preservesCanvasAlpha: preservesCanvasAlpha,
                     adjustmentClips: adjustmentClips.isEmpty ? nil : adjustmentClips
                 )
             ]
@@ -1245,6 +1259,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified
@@ -1378,6 +1397,11 @@ final class ExportEngine: FlattenedTimelineConsumer {
             removePartialOutput(at: url)
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified
@@ -1412,7 +1436,10 @@ final class ExportEngine: FlattenedTimelineConsumer {
             defer { removeTemporaryRenderURLs(graphAudioOwnedURLs) }
             let exportPackage = try await makeExportPackage(
                 for: project, audioProcessing: audioProcessing, graphAudio: graphAudioURL,
-                includeAudioTrack: false
+                includeAudioTrack: false,
+                // LF-ACTION-02: ProRes 4444 is the only alpha-capable profile;
+                // every other delivery composites an opaque canvas.
+                preservesCanvasAlpha: profileOverride == .proRes4444
             )
             graphAudioOwnedURLs.removeAll()
             defer { removeTemporaryRenderURLs(exportPackage.temporaryRenderURLs) }
@@ -1547,6 +1574,8 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
             }
             writer.startSession(atSourceTime: .zero)
+            activeWriterSessionWriter = writer
+            activeWriterSessionReaders = [reader] + (audioReader.map { [$0] } ?? [])
 
             if let metadataAdaptor, let metadataInput {
                 for chapterGroup in chapterGroups {
@@ -1558,23 +1587,60 @@ final class ExportEngine: FlattenedTimelineConsumer {
             }
 
             let totalDuration = max(project.timeline.duration, 1.0 / 600.0)
-            if let writerVideoInput, let videoReaderOutput {
-                try await pumpSamples(
-                    output: UncheckedSendable(videoReaderOutput),
-                    input: UncheckedSendable(writerVideoInput),
-                    queueLabel: "moviecut.export.writer.video",
-                    totalDuration: totalDuration,
-                    reportsProgress: true
-                )
-            }
-            if let writerAudioInput, let audioReaderOutput {
-                try await pumpSamples(
-                    output: UncheckedSendable(audioReaderOutput),
-                    input: UncheckedSendable(writerAudioInput),
-                    queueLabel: "moviecut.export.writer.audio",
-                    totalDuration: totalDuration,
-                    reportsProgress: false
-                )
+            // STAB-02: both pumps run CONCURRENTLY. With an audio writer
+            // input present, pumping video ALONE first can stall the video
+            // queue forever (the W4 ProRes timeout class — iOS RENDER-02
+            // measured the same deadlock on 2026-08-26 and fixed it with
+            // concurrent pumps; this ports the pattern). A failing pump
+            // tears down the shared session so the sibling's reader drains
+            // (cancelled reader: copyNextSampleBuffer → nil) and its
+            // continuation resumes instead of parking forever.
+            let compositionReaderBox = UncheckedSendable(reader)
+            let graphAudioReaderBox = audioReader.map { UncheckedSendable($0) }
+            let writerBox = UncheckedSendable(writer)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                if let writerVideoInput, let videoReaderOutput {
+                    let output = UncheckedSendable(videoReaderOutput as AVAssetReaderOutput)
+                    let input = UncheckedSendable(writerVideoInput)
+                    group.addTask {
+                        do {
+                            try await self.pumpSamples(
+                                output: output,
+                                input: input,
+                                writer: writerBox,
+                                queueLabel: "moviecut.export.writer.video",
+                                totalDuration: totalDuration,
+                                reportsProgress: true
+                            )
+                        } catch {
+                            compositionReaderBox.value.cancelReading()
+                            graphAudioReaderBox?.value.cancelReading()
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
+                    }
+                }
+                if let writerAudioInput, let audioReaderOutput {
+                    let output = UncheckedSendable(audioReaderOutput as AVAssetReaderOutput)
+                    let input = UncheckedSendable(writerAudioInput)
+                    group.addTask {
+                        do {
+                            try await self.pumpSamples(
+                                output: output,
+                                input: input,
+                                writer: writerBox,
+                                queueLabel: "moviecut.export.writer.audio",
+                                totalDuration: totalDuration,
+                                reportsProgress: false
+                            )
+                        } catch {
+                            compositionReaderBox.value.cancelReading()
+                            graphAudioReaderBox?.value.cancelReading()
+                            writerBox.value.cancelWriting()
+                            throw error
+                        }
+                    }
+                }
             }
 
             guard reader.status != .failed else {
@@ -1584,19 +1650,47 @@ final class ExportEngine: FlattenedTimelineConsumer {
                 throw audioReader.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
+            // STAB-02 cancel E2E: finishWriting on a cancelled/failed writer
+            // is ILLEGAL — AVFoundation raises NSInternalInconsistencyException
+            // ("Cannot call method when status is 4"), killing the process
+            // instead of failing the export (measured 2026-09-03: a cancel
+            // whose reader teardown re-invoked the pumps' handlers completed
+            // the group NORMALLY, fell through to finishWriting, and crashed).
+            // The status switch below can never see these states because the
+            // call itself traps first — check BEFORE finishing.
+            switch writer.status {
+            case .cancelled:
+                throw CancellationError()
+            case .failed:
+                throw writer.error ?? ExportEngineError.exportSessionCreationFailed
+            default:
+                break
+            }
             await finishWriting(UncheckedSendable(writer))
-            guard writer.status == .completed else {
+            switch writer.status {
+            case .completed:
+                break
+            case .cancelled:
+                throw CancellationError()
+            default:
                 throw writer.error ?? ExportEngineError.exportSessionCreationFailed
             }
 
             exportProgress = 1
             lastExportURL = url
+            clearActiveWriterSession()
             finishExport()
             return url
         } catch {
             removePartialOutput(at: url)
+            clearActiveWriterSession()
             let classified = FileOperationError.classify(error)
             AppLog.export.error("export failed: \(classified.userMessage, privacy: .public)")
+            // BUG-ACC-04: the classified message swallows the underlying
+            // error — the raw error identifies which case actually fired
+            // (the intermittent 5-min master failure logged only a generic
+            // "MovieCut 오류 -1" wrapper and was undiagnosable).
+            AppLog.export.error("export failed (raw): \(String(describing: error), privacy: .public)")
             exportError = classified.userMessage
             finishExport()
             throw classified
@@ -1610,22 +1704,36 @@ final class ExportEngine: FlattenedTimelineConsumer {
     /// pump owns them for the duration of the transfer and serializes all access
     /// through the writer's request queue, so they are passed in `@unchecked
     /// Sendable` boxes.
+    ///
+    /// - Parameter writer: the session's writer, for the cancellation poller.
+    /// STAB-02 cancel E2E measured that after `cancelExport()` cancels the
+    /// writer, `requestMediaDataWhenReady` NEVER fires again — the handler
+    /// paths below can't run and both pumps leak their continuations, parking
+    /// the export forever instead of failing cleanly (the "cancelled reader's
+    /// copyNextSampleBuffer → nil" teardown only works if the handler is
+    /// invoked once more, which a cancelled writer input never does). The
+    /// poller watches the writer's cancelled/failed status and tears the
+    /// continuation down; the once-box guarantees the handler and the poller
+    /// can't double-resume.
     private nonisolated func pumpSamples(
         output: UncheckedSendable<AVAssetReaderOutput>,
         input: UncheckedSendable<AVAssetWriterInput>,
+        writer: UncheckedSendable<AVAssetWriter>,
         queueLabel: String,
         totalDuration: Double,
         reportsProgress: Bool
     ) async throws {
         let queue = DispatchQueue(label: queueLabel)
+        let once = PumpContinuationOnce()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            once.set(continuation)
             input.value.requestMediaDataWhenReady(on: queue) { [weak self] in
                 let writerInput = input.value
                 let readerOutput = output.value
                 while writerInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else {
                         writerInput.markAsFinished()
-                        continuation.resume(returning: ())
+                        once.resumeReturning()
                         return
                     }
 
@@ -1640,11 +1748,57 @@ final class ExportEngine: FlattenedTimelineConsumer {
                     }
 
                     if !writerInput.append(sampleBuffer) {
-                        continuation.resume(throwing: ExportEngineError.exportSessionCreationFailed)
+                        once.resumeThrowing(ExportEngineError.exportSessionCreationFailed)
                         return
                     }
                 }
             }
+            Task.detached { [once, writer] in
+                while once.isLive {
+                    let status = writer.value.status
+                    if status == .cancelled || status == .failed {
+                        once.resumeThrowing(CancellationError())
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                }
+            }
+        }
+    }
+
+    /// A once-only resume guard for a pump continuation: the media-data
+    /// handler and the cancellation poller can BOTH attempt to resume, and
+    /// exactly one must win (a leaked or double resume is a runtime trap).
+    private final class PumpContinuationOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+
+        func set(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.continuation = continuation
+        }
+
+        var isLive: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return continuation != nil
+        }
+
+        func resumeReturning() {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(returning: ())
+        }
+
+        func resumeThrowing(_ error: Error) {
+            lock.lock()
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(throwing: error)
         }
     }
 
@@ -1698,12 +1852,27 @@ final class ExportEngine: FlattenedTimelineConsumer {
     }
 
     func cancelExport() {
+        // STAB-02: the writer path (explicit bitrate / ProRes) cancels
+        // through its readers and writer; the in-flight pumps then fail
+        // into the catch path, which removes the partial output.
+        for reader in activeWriterSessionReaders {
+            reader.cancelReading()
+        }
+        activeWriterSessionReaders.removeAll()
+        activeWriterSessionWriter?.cancelWriting()
+        activeWriterSessionWriter = nil
         activeExportSession?.cancelExport()
         progressTask?.cancel()
         activeExportSession = nil
         exportProgress = 0
         lastExportURL = nil
         isExporting = false
+    }
+
+    /// Drops the writer path's live-session registration (STAB-02).
+    private func clearActiveWriterSession() {
+        activeWriterSessionWriter = nil
+        activeWriterSessionReaders.removeAll()
     }
 
     private func finishExport() {

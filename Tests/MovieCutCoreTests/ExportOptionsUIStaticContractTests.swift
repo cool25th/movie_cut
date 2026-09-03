@@ -35,7 +35,11 @@ struct ExportOptionsUIStaticContractTests {
     func viewModelRoutesToEngineMethods() throws {
         let source = try source("App/MovieCutMac/EditorViewModel.swift")
         #expect(source.contains("exportEngine.exportVideoWithExplicitBitrate("))
-        #expect(source.contains("profileOverride: .proRes422"))
+        // stage-3 increment B: the master exports (ProRes/HDR/harness profile
+        // knob) funnel through the shared exportMaster(to:profile:) which
+        // forwards the profile to the engine's profileOverride parameter.
+        #expect(source.contains("exportMaster(to: url, profile: .proRes422)"))
+        #expect(source.contains("profileOverride: profile"))
         #expect(source.contains("exportEngine.exportAudioOnly("))
         #expect(source.contains("exportEngine.exportAnimatedGIF("))
         #expect(source.contains("exportEngine.exportStillFrame("))

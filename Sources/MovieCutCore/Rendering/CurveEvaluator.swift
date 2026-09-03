@@ -31,7 +31,7 @@ public enum CurveEvaluator {
 
     public static func evaluate(points: [CurvePoint], at x: Double) -> Double {
         let points = normalizedPoints(points)
-        let x = clamp(x)
+        let x = x.clamped(to: 0...1, fallback: 0)
 
         guard points.count > 1 else { return x }
         if x <= 0 { return 0 }
@@ -43,7 +43,7 @@ public enum CurveEvaluator {
         let lower = points[lowerIndex]
         let upper = points[upperIndex]
 
-        guard upper.x > lower.x else { return clamp(lower.y) }
+        guard upper.x > lower.x else { return lower.y.clamped(to: 0...1, fallback: 0) }
 
         let h = upper.x - lower.x
         let t = (x - lower.x) / h
@@ -60,7 +60,7 @@ public enum CurveEvaluator {
             + h01 * upper.y
             + h11 * h * tangents[upperIndex]
 
-        return clamp(y)
+        return y.clamped(to: 0...1, fallback: 0)
     }
 
     public static func lut(points: [CurvePoint], size: Int = defaultLUTSize) -> [Double] {
@@ -106,10 +106,5 @@ public enum CurveEvaluator {
         let width = rhs.x - lhs.x
         guard width > 0 else { return 0 }
         return (rhs.y - lhs.y) / width
-    }
-
-    private static func clamp(_ value: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return Swift.min(Swift.max(value, 0), 1)
     }
 }

@@ -18,9 +18,21 @@ public struct CreateTrackCommand: EditorCommand {
         if project.timeline.tracks.contains(where: { $0.id == track.id }) {
             throw EditorCommandError.invalidCommand("Track already exists: \(track.id)")
         }
-        project.timeline.tracks.append(track)    }
-
+        // CODEX-19: callers assign `zIndex: tracks.count`, which collides
+        // after a deletion (0/1/2, remove 0 → next add is 2, duplicating the
+        // survivor). Rendering sorts by zIndex alone, so a duplicate makes
+        // the overlap order nondeterministic. The command is the single
+        // choke point every surface funnels through — normalize here:
+        // clamp any colliding explicit z-index to max+1, leaving already
+        // unique z-indexes untouched (deliberate layer placement survives).
+        var normalized = track
+        let occupied = Set(project.timeline.tracks.map(\.zIndex))
+        if occupied.contains(normalized.zIndex) {
+            normalized.zIndex = (occupied.max() ?? -1) + 1
+        }
+        project.timeline.tracks.append(normalized)
     }
+}
 
 public struct RemoveTrackCommand: EditorCommand {
     public let id: UUID
@@ -33,6 +45,12 @@ public struct RemoveTrackCommand: EditorCommand {
 
     public func apply(to project: inout Project) throws {
         let index = try project.trackIndex(for: track.id)
+        // CODEX-20: a locked track is not editable — every other mutating
+        // command (SlideClip, trim, append-effect) routes through
+        // ensureTrackIsEditable; removal silently skipped the guard, so the
+        // track-management sheet's swipe-delete destroyed a locked track and
+        // every clip on it. Reject instead of deleting.
+        try project.ensureTrackIsEditable(at: index)
         project.timeline.tracks.remove(at: index)
     }
 }

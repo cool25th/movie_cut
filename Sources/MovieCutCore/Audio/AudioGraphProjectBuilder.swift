@@ -156,6 +156,14 @@ public enum AudioGraphProjectBuilder {
             for clip in track.clips.sorted(by: { $0.timelineRange.start < $1.timelineRange.start }) {
                 guard let assetId = clip.assetId,
                       let asset = project.mediaLibrary.assets[assetId] else { continue }
+                // BUG-ACC-01: an adjustment layer is a grading CONTAINER (G-03)
+                // — it renders no content and must contribute no audio strip.
+                // Without this guard the layer's assetId (it borrows a real
+                // asset's id for scoping) made it an audible strip; combined
+                // with magnetic compaction shoving the overlapped layer after
+                // the visible clips, the mix's audible span grew to
+                // video+BGM lengths SUMMED (2s+4s → 6s measured).
+                guard !clip.isAdjustmentLayer else { continue }
                 // Audio tracks carry audio clips; video tracks contribute
                 // their clips' embedded audio (images/text have none).
                 let carriesAudio = track.kind == .audio ? (clip.kind == .audio || clip.kind == .video)

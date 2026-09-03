@@ -94,7 +94,7 @@ struct R501TimelineToolbarStaticContractTests {
 
         #expect(toolbar.contains("guard let selectedClip = viewModel.selectedClip else { return }"))
         #expect(toolbar.contains("await viewModel.updateSelectedReversePlayback(!selectedClip.isReversed)"))
-        #expect(toolbar.contains("Task { await viewModel.freezeSelectedFrame() }"))
+        #expect(toolbar.contains("Task { viewModel.noteQuickToolUsed(); await viewModel.freezeSelectedFrame() }"))
         #expect(toolbar.contains("isDisabled: !selectedClipSupportsVisualTimelineEffect"))
         #expect(toolbar.contains(#"title: "Reverse Selected Clip""#))
         #expect(toolbar.contains(#"hint: "Reverse Selected Clip toggles reverse playback for the selected visual clip.""#))

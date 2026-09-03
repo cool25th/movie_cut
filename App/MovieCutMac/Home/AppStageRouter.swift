@@ -66,6 +66,13 @@ final class AppStageRouter {
         stage = .editor
     }
 
+    /// CA-25: user tapped "Open the sample project" on the first-run welcome
+    /// card. Loads the bundled sample template and enters the editor.
+    func requestOpenBundledSampleProject() async {
+        guard await viewModel.openBundledSampleProject() else { return }
+        stage = .editor
+    }
+
     /// User picked photos for the "Photo to Video" Quick Start card. Creates a
     /// 9:16 slideshow from the images with the chosen pace and transition and
     /// enters the editor.

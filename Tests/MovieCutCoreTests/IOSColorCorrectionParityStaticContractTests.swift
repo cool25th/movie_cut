@@ -26,7 +26,10 @@ struct IOSColorCorrectionParityStaticContractTests {
         // the plan's videoComposition rides the AVPlayerItem itself (RACE-01
         // removed the redundant overlay generator that carried it before).
         let source = try source("App/MovieCutiOS/Views/PreviewView.swift")
-        #expect(source.contains("makeRenderPlan(for: project)"))
+        // Stage-4: the call gained an explicit source policy (proxy preview
+        // vs original export) — the delegation itself is unchanged.
+        #expect(source.contains("makeRenderPlan("))
+        #expect(source.contains("sourcePolicy: useProxyPlayback ? .proxyWhenAvailable : .originalOnly"))
         #expect(source.contains("item.videoComposition = plan.videoComposition"))
         #expect(!source.contains("applyFilterPipeline"))
     }

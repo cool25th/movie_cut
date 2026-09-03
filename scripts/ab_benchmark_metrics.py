@@ -26,7 +26,7 @@ always reports the family together:
   --self-test
       Deterministic synthetic checks of every metric primitive.
 
-Dependencies: numpy + ffmpeg/ffprobe (same as scripts/capcut_parity_metrics.py).
+Dependencies: numpy + ffmpeg/ffprobe.
 Frame sampling for `single` and `pair` is timestamp-based (default 9 evenly
 spaced points); the sample count is recorded in every JSON output so numbers
 are always read with their sampling conditions (§1.4 condition-field rule).

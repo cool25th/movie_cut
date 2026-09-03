@@ -83,6 +83,13 @@
 - **검증**: iOS 시뮬 **81테스트/19스위트 PASS**(캐시 테스트 포함)·verify_gate **GATE_PASS 5/5**·**e2e 전체 클린 패스(12분 22초 완주, `E2E check OK` — BUG-ACC-07/08 수정 반영 후 첫 풀 그린, HDR 3섹션·G-25 미터 포함)**.
 - **정직 기록**: e2e 클린 패스까지 4회 실패 — 전부 **병렬 루프 세션 증분 버스트가 이 세션의 앱 인스턴스를 SIGTERM**하는 경합(광학흐름 섹션 ~21초 만에 사망·단독 실행은 항상 통과·시스템 로그에 킬 근거 없음·루프 셸/테스트 시작 시각과 상관 관계). 재시도 래퍼로 깨끗한 창 확보. 크로스세션 검증 직렬 규율의 실효 사례.
 
+## 감사 잔여 항목 처분 (2026-09-03, 항목 3·5·6)
+
+- **5 — 스크립트 처분**: `run_preview_export_parity.sh`(계승: run_core_editing_parity가 같은 비교기로 19시나리오 커버)·`capture_capcut_parity.sh`+`capcut_parity_metrics.py`(UI 스크린샷 패리티 도구 — MACUI-01 AX 차단·아카이브 문서 전용; 인코딩 B측 도구는 아님) → **docs/archive/scripts/ 이동 보존**. `verify_preview_export_parity.py`는 현행 게이트·nightly가 사용 중이라 **원위치 유지**·ab_benchmark 주석의 이동된 경로 참조 정리.
+- **3 — 카드뉴스 은닉 명시화**: `isCardEditorMode`에 dormant-by-design 문서화 — 제품 UI는 cardDocument를 만들지 않고 진입은 cardDocument 보유 프로젝트 열기 + 하니스/e2e(G-18/G-19)뿐. Core 모델·명령은 후속 오서링 기능용 유지(삭제 아님 — 제품 결정 대기 유지하되 상태가 코드에 보임).
+- **6 — UITestHarness 분할**: **이연(근거 기록)** — 확장 멤버 114개 중 private 59개·공유 헬퍼 다수로 분할 시 internal 승격이 광범위하고, 병렬 루프 세션의 STAB-02 취소 E2E가 같은 파일에 시나리오를 추가할 가능성이 높아 지금 분할은 충돌 위험이 이득보다 큼. 병렬 세션 종료 후 단독 증분 권장.
+- 게이트: verify_gate **GATE_PASS 5/5**.
+
 ## 다음 작업
 
 1. ~~3단계 증분 B·4단계 구현 항목~~ **완료**.

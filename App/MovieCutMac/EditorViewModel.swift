@@ -665,6 +665,15 @@ final class EditorViewModel {
         return Self.isTranscribable(selectedAsset)
     }
 
+    /// Whether the editor shows the card-news surface instead of the timeline.
+    ///
+    /// Dormant-by-design in v1 (audit 2026-09-03): NO UI creates a
+    /// cardDocument — the card editor is reached only by OPENING a
+    /// `.moviecut` project that already carries one (or the DEBUG harness
+    /// scenarios/e2e G-18/G-19, which keep the surface exercised and tested).
+    /// The Core CardNews models + commands stay for the later authoring
+    /// feature; until an entry ships, this exists so those project files
+    /// still open into their editor.
     var isCardEditorMode: Bool {
         currentProject.cardDocument != nil
     }

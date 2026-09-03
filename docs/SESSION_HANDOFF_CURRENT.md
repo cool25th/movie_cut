@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-04 세션 (3-A 검증 매트릭스 측정 완결 — 디스크 풀 실ENOSPC 게이트 신규)
+
+- **증분**: STABILIZATION_PLAN §3 Phase 3-A의 잔여 미측정 축(디스크 부족)을 실측으로 승격 — 신규 `scripts/run_diskfull_gate.sh`: 1MB 스크래치 DMG 볼륨(hdiutil·생성/마운트/분리/삭제 전부 스크립트 소유)에 ~1.64MB ProRes 익스포트로 **실 ENOSPC 미드플라이트 유발**. 판정은 3조건(UITEST_DONE+error≠none+공유 가능한 부분산물 부재)+CONTINUATION MISUSE 0건.
+- **측정**: **2/2 PASS** — `error=디스크 가득참` 분류 메시지 표면·목적지 클린·앱 정상 종료(파킹/크래시 없음·wall 0.9s대) + verify_gate GATE_PASS 5/5. CA05 11행(디스크 풀)의 종이 주장은 12행(취소·거짓 판명)과 달리 **실측으로 참** 확인.
+- **매트릭스 원장**: `PHASE3A_VERIFICATION_MATRIX_20260904.md` — 5축(백그라운드·디스크 부족·취소·재열기·외장 미디어) 전부 측정 증거 또는 명시적 불가 사유(파괴적·실기기)로 판정 완결. STABILIZATION_PLAN 3-A 행 ✅ 반영.
+- **스카웃: 신규 후보 없음**(직전 증분은 측정·타이밍 무이상). 자기 리뷰: ENOSPC는 취소와 달리 append-실패 핸들러 경로로 정상 복귀(폴러 불필요) 실측 확인 — 추가 트윈 없음. 부기: 게이트 러너의 와치독 종료 잡 제어 메시지 1건(판정 무영향).
+- **잔여 3-A는 전부 사용자/환경 대기**: 실기기 3/3·signed archive 실증(계정 전제)·베타 그룹.
+
+### 다음 회차 — 큐
+① 백로그 §0.5.1 실행 가능 잔여 스캔 — **CA-21(Edit Detection precision/recall 측정 — 측정 단계 승인됨·SceneChangeProvider 코드 존재)**가 다음 후보, CA-20(roles — 방향 문서 §3 반영 확인 후) ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
 ## 2026-09-04 세션 (베타 전 사전 점검 실행 — 체크리스트 §5 해당 행 완결·ko 갭 소멸 정정)
 
 - **증분(측정 증분·코드 변경 없음)**: `run_beta_scenarios.sh` **2회 연속 4/4 PASS** — ①임포트→첫 컷→출력(dur=3.000s·1920x1080·ffprobe) ②색 보정→출력 ③9:16 세로(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). wall 3.2~4.1s/단계. verify_gate GATE_PASS 5/5 동반. RELEASE_CHECKLIST §5 해당 행 [x] 완결(일시·근거 기록).

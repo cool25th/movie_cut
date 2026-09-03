@@ -69,6 +69,8 @@ final class HomeRoutingUITests: XCTestCase {
         // Recovery state is isolated because the tested app's default
         // Application Support directory is shared across UI test processes.
         app.launchEnvironment["MOVIECUT_AUTOSAVE_DIR"] = autosaveDirectory.path
+        // CA-25: keep the first-run welcome card out of home-routing assertions.
+        app.launchEnvironment["MOVIECUT_DISABLE_ONBOARDING"] = "1"
         // Deliberately NOT setting MOVIECUT_UITEST / MOVIECUT_BOOTSTRAP_PROJECT:
         // the app must start on home.
         app.launch()
@@ -106,6 +108,8 @@ final class HomeRoutingUITests: XCTestCase {
         }
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchEnvironment["MOVIECUT_AUTOSAVE_DIR"] = autosaveDirectory.path
+        // CA-25: keep the first-run welcome card out of home-routing assertions.
+        app.launchEnvironment["MOVIECUT_DISABLE_ONBOARDING"] = "1"
         app.launchEnvironment["MOVIECUT_UITEST"] = "1"
         app.launch()
 

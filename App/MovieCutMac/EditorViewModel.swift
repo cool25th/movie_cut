@@ -154,6 +154,9 @@ final class EditorViewModel {
     @ObservationIgnored var desiredMasterAudioProcessing: MasterAudioProcessing?
     @ObservationIgnored var masterAudioProcessingMutationGeneration: UInt64 = 0
     @ObservationIgnored var masterAudioProcessingMutationTask: Task<Void, Never>?
+    /// CA-25 onboarding instrumentation (first launch/import/export/quick tools).
+    let onboardingMetrics = OnboardingMetrics()
+
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
@@ -1096,6 +1099,59 @@ final class EditorViewModel {
         }
     }
 
+    /// CA-25: opens the bundled sample project (W1-mini talking-head template
+    /// shipped in the app bundle — fully offline). Mirrors `importProjectPackage`
+    /// but sources the package from the bundle instead of a panel. Returns true
+    /// when the sample loaded.
+    @discardableResult
+    func openBundledSampleProject() async -> Bool {
+        guard let url = Bundle.main.url(forResource: "SampleProject", withExtension: ProjectPackage.fileExtension) else {
+            lastErrorMessage = NSLocalizedString(
+                "The sample project isn't available in this build.",
+                comment: "Error when the bundled sample template is missing"
+            )
+            return false
+        }
+        guard await confirmDiscardUnsavedChanges() else { return false }
+        do {
+            let project = try ProjectPackage.load(from: url)
+            session = EditorSession(project: project)
+            currentProject = project
+            invalidateMasterLoudnessContext()
+            resetMasterAudioProcessingMutationContext(to: project.masterAudioProcessing)
+            currentProjectURL = nil
+            canvasSelection = project.canvas.aspectRatio
+            syncExportUI(from: project.exportSettings)
+            selectedClipId = nil
+            selectedAssetId = nil
+            playbackEngine.clear()
+            playheadTime = 0
+            clearGeneratedSubtitles()
+            clearClipProcessingState()
+            recentAnalysisResults = []
+            lastExportURL = nil
+            lastErrorMessage = nil
+            lastStatusMessage = NSLocalizedString(
+                "Sample project loaded. Try: cut the clip, add subtitles, then export.",
+                comment: "Status after opening the bundled sample project"
+            )
+            // The loaded sample is the clean baseline for this session.
+            lastSavedProject = project
+            isDirty = false
+            onboardingMetrics.record(.sampleOpened)
+            return true
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = "Could not open the sample project: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// CA-25 metric: first Quick Tools action (freeze / reverse) on this install.
+    func noteQuickToolUsed() {
+        onboardingMetrics.record(.quickToolsUsed)
+    }
+
     func saveProject() async {
         // Deterministic path injection for the ungated home relaunch XCUITest.
         // This does not enable MOVIECUT_UITEST or alter app routing; it only
@@ -1377,6 +1433,7 @@ final class EditorViewModel {
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1410,6 +1467,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1481,6 +1539,7 @@ final class EditorViewModel {
                 profileOverride: profile,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1510,6 +1569,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1534,6 +1594,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1559,6 +1620,7 @@ final class EditorViewModel {
                 to: url,
                 audioProcessing: buildAudioProcessingOptions()
             )
+            onboardingMetrics.record(.firstExport)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
@@ -1805,10 +1867,12 @@ final class EditorViewModel {
 
     private func reportMediaLibraryDropSuccess(count: Int) {
         setDropStatus(Self.DropFeedbackMessage.importedMediaFiles(count))
+        onboardingMetrics.record(.firstImport)
     }
 
     private func reportTimelineFileDropSuccess(count: Int) {
         setDropStatus(Self.DropFeedbackMessage.addedMediaFilesToTimeline(count))
+        onboardingMetrics.record(.firstImport)
     }
 
     private func reportTimelineLibraryAssetDropSuccess(count: Int) {

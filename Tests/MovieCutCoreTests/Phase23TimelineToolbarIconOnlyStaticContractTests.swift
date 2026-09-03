@@ -99,7 +99,7 @@ struct Phase23TimelineToolbarIconOnlyStaticContractTests {
             #"systemImage: "snowflake""#,
             #"title: "Freeze Selected Frame""#,
             #"hint: "Freeze Selected Frame inserts a still frame at the playhead for the selected visual clip.""#,
-            "Task { await viewModel.freezeSelectedFrame() }",
+            "Task { viewModel.noteQuickToolUsed(); await viewModel.freezeSelectedFrame() }",
             "isDisabled: !selectedClipSupportsVisualTimelineEffect",
             #"systemImage: "backward.fill""#,
             #"title: "Reverse Selected Clip""#,

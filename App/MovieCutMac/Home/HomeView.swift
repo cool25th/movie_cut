@@ -26,6 +26,10 @@ struct HomeView: View {
     @State private var isTemplatePickerPresented = false
     @State private var isPhotoPickerPresented = false
 
+    /// CA-25 first-run welcome card: shown once per install until the user
+    /// opens the sample project or skips it.
+    @State private var showsOnboardingCard = false
+
     /// Slideshow options chosen in the "Photo to Video" configuration sheet
     /// before the multi-image picker opens.
     @State private var isSlideshowOptionsPresented = false
@@ -41,6 +45,10 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MovieCutSpacing.large) {
                 header
+
+                if showsOnboardingCard {
+                    onboardingCard
+                }
 
                 quickStartSection
 
@@ -66,7 +74,10 @@ struct HomeView: View {
         .tint(MovieCutTheme.accentCyan)
         .frame(minWidth: 1024, minHeight: 720)
         .navigationTitle("MovieCut")
-        .task { await refresh() }
+        .task {
+            await refresh()
+            configureOnboarding()
+        }
         // Refresh whenever the stage flips back to home (e.g. after returning
         // from the editor where a save may have just recorded a new entry).
         .onChange(of: router.stage) { _, newStage in
@@ -186,6 +197,113 @@ struct HomeView: View {
         }
         .padding(20)
         .frame(width: 480, height: 420)
+    }
+
+    // MARK: - Onboarding (CA-25)
+
+    /// Shows the card exactly once per install: records the first launch,
+    /// shows the 3-step guide (import → subtitles → export) until dismissed,
+    /// and stays out of UI-test launches that drive the home stage.
+    private func configureOnboarding() {
+        guard ProcessInfo.processInfo.environment["MOVIECUT_DISABLE_ONBOARDING"] == nil else { return }
+        let metrics = viewModel.onboardingMetrics
+        metrics.record(.firstLaunch)
+        guard !metrics.isDismissed else { return }
+        metrics.record(.onboardingShown)
+        showsOnboardingCard = true
+    }
+
+    private func dismissOnboarding() {
+        viewModel.onboardingMetrics.isDismissed = true
+        showsOnboardingCard = false
+    }
+
+    private func openSampleProject() {
+        Task {
+            await router.requestOpenBundledSampleProject()
+            if viewModel.lastErrorMessage == nil {
+                dismissOnboarding()
+            }
+        }
+    }
+
+    /// The first-run guide: three steps to a first export, plus the bundled
+    /// sample project as the zero-setup path through them (offline).
+    private var onboardingCard: some View {
+        VStack(alignment: .leading, spacing: MovieCutSpacing.medium) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Welcome to MovieCut")
+                        .font(.title2.weight(.semibold))
+                    Text("Three steps to your first export")
+                        .font(MovieCutTypography.metadata)
+                        .foregroundStyle(MovieCutTheme.mutedText)
+                }
+                Spacer()
+                Button("Skip") { dismissOnboarding() }
+                    .accessibilityIdentifier("home.onboarding.skip")
+            }
+
+            HStack(alignment: .top, spacing: MovieCutSpacing.medium) {
+                onboardingStep(
+                    number: "1",
+                    title: "Import your clip",
+                    detail: "Drop in a clip from your iPhone.",
+                    icon: "square.and.arrow.down"
+                )
+                onboardingStep(
+                    number: "2",
+                    title: "Add subtitles",
+                    detail: "Auto-transcribe your speech.",
+                    icon: "captions.bubble"
+                )
+                onboardingStep(
+                    number: "3",
+                    title: "Export",
+                    detail: "Ship a 9:16 short.",
+                    icon: "square.and.arrow.up"
+                )
+            }
+
+            Button {
+                openSampleProject()
+            } label: {
+                Label("Open the sample project", systemImage: "play.circle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("home.onboarding.openSample")
+        }
+        .padding(MovieCutSpacing.large)
+        .background(MovieCutTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: MovieCutRadius.large))
+        .overlay(
+            RoundedRectangle(cornerRadius: MovieCutRadius.large)
+                .stroke(MovieCutTheme.border.opacity(0.4), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Welcome to MovieCut")
+        .accessibilityHint("Three steps to your first export: import, subtitles, export.")
+    }
+
+    private func onboardingStep(number: String, title: String, detail: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: MovieCutSpacing.small) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .light))
+                .foregroundStyle(MovieCutTheme.accentCyan)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                // The step title/detail arrive as catalog keys; resolve here
+                // because Text() renders a runtime String verbatim.
+                Text("\(number). \(NSLocalizedString(title, comment: "Onboarding step title"))")
+                    .font(MovieCutTypography.cardTitle)
+                Text(NSLocalizedString(detail, comment: "Onboarding step detail"))
+                    .font(MovieCutTypography.metadata)
+                    .foregroundStyle(MovieCutTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Quick Start

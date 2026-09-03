@@ -25,10 +25,11 @@ struct MasterAudioLoudnessFreshnessStaticContractTests {
         let viewModel = try source("App/MovieCutMac/EditorViewModel.swift")
         let occurrences = viewModel.components(separatedBy: "invalidateMasterLoudnessContext()").count - 1
 
-        // One declaration + one committed refresh call + five fresh-session
-        // replacement calls. The count intentionally makes new replacement
-        // paths fail this contract until they join the same generation boundary.
-        #expect(occurrences == 7)
+        // One declaration + one committed refresh call + six fresh-session
+        // replacement calls (CA-25's bundled sample open joins the boundary).
+        // The count intentionally makes new replacement paths fail this
+        // contract until they join the same generation boundary.
+        #expect(occurrences == 8)
     }
 
     @Test("async measurement commits only for its captured project generation")

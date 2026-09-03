@@ -23,6 +23,13 @@ targets:
       - path: App/MovieCutMac
         excludes:
           - Resources/**/*.wav
+          - Resources/SampleProject.mctemplate/**
+      # CA-25 sample project ships as a folder reference (blue folder) so the
+      # package directory survives intact in the bundle — Bundle.main.url(
+      # forResource:"SampleProject", withExtension:"mctemplate").
+      - path: App/MovieCutMac/Resources/SampleProject.mctemplate
+        type: folder
+        buildPhase: resources
     resources:
       - path: App/MovieCutMac/Resources
         includes:

@@ -60,7 +60,7 @@ bash scripts/release.sh
 
 - [ ] App Store Connect → TestFlight → 빌드 선택 → 그룹 생성(내부 테스터 10~20명)
 - [ ] 테스터에게 `docs/BETA_GUIDE.md` 전달 (6단계 과제 + 정성 메트릭 시트)
-- [ ] 베타 전 사전 점검: `bash scripts/run_beta_scenarios.sh` PASS 확인 (호스트에서 1회)
+- [x] 베타 전 사전 점검: `bash scripts/run_beta_scenarios.sh` PASS 확인 (호스트에서 1회) — **실행 완료(2026-09-04 루프, 2회 연속 4/4 PASS)**: ①임포트→첫 컷→출력(dur=3.000s·1920x1080) ②색 보정→출력 ③9:16 세로 출력(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). 각 단계 wall-clock 3.2~4.1s·ffprobe 검증. 루트 커밋 시점 HEAD에서 측정.
 - [ ] 회수 기한 1주 후 메트릭 취합 → 출시/차기 우선순위 판단 (가이드 §5 기준)
 
 ## 6. 심사 제출 (사용자)

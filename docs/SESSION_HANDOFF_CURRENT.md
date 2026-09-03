@@ -3,6 +3,16 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-04 세션 (베타 전 사전 점검 실행 — 체크리스트 §5 해당 행 완결·ko 갭 소멸 정정)
+
+- **증분(측정 증분·코드 변경 없음)**: `run_beta_scenarios.sh` **2회 연속 4/4 PASS** — ①임포트→첫 컷→출력(dur=3.000s·1920x1080·ffprobe) ②색 보정→출력 ③9:16 세로(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). wall 3.2~4.1s/단계. verify_gate GATE_PASS 5/5 동반. RELEASE_CHECKLIST §5 해당 행 [x] 완결(일시·근거 기록).
+- **부수 실측(낡은 수치 정정)**: 현지화 ko 갭 **소멸** — `verify_localization_keys.py` Mac 343 코드 키 0누락·카탈로그 476 전 항목 ko 보유, iOS 436 전 항목 ko 보유. 이전 보고 'ko 106키'는 낡은 수치(25f9286 등에서 폐쇄).
+- **스카웃: 신규 후보 없음** — 직전 증분(로드맵 배치·iOS 포팅) 파생 결함 클래스 미발견, 베타 4 시나리오가 현 빌드 최광역 스캔 역할 수행.
+- **잔여 베타 항목은 전부 사용자 단계**: TestFlight 그룹 생성·BETA_GUIDE 전달·메트릭 회수. 스크린샷 4종 규격은 정정 완료(콘텐츠 선택=사용자).
+
+### 다음 회차 — 큐
+① 백로그 §0.5.1·STABILIZATION_PLAN §3 Phase 3+에서 루프 실행 가능 항목 재스캔(없으면 대기 보고 후 종료) ② CODEX-04·07(실기기 대기)·CODEX-21 관찰·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
 ## 2026-09-03 세션 (BUG-ACC-09 완결 — iOS 취소 파킹·크래시 Mac 패턴 포팅)
 
 - **증분**: iOS `IOSExportEngine`에 Mac STAB-02 수리 3종 포팅 — ① 펌프(writer 파라미터 추가)+취소/실패 폴러(20ms)+`PumpContinuationOnce` once-guard ② 그룹 펌프 catch 형제 해체(readersBox 사전 캡처 — MainActor 비격리 접근 회피·Mac 패리티) ③ finishWriting 전 cancelled/failed 선검사. 부수: `activeOutputURL` internal 승격(취소 E2E 단언용·동일 타깯 확대).

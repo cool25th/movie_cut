@@ -312,6 +312,12 @@ final class EditorViewModel {
         await projectStore.lastAutosaveLoadFailure
     }
 
+    /// When the crash-recovery autosave was last written, for the launch
+    /// recovery prompt's identification line (project name + backup time).
+    func recoverableAutosaveDate() async -> Date? {
+        await projectStore.autosaveModificationDate()
+    }
+
     /// Removes the crash-recovery autosave (clean quit or after a manual save).
     func clearRecoveryAutosave() async {
         await projectStore.clearAutosave()

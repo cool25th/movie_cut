@@ -139,6 +139,16 @@ public actor ProjectStore {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// Modification date of the crash-recovery autosave, if present — lets the
+    /// launch recovery prompt show when the recoverable project was last
+    /// backed up instead of an unidentifiable "found a project" line.
+    public func autosaveModificationDate() -> Date? {
+        guard let url = autosaveURL,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let date = attrs[.modificationDate] as? Date else { return nil }
+        return date
+    }
+
     /// Removes the recovery autosave. Call on a clean quit or after a successful
     /// manual save so the next launch does not offer stale recovery.
     public func clearAutosave() {

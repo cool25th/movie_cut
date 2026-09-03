@@ -388,6 +388,20 @@ struct ContentView: View {
             && viewModel.currentProject.exportSettings == preset.exportSettings
     }
 
+    /// Builds the recovery alert's informative text with the identification
+    /// line the user needs to decide (external review follow-up): project
+    /// name and the autosave's last-write time. A bare "found a project"
+    /// left the user unable to tell which work they were recovering.
+    static func recoveryAlertDetail(projectName: String, autosaveDate: Date?) -> String {
+        var detail = "MovieCut found a project from a session that didn't close normally."
+        let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        detail += "\n\nProject: \(trimmed.isEmpty ? "Untitled" : trimmed)"
+        if let autosaveDate {
+            detail += "\nLast autosave: \(autosaveDate.formatted(date: .abbreviated, time: .shortened))"
+        }
+        return detail
+    }
+
     /// Offers crash recovery when an autosave from a non-clean session exists.
     /// Skipped in headless harness / bootstrap runs so the modal never blocks.
     ///
@@ -431,7 +445,10 @@ struct ContentView: View {
 
         let alert = NSAlert()
         alert.messageText = "Recover unsaved work?"
-        alert.informativeText = "MovieCut found a project from a session that didn't close normally."
+        alert.informativeText = Self.recoveryAlertDetail(
+            projectName: recovered.name,
+            autosaveDate: await viewModel.recoverableAutosaveDate()
+        )
         alert.addButton(withTitle: "Recover")
         alert.addButton(withTitle: "Discard")
         if alert.runModal() == .alertFirstButtonReturn {

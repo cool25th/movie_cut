@@ -3,6 +3,17 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-03 세션 (전체 코드리뷰 후속 — P2 EQ 캐시·P3 quit 통일/thermal 가드·P4 리네임 + e2e 첫 클린 패스)
+
+- **P2**: iOS `eqDerivations` 캐시(Mac equalizedPreviewAudio 패리티·설정+입력URL 키) — 프리뷰 재구축마다 긴 소스 EQ PCM을 재렌더하던 성능 결함 수습. 캐시 재사용/evict 테스트 추가(iOS 81/19).
+- **P3**: 하니스 12곳 quit 사이트 `terminateHarnessProcess()` 통일(exit(0) 폴백 전 커버)·PreviewView thermal 불변 시 재구축 스킵(Mac 패리티).
+- **P4**: e2e flag-gated HDR `.mov`→`.mp4` 리네임.
+- **검증**: iOS 81/19·verify_gate **5/5**·**e2e 전체 클린 패스(`E2E check OK` — BUG-ACC-07/08 수정 후 첫 풀 그린·HDR 3섹션+G-25 미터 포함)**.
+- **경합 기록**: e2e 4회 실패 전부 병렬 루프 증분 버스트의 SIGTERM 경합(광학흐름 ~21s 사망·단독 항상 통과) — 재시도로 클린 창 확보. **병렬 세션 WIP(Mac ExportEngine STAB-02 취소 E2E) 무접촉·미포함.**
+
+### 다음 회차 — 큐
+① thermal 측정(환경 대기)·CODEX-04(실기기 대기) ② 통합 브랜치 병합 결정(사용자)·루프 소형 큐·ShareLink 피커 루프 관찰. **사용자 대기**: 실기기 2종·MACUI-01/U-08 TCC·W1 STT 음성인식 TCC·STAB-07(Q13) 결정·경쟁사 B측 출력.
+
 ## 2026-09-02 세션 (BUG-ACC-08 하니스 계약 복원 — NSApp.terminate 반환·exit(0) 경화)
 
 - **원인 판명(종료 경로 계측)**: 파킹 시 `NSApp.terminate(nil)`이 shouldTerminate 판정(reply=now)·applicationWillTerminate 발화까지 **전부 완료하고 호출부로 반환** — 원래 반환하지 않는 API. ShareLink 직후 피커 재초기화의 중첩 트래킹 루프가 run-loop 종료 stop을 흡수. 재현 루프(title-template Caption) 수정 전 **2/4 파킹**.

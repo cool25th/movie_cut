@@ -1329,7 +1329,7 @@ echo "PASS: explicit SDR master unchanged — 8-bit Rec.709 ($SDR_PROBE)"
 # master — the flag flipped only after the explicit-override probe above
 # verified the 10-bit/Rec.2020/HLG contract on the actual file. The same
 # depth/tag/content probes apply to the UI-path export.
-HDR_OUT="$(mktemp -d)/hdr.mov"
+HDR_OUT="$(mktemp -d)/hdr.mp4"
 env MOVIECUT_UITEST=1 MOVIECUT_UITEST_IMPORT="$BARS" MOVIECUT_UITEST_EXPORT_HDR="$HDR_OUT" \
   MOVIECUT_UITEST_QUIT=1 "$APP_BIN" >/dev/null 2>&1 &
 HP=$!; for _ in $(seq 1 180); do [ -s "$HDR_OUT" ] && break; sleep 0.5; done; wait "$HP" 2>/dev/null || true

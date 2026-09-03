@@ -228,6 +228,42 @@ struct IOSAudioDuckingEQTests {
 
     // MARK: - EQ derived effective media
 
+    @Test("EQ derived media is cached across rebuilds and evicted on a settings change")
+    func eqDerivationCache() async throws {
+        // Preview rebuilds fire on every committed edit — re-rendering the
+        // whole source PCM each time is prohibitive (Mac parity:
+        // PlaybackEngine.equalizedPreviewAudio). The same engine must reuse
+        // the identical derived file, and re-derive when the EQ changes.
+        let engine = IOSExportEngine()
+        var project = eqProject(equalizer: .settings(for: .bassBoost))
+
+        func derivedSources(_ plan: IOSExportEngine.IOSRenderPlan) -> [String] {
+            plan.composition
+                .tracks(withMediaType: .audio)
+                .flatMap(\.segments)
+                .compactMap(\.sourceURL)
+                .map(\.lastPathComponent)
+        }
+
+        let first = try await engine.makeRenderPlan(for: project)
+        let firstURL = try #require(derivedSources(first).first)
+        #expect(firstURL.contains("MovieCutiOS-EQ-"))
+
+        // Unrelated rebuild with UNCHANGED settings — same derived file.
+        project.name = "eq-rebuilt"
+        let second = try await engine.makeRenderPlan(for: project)
+        let secondURL = try #require(derivedSources(second).first)
+        #expect(secondURL == firstURL,
+                "an unchanged EQ must reuse the cached derivation (\(firstURL) vs \(secondURL))")
+
+        // Settings change — fresh derivation, different file.
+        project.timeline.tracks[0].clips[0].equalizer = .settings(for: .trebleBoost)
+        let third = try await engine.makeRenderPlan(for: project)
+        let thirdURL = try #require(derivedSources(third).first)
+        #expect(thirdURL != firstURL,
+                "a changed EQ must re-derive (\(firstURL) vs \(thirdURL))")
+    }
+
     @Test("an EQ'd clip inserts from derived effective media (structure)")
     func eqPlanInsertsDerivedMedia() async throws {
         let plan = try await IOSExportEngine().makeRenderPlan(

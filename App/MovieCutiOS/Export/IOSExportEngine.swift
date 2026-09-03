@@ -19,10 +19,6 @@ final class IOSExportEngine {
     @ObservationIgnored private var activeWriter: AVAssetWriter?
     /// G-15: temp segments backing image clips in the CURRENT render plan.
     @ObservationIgnored private var imageRenderURLs: [URL] = []
-    /// Stage-4: temp EQ-derived audio backing EQ'd clips in the CURRENT
-    /// render plan (the shared Core `AudioEqualizerService` DSP, the same
-    /// §0 effective media the Mac graph derives — no live EQ tap).
-    @ObservationIgnored private var eqRenderURLs: [URL] = []
     /// RENDER-02: resolves writer output settings — SDR H.264 tagged
     /// explicitly Rec.709 (the root fix for the preset-path decode drift).
     @ObservationIgnored private let exportPlanner = ExportPlanner()
@@ -870,11 +866,10 @@ final class IOSExportEngine {
     /// Deletes the temp segments from the PREVIOUS plan (see makeRenderPlan).
     private func removeTemporaryImageRenders() {
         let fileManager = FileManager.default
-        for url in imageRenderURLs + eqRenderURLs where fileManager.fileExists(atPath: url.path) {
+        for url in imageRenderURLs where fileManager.fileExists(atPath: url.path) {
             try? fileManager.removeItem(at: url)
         }
         imageRenderURLs.removeAll()
-        eqRenderURLs.removeAll()
     }
 
     private func insertVideoTrack(
@@ -1056,16 +1051,17 @@ final class IOSExportEngine {
             // 복원 금지).
             let asset: AVURLAsset
             if let equalizer = clip.equalizer, !equalizer.isFlat {
-                let eqURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("MovieCutiOS-EQ-\(clip.id.uuidString)-\(UUID().uuidString).caf")
-                try await AudioEqualizerService().apply(
-                    preset: equalizer.equalizerPreset,
-                    inputURL: playbackSourceURL(for: mediaAsset),
-                    outputURL: eqURL
-                )
-                eqRenderURLs.append(eqURL)
-                asset = AVURLAsset(url: eqURL)
+                let inputURL = playbackSourceURL(for: mediaAsset)
+                asset = AVURLAsset(url: try await derivedEQMediaURL(
+                    for: clip, settings: equalizer, inputURL: inputURL
+                ))
             } else {
+                // No EQ anymore — the clip's cached derivation (if any) is
+                // dead media; reclaim it so the cache tracks exactly the
+                // clips that still derive.
+                if let evicted = eqDerivations.removeValue(forKey: clip.id) {
+                    try? FileManager.default.removeItem(at: evicted.outputURL)
+                }
                 asset = AVURLAsset(url: playbackSourceURL(for: mediaAsset))
             }
             try await insertClip(
@@ -1076,6 +1072,52 @@ final class IOSExportEngine {
                 cursor: &audioCursor
             )
         }
+    }
+
+    /// A cached EQ derivation. The temp files OUTLIVE plan rebuilds on
+    /// purpose — preview rebuilds fire on every committed edit, and
+    /// re-rendering the whole source's PCM each time is prohibitive (the Mac
+    /// hit the same wall and caches identically in
+    /// `PlaybackEngine.equalizedPreviewAudio`).
+    private struct EQDerivation {
+        let settings: ClipEqualizerSettings
+        let inputURL: URL
+        let outputURL: URL
+    }
+
+    /// EQ-derived media per clip, cached while the settings AND the source
+    /// URL are unchanged. Keyed on the input URL as well as the preset so a
+    /// proxy↔original swap (thermal downgrade) never reuses a derivation
+    /// rendered from the other source.
+    @ObservationIgnored private var eqDerivations: [UUID: EQDerivation] = [:]
+
+    /// Returns the cached derivation for the clip, rendering it on first use
+    /// or when the settings/source changed (deleting the evicted temp file).
+    private func derivedEQMediaURL(
+        for clip: Clip,
+        settings: ClipEqualizerSettings,
+        inputURL: URL
+    ) async throws -> URL {
+        if let cached = eqDerivations[clip.id],
+           cached.settings == settings,
+           cached.inputURL == inputURL {
+            return cached.outputURL
+        }
+        let evicted = eqDerivations[clip.id]?.outputURL
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutiOS-EQ-\(clip.id.uuidString)-\(UUID().uuidString).caf")
+        try await AudioEqualizerService().apply(
+            preset: settings.equalizerPreset,
+            inputURL: inputURL,
+            outputURL: outputURL
+        )
+        eqDerivations[clip.id] = EQDerivation(
+            settings: settings, inputURL: inputURL, outputURL: outputURL
+        )
+        if let evicted {
+            try? FileManager.default.removeItem(at: evicted)
+        }
+        return outputURL
     }
 
     /// Per-clip audio placement captured during insertion (BUG-IOS-10): the

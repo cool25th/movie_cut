@@ -18,6 +18,23 @@ struct PreviewView: View {
     // PlaybackEngine 164-168·216-236 패리티).
     @State private var compositionBuildTask: Task<Void, Never>?
     @State private var compositionGeneration = 0
+    /// Stage-4: the proxy policy the CURRENT installed plan was built with.
+    /// Thermal notifications only matter when they flip this value (Mac's
+    /// ThermalStateObserver skips redundant rebuilds the same way) — a
+    /// nominal↔fair transition that keeps the policy unchanged must not pay
+    /// for a full plan rebuild (EQ'd clips derive media per build).
+    @State private var lastResolvedProxyPolicy: Bool?
+
+    /// The preview's source policy for the current project + thermal state
+    /// (the caller-resolved half of the stage-4 policy; the engine applies
+    /// it per asset).
+    private func resolvedUseProxyPlayback(_ project: Project) -> Bool {
+        project.playbackSettings.useProxyPlayback
+            || ProxyDowngradePolicy.shouldAutoDowngrade(
+                thermalState: ThermalState.current,
+                autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
+            )
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -129,6 +146,9 @@ struct PreviewView: View {
         // decision itself lives in the shared Core ProxyDowngradePolicy, so
         // this only needs to trigger a rebuild.
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            // Skip when the transition didn't change the resolved policy —
+            // a full rebuild (incl. EQ media derivation) buys nothing.
+            guard resolvedUseProxyPlayback(viewModel.currentProject) != lastResolvedProxyPolicy else { return }
             rebuildComposition()
         }
         .onChange(of: viewModel.isPlaying) { _, isPlaying in
@@ -167,11 +187,8 @@ struct PreviewView: View {
             // ProxyDowngradePolicy parity with Mac). The export always reads
             // originals — the plan-level policy is resolved HERE, never from
             // settings inside the engine.
-            let useProxyPlayback = project.playbackSettings.useProxyPlayback
-                || ProxyDowngradePolicy.shouldAutoDowngrade(
-                    thermalState: ThermalState.current,
-                    autoProxyOnThermalPressure: project.playbackSettings.autoProxyOnThermalPressure
-                )
+            let useProxyPlayback = resolvedUseProxyPlayback(project)
+            lastResolvedProxyPolicy = useProxyPlayback
             let plan = try? await renderPlanEngine.makeRenderPlan(
                 for: project,
                 sourcePolicy: useProxyPlayback ? .proxyWhenAvailable : .originalOnly

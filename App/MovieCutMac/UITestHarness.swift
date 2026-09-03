@@ -183,6 +183,20 @@ extension EditorViewModel {
         ///   the ACTUAL output file and the project's preview mix (the reference the audio-mix path
         ///   produces today), compares lengths/RMS, and measures decoded LUFS-I/true-peak/clipping with
         ///   the shared Core functions; writes a JSON artifact to <path>.
+    /// The harness's deterministic quit. BUG-ACC-08: `NSApp.terminate` can
+    /// COMPLETE the full AppKit flow (delegate asked, reply now, willTerminate
+    /// fired) and still RETURN without exiting — the ShareKit picker re-init
+    /// race (ShareLink becomes visible once an export sets lastExportURL)
+    /// spins a nested tracking loop that swallows the run-loop stop (measured
+    /// 2/4 launches parked). Every harness quit site funnels through here so
+    /// no scenario can outlive its artifacts. By this point the run's
+    /// artifacts and the crash-recovery autosave are already on disk.
+    static func terminateHarnessProcess() {
+        NSApp.terminate(nil)
+        AppLog.export.notice("harness: NSApp.terminate returned without exiting (BUG-ACC-08 ShareKit race) — forcing exit(0)")
+        exit(0)
+    }
+
     func runUITestHarnessIfRequested() async {
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] == "1" else { return }
@@ -744,7 +758,29 @@ extension EditorViewModel {
             // this branch.
             if let rawProfile = env["MOVIECUT_UITEST_EXPORT_PROFILE"], !rawProfile.isEmpty {
                 if let profile = VideoCompressionProfile(rawValue: rawProfile) {
+                    // STAB-02 cancel E2E: cancel the writer-path export
+                    // mid-flight (the pump-parallelization contract —
+                    // cancelExport tears readers/writer down, the pumps fail
+                    // into the catch path, the partial output is deleted).
+                    // Measured trap: a single early shot is a NO-OP because
+                    // it lands during the audio-graph phase BEFORE the
+                    // writer session is registered (~1s of the ~1.3s wall),
+                    // and cancelExport() falsifies isExporting even when it
+                    // cancelled nothing — so the loop runs a fixed span and
+                    // stops when the export task ends, not by polling flags.
+                    var cancelTask: Task<Void, Never>?
+                    if let cancelMsRaw = env["MOVIECUT_UITEST_EXPORT_CANCEL_MS"],
+                       let cancelMs = Double(cancelMsRaw), cancelMs > 0 {
+                        cancelTask = Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: UInt64(cancelMs * 1_000_000))
+                            while !Task.isCancelled {
+                                self.exportEngine.cancelExport()
+                                try? await Task.sleep(nanoseconds: 100_000_000)
+                            }
+                        }
+                    }
                     await exportMaster(to: dest.write, profile: profile)
+                    cancelTask?.cancel()
                 } else {
                     lastErrorMessage = "unknown export profile: \(rawProfile)"
                 }
@@ -857,16 +893,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if env["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
-            // BUG-ACC-08: terminate can COMPLETE (delegate asked, reply now,
-            // willTerminate fired) and still RETURN without exiting — the
-            // ShareKit picker re-init race (ShareLink after an export) spins
-            // a tracking loop that swallows the run-loop stop (measured 2/4
-            // launches). The harness's contract is a deterministic process
-            // end, so once terminate declines, force it. Artifacts and the
-            // crash-recovery autosave are already on disk by this point.
-            AppLog.export.notice("harness: NSApp.terminate returned without exiting (BUG-ACC-08 ShareKit race) — forcing exit(0)")
-            exit(0)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1191,7 +1218,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1278,7 +1305,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -1452,7 +1479,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -2688,7 +2715,7 @@ extension EditorViewModel {
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -2797,12 +2824,12 @@ extension EditorViewModel {
                     + " project_open_ms=\(String(format: "%.2f", openMs))"
             )
             if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-                NSApp.terminate(nil)
+                Self.terminateHarnessProcess()
             }
         } catch {
             status("latency_checkpoint stage=error error=\(error.localizedDescription)")
             if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-                NSApp.terminate(nil)
+                Self.terminateHarnessProcess()
             }
         }
     }
@@ -3733,7 +3760,7 @@ extension EditorViewModel {
         }
 
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4040,7 +4067,7 @@ extension EditorViewModel {
             writeHarnessStatus("W_DONE \(lastStatusMessage ?? "")", to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4362,7 +4389,7 @@ extension EditorViewModel {
         }
         await flushAutosave()
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4786,7 +4813,7 @@ extension EditorViewModel {
             writeHarnessStatus(status, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 
@@ -4871,7 +4898,7 @@ extension EditorViewModel {
             writeHarnessStatus(line, to: resultPath)
         }
         if environment["MOVIECUT_UITEST_QUIT"] == "1" {
-            NSApp.terminate(nil)
+            Self.terminateHarnessProcess()
         }
     }
 }

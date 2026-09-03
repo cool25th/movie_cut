@@ -24,20 +24,4 @@ public enum FeatureFlag {
     /// PREVIEW still renders SDR (the HDR-source preview drift is BUG-CA12-02
     /// / G-29 scope) — the flag governs the export surface only.
     public static let hdrMaster = true
-
-    /// Standalone card-news authoring (multi-page artboard workflow).
-    ///
-    /// OFF for v1 to keep the release focused on video editing. The Core text /
-    /// shape / layout models stay; the card-news *UI* and its entry points are
-    /// hidden. Derived content from video (thumbnails, 9:16/1:1 conversion,
-    /// subtitle-to-card) can still ship as multi-format *export* without this.
-    public static let cardNewsStudio = false
-
-    /// The full iOS editor.
-    ///
-    /// OFF for v1 (Mac App Store only). iOS can still build and share the Core,
-    /// but it is not a shipping surface this release; the iOS parity gaps
-    /// (`IOSExportEngine` preset approximation, no blend/transition wiring) are
-    /// deferred until after the Mac launch stabilizes the render contract.
-    public static let iosFullEditor = false
 }

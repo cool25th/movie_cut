@@ -48,15 +48,15 @@ public struct ColorGrade: Codable, Sendable, Equatable {
         curves: ColorCurves? = nil
     ) {
         self.lift = RGB(
-            red: Self.clamp(lift.red, -1, 1),
-            green: Self.clamp(lift.green, -1, 1),
-            blue: Self.clamp(lift.blue, -1, 1)
+            red: lift.red.clamped(to: -1...1, fallback: -1),
+            green: lift.green.clamped(to: -1...1, fallback: -1),
+            blue: lift.blue.clamped(to: -1...1, fallback: -1)
         )
-        self.gamma = Self.clamp(gamma, 0.1, 4)
+        self.gamma = gamma.clamped(to: 0.1...4, fallback: 0.1)
         self.gain = RGB(
-            red: Self.clamp(gain.red, 0, 4),
-            green: Self.clamp(gain.green, 0, 4),
-            blue: Self.clamp(gain.blue, 0, 4)
+            red: gain.red.clamped(to: 0...4, fallback: 0),
+            green: gain.green.clamped(to: 0...4, fallback: 0),
+            blue: gain.blue.clamped(to: 0...4, fallback: 0)
         )
         self.hslBands = Self.sanitizedHSLBands(hslBands)
         self.curves = curves
@@ -107,11 +107,6 @@ public struct ColorGrade: Codable, Sendable, Equatable {
         }
         let sanitized = HSLBandCenter.allCases.compactMap { byCenter[$0] }.filter { !$0.isIdentity }
         return sanitized.isEmpty ? nil : sanitized
-    }
-
-    private static func clamp(_ value: Double, _ minimum: Double, _ maximum: Double) -> Double {
-        guard value.isFinite else { return minimum }
-        return Swift.min(Swift.max(value, minimum), maximum)
     }
 }
 
@@ -185,13 +180,8 @@ public struct CurvePoint: Codable, Sendable, Equatable, Hashable {
     public var y: Double
 
     public init(x: Double, y: Double) {
-        self.x = Self.clamp(x)
-        self.y = Self.clamp(y)
-    }
-
-    private static func clamp(_ value: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return Swift.min(Swift.max(value, 0), 1)
+        self.x = x.clamped(to: 0...1, fallback: 0)
+        self.y = y.clamped(to: 0...1, fallback: 0)
     }
 }
 
@@ -220,17 +210,12 @@ public struct HSLBand: Codable, Sendable, Equatable, Hashable {
 
     public init(center: HSLBandCenter, hueShift: Double = 0, saturation: Double = 0, luminance: Double = 0) {
         self.center = center
-        self.hueShift = Self.clamp(hueShift, -60, 60)
-        self.saturation = Self.clamp(saturation, -1, 1)
-        self.luminance = Self.clamp(luminance, -1, 1)
+        self.hueShift = hueShift.clamped(to: -60...60, fallback: 0)
+        self.saturation = saturation.clamped(to: -1...1, fallback: 0)
+        self.luminance = luminance.clamped(to: -1...1, fallback: 0)
     }
 
     public var isIdentity: Bool {
         hueShift == 0 && saturation == 0 && luminance == 0
-    }
-
-    private static func clamp(_ value: Double, _ minimum: Double, _ maximum: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return Swift.min(Swift.max(value, minimum), maximum)
     }
 }

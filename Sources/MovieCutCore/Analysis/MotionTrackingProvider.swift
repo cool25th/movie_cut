@@ -522,10 +522,10 @@ public final class MotionTrackingProvider: AnalysisProvider {
             return nil
         }
 
-        let minX = clamp(standardized.minX, lower: 0, upper: 1)
-        let minY = clamp(standardized.minY, lower: 0, upper: 1)
-        let maxX = clamp(standardized.maxX, lower: 0, upper: 1)
-        let maxY = clamp(standardized.maxY, lower: 0, upper: 1)
+        let minX = standardized.minX.clamped(to: 0...1)
+        let minY = standardized.minY.clamped(to: 0...1)
+        let maxX = standardized.maxX.clamped(to: 0...1)
+        let maxY = standardized.maxY.clamped(to: 0...1)
         let width = maxX - minX
         let height = maxY - minY
 
@@ -567,9 +567,5 @@ public final class MotionTrackingProvider: AnalysisProvider {
         }
 
         return min(max(preferred, 1), 120)
-    }
-
-    private static func clamp(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
-        min(max(value, lower), upper)
     }
 }

@@ -15,14 +15,10 @@ public struct ColorCorrection: Codable, Sendable, Equatable {
         warmth: Double = 0,
         tint: Double = 0
     ) {
-        self.brightness = Self.clamp(brightness, min: -1, max: 1)
-        self.contrast = Self.clamp(contrast, min: 0, max: 2)
-        self.saturation = Self.clamp(saturation, min: 0, max: 2)
-        self.warmth = Self.clamp(warmth, min: -1, max: 1)
-        self.tint = Self.clamp(tint, min: -1, max: 1)
-    }
-
-    private static func clamp(_ value: Double, min minimum: Double, max maximum: Double) -> Double {
-        Swift.min(Swift.max(value, minimum), maximum)
+        self.brightness = brightness.clamped(to: -1...1)
+        self.contrast = contrast.clamped(to: 0...2)
+        self.saturation = saturation.clamped(to: 0...2)
+        self.warmth = warmth.clamped(to: -1...1)
+        self.tint = tint.clamped(to: -1...1)
     }
 }

@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+> ⚠️ **디스크 정책 (2026-09-04, 사용자 승인)**: iOS 시뮬레이터 런타임(19G)은 삭제 완료. `platform=iOS Simulator` 테스트 실행·런타임 재다운로드 금지 — iOS 검증은 generic device 빌드(verify_gate Step 4)만. 상세: `VERIFICATION_STANDARD.md` §5 정책 노트.
+
+## 2026-09-05 세션 (CA-20 2-A — Mac 역할 UI: 인스펙터 Role 섹션·롤 레인 틴트·토글)
+
+- **증분**: `EditorViewModel+Roles`(프리셋 upsert·지정/해제 — 전부 Core 커맨드 경유·`dominantRole` 빈도+동률 레지스트리 삽입 순 결정론·`roleColor(fromHex:)` 무결 입력 black 폴백) + `Inspector/InspectorRoleSection`(전 클립 종류 공통·None/Mixed·프리셋 메뉴) + 타임라인 `roleLaneHighlight`(지배 역할 색 워시+좌측 엣지 — main-video 하이라이트 시각 언어 재사용·미태그 레인 무변경) + 툴바 `showRoleLanes` 토글(기본 off) + 현지화 7키(en·ko·카탈로그 351키 0누락).
+- **검증(측정)**: Mac 유닛 **66테스트/20스위트 PASS**(신규 4종 — 지배 롤 결정론·hex 파서·upsert 무중복·토글 기본)·Core 1,479/222·Mac 빌드 OK. **verify_gate 4/5 — iOS 빌드 단 환경 블록**: iOS 26.5 플랫폼이 디스크 위기 정리로 삭제됨+**재설치 금지 정책**(병렬 세션 VERIFICATION_STANDARD WIP) — 코드 귀속 아님(제 변경은 Mac 앱+Core·Core 전수 통과)·원격 CI가 push 후 커버.
+- **테스트가 기대 오류 1건 정정**: 동률 판정 기대를 프리셋 순→레지스트리 삽입 순으로(코드는 애초에 결정적 — 코인플립 방지 요건 충족).
+- **pbxproj 등록 콤마 함정 2연타(자기 리뷰 ③)**: 그룹 children·sources phase 라인 재구성 시 후행 콤마를 스트립해 파손 2회 — 복구+정석 보강(메모리 갱신). 서브디렉터리 파일은 해당 그룹(Inspector/)에 등록해야 경로 해석.
+- **스카웃**: 신규 후보 없음. **iOS 시뮬·플랫폼 재설치 금지 정책 준수 중** — 병렬 세션 docs WIP 무접촉.
+
+### 다음 회차 — 큐
+① **CA-20 2-B(인덱스 패널 — 검색→이동 p95·VoiceOver·롤 레인 골든 U)** ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력·**(신규) iOS 플랫폼 재설치 시점 결정(디스크 정책)**.
+
 ## 2026-09-04 세션 (CA-20 1단계 — Core roles 모델·스키마 v9·커맨드)
 
 - **전제 충족**: 방향 문서 §3에 CA-20 반영(P0-A ⑥ — 2단계 배치 명시: 1단계 Core·2단계 Mac UI) — "§3 반영 후 실행" 조건 완결.

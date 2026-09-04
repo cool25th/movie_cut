@@ -514,6 +514,23 @@
         }
       }
     },
+    "%d results": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d results"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "결과 %d개"
+          }
+        }
+      }
+    },
     "-": {
       "localizations": {
         "en": {
@@ -1907,6 +1924,23 @@
         }
       }
     },
+    "Clear search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear search"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색 지우기"
+          }
+        }
+      }
+    },
     "Cleared role tags": {
       "localizations": {
         "en": {
@@ -2004,6 +2038,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "클릭하거나 드래그하여 프리뷰를 스크럽합니다."
+          }
+        }
+      }
+    },
+    "Clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립"
           }
         }
       }
@@ -4074,6 +4125,23 @@
         }
       }
     },
+    "Marker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마커"
+          }
+        }
+      }
+    },
     "Mask": {
       "localizations": {
         "en": {
@@ -4338,6 +4406,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "재생 헤드를 한 프레임 앞으로 이동합니다."
+          }
+        }
+      }
+    },
+    "Moves the playhead to this item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moves the playhead to this item"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생 헤드를 이 항목으로 이동합니다."
           }
         }
       }
@@ -5874,6 +5959,23 @@
         }
       }
     },
+    "Search clips and markers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search clips and markers"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립과 마커 검색"
+          }
+        }
+      }
+    },
     "Seek Back One Frame": {
       "extractionState": "manual",
       "localizations": {
@@ -6916,6 +7018,23 @@
         }
       }
     },
+    "Text Clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "텍스트 클립"
+          }
+        }
+      }
+    },
     "Text clip": {
       "extractionState": "manual",
       "localizations": {
@@ -7147,6 +7266,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "타임라인"
+          }
+        }
+      }
+    },
+    "Timeline Index": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline Index"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인 인덱스"
           }
         }
       }

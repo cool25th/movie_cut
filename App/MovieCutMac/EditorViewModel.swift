@@ -164,6 +164,11 @@ final class EditorViewModel {
     /// default — the lane wash is a management view the user opts into.
     var showRoleLanes: Bool = false
 
+    /// CA-20 stage 2-B: the timeline index panel (searchable clips +
+    /// markers → playhead jump). Off by default — like role lanes, a
+    /// management surface the user opts into.
+    var showTimelineIndex: Bool = false
+
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession

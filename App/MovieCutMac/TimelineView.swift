@@ -106,6 +106,12 @@ struct TimelineView: View {
                     .frame(height: 22)
                     .overlay(MovieCutTheme.divider)
 
+                timelineIndexToggle
+
+                Divider()
+                    .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
+
                 Spacer(minLength: MovieCutSpacing.small)
 
                 zoomControls
@@ -116,6 +122,10 @@ struct TimelineView: View {
 
             if !viewModel.timelineContext.isRoot {
                 timelineBreadcrumbBar
+            }
+
+            if viewModel.showTimelineIndex {
+                TimelineIndexPanel(viewModel: viewModel)
             }
 
             Divider()
@@ -268,6 +278,21 @@ struct TimelineView: View {
         .foregroundStyle(MovieCutTheme.mutedText)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityHidden(true)
+    }
+
+    /// CA-20 stage 2-B: toggles the Timeline Index panel (searchable
+    /// clips + markers, rows jump the playhead).
+    private var timelineIndexToggle: some View {
+        timelineToolbarIconButton(
+            systemImage: "list.bullet.rectangle",
+            title: "Timeline Index",
+            hint: "Searches clips and markers; a result moves the playhead.",
+            accessibilityValue: viewModel.showTimelineIndex
+                ? NSLocalizedString("On", comment: "") : NSLocalizedString("Off", comment: "")
+        ) {
+            viewModel.showTimelineIndex.toggle()
+        }
+        .foregroundStyle(viewModel.showTimelineIndex ? MovieCutTheme.accent : Color.primary)
     }
 
     /// CA-20 stage 2-A: toggles the role-lane management view (lane tint

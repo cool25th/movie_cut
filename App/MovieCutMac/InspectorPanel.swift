@@ -96,6 +96,10 @@ struct InspectorPanel: View {
     /// the all-purpose clip inspector as the first/default surface.
     @ViewBuilder
     private func selectedClipInspectorSections(for clip: Clip) -> some View {
+        // CA-20: role tagging applies to every clip kind — metadata, not
+        // per-kind editing — so the Role section leads for all of them.
+        InspectorRoleSection(viewModel: viewModel, clip: clip)
+            .movieCutInspectorSelectedFlatRow()
         switch clip.kind {
         case .audio:
             audioClipInspectorSections(for: clip)

@@ -160,6 +160,10 @@ final class EditorViewModel {
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
+    /// CA-20 stage 2-A: timeline lane tint by dominant clip role. Off by
+    /// default — the lane wash is a management view the user opts into.
+    var showRoleLanes: Bool = false
+
     @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession

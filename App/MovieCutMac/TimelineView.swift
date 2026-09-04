@@ -100,6 +100,12 @@ struct TimelineView: View {
                     .frame(height: 22)
                     .overlay(MovieCutTheme.divider)
 
+                roleLaneToggle
+
+                Divider()
+                    .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
+
                 Spacer(minLength: MovieCutSpacing.small)
 
                 zoomControls
@@ -262,6 +268,21 @@ struct TimelineView: View {
         .foregroundStyle(MovieCutTheme.mutedText)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityHidden(true)
+    }
+
+    /// CA-20 stage 2-A: toggles the role-lane management view (lane tint
+    /// by dominant clip role).
+    private var roleLaneToggle: some View {
+        timelineToolbarIconButton(
+            systemImage: "paintpalette",
+            title: "Show Role Lanes",
+            hint: "Tints each track lane with its dominant clip role.",
+            accessibilityValue: viewModel.showRoleLanes
+                ? NSLocalizedString("On", comment: "") : NSLocalizedString("Off", comment: "")
+        ) {
+            viewModel.showRoleLanes.toggle()
+        }
+        .foregroundStyle(viewModel.showRoleLanes ? MovieCutTheme.accent : Color.primary)
     }
 
     private var timelineToolControls: some View {
@@ -831,6 +852,31 @@ struct TimelineView: View {
         }
     }
 
+    /// CA-20 stage 2-A: the role management view — when `showRoleLanes` is
+    /// on, lanes whose clips carry a dominant role get that role's color as
+    /// a subtle wash + left edge marker (the main-video highlight's visual
+    /// language, recolored). Untagged lanes stay untouched so "which clips
+    /// are unclassified" stays readable at a glance.
+    @ViewBuilder
+    private func roleLaneHighlight(for track: Track) -> some View {
+        if viewModel.showRoleLanes,
+           let role = viewModel.dominantRole(for: track) {
+            let color = EditorViewModel.roleColor(fromHex: role.colorHex)
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(color.opacity(0.10))
+                Rectangle()
+                    .strokeBorder(color.opacity(0.16), lineWidth: 1)
+                Rectangle()
+                    .fill(color.opacity(0.30))
+                    .frame(width: 2)
+            }
+            .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
     private func trackLane(_ track: Track) -> some View {
         let isMainVideo = isMainVideoTrack(track)
 
@@ -867,6 +913,7 @@ struct TimelineView: View {
                 Rectangle()
                     .fill(MovieCutTheme.trackBackground)
                 mainVideoTrackLaneHighlight(isMainVideo: isMainVideo)
+                roleLaneHighlight(for: track)
                 timelineGridLines(height: trackHeight)
 
                 ForEach(clipsForDisplay(track)) { clip in

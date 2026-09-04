@@ -859,6 +859,23 @@
         }
       }
     },
+    "Add subtitles": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add subtitles"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자막 추가"
+          }
+        }
+      }
+    },
     "Add to Timeline": {
       "extractionState": "manual",
       "localizations": {
@@ -991,6 +1008,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "영역 조정"
+          }
+        }
+      }
+    },
+    "Adjustment": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjustment"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "조정"
           }
         }
       }
@@ -1362,6 +1396,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "자동 자막 및 SRT"
+          }
+        }
+      }
+    },
+    "Auto-transcribe your speech.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-transcribe your speech."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "말하는 내용이 자동으로 자막이 됩니다."
           }
         }
       }
@@ -1856,6 +1907,22 @@
         }
       }
     },
+    "Cleared role tags": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cleared role tags"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할 태그를 지웠습니다"
+          }
+        }
+      }
+    },
     "Click applies the %@ adjustment to the selected clip.": {
       "extractionState": "manual",
       "localizations": {
@@ -2169,6 +2236,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "복사"
+          }
+        }
+      }
+    },
+    "Could not open the sample project: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open the sample project: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "샘플 프로젝트를 열 수 없습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't restore your last session": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't restore your last session"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마지막 세션을 복구할 수 없습니다"
           }
         }
       }
@@ -2528,6 +2629,23 @@
         }
       }
     },
+    "Discard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버리기"
+          }
+        }
+      }
+    },
     "Double-click text to edit · drag to move · drag the handle to resize": {
       "localizations": {
         "en": {
@@ -2608,6 +2726,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "가져올 파일을 놓으세요"
+          }
+        }
+      }
+    },
+    "Drop in a clip from your iPhone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop in a clip from your iPhone."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아이폰으로 찍은 클립을 끌어다 놓으세요."
           }
         }
       }
@@ -3568,6 +3703,23 @@
         }
       }
     },
+    "Import your clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import your clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립 가져오기"
+          }
+        }
+      }
+    },
     "Imported LUT effect": {
       "extractionState": "manual",
       "localizations": {
@@ -3581,6 +3733,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "가져온 LUT 효과"
+          }
+        }
+      }
+    },
+    "Imported videos, audio, and images appear here. Drag files in or use the Import button above.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported videos, audio, and images appear here. Drag files in or use the Import button above."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져온 비디오·오디오·이미지가 여기에 표시됩니다. 파일을 끌어다 놓거나 위의 가져오기 버튼을 사용하세요."
           }
         }
       }
@@ -3681,6 +3850,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "카라오케 강조 색상"
+          }
+        }
+      }
+    },
+    "Last autosave: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last autosave: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마지막 자동 저장: %@"
           }
         }
       }
@@ -4089,6 +4275,22 @@
         }
       }
     },
+    "Mixed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixed"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "혼합"
+          }
+        }
+      }
+    },
     "Motion Tracking": {
       "extractionState": "manual",
       "localizations": {
@@ -4136,6 +4338,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "재생 헤드를 한 프레임 앞으로 이동합니다."
+          }
+        }
+      }
+    },
+    "MovieCut found a project from a session that didn't close normally.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut found a project from a session that didn't close normally."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut이 정상적으로 종료되지 않은 세션의 프로젝트를 찾았습니다."
           }
         }
       }
@@ -4569,6 +4788,23 @@
         }
       }
     },
+    "OK": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        }
+      }
+    },
     "Off": {
       "extractionState": "manual",
       "localizations": {
@@ -4615,6 +4851,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "불투명도"
+          }
+        }
+      }
+    },
+    "Open the sample project": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the sample project"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "샘플 프로젝트 열기"
           }
         }
       }
@@ -5155,6 +5408,23 @@
         }
       }
     },
+    "Project: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프로젝트: %@"
+          }
+        }
+      }
+    },
     "Proxy ready": {
       "extractionState": "manual",
       "localizations": {
@@ -5249,6 +5519,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "속도"
+          }
+        }
+      }
+    },
+    "Recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복구"
+          }
+        }
+      }
+    },
+    "Recover unsaved work?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover unsaved work?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장되지 않은 작업을 복구할까요?"
           }
         }
       }
@@ -5453,6 +5757,38 @@
         }
       }
     },
+    "Role": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할"
+          }
+        }
+      }
+    },
+    "Role lanes are shown on the timeline.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role lanes are shown on the timeline."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인에 역할 레인이 표시되어 있습니다."
+          }
+        }
+      }
+    },
     "Runs this Smart tool.": {
       "extractionState": "manual",
       "localizations": {
@@ -5500,6 +5836,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "안전 영역 가이드"
+          }
+        }
+      }
+    },
+    "Sample project loaded. Try: cut the clip, add subtitles, then export.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample project loaded. Try: cut the clip, add subtitles, then export."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "샘플 프로젝트를 열었습니다. 자르기 → 자막 → 출력을 순서대로 시도해 보세요."
           }
         }
       }
@@ -5807,6 +6160,39 @@
         }
       }
     },
+    "Ship a 9:16 short.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ship a 9:16 short."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9:16 숏츠로 내보내세요."
+          }
+        }
+      }
+    },
+    "Show Role Lanes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Role Lanes"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할 레인 보기"
+          }
+        }
+      }
+    },
     "Shows or hides non-exporting title and action safe guides on the preview canvas.": {
       "extractionState": "manual",
       "localizations": {
@@ -5921,6 +6307,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "크기"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "건너뛰기"
           }
         }
       }
@@ -6448,6 +6851,22 @@
         }
       }
     },
+    "Tagged %d clips as %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagged %d clips as %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d개 클립을 %2$@(으)로 태그했습니다"
+          }
+        }
+      }
+    },
     "Target bitrate may be adjusted by the selected format and system encoder.": {
       "localizations": {
         "en": {
@@ -6564,6 +6983,23 @@
         }
       }
     },
+    "The sample project isn't available in this build.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sample project isn't available in this build."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 빌드에는 샘플 프로젝트가 포함되어 있지 않습니다."
+          }
+        }
+      }
+    },
     "Thermal pressure: preview is using the proxy. It restores when the device cools. Export uses the original.": {
       "localizations": {
         "en": {
@@ -6609,6 +7045,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 프로젝트에는 측정할 오디오가 없습니다."
+          }
+        }
+      }
+    },
+    "Three steps to your first export": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three steps to your first export"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 출력까지 세 단계"
           }
         }
       }
@@ -6847,6 +7300,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "선택한 클립의 타이밍 효과"
+          }
+        }
+      }
+    },
+    "Tints each track lane with its dominant clip role.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tints each track lane with its dominant clip role."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각 트랙 레인을 지배적인 클립 역할 색으로 물들입니다."
           }
         }
       }
@@ -7155,6 +7624,23 @@
         }
       }
     },
+    "Untitled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제목 없음"
+          }
+        }
+      }
+    },
     "Use the Music and Sound Effects search fields below to filter audio.": {
       "extractionState": "manual",
       "localizations": {
@@ -7356,6 +7842,23 @@
         }
       }
     },
+    "Welcome to MovieCut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to MovieCut"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut에 오신 것을 환영합니다"
+          }
+        }
+      }
+    },
     "Wipe": {
       "extractionState": "manual",
       "localizations": {
@@ -7369,6 +7872,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "와이프"
+          }
+        }
+      }
+    },
+    "Your library is empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your library is empty"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "라이브러리가 비어 있습니다"
           }
         }
       }
@@ -7619,414 +8139,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "x"
-          }
-        }
-      }
-    },
-    "Your library is empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your library is empty"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "라이브러리가 비어 있습니다"
-          }
-        }
-      }
-    },
-    "Imported videos, audio, and images appear here. Drag files in or use the Import button above.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Imported videos, audio, and images appear here. Drag files in or use the Import button above."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "가져온 비디오·오디오·이미지가 여기에 표시됩니다. 파일을 끌어다 놓거나 위의 가져오기 버튼을 사용하세요."
-          }
-        }
-      }
-    },
-    "Adjustment": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Adjustment"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "조정"
-          }
-        }
-      }
-    },
-    "Recover unsaved work?": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recover unsaved work?"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "저장되지 않은 작업을 복구할까요?"
-          }
-        }
-      }
-    },
-    "MovieCut found a project from a session that didn't close normally.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MovieCut found a project from a session that didn't close normally."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MovieCut이 정상적으로 종료되지 않은 세션의 프로젝트를 찾았습니다."
-          }
-        }
-      }
-    },
-    "Project: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Project: %@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "프로젝트: %@"
-          }
-        }
-      }
-    },
-    "Last autosave: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Last autosave: %@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "마지막 자동 저장: %@"
-          }
-        }
-      }
-    },
-    "Untitled": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Untitled"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "제목 없음"
-          }
-        }
-      }
-    },
-    "Recover": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recover"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "복구"
-          }
-        }
-      }
-    },
-    "Discard": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Discard"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "버리기"
-          }
-        }
-      }
-    },
-    "Welcome to MovieCut": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Welcome to MovieCut"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MovieCut에 오신 것을 환영합니다"
-          }
-        }
-      }
-    },
-    "Three steps to your first export": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Three steps to your first export"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "첫 출력까지 세 단계"
-          }
-        }
-      }
-    },
-    "Skip": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skip"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "건너뛰기"
-          }
-        }
-      }
-    },
-    "Import your clip": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import your clip"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "클립 가져오기"
-          }
-        }
-      }
-    },
-    "Drop in a clip from your iPhone.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Drop in a clip from your iPhone."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "아이폰으로 찍은 클립을 끌어다 놓으세요."
-          }
-        }
-      }
-    },
-    "Add subtitles": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add subtitles"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "자막 추가"
-          }
-        }
-      }
-    },
-    "Auto-transcribe your speech.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auto-transcribe your speech."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "말하는 내용이 자동으로 자막이 됩니다."
-          }
-        }
-      }
-    },
-    "Ship a 9:16 short.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ship a 9:16 short."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "9:16 숏츠로 내보내세요."
-          }
-        }
-      }
-    },
-    "Open the sample project": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open the sample project"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "샘플 프로젝트 열기"
-          }
-        }
-      }
-    },
-    "Sample project loaded. Try: cut the clip, add subtitles, then export.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sample project loaded. Try: cut the clip, add subtitles, then export."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "샘플 프로젝트를 열었습니다. 자르기 → 자막 → 출력을 순서대로 시도해 보세요."
-          }
-        }
-      }
-    },
-    "The sample project isn't available in this build.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The sample project isn't available in this build."
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 빌드에는 샘플 프로젝트가 포함되어 있지 않습니다."
-          }
-        }
-      }
-    },
-    "Couldn't restore your last session": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't restore your last session"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "마지막 세션을 복구할 수 없습니다"
-          }
-        }
-      }
-    },
-    "Could not open the sample project: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Could not open the sample project: %@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "샘플 프로젝트를 열 수 없습니다: %@"
-          }
-        }
-      }
-    },
-    "OK": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OK"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "확인"
           }
         }
       }

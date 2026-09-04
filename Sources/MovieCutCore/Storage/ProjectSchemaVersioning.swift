@@ -36,7 +36,10 @@ private let storageSignposter = OSSignposter(subsystem: "com.moviecut.mac", cate
 /// - v7 → v8 (G-26): `Project.masterAudioProcessing` added. The field
 ///   decodes to nil for v7 projects, so this migrator only bumps the
 ///   version.
-public let currentSchemaVersion: Int = 8
+/// - v8 → v9 (CA-20 stage 1): `Project.roles` and `Clip.roleId` added
+///   (FCP-style clip role tags). Both decode to their defaults for v8
+///   projects ([] and nil), so this migrator only bumps the version.
+public let currentSchemaVersion: Int = 9
 
 /// Schema versioning + migration registry for the on-disk `Project` format.
 public enum ProjectSchema {
@@ -50,7 +53,8 @@ public enum ProjectSchema {
         AddTrackSoloMigration(),
         AddAdjustmentLayerMigration(),
         AddStabilizationMigration(),
-        AddMasterAudioProcessingMigration()
+        AddMasterAudioProcessingMigration(),
+        AddClipRolesMigration()
     ]
 }
 
@@ -108,6 +112,22 @@ public struct AddMasterAudioProcessingMigration: ProjectMigration {
 
     public func migrate(_ project: inout Project) throws {
         // No payload change: `Project.masterAudioProcessing` decodes to its default (nil).
+    }
+}
+
+/// v8 → v9: introduces `Project.roles` and `Clip.roleId` (CA-20 stage 1 —
+/// FCP-style clip role tags). Both fields are optional on decode and fall
+/// back to their defaults for v8 projects, so this migrator performs no
+/// payload transform — it only bumps the schema version so the chain
+/// reaches `currentSchemaVersion`.
+public struct AddClipRolesMigration: ProjectMigration {
+    public let version = 9
+
+    public init() {}
+
+    public func migrate(_ project: inout Project) throws {
+        // No payload change: `Project.roles` decodes to [] and
+        // `Clip.roleId` to nil for v8 projects.
     }
 }
 

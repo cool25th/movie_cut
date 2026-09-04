@@ -5,6 +5,17 @@
 
 > ⚠️ **디스크 정책 (2026-09-04, 사용자 승인)**: iOS 시뮬레이터 런타임(19G)은 삭제 완료. `platform=iOS Simulator` 테스트 실행·런타임 재다운로드 금지 — iOS 검증은 generic device 빌드(verify_gate Step 4)만. 상세: `VERIFICATION_STANDARD.md` §5 정책 노트.
 
+## 2026-09-05 세션 (CA-20 2-B — 타임라인 인덱스 패널: 검색→이동·p95 프록시 실측)
+
+- **증분**: `EditorViewModel+TimelineIndex`(엔트리 빌드=클립+사용자 마커·비트 마커 제외·제목/트랙명/롤명 매칭·reveal 경로) + `TimelineIndexPanel`(검색·결과 수·VoiceOver 라벨/힌트·적응 타임코드 — CA-19 레이블 재사용) + 툴바 토글(기본 off) + 현지화 8키.
+- **검증(측정)**: Mac 유닛 **71테스트/21스위트 PASS**(신규 5종) — **30분 타임라인(360클립+30마커) 200쿼리 검색 p95=1.515ms ≤ 50ms 예산**(DoD의 자동화 가능 슬라이스·사전등록 예산). Core 1,479/222·카탈로그 359키 0누락. verify_gate 4/5 — iOS 단 환경 블록 지속(플랫폼 부재+재설치 금지·코드 귀속 아님).
+- **iOS defer 사유 기록 완료**(백로그 행): Mac 우선 — W4 장편 관리=데스크톱 중심·iOS 인스펙터 구조 상이·베타 반응 후 이식.
+- **스카웃: 신규 후보 없음**(2-B 파일 신규·pbxproj 등록 콤마 정석 준수로 파손 0). 자기 리뷰 ③: Swift Testing `#expect` 코멘트 슬롯은 리터럴만(동적 메시지 컴파일 오류) — 측정값은 print 라인으로.
+- **잔여(수동 U)**: VoiceOver walkthrough·롤 레인 골든·role rename/remove 정책.
+
+### 다음 회차 — 큐
+① §0.5.1 잔여 스캔 — 실행 가능 항목 소진 시 대기 보고 ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력·iOS 플랫폼 재설치 시점 결정.
+
 ## 2026-09-05 세션 (CA-20 2-A — Mac 역할 UI: 인스펙터 Role 섹션·롤 레인 틴트·토글)
 
 - **증분**: `EditorViewModel+Roles`(프리셋 upsert·지정/해제 — 전부 Core 커맨드 경유·`dominantRole` 빈도+동률 레지스트리 삽입 순 결정론·`roleColor(fromHex:)` 무결 입력 black 폴백) + `Inspector/InspectorRoleSection`(전 클립 종류 공통·None/Mixed·프리셋 메뉴) + 타임라인 `roleLaneHighlight`(지배 역할 색 워시+좌측 엣지 — main-video 하이라이트 시각 언어 재사용·미태그 레인 무변경) + 툴바 `showRoleLanes` 토글(기본 off) + 현지화 7키(en·ko·카탈로그 351키 0누락).

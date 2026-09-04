@@ -19,6 +19,8 @@ struct RecoveryAlertDetailTests {
         )
         #expect(detail.contains("Talking Head Cut"))
         #expect(detail.contains(stamp.formatted(date: .abbreviated, time: .shortened)))
+        // Line counts assume the localized body contains no embedded newline —
+        // true for every catalog language; revisit if a translation breaks it.
         #expect(detail.split(separator: "\n").count == 3, "body + project line + time line")
     }
 

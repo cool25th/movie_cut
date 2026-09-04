@@ -12,6 +12,7 @@ import MovieCutCore
 /// suite with `MOVIECUT_GEN_SAMPLE_TEMPLATE=1
 /// MOVIECUT_SAMPLE_MEDIA=/tmp/sample_media.mov` to re-export the package into
 /// `App/MovieCutMac/Resources/SampleProject.mctemplate`, then commit it.
+@MainActor
 @Suite("Bundled sample project")
 struct SampleProjectTemplateTests {
     @Test("bundled sample template loads with a vertical clip and real media")
@@ -35,16 +36,25 @@ struct SampleProjectTemplateTests {
         #expect(FileManager.default.fileExists(atPath: asset.originalURL.path), "packaged media file exists")
     }
 
-    @Test("sample opens through the view-model adoption path")
+    @Test("sample opens through the view-model adoption path with writable staged media")
     func sampleOpensThroughViewModel() async throws {
-        let url = try #require(
-            Bundle.main.url(forResource: "SampleProject", withExtension: ProjectPackage.fileExtension)
-        )
-        let project = try ProjectPackage.load(from: url)
-        // The package manifest IS the clean baseline contract the open path
-        // (openBundledSampleProject) relies on: vertical canvas + placed clip.
-        #expect(!project.timeline.tracks.isEmpty)
-        #expect(project.timeline.tracks.flatMap(\.clips).count >= 1)
+        let viewModel = EditorViewModel(project: Project(name: "Sample Host"))
+
+        let opened = await viewModel.openBundledSampleProject()
+        #expect(opened, "sample must open in the test host: \(viewModel.lastErrorMessage ?? "no error")")
+
+        // Adoption contract: clean baseline, no error surfaced.
+        #expect(viewModel.isDirty == false)
+        #expect(viewModel.lastErrorMessage == nil)
+        #expect(viewModel.currentProject.timeline.tracks.flatMap(\.clips).count == 1)
+
+        // P2 fix pinned: media must NOT point into the read-only app bundle —
+        // the open path stages copies into the managed imports root and
+        // records the managed-relative path (SURV-01 convention).
+        let asset = try #require(viewModel.currentProject.mediaLibrary.assets.values.first)
+        #expect(!asset.originalURL.path.contains(".app/"), "media must be staged outside the bundle")
+        #expect(asset.managedImportPath != nil, "staged copy records its managed-relative path")
+        #expect(FileManager.default.fileExists(atPath: asset.originalURL.path))
     }
 
     /// Regeneration lives in Core tests (`SampleProjectTemplateGenerationTests`)

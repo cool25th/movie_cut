@@ -3,6 +3,19 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-04 세션 (CA-20 1단계 — Core roles 모델·스키마 v9·커맨드)
+
+- **전제 충족**: 방향 문서 §3에 CA-20 반영(P0-A ⑥ — 2단계 배치 명시: 1단계 Core·2단계 Mac UI) — "§3 반영 후 실행" 조건 완결.
+- **증분(Core)**: `TimelineRole`(id/name/colorHex·프리셋 4종 고정 id — 재생성 안정) + `Clip.roleId`/`Project.roles`(빈 프로젝트 JSON 바이트동일 — compounds 전례 준수) + **스키마 v8→v9**(`AddClipRolesMigration` — 가필드 기본값 디코드·버전만 상승; 체인 테스트 v9 가짜 확장) + `AddTimelineRoleCommand`(이름/id 중복 거부) + `SetClipRoleCommand`(배치 태그/해제).
+- **테스트가 실결함 적발(자기 리뷰 ①의 즉시 실증)**: 커맨드 초안이 *변이 후 검사* 원자성(부분 적용 가능)이었음 — 원자성 테스트가 걸어 **사전 검증**(distinctIds ⊆ existingIds + role 존재 확인 후 변이)으로 재작성.
+- **검증**: 신규 `ClipRolesTests` **7/7**(왕복·v8→v9 러너 마이그레이션·바이트동일·원자성·undo 스냅숏·중복 가드)·Core 전체 **1,479/222**·verify_gate **GATE_PASS 5/5**.
+- **2단계 잔여(백로그 행 갱신)**: Mac UI(롤별 레인 색 골든·인덱스 패널·검색→이동 p95·VoiceOver)·role rename/remove 정책(참조 처리)·iOS defer 사유 기록.
+- **스카웃: 신규 후보 없음** — 스키마 범프 핀 여부는 양 플랫폼 빌드+Core 전수로 확인(무관통).
+- **테스트 도구 교훈 2건(자기 리뷰 ③)**: 손짠 JSON 픽스처는 모델 필수 키 증가마다 부패 — 정상 인코딩 후 버전만 강제가 정석·서브스트링 판정은 `"roles":`처럼 콜론 포함으로(프로젝트명 "roles"과 충돌했음).
+
+### 다음 회차 — 큐
+① **CA-20 2단계(Mac UI — 롤별 레인 색·인덱스 패널)** ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
 ## 2026-09-04 세션 (CA-21 측정 완료·PASS — Edit Detection 무작동 결함 적발·수리)
 
 - **증분**: 사전등록 임계값(recall≥0.80·precision≥0.80·무컷 0검출·실계열 FP≤1/세그먼트·RTF≤1.0·매칭 ±0.5s)을 코드에 고정 후 `run_ca21_scene_detection.sh`(ffmpeg lavfi 결정론 픽스처 4종·매니페스트→`swift test` env 구동·판정 라인 grep 가짜그린 가드)로 측정.

@@ -3,6 +3,18 @@
 > 마스터 프롬프트(`AGENT_MASTER_PROMPT_20260815.md`) 프로토콜 6번의 세션 종료 산출물.
 > 최신 세션이 이 파일의 최상단에 기록된다. 실행 순서의 근거는 `DEVELOPMENT_DIRECTION_20260815.md` §3·§9 — 단, **안정화 창구(STABILIZATION_PLAN_20260829.md 루프 실행 가능 잔여 존재 중)는 해당 계획의 §3 Phase 순서가 우선**(LI-004, 사용자 병합 지시 2026-08-29).
 
+## 2026-09-04 세션 (CA-21 측정 완료·PASS — Edit Detection 무작동 결함 적발·수리)
+
+- **증분**: 사전등록 임계값(recall≥0.80·precision≥0.80·무컷 0검출·실계열 FP≤1/세그먼트·RTF≤1.0·매칭 ±0.5s)을 코드에 고정 후 `run_ca21_scene_detection.sh`(ffmpeg lavfi 결정론 픽스처 4종·매니페스트→`swift test` env 구동·판정 라인 grep 가짜그린 가드)로 측정.
+- **측정이 제품 결함 적발**: `SceneChangeProvider`의 CIAreaHistogram RGBA8 판독이 **모든 프레임에서 전부 0** 반환(흑/백 프로브로 확인) — 프레임 간 차이 항상 0 → **씬 검출기가 한 번도 작동한 적 없는 무작동 상태**(기능 테스트 부재·메타데이터 테스트만 존재). 순수 Swift 픽셀 직접 계수로 교체(≤256 다운스케일·64빈 휘도·chi-squared 유지) + 상시 회귀 유닛 2종.
+- **실측(2회 재현)**: **recall 0.875(7/8)·precision 1.000·RTF 0.102·무컷 0검출·경계 컷 4/4 정확** — 전 임계값 통과. 정직 기록: mandelbrot→noise 분산휘도 전이 미스(히스토그램류의 알려진 한계)·검출 타임스탬프=컷 후 첫 샘플(2fps 격자).
+- **도구 결함 3건 동반 수리(자기 리뷰 ③)**: concat `-c copy` 타임스탬프 파손(재인코딩)·경과시간 초 버림(attoseconds 병합)·매니페스트 없는 일반 run이 FAIL→`.enabled(if:)` 스킵(드라이버 판정 라인 grep으로 이중 가드).
+- **검증**: 측정 게이트 3회 PASS·Core **1,472/221**(신규 히스토그램 유닛 포함)·verify_gate 5/5.
+- **스카웃**: CIAreaHistogram 오용은 리포 유일 사용처(전수 확인) — 신규 후보 없음.
+
+### 다음 회차 — 큐
+① CA-20(roles+타임라인 인덱스 — 방향 문서 §3 반영 확인 후) ② CODEX-04·07(실기기 대기)·thermal(환경 대기). **사용자 대기**: 병합 결정·계정/Team ID·실기기 2종·MACUI-01/U-08 TCC·W1 STT TCC·STAB-07(Q13)·가격·경쟁사 B측 출력.
+
 ## 2026-09-04 세션 (3-A 검증 매트릭스 측정 완결 — 디스크 풀 실ENOSPC 게이트 신규)
 
 - **증분**: STABILIZATION_PLAN §3 Phase 3-A의 잔여 미측정 축(디스크 부족)을 실측으로 승격 — 신규 `scripts/run_diskfull_gate.sh`: 1MB 스크래치 DMG 볼륨(hdiutil·생성/마운트/분리/삭제 전부 스크립트 소유)에 ~1.64MB ProRes 익스포트로 **실 ENOSPC 미드플라이트 유발**. 판정은 3조건(UITEST_DONE+error≠none+공유 가능한 부분산물 부재)+CONTINUATION MISUSE 0건.

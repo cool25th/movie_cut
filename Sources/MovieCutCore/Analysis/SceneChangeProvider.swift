@@ -127,47 +127,56 @@ public final class SceneChangeProvider: AnalysisProvider {
     }
 
     /// Computes a 64-bin luminance histogram for an image.
-    private func computeHistogram(for image: CIImage) -> [Float] {
-        let filter = CIFilter(name: "CIAreaHistogram", parameters: [
-            kCIInputImageKey: image,
-            kCIInputExtentKey: CIVector(cgRect: image.extent),
-            "inputCount": 64
-        ])!
-
-        guard let outputImage = filter.outputImage else {
-            return [Float](repeating: 0, count: 64)
+    ///
+    /// CA-21 measurement (2026-09-04) found the previous implementation —
+    /// CIAreaHistogram rendered to an RGBA8 bitmap — returned ALL ZEROS for
+    /// every frame (the filter's output extent/scale does not line up with
+    /// the 64×1 region read here), so the chi-squared difference was always
+    /// 0 and the provider NEVER detected a scene change. This counts the
+    /// histogram directly from rendered pixels instead: no CIFilter
+    /// coordinate semantics to drift, and the math is unit-testable.
+    func computeHistogram(for image: CIImage) -> [Float] {
+        // Downscale for histogram purposes (shape is scale-invariant) so
+        // 4K frames don't pay full-resolution pixel walks at the sampling
+        // rate.
+        let maxDim = max(image.extent.width, image.extent.height)
+        var working = image
+        if maxDim > 256, maxDim.isFinite, maxDim > 0 {
+            let scale = 256 / maxDim
+            working = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         }
+        let width = Int(working.extent.width.rounded())
+        let height = Int(working.extent.height.rounded())
+        guard width > 0, height > 0 else { return [Float](repeating: 0, count: 64) }
 
-        // Read histogram data
-        let bitmap = [UInt8](repeating: 0, count: 256) // 64 bins * 4 bytes
-        var mutableBitmap = bitmap
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
         context.render(
-            outputImage,
-            toBitmap: &mutableBitmap,
-            rowBytes: 256,
-            bounds: CGRect(x: 0, y: 0, width: 64, height: 1),
+            working,
+            toBitmap: &pixels,
+            rowBytes: width * 4,
+            bounds: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)),
             format: .RGBA8,
             colorSpace: CGColorSpaceCreateDeviceRGB()
         )
 
-        // Use luminance channel (average of R, G, B for each bin)
         var histogram = [Float](repeating: 0, count: 64)
-        let totalPixels = Float(image.extent.width * image.extent.height)
-        guard totalPixels > 0 else { return histogram }
-
-        for i in 0..<64 {
-            let r = Float(mutableBitmap[i * 4])
-            let g = Float(mutableBitmap[i * 4 + 1])
-            let b = Float(mutableBitmap[i * 4 + 2])
+        let totalPixels = Float(width * height)
+        for i in 0..<(width * height) {
+            let r = Float(pixels[i * 4])
+            let g = Float(pixels[i * 4 + 1])
+            let b = Float(pixels[i * 4 + 2])
             let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-            histogram[i] = luminance / totalPixels
+            let bin = min(63, Int(luminance / 4))
+            histogram[bin] += 1
         }
-
+        for i in 0..<64 {
+            histogram[i] /= totalPixels
+        }
         return histogram
     }
 
     /// Computes chi-squared difference between two histograms.
-    private func histogramDifference(_ a: [Float], _ b: [Float]) -> Float {
+    func histogramDifference(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count else { return 1.0 }
 
         var difference: Float = 0

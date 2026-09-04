@@ -209,8 +209,11 @@ struct HomeView: View {
         let metrics = viewModel.onboardingMetrics
         metrics.record(.firstLaunch)
         guard !metrics.isDismissed else { return }
-        metrics.record(.onboardingShown)
-        showsOnboardingCard = true
+        // First launch only: record() is first-only, so later home visits
+        // before a dismissal don't re-show the card ("first-run guide").
+        if metrics.record(.onboardingShown) {
+            showsOnboardingCard = true
+        }
     }
 
     private func dismissOnboarding() {
@@ -220,8 +223,9 @@ struct HomeView: View {
 
     private func openSampleProject() {
         Task {
-            await router.requestOpenBundledSampleProject()
-            if viewModel.lastErrorMessage == nil {
+            // Dismiss only when the sample actually opened — cancelling the
+            // unsaved-changes guard (or an error) must keep the card available.
+            if await router.requestOpenBundledSampleProject() {
                 dismissOnboarding()
             }
         }

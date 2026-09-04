@@ -1114,7 +1114,9 @@ final class EditorViewModel {
         }
         guard await confirmDiscardUnsavedChanges() else { return false }
         do {
-            let project = try ProjectPackage.load(from: url)
+            var loaded = try ProjectPackage.load(from: url)
+            stageSampleMediaIntoManagedImports(&loaded)
+            let project = Self.ensureDefaultTracks(in: loaded)
             session = EditorSession(project: project)
             currentProject = project
             invalidateMasterLoudnessContext()
@@ -1142,8 +1144,44 @@ final class EditorViewModel {
             return true
         } catch {
             lastStatusMessage = nil
-            lastErrorMessage = "Could not open the sample project: \(error.localizedDescription)"
+            lastErrorMessage = String(
+                format: NSLocalizedString("Could not open the sample project: %@", comment: "Sample project open failure"),
+                error.localizedDescription
+            )
             return false
+        }
+    }
+
+    /// The package resolves media URLs into the read-only app bundle. Editing
+    /// flows that replace sources (destructive applies, relink) need writable
+    /// media, so stage copies into the managed imports root and record the
+    /// managed-relative path — the same convention crash recovery rebases with
+    /// (SURV-01). Bundle files stay untouched; a failed staging falls back to
+    /// the bundle URL (playable/exportable, just not replaceable) instead of
+    /// failing the whole sample open.
+    private func stageSampleMediaIntoManagedImports(_ project: inout Project) {
+        guard let importsRoot = ProjectStore.defaultImportsDirectory() else { return }
+        let fileManager = FileManager.default
+        let projectFolder = project.id.uuidString
+        for assetId in project.mediaLibrary.assets.keys {
+            guard var asset = project.mediaLibrary.assets[assetId] else { continue }
+            let relative = "\(projectFolder)/\(asset.originalURL.lastPathComponent)"
+            let destination = importsRoot.appendingPathComponent(relative)
+            do {
+                if !fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.createDirectory(
+                        at: destination.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try fileManager.copyItem(at: asset.originalURL, to: destination)
+                }
+                asset.originalURL = destination
+                asset.managedImportPath = relative
+                asset.originalBookmark = nil
+                project.mediaLibrary.assets[assetId] = asset
+            } catch {
+                continue
+            }
         }
     }
 

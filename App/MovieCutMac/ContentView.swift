@@ -446,9 +446,12 @@ struct ContentView: View {
         // Previously this case was invisible (try? swallow).
         if let failure = await viewModel.autosaveLoadFailure() {
             let alert = NSAlert()
-            alert.messageText = "Couldn't restore your last session"
+            alert.messageText = NSLocalizedString(
+                "Couldn't restore your last session",
+                comment: "Recovery corrupt-file alert title"
+            )
             alert.informativeText = failure.userMessage
-            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
             alert.runModal()
             return
         }

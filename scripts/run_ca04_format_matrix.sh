@@ -102,7 +102,9 @@ if [ -s "$WORK/vfr_export.mp4" ]; then
   a="$(json "$WORK/vfr_export.mp4" v:0 stream=avg_frame_rate)"
   n="$(json "$WORK/vfr_export.mp4" v:0 stream=nb_frames)"
   note vfr "output rate r=$r avg=$a frames=$n (input: 100 frames @~20.1fps VFR)"
-  [ "$r" = "$a" ] || bad vfr "output not CFR: r=$r avg=$a"
+  # A failed probe stays empty (`|| true` in json()); empty = empty would
+  # pass vacuously — demand a real reading on both sides (QAUTO-01).
+  [ -n "$r" ] && [ "$r" = "$a" ] || bad vfr "output not CFR (or probe empty): r=$r avg=$a"
   awk -v n="$n" 'BEGIN { exit (n >= 130 && n <= 170) ? 0 : 1 }' \
     || bad vfr "resampled frame count $n outside 130–170 (5s @30fps CFR)"
 fi

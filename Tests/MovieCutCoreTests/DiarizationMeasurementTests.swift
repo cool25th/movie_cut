@@ -279,7 +279,13 @@ struct DiarizationMeasurementTests {
 
             print(String(format: "CA18MEASURE class=%@ file=%@ segments_detected=%d confusion=%.3f rtf=%.3f",
                          tag, (spec.file as NSString).lastPathComponent, detected.count, conf, rtf))
-            if conf > 0.10 {
+            if detected.isEmpty {
+                // Degeneracy tripwire: with zero detected segments confusion()
+                // iterates nothing and scores 0 — the same false-PASS class as
+                // the merged-segment defect (2026-09-05). An empty detection is
+                // a broken measurement, not a good score.
+                failures.append("T1 \(tag) degeneracy: 0 segments detected — confusion undefined, forced FAIL")
+            } else if conf > 0.10 {
                 failures.append(String(format: "T1 %@ confusion %.1f%% > 10%%", tag, conf * 100))
             }
             if rtf > 0.5 {

@@ -119,6 +119,9 @@ bash scripts/verify_gate.sh
 4. **Step 4**: `xcodebuild -scheme MovieCutiOS` — iOS generic device 빌드(`CODE_SIGNING_ALLOWED=NO`). iOS 스킴 장기 미빌드 사고(2026-08-14 이전 2주) 재발 방지 게이트
 5. **Step 5**: high-signal lint 게이트(`scripts/lint_gate.sh` — force_cast / force_try / shorthand_operator 정정 위험 허용목록)
 
+> ⚠️ **iOS 시뮬레이터 테스트 금지 (2026-09-04, 디스크 정책)**
+> `platform=iOS Simulator` 대상 테스트 실행(`MovieCutiOSTests` 포함) 및 `xcodebuild -downloadPlatform`/런타임 설치를 금지한다. iOS 시뮬레이터 런타임(19G)은 설치 직후 자동 재다운로드되어 디스크를 반복적으로 소진한다. iOS 검증은 **Step 4의 generic device 빌드만**으로 수행하고, 런타임 의존 테스트는 macOS 샌드박스(`MovieCutMacTests`)로 대체한다.
+
 ---
 
 ## 6. 검증 방법론 업그레이드 (2026-08-15, 외부 검수 채택)

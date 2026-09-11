@@ -1,0 +1,84 @@
+# ChatGPT 외부 리뷰 루프 — 매일 새벽 4시 자동 보고·피드백·개선 (2026-09-12)
+
+## 0. 목적
+
+자율 루프의 진행상황을 매일 새벽 4시 ChatGPT에 요약 보고하고, ChatGPT의 피드백을
+받아 개선 사항을 반영하는 무인 외부 리뷰 루프. 기존 루프 문서 체계
+(LOOP_STATE · SESSION_HANDOFF_CURRENT · LOOP_STATE_REPORT)와 병행하며,
+피드백에서 나온 큰 작업은 기존 자율 루프 백로그로 등록한다(계획은 루프에 병합 원칙).
+
+## 1. 아키텍처 — 5단계
+
+| 단계 | 내용 | 산출물 |
+|---|---|---|
+| 1. 수집 | `scripts/collect_progress_for_ai_review.sh` — 측정/기록 산출물만 읽어 다이제스트 생성 (테스트 실행 없음) | stdout 다이제스트 |
+| 2. 보고 | 다이제스트를 한국어 요약 보고서로 편성 | `docs/AI_REVIEW/REPORT_YYYYMMDD.md` |
+| 3. 전송 | ChatGPT에 보고서 전송 (§2 연결 수단) | — |
+| 4. 피드백 | ChatGPT 응답 전문 저장 | `docs/AI_REVIEW/FEEDBACK_YYYYMMDD.md` |
+| 5. 개선 | 피드백 분류 → 즉시 반영(검증 가능한 소규모) 또는 루프 백로그 등록 | `docs/AI_REVIEW/ACTIONS_YYYYMMDD.md` |
+
+보고 범위: 직전 보고서 헤더의 `Since-commit:` 이후 커밋. 첫 보고는 최근 20커밋.
+
+## 2. ChatGPT 연결 수단 (우선순위)
+
+1. **OpenAI API** — 환경변수 `OPENAI_API_KEY` 설정 시. 모델은 `CHATGPT_MODEL`
+   (기본 `gpt-4o`, 404 모델 오류 시 `/v1/models`로 유효 모델 확인 후 재시도).
+   `curl https://api.openai.com/v1/chat/completions`.
+2. **browser-use 플러그인** — 키 미설정 시 chatgpt.com을 브라우저 자동화로 접속.
+   chatgpt.com 로그인 세션이 플러그인 브라우저에 유지되어 있어야 한다(최초 1회 수동 로그인).
+   로그인 만료 시: `FEEDBACK_YYYYMMDD.md`에 `CONNECTION_FAIL: login expired` 기록 후 종료 —
+   다음 회차 재시도, 사용자에게 재로그인 요청 메모 남김.
+
+## 3. 안전 규칙 (매 회차 준수)
+
+- **push 금지** — 로컬 커밋까지만. CI 트리거 없음.
+- **타 세션 WIP 무접촉** — 작업 시작 시 `git status`의 수정 파일(예: 병렬 세션 docs WIP)은
+  읽기 전용 컨텍스트로만 사용하고 절대 스테이지/커밋에 포함하지 않는다. 신규 파일만 커밋.
+- **테스트 실행 최소화** — 새벽 무인 실행이므로 무거운 게이트 전수 재실행 금지.
+  기록된 산출물(`.build-check/history/`, 측정 보고서)을 읽어 판단. 개선 반영에
+  테스트가 필요하면 해당 모듈의 신속 유닛만 실행하고 **테스트 후 즉시 정리**
+  (스크래치·보존분·컨테이너 임시 삭제 + 확보 용량 보고 — 2026-08-30 사용자 지시).
+- **디스크 정책** — iOS 시뮬레이터 실행·런타임 재다운로드 금지(VERIFICATION_STANDARD §5).
+- **개선 반영 한도** — 문서 정정·현지화 키·소규모 코드 수정(해당 유닛 통과로 검증 가능한 것)까지
+  즉시 반영. 아키텍처 변경·대규모 리팩터링·의존성 추가·출시 관련 결정은 **반영하지 않고**
+  루프 백로그(LOOP_STATE 큐 섹션 + NEXT_SESSION 문서)에 항목 등록 후 종료.
+- **ChatGPT 피드백은 외부 의견** — 사전등록 임계값·검증 원칙(측정 근거)과 충돌하면
+  측정이 우선하며, 그 충돌 자체를 ACTIONS에 기록한다.
+
+## 4. 실패 처리
+
+| 상황 | 처리 |
+|---|---|
+| ChatGPT 연결 실패(API 오류·로그인 만료) | REPORT까지만 저장, `FEEDBACK`에 실패 원인 기록 후 종료. 다음 회차 재시도 |
+| 4시에 Mac 슬립/전원 off | 해당 회차 스킵(호스트 스케줄러 위임). Since-commit 마커 덕분에 다음 회차가 공백 구간을 포함해 보고 |
+| 수집 스크립트 실패 | 부분 다이제스트로라도 보고 진행, 스크립트 오류를 REPORT에 명시 |
+| 피드백 품질 저하(빈 응답·무관 내용) | 원문 그대로 저장 + ACTIONS에 "반영 불가 사유" 기록 |
+
+## 5. 산출물 규약
+
+- `docs/AI_REVIEW/REPORT_YYYYMMDD.md` — 헤더에 `Since-commit: <sha>` / `Until-commit: <sha>` 필수(다음 회차 범위 계산용).
+- `docs/AI_REVIEW/FEEDBACK_YYYYMMDD.md` — ChatGPT 응답 전문 + 전송 경로(API/브라우저) 명시.
+- `docs/AI_REVIEW/ACTIONS_YYYYMMDD.md` — 피드백 항목별 처분: `APPLIED`(커밋 sha) / `BACKLOG`(등록 위치) / `REJECTED`(사유) / `SKIPPED`(사유).
+- 3개 파일은 한 커밋으로 묶어 docs-only 커밋(루프 마감 서명 규약 준수).
+
+## 6. 매 회차 실행 절차 (스케줄 세션용 체크리스트)
+
+1. `scripts/collect_progress_for_ai_review.sh` 실행 → 다이제스트 확보.
+2. 다이제스트 기반 `REPORT_YYYYMMDD.md` 작성(한국어·증분 중심·측정 수치 포함).
+3. §2 순서로 ChatGPT 전송 — 보고서 + 질문: "이 진행상황에 대한 리스크·누락·개선점을 알려달라".
+4. 응답 전문 `FEEDBACK_YYYYMMDD.md` 저장.
+5. 피드백 항목별 처분(§3 한도) → `ACTIONS_YYYYMMDD.md`.
+6. 신규 파일만 스테이지해 docs-only 커밋(§5 규약). push 금지.
+7. 테스트를 실행했다면 즉시 정리 + 용량 보고를 ACTIONS에 기록.
+
+## 7. 파이프라인 검증 (DoD)
+
+- 최초 1회 수동 종단 실행(수집→보고→전송→피드백→ACTIONS) 성공이 이 루프의 가동 조건.
+- 이후 매 회차 ACTIONS의 `APPLIED` 항목은 커밋으로, `BACKLOG` 항목은 루프 문서 등록으로 추적.
+
+## 8. 현재 상태
+
+- 2026-09-12: 계획 수립 + 수집 스크립트 추가 + **종단 검증 1회 성공**(§7 DoD 충족 — REPORT/FEEDBACK/ACTIONS_20260912 참조). 스케줄 등록: 매일 04:00.
+- 연결 수단: OPENAI_API_KEY 미설정 → **browser-use(chatgpt.com) 경로로 검증 완료**(계정 로그인 세션 확인). API 키 발급 시 §2 1순위로 자동 전환.
+- 운영 노트(1회차에서 학습): ChatGPT 입력창 전송은 Send 버튼 클릭이 간헐 미동작 → **입력 후 Enter로 전송**이 안정적. 응답 폴링은 20초 간격, js 호출당 100초 이내로 분할. IAB 탭이 about:blank로 초기화될 수 있으므로 매 회차 URL 재확인 필수.
+- 1회차 피드백 결과: BACKLOG 9건(ACTIONS_20260912.md) — 다음 루프 세션이 LOOP_STATE 큐에 등록할 것. 사용자 보고 필요 2건(macOS/iOS 베타 train 분리 검토, 계정/Team ID 전제 distribution gate).

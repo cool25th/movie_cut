@@ -81,12 +81,19 @@ set -e
 
 grep -q "CA18 VERDICT:" "$WORK/measure.log" || {
   echo "CA18 GATE FAIL — verdict line absent (suite did not run)" >&2
+  # QAUTO-01: retain even the absent-verdict evidence before discarding WORK.
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 NO_VERDICT "$WORK/measure.log" "${BASH_SOURCE[0]}" || true
   KEEP="/tmp/moviecut-ca18-keep-$(date +%H%M%S)"
   cp -r "$WORK" "$KEEP" 2>/dev/null || true
   echo "evidence kept at: $KEEP" >&2
   exit 1
 }
-grep -q "CA18 VERDICT: PASS" "$WORK/measure.log" && echo "CA18 DIARIZATION MEASUREMENT PASS" || {
+if grep -q "CA18 VERDICT: PASS" "$WORK/measure.log"; then
+  # QAUTO-01: pin the verdict to app commit + harness sha before exit.
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  echo "CA18 DIARIZATION MEASUREMENT PASS"
+else
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA18 DIARIZATION MEASUREMENT FAIL (explicit failure recorded — no UI work without approval)" >&2
   exit "${rc:-1}"
-}
+fi

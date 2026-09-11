@@ -135,7 +135,7 @@
 ## Top gaps(감사 도출·보강 반영 후 잔여)
 
 1. ~~CA-18 0검출 거짓 PASS~~ → **보강 ① 완료**(전행 재측정으로 정상 경로 무손상 확인).
-2. **CA-18·CA-21 harness/evidence 핀 부재**: 증거가 trap 삭제되는 /tmp에만 존재 — 사전등록 규율이 사후 감사 불가. → QAUTO-01 잔여(artifacts 기록+app/harness sha 바인딩).
+2. **CA-18·CA-21 harness/evidence 핀 부재**: 증거가 trap 삭제되는 /tmp에만 존재 — 사전등록 규율이 사후 감사 불가. → **2026-09-12 2차 증분으로 CA-18·21 폐쇄**: 공용 기록기 `scripts/record_measurement_verdict.sh` — 양 드라이버가 판정을 `.build-check/history/qauto-*.json`(ts·verdict·app_commit·harness_sha256·관측 라인·NO_VERDICT 경로 포함)으로 보존, 전행 재측정으로 검증(ACTIONS_20260912_2). 나머지 6하니스 확장은 provenance manifest 통합 증분(2회차 피드백 Day 2)에서.
 3. ~~CA-12 self-test 미호출~~ → **보강 ② 완료**(서브커맨드형 교정 포함).
 4. **evidence 바인딩 0/8(CA-12 제외)**: 판정이 터미널에만 존재 — 빌드/기기/일시와 무결. → QAUTO-01 잔여(공통 recorder 패턴 `.build-check/history/` 연계 검토).
 5. ~~CA-04 공허 동일~~ → **보강 ③ 완료**(전행 재실행 잔여).

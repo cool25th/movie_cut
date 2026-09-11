@@ -78,9 +78,16 @@ set -e
 # test execution (a filtered-out suite prints nothing and exits 0).
 grep -q "CA21 VERDICT:" "$WORK/measure.log" || {
   echo "CA21 GATE FAIL — measurement verdict line absent (suite did not run — the 0-tests fake-green trap)" >&2
+  # QAUTO-01: retain even the absent-verdict evidence before discarding WORK.
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 NO_VERDICT "$WORK/measure.log" "${BASH_SOURCE[0]}" || true
   exit 1
 }
-grep -q "CA21 VERDICT: PASS" "$WORK/measure.log" && echo "CA21 SCENE-DETECTION MEASUREMENT PASS" || {
+if grep -q "CA21 VERDICT: PASS" "$WORK/measure.log"; then
+  # QAUTO-01: pin the verdict to app commit + harness sha before exit.
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  echo "CA21 SCENE-DETECTION MEASUREMENT PASS"
+else
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA21 SCENE-DETECTION MEASUREMENT FAIL" >&2
   exit "${rc:-1}"
-}
+fi

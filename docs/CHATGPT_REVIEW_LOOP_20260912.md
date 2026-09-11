@@ -68,6 +68,15 @@
 1. `scripts/collect_progress_for_ai_review.sh` 실행 → 다이제스트 확보.
 2. 다이제스트 기반 `REPORT_YYYYMMDD.md` 작성(한국어·증분 중심·측정 수치 포함).
 3. §2 순서로 ChatGPT 전송 — 보고서 + 질문: "이 진행상황에 대한 리스크·누락·개선점을 알려달라".
+   **전송 경로(2회차에서 검증·이 섹션이 스케줄 프롬프트의 낡은 Enter 서술에 우선)**: ① 보고서는
+   컴포저 `#prompt-textarea`에 locator fill(정상 동작). ② 전송은 Enter/locator click이 불안정하므로
+   **evaluate로 전송 버튼을 DOM 직접 클릭**:
+   `document.querySelector('button[aria-label="Send prompt"], #composer-submit-button').click()`
+   (2회차에서 이 경로만 성공). ③ 제출 확인은 URL의 /c/ 전환+`[data-message-author-role="user"]` 수.
+   ④ 응답이 선문에서 스톨하면 "계속" 요청을 같은 경로로 전송하고 **reload하면 서버에 보존된 완성본이
+   복구된다**(2회차 실측 — 5,231자 회수). ⑤ screenshot/좌표(CUA) 캡처는 게스트 오류로 불가할 수
+   있으므로 DOM 경로만 사용. 폴링은 js 호출당 3회×20~25초 이내로 짧게 — 장시간 폴링 호출이
+   600초 행으로 늘어지는 사례 2회 있었음.
 4. 응답 전문 `FEEDBACK_YYYYMMDD.md` 저장.
 5. 피드백 항목별 처분(§3 한도) → `ACTIONS_YYYYMMDD.md`.
 6. BACKLOG 항목을 루프 원장(CAPCUT_FEATURE_BACKLOG.md §0.5.1 등)에 등록 + LOOP_STATE 큐 갱신.
@@ -85,5 +94,9 @@
 - 2026-09-12: 계획 수립 + 수집 스크립트 추가 + **종단 검증 1회 성공**(§7 DoD 충족 — REPORT/FEEDBACK/ACTIONS_20260912 참조). 스케줄 등록: 매일 04:00.
 - 2026-09-12(후속): **§6-7 개선 실행 단계 추가(사용자 지시)** — 피드백 처분·원장 등록 후, '즉시/실행 가능' 검증 전용 항목(QAUTO 레인)을 같은 세션에서 1개 증분 실행까지 진행. 1회차에 이 흐름의 수동 선례 완료(QAUTO 등록 + QAUTO-01 1차 감사·보강·재측정, 7e0a768).
 - 연결 수단: OPENAI_API_KEY 미설정 → **browser-use(chatgpt.com) 경로로 검증 완료**(계정 로그인 세션 확인). API 키 발급 시 §2 1순위로 자동 전환.
-- 운영 노트(1회차에서 학습): ChatGPT 입력창 전송은 Send 버튼 클릭이 간헐 미동작 → **입력 후 Enter로 전송**이 안정적. 응답 폴링은 20초 간격, js 호출당 100초 이내로 분할. IAB 탭이 about:blank로 초기화될 수 있으므로 매 회차 URL 재확인 필수.
+- 운영 노트(2회차 확정): 전송은 **locator fill + evaluate DOM 클릭** 경로(§6-3 참조 — Enter/locator
+  click/스크린샷은 2회차에서 전부 불안정). 응답 스톨 → "계속"+reload 복구. 브라우저 폴링은 짧게
+  분할하고 그 사이에 로컬 작업(§6-7 증분)을 진행해 시간을 아낀다.
+- (구)운영 노트(1회차): ChatGPT 입력창 전송은 Send 버튼 클릭이 간헐 미동작 → Enter 전송 권고였으나
+  2회차에서 반전 — **§6-3의 DOM 클릭 경로가 표준**. 스케줄 프롬프트의 낡은 서술은 본 섹션이 우선한다.
 - 1회차 피드백 결과: BACKLOG 9건 → **원장 QAUTO-01~06 등록 완료**(ACTIONS_20260912 §후속 진행). QAUTO-01 잔여 축이 현재 큐 최상위. 사용자 보고 필요 2건(macOS/iOS 베타 train 분리 검토, 계정/Team ID 전제 distribution gate).

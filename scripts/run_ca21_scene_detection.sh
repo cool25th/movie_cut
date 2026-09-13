@@ -29,6 +29,32 @@ trap 'rm -rf "$WORK"' EXIT
 gen() { # gen <out> <lavfi-source> <seconds>
   ffmpeg -y -loglevel error -f lavfi -i "$2" -t "$3" -r 30 -pix_fmt yuv420p "$1"
 }
+
+# --- QAUTO-01 control preflight (2026-09-14, 3회차 피드백: known-invalid가
+# 핵심) — 손상 픽스처가 게이트를 거부시키는지 실측 전에 증명한다. 판정은
+# ① rc≠0 ② 스위트 실실행 표식(0-tests 가짜그린 함정은 아무것도 출력하지
+# 않는다) ③ PASS 판정 부재 — 셋 다여야 한다. 실패 시 실측 거부+기록.
+echo "Control preflight (known-invalid: corrupt fixture)…"
+printf 'this is not an mp4 file — QAUTO known-invalid control' > "$WORK/control.mp4"
+cat > "$WORK/control.json" <<EOF
+[{"file": "$WORK/control.mp4", "class": "invalid_control", "expected_cuts": []}]
+EOF
+set +e
+CA21_MANIFEST="$WORK/control.json" \
+  swift test --filter "SceneChangeDetectionMeasurementTests" 2>&1 | tee "$WORK/control.log"
+crc=${PIPESTATUS[0]}
+set -e
+if [ "$crc" -ne 0 ] \
+   && grep -q 'Suite "CA-21 scene-change measurement" started' "$WORK/control.log" \
+   && ! grep -q "CA21 VERDICT: PASS" "$WORK/control.log"; then
+  echo "CONTROL OK — gate refuses a corrupt fixture (no PASS verdict, suite executed)"
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+else
+  echo "CONTROL FAIL — corrupt fixture did not trip the gate; real measurement REFUSED" >&2
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_FAIL "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  exit 1
+fi
+
 echo "Generating fixtures (scratch)…"
 gen "$WORK/no_cut.mp4"  "color=c=0x808080:s=320x240:r=30" 10
 gen "$WORK/seg_a.mp4"   "color=c=0x101010:s=320x240:r=30" 2

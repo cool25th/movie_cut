@@ -30,6 +30,32 @@ GAP=0.4
 
 dur() { ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$1"; }
 
+# --- QAUTO-01 control preflight (2026-09-14, 3회차 피드백: known-invalid가
+# 핵심) — 실측을 믿기 전에 게이트가 measurement-invalid 입력에서 반드시
+# 발화하는지 증명한다. 프레임(25ms)보다 짧은 무음 파일은 0검출 — 어제 막은
+# 거짓-PASS 경로 그 자체. 컨트롤 실패 시 실측을 거부하고 그 거부를 기록.
+echo "Control preflight (known-invalid: sub-frame silent fixture)…"
+ffmpeg -y -loglevel error -f lavfi -i "anullsrc=r=44100:cl=mono" -t 0.005 "$WORK/silence.wav"
+[ -s "$WORK/silence.wav" ] || { echo "control fixture generation failed" >&2; exit 1; }
+cat > "$WORK/control.json" <<EOF
+[{"file": "$WORK/silence.wav", "class": "invalid_control", "segments": []}]
+EOF
+set +e
+CA18_MANIFEST="$WORK/control.json" \
+  swift test --filter "DiarizationMeasurementTests" 2>&1 | tee "$WORK/control.log"
+crc=${PIPESTATUS[0]}
+set -e
+if [ "$crc" -ne 0 ] \
+   && grep -q "degeneracy: 0 segments detected" "$WORK/control.log" \
+   && grep -q "CA18 VERDICT: FAIL" "$WORK/control.log"; then
+  echo "CONTROL OK — gate trips on measurement-invalid input (degeneracy forced FAIL observed)"
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+else
+  echo "CONTROL FAIL — gate did not trip as expected; real measurement REFUSED" >&2
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 CONTROL_FAIL "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  exit 1
+fi
+
 # synth
 build_synth() {
   local out="$1" noisy="$2"

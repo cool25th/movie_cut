@@ -55,6 +55,37 @@ else
   exit 1
 fi
 
+# --- QAUTO-01 positive smoke control (2026-09-14, 4회차): a negative-only
+# preflight would bless an always-rejecting broken gate. The hard fixture's
+# cuts are exact by construction (lavfi concat at 2/4/6/8), so a
+# single-fixture manifest MUST earn a PASS verdict — proving the gate can
+# issue one, on the same code path. Failure ⇒ refuse the real measurement.
+echo "Control preflight (positive smoke: exact-cut known-good fixture)…"
+gen "$WORK/pc_a.mp4" "color=c=0x101010:s=320x240:r=30" 2
+gen "$WORK/pc_b.mp4" "color=c=0xf0f0f0:s=320x240:r=30" 2
+gen "$WORK/pc_c.mp4" "color=c=0x303030:s=320x240:r=30" 2
+gen "$WORK/pc_d.mp4" "color=c=0xc0c0c0:s=320x240:r=30" 2
+gen "$WORK/pc_e.mp4" "color=c=0x600000:s=320x240:r=30" 2
+printf "file '%s/pc_a.mp4'\nfile '%s/pc_b.mp4'\nfile '%s/pc_c.mp4'\nfile '%s/pc_d.mp4'\nfile '%s/pc_e.mp4'\n" "$WORK" "$WORK" "$WORK" "$WORK" "$WORK" > "$WORK/pc.txt"
+ffmpeg -y -loglevel error -f concat -safe 0 -i "$WORK/pc.txt" -r 30 "$WORK/positive.mp4"
+[ -s "$WORK/positive.mp4" ] || { echo "positive control fixture generation failed" >&2; exit 1; }
+cat > "$WORK/positive.json" <<EOF
+[{"file": "$WORK/positive.mp4", "class": "positive_control", "expected_cuts": [2, 4, 6, 8]}]
+EOF
+set +e
+CA21_MANIFEST="$WORK/positive.json" \
+  swift test --filter "SceneChangeDetectionMeasurementTests" 2>&1 | tee "$WORK/positive.log"
+prc=${PIPESTATUS[0]}
+set -e
+if [ "$prc" -eq 0 ] && grep -q "CA21 VERDICT: PASS" "$WORK/positive.log"; then
+  echo "CONTROL POSITIVE OK — gate issues PASS on an exact-cut known-good fixture"
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_POSITIVE_OK "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
+else
+  echo "CONTROL POSITIVE FAIL — gate cannot issue PASS on known-good input; real measurement REFUSED" >&2
+  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_POSITIVE_FAIL "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
+  exit 1
+fi
+
 echo "Generating fixtures (scratch)…"
 gen "$WORK/no_cut.mp4"  "color=c=0x808080:s=320x240:r=30" 10
 gen "$WORK/seg_a.mp4"   "color=c=0x101010:s=320x240:r=30" 2

@@ -23,6 +23,9 @@ command -v ffprobe >/dev/null || { echo "ffprobe required" >&2; exit 1; }
 
 WORK="$(mktemp -d /tmp/moviecut-ca18.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
+# One run id for every record of this invocation — control legs and the real
+# measurement must be provably from the same run (stale-record reuse guard).
+RUN_ID="$(date +%s)-$$"
 
 VOICE_A="Yuna"
 VOICE_B="Daniel"
@@ -49,10 +52,14 @@ if [ "$crc" -ne 0 ] \
    && grep -q "degeneracy: 0 segments detected" "$WORK/control.log" \
    && grep -q "CA18 VERDICT: FAIL" "$WORK/control.log"; then
   echo "CONTROL OK — gate trips on measurement-invalid input (degeneracy forced FAIL observed)"
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="FAIL_DEGENERACY" \
+    REC_OBSERVED_STATE="SEMANTIC_FAIL_DEGENERACY" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
 else
   echo "CONTROL FAIL — gate did not trip as expected; real measurement REFUSED" >&2
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 CONTROL_FAIL "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="FAIL_DEGENERACY" \
+    REC_AUTHORIZED="false" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 ERROR_CONTROL_BREACH "$WORK/control.log" "${BASH_SOURCE[0]}" || true
   exit 1
 fi
 
@@ -116,10 +123,12 @@ grep -q "CA18 VERDICT:" "$WORK/measure.log" || {
 }
 if grep -q "CA18 VERDICT: PASS" "$WORK/measure.log"; then
   # QAUTO-01: pin the verdict to app commit + harness sha before exit.
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  REC_RUN_ID="$RUN_ID" REC_PHASE="measurement" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA18 DIARIZATION MEASUREMENT PASS"
 else
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  REC_RUN_ID="$RUN_ID" REC_PHASE="measurement" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca18 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA18 DIARIZATION MEASUREMENT FAIL (explicit failure recorded — no UI work without approval)" >&2
   exit "${rc:-1}"
 fi

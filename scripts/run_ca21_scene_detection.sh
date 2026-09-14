@@ -25,6 +25,9 @@ command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 
 WORK="$(mktemp -d /tmp/moviecut-ca21.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
+# One run id for every record of this invocation — control legs and the real
+# measurement must be provably from the same run (stale-record reuse guard).
+RUN_ID="$(date +%s)-$$"
 
 gen() { # gen <out> <lavfi-source> <seconds>
   ffmpeg -y -loglevel error -f lavfi -i "$2" -t "$3" -r 30 -pix_fmt yuv420p "$1"
@@ -48,10 +51,14 @@ if [ "$crc" -ne 0 ] \
    && grep -q 'Suite "CA-21 scene-change measurement" started' "$WORK/control.log" \
    && ! grep -q "CA21 VERDICT: PASS" "$WORK/control.log"; then
   echo "CONTROL OK — gate refuses a corrupt fixture (no PASS verdict, suite executed)"
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="ABORT_BEFORE_VERDICT" \
+    REC_OBSERVED_STATE="ABORT_BEFORE_VERDICT" REC_VERDICT_PRESENT="false" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_OK "$WORK/control.log" "${BASH_SOURCE[0]}" || true
 else
   echo "CONTROL FAIL — corrupt fixture did not trip the gate; real measurement REFUSED" >&2
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_FAIL "$WORK/control.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="ABORT_BEFORE_VERDICT" \
+    REC_AUTHORIZED="false" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 ERROR_CONTROL_BREACH "$WORK/control.log" "${BASH_SOURCE[0]}" || true
   exit 1
 fi
 
@@ -79,10 +86,14 @@ prc=${PIPESTATUS[0]}
 set -e
 if [ "$prc" -eq 0 ] && grep -q "CA21 VERDICT: PASS" "$WORK/positive.log"; then
   echo "CONTROL POSITIVE OK — gate issues PASS on an exact-cut known-good fixture"
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_POSITIVE_OK "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="PASS" \
+    REC_OBSERVED_STATE="SEMANTIC_PASS" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_POSITIVE_OK "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
 else
   echo "CONTROL POSITIVE FAIL — gate cannot issue PASS on known-good input; real measurement REFUSED" >&2
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 CONTROL_POSITIVE_FAIL "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
+  REC_RUN_ID="$RUN_ID" REC_PHASE="control_preflight" REC_EXPECTED="PASS" \
+    REC_AUTHORIZED="false" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 ERROR_CONTROL_BREACH "$WORK/positive.log" "${BASH_SOURCE[0]}" || true
   exit 1
 fi
 
@@ -141,10 +152,12 @@ grep -q "CA21 VERDICT:" "$WORK/measure.log" || {
 }
 if grep -q "CA21 VERDICT: PASS" "$WORK/measure.log"; then
   # QAUTO-01: pin the verdict to app commit + harness sha before exit.
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  REC_RUN_ID="$RUN_ID" REC_PHASE="measurement" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 PASS "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA21 SCENE-DETECTION MEASUREMENT PASS"
 else
-  bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
+  REC_RUN_ID="$RUN_ID" REC_PHASE="measurement" REC_AUTHORIZED="true" \
+    bash "$ROOT/scripts/record_measurement_verdict.sh" ca21 FAIL "$WORK/measure.log" "${BASH_SOURCE[0]}"
   echo "CA21 SCENE-DETECTION MEASUREMENT FAIL" >&2
   exit "${rc:-1}"
 fi

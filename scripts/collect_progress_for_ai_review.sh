@@ -50,3 +50,9 @@ echo
 
 echo "## Disk"
 df -h / | tail -1
+echo
+
+echo "## Disk guard (QAUTO-07 — raw bytes 3단계 판정, 매 회차 자동 기록)"
+# 종료코드(0 GO/WARN·2 BLOCK·3 STOP)가 set -e로 수집기를 끝내지 않도록 흡수.
+bash scripts/disk_guard.sh || true
+echo

@@ -22,10 +22,14 @@ command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 command -v ffprobe >/dev/null || { echo "ffprobe required" >&2; exit 1; }
 
 WORK="$(mktemp -d /tmp/moviecut-ca18.XXXXXX)"
-trap 'rm -rf "$WORK"' EXIT
 # One run id for every record of this invocation — control legs and the real
 # measurement must be provably from the same run (stale-record reuse guard).
 RUN_ID="$(date +%s)-$$"
+RUN_START="$(date +%Y-%m-%dT%H:%M:%S)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+# QAUTO-01 hardening: assemble the run's immutable provenance manifest
+# BEFORE the scratch fixtures are removed (dataset SHA capture).
+trap 'bash "$ROOT/scripts/build_run_manifest.sh" "$RUN_ID" ca18 "$WORK" "$RUN_START" "$SCRIPT_PATH" || true; rm -rf "$WORK"' EXIT
 
 VOICE_A="Yuna"
 VOICE_B="Daniel"

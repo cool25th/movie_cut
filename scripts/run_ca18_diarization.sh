@@ -29,7 +29,7 @@ RUN_START="$(date +%Y-%m-%dT%H:%M:%S)"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 # QAUTO-01 hardening: assemble the run's immutable provenance manifest
 # BEFORE the scratch fixtures are removed (dataset SHA capture).
-trap 'bash "$ROOT/scripts/build_run_manifest.sh" "$RUN_ID" ca18 "$WORK" "$RUN_START" "$SCRIPT_PATH" || true; rm -rf "$WORK"' EXIT
+trap 'rc=$?; bash "$ROOT/scripts/build_run_manifest.sh" "$RUN_ID" ca18 "$WORK" "$RUN_START" "$SCRIPT_PATH" "$rc" || true; rm -rf "$WORK"' EXIT
 
 VOICE_A="Yuna"
 VOICE_B="Daniel"

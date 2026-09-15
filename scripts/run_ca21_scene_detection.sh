@@ -31,7 +31,7 @@ RUN_START="$(date +%Y-%m-%dT%H:%M:%S)"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 # QAUTO-01 hardening: assemble the run's immutable provenance manifest
 # BEFORE the scratch fixtures are removed (dataset SHA capture).
-trap 'bash "$ROOT/scripts/build_run_manifest.sh" "$RUN_ID" ca21 "$WORK" "$RUN_START" "$SCRIPT_PATH" || true; rm -rf "$WORK"' EXIT
+trap 'rc=$?; bash "$ROOT/scripts/build_run_manifest.sh" "$RUN_ID" ca21 "$WORK" "$RUN_START" "$SCRIPT_PATH" "$rc" || true; rm -rf "$WORK"' EXIT
 
 gen() { # gen <out> <lavfi-source> <seconds>
   ffmpeg -y -loglevel error -f lavfi -i "$2" -t "$3" -r 30 -pix_fmt yuv420p "$1"

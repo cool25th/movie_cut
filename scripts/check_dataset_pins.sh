@@ -113,37 +113,58 @@ if [ "$MODE" = "update" ]; then
       echo "UPDATE REFUSED — $rel has worktree-only changes; stage or commit the fixture change first" >&2
       exit 1
     fi
-  elif git -C "$LOCK_ROOT" diff --cached --quiet -- "$rel"; then
-    echo "UPDATE REFUSED — no staged/committed change for $rel — nothing to update" >&2
-    exit 1
+    SOURCE_STATE="staged"
+  else
+    SOURCE_STATE="committed"
   fi
+  JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
   LOCK="$LOCK" REL="$rel" SHA="$(sha_of "$FILE")" SIZE="$(size_of "$FILE")" \
-  BLOB="$(blob_of "$rel")" REASON="$REASON" \
+  BLOB="$(blob_of "$rel")" REASON="$REASON" SOURCE_STATE="$SOURCE_STATE" \
+  JOURNAL="$JOURNAL" \
   UPDATED_AT="$(date +%Y-%m-%dT%H:%M:%S)" \
-  UPDATED_BY="$(git -C "$LOCK_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+  HEAD_COMMIT="$(git -C "$LOCK_ROOT" rev-parse HEAD 2>/dev/null | cut -c1-12 || echo unknown)" \
   python3 - <<'PY'
 import json, os
 lock = json.load(open(os.environ["LOCK"]))
-entry = lock["fixtures"][os.environ["REL"]]
-entry["sha256"] = os.environ["SHA"]
+entry = lock["fixtures"].get(os.environ["REL"])
+if entry is None:
+    print(f"UPDATE REFUSED — {os.environ['REL']} is not in the lock (BASELINE_MISSING)")
+    raise SystemExit(1)
+old_sha = entry["sha256"]
+new_sha = os.environ["SHA"]
+if old_sha == new_sha:
+    print(f"UPDATE REFUSED — pinned sha already matches the current bytes — nothing to update")
+    raise SystemExit(1)
+line = {"ts": os.environ["UPDATED_AT"], "kind": "dataset_pin_update",
+        "fixture_id": entry.get("fixture_id"), "path": os.environ["REL"],
+        "old_sha256": old_sha, "new_sha256": new_sha,
+        "old_git_blob_sha": entry.get("git_blob_sha"),
+        "new_git_blob_sha": os.environ["BLOB"],
+        "source_state": os.environ["SOURCE_STATE"],
+        "reason": os.environ["REASON"], "base_head_commit": os.environ["HEAD_COMMIT"]}
+with open(os.environ["JOURNAL"], "a") as f:
+    f.write(json.dumps(line, ensure_ascii=False) + "\n")
+entry["sha256"] = new_sha
 entry["size"] = int(os.environ["SIZE"])
 entry["git_blob_sha"] = os.environ["BLOB"]
 entry.setdefault("update_history", []).append({
-    "ts": os.environ["UPDATED_AT"], "commit": os.environ["UPDATED_BY"],
-    "reason": os.environ["REASON"]})
+    "ts": os.environ["UPDATED_AT"], "commit": os.environ["HEAD_COMMIT"][:12],
+    "sha256": new_sha, "reason": os.environ["REASON"]})
 lock["updated_at"] = os.environ["UPDATED_AT"]
-lock["updated_by_commit"] = os.environ["UPDATED_BY"]
+lock["updated_by_commit"] = os.environ["HEAD_COMMIT"][:12]
 with open(os.environ["LOCK"], "w") as f:
     json.dump(lock, f, indent=2, ensure_ascii=False)
     f.write("\n")
-print(f"dataset pin updated: {os.environ['REL']} (reason recorded in lock update_history)")
+print(f"dataset pin updated: {os.environ['REL']} (journal line appended)")
 PY
-  echo "NOTE: commit the lock together with the fixture change (same review unit)." >&2
+  echo "NOTE: commit the lock, journal, and fixture change together (same review unit)." >&2
   exit 0
 fi
 
 # --- verify ---
 [ -e "$LOCK" ] || { echo "BASELINE_MISSING — lock absent: $LOCK" >&2; exit 1; }
+JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
+
 overall=0
 for f in "$@"; do
   [ -f "$f" ] || { echo "HASH_ERROR $f (not a regular file)"; overall=1; continue; }
@@ -165,5 +186,43 @@ PY
     echo "MISMATCH $rel expected=$expected observed=$sha"; overall=1
   fi
 done
+
+# Journal cross-check (13th-cycle): every lock update_history entry must have
+# a matching append-only journal line. A lock that moved without its journal
+# ("baseline이 몰래 움직임") is a fail-closed condition.
+JOURNAL="$JOURNAL" LOCK="$LOCK" python3 - <<'PY'
+import glob, json, os
+lock = json.load(open(os.environ["LOCK"]))
+hist = []
+for rel, entry in lock.get("fixtures", {}).items():
+    for h in entry.get("update_history", []):
+        hist.append((rel, h.get("sha256")))
+if not hist:
+    raise SystemExit(0)
+journal = []
+jpath = os.environ["JOURNAL"]
+if os.path.exists(jpath):
+    for line in open(jpath):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            journal.append(json.loads(line))
+        except Exception:
+            journal.append({})
+missing = []
+for rel, sha in hist:
+    hit = any(j.get("path") == rel and j.get("new_sha256") == sha for j in journal)
+    if not hit:
+        missing.append(f"{rel}@{str(sha)[:12]}")
+if missing:
+    print("MISSING_UPDATE_JOURNAL — lock moved without journal entries for: "
+          + ", ".join(missing))
+    raise SystemExit(1)
+print(f"update journal consistent ({len(hist)} entries)")
+raise SystemExit(0)
+PY
+[ $? -ne 0 ] && overall=1
+
 [ "$overall" -eq 0 ] && echo "dataset pins: ALL MATCH" || echo "dataset pins: FAILED (fail-closed)"
 exit "$overall"

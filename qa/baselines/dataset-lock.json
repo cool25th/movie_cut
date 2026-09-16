@@ -1,15 +1,58 @@
 {
-  "schema_version": 1,
+  "schema_version": "1.1",
   "kind": "dataset-lock",
-  "updated_at": "2026-09-16T21:04:23",
-  "updated_by_commit": "cdfe938",
-  "worktree_dirty_at_init": true,
+  "updated_at": "2026-09-16T21:14:07",
+  "updated_by_commit": "1968261",
   "fixtures": {
-    "Tests/Fixtures/ca04_vfr_320x240_5s.mp4": {"sha256": "bede888f6f2ebb371f988cdbd6e27a8983bd4e10d9ff9f95a00afa0d1fac1af3", "size": 11504},
-    "Tests/Fixtures/ca04_tenbit_320x240_2s.mov": {"sha256": "e428dcba154196d1d4d016b88773d4a0897b87fc19491be6b799f5939bc97e71", "size": 1671007},
-    "Tests/Fixtures/ca04_bt2020pq_320x240_2s.mp4": {"sha256": "08f9a9100dd87e9188edc1332b4cb592f2dfdd5be69ec696a9459e23cd87bac0", "size": 107847},
-    "Tests/Fixtures/ca04_rotated_asym_320x240_2s_90deg.mp4": {"sha256": "e89fedbaa4ccd76efb6be7b359591e04f34c99a8c914add0849ddd43c173b344", "size": 3654},
-    "Tests/Fixtures/rec709_1080p_1s_24fps.mp4": {"sha256": "f05069701192377021ebec1feec4a0435f2d6946f2ceba1c7db9b3330f363d93", "size": 7964},
-    "Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4": {"sha256": "1aab9104827ceb8d05ab474c07f982dee4f99dea1e8da5fb5c62e2cd25d36d71", "size": 29068}
+    "Tests/Fixtures/ca04_vfr_320x240_5s.mp4": {
+      "fixture_id": "ca04_vfr",
+      "oracle_role": "frame_count",
+      "sha256": "bede888f6f2ebb371f988cdbd6e27a8983bd4e10d9ff9f95a00afa0d1fac1af3",
+      "size": 11504,
+      "git_blob_sha": "a3ad8f04a29e391b7d660de636868f6b2e08bc5d",
+      "path": "Tests/Fixtures/ca04_vfr_320x240_5s.mp4"
+    },
+    "Tests/Fixtures/ca04_tenbit_320x240_2s.mov": {
+      "fixture_id": "ca04_tenbit",
+      "oracle_role": "bitdepth_luma_preservation",
+      "sha256": "e428dcba154196d1d4d016b88773d4a0897b87fc19491be6b799f5939bc97e71",
+      "size": 1671007,
+      "git_blob_sha": "53232b08153cfad864815d5f05e5f6d6db943e72",
+      "path": "Tests/Fixtures/ca04_tenbit_320x240_2s.mov"
+    },
+    "Tests/Fixtures/ca04_bt2020pq_320x240_2s.mp4": {
+      "fixture_id": "ca04_bt2020pq",
+      "oracle_role": "color_tag_preservation",
+      "sha256": "08f9a9100dd87e9188edc1332b4cb592f2dfdd5be69ec696a9459e23cd87bac0",
+      "size": 107847,
+      "git_blob_sha": "7e0f172095b7147434ccf282250d57ecd66c9eb0",
+      "path": "Tests/Fixtures/ca04_bt2020pq_320x240_2s.mp4"
+    },
+    "Tests/Fixtures/ca04_rotated_asym_320x240_2s_90deg.mp4": {
+      "fixture_id": "ca04_rotated_asym",
+      "oracle_role": "known_answer_region",
+      "sha256": "e89fedbaa4ccd76efb6be7b359591e04f34c99a8c914add0849ddd43c173b344",
+      "size": 3654,
+      "git_blob_sha": "041485f32c078c349951be8d1ff493c1d54d6f49",
+      "path": "Tests/Fixtures/ca04_rotated_asym_320x240_2s_90deg.mp4"
+    },
+    "Tests/Fixtures/rec709_1080p_1s_24fps.mp4": {
+      "fixture_id": "rec709_1080p",
+      "oracle_role": "mixed_media_sync",
+      "sha256": "f05069701192377021ebec1feec4a0435f2d6946f2ceba1c7db9b3330f363d93",
+      "size": 7964,
+      "git_blob_sha": "1b8b0e006bbe5f59fedf2344a1a06ddadb035566",
+      "path": "Tests/Fixtures/rec709_1080p_1s_24fps.mp4",
+      "oracle_group_id": "ca04_mixed_media"
+    },
+    "Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4": {
+      "fixture_id": "solid_red_tone",
+      "oracle_role": "mixed_media_sync",
+      "sha256": "1aab9104827ceb8d05ab474c07f982dee4f99dea1e8da5fb5c62e2cd25d36d71",
+      "size": 29068,
+      "git_blob_sha": "5d3b6dbd08bcda00b218fb4119f420581827505d",
+      "path": "Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4",
+      "oracle_group_id": "ca04_mixed_media"
+    }
   }
 }

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "kind": "dataset-lock",
+  "updated_at": "2026-09-16T21:04:23",
+  "updated_by_commit": "cdfe938",
+  "worktree_dirty_at_init": true,
+  "fixtures": {
+    "Tests/Fixtures/ca04_vfr_320x240_5s.mp4": {"sha256": "bede888f6f2ebb371f988cdbd6e27a8983bd4e10d9ff9f95a00afa0d1fac1af3", "size": 11504},
+    "Tests/Fixtures/ca04_tenbit_320x240_2s.mov": {"sha256": "e428dcba154196d1d4d016b88773d4a0897b87fc19491be6b799f5939bc97e71", "size": 1671007},
+    "Tests/Fixtures/ca04_bt2020pq_320x240_2s.mp4": {"sha256": "08f9a9100dd87e9188edc1332b4cb592f2dfdd5be69ec696a9459e23cd87bac0", "size": 107847},
+    "Tests/Fixtures/ca04_rotated_asym_320x240_2s_90deg.mp4": {"sha256": "e89fedbaa4ccd76efb6be7b359591e04f34c99a8c914add0849ddd43c173b344", "size": 3654},
+    "Tests/Fixtures/rec709_1080p_1s_24fps.mp4": {"sha256": "f05069701192377021ebec1feec4a0435f2d6946f2ceba1c7db9b3330f363d93", "size": 7964},
+    "Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4": {"sha256": "1aab9104827ceb8d05ab474c07f982dee4f99dea1e8da5fb5c62e2cd25d36d71", "size": 29068}
+  }
+}

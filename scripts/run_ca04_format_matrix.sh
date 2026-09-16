@@ -20,6 +20,18 @@ for f in ca04_vfr_320x240_5s.mp4 ca04_tenbit_320x240_2s.mov \
   [ -s "$FIXDIR/$f" ] || { echo "missing fixture $f; run scripts/make_fixtures.sh" >&2; exit 1; }
 done
 
+# QAUTO-01 dataset pin preflight (11th-cycle): these fixtures are COMMITTED
+# oracle inputs (rotation known-answer regions, frame-count oracle, CFR/VFR
+# golden). If their bytes drift from the committed baseline the measurement
+# is refused — a pin mismatch must never be silently re-baselined here.
+bash "$ROOT/scripts/check_dataset_pins.sh" "$ROOT/qa/baselines/dataset-lock.json" \
+  "$FIXDIR/ca04_vfr_320x240_5s.mp4" "$FIXDIR/ca04_tenbit_320x240_2s.mov" \
+  "$FIXDIR/ca04_bt2020pq_320x240_2s.mp4" "$FIXDIR/ca04_rotated_asym_320x240_2s_90deg.mp4" \
+  "$FIXDIR/rec709_1080p_1s_24fps.mp4" "$FIXDIR/solid_red_tone_320x240_2s_30fps.mp4" || {
+  echo "ERROR_DATASET_PIN_MISMATCH — dataset pins failed; measurement REFUSED" >&2
+  exit 1
+}
+
 echo "Building MovieCutMac (Debug, sandbox OFF)…"
 xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac -configuration Debug \
   -destination 'platform=macOS' ENABLE_APP_SANDBOX=NO CODE_SIGNING_ALLOWED=NO build >/dev/null

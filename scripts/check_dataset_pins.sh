@@ -124,21 +124,43 @@ if [ "$MODE" = "update" ]; then
   UPDATED_AT="$(date +%Y-%m-%dT%H:%M:%S)" \
   HEAD_COMMIT="$(git -C "$LOCK_ROOT" rev-parse HEAD 2>/dev/null | cut -c1-12 || echo unknown)" \
   python3 - <<'PY'
-import json, os
+import datetime, hashlib, json, os
 lock = json.load(open(os.environ["LOCK"]))
 entry = lock["fixtures"].get(os.environ["REL"])
 if entry is None:
     print(f"UPDATE REFUSED — {os.environ['REL']} is not in the lock (BASELINE_MISSING)")
     raise SystemExit(1)
 old_sha = entry["sha256"]
+old_blob = entry.get("git_blob_sha", "")
 new_sha = os.environ["SHA"]
 if old_sha == new_sha:
-    print(f"UPDATE REFUSED — pinned sha already matches the current bytes — nothing to update")
+    print("UPDATE REFUSED — pinned sha already matches the current bytes — nothing to update")
     raise SystemExit(1)
+# 14th-cycle (feedback-revised): update_id and payload_digest are SEPARATE
+# roles. update_id = occurrence identifier (sha256 of "dataset-pin-update-v2"
+# + fixture_id + update_seq) — content hashes cannot identify occurrences
+# (A→B→A→B with equal reasons reproduces the same id). payload_digest =
+# sha256 of the canonical provenance payload — identifies what changed.
+# Raw reason is stored as-is; JSON escaping handles embedded newlines.
+fid = entry.get("fixture_id", "")
+update_seq = len(entry.get("update_history", [])) + 1
+update_id = hashlib.sha256(("dataset-pin-update-v2\n" + fid + "\n"
+                            + str(update_seq)).encode("utf-8")).hexdigest()
+payload = {"fixture_id": fid, "path": os.environ["REL"],
+           "old_sha256": old_sha, "new_sha256": new_sha,
+           "old_git_blob_sha": old_blob, "new_git_blob_sha": os.environ["BLOB"],
+           "base_head_commit": os.environ["HEAD_COMMIT"],
+           "source_state": os.environ["SOURCE_STATE"],
+           "reason": os.environ["REASON"]}
+payload_digest = hashlib.sha256(json.dumps(
+    payload, sort_keys=True, ensure_ascii=False,
+    separators=(",", ":")).encode("utf-8")).hexdigest()
 line = {"ts": os.environ["UPDATED_AT"], "kind": "dataset_pin_update",
-        "fixture_id": entry.get("fixture_id"), "path": os.environ["REL"],
+        "update_id": update_id, "update_seq": update_seq,
+        "payload_digest": payload_digest,
+        "fixture_id": fid, "path": os.environ["REL"],
         "old_sha256": old_sha, "new_sha256": new_sha,
-        "old_git_blob_sha": entry.get("git_blob_sha"),
+        "old_git_blob_sha": old_blob,
         "new_git_blob_sha": os.environ["BLOB"],
         "source_state": os.environ["SOURCE_STATE"],
         "reason": os.environ["REASON"], "base_head_commit": os.environ["HEAD_COMMIT"]}
@@ -149,13 +171,15 @@ entry["size"] = int(os.environ["SIZE"])
 entry["git_blob_sha"] = os.environ["BLOB"]
 entry.setdefault("update_history", []).append({
     "ts": os.environ["UPDATED_AT"], "commit": os.environ["HEAD_COMMIT"][:12],
-    "sha256": new_sha, "reason": os.environ["REASON"]})
+    "sha256": new_sha, "reason": os.environ["REASON"],
+    "update_id": update_id, "update_seq": update_seq,
+    "payload_digest": payload_digest})
 lock["updated_at"] = os.environ["UPDATED_AT"]
 lock["updated_by_commit"] = os.environ["HEAD_COMMIT"][:12]
 with open(os.environ["LOCK"], "w") as f:
     json.dump(lock, f, indent=2, ensure_ascii=False)
     f.write("\n")
-print(f"dataset pin updated: {os.environ['REL']} (journal line appended)")
+print(f"dataset pin updated: {os.environ['REL']} (update_id {update_id[:12]}…, journal line appended)")
 PY
   echo "NOTE: commit the lock, journal, and fixture change together (same review unit)." >&2
   exit 0
@@ -191,12 +215,12 @@ done
 # a matching append-only journal line. A lock that moved without its journal
 # ("baseline이 몰래 움직임") is a fail-closed condition.
 JOURNAL="$JOURNAL" LOCK="$LOCK" python3 - <<'PY'
-import glob, json, os
+import json, os
 lock = json.load(open(os.environ["LOCK"]))
 hist = []
 for rel, entry in lock.get("fixtures", {}).items():
     for h in entry.get("update_history", []):
-        hist.append((rel, h.get("sha256")))
+        hist.append((rel, h))
 if not hist:
     raise SystemExit(0)
 journal = []
@@ -210,19 +234,45 @@ if os.path.exists(jpath):
             journal.append(json.loads(line))
         except Exception:
             journal.append({})
-missing = []
-for rel, sha in hist:
-    hit = any(j.get("path") == rel and j.get("new_sha256") == sha for j in journal)
-    if not hit:
-        missing.append(f"{rel}@{str(sha)[:12]}")
-if missing:
-    print("MISSING_UPDATE_JOURNAL — lock moved without journal entries for: "
-          + ", ".join(missing))
+
+problems = []
+# Forward: history → journal (every recorded update must appear exactly once).
+for rel, h in hist:
+    uid = h.get("update_id")
+    if not uid:
+        # Legacy pre-update_id entries are treated as missing — strict by
+        # design (no real legacy entries exist; created after this change).
+        problems.append(f"MISSING_UPDATE_JOURNAL {rel} (no update_id)")
+        continue
+    hits = [j for j in journal if j.get("update_id") == uid]
+    if len(hits) == 0:
+        problems.append(f"MISSING_UPDATE_JOURNAL {rel}@{uid[:12]}")
+    elif len(hits) > 1:
+        problems.append(f"DUPLICATE_UPDATE_JOURNAL {rel}@{uid[:12]} x{len(hits)}")
+    else:
+        j = hits[0]
+        if j.get("payload_digest") != h.get("payload_digest"):
+            problems.append(f"UPDATE_JOURNAL_MISMATCH {rel}@{uid[:12]}")
+# Reverse: journal → history (every journal line must correspond to exactly
+# one recorded update — otherwise the entry is an orphan).
+for j in journal:
+    uid = j.get("update_id")
+    if not uid:
+        problems.append("ORPHAN_UPDATE_JOURNAL (line without update_id)")
+        continue
+    hits = [h for _rel, h in hist if h.get("update_id") == uid]
+    if len(hits) == 0:
+        problems.append(f"ORPHAN_UPDATE_JOURNAL {j.get('fixture_id', '?')}@{uid[:12]}")
+    elif len(hits) > 1:
+        problems.append(f"DUPLICATE_UPDATE_HISTORY {j.get('fixture_id', '?')}@{uid[:12]} x{len(hits)}")
+if problems:
+    print("UPDATE_JOURNAL_FAIL: " + "; ".join(problems))
     raise SystemExit(1)
-print(f"update journal consistent ({len(hist)} entries)")
+print(f"update journal consistent ({len(hist)} updates, 1:1 cardinality verified)")
 raise SystemExit(0)
 PY
-[ $? -ne 0 ] && overall=1
+rc=$?
+if [ "$rc" -ne 0 ]; then overall=1; fi
 
 [ "$overall" -eq 0 ] && echo "dataset pins: ALL MATCH" || echo "dataset pins: FAILED (fail-closed)"
 exit "$overall"

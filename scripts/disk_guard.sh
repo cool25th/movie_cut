@@ -88,8 +88,18 @@ recurrent = len(window_starts) >= 2
 prev_guard = records[-1][1] if records else ""
 prev_ts = records[-1][0] if records else None
 
+# STOP state (14th-cycle contract): guard-only. While in STOP, stay STOP
+# until >=12 GiB is observed TWICE consecutively, then return to BLOCK (never
+# straight to WARN). "BLOCK-safe increments" are FORBIDDEN in STOP — only the
+# guard observation, a small guard-state update, and the cycle report run.
+# Any STOP observation in the recent history keeps us in the STOP
+# release contract (last record governs; consecutive >=12GiB reads
+# still required below — see the 12-GiB release check).
+prev_stopped = prev_guard == "STOP" or any(g == "STOP" for _t, g, _b in records[-3:])
 if avail < 10 * GIB:
     tier = "STOP"
+elif prev_stopped and avail < 12 * GIB:
+    tier = "STOP"          # STOP release needs two consecutive >=12GiB reads
 elif avail < 15 * GIB:
     tier = "BLOCK"
 elif prev_guard == "BLOCK":

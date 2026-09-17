@@ -187,4 +187,13 @@ print(f"disk guard: {rec['guard']} ({rec['available_gib']} GiB free"
       f"episodes24h {rec['episodes_24h']}"
       f"{', RECURRENT' if rec['recurrent_block'] else ''}) — {os.environ['OUT_PATH']}")
 PY
+
+# QAUTO-DISK-ATTRIBUTION (17th-cycle): on a large delta, capture a bounded
+# read-only attribution snapshot. Best-effort — never changes the guard rc.
+if [ -n "${DELTA_BYTES:-}" ]; then
+  ABS_DELTA="${DELTA_BYTES#-}"
+  if [ "$ABS_DELTA" -ge $((2 * 1024 * 1024 * 1024)) ]; then
+    bash "$ROOT/scripts/disk_attribution.sh" || true
+  fi
+fi
 exit "$RC"

@@ -103,11 +103,15 @@ elif prev_stopped and avail < 12 * GIB:
 elif avail < 15 * GIB:
     tier = "BLOCK"
 elif prev_guard == "BLOCK":
-    # Release contract (8th/9th-cycle): TWO consecutive >=20GiB observations
-    # AND the gap between them within the preregistered observation limit.
+    # Release contract (8th/9th/18th-cycle): TWO consecutive >=20GiB
+    # observations, gap within the preregistered observation limit, AND a
+    # MINIMUM interval of 1h — two guard invocations seconds apart are one
+    # physical moment, not temporal stability (17th-cycle 10s-gap lesson).
     if avail < 20 * GIB or prev_int is None or prev_int < 20 * GIB:
         tier = "BLOCK"
     elif prev_ts is None or (now - prev_ts) > timedelta(hours=MAX_OBS_GAP_HOURS):
+        tier = "BLOCK"
+    elif (now - prev_ts) < timedelta(hours=1):
         tier = "BLOCK"
     else:
         tier = "WARN" if avail < 25 * GIB else "GO"
@@ -123,6 +127,8 @@ if recurrent:
 if tier == "BLOCK" and prev_guard == "BLOCK" and avail >= 20 * GIB:
     if prev_ts is not None and (now - prev_ts) > timedelta(hours=MAX_OBS_GAP_HOURS):
         reasons.append("RECOVERY_CONFIRMATION_EXPIRED")
+    elif prev_ts is not None and (now - prev_ts) < timedelta(hours=1):
+        reasons.append("AWAITING_MIN_OBSERVATION_INTERVAL_1H")
     else:
         reasons.append("AWAITING_SECOND_CONSECUTIVE_20GIB_OBSERVATION")
 
@@ -188,12 +194,8 @@ print(f"disk guard: {rec['guard']} ({rec['available_gib']} GiB free"
       f"{', RECURRENT' if rec['recurrent_block'] else ''}) — {os.environ['OUT_PATH']}")
 PY
 
-# QAUTO-DISK-ATTRIBUTION (17th-cycle): on a large delta, capture a bounded
-# read-only attribution snapshot. Best-effort — never changes the guard rc.
-if [ -n "${DELTA_BYTES:-}" ]; then
-  ABS_DELTA="${DELTA_BYTES#-}"
-  if [ "$ABS_DELTA" -ge $((2 * 1024 * 1024 * 1024)) ]; then
-    bash "$ROOT/scripts/disk_attribution.sh" || true
-  fi
-fi
+# QAUTO-DISK-ATTRIBUTION (18th-cycle): invoked on EVERY guard run — the
+# script itself decides baseline vs event by |Δ|. Best-effort, never changes
+# the guard rc.
+bash "$ROOT/scripts/disk_attribution.sh" "$HISTORY" || true
 exit "$RC"

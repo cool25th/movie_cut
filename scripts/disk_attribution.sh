@@ -37,7 +37,10 @@ du_kb() { # bounded du, rc-rescued (partial du failure must not kill us —
 }
 
 # Last two guard records → current available + delta.
-read -r CUR_TS CUR_BYTES PREV_BYTES <<EOF
+# Code-review P4-2: pipe-delimited so the parse makes NO assumption about
+# ts containing no spaces (whitespace-delimited read would silently
+# mis-split on any spaced timestamp).
+IFS='|' read -r CUR_TS CUR_BYTES PREV_BYTES <<EOF
 $(python3 - "$HISTORY" <<'PY'
 import glob, json, sys
 files = sorted(glob.glob(sys.argv[1] + "/disk-*.json"))
@@ -49,9 +52,9 @@ for f in files[-2:]:
     except Exception:
         pass
 if len(recs) < 2:
-    print("", "0", "0")
+    print("|0|0")
 else:
-    print(recs[-1][0], recs[-1][1], recs[-2][1])
+    print(f"{recs[-1][0]}|{recs[-1][1]}|{recs[-2][1]}")
 PY
 )
 EOF

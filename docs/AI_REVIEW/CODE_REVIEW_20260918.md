@@ -27,4 +27,6 @@
 - **P3 1·2 수리 완료**: ①`ever_gated`(BLOCK/STOP 이력 전무 시 attention 불필요) ②STOP 해제 ≥12GiB **2회 연속 강제**(BLOCK 해제 경로와 동일 방식 — 주석·코드 일치).
 - **검증(합성 5케이스+실가드)**: A 깨끗한 이력 → attention false(기록 3건 실재 확인) / B 단일 12GiB → STOP 유지 / C 12.5→12.8 2회 연속 → BLOCK 복귀 / D 2회차 미달 → STOP 유지(리셋) / E BLOCK 이력 → attention true 회귀 없음 / 실가드 GO 27.88GiB·attribution 실제 LARGE_RECOVERY(Δ+10.82) 캡조+post-event baseline.
 - **수리 중 신규 함정 발견·기록**: macOS bash 3.2에서 `$()` 내부 heredoc 주석의 아포스트로피가 파서를 깨뜨림(최소 재현 확인) — 주석 문구로 회피.
-- P3 3번+P4 2건: 다음 hardening 회차 패키지로 유지.
+- **P3 3 + P4 2 수리 완료(같은 날 후속)**: ③verify의 sha256 부재 항목 → 명시 `HASH_ERROR`(무음 종료 제거) · P4-1 spec 2부 분에서 role=fid 중복 → `unassigned` · P4-2 attribution read를 `|` 구분자로(공백 무가정).
+- 검증: 변형 lock(git 저장소 합성) → HASH_ERROR+exit 1·spec 3형태(3부/2부/무식별) 정상·실 lock 6종 MATCH 회귀·attribution 실실행 정상.
+- 테스트 함정 1건 추가 기록: 합성 lock 검증 시 `git init` 누락하면 LOCK_ROOT가 스크립트 루트로 폴백해 rel 접두 매칭 실패(오판 방지 — 합성 저장소는 git init 필수).

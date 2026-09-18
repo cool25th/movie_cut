@@ -83,7 +83,16 @@ if [ "$MODE" = "init" ]; then
     for spec in "$@"; do
       file="${spec%%:*}"
       rest="${spec#*:}"
-      if [ "$rest" = "$spec" ]; then fid="$rest"; role="unassigned"; else fid="${rest%%:*}"; role="${rest#*:}"; fi
+      if [ "$rest" = "$spec" ]; then
+        # bare path — no colon at all
+        fid="$rest"; role="unassigned"
+      else
+        fid="${rest%%:*}"
+        role="${rest#*:}"
+        # Code-review P4-1: a 2-part spec (file:fixture_id) has no role
+        # segment — "${rest#*:}" echoes the whole rest, duplicating fid.
+        [ "$role" = "$rest" ] && role="unassigned"
+      fi
       [ -f "$file" ] || { echo "cannot hash (not a regular file): $file" >&2; exit 1; }
       rel="$(rel_of "$file")"
       git -C "$LOCK_ROOT" ls-files --error-unmatch "$rel" >/dev/null 2>&1 \
@@ -203,7 +212,16 @@ PY
   if [ "$entry" = "null" ] || [ -z "$entry" ]; then
     echo "BASELINE_MISSING $rel — add via the init/update review flow"; overall=1; continue
   fi
-  expected="$(printf '%s' "$entry" | python3 -c "import json,sys; print(json.load(sys.stdin)['sha256'])")"
+  # Code-review P3-3: a malformed entry (missing sha256) must produce an
+  # explicit verdict — never a KeyError that set -e turns into a silent death
+  # halfway through the loop.
+  expected="$(printf '%s' "$entry" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('sha256', '') if isinstance(d, dict) else '')" || echo '')"
+  if [ -z "$expected" ]; then
+    echo "HASH_ERROR $rel — lock entry has no sha256 (malformed)"; overall=1; continue
+  fi
   if [ "$sha" = "$expected" ]; then
     echo "MATCH $rel"
   else

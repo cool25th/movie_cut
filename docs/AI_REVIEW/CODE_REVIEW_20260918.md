@@ -22,6 +22,9 @@
 - `check_dataset_pins.sh:86` — 2부 분 spec(`file:fixture_id`)에서 `oracle_role`이 fixture_id와 동일값 중복 기록(콜론 분해 엣지)
 - `disk_attribution.sh:40` — `read -r CUR_TS`가 ts 무공백 가정(ISO 형식이라 현재 항상 참·암묵 가정)
 
-## 처분 계획
+## 처분 결과 (2026-09-18 수리 완료)
 
-P3 1·2번: 즉시 수리(본 회차 — 사용자 지시). P3 3번+P4: 다음 hardening 회차에 패키지. 수리 검증: 합성 케이스 매트릭스 + 실가드 1회(회귀 없음 확인).
+- **P3 1·2 수리 완료**: ①`ever_gated`(BLOCK/STOP 이력 전무 시 attention 불필요) ②STOP 해제 ≥12GiB **2회 연속 강제**(BLOCK 해제 경로와 동일 방식 — 주석·코드 일치).
+- **검증(합성 5케이스+실가드)**: A 깨끗한 이력 → attention false(기록 3건 실재 확인) / B 단일 12GiB → STOP 유지 / C 12.5→12.8 2회 연속 → BLOCK 복귀 / D 2회차 미달 → STOP 유지(리셋) / E BLOCK 이력 → attention true 회귀 없음 / 실가드 GO 27.88GiB·attribution 실제 LARGE_RECOVERY(Δ+10.82) 캡조+post-event baseline.
+- **수리 중 신규 함정 발견·기록**: macOS bash 3.2에서 `$()` 내부 heredoc 주석의 아포스트로피가 파서를 깨뜨림(최소 재현 확인) — 주석 문구로 회피.
+- P3 3번+P4 2건: 다음 hardening 회차 패키지로 유지.

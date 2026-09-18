@@ -98,8 +98,10 @@ prev_ts = records[-1][0] if records else None
 prev_stopped = prev_guard == "STOP" or any(g == "STOP" for _t, g, _b in records[-3:])
 if avail < 10 * GIB:
     tier = "STOP"
-elif prev_stopped and avail < 12 * GIB:
-    tier = "STOP"          # STOP release needs two consecutive >=12GiB reads
+elif prev_stopped and (avail < 12 * GIB or prev_int is None or prev_int < 12 * GIB):
+    tier = "STOP"          # STOP release needs TWO consecutive >=12GiB reads
+    # (code-review P3-2: the single-read release matched the documented
+    #  contract only in spirit — now enforced like the BLOCK release path)
 elif avail < 15 * GIB:
     tier = "BLOCK"
 elif prev_guard == "BLOCK":
@@ -134,15 +136,19 @@ if tier == "BLOCK" and prev_guard == "BLOCK" and avail >= 20 * GIB:
 
 # operator_attention clears only after a clean release plus 24h with no
 # new BLOCK (9th-cycle feedback — not on "24h without a record").
+# Code-review P3-1 (2026-09-18): a history with NO BLOCK/STOP record ever
+# requires no operator attention — released_at=None must not force the flag
+# on forever for fresh deployments.
 released_at = None
 for i in range(1, len(records)):
     if records[i - 1][1] == "BLOCK" and records[i][1] != "BLOCK":
         released_at = records[i][0]
+ever_gated = any(g in ("BLOCK", "STOP") for _t, g, _b in records)
 since_release_ok = (released_at is not None
                     and (now - released_at) >= timedelta(hours=FRESH_HOURS)
                     and all(g != "BLOCK" for _t, g, _b in records
                             if released_at is not None and _t >= released_at))
-operator_attention = recurrent or not since_release_ok
+operator_attention = recurrent or (ever_gated and not since_release_ok)
 
 print(json.dumps({"tier": tier, "episodes_24h": len(window_starts),
                   "recurrent_block": recurrent,

@@ -220,12 +220,13 @@ if [ "$MODE" = "repair" ]; then
   rel="$(rel_of "$FILE")"
   JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
   LOCK="$LOCK" REL="$rel" JOURNAL="$JOURNAL" REASON="$REASON" \
-  LOCK_ROOT="$LOCK_ROOT" \
+  LOCK_ROOT="$LOCK_ROOT" LOCK_REL="$(rel_of "$LOCK")" \
   python3 - <<'PY'
 import datetime, hashlib, json, os, subprocess
 
 lock = json.load(open(os.environ["LOCK"]))
 rel = os.environ["REL"]
+lock_rel = os.environ["LOCK_REL"]
 entry = lock["fixtures"].get(rel)
 if entry is None:
     print(f"REPAIR REFUSED — {rel} is not in the lock"); raise SystemExit(1)
@@ -236,62 +237,152 @@ if not hist:
 
 def git(*args):
     # rev-parse ECHOES unparseable args on stdout (root-commit "c^" trap —
-    # found by the 23rd-cycle E2E): only a zero rc proves the rev resolved.
+    # 23rd-cycle E2E): only a zero rc proves the rev resolved.
     r = subprocess.run(["git", "-C", os.environ["LOCK_ROOT"], *args],
                        capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else ""
 
-new_blob = entry.get("git_blob_sha", "")
-h = hist[-1]
-new_sha = h.get("sha256", entry.get("sha256", ""))
-
-# Walk commits touching the fixture; find the one whose blob == pinned blob.
-commits = git("log", "--format=%H", "--", rel).splitlines()
-proven = None
-for c in commits:
-    blob = git("rev-parse", f"{c}:{rel}")
-    if blob == new_blob:
-        parent = git("rev-parse", f"{c}^")
-        parent_blob = git("rev-parse", f"{parent}:{rel}") if parent else ""
-        if parent_blob and parent_blob != new_blob:
-            proven = (parent, c, parent_blob)
-            break
-if proven is None:
-    print(f"UNRECOVERABLE_UPDATE_PROVENANCE — Git history does not prove the "
-          f"pinned blob for {rel}. Do NOT force-heal; use --rebaseline to "
-          f"start a new provenance chain with an explicit reason.")
+def unprovable(why):
+    print(f"UNRECOVERABLE_UPDATE_PROVENANCE — {why}. Do NOT force-heal; "
+          f"use --rebaseline to start a new provenance chain with an "
+          f"explicit reason.")
     raise SystemExit(2)
 
-parent, change_commit, parent_blob = proven
+h = hist[-1]
+new_blob = entry.get("git_blob_sha", "")
+new_sha = h.get("sha256", entry.get("sha256", ""))
+old_blob_expected = h.get("old_git_blob_sha", "")  # may be absent (legacy)
+
+# --- Hardened proof (24th-cycle): the two PAST TREES must independently
+# prove fixture A→B AND lock A→B with stable identity. The current lock is
+# an index of what to prove, never the proof itself.
+# Step 1 — find change_commit: a commit whose tree holds fixture blob == B.
+candidates = []
+for c in git("log", "--format=%H", "--", rel).splitlines():
+    if c and git("rev-parse", f"{c}:{rel}") == new_blob:
+        candidates.append(c)
+if not candidates:
+    unprovable(f"no commit tree holds the pinned blob for {rel}")
+
+def tree_lock(commit):
+    out = git("show", f"{commit}:{lock_rel}")
+    try:
+        return json.loads(out) if out else None
+    except Exception:
+        return None
+
+proven = None
+rejects = []
+for change_commit in candidates:
+    base = git("rev-parse", f"{change_commit}^")
+    if not base:
+        rejects.append((change_commit, "root commit — no parent epoch")); continue
+    # ancestry: base⊂change is implied by parent; require change⊂HEAD
+    if git("merge-base", "--is-ancestor", change_commit, "HEAD") is not None \
+            and subprocess.run(["git", "-C", os.environ["LOCK_ROOT"], "merge-base",
+                                "--is-ancestor", change_commit, "HEAD"],
+                               capture_output=True).returncode != 0:
+        rejects.append((change_commit, "not an ancestor of HEAD")); continue
+    base_blob = git("rev-parse", f"{base}:{rel}")
+    if not base_blob or base_blob == new_blob:
+        rejects.append((change_commit, "parent tree does not hold a distinct A")); continue
+    # exactly ONE commit in the UNION of {fixture, lock} paths may exist in
+    # base..change — fixture and lock changing in SEPARATE commits must be
+    # UNRECOVERABLE even if both final trees show A→B (24th-cycle feedback).
+    touching = git("log", "--format=%H", f"{base}..{change_commit}", "--", rel, lock_rel).splitlines()
+    touching = [t for t in touching if t]
+    if touching != [change_commit]:
+        rejects.append((change_commit, f"base..change touches fixture/lock in "
+                                       f"{len(touching)} commits — refusing to collapse")); continue
+    # both trees must carry the LOCK with A→B and stable identity
+    base_lock, change_lock_tree = tree_lock(base), tree_lock(change_commit)
+    if base_lock is None or change_lock_tree is None:
+        rejects.append((change_commit, "lock file absent in one of the two trees")); continue
+    be = base_lock.get("fixtures", {}).get(rel)
+    ce = change_lock_tree.get("fixtures", {}).get(rel)
+    if not be or not ce:
+        rejects.append((change_commit, "fixture entry absent in one of the two lock trees")); continue
+    for ident in ("fixture_id", "path", "oracle_role"):
+        if be.get(ident) != ce.get(ident) or ce.get(ident) != entry.get(ident):
+            rejects.append((change_commit, f"identity field {ident} changed across the epoch")); continue
+    # A→B: content SHAs from the trees' own lock entries
+    if be.get("sha256") == ce.get("sha256"):
+        rejects.append((change_commit, "lock trees show no A→B change")); continue
+    proven = (base, change_commit, base_blob)
+    break
+
+if proven is None:
+    detail = "; ".join(f"{c[:8]}: {w}" for c, w in rejects[:3])
+    unprovable(f"no commit pair proves the epoch ({detail or 'no candidates'})")
+
+base, change_commit, base_blob = proven
+if old_blob_expected and old_blob_expected != base_blob:
+    # lock claimed a different old blob than the tree proves — trust the tree
+    print(f"note: lock old_git_blob_sha mismatched tree evidence "
+          f"(tree wins: {base_blob[:12]})")
 now = datetime.datetime.now().isoformat(timespec="seconds")
 fid = entry.get("fixture_id", "")
 update_seq = h.get("update_seq", len(hist))
+# update_id recomputed from EVIDENCE (never the lock-supplied value)
 update_id = hashlib.sha256(("dataset-pin-update-v2\n" + fid + "\n"
                             + str(update_seq)).encode("utf-8")).hexdigest()
+
 payload = {"fixture_id": fid, "path": rel,
-           "old_sha256": h.get("old_sha256", ""), "new_sha256": new_sha,
-           "old_git_blob_sha": parent_blob, "new_git_blob_sha": new_blob,
-           "base_head_commit": parent[:12], "source_state": "recovered",
+           "old_sha256": "", "new_sha256": new_sha,
+           "old_git_blob_sha": base_blob, "new_git_blob_sha": new_blob,
+           "base_head_commit": base[:12], "source_state": "recovered",
            "reason": os.environ["REASON"]}
 payload_digest = hashlib.sha256(json.dumps(
     payload, sort_keys=True, ensure_ascii=False,
     separators=(",", ":")).encode("utf-8")).hexdigest()
-line = {"ts": now, "kind": "recovered_missing_update_journal",
+
+# idempotency contract (24th-cycle feedback): same update_id + SAME
+# canonical recovery → exit 0 / ALREADY_PRESENT (re-runnable); same
+# update_id + DIFFERENT recovery → hard fail / PROVENANCE_CONFLICT —
+# idempotency must never become a provenance-hiding mechanism.
+if os.path.exists(os.environ["JOURNAL"]):
+    for line in open(os.environ["JOURNAL"]):
+        try:
+            j = json.loads(line)
+        except Exception:
+            continue
+        if j.get("update_id") == update_id and \
+                j.get("kind") == "recovered_missing_update_journal":
+            # canonical recovery identity = update_id + evidence commits.
+            # The repair-time --reason is NOT part of it (a re-run may word
+            # the reason differently; the A→B evidence is what must match).
+            if j.get("evidence", {}).get("base_commit") == base[:12] and \
+                    j.get("evidence", {}).get("change_commit") == change_commit[:12]:
+                print(f"REPAIR_ALREADY_PRESENT")
+                print(f"  update_id={update_id}")
+                print(f"  recovered_at={j.get('recovered_at')}")
+                print(f"  mutation=false reason=duplicate_update_id")
+                raise SystemExit(0)
+            print(f"PROVENANCE_CONFLICT — journal already holds a DIFFERENT "
+                  f"recovery for {rel}@{update_id[:12]} "
+                  f"(existing evidence {j.get('evidence')} vs proven "
+                  f"{base[:12]}→{change_commit[:12]}). Refusing to overwrite.")
+            raise SystemExit(3)
+
+line_out = {"ts": now, "kind": "recovered_missing_update_journal",
         "recovered_at": now,
         "update_id": update_id, "update_seq": update_seq,
         "payload_digest": payload_digest,
         "original_payload_digest": h.get("payload_digest"),
         "fixture_id": fid, "path": rel,
         "old_sha256": payload["old_sha256"], "new_sha256": new_sha,
-        "old_git_blob_sha": parent_blob, "new_git_blob_sha": new_blob,
+        "old_git_blob_sha": base_blob, "new_git_blob_sha": new_blob,
         "source_state": "recovered",
         "reason": os.environ["REASON"],
-        "evidence": {"base_commit": parent[:12], "change_commit": change_commit[:12]},
-        "note": "journal line re-created from Git-history proof; original event time unknown by construction"}
+        "evidence": {"base_commit": base[:12], "change_commit": change_commit[:12],
+                     "lock_read_from_trees": True},
+        "note": "journal line re-created from two-tree Git proof; original event time unknown by construction"}
 with open(os.environ["JOURNAL"], "a") as f:
-    f.write(json.dumps(line, ensure_ascii=False) + "\n")
-print(f"journal repaired: {rel} (recovered_at={now}, evidence "
-      f"{parent[:12]}→{change_commit[:12]}) — re-run verify to confirm 1:1")
+    f.write(json.dumps(line_out, ensure_ascii=False) + "\n")
+print(f"REPAIR_CREATED")
+print(f"  update_id={update_id} recovered_at={now}")
+print(f"  evidence={base[:12]}→{change_commit[:12]} lock_verified_in_both_trees=true")
+print(f"  — re-run verify to confirm 1:1")
 PY
   exit $?
 fi

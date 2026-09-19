@@ -32,6 +32,8 @@ MODE="verify"
 case "${1:-}" in
   --init) MODE="init"; shift ;;
   --update) MODE="update"; shift ;;
+  --repair-missing-journal) MODE="repair"; shift ;;
+  --rebaseline) MODE="rebaseline"; shift ;;
 esac
 LOCK="${1:?lock file required}"
 shift
@@ -194,6 +196,182 @@ PY
   exit 0
 fi
 
+# --- repair-missing-journal (manual operator only — 13th-cycle spec) -----
+# Restores a LOST journal line for a lock update_history entry ONLY when
+# Git history independently proves the change: (a) some commit holds the
+# fixture blob == new git_blob_sha, (b) its parent holds the OLD blob,
+# (c) the lock already records that A→B. recovered_at is ALWAYS now —
+# never a backdated timestamp (the original event time is unknown by
+# definition of "journal lost"). If Git cannot prove it, we escalate to
+# UNRECOVERABLE_UPDATE_PROVENANCE instead of silently healing.
+if [ "$MODE" = "repair" ]; then
+  [ -e "$LOCK" ] || { echo "BASELINE_MISSING — lock absent: $LOCK" >&2; exit 1; }
+  # reuse the update-mode arg parsing (--reason required)
+  FILE_ARG=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason) REASON="${2:-}"; shift 2 ;;
+      *) FILE_ARG="$1"; shift ;;
+    esac
+  done
+  FILE="${FILE_ARG:?repair target file required}"
+  [ -n "${REASON:-}" ] || { echo "REPAIR REFUSED — --reason is required" >&2; exit 1; }
+  [ -f "$FILE" ] || { echo "HASH_ERROR $FILE (not a regular file)" >&2; exit 1; }
+  rel="$(rel_of "$FILE")"
+  JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
+  LOCK="$LOCK" REL="$rel" JOURNAL="$JOURNAL" REASON="$REASON" \
+  LOCK_ROOT="$LOCK_ROOT" \
+  python3 - <<'PY'
+import datetime, hashlib, json, os, subprocess
+
+lock = json.load(open(os.environ["LOCK"]))
+rel = os.environ["REL"]
+entry = lock["fixtures"].get(rel)
+if entry is None:
+    print(f"REPAIR REFUSED — {rel} is not in the lock"); raise SystemExit(1)
+hist = entry.get("update_history", [])
+if not hist:
+    print(f"REPAIR REFUSED — {rel} has no update_history (nothing to repair)")
+    raise SystemExit(1)
+
+def git(*args):
+    # rev-parse ECHOES unparseable args on stdout (root-commit "c^" trap —
+    # found by the 23rd-cycle E2E): only a zero rc proves the rev resolved.
+    r = subprocess.run(["git", "-C", os.environ["LOCK_ROOT"], *args],
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+new_blob = entry.get("git_blob_sha", "")
+h = hist[-1]
+new_sha = h.get("sha256", entry.get("sha256", ""))
+
+# Walk commits touching the fixture; find the one whose blob == pinned blob.
+commits = git("log", "--format=%H", "--", rel).splitlines()
+proven = None
+for c in commits:
+    blob = git("rev-parse", f"{c}:{rel}")
+    if blob == new_blob:
+        parent = git("rev-parse", f"{c}^")
+        parent_blob = git("rev-parse", f"{parent}:{rel}") if parent else ""
+        if parent_blob and parent_blob != new_blob:
+            proven = (parent, c, parent_blob)
+            break
+if proven is None:
+    print(f"UNRECOVERABLE_UPDATE_PROVENANCE — Git history does not prove the "
+          f"pinned blob for {rel}. Do NOT force-heal; use --rebaseline to "
+          f"start a new provenance chain with an explicit reason.")
+    raise SystemExit(2)
+
+parent, change_commit, parent_blob = proven
+now = datetime.datetime.now().isoformat(timespec="seconds")
+fid = entry.get("fixture_id", "")
+update_seq = h.get("update_seq", len(hist))
+update_id = hashlib.sha256(("dataset-pin-update-v2\n" + fid + "\n"
+                            + str(update_seq)).encode("utf-8")).hexdigest()
+payload = {"fixture_id": fid, "path": rel,
+           "old_sha256": h.get("old_sha256", ""), "new_sha256": new_sha,
+           "old_git_blob_sha": parent_blob, "new_git_blob_sha": new_blob,
+           "base_head_commit": parent[:12], "source_state": "recovered",
+           "reason": os.environ["REASON"]}
+payload_digest = hashlib.sha256(json.dumps(
+    payload, sort_keys=True, ensure_ascii=False,
+    separators=(",", ":")).encode("utf-8")).hexdigest()
+line = {"ts": now, "kind": "recovered_missing_update_journal",
+        "recovered_at": now,
+        "update_id": update_id, "update_seq": update_seq,
+        "payload_digest": payload_digest,
+        "original_payload_digest": h.get("payload_digest"),
+        "fixture_id": fid, "path": rel,
+        "old_sha256": payload["old_sha256"], "new_sha256": new_sha,
+        "old_git_blob_sha": parent_blob, "new_git_blob_sha": new_blob,
+        "source_state": "recovered",
+        "reason": os.environ["REASON"],
+        "evidence": {"base_commit": parent[:12], "change_commit": change_commit[:12]},
+        "note": "journal line re-created from Git-history proof; original event time unknown by construction"}
+with open(os.environ["JOURNAL"], "a") as f:
+    f.write(json.dumps(line, ensure_ascii=False) + "\n")
+print(f"journal repaired: {rel} (recovered_at={now}, evidence "
+      f"{parent[:12]}→{change_commit[:12]}) — re-run verify to confirm 1:1")
+PY
+  exit $?
+fi
+
+# --- rebaseline (manual operator only — last resort after UNRECOVERABLE) --
+# Starts a NEW provenance chain for one fixture: provenance_reset event +
+# re-pinned current bytes. The old entry is not deleted — history stays
+# linked through the reset event (repair must never overwrite evidence).
+if [ "$MODE" = "rebaseline" ]; then
+  [ -e "$LOCK" ] || { echo "BASELINE_MISSING — lock absent: $LOCK" >&2; exit 1; }
+  FILE_ARG=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason) REASON="${2:-}"; shift 2 ;;
+      *) FILE_ARG="$1"; shift ;;
+    esac
+  done
+  FILE="${FILE_ARG:?rebaseline target file required}"
+  [ -n "${REASON:-}" ] || { echo "REBASELINE REFUSED — --reason is required (operator acknowledgment)" >&2; exit 1; }
+  [ -f "$FILE" ] || { echo "HASH_ERROR $FILE (not a regular file)" >&2; exit 1; }
+  rel="$(rel_of "$FILE")"
+  git -C "$LOCK_ROOT" ls-files --error-unmatch "$rel" >/dev/null 2>&1 \
+    || { echo "REBASELINE REFUSED — $rel is not tracked" >&2; exit 1; }
+  git -C "$LOCK_ROOT" diff --quiet HEAD -- "$rel" \
+    || { echo "REBASELINE REFUSED — $rel differs from HEAD; commit first" >&2; exit 1; }
+  JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
+  LOCK="$LOCK" REL="$rel" JOURNAL="$JOURNAL" REASON="$REASON" FILE="$FILE" \
+  LOCK_ROOT="$LOCK_ROOT" \
+  python3 - <<'PY'
+import datetime, hashlib, json, os, subprocess
+lock = json.load(open(os.environ["LOCK"]))
+rel = os.environ["REL"]
+entry = lock["fixtures"].get(rel)
+if entry is None:
+    print(f"REBASELINE REFUSED — {rel} is not in the lock"); raise SystemExit(1)
+def git(*a):
+    # same rev-parse echo trap as above — zero rc required
+    r = subprocess.run(["git", "-C", os.environ["LOCK_ROOT"], *a],
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+blob = git("rev-parse", f"HEAD:{rel}")
+sha = hashlib.sha256(open(os.environ["FILE"], "rb").read()).hexdigest()
+now = datetime.datetime.now().isoformat(timespec="seconds")
+epoch = len(entry.get("update_history", [])) + 1
+reset_update_id = hashlib.sha256(("dataset-pin-reset-v1\n" + entry.get("fixture_id","") + "\n"
+                                   + str(epoch)).encode("utf-8")).hexdigest()
+supersedes = [h.get("update_id") for h in entry.get("update_history", [])
+              if h.get("update_id")]
+line = {"ts": now, "kind": "provenance_reset",
+        "update_id": reset_update_id, "update_seq": epoch,
+        "fixture_id": entry.get("fixture_id", ""), "path": rel,
+        "provenance_epoch": epoch,
+        "old_sha256": entry.get("sha256"), "new_sha256": sha,
+        "old_git_blob_sha": entry.get("git_blob_sha"), "new_git_blob_sha": blob,
+        "reason": os.environ["REASON"],
+        "supersedes_update_ids": supersedes,
+        "operator_acknowledgment": True,
+        "note": "new provenance chain starts here — prior chain kept via reset event"}
+with open(os.environ["JOURNAL"], "a") as f:
+    f.write(json.dumps(line, ensure_ascii=False) + "\n")
+entry["sha256"] = sha
+entry["size"] = os.path.getsize(os.environ["FILE"])
+entry["git_blob_sha"] = blob
+entry["provenance_epoch"] = epoch
+entry.setdefault("update_history", []).append({
+    "ts": now, "commit": git("rev-parse", "--short", "HEAD"),
+    "sha256": sha, "reason": os.environ["REASON"],
+    "update_id": reset_update_id,
+    "update_seq": epoch, "payload_digest": None,
+    "kind": "provenance_reset"})
+lock["updated_at"] = now
+with open(os.environ["LOCK"], "w") as f:
+    json.dump(lock, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+print(f"rebaselined: {rel} (epoch {epoch}, reset event appended)")
+PY
+  echo "NOTE: commit the lock and journal together (same review unit)." >&2
+  exit 0
+fi
+
 # --- verify ---
 [ -e "$LOCK" ] || { echo "BASELINE_MISSING — lock absent: $LOCK" >&2; exit 1; }
 JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
@@ -253,6 +431,11 @@ if os.path.exists(jpath):
         except Exception:
             journal.append({})
 
+superseded = set()
+for j in journal:
+    for uid in (j.get("supersedes_update_ids") or []):
+        superseded.add(uid)
+
 problems = []
 # Forward: history → journal (every recorded update must appear exactly once).
 for rel, h in hist:
@@ -262,6 +445,8 @@ for rel, h in hist:
         # design (no real legacy entries exist; created after this change).
         problems.append(f"MISSING_UPDATE_JOURNAL {rel} (no update_id)")
         continue
+    if uid in superseded:
+        continue  # declared broken & reset by an operator provenance_reset
     hits = [j for j in journal if j.get("update_id") == uid]
     if len(hits) == 0:
         problems.append(f"MISSING_UPDATE_JOURNAL {rel}@{uid[:12]}")
@@ -269,7 +454,13 @@ for rel, h in hist:
         problems.append(f"DUPLICATE_UPDATE_JOURNAL {rel}@{uid[:12]} x{len(hits)}")
     else:
         j = hits[0]
-        if j.get("payload_digest") != h.get("payload_digest"):
+        if j.get("kind") == "recovered_missing_update_journal":
+            # A recovered line corroborates via the lock's surviving digest —
+            # its own reconstructed payload_digest can never equal the lost
+            # original by construction.
+            if j.get("original_payload_digest") != h.get("payload_digest"):
+                problems.append(f"UPDATE_JOURNAL_MISMATCH {rel}@{uid[:12]}")
+        elif j.get("payload_digest") != h.get("payload_digest"):
             problems.append(f"UPDATE_JOURNAL_MISMATCH {rel}@{uid[:12]}")
 # Reverse: journal → history (every journal line must correspond to exactly
 # one recorded update — otherwise the entry is an orphan).

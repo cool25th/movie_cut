@@ -57,9 +57,15 @@ if mf:
 else:
     checks["json_parseable"] = None
 
-REQUIRED = ["run_id", "started_at", "assembled_at", "app_commit", "driver_sha256",
-            "toolchain", "control_legs", "measurement", "fixtures_sha256"]
-schema_ok = bool(parsed) and all(k in parsed for k in REQUIRED)
+# Manifest schema v1 used "assembled_at"; v2 renamed it to "finished_at"
+# (plus driver_exit_code etc.). The observer accepts either — the 22nd-cycle
+# active soak exposed that a v1-only required list flags every v2 manifest
+# INVALID_PROVENANCE (fail-closed, but wrong: the two had never met in a
+# healthy environment during the long BLOCK).
+REQUIRED_COMMON = ["run_id", "started_at", "app_commit", "driver_sha256",
+                   "toolchain", "control_legs", "measurement", "fixtures_sha256"]
+schema_ok = bool(parsed) and all(k in parsed for k in REQUIRED_COMMON) and (
+    "assembled_at" in parsed or "finished_at" in parsed)
 checks["schema_complete"] = schema_ok
 
 legs = (parsed or {}).get("control_legs", [])
@@ -70,9 +76,10 @@ m = (parsed or {}).get("measurement")
 checks["measurement_authorized"] = bool(m and m.get("measurement_authorized") is True)
 
 fresh = None
-if parsed and parsed.get("assembled_at"):
+stamp = (parsed or {}).get("finished_at") or (parsed or {}).get("assembled_at")
+if parsed and stamp:
     try:
-        assembled = datetime.datetime.fromisoformat(parsed["assembled_at"])
+        assembled = datetime.datetime.fromisoformat(stamp)
         age_h = (now - assembled).total_seconds() / 3600
         fresh = age_h <= FRESHNESS_HOURS
         checks["manifest_age_hours"] = round(age_h, 2)

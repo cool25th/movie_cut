@@ -102,7 +102,7 @@ if [ "$MODE" = "init" ]; then
       git -C "$LOCK_ROOT" diff --quiet HEAD -- "$rel" \
         || { echo "DIRTY_FIXTURE $rel — differs from HEAD; commit the fixture first" >&2; exit 1; }
       [ $first -eq 1 ] || printf ',\n'
-      printf '    "%s": {"fixture_id": "%s", "oracle_role": "%s", "sha256": "%s", "size": %s, "git_blob_sha": "%s", "path": "%s"}' \
+      printf '    "%s": {"fixture_id": "%s", "oracle_role": "%s", "provenance_epoch": 1, "sha256": "%s", "size": %s, "git_blob_sha": "%s", "path": "%s"}' \
         "$rel" "$fid" "$role" "$(sha_of "$file")" "$(size_of "$file")" "$(blob_of "$rel")" "$rel"
       first=0
     done
@@ -154,9 +154,12 @@ if old_sha == new_sha:
 # sha256 of the canonical provenance payload — identifies what changed.
 # Raw reason is stored as-is; JSON escaping handles embedded newlines.
 fid = entry.get("fixture_id", "")
+epoch = entry.get("provenance_epoch", 1)
 update_seq = len(entry.get("update_history", [])) + 1
-update_id = hashlib.sha256(("dataset-pin-update-v2\n" + fid + "\n"
-                            + str(update_seq)).encode("utf-8")).hexdigest()
+# update_id v3 (25th-cycle): includes the provenance epoch — an identical
+# A→B recurring after a reset must never collide with the pre-reset event.
+update_id = hashlib.sha256(("dataset-pin-update-v3\n" + fid + "\n"
+                            + str(epoch) + "\n" + str(update_seq)).encode("utf-8")).hexdigest()
 payload = {"fixture_id": fid, "path": os.environ["REL"],
            "old_sha256": old_sha, "new_sha256": new_sha,
            "old_git_blob_sha": old_blob, "new_git_blob_sha": os.environ["BLOB"],
@@ -168,6 +171,7 @@ payload_digest = hashlib.sha256(json.dumps(
     separators=(",", ":")).encode("utf-8")).hexdigest()
 line = {"ts": os.environ["UPDATED_AT"], "kind": "dataset_pin_update",
         "update_id": update_id, "update_seq": update_seq,
+        "provenance_epoch": epoch,
         "payload_digest": payload_digest,
         "fixture_id": fid, "path": os.environ["REL"],
         "old_sha256": old_sha, "new_sha256": new_sha,
@@ -184,6 +188,7 @@ entry.setdefault("update_history", []).append({
     "ts": os.environ["UPDATED_AT"], "commit": os.environ["HEAD_COMMIT"][:12],
     "sha256": new_sha, "reason": os.environ["REASON"],
     "update_id": update_id, "update_seq": update_seq,
+    "provenance_epoch": epoch,
     "payload_digest": payload_digest})
 lock["updated_at"] = os.environ["UPDATED_AT"]
 lock["updated_by_commit"] = os.environ["HEAD_COMMIT"][:12]
@@ -252,6 +257,20 @@ h = hist[-1]
 new_blob = entry.get("git_blob_sha", "")
 new_sha = h.get("sha256", entry.get("sha256", ""))
 old_blob_expected = h.get("old_git_blob_sha", "")  # may be absent (legacy)
+entry_epoch = entry.get("provenance_epoch", 1)
+# legacy-shaped history (pre-v3, no epoch recorded): fail-closed, never
+# silently recomputed — migration was SKIPPED because real history was 0,
+# not because old ids stay accepted (25th-cycle feedback).
+if "provenance_epoch" not in h:
+    unprovable(f"history entry lacks provenance_epoch (pre-v3 shape) — "
+               f"v3 accepts no legacy ids by design")
+# epoch boundary (25th-cycle): a history entry from a PREVIOUS epoch must
+# not be repaired — its chain was explicitly reset; repairing across the
+# boundary would stitch two provenance chains back together.
+h_epoch = h.get("provenance_epoch", entry_epoch)
+if h_epoch != entry_epoch:
+    unprovable(f"history entry epoch {h_epoch} != current epoch {entry_epoch} "
+               f"(provenance was reset) — cross-epoch repair is forbidden")
 
 # --- Hardened proof (24th-cycle): the two PAST TREES must independently
 # prove fixture A→B AND lock A→B with stable identity. The current lock is
@@ -323,8 +342,10 @@ if old_blob_expected and old_blob_expected != base_blob:
 now = datetime.datetime.now().isoformat(timespec="seconds")
 fid = entry.get("fixture_id", "")
 update_seq = h.get("update_seq", len(hist))
-# update_id recomputed from EVIDENCE (never the lock-supplied value)
-update_id = hashlib.sha256(("dataset-pin-update-v2\n" + fid + "\n"
+# update_id recomputed from EVIDENCE (never the lock-supplied value) — v3
+# includes the epoch so cross-epoch collisions cannot alias.
+update_id = hashlib.sha256(("dataset-pin-update-v3\n" + fid + "\n"
+                            + str(entry_epoch) + "\n"
                             + str(update_seq)).encode("utf-8")).hexdigest()
 
 payload = {"fixture_id": fid, "path": rel,
@@ -367,6 +388,7 @@ if os.path.exists(os.environ["JOURNAL"]):
 line_out = {"ts": now, "kind": "recovered_missing_update_journal",
         "recovered_at": now,
         "update_id": update_id, "update_seq": update_seq,
+        "provenance_epoch": entry_epoch,
         "payload_digest": payload_digest,
         "original_payload_digest": h.get("payload_digest"),
         "fixture_id": fid, "path": rel,
@@ -426,7 +448,9 @@ def git(*a):
 blob = git("rev-parse", f"HEAD:{rel}")
 sha = hashlib.sha256(open(os.environ["FILE"], "rb").read()).hexdigest()
 now = datetime.datetime.now().isoformat(timespec="seconds")
-epoch = len(entry.get("update_history", [])) + 1
+# epoch = CHAIN number (25th-cycle): current epoch + 1, NOT history length —
+# two updates in epoch 1 then a reset must land on epoch 2, not 3.
+epoch = int(entry.get("provenance_epoch", 1)) + 1
 reset_update_id = hashlib.sha256(("dataset-pin-reset-v1\n" + entry.get("fixture_id","") + "\n"
                                    + str(epoch)).encode("utf-8")).hexdigest()
 supersedes = [h.get("update_id") for h in entry.get("update_history", [])
@@ -452,6 +476,7 @@ entry.setdefault("update_history", []).append({
     "sha256": sha, "reason": os.environ["REASON"],
     "update_id": reset_update_id,
     "update_seq": epoch, "payload_digest": None,
+    "provenance_epoch": epoch,
     "kind": "provenance_reset"})
 lock["updated_at"] = now
 with open(os.environ["LOCK"], "w") as f:
@@ -568,7 +593,16 @@ for j in journal:
 if problems:
     print("UPDATE_JOURNAL_FAIL: " + "; ".join(problems))
     raise SystemExit(1)
-print(f"update journal consistent ({len(hist)} updates, 1:1 cardinality verified)")
+# provenance continuity status (25th-cycle): RESET_CONTINUOUS is NOT an
+# error — "complete within the current epoch, a reset exists in the past".
+# It exists so a rebaseline can never silently masquerade as continuity.
+reset_fixtures = sorted({j.get("fixture_id") or j.get("path")
+                         for j in journal
+                         if j.get("kind") == "provenance_reset"})
+status = "RESET_CONTINUOUS" if reset_fixtures else "CONTINUOUS"
+print(f"update journal consistent ({len(hist)} updates, 1:1 cardinality verified, "
+      f"provenance={status}"
+      + (f", reset_fixtures={reset_fixtures}" if reset_fixtures else "") + ")")
 raise SystemExit(0)
 PY
 rc=$?

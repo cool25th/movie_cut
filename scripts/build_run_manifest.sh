@@ -91,6 +91,27 @@ if os.environ.get("START_TS"):
     except Exception:
         duration_ms = ""
 
+# 26th-cycle feedback: the manifest must reference the EXACT audit artifact
+# of this run — never "latest in the directory" (parallel/stale/clock-skew
+# runs would pick the wrong evidence). PROVENANCE_AUDIT env carries an
+# explicit path; without it no audit is attached (rather than guessing).
+audit_summary = None
+_audit_path = os.environ.get("PROVENANCE_AUDIT") or ""
+audits = [_audit_path] if (_audit_path and os.path.isfile(_audit_path)) else []
+if audits:
+    try:
+        a = json.load(open(audits[-1]))
+        audit_summary = {
+            "provenance_audit_id": a.get("audit_id"),
+            "audit_sha256": a.get("audit_sha256"),
+            "audit_record": os.path.basename(audits[-1]),
+            "audit_ts": a.get("ts"),
+            "overall_continuity_status": a.get("overall_continuity_status"),
+            "totals": a.get("totals"),
+        }
+    except Exception:
+        audit_summary = None
+
 payload = {
     "manifest_schema_version": 2,
     "run_id": run_id,
@@ -111,6 +132,8 @@ payload = {
     "fixture_count": len(fixtures),
     "fixtures_sha256": fixtures,
 }
+if audit_summary is not None:
+    payload["provenance_audit"] = audit_summary
 # Collision comparison covers CONTENT only: the volatile time-of-assembly
 # fields (finished_at/duration_ms) would make every re-invocation differ and
 # turn the idempotent-re-invocation case into a false collision (found by

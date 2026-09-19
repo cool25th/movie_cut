@@ -29,11 +29,16 @@ set -euo pipefail
 SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 MODE="verify"
+HUMAN=0
 case "${1:-}" in
   --init) MODE="init"; shift ;;
   --update) MODE="update"; shift ;;
   --repair-missing-journal) MODE="repair"; shift ;;
   --rebaseline) MODE="rebaseline"; shift ;;
+  --audit) MODE="audit"; shift
+            case "${1:-}" in
+              --human) HUMAN=1; shift ;;
+            esac ;;
 esac
 LOCK="${1:?lock file required}"
 shift
@@ -485,6 +490,115 @@ with open(os.environ["LOCK"], "w") as f:
 print(f"rebaselined: {rel} (epoch {epoch}, reset event appended)")
 PY
   echo "NOTE: commit the lock and journal together (same review unit)." >&2
+  exit 0
+fi
+
+# --- audit (26th-cycle): machine contract first, human as projection ----
+# Read-only. Reuses the SAME facts verify checks (lock + journal) so the
+# projection can never drift from the verdict. Emits JSON to stdout AND an
+# append-only record under .build-check/history/audit/ (the run manifest
+# reads that record — stdout alone would leave the evidence chain).
+if [ "$MODE" = "audit" ]; then
+  [ -e "$LOCK" ] || { echo "BASELINE_MISSING — lock absent: $LOCK" >&2; exit 1; }
+  JOURNAL="$(dirname "$LOCK")/dataset-lock-updates.jsonl"
+  AUDIT_DIR="$(dirname "$LOCK")/../history/audit"
+  [ -d "$(dirname "$LOCK")/../history" ] && AUDIT_DIR="$(dirname "$LOCK")/../history/audit" || AUDIT_DIR="$SCRIPT_ROOT/.build-check/history/audit"
+  LOCK="$LOCK" JOURNAL="$JOURNAL" AUDIT_DIR="$AUDIT_DIR" HUMAN="$HUMAN" \
+  LOCK_ROOT="$LOCK_ROOT" \
+  python3 - <<'PY'
+import datetime, glob, json, os
+
+lock = json.load(open(os.environ["LOCK"]))
+jpath = os.environ["JOURNAL"]
+journal = []
+if os.path.exists(jpath):
+    for line in open(jpath):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            journal.append(json.loads(line))
+        except Exception:
+            journal.append({})
+
+fixtures = {}
+for rel, entry in lock.get("fixtures", {}).items():
+    epoch = entry.get("provenance_epoch", 1)
+    hist = entry.get("update_history", [])
+    resets = [j for j in journal
+              if j.get("kind") == "provenance_reset" and j.get("path") == rel]
+    repairs = [j for j in journal
+               if j.get("kind") == "recovered_missing_update_journal"
+               and j.get("path") == rel]
+    # current-epoch counts use the EVENT-RECORDED epoch (reproducible),
+    # not the epoch at audit time
+    repairs_current = [r for r in repairs if r.get("provenance_epoch") == epoch]
+    last_id = hist[-1].get("update_id") if hist else None
+    fixtures[rel] = {
+        "fixture_id": entry.get("fixture_id"),
+        "provenance_epoch": epoch,
+        "continuity_status": "RESET_CONTINUOUS" if resets else "CONTINUOUS",
+        "reset_count": len(resets),
+        "repair_count_current_epoch": len(repairs_current),
+        "repair_count_total": len(repairs),
+        "has_prior_reset": bool(resets),
+        "last_update_id": last_id,
+    }
+
+_lock = os.path.abspath(os.environ["LOCK"])
+_root = os.environ.get("LOCK_ROOT") or ""
+if _root and os.path.isdir(_root):
+    _root = os.path.abspath(_root)
+    if _lock.startswith(_root + os.sep):
+        _lock = os.path.relpath(_lock, _root)
+lock_display = _lock
+
+import hashlib as _hl
+report = {
+    "schema_version": 1,
+    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+    "kind": "provenance_audit",
+    "lock": lock_display,
+    "fixtures": fixtures,
+    "totals": {
+        "fixtures": len(fixtures),
+        "any_reset": any(f["has_prior_reset"] for f in fixtures.values()),
+        "repairs_total": sum(f["repair_count_total"] for f in fixtures.values()),
+        "resets_total": sum(f["reset_count"] for f in fixtures.values()),
+    },
+}
+overall = ("RESET_CONTINUOUS"
+           if any(f["has_prior_reset"] for f in fixtures.values())
+           else "CONTINUOUS")
+report["overall_continuity_status"] = overall
+_audit_id = _hl.sha256(json.dumps(report, sort_keys=True,
+                                  ensure_ascii=False).encode()).hexdigest()[:16]
+report["audit_id"] = _audit_id
+report["audit_sha256"] = _hl.sha256(json.dumps(report, sort_keys=True,
+                                               ensure_ascii=False).encode()).hexdigest()
+outdir = os.environ["AUDIT_DIR"]
+os.makedirs(outdir, exist_ok=True)
+out = os.path.join(outdir, f"audit-{_audit_id}.json")
+with open(out, "w") as f:
+    json.dump(report, f, indent=2)
+    f.write("\n")
+
+if os.environ.get("HUMAN") == "1":
+    print(f"provenance audit — {report['ts']} (audit_id: {_audit_id}, record: {out})")
+    for rel, fx in sorted(fixtures.items()):
+        print(f"  {fx['fixture_id'] or rel}: "
+              f"epoch {fx['provenance_epoch']} / "
+              f"reset {fx['reset_count']}회 / "
+              f"현재 epoch repair {fx['repair_count_current_epoch']}회 / "
+              f"lifetime repair {fx['repair_count_total']}회 / "
+              f"{fx['continuity_status']}")
+    t = report["totals"]
+    print(f"  총계: fixtures {t['fixtures']}·resets {t['resets_total']}·"
+          f"repairs {t['repairs_total']}")
+else:
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(f"# record: {out}", file=__import__("sys").stderr)
+PY
   exit 0
 fi
 

@@ -455,7 +455,8 @@ sha = hashlib.sha256(open(os.environ["FILE"], "rb").read()).hexdigest()
 now = datetime.datetime.now().isoformat(timespec="seconds")
 # epoch = CHAIN number (25th-cycle): current epoch + 1, NOT history length —
 # two updates in epoch 1 then a reset must land on epoch 2, not 3.
-epoch = int(entry.get("provenance_epoch", 1)) + 1
+prev_epoch = int(entry.get("provenance_epoch", 1))
+epoch = prev_epoch + 1
 reset_update_id = hashlib.sha256(("dataset-pin-reset-v1\n" + entry.get("fixture_id","") + "\n"
                                    + str(epoch)).encode("utf-8")).hexdigest()
 supersedes = [h.get("update_id") for h in entry.get("update_history", [])
@@ -464,6 +465,10 @@ line = {"ts": now, "kind": "provenance_reset",
         "update_id": reset_update_id, "update_seq": epoch,
         "fixture_id": entry.get("fixture_id", ""), "path": rel,
         "provenance_epoch": epoch,
+        # 27th-cycle invariant: the reset event itself must prove
+        # next == prev + 1 — the audit reads THIS field, not the lock's
+        # current state (which can drift further before an audit runs).
+        "previous_epoch": prev_epoch,
         "old_sha256": entry.get("sha256"), "new_sha256": sha,
         "old_git_blob_sha": entry.get("git_blob_sha"), "new_git_blob_sha": blob,
         "reason": os.environ["REASON"],
@@ -545,6 +550,48 @@ for rel, entry in lock.get("fixtures", {}).items():
         "last_update_id": last_id,
     }
 
+# 27th-cycle: audit invariants — four preregistered epoch-chain contracts
+# checked against journal events + lock state. A violation does NOT rewrite
+# continuity_status (that stays the projection of verify's facts); it is
+# reported separately as invariants_status so the two axes stay readable.
+violations = []
+last_epoch_by_path = {}
+for ev in journal:
+    path = ev.get("path")
+    kind = ev.get("kind")
+    if path not in fixtures:
+        continue
+    e = ev.get("provenance_epoch")
+    lock_epoch = fixtures[path]["provenance_epoch"]
+    if e is None:
+        label = ("reset_epoch_recorded" if kind == "provenance_reset"
+                 else "repair_epoch_recorded")
+        violations.append({"path": path, "kind": kind, "ts": ev.get("ts"),
+                           "invariant": label,
+                           "detail": "event lacks provenance_epoch (legacy-shaped)"})
+        continue
+    if e > lock_epoch:
+        violations.append({"path": path, "kind": kind, "ts": ev.get("ts"),
+                           "invariant": "event_epoch_le_lock_epoch",
+                           "detail": f"event epoch {e} > lock epoch {lock_epoch}"})
+    prev_seen = last_epoch_by_path.get(path)
+    if prev_seen is not None and e < prev_seen:
+        violations.append({"path": path, "kind": kind, "ts": ev.get("ts"),
+                           "invariant": "epoch_monotonic",
+                           "detail": f"epoch regressed {prev_seen} -> {e}"})
+    last_epoch_by_path[path] = e
+    if kind == "provenance_reset":
+        prev = ev.get("previous_epoch")
+        if prev is None:
+            violations.append({"path": path, "kind": kind, "ts": ev.get("ts"),
+                               "invariant": "reset_previous_epoch_recorded",
+                               "detail": "reset event lacks previous_epoch "
+                                         "(pre-27th-cycle shape — chain step unprovable)"})
+        elif e != prev + 1:
+            violations.append({"path": path, "kind": kind, "ts": ev.get("ts"),
+                               "invariant": "reset_next_is_prev_plus_1",
+                               "detail": f"reset epoch {e} != previous_epoch {prev} + 1"})
+
 _lock = os.path.abspath(os.environ["LOCK"])
 _root = os.environ.get("LOCK_ROOT") or ""
 if _root and os.path.isdir(_root):
@@ -571,6 +618,8 @@ overall = ("RESET_CONTINUOUS"
            if any(f["has_prior_reset"] for f in fixtures.values())
            else "CONTINUOUS")
 report["overall_continuity_status"] = overall
+report["invariants"] = {"checked": 4, "violations": violations}
+report["invariants_status"] = "PASS" if not violations else "VIOLATION"
 _audit_id = _hl.sha256(json.dumps(report, sort_keys=True,
                                   ensure_ascii=False).encode()).hexdigest()[:16]
 report["audit_id"] = _audit_id
@@ -595,6 +644,10 @@ if os.environ.get("HUMAN") == "1":
     t = report["totals"]
     print(f"  총계: fixtures {t['fixtures']}·resets {t['resets_total']}·"
           f"repairs {t['repairs_total']}")
+    inv = report["invariants_status"]
+    print(f"  invariants(4종): {inv}"
+          + (f" — {len(report['invariants']['violations'])}건 위반"
+             if inv == "VIOLATION" else ""))
 else:
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"# record: {out}", file=__import__("sys").stderr)

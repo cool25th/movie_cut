@@ -58,6 +58,25 @@ bash scripts/release.sh
 
 ## 5. TestFlight 베타 (사용자)
 
+### 5.1 베타 출시 게이트 — 수치 기준 (2026-09-21 채택, 방향 자문 반영)
+
+> 원천: `AI_REVIEW/FEEDBACK_20260921_DIRECTION.md` P0 + `LOCAL_BETA_DIAGNOSTICS_DESIGN_20260921.md` §4.
+> 전제: 실기기 3종(최저/중간/최신) × 대표 워크플로우 3종 이상 Blocker 0 (G-27).
+> 측정 인프라(CAPCUT_FEATURE_BACKLOG CA-30) 승인 전까지는 대리 판정으로 G-27 러너 Blocker 0 + `run_beta_scenarios.sh` 4/4를 사용한다.
+
+| 게이트 | 기준 |
+|---|---|
+| Import 성공률 | ≥ 98% |
+| 첫 프로젝트 Export 성공률 | ≥ 95% |
+| 재실행 후 프로젝트 복구 | 100% |
+| A/V sync critical defect | 0 |
+| 편집 중 crash | < 1% session |
+| Photos 권한 상태별 dead-end | 0 |
+| 20분 편집 후 thermal 사용불가 | 0 |
+| P0/P1 UI blocker | 0 |
+
+베타 품질 지표(Unaided First Export ≥80%→90%·첫 출력 median ≤10분/P80 ≤15분·7일 내 두 번째 프로젝트 ≥40% 등)의 측정 설계는 `LOCAL_BETA_DIAGNOSTICS_DESIGN_20260921.md` — 오프라인 원칙 유지(로컬 JSON·opt-in 반출만).
+
 - [ ] App Store Connect → TestFlight → 빌드 선택 → 그룹 생성(내부 테스터 10~20명)
 - [ ] 테스터에게 `docs/BETA_GUIDE.md` 전달 (6단계 과제 + 정성 메트릭 시트)
 - [x] 베타 전 사전 점검: `bash scripts/run_beta_scenarios.sh` PASS 확인 (호스트에서 1회) — **실행 완료(2026-09-04 루프, 2회 연속 4/4 PASS)**: ①임포트→첫 컷→출력(dur=3.000s·1920x1080) ②색 보정→출력 ③9:16 세로 출력(1080x1920 기하 실측) ④autosave 저장·재시작 복구(recovered_clips=1). 각 단계 wall-clock 3.2~4.1s·ffprobe 검증. 루트 커밋 시점 HEAD에서 측정.

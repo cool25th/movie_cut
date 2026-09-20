@@ -12,6 +12,20 @@
 - [x] `scripts/release.sh` — verify_gate(5단계) → archive(Release, 서명) → export(app-store-connect) → 선택 업로드, 자격증명 없으면 **fail-loud**
 - [x] `.github/workflows/release.yml` — 수동 트리거(Actions → Release → Run workflow)
 
+## 0.5 베타 준비 게이트 G1~G6 (QAUTO-04 — 2026-09-21 채택)
+
+> 판정식: **G1~G5 중 하나라도 FAIL 또는 BLOCKED면 External NOT READY.** G6은 베타 품질 수치 게이트로 §5.1과 동일 계약.
+> BLOCKED(사용자 대기)는 PASS-equivalent가 아니다(QAUTO-05 규약 준용) — 대기 사유와 해제 조건을 항상 명시.
+
+| 게이트 | 범위 | 판정 근거 | 현재 자가 채점(2026-09-21) |
+|---|---|---|---|
+| G1 Build | 빌드·테스트·정적 검증 | verify_gate 5/5 @ candidate SHA + 동일 SHA 원격 CI green | 🟡 **PASS@HEAD(2026-09-19 실측)** — candidate SHA=CI SHA 동일성 증거는 배포 시점 채점(QAUTO-05) |
+| G2 Project | 프로젝트 무결성 | QAUTO-02 게이트(전 버전 마이그레이션 round-trip·손상 fail-closed·undo 무결성) + autosave/복구 E2E | ✅ **PASS(2026-09-21 승격)** — QAUTO-02 완료(`ProjectIntegrityGateTests` 5/5·Core 1,485/224 전수 통과)·autosave/복구 E2E 상환 완료 |
+| G3 Media | 미디어 생존성·입력 호환 | CA-03 감사+BUG-01/02/04/05 수리 완료·CA-04 포맷 매트릭스 PASS(실측)·relink 실경로 테스트 | ✅ **PASS** (잔여: iOS 실기기 relink 수동 확인 — G4로 이관) |
+| G4 Device | 실기기 검증·권한 | G-27 실기기 3종(최저/중간/최신) 시나리오 Blocker 0 + TCC lifecycle(NotDetermined→Allow/Deny·revoke) | 🔴 **BLOCKED(사용자 대기)** — 실기기 2종 확보 필요·1/3 완료(iPhone 13 Pro 2026-08-22) |
+| G5 Operational | 배포 증거 체인 | QAUTO-05: main SHA→CI→Archive→Signing→TestFlight→실기기 cold launch→Import/Edit/Save/Reopen/Export 증거 | 🔴 **BLOCKED(사용자 대기)** — 계정/Team ID(Stage-1 가이드 B-1~B-5) |
+| G6 Beta UX | 베타 품질 수치 | §5.1 Beta Launch Gate 8종 + 계측 인프라(CA-30 승인 대기 — 대리 판정은 G-27+beta_scenarios 4/4) | 🟡 수치표 등록 완료(CA-29)·계측 구현 승인 대기 |
+
 ## 1. Apple Developer 자격 확보 (사용자)
 
 - [ ] Apple Developer Program 가입 (연 $99, https://developer.apple.com/programs)

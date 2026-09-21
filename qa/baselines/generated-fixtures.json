@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "kind": "generated-fixtures",
+  "note": "GENERATED_FIXTURE provenance class — derivation records (generation contract: generator identity + params + ordered inputs), NOT content-addressed committed bytes. Separate from dataset-lock.json by design. Managed by scripts/check_generated_fixtures.sh.",
+  "fixtures": {}
+}

@@ -35,6 +35,22 @@ final class IOSEditorViewModel {
     var templateStore: TemplateStore
     // CA-17: subtitle export state — SRT/VTT written from timeline text clips.
     var lastSubtitleExportURL: URL? = nil
+    /// CA-30 Local Beta Diagnostics — funnel event log (JSONL, offline by
+    /// construction: the log type references no networking API). Nil
+    /// directory under the UI-test harness so harness runs never pollute it.
+    @ObservationIgnored
+    let betaDiagnostics: BetaDiagnosticsLog = {
+        let harness = ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1"
+        let directory: URL? = harness
+            ? nil
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/Diagnostics", isDirectory: true)
+        return BetaDiagnosticsLog(
+            directory: directory,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            deviceClass: "iOS"
+        )
+    }()
 
     private var session: EditorSession
     private let projectStore: ProjectStore
@@ -106,6 +122,7 @@ final class IOSEditorViewModel {
     }
 
     func importMedia(from url: URL, kind: MediaKind? = nil) async {
+        await betaDiagnostics.record(.importStart)
         // BUG-02: reject unknown extensions / signature-less content at
         // import with an explicit reason (was a silent `.video` default).
         var asset: MediaAsset
@@ -130,6 +147,7 @@ final class IOSEditorViewModel {
     }
 
     func addClipToTimeline(asset: MediaAsset) async {
+        await betaDiagnostics.recordOnce(.firstClipOnTimeline)
         do {
             var snapshot = await session.snapshot()
             if snapshot.mediaLibrary.assets[asset.id] == nil {
@@ -397,7 +415,22 @@ final class IOSEditorViewModel {
 
     @discardableResult
     func exportProject() async throws -> URL {
-        try await exportEngine.exportProject(currentProject)
+        await betaDiagnostics.record(.exportStart)
+        let diagnosticsExportStarted = Date()
+        do {
+            let url = try await exportEngine.exportProject(currentProject)
+            await betaDiagnostics.record(
+                .exportSuccess,
+                durationMs: Int(Date().timeIntervalSince(diagnosticsExportStarted) * 1000)
+            )
+            return url
+        } catch {
+            await betaDiagnostics.record(
+                .exportFail,
+                errorCode: String(describing: Swift.type(of: error))
+            )
+            throw error
+        }
     }
 
     func cancelExport() {
@@ -429,6 +462,11 @@ final class IOSEditorViewModel {
     }
 
     private func apply(_ command: any EditorCommand) async {
+        // CA-30 funnel: the first user-invoked edit. Programmatic
+        // dispatches (import, automatic clip placement) are not edits.
+        if !(command is ImportMediaCommand || command is AddClipCommand) {
+            await betaDiagnostics.recordOnce(.firstEdit)
+        }
         do {
             try await session.dispatch(command)
             await refreshFromSession()
@@ -1239,6 +1277,134 @@ final class IOSEditorViewModel {
             fadeInDuration: fadeInDuration ?? selectedClip.fadeInDuration,
             fadeOutDuration: fadeOutDuration ?? selectedClip.fadeOutDuration
         ))
+    }
+
+    // MARK: - CA-31 audio presets (Mac inspector parity)
+
+    /// CA-31(a): whether the "Duck Background" action can run for the
+    /// current selection (audio or video speech clip).
+    var canDuckBackground: Bool {
+        guard let clip = selectedClip else { return false }
+        return clip.kind == .audio || clip.kind == .video
+    }
+
+    /// CA-31(a): applies a built-in EQ preset to the selected clip through
+    /// the same `SetClipPropertyCommand` path the Mac inspector uses. Flat
+    /// clears the settings (nil). The identical-settings echo guard mirrors
+    /// BUG-ACC-07: a programmatic refresh re-firing the chip must not
+    /// dirty the project or the undo stack.
+    func applyAudioEQPreset(_ preset: EqualizerPresetID) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+        let settings: ClipEqualizerSettings?
+        switch preset {
+        case .flat:
+            settings = nil
+        case .custom:
+            settings = .custom(bands: clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+        case .voiceEnhance, .bassBoost, .trebleBoost:
+            settings = .settings(for: preset)
+        }
+        if clip.equalizer == settings { return }
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
+    }
+
+    /// CA-31(a): "Duck Background" — Mac `autoDuckOtherAudio` parity. The
+    /// selected speech clip's voiced intervals (silence analysis) duck every
+    /// overlapping audio-track clip via `SetAudioDuckingCommand`; the iOS
+    /// render path already consumes `duckingRanges`/`duckingLevel`
+    /// (stage-4 placed-span ducking, preview and export alike).
+    func duckBackgroundUnderSelectedClip(
+        duckLevel: Double = AudioDuckingPlanner.defaultDuckingLevel,
+        thresholdDB: Float = -40,
+        minimumSilenceDuration: TimeInterval = 0.35
+    ) async {
+        guard let speechClipId = selectedClipId, let speechClip = selectedClip else {
+            lastErrorMessage = "Select the speech clip (voiceover or video) to duck music under."
+            return
+        }
+        guard speechClip.kind == .audio || speechClip.kind == .video else {
+            lastErrorMessage = "Ducking needs an audio or video speech clip selection."
+            return
+        }
+        guard let assetId = speechClip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "The selected clip's media is missing; re-link it before ducking."
+            return
+        }
+        lastErrorMessage = nil
+        lastStatusMessage = "Analyzing speech for ducking..."
+        do {
+            let provider = SilenceDetectionProvider(
+                silenceThresholdDB: thresholdDB,
+                minimumSilenceDuration: minimumSilenceDuration
+            )
+            let analysis = try await provider.analyze(asset: asset, in: currentProject)
+            let silenceRanges = analysis.suggestions.flatMap { suggestion -> [TimeRange] in
+                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
+                return ranges.compactMap { Self.timelineMapping(for: $0, in: speechClip)?.timelineRange }
+            }
+            let voiceIntervals = AudioDuckingPlanner.voiceIntervals(
+                speechTimelineRange: speechClip.timelineRange,
+                silenceRangesInTimeline: silenceRanges
+            )
+            guard !voiceIntervals.isEmpty else {
+                lastStatusMessage = "No voiced intervals detected in the selected clip; nothing to duck."
+                return
+            }
+            var duckingByClip: [UUID: [TimeRange]] = [:]
+            for track in currentProject.timeline.tracks where track.kind == .audio {
+                for clip in track.clips
+                where clip.id != speechClipId && clip.timelineRange.overlaps(speechClip.timelineRange) {
+                    let ranges = AudioDuckingPlanner.duckingRanges(
+                        forTarget: clip.timelineRange,
+                        voiceIntervals: voiceIntervals
+                    )
+                    if !ranges.isEmpty {
+                        duckingByClip[clip.id] = ranges
+                    }
+                }
+            }
+            guard !duckingByClip.isEmpty else {
+                lastStatusMessage = "No overlapping audio clips found to duck under the selection."
+                return
+            }
+            try await session.dispatch(SetAudioDuckingCommand(
+                duckingRangesByClip: duckingByClip,
+                level: duckLevel
+            ))
+            await refreshFromSession()
+            lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervals.count) voiced interval(s) at \(Int(duckLevel * 100))% volume."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Asset-time → timeline mapping for analysis suggestions (Mac
+    /// `EditorViewModel+AnalysisSupport` parity): honors rate/speed ramps
+    /// through the canonical `Clip.makeTimeMapping()`.
+    private static func timelineMapping(
+        for sourceRange: TimeRange,
+        in clip: Clip
+    ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
+        guard
+            sourceRange.start.isFinite,
+            sourceRange.duration.isFinite,
+            sourceRange.duration > 0
+        else {
+            return nil
+        }
+        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
+        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
+        guard sourceEnd > sourceStart else { return nil }
+        guard let mapping = clip.makeTimeMapping() else { return nil }
+        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
+        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
+        guard timelineEnd > timelineStart else { return nil }
+        return (
+            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
+            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
+        )
     }
 
     // MARK: - Phase-1 transport & library surfaces (review #3)

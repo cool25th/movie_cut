@@ -128,6 +128,29 @@ struct IOSInspectorSheet: View {
                                 }
                                 .pickerStyle(.menu)
                             }
+
+                            // CA-31(a): audio presets — the render paths
+                            // already consume clip EQ (eqDerivations) and
+                            // ducking metadata (placed-span ducking); this is
+                            // the missing iOS action surface.
+                            if clip.kind == .audio || clip.kind == .video {
+                                Section("Audio") {
+                                    eqPresetChips(for: clip)
+                                    Button {
+                                        Task { await viewModel.duckBackgroundUnderSelectedClip() }
+                                    } label: {
+                                        Label(
+                                            NSLocalizedString("Duck Background", comment: "CA-31 audio preset action"),
+                                            systemImage: "waveform.badge.minus"
+                                        )
+                                    }
+                                    .disabled(!viewModel.canDuckBackground)
+                                    .accessibilityHint(NSLocalizedString(
+                                        "Ducks overlapping music under this clip's speech",
+                                        comment: "CA-31 duck action hint"
+                                    ))
+                                }
+                            }
                         }
 
                         Section {
@@ -320,6 +343,52 @@ struct IOSInspectorSheet: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Subtitle style \(preset.name)")
         .accessibilityHint("Applies this style preset to the selected text clip")
+    }
+
+    // CA-31(a): EQ preset chips — settings equality decides the highlight,
+    // so a chip reflects the persisted clip state rather than UI-local state.
+    private var audioEQPresetIDs: [EqualizerPresetID] {
+        [.flat, .voiceEnhance, .bassBoost, .trebleBoost]
+    }
+
+    private func eqPresetChips(for clip: Clip) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(audioEQPresetIDs, id: \.rawValue) { presetID in
+                    eqPresetChip(presetID, for: clip)
+                }
+            }
+        }
+    }
+
+    private func eqPresetChip(_ presetID: EqualizerPresetID, for clip: Clip) -> some View {
+        let isCurrent: Bool = {
+            guard let equalizer = clip.equalizer else { return presetID == .flat }
+            if presetID == .flat { return equalizer.isFlat }
+            return equalizer == ClipEqualizerSettings.settings(for: presetID)
+        }()
+        return Button {
+            Task { await viewModel.applyAudioEQPreset(presetID) }
+        } label: {
+            Text(EqualizerPreset.preset(for: presetID).name)
+                .font(.caption)
+                .lineLimit(1)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(
+                    isCurrent ? Color.accentColor.opacity(0.25) : Color(uiColor: .quaternarySystemFill),
+                    in: Capsule()
+                )
+                .overlay {
+                    if isCurrent {
+                        Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Equalizer preset \(EqualizerPreset.preset(for: presetID).name)")
+        .accessibilityHint("Applies this audio preset to the selected clip")
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
     private func percentText(_ value: Double) -> String {

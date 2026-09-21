@@ -157,6 +157,24 @@ final class EditorViewModel {
     /// CA-25 onboarding instrumentation (first launch/import/export/quick tools).
     let onboardingMetrics = OnboardingMetrics()
 
+    /// CA-30 Local Beta Diagnostics — the funnel event log (JSONL, offline
+    /// by construction: the log type references no networking API). Nil
+    /// directory under the UI-test harness so harness runs never pollute it.
+    @ObservationIgnored
+    let betaDiagnostics: BetaDiagnosticsLog = {
+        let harness = ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1"
+            || ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_PROJECT"] != nil
+        let directory: URL? = harness
+            ? nil
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/Diagnostics", isDirectory: true)
+        return BetaDiagnosticsLog(
+            directory: directory,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            deviceClass: "mac"
+        )
+    }()
+
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
@@ -1462,7 +1480,12 @@ final class EditorViewModel {
     /// but without the save panel. Used by automation and the XCUITest harness so
     /// the real export pipeline is exercised end-to-end.
     func exportProject(to url: URL) async {
-        guard ensureAllMediaReachableForExport() else { return }
+        await betaDiagnostics.record(.exportStart)
+        let diagnosticsExportStarted = Date()
+        guard ensureAllMediaReachableForExport() else {
+            await betaDiagnostics.record(.exportFail, errorCode: "ExportPreflight.mediaUnreachable")
+            return
+        }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1481,10 +1504,18 @@ final class EditorViewModel {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
             onboardingMetrics.record(.firstExport)
+            await betaDiagnostics.record(
+                .exportSuccess,
+                durationMs: Int(Date().timeIntervalSince(diagnosticsExportStarted) * 1000)
+            )
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await betaDiagnostics.record(
+                .exportFail,
+                errorCode: String(describing: Swift.type(of: error))
+            )
         }
     }
 
@@ -1677,6 +1708,7 @@ final class EditorViewModel {
 
 
     func importMedia(_ urls: [URL]) async {
+        await betaDiagnostics.record(.importStart)
         guard !urls.isEmpty else {
             reportInvalidMediaLibraryDrop()
             return
@@ -1811,6 +1843,7 @@ final class EditorViewModel {
 
 
     func addClipToTimeline(_ asset: MediaAsset) async {
+        await betaDiagnostics.recordOnce(.firstClipOnTimeline)
         await addMediaAssetToTimeline(asset, preferredTrackId: nil, startTime: currentProject.timeline.duration)
     }
 
@@ -4198,6 +4231,15 @@ final class EditorViewModel {
     }
 
     func apply(_ command: any EditorCommand) async {
+        // CA-30 funnel: the first user-invoked edit. Programmatic
+        // dispatches — import, automatic clip placement, and the
+        // export-settings reconciliation inside exportProject(to:) — are
+        // not edits.
+        if !(command is ImportMediaCommand
+            || command is AddClipCommand
+            || command is SetProjectExportSettingsCommand) {
+            await betaDiagnostics.recordOnce(.firstEdit)
+        }
         do {
             try await session.dispatch(command)
             try await refreshFromSession()

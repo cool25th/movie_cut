@@ -24,7 +24,7 @@
 | G3 Media | 미디어 생존성·입력 호환 | CA-03 감사+BUG-01/02/04/05 수리 완료·CA-04 포맷 매트릭스 PASS(실측)·relink 실경로 테스트 | ✅ **PASS** (잔여: iOS 실기기 relink 수동 확인 — G4로 이관) |
 | G4 Device | 실기기 검증·권한 | G-27 실기기 3종(최저/중간/최신) 시나리오 Blocker 0 + TCC lifecycle(NotDetermined→Allow/Deny·revoke) | 🔴 **BLOCKED(사용자 대기)** — 실기기 2종 확보 필요·1/3 완료(iPhone 13 Pro 2026-08-22) |
 | G5 Operational | 배포 증거 체인 | QAUTO-05: main SHA→CI→Archive→Signing→TestFlight→실기기 cold launch→Import/Edit/Save/Reopen/Export 증거 | 🔴 **BLOCKED(사용자 대기)** — 계정/Team ID(Stage-1 가이드 B-1~B-5) |
-| G6 Beta UX | 베타 품질 수치 | §5.1 Beta Launch Gate 8종 + 계측 인프라(CA-30 승인 대기 — 대리 판정은 G-27+beta_scenarios 4/4) | 🟡 수치표 등록 완료(CA-29)·계측 구현 승인 대기 |
+| G6 Beta UX | 베타 품질 수치 | §5.1 Beta Launch Gate 8종 + 계측 인프라(CA-30 1차 완료 — 로컬 JSONL 퍼널 양 플랫폼 배선·반출 UI는 2차) | 🟡 수치표 등록 완료(CA-29)·계측 구현 1차 완료(2026-09-21)·반출 표면·실기기 잔여 |
 
 ## 1. Apple Developer 자격 확보 (사용자)
 

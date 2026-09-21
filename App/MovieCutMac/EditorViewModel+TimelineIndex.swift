@@ -137,3 +137,57 @@ extension EditorViewModel {
         scrubPlayhead(to: match.time)
     }
 }
+
+extension EditorViewModel {
+
+    // MARK: - N1-B transcript range delete
+
+    /// Deletes the sentence span of one transcript hit (N1-B "이 부분
+    /// 삭제"). In the auto-subtitle workflow the subtitle card's timeline
+    /// range IS the spoken sentence span, so removing it cuts the speech
+    /// from every track in one atomic undo (`AutoCutCommand` splits at the
+    /// boundaries and removes what falls inside).
+    func deleteTranscriptSentence(_ match: TranscriptSearchIndex.Match) async {
+        guard let card = currentProject.timeline.tracks.flatMap(\.clips)
+            .first(where: { $0.id == match.clipId })
+        else {
+            lastErrorMessage = NSLocalizedString(
+                "The subtitle card for this match is no longer on the timeline.",
+                comment: "N1-B missing card error"
+            )
+            return
+        }
+        lastErrorMessage = nil
+        await apply(AutoCutCommand(removableRanges: [card.timelineRange]))
+        lastStatusMessage = NSLocalizedString(
+            "Deleted the matched sentence span.",
+            comment: "N1-B status"
+        )
+    }
+
+    /// Deletes everything between two matched words — [start, end) in
+    /// timeline seconds, keeping the end phrase itself (N1-B "여기부터
+    /// 여기까지 삭제"). One atomic undo.
+    func deleteTranscriptRange(
+        from start: TranscriptSearchIndex.Match,
+        to end: TranscriptSearchIndex.Match
+    ) async {
+        let lower = min(start.time, end.time)
+        let upper = max(start.time, end.time)
+        guard upper - lower > 0.01 else {
+            lastErrorMessage = NSLocalizedString(
+                "The two matches are at the same moment; nothing to delete between them.",
+                comment: "N1-B empty range error"
+            )
+            return
+        }
+        lastErrorMessage = nil
+        await apply(AutoCutCommand(removableRanges: [
+            TimeRange(start: lower, duration: upper - lower),
+        ]))
+        lastStatusMessage = NSLocalizedString(
+            "Deleted the transcript range between the two matches.",
+            comment: "N1-B range status"
+        )
+    }
+}

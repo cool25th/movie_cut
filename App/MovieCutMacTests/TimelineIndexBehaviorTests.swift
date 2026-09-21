@@ -205,3 +205,111 @@ struct TimelineIndexTranscriptSearchTests {
         #expect(vm.transcriptMatches(for: "sparkle").isEmpty)
     }
 }
+
+/// N1-B: transcript-driven deletion — "delete this sentence" and "delete
+/// between two matches" both go through `AutoCutCommand`, so each pass is
+/// ONE undo unit that restores the timeline exactly.
+@MainActor
+@Suite("Timeline index transcript delete (N1-B)")
+struct TimelineIndexTranscriptDeleteTests {
+
+    private func makeProject() -> (EditorViewModel, UUID, UUID) {
+        // One 10 s video clip + two subtitle cards ([2,4) "hello world",
+        // [6,8) "goodbye now") with word timings.
+        let videoId = UUID()
+        let assets = [videoId: MediaAsset(
+            originalURL: URL(fileURLWithPath: "/scratch/talk.mp4"),
+            kind: .video, duration: 10
+        )]
+        func card(_ text: String, _ start: TimeInterval, words: [WordTiming]) -> Clip {
+            Clip(
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: 2),
+                timelineRange: TimeRange(start: start, duration: 2),
+                textContent: TextClipContent(text: text, wordTimings: words)
+            )
+        }
+        let hello = card("hello world", 2, words: [
+            WordTiming(text: "hello", startTime: 0.0, endTime: 0.5, confidence: 1),
+            WordTiming(text: "world", startTime: 0.5, endTime: 1.0, confidence: 1),
+        ])
+        let goodbye = card("goodbye now", 6, words: [
+            WordTiming(text: "goodbye", startTime: 0.0, endTime: 0.5, confidence: 1),
+            WordTiming(text: "now", startTime: 0.5, endTime: 1.0, confidence: 1),
+        ])
+        var project = Project(
+            name: "n1b",
+            mediaLibrary: MediaLibrary(assets: assets),
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .video, name: "V", zIndex: 0, clips: [
+                    Clip(
+                        assetId: videoId, kind: .video,
+                        sourceRange: TimeRange(start: 0, duration: 10),
+                        timelineRange: TimeRange(start: 0, duration: 10)
+                    ),
+                ]),
+                Track(kind: .text, name: "Subtitles", zIndex: 1, clips: [hello, goodbye]),
+            ])
+        )
+        project.mediaLibrary = MediaLibrary(assets: assets)
+        return (EditorViewModel(project: project), hello.id, goodbye.id)
+    }
+
+    @Test("Delete Sentence removes the card's span from every track in one undo")
+    func deleteSentence() async {
+        let (vm, helloId, _) = makeProject()
+        let matches = vm.transcriptMatches(for: "hello world")
+        #expect(matches.count == 1)
+        #expect(matches[0].time == 2.0, "word 'hello' at card start")
+
+        await vm.deleteTranscriptSentence(matches[0])
+
+        let clips = vm.currentProject.timeline.tracks.flatMap(\.clips)
+        // Nothing remains on the timeline inside [2,4).
+        for clip in clips {
+            #expect(!clip.timelineRange.overlaps(TimeRange(start: 2, duration: 2)),
+                    "clip \(clip.timelineRange) still overlaps the deleted sentence span")
+        }
+        // The video clip was split around the span: two parts remain.
+        let videoClips = clips.filter { $0.kind == .video }
+        #expect(videoClips.count == 2, "expected the video split into 2 parts, got \(videoClips.count)")
+        // ONE undo restores the exact original (F-18 AC③ atomicity).
+        await vm.undo()
+        let restored = vm.currentProject.timeline.tracks.flatMap(\.clips)
+        #expect(restored.count == 3, "expected 3 clips back, got \(restored.count)")
+        #expect(restored.contains { $0.id == helloId })
+        #expect(vm.transcriptMatches(for: "hello world").count == 1)
+    }
+
+    @Test("Delete Range between two matches cuts [start, end) and one undo restores")
+    func deleteRange() async {
+        let (vm, _, goodbyeId) = makeProject()
+        let hello = vm.transcriptMatches(for: "hello").first!
+        let goodbye = vm.transcriptMatches(for: "goodbye").first!
+        #expect(hello.time == 2.0)
+        #expect(goodbye.time == 6.0)
+
+        await vm.deleteTranscriptRange(from: hello, to: goodbye)
+
+        let clips = vm.currentProject.timeline.tracks.flatMap(\.clips)
+        // [2,6) is gone: the "hello world" card fell inside and was removed,
+        // the goodbye card survives.
+        #expect(!clips.contains { $0.id == goodbyeId && $0.timelineRange.start != 6 })
+        for clip in clips where clip.id != goodbyeId {
+            #expect(!clip.timelineRange.overlaps(TimeRange(start: 2, duration: 4)),
+                    "clip \(clip.timelineRange) still overlaps the deleted range")
+        }
+        await vm.undo()
+        #expect(vm.currentProject.timeline.tracks.flatMap(\.clips).count == 3)
+    }
+
+    @Test("Two matches at the same moment refuse with an explicit error")
+    func sameMomentRefuses() async {
+        let (vm, _, _) = makeProject()
+        let hello = vm.transcriptMatches(for: "hello").first!
+        await vm.deleteTranscriptRange(from: hello, to: hello)
+        #expect(vm.lastErrorMessage != nil)
+        #expect(vm.currentProject.timeline.tracks.flatMap(\.clips).count == 3,
+                "no mutation on refusal")
+    }
+}

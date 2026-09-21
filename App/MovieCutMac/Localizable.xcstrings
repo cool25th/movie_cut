@@ -1907,6 +1907,40 @@
         }
       }
     },
+    "Clear": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지우기"
+          }
+        }
+      }
+    },
+    "Clear Range Mark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Range Mark"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "범위 표시 지우기"
+          }
+        }
+      }
+    },
     "Clear library search": {
       "extractionState": "manual",
       "localizations": {
@@ -2561,6 +2595,40 @@
         }
       }
     },
+    "Delete Range to Here (from %d s)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Range to Here (from %d s)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기까지 삭제 (시작 %d초)"
+          }
+        }
+      }
+    },
+    "Delete Sentence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Sentence"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 문장 삭제"
+          }
+        }
+      }
+    },
     "Delete subtitle": {
       "extractionState": "manual",
       "localizations": {
@@ -2591,6 +2659,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 자막 삭제"
+          }
+        }
+      }
+    },
+    "Deleted the matched sentence span.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted the matched sentence span."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치한 문장 구간을 삭제했습니다."
+          }
+        }
+      }
+    },
+    "Deleted the transcript range between the two matches.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted the transcript range between the two matches."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "두 검색 결과 사이의 구간을 삭제했습니다."
           }
         }
       }
@@ -4125,6 +4227,23 @@
         }
       }
     },
+    "Mark Delete-Range Start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark Delete-Range Start"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제 범위 시작으로 표시"
+          }
+        }
+      }
+    },
     "Marker": {
       "extractionState": "manual",
       "localizations": {
@@ -5605,6 +5724,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "RGB 퍼레이드"
+          }
+        }
+      }
+    },
+    "Range start marked at %d s": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Range start marked at %d s"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "범위 시작이 %d초에 표시됨"
           }
         }
       }
@@ -7132,6 +7268,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 빌드에는 샘플 프로젝트가 포함되어 있지 않습니다."
+          }
+        }
+      }
+    },
+    "The subtitle card for this match is no longer on the timeline.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subtitle card for this match is no longer on the timeline."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 검색 결과의 자막 카드가 타임라인에 더 이상 없습니다."
+          }
+        }
+      }
+    },
+    "The two matches are at the same moment; nothing to delete between them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The two matches are at the same moment; nothing to delete between them."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "두 검색 결과가 같은 위치입니다. 사이에 삭제할 것이 없습니다."
           }
         }
       }

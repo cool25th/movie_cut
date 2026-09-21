@@ -9,6 +9,8 @@ import SwiftUI
 struct TimelineIndexPanel: View {
     @Bindable var viewModel: EditorViewModel
     @State private var filter = ""
+    /// N1-B: the pending "delete range start" mark (transient UI state).
+    @State private var rangeMark: TranscriptSearchIndex.Match?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,11 +52,34 @@ struct TimelineIndexPanel: View {
                     // a search that matched spoken content jumps to the word.
                     let transcriptMatches = viewModel.transcriptMatches(for: filter)
                     if !transcriptMatches.isEmpty {
-                        Text(NSLocalizedString("Transcript", comment: "N1-A transcript search section"))
-                            .font(MovieCutTypography.micro)
-                            .foregroundStyle(MovieCutTheme.mutedText)
-                            .padding(.horizontal, MovieCutSpacing.small)
-                            .padding(.vertical, MovieCutSpacing.xSmall)
+                        HStack(spacing: MovieCutSpacing.xSmall) {
+                            Text(NSLocalizedString("Transcript", comment: "N1-A transcript search section"))
+                                .font(MovieCutTypography.micro)
+                                .foregroundStyle(MovieCutTheme.mutedText)
+                            if let mark = rangeMark {
+                                Spacer()
+                                Text(String(
+                                    format: NSLocalizedString(
+                                        "Range start marked at %d s", comment: "N1-B range mark status"
+                                    ),
+                                    Int(mark.time.rounded(.down))
+                                ))
+                                    .font(MovieCutTypography.micro)
+                                    .foregroundStyle(MovieCutTheme.accent)
+                                Button {
+                                    rangeMark = nil
+                                } label: {
+                                    Text(NSLocalizedString("Clear", comment: "N1-B clear range mark"))
+                                        .font(MovieCutTypography.micro)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(NSLocalizedString(
+                                    "Clear range mark", comment: "N1-B clear a11y"
+                                ))
+                            }
+                        }
+                        .padding(.horizontal, MovieCutSpacing.small)
+                        .padding(.vertical, MovieCutSpacing.xSmall)
                         ForEach(transcriptMatches) { match in
                             transcriptRow(match)
                             Divider()
@@ -107,6 +132,54 @@ struct TimelineIndexPanel: View {
             comment: "N1-A transcript row a11y hint"
         ))
         .accessibilityIdentifier("timelineIndex.transcript.\(match.id)")
+        // N1-B: the delete actions — atomic per AutoCutCommand (one undo).
+        .contextMenu {
+            Button {
+                Task { await viewModel.deleteTranscriptSentence(match) }
+            } label: {
+                Label(
+                    NSLocalizedString("Delete Sentence", comment: "N1-B action"),
+                    systemImage: "scissors"
+                )
+            }
+            Divider()
+            if let mark = rangeMark {
+                Button {
+                    Task {
+                        await viewModel.deleteTranscriptRange(from: mark, to: match)
+                        rangeMark = nil
+                    }
+                } label: {
+                    Label(
+                        String(
+                            format: NSLocalizedString(
+                                "Delete Range to Here (from %d s)", comment: "N1-B range action"
+                            ),
+                            Int(mark.time.rounded(.down))
+                        ),
+                        systemImage: "arrow.left.to.line.compact"
+                    )
+                }
+                .disabled(abs(mark.time - match.time) <= 0.01)
+                Button {
+                    rangeMark = nil
+                } label: {
+                    Label(
+                        NSLocalizedString("Clear Range Mark", comment: "N1-B action"),
+                        systemImage: "xmark.circle"
+                    )
+                }
+            } else {
+                Button {
+                    rangeMark = match
+                } label: {
+                    Label(
+                        NSLocalizedString("Mark Delete-Range Start", comment: "N1-B action"),
+                        systemImage: "flag"
+                    )
+                }
+            }
+        }
     }
 
     private func row(_ entry: EditorViewModel.TimelineIndexEntry) -> some View {

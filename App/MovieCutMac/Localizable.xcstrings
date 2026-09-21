@@ -4410,6 +4410,23 @@
         }
       }
     },
+    "Moves the playhead to the matched word": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moves the playhead to the matched word"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치한 단어로 재생 헤드를 이동합니다"
+          }
+        }
+      }
+    },
     "Moves the playhead to this item": {
       "extractionState": "manual",
       "localizations": {
@@ -7587,6 +7604,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "트랜스"
+          }
+        }
+      }
+    },
+    "Transcript": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대사"
+          }
+        }
+      }
+    },
+    "Transcript match": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript match"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대사 검색 결과"
           }
         }
       }

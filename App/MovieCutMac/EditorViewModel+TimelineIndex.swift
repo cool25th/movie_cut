@@ -100,3 +100,40 @@ extension EditorViewModel {
         return NSLocalizedString("Clip", comment: "")
     }
 }
+
+extension EditorViewModel {
+
+    // MARK: - N1-A transcript search
+
+    /// Transcript phrase matches for the index panel's query — subtitle
+    /// cards searched as ONE concatenated corpus (N1-A), so a spoken phrase
+    /// split across two cards still hits, word-time precise when karaoke
+    /// timings exist.
+    func transcriptMatches(for filter: String) -> [TranscriptSearchIndex.Match] {
+        let items = currentProject.timeline.tracks.flatMap { track in
+            track.clips.compactMap { clip -> TranscriptSearchIndex.Item? in
+                guard let content = clip.textContent, content.contentKind != .sticker else {
+                    return nil
+                }
+                return TranscriptSearchIndex.Item(
+                    clipId: clip.id,
+                    text: content.text,
+                    timelineStart: clip.timelineRange.start,
+                    words: content.wordTimings
+                )
+            }
+        }
+        return TranscriptSearchIndex.matches(for: filter, in: items)
+    }
+
+    /// Reveals a transcript hit: selects the subtitle card and jumps the
+    /// playhead to the matched word's second.
+    func revealTranscriptMatch(_ match: TranscriptSearchIndex.Match) {
+        if currentProject.timeline.tracks.contains(where: { track in
+            track.clips.contains { $0.id == match.clipId }
+        }) {
+            selectedClipIds = [match.clipId]
+        }
+        scrubPlayhead(to: match.time)
+    }
+}

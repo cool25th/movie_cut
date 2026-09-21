@@ -123,3 +123,85 @@ struct TimelineIndexBehaviorTests {
         #expect(p95 <= 0.050, "p95 exceeds the 50ms budget — measured value on the INDEXP95 line above")
     }
 }
+
+/// N1-A 1차: transcript phrase search through the index surface — the VM
+/// adapter feeds subtitle cards (with karaoke word timings) into the Core
+/// corpus, and reveal selects the card + seeks to the matched WORD second.
+@MainActor
+@Suite("Timeline index transcript search (N1-A)")
+struct TimelineIndexTranscriptSearchTests {
+
+    private func textClip(
+        id: UUID = UUID(),
+        text: String,
+        start: TimeInterval,
+        words: [WordTiming]? = nil
+    ) -> Clip {
+        Clip(
+            id: id,
+            kind: .text,
+            sourceRange: TimeRange(start: 0, duration: 2),
+            timelineRange: TimeRange(start: start, duration: 2),
+            textContent: TextClipContent(text: text, wordTimings: words)
+        )
+    }
+
+    @Test("A cross-card phrase hits with word-level time and reveal seeks to it")
+    func crossCardSearchAndReveal() {
+        let firstCard = UUID()
+        var project = Project(
+            name: "n1",
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .text, name: "Subtitles", zIndex: 0, clips: [
+                    textClip(
+                        id: firstCard,
+                        text: "and that is exactly why we",
+                        start: 10,
+                        words: [
+                            WordTiming(text: "and", startTime: 0.0, endTime: 0.2, confidence: 1),
+                            WordTiming(text: "that", startTime: 0.2, endTime: 0.4, confidence: 1),
+                            WordTiming(text: "is", startTime: 0.4, endTime: 0.5, confidence: 1),
+                            WordTiming(text: "exactly", startTime: 0.5, endTime: 0.9, confidence: 1),
+                            WordTiming(text: "why", startTime: 0.9, endTime: 1.1, confidence: 1),
+                            WordTiming(text: "we", startTime: 1.1, endTime: 1.3, confidence: 1),
+                        ]
+                    ),
+                    textClip(id: UUID(), text: "shipped it early", start: 14),
+                ])
+            ])
+        )
+        project.mediaLibrary = MediaLibrary(assets: [:])
+        let vm = EditorViewModel(project: project)
+
+        let matches = vm.transcriptMatches(for: "EXACTLY why we shipped")
+        #expect(matches.count == 1, "cross-card phrase must match once")
+        #expect(matches[0].clipId == firstCard)
+        #expect(matches[0].time == 10.5, "word-level second (exactly = 10 + 0.5), got \(matches[0].time)")
+
+        vm.revealTranscriptMatch(matches[0])
+        #expect(vm.selectedClipIds == [firstCard])
+        #expect(abs(vm.playheadTime - 10.5) < 0.0001)
+    }
+
+    @Test("The transcript section never matches sticker clips")
+    func stickersAreExcluded() {
+        let sticker = Clip(
+            kind: .text,
+            sourceRange: TimeRange(start: 0, duration: 1),
+            timelineRange: TimeRange(start: 0, duration: 1),
+            textContent: TextClipContent(
+                text: "sparkle",
+                contentKind: .sticker
+            )
+        )
+        var project = Project(
+            name: "n1-sticker",
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .text, name: "Subtitles", zIndex: 0, clips: [sticker])
+            ])
+        )
+        project.mediaLibrary = MediaLibrary(assets: [:])
+        let vm = EditorViewModel(project: project)
+        #expect(vm.transcriptMatches(for: "sparkle").isEmpty)
+    }
+}

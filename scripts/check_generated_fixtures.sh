@@ -358,6 +358,9 @@ init|regenerate)
   [ -e "$COMMITTED_LOCK" ] || { echo "COMMITTED_LOCK_MISSING — $COMMITTED_LOCK" >&2; exit 1; }
   GENLOCK="$LOCK" SPEC="$SPEC" JOURNAL="$JOURNAL" COMMITTED_LOCK="$COMMITTED_LOCK" \
   GENROOT="$LOCK_ROOT" MODE="$MODE" \
+  ENV_OS="$(sw_vers -productVersion 2>/dev/null || echo unknown)" \
+  ENV_ARCH="$(uname -m 2>/dev/null || echo unknown)" \
+  ENV_TOOL="$(ffmpeg -version 2>/dev/null | head -1 | cut -c1-60 || echo unknown)" \
   python3 - <<'PY'
 import datetime, hashlib, json, os, subprocess, sys
 
@@ -460,6 +463,12 @@ def append_event(event, extra):
     line = {"ts": now, "kind": "generated_fixture_event", "event": event,
             "fixture_id": fid, "generation_id": gid, "output_sha256": out_sha,
             "provenance_epoch": extra.get("provenance_epoch", 1)}
+    # environment = OBSERVATIONAL evidence only (29th-cycle): never part of
+    # the generation identity — it is promoted INTO the identity only after
+    # a real nondeterminism observation identifies the responsible axis.
+    line["environment"] = {"os_version": os.environ.get("ENV_OS", "unknown"),
+                           "arch": os.environ.get("ENV_ARCH", "unknown"),
+                           "tool": os.environ.get("ENV_TOOL", "unknown")}
     line.update(extra)
     with open(os.environ["JOURNAL"], "a") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
@@ -537,6 +546,9 @@ rebaseline)
   [ -n "$REASON" ] || { echo "REBASELINE REFUSED — --reason is required (operator acknowledgment)" >&2; exit 1; }
   [ -e "$LOCK" ] || { echo "BASELINE_MISSING — gen-lock absent: $LOCK" >&2; exit 1; }
   GENLOCK="$LOCK" FID="$FID" JOURNAL="$JOURNAL" GENROOT="$LOCK_ROOT" REASON="$REASON" \
+  ENV_OS="$(sw_vers -productVersion 2>/dev/null || echo unknown)" \
+  ENV_ARCH="$(uname -m 2>/dev/null || echo unknown)" \
+  ENV_TOOL="$(ffmpeg -version 2>/dev/null | head -1 | cut -c1-60 || echo unknown)" \
   python3 - <<'PY'
 import datetime, hashlib, json, os
 
@@ -564,6 +576,9 @@ line = {"ts": now, "kind": "generated_fixture_event", "event": "REBASELINE",
         "fixture_id": fid, "generation_id": entry.get("generation_id"),
         "output_sha256": new_sha, "provenance_epoch": epoch,
         "previous_epoch": prev_epoch,
+        "environment": {"os_version": os.environ.get("ENV_OS", "unknown"),
+                        "arch": os.environ.get("ENV_ARCH", "unknown"),
+                        "tool": os.environ.get("ENV_TOOL", "unknown")},
         "reason": os.environ["REASON"],
         "operator_acknowledgment": True,
         "note": "new provenance chain starts here — prior chain kept via this event"}

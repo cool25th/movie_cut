@@ -85,6 +85,35 @@ struct TimelineIndexPanel: View {
                             Divider()
                                 .overlay(MovieCutTheme.divider.opacity(0.5))
                         }
+                    } else if !filter.trimmingCharacters(in: .whitespaces).isEmpty,
+                              viewModel.canOfferTranscriptSearchTranscription {
+                        // N1: nothing to search yet — the project has speech
+                        // clips but no subtitles. Offer the on-demand pass
+                        // so the phrase search gets its material.
+                        Button {
+                            Task { await viewModel.transcribeForTranscriptSearch() }
+                        } label: {
+                            Label(
+                                NSLocalizedString(
+                                    "No transcript matches — Transcribe & Search",
+                                    comment: "N1 on-demand transcription row"
+                                ),
+                                systemImage: "waveform.badge.magnifyingglass"
+                            )
+                            .font(MovieCutTypography.cardBody)
+                            .foregroundStyle(MovieCutTheme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, MovieCutSpacing.small)
+                        .padding(.vertical, MovieCutSpacing.xSmall)
+                        .accessibilityHint(NSLocalizedString(
+                            "Transcribes the project's speech so the search can match it",
+                            comment: "N1 on-demand a11y hint"
+                        ))
+                        Divider()
+                            .overlay(MovieCutTheme.divider.opacity(0.5))
                     }
                     ForEach(viewModel.timelineIndexEntries(filter: filter)) { entry in
                         row(entry)
@@ -142,6 +171,14 @@ struct TimelineIndexPanel: View {
                     systemImage: "scissors"
                 )
             }
+            Button {
+                Task { await viewModel.keepTranscriptSentenceOnly(match) }
+            } label: {
+                Label(
+                    NSLocalizedString("Keep Only This Sentence", comment: "N1 keep-only action"),
+                    systemImage: "arrow.right.to.line.compact"
+                )
+            }
             Divider()
             if let mark = rangeMark {
                 Button {
@@ -158,6 +195,23 @@ struct TimelineIndexPanel: View {
                             Int(mark.time.rounded(.down))
                         ),
                         systemImage: "arrow.left.to.line.compact"
+                    )
+                }
+                .disabled(abs(mark.time - match.time) <= 0.01)
+                Button {
+                    Task {
+                        await viewModel.keepTranscriptRangeOnly(from: mark, to: match)
+                        rangeMark = nil
+                    }
+                } label: {
+                    Label(
+                        String(
+                            format: NSLocalizedString(
+                                "Keep Only from Mark to Here (from %d s)", comment: "N1 keep-only range action"
+                            ),
+                            Int(mark.time.rounded(.down))
+                        ),
+                        systemImage: "rectangle.compress.vertical"
                     )
                 }
                 .disabled(abs(mark.time - match.time) <= 0.01)

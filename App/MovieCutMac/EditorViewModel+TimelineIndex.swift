@@ -191,3 +191,107 @@ extension EditorViewModel {
         )
     }
 }
+
+extension EditorViewModel {
+
+    // MARK: - N1 on-demand transcription + keep-only
+
+    /// N1: the speech clip an on-demand "Transcribe & Search" pass should
+    /// use — the selected audio/video clip when there is one, else the
+    /// first speech clip on the timeline.
+    func transcriptSearchTranscriptionTarget() -> Clip? {
+        if let selectedClip, selectedClip.kind == .audio || selectedClip.kind == .video {
+            return selectedClip
+        }
+        return currentProject.timeline.tracks
+            .flatMap(\.clips)
+            .first { $0.kind == .audio || $0.kind == .video }
+    }
+
+    /// N1: offer the on-demand pass only when a phrase search has nothing
+    /// to search — speech clips exist but no text clips do.
+    var canOfferTranscriptSearchTranscription: Bool {
+        let clips = currentProject.timeline.tracks.flatMap(\.clips)
+        let hasSpeech = clips.contains { $0.kind == .audio || $0.kind == .video }
+        let hasText = clips.contains { $0.textContent != nil }
+        return hasSpeech && !hasText
+    }
+
+    /// N1: "Transcribe & Search" — no subtitle matches because the project
+    /// has no subtitles yet; transcribe the speech content once through the
+    /// existing auto-subtitle flow so the phrase search has material.
+    func transcribeForTranscriptSearch() async {
+        guard let target = transcriptSearchTranscriptionTarget() else {
+            lastErrorMessage = NSLocalizedString(
+                "No audio or video clips to transcribe.", comment: "N1 on-demand error"
+            )
+            return
+        }
+        lastErrorMessage = nil
+        // prepareSubtitles aligns its output to the selection, so select
+        // the target speech clip for the pass.
+        selectedClipId = target.id
+        await generateSubtitles()
+    }
+
+    /// N1 keep-only: keeps [start, end) between two matched words and
+    /// removes everything around it — one atomic `AutoCutCommand`, so a
+    /// single undo restores the full timeline.
+    func keepTranscriptRangeOnly(
+        from start: TranscriptSearchIndex.Match,
+        to end: TranscriptSearchIndex.Match
+    ) async {
+        let lower = min(start.time, end.time)
+        let upper = max(start.time, end.time)
+        guard upper - lower > 0.01 else {
+            lastErrorMessage = NSLocalizedString(
+                "The two matches are at the same moment; nothing to keep between them.",
+                comment: "N1 keep-only empty range error"
+            )
+            return
+        }
+        let total = currentProject.timeline.duration
+        var removable: [TimeRange] = []
+        if lower > 0.01 {
+            removable.append(TimeRange(start: 0, duration: lower))
+        }
+        if upper < total - 0.01 {
+            removable.append(TimeRange(start: upper, duration: total - upper))
+        }
+        guard !removable.isEmpty else {
+            lastErrorMessage = NSLocalizedString(
+                "This range already covers the whole timeline.",
+                comment: "N1 keep-only whole-timeline error"
+            )
+            return
+        }
+        lastErrorMessage = nil
+        await apply(AutoCutCommand(removableRanges: removable))
+        lastStatusMessage = NSLocalizedString(
+            "Kept only the transcript range between the two matches.",
+            comment: "N1 keep-only status"
+        )
+    }
+
+    /// N1 keep-only: keeps one matched sentence's span (the subtitle card's
+    /// range) and removes everything around it.
+    func keepTranscriptSentenceOnly(_ match: TranscriptSearchIndex.Match) async {
+        guard let card = currentProject.timeline.tracks.flatMap(\.clips)
+            .first(where: { $0.id == match.clipId })
+        else {
+            lastErrorMessage = NSLocalizedString(
+                "The subtitle card for this match is no longer on the timeline.",
+                comment: "N1 keep-only missing card error"
+            )
+            return
+        }
+        await keepTranscriptRangeOnly(
+            from: TranscriptSearchIndex.Match(
+                clipId: card.id, time: card.timelineRange.start, excerpt: ""
+            ),
+            to: TranscriptSearchIndex.Match(
+                clipId: card.id, time: card.timelineRange.end, excerpt: ""
+            )
+        )
+    }
+}

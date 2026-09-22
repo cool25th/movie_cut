@@ -4041,6 +4041,57 @@
         }
       }
     },
+    "Keep Only This Sentence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Only This Sentence"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 문장만 남기기"
+          }
+        }
+      }
+    },
+    "Keep Only from Mark to Here (from %d s)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Only from Mark to Here (from %d s)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "표시 지점부터 여기까지만 남기기 (%d초부터)"
+          }
+        }
+      }
+    },
+    "Kept only the transcript range between the two matches.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept only the transcript range between the two matches."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "두 검색 결과 사이 구간만 남겼습니다."
+          }
+        }
+      }
+    },
     "Last autosave: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -4731,6 +4782,23 @@
         }
       }
     },
+    "No audio or video clips to transcribe.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No audio or video clips to transcribe."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전사할 오디오·비디오 클립이 없습니다."
+          }
+        }
+      }
+    },
     "No beta diagnostics recorded yet.": {
       "extractionState": "manual",
       "localizations": {
@@ -4972,6 +5040,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "썸네일 없음"
+          }
+        }
+      }
+    },
+    "No transcript matches — Transcribe & Search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transcript matches — Transcribe & Search"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대사 검색 결과 없음 — 전사 후 검색"
           }
         }
       }
@@ -7357,6 +7442,23 @@
         }
       }
     },
+    "The two matches are at the same moment; nothing to keep between them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The two matches are at the same moment; nothing to keep between them."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "두 검색 결과가 같은 위치입니다. 사이에 남길 것이 없습니다."
+          }
+        }
+      }
+    },
     "Thermal pressure: preview is using the proxy. It restores when the device cools. Export uses the original.": {
       "localizations": {
         "en": {
@@ -7402,6 +7504,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 프로젝트에는 측정할 오디오가 없습니다."
+          }
+        }
+      }
+    },
+    "This range already covers the whole timeline.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This range already covers the whole timeline."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 범위가 타임라인 전체를 이미 덮습니다."
           }
         }
       }
@@ -7825,6 +7944,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "트랜스"
+          }
+        }
+      }
+    },
+    "Transcribes the project's speech so the search can match it": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes the project's speech so the search can match it"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색이 말소리를 찾을 수 있도록 프로젝트 음성을 전사합니다"
           }
         }
       }

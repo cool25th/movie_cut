@@ -313,3 +313,167 @@ struct TimelineIndexTranscriptDeleteTests {
                 "no mutation on refusal")
     }
 }
+
+/// N1 on-demand transcription + keep-only.
+@MainActor
+@Suite("Timeline index on-demand transcription & keep-only (N1)")
+struct TimelineIndexOnDemandTests {
+
+    /// A deterministic in-memory provider so the on-demand pass runs the
+    /// REAL subtitle-generation flow without device speech recognition.
+    private struct FakeSpeechProvider: TranscriptionProvider {
+        var isAvailable: Bool { true }
+        var providerName: String { "Fake" }
+        func transcribe(audioURL: URL, language: String?) async throws -> TranscriptionResult {
+            TranscriptionResult(segments: [
+                TranscriptionSegment(
+                    text: "hello world",
+                    startTime: 1.0,
+                    endTime: 2.0,
+                    confidence: 1,
+                    words: [
+                        WordTiming(text: "hello", startTime: 1.0, endTime: 1.5, confidence: 1),
+                        WordTiming(text: "world", startTime: 1.5, endTime: 2.0, confidence: 1),
+                    ]
+                ),
+            ], language: language)
+        }
+    }
+
+    private func makeProject() -> EditorViewModel {
+        let videoId = UUID()
+        let assets = [videoId: MediaAsset(
+            originalURL: URL(fileURLWithPath: "/scratch/talk.mp4"),
+            kind: .video, duration: 10
+        )]
+        var project = Project(
+            name: "n1-ondemand",
+            mediaLibrary: MediaLibrary(assets: assets),
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .video, name: "V", zIndex: 0, clips: [
+                    Clip(
+                        assetId: videoId, kind: .video,
+                        sourceRange: TimeRange(start: 0, duration: 10),
+                        timelineRange: TimeRange(start: 0, duration: 10)
+                    ),
+                ]),
+            ])
+        )
+        project.mediaLibrary = MediaLibrary(assets: assets)
+        return EditorViewModel(project: project)
+    }
+
+    @Test("Transcribe & Search: on-demand pass creates searchable subtitles end to end")
+    func onDemandTranscriptionFlow() async {
+        let vm = makeProject()
+        // Speech present, no subtitles → the offer is available, and a
+        // phrase search finds nothing yet.
+        #expect(vm.canOfferTranscriptSearchTranscription)
+        #expect(vm.transcriptMatches(for: "hello world").isEmpty)
+
+        vm.transcriptionService.currentProvider = FakeSpeechProvider()
+        await vm.transcribeForTranscriptSearch()
+
+        #expect(vm.lastErrorMessage == nil, "on-demand pass failed: \(vm.lastErrorMessage ?? "?")")
+        let matches = vm.transcriptMatches(for: "hello world")
+        #expect(matches.count == 1, "expected the fresh subtitles to be searchable")
+        // With subtitles on the timeline the offer disappears.
+        #expect(!vm.canOfferTranscriptSearchTranscription)
+    }
+
+    @Test("The offer requires speech clips and the absence of subtitles")
+    func offerGating() {
+        let vm = makeProject()
+        #expect(vm.canOfferTranscriptSearchTranscription)
+
+        // A project with no speech clips offers nothing and has no target.
+        let empty = EditorViewModel(project: Project(
+            name: "empty",
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [])
+        ))
+        #expect(!empty.canOfferTranscriptSearchTranscription)
+        #expect(empty.transcriptSearchTranscriptionTarget() == nil)
+
+        // With subtitle cards on the timeline there is already material to
+        // search — the offer disappears.
+        let (withSubtitles, _, _) = makeDeleteFixture()
+        #expect(!withSubtitles.canOfferTranscriptSearchTranscription)
+    }
+
+    @Test("Keep-only between two matches keeps the span and one undo restores all")
+    func keepOnlyRange() async {
+        let (vm, _, _) = makeDeleteFixture()
+        let hello = vm.transcriptMatches(for: "hello").first!
+        let goodbye = vm.transcriptMatches(for: "goodbye").first!
+
+        await vm.keepTranscriptRangeOnly(from: hello, to: goodbye)
+
+        let clips = vm.currentProject.timeline.tracks.flatMap(\.clips)
+        #expect(!clips.isEmpty)
+        for clip in clips {
+            #expect(clip.timelineRange.start >= 2.0 - 0.001 && clip.timelineRange.end <= 6.0 + 0.001,
+                    "clip \(clip.timelineRange) survived outside the kept span [2,6)")
+        }
+        await vm.undo()
+        #expect(vm.currentProject.timeline.tracks.flatMap(\.clips).count == 3)
+    }
+
+    @Test("Keep-only sentence keeps just the card span")
+    func keepOnlySentence() async {
+        let (vm, helloId, goodbyeId) = makeDeleteFixture()
+        let hello = vm.transcriptMatches(for: "hello world").first!
+
+        await vm.keepTranscriptSentenceOnly(hello)
+
+        let clips = vm.currentProject.timeline.tracks.flatMap(\.clips)
+        #expect(clips.contains { $0.id == helloId })
+        #expect(!clips.contains { $0.id == goodbyeId })
+        for clip in clips {
+            #expect(clip.timelineRange.start >= 2.0 - 0.001 && clip.timelineRange.end <= 4.0 + 0.001,
+                    "clip \(clip.timelineRange) survived outside the sentence span [2,4)")
+        }
+        await vm.undo()
+        #expect(vm.currentProject.timeline.tracks.flatMap(\.clips).count == 3)
+    }
+
+    /// The N1-B delete fixture (10 s video + two subtitle cards).
+    private func makeDeleteFixture() -> (EditorViewModel, UUID, UUID) {
+        let videoId = UUID()
+        let assets = [videoId: MediaAsset(
+            originalURL: URL(fileURLWithPath: "/scratch/talk.mp4"),
+            kind: .video, duration: 10
+        )]
+        func card(_ text: String, _ start: TimeInterval, words: [WordTiming]) -> Clip {
+            Clip(
+                kind: .text,
+                sourceRange: TimeRange(start: 0, duration: 2),
+                timelineRange: TimeRange(start: start, duration: 2),
+                textContent: TextClipContent(text: text, wordTimings: words)
+            )
+        }
+        let hello = card("hello world", 2, words: [
+            WordTiming(text: "hello", startTime: 0.0, endTime: 0.5, confidence: 1),
+            WordTiming(text: "world", startTime: 0.5, endTime: 1.0, confidence: 1),
+        ])
+        let goodbye = card("goodbye now", 6, words: [
+            WordTiming(text: "goodbye", startTime: 0.0, endTime: 0.5, confidence: 1),
+            WordTiming(text: "now", startTime: 0.5, endTime: 1.0, confidence: 1),
+        ])
+        var project = Project(
+            name: "n1-keep",
+            mediaLibrary: MediaLibrary(assets: assets),
+            timeline: Timeline(canvasSize: CGSize(width: 320, height: 240), tracks: [
+                Track(kind: .video, name: "V", zIndex: 0, clips: [
+                    Clip(
+                        assetId: videoId, kind: .video,
+                        sourceRange: TimeRange(start: 0, duration: 10),
+                        timelineRange: TimeRange(start: 0, duration: 10)
+                    ),
+                ]),
+                Track(kind: .text, name: "Subtitles", zIndex: 1, clips: [hello, goodbye]),
+            ])
+        )
+        project.mediaLibrary = MediaLibrary(assets: assets)
+        return (EditorViewModel(project: project), hello.id, goodbye.id)
+    }
+}

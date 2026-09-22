@@ -42,6 +42,12 @@ public enum TranscriptSearchIndex {
         public let excerpt: String
         /// Stable identity for list UIs.
         public var id: String { "\(clipId.uuidString)-\(String(format: "%.3f", time))" }
+
+        public init(clipId: UUID, time: TimeInterval, excerpt: String) {
+            self.clipId = clipId
+            self.time = time
+            self.excerpt = excerpt
+        }
     }
 
     /// Matches are capped so a degenerate query (a single common letter)

@@ -157,6 +157,12 @@ final class EditorViewModel {
     /// CA-25 onboarding instrumentation (first launch/import/export/quick tools).
     let onboardingMetrics = OnboardingMetrics()
 
+    /// N1: cached transcript-search corpus — the build is the expensive
+    /// part (per-card normalize + span math), so it rebuilds only when the
+    /// timeline changes, not per keystroke.
+    @ObservationIgnored
+    var transcriptCorpusCache: (timeline: Timeline, corpus: TranscriptSearchIndex.Corpus)?
+
     /// CA-30 Local Beta Diagnostics — the funnel event log (JSONL, offline
     /// by construction: the log type references no networking API). Nil
     /// directory under the UI-test harness so harness runs never pollute it.

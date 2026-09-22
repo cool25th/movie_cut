@@ -54,63 +54,83 @@ public enum TranscriptSearchIndex {
     /// cannot flood the index panel.
     public static let matchLimit = 50
 
-    /// Case-insensitive, whitespace-collapsed phrase search across cards.
-    /// An empty (or whitespace-only) query matches nothing by contract.
-    public static func matches(for rawQuery: String, in items: [Item]) -> [Match] {
-        let query = normalize(rawQuery)
-        guard !query.isEmpty else { return [] }
+    /// A build-once, search-many index over the subtitle cards. Building the
+    /// corpus is the expensive part (normalize + span math over every card),
+    /// so interactive search surfaces (a search field firing per keystroke)
+    /// build once per timeline change and query the same corpus — the
+    /// N1 measurement found per-query rebuilds cost ~180 ms p95 on a
+    /// 30-minute timeline.
+    public struct Corpus: Sendable {
+        private let characters: [Character]
+        private let cardSpans: [(start: Int, end: Int, item: Item)]
+        private let wordSpans: [(start: Int, end: Int, card: Int, word: WordTiming)]
 
-        // Pass 1 — build the padded corpus (" card1 card2 … "), recording
-        // integer offsets per card (offsets avoid String.Index invalidation
-        // across the mutation-heavy build).
-        var corpus = " "
-        var cardSpans: [(start: Int, end: Int, item: Item)] = []
-        for item in items.sorted(by: { $0.timelineStart < $1.timelineStart }) {
-            let itemText = normalize(item.text)
-            guard !itemText.isEmpty else { continue }
-            // The corpus always ends with a separator space, so the item's
-            // text starts AT the current count (index == count, not
-            // count - 1 — the pad space owns the last index).
-            let start = corpus.count
-            corpus += itemText
-            cardSpans.append((start: start, end: corpus.count, item: item))
-            corpus += " "
-        }
-        let characters = Array(corpus)
-
-        // Pass 2 — per-card word spans (token count must equal the timing
-        // count, else the card resolves to its start).
-        var wordSpans: [(start: Int, end: Int, card: Int, word: WordTiming)] = []
-        for (cardIndex, span) in cardSpans.enumerated() {
-            guard let words = span.item.words, !words.isEmpty else { continue }
-            let tokens = corpus[corpus.index(corpus.startIndex, offsetBy: span.start)..<corpus.index(corpus.startIndex, offsetBy: span.end)]
-                .components(separatedBy: " ")
-            guard tokens.count == words.count else { continue }
-            var offset = span.start
-            for (tokenIndex, token) in tokens.enumerated() {
-                wordSpans.append((offset, offset + token.count, cardIndex, words[tokenIndex]))
-                offset += token.count + 1
+        /// Builds the normalized corpus and span maps from timeline-ordered
+        /// items (order is normalized here — callers may pass any order).
+        public init(items: [Item]) {
+            var corpus = " "
+            var cardSpans: [(start: Int, end: Int, item: Item)] = []
+            for item in items.sorted(by: { $0.timelineStart < $1.timelineStart }) {
+                let itemText = TranscriptSearchIndex.normalize(item.text)
+                guard !itemText.isEmpty else { continue }
+                // The corpus always ends with a separator space, so the item's
+                // text starts AT the current count (index == count, not
+                // count - 1 — the pad space owns the last index).
+                let start = corpus.count
+                corpus += itemText
+                cardSpans.append((start: start, end: corpus.count, item: item))
+                corpus += " "
             }
+            var wordSpans: [(start: Int, end: Int, card: Int, word: WordTiming)] = []
+            for (cardIndex, span) in cardSpans.enumerated() {
+                guard let words = span.item.words, !words.isEmpty else { continue }
+                let tokens = corpus[corpus.index(corpus.startIndex, offsetBy: span.start)..<corpus.index(corpus.startIndex, offsetBy: span.end)]
+                    .components(separatedBy: " ")
+                guard tokens.count == words.count else { continue }
+                var offset = span.start
+                for (tokenIndex, token) in tokens.enumerated() {
+                    wordSpans.append((offset, offset + token.count, cardIndex, words[tokenIndex]))
+                    offset += token.count + 1
+                }
+            }
+            self.characters = Array(corpus)
+            self.cardSpans = cardSpans
+            self.wordSpans = wordSpans
         }
 
-        // Pass 3 — repeated phrase search over the final corpus.
-        var results: [Match] = []
-        let padded = Array(" " + query + " ")
-        var searchFrom = 0
-        while results.count < matchLimit {
-            let found = firstRange(of: padded, in: characters, from: searchFrom)
-            guard let found else { break }
-            let phraseStart = found.lowerBound + 1
-            let phraseEnd = found.upperBound - 1
-            let resolved = resolve(phraseStart, cardSpans: cardSpans, wordSpans: wordSpans)
-            results.append(Match(
-                clipId: resolved.item.clipId,
-                time: resolved.time,
-                excerpt: excerpt(around: phraseStart..<phraseEnd, in: characters)
-            ))
-            searchFrom = found.upperBound
+        /// Case-insensitive, whitespace-collapsed phrase search. An empty
+        /// (or whitespace-only) query matches nothing by contract.
+        public func matches(for rawQuery: String) -> [TranscriptSearchIndex.Match] {
+            let query = TranscriptSearchIndex.normalize(rawQuery)
+            guard !query.isEmpty else { return [] }
+
+            var results: [TranscriptSearchIndex.Match] = []
+            let padded = Array(" " + query + " ")
+            var searchFrom = 0
+            while results.count < TranscriptSearchIndex.matchLimit {
+                let found = TranscriptSearchIndex.firstRange(of: padded, in: characters, from: searchFrom)
+                guard let found else { break }
+                let phraseStart = found.lowerBound + 1
+                let phraseEnd = found.upperBound - 1
+                let resolved = TranscriptSearchIndex.resolve(
+                    phraseStart, cardSpans: cardSpans, wordSpans: wordSpans
+                )
+                results.append(TranscriptSearchIndex.Match(
+                    clipId: resolved.item.clipId,
+                    time: resolved.time,
+                    excerpt: TranscriptSearchIndex.excerpt(
+                        around: phraseStart..<phraseEnd, in: characters
+                    )
+                ))
+                searchFrom = found.upperBound
+            }
+            return results
         }
-        return results
+    }
+
+    /// One-shot convenience over `Corpus` (build + single search).
+    public static func matches(for rawQuery: String, in items: [Item]) -> [Match] {
+        Corpus(items: items).matches(for: rawQuery)
     }
 
     // MARK: - Internals

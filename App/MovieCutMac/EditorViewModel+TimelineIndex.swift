@@ -108,22 +108,26 @@ extension EditorViewModel {
     /// Transcript phrase matches for the index panel's query — subtitle
     /// cards searched as ONE concatenated corpus (N1-A), so a spoken phrase
     /// split across two cards still hits, word-time precise when karaoke
-    /// timings exist.
+    /// timings exist. The corpus is cached per timeline state (the build
+    /// dominates; queries must stay keystroke-cheap).
     func transcriptMatches(for filter: String) -> [TranscriptSearchIndex.Match] {
-        let items = currentProject.timeline.tracks.flatMap { track in
-            track.clips.compactMap { clip -> TranscriptSearchIndex.Item? in
-                guard let content = clip.textContent, content.contentKind != .sticker else {
-                    return nil
+        if transcriptCorpusCache?.timeline != currentProject.timeline {
+            let items = currentProject.timeline.tracks.flatMap { track in
+                track.clips.compactMap { clip -> TranscriptSearchIndex.Item? in
+                    guard let content = clip.textContent, content.contentKind != .sticker else {
+                        return nil
+                    }
+                    return TranscriptSearchIndex.Item(
+                        clipId: clip.id,
+                        text: content.text,
+                        timelineStart: clip.timelineRange.start,
+                        words: content.wordTimings
+                    )
                 }
-                return TranscriptSearchIndex.Item(
-                    clipId: clip.id,
-                    text: content.text,
-                    timelineStart: clip.timelineRange.start,
-                    words: content.wordTimings
-                )
             }
+            transcriptCorpusCache = (currentProject.timeline, TranscriptSearchIndex.Corpus(items: items))
         }
-        return TranscriptSearchIndex.matches(for: filter, in: items)
+        return transcriptCorpusCache!.corpus.matches(for: filter)
     }
 
     /// Reveals a transcript hit: selects the subtitle card and jumps the

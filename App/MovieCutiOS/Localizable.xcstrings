@@ -5090,6 +5090,23 @@
         }
       }
     },
+    "Reduces background noise in the selected clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reduces background noise in the selected clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립의 배경 잡음을 줄입니다"
+          }
+        }
+      }
+    },
     "Relink": {
       "extractionState": "manual",
       "localizations": {

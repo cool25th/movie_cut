@@ -1380,6 +1380,71 @@ final class IOSEditorViewModel {
         }
     }
 
+    /// CA-31(a) 2차: Noise Reduce — Mac `applyNoiseReduction(for:)` parity.
+    /// The denoised audio derives through the shared Core service; audio
+    /// clips swap their source asset, video clips get a denoised audio twin
+    /// on the audio track with the original muted (the Mac detach-style
+    /// pattern). Like the Mac path, the derived file is referenced by URL.
+    func applyNoiseReductionToSelectedClip() async {
+        guard let clipId = selectedClipId, let clip = selectedClip,
+              clip.kind == .audio || clip.kind == .video else {
+            lastErrorMessage = "Select an audio or video clip for noise reduction."
+            return
+        }
+        guard let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "The selected clip's media is missing; re-link it first."
+            return
+        }
+        lastErrorMessage = nil
+        lastStatusMessage = "Reducing noise..."
+        do {
+            let service = NoiseReductionService()
+            let denoisedURL = try await service.applyNoiseReduction(
+                to: AVAsset(url: asset.originalURL)
+            )
+            let denoisedAsset = MediaAsset(
+                originalURL: denoisedURL,
+                kind: .audio,
+                duration: asset.duration
+            )
+            try await session.dispatch(ImportMediaCommand(asset: denoisedAsset))
+
+            switch clip.kind {
+            case .audio:
+                try await session.dispatch(SetClipSourceAssetCommand(
+                    clipId: clipId,
+                    assetId: denoisedAsset.id,
+                    kind: .audio
+                ))
+            case .video:
+                let audioTrack = try await ensureTrack(for: .audio)
+                let denoisedClip = Clip(
+                    assetId: denoisedAsset.id,
+                    kind: .audio,
+                    sourceRange: clip.sourceRange,
+                    timelineRange: clip.timelineRange,
+                    volume: clip.volume,
+                    fadeInDuration: clip.fadeInDuration,
+                    fadeOutDuration: clip.fadeOutDuration,
+                    playbackRate: clip.playbackRate
+                )
+                try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: denoisedClip))
+                try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .volume(0)))
+                selectedClipId = denoisedClip.id
+            case .image, .text:
+                throw EditorCommandError.invalidCommand(
+                    "Select an audio or video clip for noise reduction."
+                )
+            }
+            await refreshFromSession()
+            lastStatusMessage = "Noise reduction applied."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     /// Asset-time → timeline mapping for analysis suggestions (Mac
     /// `EditorViewModel+AnalysisSupport` parity): honors rate/speed ramps
     /// through the canonical `Clip.makeTimeMapping()`.

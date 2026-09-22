@@ -149,6 +149,21 @@ struct IOSInspectorSheet: View {
                                         "Ducks overlapping music under this clip's speech",
                                         comment: "CA-31 duck action hint"
                                     ))
+                                    // CA-31(a) 2차: Noise Reduce — Mac's
+                                    // destructive-apply parity.
+                                    Button {
+                                        Task { await viewModel.applyNoiseReductionToSelectedClip() }
+                                    } label: {
+                                        Label(
+                                            NSLocalizedString("Noise Reduce", comment: "CA-31 audio preset action"),
+                                            systemImage: "waveform.and.sparkle"
+                                        )
+                                    }
+                                    .disabled(!viewModel.canDuckBackground)
+                                    .accessibilityHint(NSLocalizedString(
+                                        "Reduces background noise in the selected clip",
+                                        comment: "CA-31 noise reduce hint"
+                                    ))
                                 }
                             }
                         }

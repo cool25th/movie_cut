@@ -131,3 +131,76 @@ struct IOSAudioPresetTests {
         #expect(vm.currentProject.timeline.tracks.flatMap(\.clips).isEmpty)
     }
 }
+
+/// CA-31(a) 2차: Noise Reduce — Mac's derive-and-swap parity. Audio clips
+/// swap their source to the denoised asset; video clips get a denoised
+/// audio twin on the audio track with the original muted.
+@MainActor
+extension IOSAudioPresetTests {
+
+    @Test("Noise Reduce on an audio clip swaps the source to the denoised asset")
+    func noiseReduceAudioClip() async throws {
+        let vm = IOSEditorViewModel(autosaveDirectory: tempAutosaveDir("nr-audio"))
+        let url = fixture("noisy_voice_1k_hiss_8k_2s_mono.wav")
+        let asset = MediaImporter.probe(url: url)
+        await vm.importMedia(from: url, kind: .audio)
+        await vm.addClipToTimeline(asset: asset)
+        let clip = try #require(
+            vm.currentProject.timeline.tracks.flatMap(\.clips).first { $0.assetId == asset.id }
+        )
+        vm.selectedClipId = clip.id
+
+        await vm.applyNoiseReductionToSelectedClip()
+
+        #expect(vm.lastErrorMessage == nil, "NR failed: \(vm.lastErrorMessage ?? "?")")
+        let swapped = try #require(
+            vm.currentProject.timeline.tracks.flatMap(\.clips).first { $0.id == clip.id }
+        )
+        #expect(swapped.assetId != asset.id, "audio clip must swap to the denoised asset")
+        let denoisedAsset = try #require(
+            vm.currentProject.mediaLibrary.assets[swapped.assetId!]
+        )
+        #expect(denoisedAsset.kind == .audio)
+        #expect(FileManager.default.fileExists(atPath: denoisedAsset.originalURL.path),
+                "denoised file must exist")
+    }
+
+    @Test("Noise Reduce on a video clip adds a denoised audio twin and mutes the original")
+    func noiseReduceVideoClip() async throws {
+        let vm = IOSEditorViewModel(autosaveDirectory: tempAutosaveDir("nr-video"))
+        let url = Self.repoRoot.appendingPathComponent(
+            "Tests/Fixtures/solid_red_tone_320x240_2s_30fps.mp4"
+        )
+        let asset = MediaImporter.probe(url: url)
+        await vm.importMedia(from: url, kind: .video)
+        await vm.addClipToTimeline(asset: asset)
+        let clip = try #require(
+            vm.currentProject.timeline.tracks.flatMap(\.clips).first { $0.assetId == asset.id }
+        )
+        vm.selectedClipId = clip.id
+
+        await vm.applyNoiseReductionToSelectedClip()
+
+        #expect(vm.lastErrorMessage == nil, "NR failed: \(vm.lastErrorMessage ?? "?")")
+        // The original video clip is muted in place.
+        let muted = try #require(
+            vm.currentProject.timeline.tracks.flatMap(\.clips).first { $0.id == clip.id }
+        )
+        #expect(muted.volume == 0)
+        // A denoised audio twin sits on the audio track at the same span.
+        let twin = try #require(
+            vm.currentProject.timeline.tracks.flatMap(\.clips)
+                .first { $0.kind == .audio && $0.timelineRange == clip.timelineRange }
+        )
+        #expect(twin.assetId != clip.assetId)
+        #expect(vm.selectedClipId == twin.id)
+    }
+
+    @Test("Noise Reduce without a valid selection reports an explicit error")
+    func noiseReduceNoSelection() async throws {
+        let vm = IOSEditorViewModel(autosaveDirectory: tempAutosaveDir("nr-nosel"))
+        await vm.applyNoiseReductionToSelectedClip()
+        #expect(vm.lastErrorMessage != nil)
+        #expect(vm.currentProject.mediaLibrary.assets.isEmpty)
+    }
+}

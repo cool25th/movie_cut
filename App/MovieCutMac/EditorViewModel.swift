@@ -1538,6 +1538,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
@@ -1546,10 +1547,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1609,6 +1612,7 @@ final class EditorViewModel {
         guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
@@ -1618,10 +1622,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1640,6 +1646,7 @@ final class EditorViewModel {
     /// panel. Used by automation to verify audio-only outputs headlessly.
     func exportAudioOnly(to url: URL) async {
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportAudioOnly(
@@ -1648,10 +1655,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1665,6 +1674,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportAnimatedGIF(
@@ -1673,10 +1683,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1690,6 +1702,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportStillFrame(
@@ -1699,10 +1712,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 

@@ -2308,6 +2308,23 @@
         }
       }
     },
+    "Copied beta diagnostics for feedback.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied beta diagnostics for feedback."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드백용 베타 진단 정보를 복사했습니다."
+          }
+        }
+      }
+    },
     "Copy": {
       "extractionState": "manual",
       "localizations": {
@@ -2321,6 +2338,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "복사"
+          }
+        }
+      }
+    },
+    "Copy Beta Diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Beta Diagnostics"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "베타 진단 정보 복사"
           }
         }
       }
@@ -4693,6 +4727,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "애니메이션 없음"
+          }
+        }
+      }
+    },
+    "No beta diagnostics recorded yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No beta diagnostics recorded yet."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 기록된 베타 진단 정보가 없습니다."
           }
         }
       }

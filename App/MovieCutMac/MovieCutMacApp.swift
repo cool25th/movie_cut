@@ -384,6 +384,12 @@ struct MovieCutMacApp: App {
                 Button("MovieCut Keyboard Shortcuts") {
                     MovieCutKeyboardShortcutHelp.show()
                 }
+
+                // CA-30: the opt-in diagnostics surface — a beta tester
+                // attaches the local funnel log to feedback by copying it.
+                Button("Copy Beta Diagnostics") {
+                    Task { await viewModel.copyBetaDiagnosticsToPasteboard() }
+                }
             }
         }
     }

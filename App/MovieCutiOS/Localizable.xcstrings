@@ -5690,6 +5690,40 @@
         }
       }
     },
+    "Share Beta Diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Beta Diagnostics"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "베타 진단 정보 공유"
+          }
+        }
+      }
+    },
+    "Share Beta Diagnostics File": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Beta Diagnostics File"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "베타 진단 파일 공유"
+          }
+        }
+      }
+    },
     "Shows or hides non-exporting title and action safe guides on the preview canvas.": {
       "extractionState": "manual",
       "localizations": {

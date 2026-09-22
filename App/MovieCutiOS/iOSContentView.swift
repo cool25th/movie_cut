@@ -20,6 +20,9 @@ struct IOSContentView: View {
     @State private var isExportResultPresented = false
     @State private var isExportErrorPresented = false
     @State private var didCancelExport = false
+    /// CA-30 2차: the local diagnostics JSONL for the opt-in share
+    /// (TestFlight feedback attachment). Identifiable wrapper for sheet(item:).
+    @State private var diagnosticsShare: DiagnosticsShareItem?
     // UX-REC-02: launch recovery prompt — offer Keep/Discard for restored work.
     @State private var isRecoveryPromptPresented = false
     // CA-17: subtitle export format picker.
@@ -163,6 +166,20 @@ struct IOSContentView: View {
                             isExportSettingsPresented = true
                         } label: {
                             Label("Export Settings", systemImage: "switch.2")
+                        }
+
+                        // CA-30 2차: opt-in diagnostics export — the local
+                        // funnel log never leaves the device on its own.
+                        Button {
+                            Task {
+                                diagnosticsShare = (await viewModel.betaDiagnosticsExportURL())
+                                    .map(DiagnosticsShareItem.init)
+                            }
+                        } label: {
+                            Label(
+                                NSLocalizedString("Share Beta Diagnostics", comment: "CA-30 iOS export surface"),
+                                systemImage: "stethoscope"
+                            )
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -323,6 +340,18 @@ struct IOSContentView: View {
                     IOSExportResultSheet(exportURL: exportURL)
                         .presentationDetents([.height(240)])
                 }
+            }
+            .sheet(item: $diagnosticsShare) { item in
+                // CA-30 2차: the share surface for the opt-in diagnostics
+                // export (TestFlight feedback attachment).
+                ShareLink(item: item.url) {
+                    Label(
+                        NSLocalizedString("Share Beta Diagnostics File", comment: "CA-30 iOS share sheet"),
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+                .padding()
+                .presentationDetents([.height(160)])
             }
             .alert("Export Failed", isPresented: $isExportErrorPresented) {
                 Button("OK", role: .cancel) {}
@@ -1124,6 +1153,13 @@ struct MovieCutProjectDocument: FileDocument {
 }
 
 let moviecutType = UTType(filenameExtension: "moviecut") ?? .json
+
+/// CA-30 2차: Identifiable wrapper so sheet(item:) can present the
+/// diagnostics share target.
+private struct DiagnosticsShareItem: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
 
 
 #Preview {

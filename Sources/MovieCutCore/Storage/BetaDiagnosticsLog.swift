@@ -134,6 +134,12 @@ public actor BetaDiagnosticsLog {
         FileManager.default.createFile(atPath: activeURL.path, contents: nil)
     }
 
+    /// The active JSONL file for opt-in export surfaces (nil when the log
+    /// is disabled). Reading it never writes.
+    public func exportFileURL() -> URL? {
+        fileURL
+    }
+
     /// Events recorded so far (active file only), in order — the test and
     /// export surface. Corrupt lines are skipped, never fatal.
     public func recordedEvents() -> [Event] {

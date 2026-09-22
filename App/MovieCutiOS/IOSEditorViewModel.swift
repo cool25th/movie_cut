@@ -437,6 +437,12 @@ final class IOSEditorViewModel {
         exportEngine.cancelExport()
     }
 
+    /// CA-30 2차: the diagnostics JSONL for the opt-in share surface
+    /// (TestFlight feedback attachment). Nil when the log is disabled.
+    func betaDiagnosticsExportURL() async -> URL? {
+        await betaDiagnostics.exportFileURL()
+    }
+
     func clearError() { lastErrorMessage = nil }
 
     private var selectedClipTrackId: UUID? {

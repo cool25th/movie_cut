@@ -460,6 +460,351 @@
       "name": "ffmpeg (industry reference)",
       "registered_at": "2026-09-23T22:32:40",
       "version": "ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg deve"
+    },
+    "moviecut": {
+      "measurements": {
+        "2026-09-23T23:12:36": {
+          "app_commit": "76806eb",
+          "candidate": "moviecut",
+          "fixtures": {
+            "ab01_single_1080p30": {
+              "duration_s": "10.000000",
+              "metrics": {
+                "canvas": "1920x1080",
+                "delta_e_max": 220.164,
+                "delta_e_mean": 9.326,
+                "delta_e_p95": 18.613,
+                "export": "/Users/cool-mini4/MyDev/automation/movie_cut/artifacts/ab_benchmark/candidates/moviecut/ab01_single_1080p30.mp4",
+                "frames_compared": 9,
+                "mad_max": 27.782,
+                "mad_p95": 25.353,
+                "per_frame": [
+                  {
+                    "mad_per_channel": [
+                      0.809,
+                      25.286,
+                      0.827
+                    ],
+                    "psnr_db": 24.103,
+                    "ssim": 0.972126,
+                    "t_s": 0.556
+                  },
+                  {
+                    "mad_per_channel": [
+                      4.738,
+                      27.782,
+                      4.174
+                    ],
+                    "psnr_db": 18.604,
+                    "ssim": 0.946615,
+                    "t_s": 1.667
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.724,
+                      25.195,
+                      0.717
+                    ],
+                    "psnr_db": 24.176,
+                    "ssim": 0.975188,
+                    "t_s": 2.778
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.714,
+                      25.069,
+                      0.684
+                    ],
+                    "psnr_db": 24.208,
+                    "ssim": 0.975641,
+                    "t_s": 3.889
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.734,
+                      25.382,
+                      0.75
+                    ],
+                    "psnr_db": 24.12,
+                    "ssim": 0.975745,
+                    "t_s": 5.0
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.685,
+                      25.209,
+                      0.663
+                    ],
+                    "psnr_db": 24.189,
+                    "ssim": 0.975637,
+                    "t_s": 6.111
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.675,
+                      24.073,
+                      0.617
+                    ],
+                    "psnr_db": 24.46,
+                    "ssim": 0.974909,
+                    "t_s": 7.222
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.683,
+                      25.225,
+                      0.654
+                    ],
+                    "psnr_db": 24.184,
+                    "ssim": 0.974927,
+                    "t_s": 8.333
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.763,
+                      25.222,
+                      0.77
+                    ],
+                    "psnr_db": 24.15,
+                    "ssim": 0.974242,
+                    "t_s": 9.444
+                  }
+                ],
+                "psnr_global_db": 23.086,
+                "reference_dir": "/tmp/moviecut-bench-cand.MfheDe/ab01_single_1080p30/refs",
+                "ssim_mean": 0.97167,
+                "ssim_min": 0.946615
+              },
+              "output_sha256": "e8e4444dbb45b521312253a2c8ce4757459efd8a17fa484c6939dbf6fc4fc198"
+            },
+            "ab02_4k60_hevc": {
+              "duration_s": "6.000000",
+              "metrics": {
+                "canvas": "1920x1080",
+                "delta_e_max": 256.09,
+                "delta_e_mean": 9.627,
+                "delta_e_p95": 18.188,
+                "export": "/Users/cool-mini4/MyDev/automation/movie_cut/artifacts/ab_benchmark/candidates/moviecut/ab02_4k60_hevc.mp4",
+                "frames_compared": 9,
+                "mad_max": 26.946,
+                "mad_p95": 25.906,
+                "per_frame": [
+                  {
+                    "mad_per_channel": [
+                      2.63,
+                      25.228,
+                      2.057
+                    ],
+                    "psnr_db": 23.28,
+                    "ssim": 0.961583,
+                    "t_s": 0.333
+                  },
+                  {
+                    "mad_per_channel": [
+                      2.597,
+                      25.299,
+                      2.035
+                    ],
+                    "psnr_db": 23.264,
+                    "ssim": 0.962704,
+                    "t_s": 1.0
+                  },
+                  {
+                    "mad_per_channel": [
+                      4.175,
+                      26.166,
+                      3.428
+                    ],
+                    "psnr_db": 20.489,
+                    "ssim": 0.946318,
+                    "t_s": 1.667
+                  },
+                  {
+                    "mad_per_channel": [
+                      2.635,
+                      25.098,
+                      2.146
+                    ],
+                    "psnr_db": 23.228,
+                    "ssim": 0.961749,
+                    "t_s": 2.333
+                  },
+                  {
+                    "mad_per_channel": [
+                      2.62,
+                      25.236,
+                      2.176
+                    ],
+                    "psnr_db": 23.175,
+                    "ssim": 0.963893,
+                    "t_s": 3.0
+                  },
+                  {
+                    "mad_per_channel": [
+                      5.431,
+                      25.131,
+                      5.63
+                    ],
+                    "psnr_db": 19.01,
+                    "ssim": 0.936955,
+                    "t_s": 3.667
+                  },
+                  {
+                    "mad_per_channel": [
+                      2.607,
+                      25.143,
+                      2.144
+                    ],
+                    "psnr_db": 23.178,
+                    "ssim": 0.964314,
+                    "t_s": 4.333
+                  },
+                  {
+                    "mad_per_channel": [
+                      2.607,
+                      25.203,
+                      2.151
+                    ],
+                    "psnr_db": 23.167,
+                    "ssim": 0.966884,
+                    "t_s": 5.0
+                  },
+                  {
+                    "mad_per_channel": [
+                      4.14,
+                      26.946,
+                      4.88
+                    ],
+                    "psnr_db": 19.388,
+                    "ssim": 0.942197,
+                    "t_s": 5.667
+                  }
+                ],
+                "psnr_global_db": 21.645,
+                "reference_dir": "/tmp/moviecut-bench-cand.MfheDe/ab02_4k60_hevc/refs",
+                "ssim_mean": 0.956289,
+                "ssim_min": 0.936955
+              },
+              "output_sha256": "d37916672ea273a246ac0fe267065cb477af4b30d183e50bcf62a90281349638"
+            },
+            "ab10_external_disk": {
+              "duration_s": "10.000000",
+              "metrics": {
+                "canvas": "1920x1080",
+                "delta_e_max": 220.164,
+                "delta_e_mean": 9.326,
+                "delta_e_p95": 18.613,
+                "export": "/Users/cool-mini4/MyDev/automation/movie_cut/artifacts/ab_benchmark/candidates/moviecut/ab10_external_disk.mp4",
+                "frames_compared": 9,
+                "mad_max": 27.782,
+                "mad_p95": 25.353,
+                "per_frame": [
+                  {
+                    "mad_per_channel": [
+                      0.809,
+                      25.286,
+                      0.827
+                    ],
+                    "psnr_db": 24.103,
+                    "ssim": 0.972126,
+                    "t_s": 0.556
+                  },
+                  {
+                    "mad_per_channel": [
+                      4.738,
+                      27.782,
+                      4.174
+                    ],
+                    "psnr_db": 18.604,
+                    "ssim": 0.946615,
+                    "t_s": 1.667
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.724,
+                      25.195,
+                      0.717
+                    ],
+                    "psnr_db": 24.176,
+                    "ssim": 0.975188,
+                    "t_s": 2.778
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.714,
+                      25.069,
+                      0.684
+                    ],
+                    "psnr_db": 24.208,
+                    "ssim": 0.975641,
+                    "t_s": 3.889
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.734,
+                      25.382,
+                      0.75
+                    ],
+                    "psnr_db": 24.12,
+                    "ssim": 0.975745,
+                    "t_s": 5.0
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.685,
+                      25.209,
+                      0.663
+                    ],
+                    "psnr_db": 24.189,
+                    "ssim": 0.975637,
+                    "t_s": 6.111
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.675,
+                      24.073,
+                      0.617
+                    ],
+                    "psnr_db": 24.46,
+                    "ssim": 0.974909,
+                    "t_s": 7.222
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.683,
+                      25.225,
+                      0.654
+                    ],
+                    "psnr_db": 24.184,
+                    "ssim": 0.974927,
+                    "t_s": 8.333
+                  },
+                  {
+                    "mad_per_channel": [
+                      0.763,
+                      25.222,
+                      0.77
+                    ],
+                    "psnr_db": 24.15,
+                    "ssim": 0.974242,
+                    "t_s": 9.444
+                  }
+                ],
+                "psnr_global_db": 23.086,
+                "reference_dir": "/tmp/moviecut-bench-cand.MfheDe/ab10_external_disk/refs",
+                "ssim_mean": 0.97167,
+                "ssim_min": 0.946615
+              },
+              "output_sha256": "b1d6d9b8b58bfb8dc30223897990d4aff4dfc61a482b7be47cd064670bba4680"
+            }
+          },
+          "measured_at": "2026-09-23T23:12:36",
+          "pair_contract": "9-point sampling vs source frames, CA-12 pair machinery"
+        }
+      },
+      "name": "MovieCut (app harness)",
+      "registered_at": "2026-09-23T23:12:09",
+      "version": "76806eb Debug passthrough"
     }
   },
   "schema_version": 1

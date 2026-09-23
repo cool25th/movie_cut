@@ -350,6 +350,7 @@
 
 ### BUG-CA12-03 (P2 후보) — CA-12 하니스 프리뷰 덤프 참조가 t≥3.5에서 엉뚱한 프레임 공급 — 미수정(2026-09-23 등록)
 
+- **결함 lifecycle 계약 적용(30회차 피드백)**: `discovered_by: {kind: BENCHMARK, id: CA-12, evidence: run_20260923_225916 ab01 preview pair}`·공통 lifecycle **DISCOVERED→REPRODUCED→ROOT_CAUSED→DISPOSITIONED→FIXED/ACCEPTED_UNSUPPORTED→REGRESSION_PROVED→CLOSED**. **evidence_affected(역방향)**: 본 결함이 오염 가능한 기존 증거 = `run_20260923_225916`의 **ab01 preview pair 지표(PSNR 15.64dB)는 `evidence_status: SUSPECT`** — 소스 참조 계약 지표(PSNR 23.09dB/SSIM 0.972)와 후보 계약은 무오염. 수리 후 affected 재실측으로 `REVALIDATED` 전환. **31회차 1순위: lifecycle 종결**(reproducer 고정→stale 조건 특정→fix→regression fixture→재실측).
 - 증상: `run_20260923_225916`(HEAD 76806eb, ab01/ab02/ab10 재실측)에서 ab01 pair(프리뷰 PNG 참조)가 PSNR 15.64dB — 2026-08-27 기준선(29.46dB)과 급락. 프레임별로 t=1.0은 정상(루마 MAD 1.99 ≤ 2.0)·t≥3.5만 발산(MAD 22).
 - **진단(프레임 인덱스 대조로 좁힘)**: 출력(export)은 소스와 프레임 정렬 정상(동일 프레임 번호 MAD 7.4=인코딩 차이만·시간 오프셋 0). **프리뷰 덤프 PNG(`MOVIECUT_UITEST_PREVIEW_DUMP`)가 t≥3.5 시점에서 주변 어느 소스 프레임(104/105/106)과도 불일치(MAD 25.9~27.9)** — 참조 생성 쪽이 스테일/다른 시점 프레임을 덤프. BUG-CA12-01·BUG-ACC-06 "스냅숏 스테일 공급" 클래스와 부합.
 - 영향: CA-12의 자기 pair 지표(프리뷰 참조)만 오염 — **후보 계약(`run_benchmark_candidates.sh --measure`, 소스 프레임 참조)은 무오염**. 코어 파리티 스윕(nightly, MAD≤2 게이트)은 별도 경로로 현재 PASS이므로 제품 파리티 결함으로 단정 금지.
@@ -360,8 +361,11 @@
 
 > 원천: `QAUTO06_MEDIA_CORPUS_20260922.md` — 미디어 호환 코퍼스 첫 실측.
 
-### BUG-CORPUS-01 (P2) — hev1 태그 HEVC 소스가 프리셋 export에서 명시적 거부 — 미수정(경계 기록)
+### BUG-CORPUS-01 (P2) — hev1 태그 HEVC 소스가 프리셋 export에서 명시적 거부 — **disposition 확정(2026-09-24, 30회차): 원인=AVFOUNDATION_LIMITATION(프레임워크 디코더 태그 거부)·제품 파이프라인 결함 아님**
 
+- **판정 증거(30회차 통제 A/B — 동일 커맨드·태그만 차이·양측 49,295B 동일 크기)**: hev1 파일은 AVAssetReader 디코드가 **프레임워크 수준 실패**(AVFoundationErrorDomain **-11833 "Cannot Decode"**·하위 NSOSStatusErrorDomain **-12906** "The decoder required for this media cannot be found"·0프레임 — 직접 reader와 composition-borrow 모두)·hvc1 파일(바이트 동일·태그만 상이)은 30프레임 정상 디코드(직접·composition-borrow 모두). MovieCut export 엔진은 composition-borrow reader 형태(App/MovieCutMac/Export/ExportEngine.swift:1466) — 판정 사다리 T1(AVFoundation load/decode)에서 이미 실패하므로 제품 경로 통과 불가. **disposition rule(30회차 피드백 고정) 적용: Apple 최소 harness 실패 확인**.
+- **남은 열린 조건 — practical fallback 실증됨(규칙상 BUG 재판정 트리거)**: 동일 바이트가 hvc1 태그로 디코드 성공이 실증됐으므로 **import 시점 re-tag/remux(hev1→hvc1) fallback이 존재** — fallback 제품화는 별도 승인 항목(소규모 제품 변경·30회차 피드백 사다리 T0→T3 전 구간 실측을 전제로 승인 요청). fallback 미채택 시에만 EXPECTED_UNSUPPORTED로 최종 선언 가능.
+- **BUG-CORPUS-01-UX(별도 결함 — 최우선 소규모 수리 후보)**: -11833 계열이 사용자에게 "작업이 중단됨"으로 표면 — "이 HEVC 형식(hev1)은 현재 내보내기를 지원하지 않습니다" 같은 명시적 분류로 교정 필요(원인 판정과 UX 결함 분리 — 30회차 피드백). 원인이 프레임워크여도 UX 표면은 제품 수정 대상.
 - **QAUTO↔BUG 양방향 링크 계약(29회차 피드백 확정)**: `discovered_by: QAUTO-06`·`regression_fixture: hev1 HEVC 런타임 생성 커맨드(QAUTO06 코퍼스)`·**닫힘 조건 = 제품 수정 PASS + 원본 corpus fixture PASS**(버그만 닫히고 corpus가 여전히 UNSUPPORTED인 상태 금지). QAUTO-06 쪽엔 discovered_bug 참조만 — 제품 결함 lifecycle은 이 BUG 레인이 소유. 처분 시 3상태 구분 적용: SUPPORTED / EXPECTED_UNSUPPORTED / BUG(실제 버그가 unsupported로 흡수되는 것 방지).
 - 증상: libx265 기본(hev1 태그) HEVC mp4 임포트는 성공하나(clips=1) Mac 프리셋 export가 "작업이 중단됨"으로 실패(wall 0.985s·분류 오류 표면 — 무음 실패 아님). hvc1 태그 동일 소스·커밋 HEVC 10bit 픽스처(bt2029pq)는 모두 성공 — 원인은 코덱이 아니라 **mp4 코덱 태그(hev1 vs hvc1)**.
 - 영향: iPhone 실녹화(hvc1)는 무영향. hev1(일부 서드파티·Android 계열 인코더 출력) 사용자에게 "영상이 안 되는" 사례로 나타날 수 있음.

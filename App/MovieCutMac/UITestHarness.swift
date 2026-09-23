@@ -743,6 +743,13 @@ extension EditorViewModel {
         // run (COMPETITIVE_ANALYSIS §1.4 requires both). Everything inside the
         // clock is the exportProject call itself: container staging and the
         // finalize copy stay outside.
+        // OC-02: persist the current project through the real ProjectStore —
+        // the headless batch-export CLI round-trips these saved files.
+        if lastErrorMessage == nil,
+           let savePath = env["MOVIECUT_UITEST_PROJECT_SAVE"], !savePath.isEmpty {
+            await saveProject(to: URL(filePath: savePath))
+        }
+
         var exportWallSuffix = ""
         if lastErrorMessage == nil,
            let exportPath = env["MOVIECUT_UITEST_EXPORT"], !exportPath.isEmpty {

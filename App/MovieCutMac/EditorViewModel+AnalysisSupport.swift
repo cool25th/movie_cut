@@ -70,33 +70,12 @@ extension EditorViewModel {
         asset.kind == .audio || asset.kind == .video
     }
 
+    /// Asset-time → timeline mapping, delegated to the shared Core
+    /// `Clip.timelineMapping(for:)` (single source — the iOS copy is gone).
     func timelineMapping(
         for sourceRange: TimeRange,
         in clip: Clip
     ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
-        guard
-            sourceRange.start.isFinite,
-            sourceRange.duration.isFinite,
-            sourceRange.duration > 0
-        else {
-            return nil
-        }
-
-        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
-        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
-        guard sourceEnd > sourceStart else { return nil }
-
-        // Map the source range to the timeline through the canonical mapping so
-        // subtitle/auto-assistant windows land at the right timeline position
-        // for any rate or speed ramp (Step 3).
-        guard let mapping = clip.makeTimeMapping() else { return nil }
-        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
-        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
-        guard timelineEnd > timelineStart else { return nil }
-
-        return (
-            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
-            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
-        )
+        clip.timelineMapping(for: sourceRange)
     }
 }

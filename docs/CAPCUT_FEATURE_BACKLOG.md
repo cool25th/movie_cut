@@ -354,6 +354,13 @@
 - 영향: iPhone 실녹화(hvc1)는 무영향. hev1(일부 서드파티·Android 계열 인코더 출력) 사용자에게 "영상이 안 되는" 사례로 나타날 수 있음.
 - 수정 방향(후보): 임포트 시점 codec-tag 사전 검증(hev1 감지 시 안내 또는 reader 경로 리라이트) — 착수는 별도 결정. 코퍼스 계약(성공 또는 명시적 unsupported)은 현재도 충족.
 
+## 1.17 중복/하드코딩 정리 리팩터 A1~B2 — **완료(2026-09-23, usage 중단 복구)**
+
+- **A1 덕킹 플랜 중립화**: `Sources/MovieCutCore/Audio/SpeechDuckingService.swift` 신규 — Mac `autoDuckOtherAudio`·iOS `duckBackgroundUnderSelectedClip`가 `SpeechDuckingService.plan`으로 위임(임계값 `defaultSilenceThresholdDB=-40`·`defaultMinimumSilenceDuration=0.35` 상수). 정적 계약 테스트(`AudioDuckingTests` §orchestrates)를 신규 위임 구조로 갱신.
+- **A2/B1/B2**: `Clip.timelineMapping` Core 통일, Mac `exportProject` begin/endDiagnosticsExport 헬퍼, `0.01`→`minimumTranscriptRangeSeconds` 명명, NR 트윈 Core 위임.
+- 게이트: **verify_gate 5/5 PASS**(테스트 1503·Mac/iOS 빌드·린트) — SpeechDuckingServiceTests 3/3 포함.
+- 기록만 하고 미조치(의도적): A4~A6, B3, B4, 임계값 리터럴(50ms·250ms·±0.2s·±10ms).
+
 ## 1.14 Codex 봇 리뷰(스택 PR) 파생 결함 (2026-08-29 등록)
 
 > 원천: 스택 PR #19~#23(2026-08-29 push)에 `chatgpt-codex-connector[bot]` 자동 리뷰가 남긴 지적 — 전부 현재 HEAD 코드 대조로 판정(유효=등록, 이후 스택에서 이미 해결=회신만, 기존 등록과 중복=상호 참조). 본 PR들은 게이트 통과 스냅샷이므로 병합 블록으로 삼지 않고 후속 증분으로 처리. 스레드는 등록 회신 후 해결 완료.

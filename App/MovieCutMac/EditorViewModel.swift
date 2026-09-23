@@ -1486,8 +1486,7 @@ final class EditorViewModel {
     /// but without the save panel. Used by automation and the XCUITest harness so
     /// the real export pipeline is exercised end-to-end.
     func exportProject(to url: URL) async {
-        await betaDiagnostics.record(.exportStart)
-        let diagnosticsExportStarted = Date()
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         guard ensureAllMediaReachableForExport() else {
             await betaDiagnostics.record(.exportFail, errorCode: "ExportPreflight.mediaUnreachable")
             return
@@ -1510,18 +1509,12 @@ final class EditorViewModel {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
             onboardingMetrics.record(.firstExport)
-            await betaDiagnostics.record(
-                .exportSuccess,
-                durationMs: Int(Date().timeIntervalSince(diagnosticsExportStarted) * 1000)
-            )
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
-            await betaDiagnostics.record(
-                .exportFail,
-                errorCode: String(describing: Swift.type(of: error))
-            )
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -2536,8 +2529,8 @@ final class EditorViewModel {
     /// range-based ducking metadata that preview and export both consume.
     func autoDuckOtherAudio(
         duckLevel: Double = AudioDuckingPlanner.defaultDuckingLevel,
-        thresholdDB: Float = -40,
-        minimumSilenceDuration: TimeInterval = 0.35
+        thresholdDB: Float = SpeechDuckingService.defaultSilenceThresholdDB,
+        minimumSilenceDuration: TimeInterval = SpeechDuckingService.defaultMinimumSilenceDuration
     ) async {
         guard let speechClipId = selectedClipId else {
             lastErrorMessage = "Select the speech clip (voiceover or video) to duck music under."
@@ -2555,51 +2548,28 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastStatusMessage = "Analyzing speech for ducking..."
 
-            let provider = SilenceDetectionProvider(
-                silenceThresholdDB: thresholdDB,
+            // Platform-neutral plan (shared with iOS — SpeechDuckingService).
+            let outcome = try await SpeechDuckingService.plan(
+                project: snapshot,
+                speechClip: speechClip,
+                asset: asset,
+                duckLevel: duckLevel,
+                thresholdDB: thresholdDB,
                 minimumSilenceDuration: minimumSilenceDuration
             )
-            let analysis = try await provider.analyze(asset: asset, in: snapshot)
-            let silenceTimelineRanges: [TimeRange] = analysis.suggestions.flatMap { suggestion -> [TimeRange] in
-                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
-                return ranges.compactMap { timelineMapping(for: $0, in: speechClip)?.timelineRange }
-            }
-
-            let voiceIntervals = AudioDuckingPlanner.voiceIntervals(
-                speechTimelineRange: speechClip.timelineRange,
-                silenceRangesInTimeline: silenceTimelineRanges
-            )
-            guard !voiceIntervals.isEmpty else {
+            switch outcome {
+            case .noVoicedIntervals:
                 lastStatusMessage = "No voiced intervals detected in the selected clip; nothing to duck."
-                return
-            }
-
-            var duckingByClip: [UUID: [TimeRange]] = [:]
-            for track in snapshot.timeline.tracks where track.kind == .audio {
-                for clip in track.clips
-                    where clip.id != speechClipId && clip.timelineRange.overlaps(speechClip.timelineRange)
-                {
-                    let ranges = AudioDuckingPlanner.duckingRanges(
-                        forTarget: clip.timelineRange,
-                        voiceIntervals: voiceIntervals
-                    )
-                    if !ranges.isEmpty {
-                        duckingByClip[clip.id] = ranges
-                    }
-                }
-            }
-
-            guard !duckingByClip.isEmpty else {
+            case .noOverlappingAudio:
                 lastStatusMessage = "No overlapping audio clips found to duck under the selection."
-                return
+            case .ducked(let duckingByClip, let voiceIntervalCount):
+                try await session.dispatch(SetAudioDuckingCommand(
+                    duckingRangesByClip: duckingByClip,
+                    level: duckLevel
+                ))
+                try await refreshFromSession()
+                lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervalCount) voiced interval(s) at \(Int(duckLevel * 100))% volume."
             }
-
-            try await session.dispatch(SetAudioDuckingCommand(
-                duckingRangesByClip: duckingByClip,
-                level: duckLevel
-            ))
-            try await refreshFromSession()
-            lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervals.count) voiced interval(s) at \(Int(duckLevel * 100))% volume."
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
@@ -2991,16 +2961,7 @@ final class EditorViewModel {
             selectedAssetId = denoisedAsset.id
         case .video:
             let audioTrack = try await ensureTrack(for: .audio)
-            let denoisedClip = Clip(
-                assetId: denoisedAsset.id,
-                kind: .audio,
-                sourceRange: clip.sourceRange,
-                timelineRange: clip.timelineRange,
-                volume: clip.volume,
-                fadeInDuration: clip.fadeInDuration,
-                fadeOutDuration: clip.fadeOutDuration,
-                playbackRate: clip.playbackRate
-            )
+            let denoisedClip = NoiseReductionService.denoisedTwin(of: clip, assetId: denoisedAsset.id)
 
             try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: denoisedClip))
             try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .volume(0)))

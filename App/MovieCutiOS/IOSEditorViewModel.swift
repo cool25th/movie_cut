@@ -1321,8 +1321,8 @@ final class IOSEditorViewModel {
     /// (stage-4 placed-span ducking, preview and export alike).
     func duckBackgroundUnderSelectedClip(
         duckLevel: Double = AudioDuckingPlanner.defaultDuckingLevel,
-        thresholdDB: Float = -40,
-        minimumSilenceDuration: TimeInterval = 0.35
+        thresholdDB: Float = SpeechDuckingService.defaultSilenceThresholdDB,
+        minimumSilenceDuration: TimeInterval = SpeechDuckingService.defaultMinimumSilenceDuration
     ) async {
         guard let speechClipId = selectedClipId, let speechClip = selectedClip else {
             lastErrorMessage = "Select the speech clip (voiceover or video) to duck music under."
@@ -1340,46 +1340,28 @@ final class IOSEditorViewModel {
         lastErrorMessage = nil
         lastStatusMessage = "Analyzing speech for ducking..."
         do {
-            let provider = SilenceDetectionProvider(
-                silenceThresholdDB: thresholdDB,
+            // Platform-neutral plan (shared with Mac — SpeechDuckingService).
+            let outcome = try await SpeechDuckingService.plan(
+                project: currentProject,
+                speechClip: speechClip,
+                asset: asset,
+                duckLevel: duckLevel,
+                thresholdDB: thresholdDB,
                 minimumSilenceDuration: minimumSilenceDuration
             )
-            let analysis = try await provider.analyze(asset: asset, in: currentProject)
-            let silenceRanges = analysis.suggestions.flatMap { suggestion -> [TimeRange] in
-                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
-                return ranges.compactMap { Self.timelineMapping(for: $0, in: speechClip)?.timelineRange }
-            }
-            let voiceIntervals = AudioDuckingPlanner.voiceIntervals(
-                speechTimelineRange: speechClip.timelineRange,
-                silenceRangesInTimeline: silenceRanges
-            )
-            guard !voiceIntervals.isEmpty else {
+            switch outcome {
+            case .noVoicedIntervals:
                 lastStatusMessage = "No voiced intervals detected in the selected clip; nothing to duck."
-                return
-            }
-            var duckingByClip: [UUID: [TimeRange]] = [:]
-            for track in currentProject.timeline.tracks where track.kind == .audio {
-                for clip in track.clips
-                where clip.id != speechClipId && clip.timelineRange.overlaps(speechClip.timelineRange) {
-                    let ranges = AudioDuckingPlanner.duckingRanges(
-                        forTarget: clip.timelineRange,
-                        voiceIntervals: voiceIntervals
-                    )
-                    if !ranges.isEmpty {
-                        duckingByClip[clip.id] = ranges
-                    }
-                }
-            }
-            guard !duckingByClip.isEmpty else {
+            case .noOverlappingAudio:
                 lastStatusMessage = "No overlapping audio clips found to duck under the selection."
-                return
+            case .ducked(let duckingByClip, let voiceIntervalCount):
+                try await session.dispatch(SetAudioDuckingCommand(
+                    duckingRangesByClip: duckingByClip,
+                    level: duckLevel
+                ))
+                await refreshFromSession()
+                lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervalCount) voiced interval(s) at \(Int(duckLevel * 100))% volume."
             }
-            try await session.dispatch(SetAudioDuckingCommand(
-                duckingRangesByClip: duckingByClip,
-                level: duckLevel
-            ))
-            await refreshFromSession()
-            lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervals.count) voiced interval(s) at \(Int(duckLevel * 100))% volume."
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
@@ -1425,16 +1407,7 @@ final class IOSEditorViewModel {
                 ))
             case .video:
                 let audioTrack = try await ensureTrack(for: .audio)
-                let denoisedClip = Clip(
-                    assetId: denoisedAsset.id,
-                    kind: .audio,
-                    sourceRange: clip.sourceRange,
-                    timelineRange: clip.timelineRange,
-                    volume: clip.volume,
-                    fadeInDuration: clip.fadeInDuration,
-                    fadeOutDuration: clip.fadeOutDuration,
-                    playbackRate: clip.playbackRate
-                )
+                let denoisedClip = NoiseReductionService.denoisedTwin(of: clip, assetId: denoisedAsset.id)
                 try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: denoisedClip))
                 try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .volume(0)))
                 selectedClipId = denoisedClip.id
@@ -1451,32 +1424,6 @@ final class IOSEditorViewModel {
         }
     }
 
-    /// Asset-time → timeline mapping for analysis suggestions (Mac
-    /// `EditorViewModel+AnalysisSupport` parity): honors rate/speed ramps
-    /// through the canonical `Clip.makeTimeMapping()`.
-    private static func timelineMapping(
-        for sourceRange: TimeRange,
-        in clip: Clip
-    ) -> (sourceRange: TimeRange, timelineRange: TimeRange)? {
-        guard
-            sourceRange.start.isFinite,
-            sourceRange.duration.isFinite,
-            sourceRange.duration > 0
-        else {
-            return nil
-        }
-        let sourceStart = max(sourceRange.start, clip.sourceRange.start)
-        let sourceEnd = min(sourceRange.end, clip.sourceRange.end)
-        guard sourceEnd > sourceStart else { return nil }
-        guard let mapping = clip.makeTimeMapping() else { return nil }
-        let timelineStart = mapping.timelineTime(forSourceTime: sourceStart)
-        let timelineEnd = min(clip.timelineRange.end, mapping.timelineTime(forSourceTime: sourceEnd))
-        guard timelineEnd > timelineStart else { return nil }
-        return (
-            sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
-            timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
-        )
-    }
 
     // MARK: - Phase-1 transport & library surfaces (review #3)
 

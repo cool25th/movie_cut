@@ -144,6 +144,10 @@ extension EditorViewModel {
 
 extension EditorViewModel {
 
+    /// N1: two matches closer than this (seconds) are "the same moment" —
+    /// range delete/keep between them is refused instead of doing nothing.
+    private static let minimumTranscriptRangeSeconds: TimeInterval = 0.01
+
     // MARK: - N1-B transcript range delete
 
     /// Deletes the sentence span of one transcript hit (N1-B "이 부분
@@ -178,7 +182,7 @@ extension EditorViewModel {
     ) async {
         let lower = min(start.time, end.time)
         let upper = max(start.time, end.time)
-        guard upper - lower > 0.01 else {
+        guard upper - lower > Self.minimumTranscriptRangeSeconds else {
             lastErrorMessage = NSLocalizedString(
                 "The two matches are at the same moment; nothing to delete between them.",
                 comment: "N1-B empty range error"
@@ -247,7 +251,7 @@ extension EditorViewModel {
     ) async {
         let lower = min(start.time, end.time)
         let upper = max(start.time, end.time)
-        guard upper - lower > 0.01 else {
+        guard upper - lower > Self.minimumTranscriptRangeSeconds else {
             lastErrorMessage = NSLocalizedString(
                 "The two matches are at the same moment; nothing to keep between them.",
                 comment: "N1 keep-only empty range error"
@@ -256,10 +260,10 @@ extension EditorViewModel {
         }
         let total = currentProject.timeline.duration
         var removable: [TimeRange] = []
-        if lower > 0.01 {
+        if lower > Self.minimumTranscriptRangeSeconds {
             removable.append(TimeRange(start: 0, duration: lower))
         }
-        if upper < total - 0.01 {
+        if upper < total - Self.minimumTranscriptRangeSeconds {
             removable.append(TimeRange(start: upper, duration: total - upper))
         }
         guard !removable.isEmpty else {

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Verification gate for autonomous work. Run from repo root.
-# Exits 0 (PASS) only if all five checks succeed:
+# Exits 0 (PASS) only if all six checks succeed:
 #   1. swift build
-#   2. swift test (full, unfiltered)
+#   2. swift test (full minus wall-clock measurements) + 2b. measurement solo
 #   3. xcodebuild MovieCutMac Debug macOS
 #   4. xcodebuild MovieCutiOS Debug generic/iOS (W4 / kiro 9.3)
 #   5. high-signal lint gate (scripts/lint_gate.sh allow-list)
@@ -34,11 +34,17 @@ fi
 # stall the gate indefinitely. macOS ships no `timeout(1)`, so poll a background
 # job and kill it (plus its children) when the budget is breached. Override the
 # budget with SWIFT_TEST_TIMEOUT_S (default 900s, matching CI's 15 minutes).
+#
+# Wall-clock capability tests (TranscriptSearchMeasurementTests) are EXCLUDED
+# here and run solo in step 2b: co-scheduled suites inflate wall time ~1.8x
+# (2026-09-24 evidence: T1b best-of-3 338ms loaded vs 195ms solo, budget 250ms)
+# so the full-suite pass measures capability-under-contention, which is not the
+# contract. The skip keeps the 250ms threshold meaningful and the gate stable.
 SWIFT_TEST_TIMEOUT_S="${SWIFT_TEST_TIMEOUT_S:-900}"
-echo "[gate] step 2/5: swift test (full, timeout ${SWIFT_TEST_TIMEOUT_S}s)" | tee -a "$LOG"
+echo "[gate] step 2/6: swift test (full minus wall-clock measurements, timeout ${SWIFT_TEST_TIMEOUT_S}s)" | tee -a "$LOG"
 SWIFT_TEST_OUT="$REPO_ROOT/.build-check/last_swift_test.out"
 : > "$SWIFT_TEST_OUT"
-swift test > >(tee -a "$SWIFT_TEST_OUT" | tee -a "$LOG") 2>&1 &
+swift test --skip TranscriptSearchMeasurementTests > >(tee -a "$SWIFT_TEST_OUT" | tee -a "$LOG") 2>&1 &
 TEST_PID=$!
 TEST_RC=0
 SECONDS=0
@@ -73,8 +79,41 @@ else
   pass=false
 fi
 
+# --- step 2b: wall-clock capability tests, solo ---
+# Same watchdog pattern, tighter budget: measurement suites only (~30s).
+echo "[gate] step 2b/6: swift test measurement (solo)" | tee -a "$LOG"
+MEAS_OUT="$REPO_ROOT/.build-check/last_measurement_test.out"
+: > "$MEAS_OUT"
+swift test --filter TranscriptSearchMeasurementTests > >(tee -a "$MEAS_OUT" | tee -a "$LOG") 2>&1 &
+MEAS_PID=$!
+MEAS_RC=0
+SECONDS=0
+while kill -0 "$MEAS_PID" 2>/dev/null; do
+  if [ "$SECONDS" -ge 300 ]; then
+    echo "[gate] swift test measurement: TIMEOUT — killing pid $MEAS_PID" | tee -a "$LOG"
+    pkill -P "$MEAS_PID" 2>/dev/null
+    kill -TERM "$MEAS_PID" 2>/dev/null
+    sleep 5
+    pkill -9 -P "$MEAS_PID" 2>/dev/null
+    kill -9 "$MEAS_PID" 2>/dev/null
+    MEAS_RC=124
+    break
+  fi
+  sleep 5
+done
+if [ "$MEAS_RC" -ne 124 ]; then
+  wait "$MEAS_PID"
+  MEAS_RC=$?
+fi
+if [ "$MEAS_RC" -eq 0 ]; then
+  echo "[gate] swift test measurement: OK" | tee -a "$LOG"
+else
+  echo "[gate] swift test measurement: FAIL (rc=$MEAS_RC)" | tee -a "$LOG"
+  pass=false
+fi
+
 # --- step 3: xcodebuild (Mac) ---
-echo "[gate] step 3/5: xcodebuild MovieCutMac" | tee -a "$LOG"
+echo "[gate] step 3/6: xcodebuild MovieCutMac" | tee -a "$LOG"
 if xcodebuild -project MovieCut.xcodeproj -scheme MovieCutMac \
   -configuration Debug -destination 'platform=macOS' \
   CODE_SIGNING_ALLOWED=NO build >>"$LOG" 2>&1; then
@@ -89,7 +128,7 @@ fi
 # errors that hid behind the "iOS platform not installed" block for two weeks
 # (fixed in cd1458f). The generic destination needs only the iOS SDK shipped
 # with Xcode; CODE_SIGNING_ALLOWED=NO avoids any signing requirement.
-echo "[gate] step 4/5: xcodebuild MovieCutiOS" | tee -a "$LOG"
+echo "[gate] step 4/6: xcodebuild MovieCutiOS" | tee -a "$LOG"
 if xcodebuild -project MovieCut.xcodeproj -scheme MovieCutiOS \
   -configuration Debug -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO build >>"$LOG" 2>&1; then
@@ -105,7 +144,7 @@ if $pass; then
   # Runs LAST and only when the build/test stages passed, so a lint failure
   # is never masked by a compile failure. Missing SwiftLint is a hard fail:
   # the gate must not silently pass.
-  echo "[gate] step 5/5: lint gate" | tee -a "$LOG"
+  echo "[gate] step 5/6: lint gate" | tee -a "$LOG"
   if bash "$REPO_ROOT/scripts/lint_gate.sh" >>"$LOG" 2>&1; then
     echo "[gate] lint gate: OK" | tee -a "$LOG"
   else

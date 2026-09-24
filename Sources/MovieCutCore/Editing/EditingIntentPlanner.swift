@@ -68,17 +68,9 @@ public enum EditingIntentPlanner {
         let text = normalize(instruction)
         let allTimes = times(in: text)
 
-        // --- split (single time) ---
-        if matches(text, ["잘라", "분할", "split", "cutat"]) {
-            guard let at = allTimes.first else { throw PlannerError.noTime }
-            let target = try defaultClip(in: clips)
-            return Result(
-                actions: [.splitClip(clipId: target.clip.id, time: at)],
-                rationale: ["split clip #\(target.index) at \(at)초"]
-            )
-        }
-
-        // --- range intents (two times, whole-timeline) ---
+        // --- range intents first (two times, whole-timeline) ---
+        // A full A-to-B range disambiguates "잘라내서 삭제"-style compound
+        // phrasing toward the range reading.
         if allTimes.count >= 2 {
             let sorted = [allTimes[0], allTimes[1]].sorted()
             let (lower, upper) = (sorted[0], sorted[1])
@@ -96,9 +88,24 @@ public enum EditingIntentPlanner {
             }
         }
 
+        // --- split (single time; ordinals target, default = longest) ---
+        if matches(text, ["잘라", "분할", "split", "cutat"]) {
+            guard let at = allTimes.first else { throw PlannerError.noTime }
+            let target = try targetedClip(in: text, clips: clips)
+            return Result(
+                actions: [.splitClip(clipId: target.clip.id, time: at)],
+                rationale: ["split clip #\(target.index) at \(at)초"]
+            )
+        }
+
         // --- clip-property intents (volume / speed / preset) ---
         if matches(text, ["볼륨", "소리줘", "volume"]) {
-            let value = volumeValue(in: text)
+            guard let value = volumeValue(in: text) else {
+                // No operand ("볼륨 좀 적당히") is a REJECTION, never a
+                // guessed 1.0 — the fail-closed rule applies to missing
+                // operands, not just missing intents.
+                throw PlannerError.unrecognized(instruction)
+            }
             let target = try targetedClip(in: text, clips: clips)
             return Result(
                 actions: [.setVolume(clipId: target.clip.id, volume: value)],
@@ -189,13 +196,14 @@ public enum EditingIntentPlanner {
         return results
     }
 
-    /// Volume: "절반/반으로" → 0.5, "N%" → N/100, plain ≤2 → as-is,
-    /// larger numbers read as percent ("볼륨 150" → 1.5).
-    private static func volumeValue(in text: String) -> Double {
+    /// Volume: "절반/반으로" → 0.5, "N%" → N/100, plain ≤2 → as-is, larger
+    /// numbers read as percent ("볼륨 150" → 1.5). Nil when no operand is
+    /// stated — callers must reject, not default.
+    private static func volumeValue(in text: String) -> Double? {
         if text.contains("절반") || text.contains("반으로") { return 0.5 }
         if let pct = percentNumber(in: text) { return min(pct / 100, 2) }
         if let n = lastNumber(in: text) { return n <= 2 ? n : min(n / 100, 2) }
-        return 1.0
+        return nil
     }
 
     /// Speed: "N%" → N/100 (≥0.1), otherwise the last number clamped to
@@ -272,17 +280,24 @@ public enum EditingIntentPlanner {
         if text.contains("첫") || text.contains("first") { return 1 }
         if text.contains("마지막") || text.contains("last") { return count }
 
-        // Digits immediately BEFORE "번째" or "th".
-        for marker in ["번째", "th"] {
-            if let range = text.range(of: marker) {
+        // Digits immediately BEFORE an ordinal suffix ("2번째", "2nd", "3rd",
+        // "1st", "5th"). Every occurrence is tried — the first can be a false
+        // positive (English "the" contains "th"), and stopping there silently
+        // retargets a "99th clip" instruction at the default clip.
+        for marker in ["번째", "th", "nd", "rd", "st"] {
+            var searchStart = text.startIndex
+            while let range = text.range(of: marker, range: searchStart..<text.endIndex) {
                 let before = text[..<range.lowerBound]
                 if let n = digitsAtEnd(of: before) { return n }
+                searchStart = range.upperBound
             }
         }
         // Digits immediately AFTER "clip".
-        if let range = text.range(of: "clip") {
+        var searchStart = text.startIndex
+        while let range = text.range(of: "clip", range: searchStart..<text.endIndex) {
             let after = text[range.upperBound...]
             if let n = digitsAtStart(of: after) { return n }
+            searchStart = range.upperBound
         }
         return nil
     }

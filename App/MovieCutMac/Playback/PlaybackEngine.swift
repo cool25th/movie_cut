@@ -370,15 +370,32 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
         func pollFrame(at time: CMTime, limit: TimeInterval) -> CGImage? {
             guard let output = previewVideoOutput else { return nil }
+            // BUG-CA12-03 (31st-cycle): right after a seek the output can
+            // report hasNewPixelBuffer(forItemTime:) as true while still
+            // holding the PRE-seek buffer — the parity dump then records the
+            // PREVIOUS position's frame (measured in run_20260923_225916:
+            // ab01 requests 1.0/3.5/6.0/8.5 matched source seconds 0/1/1/6 —
+            // one-step stale). No gap exists in ab01, so the BUG-ACC-05
+            // distrust never fired, and the poll did not starve, so
+            // away-and-back never ran. Discriminator: itemTimeForDisplay
+            // reports the time the buffer is actually FOR — reject any
+            // buffer that is not for the requested item time (within a
+            // frame's presentation window) and keep polling for the real
+            // post-seek frame.
+            let frameTolerance = 0.05
             let deadline = Date().addingTimeInterval(limit)
             while Date() < deadline {
+                var displayedTime = CMTime.invalid
                 if output.hasNewPixelBuffer(forItemTime: time),
                    let pixelBuffer = output.copyPixelBuffer(
                        forItemTime: time,
-                       itemTimeForDisplay: nil
+                       itemTimeForDisplay: &displayedTime
                    ),
                    let image = Self.cgImage(from: pixelBuffer) {
-                    return image
+                    if CMTIME_IS_NUMERIC(displayedTime),
+                       abs(CMTimeGetSeconds(displayedTime) - CMTimeGetSeconds(time)) <= frameTolerance {
+                        return image
+                    }
                 }
                 Thread.sleep(forTimeInterval: 0.03)
             }

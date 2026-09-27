@@ -18,12 +18,102 @@
 # This is a HALT mechanism, not a cleanup feature — it deletes nothing.
 #
 # Usage: bash scripts/disk_guard.sh [mount-point] [history-dir]
-# Record: <history-dir>/disk-<epoch>.json
+#   bash scripts/disk_guard.sh --start-gate <SMALL|MEDIUM|LARGE> [mount] [history]
+#   bash scripts/disk_guard.sh --self-test
+# Record: <history-dir>/disk-<epoch>.json  (+ start-gate-<epoch>.json)
+#
+# RUNTIME_GUARD contract (32nd-cycle feedback): a long-running job calls this
+# script periodically and treats the exit code as —
+#   0 = continue · 2 = BLOCK: stop AFTER the current atomic step (flush
+#   evidence first) · 3 = STOP: abort immediately.
+# There is no mid-step kill: the guard sets the decision, the runner owns
+# the atomic boundary.
+#
+# START_GATE (32nd-cycle feedback): before STARTING a build/test job, check
+# that the BLOCK headroom (available − 15GiB) covers the job class —
+#   SMALL ≥ 1GiB · MEDIUM ≥ 5GiB · LARGE ≥ 10GiB
+# A WARN tier does NOT authorize a start when the BLOCK headroom is below
+# the class requirement (the 0.29GiB-headroom lesson: "WARN이므로 소형 허용"
+# would be judging safety from 0.29GiB). Denied start = rc 4
+# (START_GATE_DENIED) with a record — the runner treats it as "cannot start,
+# log and exit cleanly". Class figures are the preregistered defaults;
+# revisit after three LARGE-class measurements.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MODE="verdict"
+GATE_CLASS=""
+case "${1:-}" in
+  --start-gate) MODE="start-gate"; GATE_CLASS="${2:?class required (SMALL|MEDIUM|LARGE)}"; shift 2 ;;
+  --self-test) MODE="self-test"; shift ;;
+esac
 MOUNT="${1:-/}"
 HISTORY="${2:-$ROOT/.build-check/history}"
 mkdir -p "$HISTORY"
+
+# START_GATE pure verdict + boundary self-test (synthetic — independent of
+# the live df reading). GiB is passed as a float STRING and converted in
+# python — bash arithmetic cannot handle floats (silent-death trap).
+require_gate() { # <available_gib_float> <class> -> rc 0 allowed / 4 denied
+  AVAIL_GIB_ARG="$1" GATE_CLASS="$2" python3 - <<'PY'
+import os
+required = {"SMALL": 1, "MEDIUM": 5, "LARGE": 10}[os.environ["GATE_CLASS"]]
+headroom = float(os.environ["AVAIL_GIB_ARG"]) - 15.0
+raise SystemExit(0 if headroom >= required else 4)
+PY
+}
+
+if [ "$MODE" = "self-test" ]; then
+  FAIL=0
+  check() { # <gib> <class> <expected-rc> <label>
+    local got
+    if require_gate "$1" "$2"; then got=0; else got=$?; fi
+    if [ "$got" = "$3" ]; then echo "  OK  $4"; else echo "  BAD $4 expected rc=$3 got rc=$got"; FAIL=1; fi
+  }
+  check 15.3 SMALL 4 "headroom 0.3GiB < SMALL 1GiB -> denied"
+  check 16.2 SMALL 0 "headroom 1.2GiB >= SMALL -> allowed"
+  check 16.2 MEDIUM 4 "headroom 1.2GiB < MEDIUM 5GiB -> denied"
+  check 20.5 MEDIUM 0 "headroom 5.5GiB >= MEDIUM -> allowed"
+  check 20.5 LARGE 4 "headroom 5.5GiB < LARGE 10GiB -> denied"
+  check 25.5 LARGE 0 "headroom 10.5GiB >= LARGE -> allowed"
+  if [ "$FAIL" = "0" ]; then echo "START_GATE self-test: ALL PASS"; exit 0; fi
+  echo "START_GATE self-test: FAILED" >&2; exit 1
+fi
+
+if [ "$MODE" = "start-gate" ]; then
+  case "$GATE_CLASS" in
+    SMALL|MEDIUM|LARGE) ;;
+    *) echo "START_GATE: class must be SMALL|MEDIUM|LARGE" >&2; exit 1 ;;
+  esac
+  AVAIL_KB="$(df -k "$MOUNT" | awk 'NR==2 {print $4}')"
+  AVAIL_BYTES=$((AVAIL_KB * 1024))
+  AVAIL_GIB="$(python3 -c "print(round($AVAIL_BYTES / 1024**3, 2))")"
+  require_gate "$AVAIL_GIB" "$GATE_CLASS" && rc=0 || rc=$?
+  TS="$(date +%Y-%m-%dT%H:%M:%S)" OUT_PATH="$HISTORY/start-gate-$(date +%s).json" \
+  AVAIL_BYTES="$AVAIL_BYTES" AVAIL_GIB="$AVAIL_GIB" GATE_CLASS="$GATE_CLASS" RC="$rc" \
+  python3 - <<'PY'
+import datetime, json, os
+GIB = 1024 ** 3
+required = {"SMALL": 1, "MEDIUM": 5, "LARGE": 10}[os.environ["GATE_CLASS"]]
+headroom = round((int(os.environ["AVAIL_BYTES"]) - 15 * GIB) / GIB, 2)
+rc = int(os.environ["RC"])
+rec = {
+    "ts": os.environ["TS"],
+    "kind": "disk_start_gate",
+    "job_class": os.environ["GATE_CLASS"],
+    "required_headroom_gib": required,
+    "available_bytes": int(os.environ["AVAIL_BYTES"]),
+    "available_gib": float(os.environ["AVAIL_GIB"]),
+    "block_headroom_gib": headroom,
+    "verdict": "ALLOWED" if rc == 0 else "START_GATE_DENIED",
+}
+with open(os.environ["OUT_PATH"], "w") as f:
+    json.dump(rec, f, indent=2)
+    f.write("\n")
+print(f"start-gate[{rec['job_class']}]: {rec['verdict']} "
+      f"(BLOCK headroom {headroom}GiB, required >= {required}GiB) — {os.environ['OUT_PATH']}")
+PY
+  exit "$rc"
+fi
 
 AVAIL_KB="$(df -k "$MOUNT" | awk 'NR==2 {print $4}')"
 AVAIL_BYTES=$((AVAIL_KB * 1024))

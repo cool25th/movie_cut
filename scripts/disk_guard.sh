@@ -64,10 +64,13 @@ PY
 
 if [ "$MODE" = "self-test" ]; then
   FAIL=0
+  OBSERVED=0
+  PASSED=0
   check() { # <gib> <class> <expected-rc> <label>
     local got
     if require_gate "$1" "$2"; then got=0; else got=$?; fi
-    if [ "$got" = "$3" ]; then echo "  OK  $4"; else echo "  BAD $4 expected rc=$3 got rc=$got"; FAIL=1; fi
+    OBSERVED=$((OBSERVED + 1))
+    if [ "$got" = "$3" ]; then echo "  OK  $4"; PASSED=$((PASSED + 1)); else echo "  BAD $4 expected rc=$3 got rc=$got"; FAIL=1; fi
   }
   check 15.3 SMALL 4 "headroom 0.3GiB < SMALL 1GiB -> denied"
   check 16.2 SMALL 0 "headroom 1.2GiB >= SMALL -> allowed"
@@ -75,8 +78,20 @@ if [ "$MODE" = "self-test" ]; then
   check 20.5 MEDIUM 0 "headroom 5.5GiB >= MEDIUM -> allowed"
   check 20.5 LARGE 4 "headroom 5.5GiB < LARGE 10GiB -> denied"
   check 25.5 LARGE 0 "headroom 10.5GiB >= LARGE -> allowed"
-  if [ "$FAIL" = "0" ]; then echo "START_GATE self-test: ALL PASS"; exit 0; fi
-  echo "START_GATE self-test: FAILED" >&2; exit 1
+  # 37th-cycle feedback (§15): a self-test that silently skipped cases (the
+  # 33rd-cycle set -e lesson) must not count as PASS — the expected case
+  # count and the observed case count must both be accounted for.
+  EXPECTED=6
+  if [ "$OBSERVED" -ne "$EXPECTED" ]; then
+    echo "  BAD case-count invariant: expected_cases=$EXPECTED observed_cases=$OBSERVED"
+    FAIL=1
+  fi
+  if [ "$FAIL" = "0" ]; then
+    echo "START_GATE self-test: ALL PASS (expected_cases=$EXPECTED observed_cases=$OBSERVED passed=$PASSED failed=$((OBSERVED - PASSED)))"
+    exit 0
+  fi
+  echo "START_GATE self-test: FAILED (expected_cases=$EXPECTED observed_cases=$OBSERVED passed=$PASSED failed=$((OBSERVED - PASSED)))" >&2
+  exit 1
 fi
 
 if [ "$MODE" = "start-gate" ]; then
@@ -88,8 +103,14 @@ if [ "$MODE" = "start-gate" ]; then
   AVAIL_BYTES=$((AVAIL_KB * 1024))
   AVAIL_GIB="$(python3 -c "print(round($AVAIL_BYTES / 1024**3, 2))")"
   require_gate "$AVAIL_GIB" "$GATE_CLASS" && rc=0 || rc=$?
+  # machine-readable reason (37th-cycle feedback): rc namespace stays closed
+  # (0/2/3/4) — the details ride the decision/reason pair, not new codes.
+  if [ "$rc" = "0" ]; then DECISION="ALLOWED"; GATE_REASON="SUFFICIENT_START_HEADROOM";
+  else DECISION="DENIED"; GATE_REASON="INSUFFICIENT_START_HEADROOM"; fi
+  echo "start-gate: decision=$DECISION reason=$GATE_REASON class=$GATE_CLASS actual_gib=$AVAIL_GIB rc=$rc"
   TS="$(date +%Y-%m-%dT%H:%M:%S)" OUT_PATH="$HISTORY/start-gate-$(date +%s).json" \
   AVAIL_BYTES="$AVAIL_BYTES" AVAIL_GIB="$AVAIL_GIB" GATE_CLASS="$GATE_CLASS" RC="$rc" \
+  DECISION="$DECISION" GATE_REASON="$GATE_REASON" \
   python3 - <<'PY'
 import datetime, json, os
 GIB = 1024 ** 3
@@ -104,6 +125,8 @@ rec = {
     "available_bytes": int(os.environ["AVAIL_BYTES"]),
     "available_gib": float(os.environ["AVAIL_GIB"]),
     "block_headroom_gib": headroom,
+    "decision": os.environ["DECISION"],
+    "reason": os.environ["GATE_REASON"],
     "verdict": "ALLOWED" if rc == 0 else "START_GATE_DENIED",
 }
 with open(os.environ["OUT_PATH"], "w") as f:

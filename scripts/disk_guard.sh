@@ -107,7 +107,9 @@ if [ "$MODE" = "start-gate" ]; then
   # (0/2/3/4) — the details ride the decision/reason pair, not new codes.
   if [ "$rc" = "0" ]; then DECISION="ALLOWED"; GATE_REASON="SUFFICIENT_START_HEADROOM";
   else DECISION="DENIED"; GATE_REASON="INSUFFICIENT_START_HEADROOM"; fi
-  echo "start-gate: decision=$DECISION reason=$GATE_REASON class=$GATE_CLASS actual_gib=$AVAIL_GIB rc=$rc"
+  BLOCK_HEADROOM_GIB="$(python3 -c "print(round($AVAIL_BYTES / 1024**3 - 15, 2))")"
+  REQ_GIB="$(python3 -c "print({'SMALL':1,'MEDIUM':5,'LARGE':10}['$GATE_CLASS'])")"
+  echo "start-gate: decision=$DECISION reason=$GATE_REASON class=$GATE_CLASS available=${AVAIL_GIB}GiB start_headroom=${BLOCK_HEADROOM_GIB}GiB required_headroom=${REQ_GIB}GiB rc=$rc"
   TS="$(date +%Y-%m-%dT%H:%M:%S)" OUT_PATH="$HISTORY/start-gate-$(date +%s).json" \
   AVAIL_BYTES="$AVAIL_BYTES" AVAIL_GIB="$AVAIL_GIB" GATE_CLASS="$GATE_CLASS" RC="$rc" \
   DECISION="$DECISION" GATE_REASON="$GATE_REASON" \

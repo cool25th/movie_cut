@@ -99,6 +99,8 @@ M0 테스트 전제조건·fixture staging → 최소 램프 재현 테스트(Co
 
 **2차 증분(21:45, e2e-m3b-m5-attempt2.log)**: M6-2차(transform/keyframe/registerAsset/duration 검사 + 계약 테스트 5종)·M3b-lite(저장→재열기→북마크 접근→프리뷰 재구성)·M5-2차(프리뷰 렌더 접합 maxDelta 상한) — E2E+회귀 8/8(11.9s)·Core 전체 **1,570/1,570**·컨테이너 무오염(recovery 부재·테스트 자동저장 0). 주요 발견: `Keyframe.init`이 음수 시간을 `max(0,t)`로 정규화 — DSL 검증이 볼 수 없으므로 모델 계약을 테스트로 고정.
 
+**3차 증분(22:40, e2e-ui-planid-attempt3.log) — 기능 연결**: ① **사용자 진입점 `AIMontageSection`**(인스펙터 프로젝트 도구 — 사진 다중/음악 NSOpenPanel(powerbox→실제 보안 스코프 북마크)·길이 10/15/30/60s·화면비 4종→`applyPhotoMontage`, timelineNotEmpty·중복 planId 친절 메시지). ② **planId 중복 적용 방지** — `EditorSession.dispatch(planId:)` 영수증(`duplicatePlanApplication`, 재시도·더블클릭 차단 — Core 테스트 5종). ③ **프리뷰↔출력 음량 직접 대조**(E2E 5d — 동일 구간 RMS 비율 0.5~2.0, 별도 엔진임을 전제로 한 비교급 검증). E2E+회귀 8/8(13.99s)·Core 1,570(성능 임계 1건 부하 플레이크 — 격리 통과·이 증분과 무관). AI 몽타주 섹션 영문 UI는 AssistantSection 관례를 따름 — ko 카탈로그 등록 후속.
+
 - **E2E 통과**: `AIPhotoMontageE2ETests` 1/1 (9.37s, RC=0, 3차 시도 — 1·2차는 테스트 코드 컴파일 오류로 수정 후 재실행). 증거: `artifacts/ai_creation/20261005-m1-repair/e2e-xcodebuild-attempt3.log`. **램프 중첩 예외 0회·샌드박스 거부 0회**(16:15 실행과 동일 항목 대조). 검증 범위: 프리뷰 composition 구성(apply+redo), 전체 상태 단일 Undo(트랙·캔버스·canvasSize·미디어 라이브러리), JSON 왕복·북마크 유지, 실제 MP4 export(graph mix 경로) 디코딩(길이 15s±0.2·A/V 트랙), 3개 사진 구간 프레임 상호 구분, 마지막 구간 음악 RMS>0.001, 루프 접합부 peak<0.99.
 - **Core 전체 통과**: 1,562 테스트 / 241 스위트. 이번 수리로 신규 `TrackGainEnvelopeTests` 13, 플래너 제한 테스트 5 포함.
 - **정적 계약 테스트 2건 갱신**: `AudioDuckingTests`(양 엔진 덕킹 의미론 계약 — 프리뷰의 램프 발행이 TrackGainEnvelope 경유임을 단언, voiceClipIds 재등장 금지 조항 추가), `MasterAudioPreviewParityStaticContractTests`(applyAudioVolumeAndFades→applyGainEnvelope 개명 반영). 계약 의도는 변경 없음.
@@ -107,8 +109,11 @@ M0 테스트 전제조건·fixture staging → 최소 램프 재현 테스트(Co
 
 ### 잔여(후속 증분)
 
-- **M3b 완결**: 실제 프로세스 재시작 + 사용자 선택(powerbox) scope 검증 — 세션 재생성 수준(lite)까지는 E2E로 완료. 테스트 호스트 자기 재시작 인프라 또는 수동 검증 절차 필요.
+- **M3b 완결**: 실제 프로세스 재시작 + 사용자 선택(powerbox) scope 검증 — 세션 재생성 수준(lite)까지는 E2E로 완료. 테스트 호스트 자기 재시작 인프라 또는 수동 검증 절차 필요. (UI 진입점 `AIMontageSection`의 NSOpenPanel이 실제 powerbox 경로를 제공하므로, 수동 검증 절차 문서화가 현실적 1차 경로.)
 - **M6 픽셀 검증**: EXIF 방향·움직임(키프레임 반영)의 프레임 픽셀 단위 검증 — fixture 콘텐츠 기하 설계가 전제.
+- **AI 섹션 ko 현지화**: `AIMontageSection` 영문 문자열의 Localizable.xcstrings 등록(AssistantSection도 미등록 — 카탈로그 일괄 패스로 처리).
 - **iOS 쌍둥이 패리티**: `IOSExportEngine.applyDuckingRamps`는 전역 덕킹 없는 트랙별+fade창 회피 패턴이라 **중첩 위험은 없음**을 확인. Core `TrackGainEnvelope` 패리티 통일은 후속(iOS 테스트 실행은 기존 정책상 불가 — generic device 빌드만).
-- **프리뷰↔출력 음량 직접 대조**: 두 경로가 별도 엔진임이 확정되어 성급한 동일성 주장 대신 후속 과제로 명시적으로 남김(프리뷰 오디오 렌더 경로는 이제 측정 인프라가 갖춰짐 — M5 2차에서 사용).
+- **취소(cancel)**: 몽타주 생성 중 취소 — applyPhotoMontage가 로컬 probe+컴파일로 수 초 내 종료하므로 현재 필요성 낮음. 자연어 플래너(모델 대기) 연결 시 필수.
 - **테스트 호스트 잔존 감시**: xcodebuild 종료 후에도 테스트 호스트/앱이 잔존해 30초 자동저장으로 테스트 데이터를 재기록한 사례 관측(2026-10-05 20:09 — 처음 E2E 격리 유출로 의심했으나 잔존 앱의 소행으로 판명, [CRASH_DIAGNOSIS_20261005.md](CRASH_DIAGNOSIS_20261005.md) §7). 러너 종료 시 잔존 프로세스 확인을 운영 규칙에 반영할 것.
+
+**완료 이동**: ~~프리뷰↔출력 음량 직접 대조~~(3차 증분 E2E 5d)·~~planId 중복 적용 방지~~(3차 증분 EditorSession 영수증)·~~실제 파일 첨부 UI~~(3차 증분 AIMontageSection).

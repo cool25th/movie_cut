@@ -185,6 +185,8 @@ struct InspectorPanel: View {
                     .movieCutCard()
                 AssistantSection(viewModel: viewModel)
                     .movieCutCard()
+                AIMontageSection(viewModel: viewModel)
+                    .movieCutCard()
                 HighlightsSection(viewModel: viewModel)
                     .movieCutCard()
                 AnalysisResultsSection(viewModel: viewModel)
@@ -193,6 +195,7 @@ struct InspectorPanel: View {
                 MasterLoudnessSection(viewModel: viewModel)
                 MarkerManagementSection(viewModel: viewModel)
                 AssistantSection(viewModel: viewModel)
+                AIMontageSection(viewModel: viewModel)
                 HighlightsSection(viewModel: viewModel)
                 AnalysisResultsSection(viewModel: viewModel)
             }

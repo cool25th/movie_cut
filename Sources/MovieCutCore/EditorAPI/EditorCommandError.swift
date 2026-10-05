@@ -34,4 +34,10 @@ public enum EditorCommandError: Error, Sendable, Equatable {
 
     /// The session revision shifted while an asynchronous command/plan was preparing.
     case staleRevision(expected: SessionRevision, current: SessionRevision)
+
+    /// A prepared plan was dispatched twice with the same `planId`. The
+    /// first successful dispatch records the id; a re-dispatch of the SAME
+    /// prepared batch is an accident or a lost-response retry — never a
+    /// second edit. Re-running the intent produces a NEW plan id.
+    case duplicatePlanApplication(UUID)
 }

@@ -105,8 +105,14 @@ extension EditorViewModel {
             label: "AI Photo Montage (\(photoURLs.count) photos, \(targetDuration)s)"
         )
 
-        // 5. Commit batch atomically with expected revision check (includes canvas preset)
-        try await session.dispatch(prepared.batchCommand, expectedRevision: snapshot.revision)
+        // 5. Commit batch atomically with expected revision check (includes canvas preset).
+        // The plan id rides along so a double dispatch of the SAME prepared
+        // batch (retry/double click) is rejected instead of duplicating clips.
+        try await session.dispatch(
+            prepared.batchCommand,
+            planId: prepared.planId,
+            expectedRevision: snapshot.revision
+        )
 
         // 6. Refresh view model state from session
         try await refreshFromSession()

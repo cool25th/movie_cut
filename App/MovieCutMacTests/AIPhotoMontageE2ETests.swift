@@ -317,6 +317,20 @@ struct AIPhotoMontageE2ETests {
             #expect(junctionDelta < baselineDelta * 12, "junction is discontinuous vs baseline (\(junctionDelta) vs \(baselineDelta))")
         }
 
+        // 5d. Preview ↔ export loudness comparison: the two engines are
+        // separate implementations (audioMix envelope vs render graph) — the
+        // claim verified is "comparable levels", never bit equality.
+        if let previewTail = try await Self.decodeStats(of: previewAsset, from: 13.0, to: 15.0),
+           let exportTail = tailLevels {
+            let ratio = previewTail.rms / max(exportTail.rms, 1e-9)
+            #expect(
+                ratio > 0.5 && ratio < 2.0,
+                "preview and export levels must be comparable over the final segment (preview rms \(previewTail.rms) vs export rms \(exportTail.rms), ratio \(ratio))"
+            )
+        } else {
+            Issue.record("preview/export comparison windows must decode")
+        }
+
         // 6. Save → fresh-session reopen (M3b-lite): persist the montage
         // project, load it into a NEW view model, resolve every asset's
         // bookmark, READ the media through it, and rebuild the preview

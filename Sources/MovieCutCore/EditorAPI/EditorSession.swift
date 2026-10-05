@@ -11,6 +11,17 @@ public actor EditorSession {
     private var undoStack: [Project] = []
     private var redoStack: [Project] = []
 
+    /// Plan ids that have already been applied successfully. Dispatching the
+    /// same prepared plan twice (a lost-response retry or a double click)
+    /// must not duplicate its clips — re-running the intent creates a NEW
+    /// plan id, so rejecting a known id is always correct.
+    private var appliedPlanIds: Set<UUID> = []
+
+    /// Whether a plan with this id has already been applied in this session.
+    public func hasApplied(planId: UUID) -> Bool {
+        appliedPlanIds.contains(planId)
+    }
+
     /// Creates an editor session for a project.
     public init(project: Project, epoch: UUID = UUID(), initialRevision: UInt64 = 0) {
         self.project = project
@@ -21,13 +32,19 @@ public actor EditorSession {
     ///
     /// If `expectedRevision` is provided and does not match the session's current revision,
     /// the dispatch is aborted with `EditorCommandError.staleRevision` without mutating state.
+    /// If `planId` is provided and that plan was already applied, the dispatch
+    /// is aborted with `EditorCommandError.duplicatePlanApplication`.
     @discardableResult
     public func dispatch(
         _ command: any EditorCommand,
+        planId: UUID? = nil,
         expectedRevision: SessionRevision? = nil
     ) async throws -> SessionRevision {
         if let expected = expectedRevision, expected != revision {
             throw EditorCommandError.staleRevision(expected: expected, current: revision)
+        }
+        if let planId, appliedPlanIds.contains(planId) {
+            throw EditorCommandError.duplicatePlanApplication(planId)
         }
 
         let previousProject = project
@@ -36,6 +53,9 @@ public actor EditorSession {
         undoStack.append(previousProject)
         redoStack.removeAll()
         revision = revision.advanced()
+        if let planId {
+            appliedPlanIds.insert(planId)
+        }
         return revision
     }
 

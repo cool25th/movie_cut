@@ -45,6 +45,44 @@ struct EditorSessionRevisionTests {
         #expect(rev.value == 1)
     }
 
+    @Test("Re-dispatching the same planId is rejected without mutating state")
+    func duplicatePlanDispatchRejected() async throws {
+        let session = EditorSession(project: makeProject())
+        let planId = UUID()
+        let snapshot = await session.snapshotWithRevision()
+
+        _ = try await session.dispatch(
+            DummyCommand(note: "First"),
+            planId: planId,
+            expectedRevision: snapshot.revision
+        )
+        #expect(await session.hasApplied(planId: planId))
+
+        // A retry of the SAME prepared plan (lost response / double click)
+        // must not duplicate its effects — even at the CURRENT revision.
+        let currentRevision = await session.revision
+        await #expect(throws: EditorCommandError.duplicatePlanApplication(planId)) {
+            try await session.dispatch(
+                DummyCommand(note: "Retry"),
+                planId: planId,
+                expectedRevision: currentRevision
+            )
+        }
+
+        // State untouched by the rejected retry.
+        let project = await session.snapshot()
+        #expect(project.name == "First")
+        #expect(await session.revision.value == 1)
+
+        // A NEW plan id at the current revision applies normally.
+        _ = try await session.dispatch(
+            DummyCommand(note: "New Plan"),
+            planId: UUID(),
+            expectedRevision: currentRevision
+        )
+        #expect((await session.snapshot()).name == "New Plan")
+    }
+
     @Test("Dispatching with stale expectedRevision is rejected without mutating state")
     func dispatchWithStaleRevisionFails() async throws {
         let session = EditorSession(project: makeProject())

@@ -91,6 +91,19 @@ public actor ProjectStore {
         autosaveDirectory?.appendingPathComponent("recovery.moviecut")
     }
 
+    /// Root the NAMED periodic autosaves (`Autosave/<name>-<uuid>.moviecut`)
+    /// live under. Same root as the crash-recovery file so an injected test
+    /// directory isolates BOTH write paths — the EditorViewModel's named
+    /// autosave used to hardcode Application Support and leak test projects
+    /// into the real app's recovery list (CRASH_DIAGNOSIS_20261005 §3).
+    /// An explicit directory wins; a store with recovery disabled (`nil`)
+    /// keeps the legacy production location for named autosaves.
+    /// Nonisolated: it only reads an immutable Sendable `let`, and callers
+    /// (MainActor autosave URL builder, tests) need it synchronously.
+    nonisolated public var namedAutosaveDirectory: URL? {
+        autosaveDirectory ?? Self.defaultAutosaveDirectory()
+    }
+
     /// Writes the project to the crash-recovery autosave location (atomic).
     public func saveAutosave(_ project: Project) async throws {
         guard let url = autosaveURL else { return }

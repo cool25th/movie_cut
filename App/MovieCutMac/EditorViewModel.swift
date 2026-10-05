@@ -1415,14 +1415,12 @@ final class EditorViewModel {
     }
 
     private func defaultAutoSaveURL(for project: Project) -> URL {
-        let baseDirectory = (
-            try? FileManager.default.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-        ) ?? FileManager.default.temporaryDirectory
+        // Routes through the project store so an injected test autosave
+        // directory isolates the NAMED autosave too (the 30 s timer below
+        // outlives short tests in lingering hosts — CRASH_DIAGNOSIS_20261005
+        // §3). The store's default equals the previous hardcoded path.
+        let baseDirectory = projectStore.namedAutosaveDirectory
+            ?? FileManager.default.temporaryDirectory
 
         let sanitizedName = project.name
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
@@ -1431,7 +1429,6 @@ final class EditorViewModel {
         let fileName = sanitizedName.isEmpty ? "Untitled" : sanitizedName
 
         return baseDirectory
-            .appendingPathComponent("MovieCut", isDirectory: true)
             .appendingPathComponent("Autosave", isDirectory: true)
             .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
     }

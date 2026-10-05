@@ -36,26 +36,26 @@ struct AIPhotoMontageE2ETests {
         }
     }
 
-    /// Stages a repo fixture into Application Support — grant-free under App
-    /// Sandbox, unlike the repository tree (task-511.log recorded sandbox
-    /// read denials for repo paths). Every failure carries BOTH URLs so a
-    /// permission denial is attributable to a concrete path. Entitlements
-    /// are not broadened for tests.
-    private static func stagedFixture(_ name: String) throws -> URL {
+    /// Stages a repo fixture into the test's per-run storage directory (under
+    /// the sandboxed app's own temporaryDirectory — grant-free, deleted with
+    /// the storage root at test end). The repository tree itself is not
+    /// grant-free under App Sandbox (task-511.log recorded read denials).
+    /// Every failure carries BOTH URLs so a permission denial is attributable
+    /// to a concrete path. Entitlements are not broadened for tests.
+    private static func stagedFixture(_ name: String, in directory: URL) throws -> URL {
         let source = repoRoot.appendingPathComponent("Tests/Fixtures/\(name)")
         guard FileManager.default.fileExists(atPath: source.path) else {
             throw FixtureStagingError.missingSource(source)
         }
-        let support = try FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        )
-        let stagingDir = support.appendingPathComponent("AIMontageE2EFixtures", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        let destination = stagingDir.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent(name)
         do {
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.copyItem(at: source, to: destination)
-            }
+            try FileManager.default.removeItem(at: destination)
+        } catch {
+            // First copy of the run — nothing to remove.
+        }
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
         } catch {
             throw FixtureStagingError.copyFailed(source: source, destination: destination, underlying: error.localizedDescription)
         }
@@ -65,14 +65,59 @@ struct AIPhotoMontageE2ETests {
         return destination
     }
 
+    /// Snapshot of the REAL app-container storage the test must not touch:
+    /// the crash-recovery file and the named-autosave directory
+    /// (CRASH_DIAGNOSIS_20261005 §3 — a previous run left `AIVideoTest` in
+    /// the real app's recovery prompt).
+    private struct ContainerStorageFootprint: Equatable {
+        var recoveryExists: Bool
+        var recoverySize: Int64
+        var autosaveEntryCount: Int
+
+        static func capture() -> Self {
+            let support = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut", isDirectory: true)
+            let recovery = support?.appendingPathComponent("recovery.moviecut")
+            let autosave = support?.appendingPathComponent("Autosave", isDirectory: true)
+            let recoveryExists = recovery.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+            let recoverySize = recovery
+                .flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path) }
+                .flatMap { ($0[.size] as? NSNumber)?.int64Value } ?? 0
+            let autosaveEntryCount = autosave
+                .map { (try? FileManager.default.contentsOfDirectory(atPath: $0.path))?.count ?? 0 } ?? 0
+            return Self(
+                recoveryExists: recoveryExists,
+                recoverySize: recoverySize,
+                autosaveEntryCount: autosaveEntryCount
+            )
+        }
+    }
+
     @Test("Photos + Audio -> 15s Timeline Creation -> Undo/Redo -> Real MP4 Export")
     func photoMontageCreationAndExportEndToEnd() async throws {
-        let photo1 = try Self.stagedFixture("swatch_blue_64x64.png")
-        let photo2 = try Self.stagedFixture("swatch_green_64x64.heic")
-        let photo3 = try Self.stagedFixture("exif_orient6_asym_320x240.jpg")
-        let music = try Self.stagedFixture("duck_bgm_220hz_4s_mono.wav")
+        // Per-run storage root: fixtures, ISOLATED autosave, and export all
+        // live under one grant-free temporary directory the test removes on
+        // exit. The ViewModel's autosave directory is injected so BOTH write
+        // paths (rolling recovery + named 30 s autosave) stay out of the
+        // real app container.
+        let storageRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ai_e2e_storage_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storageRoot) }
 
-        let vm = EditorViewModel(project: Project(name: "AIVideoTest"))
+        let fixturesDir = storageRoot.appendingPathComponent("fixtures", isDirectory: true)
+        let photo1 = try Self.stagedFixture("swatch_blue_64x64.png", in: fixturesDir)
+        let photo2 = try Self.stagedFixture("swatch_green_64x64.heic", in: fixturesDir)
+        let photo3 = try Self.stagedFixture("exif_orient6_asym_320x240.jpg", in: fixturesDir)
+        let music = try Self.stagedFixture("duck_bgm_220hz_4s_mono.wav", in: fixturesDir)
+
+        let footprintBefore = ContainerStorageFootprint.capture()
+
+        let vm = EditorViewModel(
+            project: Project(name: "AIVideoTest"),
+            autosaveDirectory: storageRoot.appendingPathComponent("autosave", isDirectory: true)
+        )
 
         let initialCanvas = vm.currentProject.canvas
         let initialCanvasSize = vm.currentProject.timeline.canvasSize
@@ -98,7 +143,7 @@ struct AIPhotoMontageE2ETests {
         }
 
         let videoTracks = vm.currentProject.timeline.tracks.filter { $0.kind == .video }
-        #expect(videoTracks.count == 1)
+        try #require(videoTracks.count == 1, "expected exactly 1 video track, got \(videoTracks.count)")
         let videoClips = videoTracks[0].clips
         try #require(videoClips.count == 3, "expected 3 photo clips, got \(videoClips.count)")
 
@@ -109,7 +154,7 @@ struct AIPhotoMontageE2ETests {
 
         // Audio: 4s music loops 4+4+4+3=15s
         let audioTracks = vm.currentProject.timeline.tracks.filter { $0.kind == .audio }
-        #expect(audioTracks.count == 1)
+        try #require(audioTracks.count == 1, "expected exactly 1 audio track, got \(audioTracks.count)")
         let audioClips = audioTracks[0].clips
         try #require(audioClips.count == 4, "4s music should loop 4 times to fill 15s, got \(audioClips.count)")
 
@@ -168,10 +213,31 @@ struct AIPhotoMontageE2ETests {
             #expect(asset.originalBookmark != nil, "Reloaded asset must retain its bookmark")
         }
 
+        // 4.5 Storage isolation (CRASH_DIAGNOSIS_20261005 §3): BOTH autosave
+        // write paths land in the injected directory, and the real app
+        // container is byte-for-byte untouched.
+        await vm.flushAutosave()
+        let isolatedRecovery = storageRoot.appendingPathComponent("autosave/recovery.moviecut")
+        #expect(FileManager.default.fileExists(atPath: isolatedRecovery.path), "recovery autosave must land in the injected directory")
+
+        vm.saveCurrentProject()
+        let isolatedAutosaveDir = storageRoot.appendingPathComponent("autosave/Autosave", isDirectory: true)
+        var namedAutosaveAppeared = false
+        for _ in 0..<20 where namedAutosaveAppeared == false {
+            namedAutosaveAppeared = (try? FileManager.default.contentsOfDirectory(atPath: isolatedAutosaveDir.path))?
+                .contains(where: { $0.hasPrefix("AIVideoTest-") }) == true
+            if namedAutosaveAppeared == false {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        #expect(namedAutosaveAppeared, "named autosave must land in the injected directory (Autosave/AIVideoTest-*.moviecut)")
+
+        let footprintAfter = ContainerStorageFootprint.capture()
+        #expect(footprintAfter == footprintBefore, "the real app container must be untouched: \(footprintBefore) → \(footprintAfter)")
+
         // 5. Real MP4 Export (the graph-mix path — separate from preview) & decode
-        let outputDir = FileManager.default.temporaryDirectory.appendingPathComponent("ai_creation_test_\(UUID().uuidString)")
+        let outputDir = storageRoot.appendingPathComponent("export", isDirectory: true)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: outputDir) }
 
         let exportURL = outputDir.appendingPathComponent("photo_video_15s.mp4")
         await vm.exportProject(to: exportURL)

@@ -74,3 +74,10 @@
 테스트 실행 로그:
 `/Users/cool-mini4/.gemini/antigravity/brain/ae0bdc0d-9ce7-4710-919f-25d460a89504/.system_generated/tasks/task-473.log`
 `/Users/cool-mini4/.gemini/antigravity/brain/ae0bdc0d-9ce7-4710-919f-25d460a89504/.system_generated/tasks/task-511.log`
+
+## 7. 수리 처분 갱신 (2026-10-05 심야 — 커밋 044d09a + 저장 격리 증분)
+
+- **§2-A 배열 인덱싱 → 수리 완료**(044d09a): `#require` 전제조건·전체 상태 비교로 전환. 실패는 테스트 failure로 끝나며 프로세스 trap 없음.
+- **§2-B 램프 중첩 → 수리 완료**(044d09a): 음성 분류 오류(이미지→voice)와 전역 덕킹 램프(라우팅 없음·fade 무시)를 `TrackGainEnvelope` 비중첩 봉투 + 전역 블록 삭제로 해소. 프리뷰 재구성 무예외 E2E 통과(9.4s).
+- **§3 테스트 데이터 오염 → 수리 완료**(이번 증분): `ProjectStore.namedAutosaveDirectory` 신설 — `EditorViewModel`의 명명 자동저장(30초 타이머)이 주입 디렉터리를 존중(기본 경로 불변, 회귀 AutosaveFailureSurfacing 통과). E2E는 per-run 임시 저장소(autosave·fixture·export 통합)를 사용하고 **실제 컨테이너 무변경을 단언**으로 검증.
+- **§1 19:33 SIGSEGV → 감시 항목 유지**(인과 미입증·신규 프로세스 정상). 추가 사실: 16:15 테스트 호스트가 xcodebuild 종료 후에도 3시간+ 잔존했고, 이후 별도 실행된 앱이 이 테스트의 복구 프로젝트를 로드해 **30초 자동저장으로 테스트 데이터를 계속 재기록**하고 있었다(20:09 관측 — 처음 E2E 유출로 보였으나 잔존 앱의 소행으로 판명). 잔존 프로세스 3종(앱 2·xcodebuild 1) 정리로 해소. 교훈: 테스트 후 (1)호스트 프로세스 잔존 (2)복구 로드된 앱의 주기적 자동저장 — 두 경로가 테스트 누출로 오인될 수 있으므로 러너 종료 시 프로세스 확인을 운영 규칙에 추가.

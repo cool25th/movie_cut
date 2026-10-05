@@ -107,6 +107,7 @@ M0 테스트 전제조건·fixture staging → 최소 램프 재현 테스트(Co
 
 - **M3b**: 실제 사용자 선택 파일 scope·저장·프로세스 재시작 후 접근 검증(이번은 JSON 왕복+북마크 유지까지만).
 - **M5 2차**: 원본 접합부 직접 디코딩 실측(`renderCurrentPreviewAudio` 활용 — AAC 출력은 클릭을 부분 마스킹), equal-power 크로스페이드/루프 포인트.
-- **M6 잔여**: keyframe/transform 유한성·범위 검사, registerAsset 재사용 vs 갱신, EXIF 방향·움직임 픽셀 검증.
+- **M6 잔여**: keyframe/transform 유한성·범위 검사, registerAsset 재사용 vs 갱신, EXIF 방향·움직임 픽셀 검증. **저장 경로 격리(E2E autosave)는 완료** — `ProjectStore.namedAutosaveDirectory` 신설로 명명 자동저장까지 주입 격리, E2E per-run 임시 저장소 + 실 컨테이너 무변경 단언, AutosaveFailureSurfacing 회귀 통과(증거 `e2e-isolation-attempt1.log`, 8/8).
 - **iOS 쌍둥이 패리티**: `IOSExportEngine.applyDuckingRamps`는 전역 덕킹 없는 트랙별+fade창 회피 패턴이라 **중첩 위험은 없음**을 확인. Core `TrackGainEnvelope` 패리티 통일은 후속(iOS 테스트 실행은 기존 정책상 불가 — generic device 빌드만).
 - **프리뷰↔출력 음량 직접 대조**: 두 경로가 별도 엔진임이 확정되어 성급한 동일성 주장 대신 후속 과제로 명시적으로 남김.
+- **테스트 호스트 잔존 감시**: xcodebuild 종료 후에도 테스트 호스트/앱이 잔존해 30초 자동저장으로 테스트 데이터를 재기록한 사례 관측(2026-10-05 20:09 — 처음 E2E 격리 유출로 의심했으나 잔존 앱의 소행으로 판명, [CRASH_DIAGNOSIS_20261005.md](CRASH_DIAGNOSIS_20261005.md) §7). 러너 종료 시 잔존 프로세스 확인을 운영 규칙에 반영할 것.

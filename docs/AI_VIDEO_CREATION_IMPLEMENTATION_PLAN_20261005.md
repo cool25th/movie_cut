@@ -374,8 +374,8 @@ UI 상태: idle / analyzing / planning / preparing / applying / ready / exportin
 | AI-01 | revision·비교 커밋·중복 적용 제어 | AI-00 | **완료** | `SessionRevision.swift`, `EditorSession.swift`, `EditorSessionRevisionTests` 4/4 통과 |
 | AI-02 | 순차 컴파일·안정 참조·DSL 확장 | AI-01 | **완료** | `EditingActionDSL.swift`, `EditingPlanCompiler.swift`, `EditingPlanCompilerTests` 2/2 통과 |
 | AI-03 | 첨부·context·사진 초안·export 연결 | AI-02 | **구현 완료·E2E 결함 발견** | `PhotoMontagePlanner.swift`, `PreparedAssetStore.swift`, `EditorViewModel+AssistantProvider.swift`, `PhotoMontagePlannerTests` 2/2 통과, Mac 앱 빌드 통과. E2E는 2026-10-05 16:15에 실행되어 오디오 램프 중첩 예외로 실패(task-511.log) — export 미도달. Core 1,543 통과도 16:14 시점 수치 |
-| AI-03a | E2E 결함 수리(램프 중첩·플래너 입력 제한·북마크 실접근·기존 프로젝트 정책·접합 품질·검증 경계) | AI-03 | **미착수·최우선** | [AI_VIDEO_CREATION_DEFECT_REPAIR_PLAN_20261005.md](AI_VIDEO_CREATION_DEFECT_REPAIR_PLAN_20261005.md) — 외부 리뷰 2026-10-05 반영, 램프 중첩 원인 정적 특정 완료(전역 덕킹 블록×클립 fade) |
-| AI-04 | 기존 도우미 연결 통합 | AI-02, AI-03a | 미착수 | AI-03a 완료 후 착수 |
+| AI-03a | E2E 결함 수리(램프 중첩·플래너 입력 제한·북마크 실접근·기존 프로젝트 정책·접합 품질·검증 경계) | AI-03 | **1차 완료·검증 통과** | [AI_VIDEO_CREATION_DEFECT_REPAIR_PLAN_20261005.md](AI_VIDEO_CREATION_DEFECT_REPAIR_PLAN_20261005.md) §5 — 2차 리뷰 6건 반영. E2E 재통과(9.4s·램프 예외 0·스코프 거부 0)·Core 1,562/1,562·Mac 회귀 7/7. 잔여: M3b(프로세스 재시작 재열기)·M5 2차(원본 접합 실측)·M6 잔여·iOS 패리티 |
+| AI-04 | 기존 도우미 연결 통합 | AI-02, AI-03a | 미착수 | AI-03a 잔여와 병행 가능 |
 | AI-05 | 실제 플래너·설정·대화 수정 UI | AI-03,04 | 미착수 | |
 | AI-06 | 음악·효과음 배치·믹싱 | AI-03 | 미착수 | |
 | AI-07 | 단계 A 종단 검증 | AI-05,06 | 미착수 | |

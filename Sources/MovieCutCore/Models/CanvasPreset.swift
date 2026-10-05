@@ -183,6 +183,12 @@ public struct CanvasPreset: Codable, Sendable, Equatable {
         CanvasPreset(aspectRatio: .landscape16x9, frameRate: .fps30)
     }
 
+    /// Standard 9:16 portrait vertical video canvas (1080x1920, 30fps).
+    public static let portrait9x16 = CanvasPreset(aspectRatio: .portrait9x16, frameRate: .fps30)
+
+    /// Standard 16:9 landscape canvas (1920x1080, 30fps).
+    public static let landscape16x9 = CanvasPreset(aspectRatio: .landscape16x9, frameRate: .fps30)
+
     /// The effective output size for this canvas.
     public var size: CGSize {
         if aspectRatio == .custom {

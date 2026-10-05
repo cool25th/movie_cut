@@ -47,17 +47,13 @@ public enum EditingActionApplier {
         _ actions: [EditingActionDSL.Action],
         for project: Project
     ) async throws -> EditingActionBatchCommand {
-        for action in actions {
-            _ = try EditingActionDSL.plan(action, for: project)
-        }
-        var commands: [any EditorCommand] = []
-        for action in actions {
-            commands.append(contentsOf: try await compileOne(action, for: project))
-        }
-        return EditingActionBatchCommand(
-            label: "agent plan (\(actions.count) action\(actions.count == 1 ? "" : "s"))",
-            commands: commands
+        let prepared = try await EditingPlanCompiler.compile(
+            actions,
+            for: project,
+            baseRevision: SessionRevision(),
+            label: "agent plan (\(actions.count) action\(actions.count == 1 ? "" : "s"))"
         )
+        return prepared.batchCommand
     }
 
     /// Applies a script to a session as ONE undo unit. Throws before any
@@ -67,117 +63,19 @@ public enum EditingActionApplier {
         _ actions: [EditingActionDSL.Action],
         to session: EditorSession
     ) async throws -> ApplyReport {
-        let project = await session.snapshot()
-        let batch = try await compile(actions, for: project)
-        let commandCount = batch.commands.count
-        try await session.dispatch(batch)
+        let (project, revision) = await session.snapshotWithRevision()
+        let prepared = try await EditingPlanCompiler.compile(
+            actions,
+            for: project,
+            baseRevision: revision,
+            label: "agent plan (\(actions.count) action\(actions.count == 1 ? "" : "s"))"
+        )
+        let commandCount = prepared.batchCommand.commands.count
+        try await session.dispatch(prepared.batchCommand, expectedRevision: revision)
         return ApplyReport(
             actionCount: actions.count,
             commandCount: commandCount,
             undoUnits: 1
         )
-    }
-
-    // MARK: - Per-action compilation
-
-    private static func compileOne(
-        _ action: EditingActionDSL.Action,
-        for project: Project
-    ) async throws -> [any EditorCommand] {
-        switch action {
-        case let .deleteTimelineRange(start, end):
-            let lower = min(start, end), upper = max(start, end)
-            return [AutoCutCommand(removableRanges: [TimeRange(start: lower, duration: upper - lower)])]
-
-        case let .keepTimelineRange(start, end):
-            // Keep [lower, upper) by cutting its inverse — the N1 keep-only
-            // reduction. The kernel already rejected the empty case.
-            let lower = min(start, end), upper = max(start, end)
-            let total = project.timeline.duration
-            var removable: [TimeRange] = []
-            if lower > 0.01 {
-                removable.append(TimeRange(start: 0, duration: lower))
-            }
-            if upper < total - 0.01 {
-                removable.append(TimeRange(start: upper, duration: total - upper))
-            }
-            return [AutoCutCommand(removableRanges: removable)]
-
-        case let .deleteClip(clipId):
-            return [DeleteClipCommand(clipId: clipId)]
-
-        case let .splitClip(clipId, time):
-            return [SplitClipCommand(clipId: clipId, splitTime: time)]
-
-        case let .moveClip(clipId, timelineStart):
-            let clip = try findClip(clipId, in: project)
-            return [MoveClipCommand(
-                clipId: clipId,
-                newTimelineRange: TimeRange(
-                    start: timelineStart,
-                    duration: clip.timelineRange.duration
-                )
-            )]
-
-        case let .setVolume(clipId, volume):
-            return [SetVolumeCommand(clipId: clipId, volume: volume)]
-
-        case let .setSpeed(clipId, rate):
-            return [SetClipSpeedCommand(clipId: clipId, change: .constantRate(rate))]
-
-        case let .applyAudioPreset(clipId, preset):
-            return [SetClipPropertyCommand(
-                clipId: clipId,
-                property: .equalizer(ClipEqualizerSettings(preset: preset))
-            )]
-
-        case let .duckBackground(speechClipId):
-            let speechClip = try findClip(speechClipId, in: project)
-            let asset = try resolveAsset(for: speechClip, in: project)
-            switch try await SpeechDuckingService.plan(project: project, speechClip: speechClip, asset: asset) {
-            case let .ducked(rangesByClip, _):
-                return [SetAudioDuckingCommand(
-                    duckingRangesByClip: rangesByClip,
-                    level: AudioDuckingPlanner.defaultDuckingLevel
-                )]
-            case .noVoicedIntervals:
-                throw ApplierError.noVoicedIntervals
-            case .noOverlappingAudio:
-                // The kernel's pure validation already screens this; keep the
-                // typed mapping if state shifted between validate and compile.
-                throw EditingActionDSL.PlanningError.noOverlappingAudio
-            }
-
-        case let .removeSilence(clipId):
-            let clip = try findClip(clipId, in: project)
-            let asset = try resolveAsset(for: clip, in: project)
-            let analysis = try await SilenceDetectionProvider().analyze(asset: asset, in: project)
-            let silenceRanges = analysis.suggestions.flatMap { suggestion -> [TimeRange] in
-                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
-                return ranges.compactMap { clip.timelineMapping(for: $0)?.timelineRange }
-            }
-            guard !silenceRanges.isEmpty else {
-                throw EditingActionDSL.PlanningError.noSilenceDetected
-            }
-            return [AutoCutCommand(removableRanges: silenceRanges)]
-        }
-    }
-
-    private static func findClip(_ clipId: UUID, in project: Project) throws -> Clip {
-        for track in project.timeline.tracks {
-            if let clip = track.clips.first(where: { $0.id == clipId }) {
-                return clip
-            }
-        }
-        throw EditingActionDSL.PlanningError.clipNotFound(clipId)
-    }
-
-    private static func resolveAsset(for clip: Clip, in project: Project) throws -> MediaAsset {
-        guard let assetId = clip.assetId,
-              let asset = project.mediaLibrary.assets[assetId] else {
-            let missing = clip.assetId ?? clip.id
-            throw ApplierError.assetMissing(missing)
-        }
-        return asset
     }
 }

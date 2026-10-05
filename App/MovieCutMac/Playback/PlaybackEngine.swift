@@ -744,104 +744,38 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             return accumulatedOutputDuration
         }
 
-        func applyAudioVolumeAndFades(
+        func applyGainEnvelope(
             for clip: Clip,
             audioParameters: AVMutableAudioMixInputParameters,
             destinationTime: CMTime,
             clipDuration: CMTime
         ) {
+            // Base level for any stretch the envelope doesn't cover (rounding
+            // gaps); the envelope's constant segments restate it anyway.
             let volume = Float(clip.volume)
             audioParameters.setVolume(volume, at: destinationTime)
 
             guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
 
-            if clip.fadeInDuration > 0 {
-                let fadeInDuration = min(clip.fadeInDuration, clipDuration.seconds)
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: 0,
-                    toEndVolume: volume,
-                    timeRange: CMTimeRange(
-                        start: destinationTime,
-                        duration: CMTime(seconds: fadeInDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-
-            if clip.fadeOutDuration > 0 {
-                let fadeOutDuration = min(clip.fadeOutDuration, clipDuration.seconds)
-                let fadeOutStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: clipDuration.seconds - fadeOutDuration, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: volume,
-                    toEndVolume: 0,
-                    timeRange: CMTimeRange(
-                        start: fadeOutStart,
-                        duration: CMTime(seconds: fadeOutDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-            applyDuckingRamps(
+            // AI-03a M1: volume × fades × baked ducking compose into ONE
+            // ordered non-overlapping envelope (TrackGainEnvelope — the same
+            // semantics AudioGraphProjectBuilder feeds the export graph), so
+            // a track's single input-parameters object can never receive
+            // overlapping volume ramps. The former live global-ducking block
+            // that layered constant ramps on top of these was removed: the
+            // export graph never applied it, so it was a preview-only
+            // mismatch and the source of the montage E2E ramp exception.
+            for segment in TrackGainEnvelope.segments(
                 for: clip,
-                audioParameters: audioParameters,
-                destinationTime: destinationTime,
-                clipDuration: clipDuration,
-                baseVolume: volume
-            )
-        }
-
-        func applyDuckingRamps(
-            for clip: Clip,
-            audioParameters: AVMutableAudioMixInputParameters,
-            destinationTime: CMTime,
-            clipDuration: CMTime,
-            baseVolume: Float
-        ) {
-            guard let duckingLevel = clip.duckingLevel,
-                  duckingLevel < 1,
-                  !clip.duckingRanges.isEmpty,
-                  clipDuration.seconds.isFinite, clipDuration.seconds > 0
-            else { return }
-
-            let duckedVolume = baseVolume * Float(max(0, duckingLevel))
-            let attack = AudioDuckingPlanner.attackDuration
-            let release = AudioDuckingPlanner.releaseDuration
-            // Keep ducking ramps clear of the fade windows so AVFoundation
-            // never receives overlapping volume ramps on one clip.
-            let lowerBound = clip.fadeInDuration > 0 ? min(clip.fadeInDuration, clipDuration.seconds) : 0
-            let upperBound = clipDuration.seconds
-                - (clip.fadeOutDuration > 0 ? min(clip.fadeOutDuration, clipDuration.seconds) : 0)
-            guard upperBound > lowerBound else { return }
-
-            for range in AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges) {
-                let start = max(range.start, lowerBound)
-                let end = min(range.end, upperBound)
-                guard end - start > attack + release else { continue }
-
-                let attackStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: start, preferredTimescale: 600)
-                )
+                timelineStart: destinationTime.seconds,
+                timelineDuration: clipDuration.seconds
+            ) {
                 audioParameters.setVolumeRamp(
-                    fromStartVolume: baseVolume,
-                    toEndVolume: duckedVolume,
+                    fromStartVolume: Float(segment.startGain),
+                    toEndVolume: Float(segment.endGain),
                     timeRange: CMTimeRange(
-                        start: attackStart,
-                        duration: CMTime(seconds: attack, preferredTimescale: 600)
-                    )
-                )
-
-                let releaseStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: end - release, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: duckedVolume,
-                    toEndVolume: baseVolume,
-                    timeRange: CMTimeRange(
-                        start: releaseStart,
-                        duration: CMTime(seconds: release, preferredTimescale: 600)
+                        start: CMTime(seconds: segment.start, preferredTimescale: 600),
+                        duration: CMTime(seconds: segment.end - segment.start, preferredTimescale: 600)
                     )
                 )
             }
@@ -1131,7 +1065,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             }
                         }
 
-                        applyAudioVolumeAndFades(
+                        applyGainEnvelope(
                             for: clip,
                             audioParameters: audioParameters,
                             destinationTime: destinationTime,
@@ -1202,7 +1136,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         }
                     }
 
-                    applyAudioVolumeAndFades(
+                    applyGainEnvelope(
                         for: clip,
                         audioParameters: audioParameters,
                         destinationTime: destinationTime,
@@ -1637,39 +1571,16 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // identically (spec §0 v1.1).
 
         // MARK: - Audio Ducking
-        if audioProcessing.duckLevel > 0, !audioProcessing.voiceClipIds.isEmpty {
-            let duckMultiplier = 1.0 - audioProcessing.duckLevel
-            var voiceTimeRanges: [(start: Double, end: Double)] = []
-            let renderingTracks = renderingTracks(for: project)
-            for projTrack in renderingTracks where projTrack.kind == .video {
-                for clip in projTrack.clips where audioProcessing.voiceClipIds.contains(clip.id) {
-                    voiceTimeRanges.append((clip.timelineRange.start, clip.timelineRange.end))
-                }
-            }
-            // Lower volume of audio-track clips during voice ranges
-            for mutableParams in audioMixInputParameters {
-                for projTrack in renderingTracks where projTrack.kind == .audio {
-                    for clip in projTrack.clips {
-                        let clipRange = clip.timelineRange
-                        for voiceRange in voiceTimeRanges {
-                            if clipRange.start < voiceRange.end && voiceRange.start < clipRange.end {
-                                let duckedVolume = Float(clip.volume * duckMultiplier)
-                                let overlapStart = max(clipRange.start, voiceRange.start)
-                                let overlapEnd = min(clipRange.end, voiceRange.end)
-                                mutableParams.setVolumeRamp(
-                                    fromStartVolume: duckedVolume,
-                                    toEndVolume: duckedVolume,
-                                    timeRange: CMTimeRange(
-                                        start: CMTime(seconds: overlapStart, preferredTimescale: 600),
-                                        duration: CMTime(seconds: overlapEnd - overlapStart, preferredTimescale: 600)
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // AI-03a M1: the LIVE global-ducking block that ran here was removed.
+        // It added constant-volume ramps for voice×music overlaps onto track
+        // input-parameters WITHOUT consulting the clips' fade windows — the
+        // montage E2E's overlapping-ramp exception (task-511.log) — and it
+        // applied to every parameters object regardless of which composition
+        // track it belonged to. It also never ran in the export path
+        // (renderGraphAudio consumes eq presets only), so preview and export
+        // already disagreed. Ducking is the BAKED per-clip feature
+        // (SetAudioDuckingCommand → clip.duckingRanges), applied identically
+        // here (via TrackGainEnvelope) and by AudioGraphProjectBuilder.
 
         shouldKeepTemporaryReverseRenderURLs = true
         return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)

@@ -4803,12 +4803,6 @@ final class EditorViewModel {
 
     func buildAudioProcessingOptions() -> ClipAudioProcessingOptions {
         let snapshot = currentProject
-        var voiceClipIds: Set<UUID> = []
-        for track in snapshot.timeline.tracks where track.kind == .video {
-            for clip in track.clips where clip.volume > 0 {
-                voiceClipIds.insert(clip.id)
-            }
-        }
 
         var eqPresets: [UUID: EqualizerPreset] = [:]
         for track in snapshot.timeline.tracks {
@@ -4824,11 +4818,19 @@ final class EditorViewModel {
             }
         }
 
+        // AI-03a M1: live auto-ducking (the constant duckLevel 0.3 applied to
+        // every video-track clip as a "voice") is retired. The old preview
+        // block using these fields is gone (see PlaybackEngine), the export
+        // graph never applied it, and classifying image clips as voice
+        // ducked the montage's music its entire length. Ducking is the baked
+        // per-clip feature (SetAudioDuckingCommand). A future live-ducking
+        // revival should classify voice via an explicit dialogue role or
+        // speech analysis, never "every video track clip with volume > 0".
         return ClipAudioProcessingOptions(
             eqPresets: eqPresets,
             noiseReductionClipIds: noiseReductionClipIds,
-            duckLevel: 0.3,
-            voiceClipIds: voiceClipIds
+            duckLevel: 0.0,
+            voiceClipIds: []
         )
     }
 

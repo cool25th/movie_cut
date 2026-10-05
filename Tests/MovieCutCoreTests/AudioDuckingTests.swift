@@ -211,13 +211,24 @@ struct AudioDuckingStaticContractTests {
         #expect(export.contains("GraphMixRenderer.renderMix"), Comment(rawValue: "ExportEngine"))
         #expect(!export.contains("func applyDuckingRamps"), Comment(rawValue: "ExportEngine"))
 
-        // Playback still applies planner ramps via the audioMix (the tap-era
-        // path retires with G-25 2-C-2).
+        // Playback (AI-03a M1): per-clip hand-rolled fade/ducking ramps are
+        // retired. The legacy audioMix path emits the composed envelope from
+        // Core's TrackGainEnvelope — the same planner semantics the graph
+        // builder materializes — so a track's single input-parameters object
+        // can never receive overlapping volume ramps, and the live
+        // global-ducking block (voiceClipIds × constant ramp, applied with
+        // no track routing) stays deleted.
         let playback = try source("App/MovieCutMac/Playback/PlaybackEngine.swift")
-        #expect(playback.contains("func applyDuckingRamps"), Comment(rawValue: "PlaybackEngine"))
-        #expect(playback.contains("AudioDuckingPlanner.attackDuration"), Comment(rawValue: "PlaybackEngine"))
-        #expect(playback.contains("AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges)"), Comment(rawValue: "PlaybackEngine"))
-        #expect(playback.contains("applyDuckingRamps(\n                for: clip,"), Comment(rawValue: "PlaybackEngine"))
+        #expect(playback.contains("TrackGainEnvelope.segments"), Comment(rawValue: "PlaybackEngine"))
+        #expect(!playback.contains("func applyDuckingRamps"), Comment(rawValue: "PlaybackEngine"))
+        #expect(!playback.contains("voiceClipIds.contains"), Comment(rawValue: "PlaybackEngine"))
+
+        // The planner semantics live once, in the Core envelope both
+        // representations draw from.
+        let envelope = try source("Sources/MovieCutCore/Audio/TrackGainEnvelope.swift")
+        #expect(envelope.contains("AudioDuckingPlanner.attackDuration"), Comment(rawValue: "TrackGainEnvelope"))
+        #expect(envelope.contains("AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges)"), Comment(rawValue: "TrackGainEnvelope"))
+        #expect(envelope.contains("AudioGraphProjectBuilder"), Comment(rawValue: "TrackGainEnvelope"))
     }
 
     @Test("view model orchestrates silence analysis into ducking command")

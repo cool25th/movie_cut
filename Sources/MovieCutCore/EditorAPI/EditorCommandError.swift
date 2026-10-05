@@ -31,4 +31,7 @@ public enum EditorCommandError: Error, Sendable, Equatable {
 
     /// There is no redo history.
     case nothingToRedo
+
+    /// The session revision shifted while an asynchronous command/plan was preparing.
+    case staleRevision(expected: SessionRevision, current: SessionRevision)
 }

@@ -30,15 +30,39 @@ public enum EditingActionDSL {
         case applyAudioPreset(clipId: UUID, preset: EqualizerPresetID)
         case duckBackground(speechClipId: UUID)
         case removeSilence(clipId: UUID)
+
+        // Assembly & creation actions for AI video synthesis
+        case registerAsset(asset: MediaAsset)
+        case createTrack(trackId: UUID, kind: TrackKind, name: String)
+        case addClip(clipId: UUID, trackId: UUID, assetId: UUID, timelineRange: TimeRange, sourceRange: TimeRange, kind: ClipKind)
+        case setClipTransform(clipId: UUID, transform: ClipTransform)
+        case setClipKeyframes(clipId: UUID, keyframes: [Keyframe])
+        case setClipTransition(clipId: UUID, transition: Transition?)
+        case setClipFade(clipId: UUID, fadeIn: TimeInterval, fadeOut: TimeInterval)
+        case setClipTextContent(clipId: UUID, textContent: TextClipContent)
+        case setCanvas(canvas: CanvasPreset)
     }
 
     /// Why an action cannot be planned — typed, so a validator can reject
     /// agent output with machine reasons instead of guessing.
     public enum PlanningError: Error, Equatable, Sendable {
         case clipNotFound(UUID)
+        case trackNotFound(UUID)
+        case trackAlreadyExists(UUID)
+        case clipAlreadyExists(UUID)
+        case assetNotFound(UUID)
+        case assetAlreadyExists(UUID)
+        case incompatibleAssetKind(clip: ClipKind, asset: MediaKind)
+        case sourceRangeExceedsAssetDuration(requested: TimeInterval, duration: TimeInterval)
+        case invalidTimeValue(String)
         case emptyRange
         case invalidRate(Double)
         case invalidVolume(Double)
+        case invalidFade(Double)
+        /// A new-content plan (e.g. a photo montage) was requested against a
+        /// timeline that already carries clips — explicit placement modes
+        /// are required, never an implicit overwrite.
+        case timelineNotEmpty
         case clipNotAudio(UUID)
         case noSilenceDetected
         case noOverlappingAudio
@@ -170,6 +194,87 @@ public enum EditingActionDSL {
             // Analysis happens at APPLY time (the planner cannot know the
             // audio content); the plan declares the reduction.
             return [Plan.CommandBox(kind: "AutoCutCommand(silence)", clipId: clipId, detail: "analysis at apply")]
+
+        case let .registerAsset(asset):
+            if let existing = project.mediaLibrary.assets[asset.id] {
+                if existing.originalURL != asset.originalURL || existing.kind != asset.kind {
+                    throw PlanningError.assetAlreadyExists(asset.id)
+                }
+            }
+            return [Plan.CommandBox(kind: "ImportMediaCommand", clipId: nil, detail: asset.originalURL.lastPathComponent)]
+
+        case let .createTrack(trackId, _, name):
+            if project.timeline.tracks.contains(where: { $0.id == trackId }) {
+                throw PlanningError.trackAlreadyExists(trackId)
+            }
+            return [Plan.CommandBox(kind: "CreateTrackCommand", clipId: nil, detail: name)]
+
+        case let .addClip(clipId, trackId, assetId, timelineRange, sourceRange, kind):
+            guard project.timeline.tracks.contains(where: { $0.id == trackId }) else {
+                throw PlanningError.trackNotFound(trackId)
+            }
+            if (try? clip(clipId)) != nil {
+                throw PlanningError.clipAlreadyExists(clipId)
+            }
+
+            guard timelineRange.start.isFinite, timelineRange.start >= 0,
+                  timelineRange.duration.isFinite, timelineRange.duration > 0,
+                  sourceRange.start.isFinite, sourceRange.start >= 0,
+                  sourceRange.duration.isFinite, sourceRange.duration > 0 else {
+                throw PlanningError.invalidTimeValue("Clip timeline/source ranges must be finite, non-negative, and have positive duration")
+            }
+
+            guard let asset = project.mediaLibrary.assets[assetId] else {
+                throw PlanningError.assetNotFound(assetId)
+            }
+
+            switch (kind, asset.kind) {
+            case (.image, .image), (.image, .video):
+                break
+            case (.video, .video):
+                break
+            case (.audio, .audio), (.audio, .video):
+                break
+            case (.text, _):
+                break
+            default:
+                throw PlanningError.incompatibleAssetKind(clip: kind, asset: asset.kind)
+            }
+
+            if kind != .image && kind != .text, let assetDuration = asset.duration {
+                if sourceRange.end > assetDuration + 0.001 {
+                    throw PlanningError.sourceRangeExceedsAssetDuration(requested: sourceRange.end, duration: assetDuration)
+                }
+            }
+
+            return [Plan.CommandBox(kind: "AddClipCommand", clipId: clipId, detail: "\(kind) in \(trackId) asset:\(assetId)")]
+
+        case let .setCanvas(canvas):
+            return [Plan.CommandBox(kind: "SetProjectCanvasCommand", clipId: nil, detail: canvas.aspectRatio.rawValue)]
+
+        case let .setClipTransform(clipId, _):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(kind: "SetClipPropertyCommand(transform)", clipId: clipId)]
+
+        case let .setClipKeyframes(clipId, keyframes):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(kind: "SetClipPropertyCommand(keyframes)", clipId: clipId, detail: "\(keyframes.count) keyframes")]
+
+        case let .setClipTransition(clipId, transition):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(kind: "SetClipPropertyCommand(transition)", clipId: clipId, detail: transition?.type.rawValue ?? "none")]
+
+        case let .setClipFade(clipId, fadeIn, fadeOut):
+            _ = try clip(clipId)
+            guard fadeIn >= 0, fadeOut >= 0,
+                  fadeIn.isFinite, fadeOut.isFinite else {
+                throw PlanningError.invalidFade(min(fadeIn, fadeOut))
+            }
+            return [Plan.CommandBox(kind: "AudioFadeCommand", clipId: clipId, detail: "in:\(fadeIn), out:\(fadeOut)")]
+
+        case let .setClipTextContent(clipId, textContent):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(kind: "SetClipPropertyCommand(textContent)", clipId: clipId, detail: textContent.text)]
         }
     }
 

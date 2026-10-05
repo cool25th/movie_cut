@@ -5,21 +5,38 @@ public actor EditorSession {
     /// The current project state.
     public private(set) var project: Project
 
+    /// The current monotonically increasing session revision.
+    public private(set) var revision: SessionRevision
+
     private var undoStack: [Project] = []
     private var redoStack: [Project] = []
 
     /// Creates an editor session for a project.
-    public init(project: Project) {
+    public init(project: Project, epoch: UUID = UUID(), initialRevision: UInt64 = 0) {
         self.project = project
+        self.revision = SessionRevision(epoch: epoch, value: initialRevision)
     }
 
     /// Applies a command and records an undo snapshot.
-    public func dispatch(_ command: any EditorCommand) async throws {
+    ///
+    /// If `expectedRevision` is provided and does not match the session's current revision,
+    /// the dispatch is aborted with `EditorCommandError.staleRevision` without mutating state.
+    @discardableResult
+    public func dispatch(
+        _ command: any EditorCommand,
+        expectedRevision: SessionRevision? = nil
+    ) async throws -> SessionRevision {
+        if let expected = expectedRevision, expected != revision {
+            throw EditorCommandError.staleRevision(expected: expected, current: revision)
+        }
+
         let previousProject = project
         try command.apply(to: &project)
         project.updatedAt = Date()
         undoStack.append(previousProject)
         redoStack.removeAll()
+        revision = revision.advanced()
+        return revision
     }
 
     /// U-08 AC③: the number of commands dispatched this session — each
@@ -35,6 +52,11 @@ public actor EditorSession {
         project
     }
 
+    /// Returns a snapshot of the current project along with its exact session revision.
+    public func snapshotWithRevision() async -> (project: Project, revision: SessionRevision) {
+        (project, revision)
+    }
+
     /// Restores the previous project snapshot.
     public func undo() async throws {
         guard let previousProject = undoStack.popLast() else {
@@ -42,6 +64,7 @@ public actor EditorSession {
         }
         redoStack.append(project)
         project = previousProject
+        revision = revision.advanced()
     }
 
     /// Restores the next project snapshot after an undo.
@@ -51,5 +74,6 @@ public actor EditorSession {
         }
         undoStack.append(project)
         project = nextProject
+        revision = revision.advanced()
     }
 }

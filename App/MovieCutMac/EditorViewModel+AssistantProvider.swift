@@ -61,4 +61,57 @@ extension EditorViewModel {
             lastStatusMessage = nil
         }
     }
+
+    /// Generates a photo montage video from attached photo and optional music URLs,
+    /// compiles the sequence into an atomic batch, and commits it to the session.
+    @discardableResult
+    func applyPhotoMontage(
+        photoURLs: [URL],
+        musicURL: URL? = nil,
+        targetDuration: TimeInterval = 15.0,
+        targetCanvas: CanvasPreset = .portrait9x16
+    ) async throws -> PreparedEditPlan {
+        assistantResultMessage = nil
+        assistantSuggestions = []
+
+        // 1. Prepare and validate local assets
+        let photoAssets = try PreparedAssetStore.preparePhotoAssets(from: photoURLs)
+        let musicAsset: MediaAsset?
+        if let musicURL {
+            musicAsset = try await PreparedAssetStore.prepareMusicAsset(from: musicURL)
+        } else {
+            musicAsset = nil
+        }
+
+        // 2. Snapshot current project and session revision
+        let snapshot = await session.snapshotWithRevision()
+
+        // 3. Generate production plan
+        let plan = try PhotoMontagePlanner.plan(
+            photos: photoAssets,
+            music: musicAsset,
+            targetDuration: targetDuration,
+            targetCanvas: targetCanvas,
+            existingTracks: snapshot.project.timeline.tracks,
+            baseRevision: snapshot.revision
+        )
+
+        // 4. Sequentially compile actions into a single atomic batch command
+        let prepared = try await EditingPlanCompiler.compile(
+            plan.actions,
+            for: snapshot.project,
+            baseRevision: snapshot.revision,
+            planId: plan.planId,
+            label: "AI Photo Montage (\(photoURLs.count) photos, \(targetDuration)s)"
+        )
+
+        // 5. Commit batch atomically with expected revision check (includes canvas preset)
+        try await session.dispatch(prepared.batchCommand, expectedRevision: snapshot.revision)
+
+        // 6. Refresh view model state from session
+        try await refreshFromSession()
+        assistantResultMessage = "Created \(Int(targetDuration))s video with \(photoURLs.count) photo(s)."
+        lastStatusMessage = assistantResultMessage
+        return prepared
+    }
 }

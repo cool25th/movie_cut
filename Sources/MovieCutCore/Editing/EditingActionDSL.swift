@@ -196,10 +196,19 @@ public enum EditingActionDSL {
             return [Plan.CommandBox(kind: "AutoCutCommand(silence)", clipId: clipId, detail: "analysis at apply")]
 
         case let .registerAsset(asset):
-            if let existing = project.mediaLibrary.assets[asset.id] {
-                if existing.originalURL != asset.originalURL || existing.kind != asset.kind {
-                    throw PlanningError.assetAlreadyExists(asset.id)
-                }
+            // Registration is NEW assets only: ANY existing id is rejected.
+            // The old same-URL/same-kind carve-out silently overwrote the
+            // stored metadata/bookmark (review 2026-10-05) — reusing an
+            // asset means referencing it (`addClip`) without registering,
+            // and refreshing stored metadata is the explicit
+            // `UpdateMediaAssetCommand`.
+            guard project.mediaLibrary.assets[asset.id] == nil else {
+                throw PlanningError.assetAlreadyExists(asset.id)
+            }
+            guard asset.duration == nil || (asset.duration!.isFinite && asset.duration! > 0) else {
+                throw PlanningError.invalidTimeValue(
+                    "asset \(asset.originalURL.lastPathComponent) has an invalid duration (\(String(describing: asset.duration))) — probe it again"
+                )
             }
             return [Plan.CommandBox(kind: "ImportMediaCommand", clipId: nil, detail: asset.originalURL.lastPathComponent)]
 
@@ -252,12 +261,30 @@ public enum EditingActionDSL {
         case let .setCanvas(canvas):
             return [Plan.CommandBox(kind: "SetProjectCanvasCommand", clipId: nil, detail: canvas.aspectRatio.rawValue)]
 
-        case let .setClipTransform(clipId, _):
+        case let .setClipTransform(clipId, transform):
             _ = try clip(clipId)
+            guard transform.position.x.isFinite, transform.position.y.isFinite,
+                  transform.offset.x.isFinite, transform.offset.y.isFinite,
+                  transform.scale.width.isFinite, transform.scale.height.isFinite,
+                  transform.scale.width > 0, transform.scale.height > 0,
+                  transform.rotation.isFinite,
+                  transform.anchorPoint.x.isFinite, transform.anchorPoint.y.isFinite
+            else {
+                throw PlanningError.invalidTimeValue(
+                    "clip transform must be fully finite with positive scale"
+                )
+            }
             return [Plan.CommandBox(kind: "SetClipPropertyCommand(transform)", clipId: clipId)]
 
         case let .setClipKeyframes(clipId, keyframes):
             _ = try clip(clipId)
+            for keyframe in keyframes {
+                guard keyframe.time.isFinite, keyframe.time >= 0, keyframe.value.isFinite else {
+                    throw PlanningError.invalidTimeValue(
+                        "keyframe on clip \(clipId) must have finite value and finite time ≥ 0 (got time \(keyframe.time), value \(keyframe.value))"
+                    )
+                }
+            }
             return [Plan.CommandBox(kind: "SetClipPropertyCommand(keyframes)", clipId: clipId, detail: "\(keyframes.count) keyframes")]
 
         case let .setClipTransition(clipId, transition):

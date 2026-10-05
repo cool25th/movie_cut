@@ -145,6 +145,145 @@ struct EditingActionDSLValidationTests {
         }
     }
 
+    @Test("registerAsset rejects ANY existing id — identical re-registration must not overwrite")
+    func registerAssetIdenticalReregistrationThrows() {
+        let asset = MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/a.jpg"), kind: .image)
+        let project = Project(name: "Test", mediaLibrary: MediaLibrary(assets: [asset.id: asset]))
+
+        // Same id, same URL, same kind — the old carve-out silently
+        // overwrote stored metadata/bookmarks (review 2026-10-05). Reuse is
+        // referencing the asset (addClip) without registering; refresh is
+        // the explicit UpdateMediaAssetCommand.
+        #expect(throws: EditingActionDSL.PlanningError.assetAlreadyExists(asset.id)) {
+            try EditingActionDSL.plan(.registerAsset(asset: asset), for: project)
+        }
+    }
+
+    @Test("registerAsset rejects non-finite or non-positive known durations")
+    func registerAssetInvalidDurationThrows() {
+        let (project, _) = makeProject()
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .registerAsset(asset: MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/x.wav"), kind: .audio, duration: .nan)),
+                for: project
+            )
+        }
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .registerAsset(asset: MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/y.wav"), kind: .audio, duration: .infinity)),
+                for: project
+            )
+        }
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .registerAsset(asset: MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/z.wav"), kind: .audio, duration: 0)),
+                for: project
+            )
+        }
+    }
+
+    @Test("explicit asset metadata refresh goes through UpdateMediaAssetCommand, not registerAsset")
+    func explicitAssetUpdatePath() throws {
+        var asset = MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/u.jpg"), kind: .image)
+        var project = Project(name: "Test", mediaLibrary: MediaLibrary(assets: [asset.id: asset]))
+
+        asset.metadata = MediaMetadata(width: 64, height: 64)
+        try UpdateMediaAssetCommand(asset: asset).apply(to: &project)
+        #expect(project.mediaLibrary.assets[asset.id]?.metadata == MediaMetadata(width: 64, height: 64))
+    }
+
+    @Test("setClipTransform rejects non-finite values and non-positive scale")
+    func setClipTransformRejectsNonFinite() throws {
+        let (project, trackId, clipId) = makeProjectWithClip()
+
+        let good = ClipTransform(
+            position: CGPoint(x: 0, y: 0), offset: CGPoint(x: 0, y: 0),
+            scale: CGSize(width: 1, height: 1), rotation: 0,
+            anchorPoint: CGPoint(x: 0.5, y: 0.5)
+        )
+        _ = try EditingActionDSL.plan(.setClipTransform(clipId: clipId, transform: good), for: project)
+
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipTransform(clipId: clipId, transform: ClipTransform(position: CGPoint(x: Double.nan, y: 0))),
+                for: project
+            )
+        }
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipTransform(clipId: clipId, transform: ClipTransform(rotation: .infinity)),
+                for: project
+            )
+        }
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipTransform(clipId: clipId, transform: ClipTransform(scale: CGSize(width: 0, height: 1))),
+                for: project
+            )
+        }
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipTransform(clipId: UUID(), transform: good),
+                for: project
+            )
+        }
+    }
+
+    @Test("setClipKeyframes rejects non-finite values and negative times")
+    func setClipKeyframesRejectsNonFinite() throws {
+        let (project, _, clipId) = makeProjectWithClip()
+
+        _ = try EditingActionDSL.plan(
+            .setClipKeyframes(clipId: clipId, keyframes: [
+                Keyframe(property: .scaleX, time: 0, value: 1.0),
+                Keyframe(property: .scaleX, time: 5, value: 1.15),
+            ]),
+            for: project
+        )
+
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipKeyframes(clipId: clipId, keyframes: [
+                    Keyframe(property: .scaleX, time: 0, value: .nan),
+                ]),
+                for: project
+            )
+        }
+        // Negative time is normalized at the MODEL boundary (Keyframe.init
+        // clamps with max(0, time)) — the DSL validator never sees it.
+        #expect(Keyframe(property: .scaleX, time: -0.1, value: 1.0).time == 0)
+        #expect(throws: EditingActionDSL.PlanningError.self) {
+            try EditingActionDSL.plan(
+                .setClipKeyframes(clipId: clipId, keyframes: [
+                    Keyframe(property: .scaleX, time: .infinity, value: 1.0),
+                ]),
+                for: project
+            )
+        }
+    }
+
+    /// Project with one image clip in place (target for property actions).
+    private func makeProjectWithClip() -> (Project, UUID, UUID) {
+        let asset = MediaAsset(id: UUID(), originalURL: URL(fileURLWithPath: "/tmp/kf.jpg"), kind: .image)
+        let trackId = UUID()
+        let clipId = UUID()
+        let project = Project(
+            name: "KeyframeValidation",
+            mediaLibrary: MediaLibrary(assets: [asset.id: asset]),
+            timeline: Timeline(tracks: [
+                Track(id: trackId, kind: .video, name: "V", clips: [
+                    Clip(
+                        id: clipId,
+                        kind: .image,
+                        sourceRange: TimeRange(start: 0, duration: 5),
+                        timelineRange: TimeRange(start: 0, duration: 5)
+                    )
+                ])
+            ])
+        )
+        return (project, trackId, clipId)
+    }
+
     @Test("Sequential draft compilation rejects bad sequence fail-closed without mutating original")
     func sequentialDraftFailClosed() async throws {
         let initialProject = Project(name: "InitialProject")

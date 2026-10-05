@@ -25,10 +25,10 @@
 | M1 램프 중첩·라우팅·덕킹 정책 | **완료** | `TrackGainEnvelope`(Core)+`PlaybackEngine` 교체+전역 덕킹 블록 제거, Core 13/13 |
 | M2 플래너 입력 제한 | **완료** | 유한성·상한·반복 상한·길이 미상 거부, 테스트 5케이스 |
 | M4 기존 프로젝트 정책 | **완료** | `timelineNotEmpty` 거부·잠긴 트랙 제외 |
-| M5 접합 품질(1차) | **완료(1차)** | 접합부 12ms 안티클릭 페이드. 디코딩 실측은 E2E에서 peak/무음 검사로 1차 확인, 크로스페이드·루프 포인트는 후속 |
-| M6 검증 경계(1차) | **완료(1차)** | setClipFade isFinite·E2E 전제조건/전체비교. keyframe/transform 범위·registerAsset 갱신 구분은 후속 |
-| M3b 외부 파일 재열기 | 미착수 | 프로세스 재시작 왕복 검증 인프라 필요 |
-| E2E 재검증 | **통과** | §5 — 램프 중첩 0·스코프 거부 0·Core 1,562/1,562·Mac 회귀 7/7 |
+| M5 접합 품질 | **완료(2차)** | 1차: 12ms 안티클릭 페이드. 2차: 프리뷰 오디오 렌더(`renderCurrentPreviewAudio`) 후 접합부 maxDelta 실측 — 절대 상한 0.25 + 기준구간 대비 12배 상한(E2E 통과). equal-power 크로스페이드/루프 포인트는 선택 후속 |
+| M6 검증 경계 | **완료(2차)** | setClipFade isFinite + **transform 유한성·양수 scale + keyframe 유한성(음수 시간은 모델 경계에서 max(0,t) 정규화 — DSL이 볼 수 없음을 테스트로 고정) + registerAsset 동일 id 전면 거부(덮어쓰기 차단·갱신은 UpdateMediaAssetCommand로 명시적) + 자산 duration 유한성**. EXIF 방향·움직임 픽셀 검증은 잔여 |
+| M3b 외부 파일 재열기 | **lite 완료** | E2E: 저장→새 VM 로드→북마크 해석(beginScope)→이미지 디코드·오디오 duration 읽기→프리뷰 재구성 무오류. **잔여: 실제 프로세스 재시작 + 사용자 선택(powerbox) scope — 테스트 호스트가 자신을 재시작할 수 없어 인프라 필요** |
+| E2E 재검증 | **통과** | §5 — 램프 중첩 0·스코프 거부 0·Core 1,570/1,570·Mac 회귀 7/7 |
 
 ## 1. [P1] 오디오 램프 중첩 — 원인과 수리 (완료)
 
@@ -97,6 +97,8 @@ M0 테스트 전제조건·fixture staging → 최소 램프 재현 테스트(Co
 
 ## 5. 검증 결과 (2026-10-05 심야 실행)
 
+**2차 증분(21:45, e2e-m3b-m5-attempt2.log)**: M6-2차(transform/keyframe/registerAsset/duration 검사 + 계약 테스트 5종)·M3b-lite(저장→재열기→북마크 접근→프리뷰 재구성)·M5-2차(프리뷰 렌더 접합 maxDelta 상한) — E2E+회귀 8/8(11.9s)·Core 전체 **1,570/1,570**·컨테이너 무오염(recovery 부재·테스트 자동저장 0). 주요 발견: `Keyframe.init`이 음수 시간을 `max(0,t)`로 정규화 — DSL 검증이 볼 수 없으므로 모델 계약을 테스트로 고정.
+
 - **E2E 통과**: `AIPhotoMontageE2ETests` 1/1 (9.37s, RC=0, 3차 시도 — 1·2차는 테스트 코드 컴파일 오류로 수정 후 재실행). 증거: `artifacts/ai_creation/20261005-m1-repair/e2e-xcodebuild-attempt3.log`. **램프 중첩 예외 0회·샌드박스 거부 0회**(16:15 실행과 동일 항목 대조). 검증 범위: 프리뷰 composition 구성(apply+redo), 전체 상태 단일 Undo(트랙·캔버스·canvasSize·미디어 라이브러리), JSON 왕복·북마크 유지, 실제 MP4 export(graph mix 경로) 디코딩(길이 15s±0.2·A/V 트랙), 3개 사진 구간 프레임 상호 구분, 마지막 구간 음악 RMS>0.001, 루프 접합부 peak<0.99.
 - **Core 전체 통과**: 1,562 테스트 / 241 스위트. 이번 수리로 신규 `TrackGainEnvelopeTests` 13, 플래너 제한 테스트 5 포함.
 - **정적 계약 테스트 2건 갱신**: `AudioDuckingTests`(양 엔진 덕킹 의미론 계약 — 프리뷰의 램프 발행이 TrackGainEnvelope 경유임을 단언, voiceClipIds 재등장 금지 조항 추가), `MasterAudioPreviewParityStaticContractTests`(applyAudioVolumeAndFades→applyGainEnvelope 개명 반영). 계약 의도는 변경 없음.
@@ -105,9 +107,8 @@ M0 테스트 전제조건·fixture staging → 최소 램프 재현 테스트(Co
 
 ### 잔여(후속 증분)
 
-- **M3b**: 실제 사용자 선택 파일 scope·저장·프로세스 재시작 후 접근 검증(이번은 JSON 왕복+북마크 유지까지만).
-- **M5 2차**: 원본 접합부 직접 디코딩 실측(`renderCurrentPreviewAudio` 활용 — AAC 출력은 클릭을 부분 마스킹), equal-power 크로스페이드/루프 포인트.
-- **M6 잔여**: keyframe/transform 유한성·범위 검사, registerAsset 재사용 vs 갱신, EXIF 방향·움직임 픽셀 검증. **저장 경로 격리(E2E autosave)는 완료** — `ProjectStore.namedAutosaveDirectory` 신설로 명명 자동저장까지 주입 격리, E2E per-run 임시 저장소 + 실 컨테이너 무변경 단언, AutosaveFailureSurfacing 회귀 통과(증거 `e2e-isolation-attempt1.log`, 8/8).
+- **M3b 완결**: 실제 프로세스 재시작 + 사용자 선택(powerbox) scope 검증 — 세션 재생성 수준(lite)까지는 E2E로 완료. 테스트 호스트 자기 재시작 인프라 또는 수동 검증 절차 필요.
+- **M6 픽셀 검증**: EXIF 방향·움직임(키프레임 반영)의 프레임 픽셀 단위 검증 — fixture 콘텐츠 기하 설계가 전제.
 - **iOS 쌍둥이 패리티**: `IOSExportEngine.applyDuckingRamps`는 전역 덕킹 없는 트랙별+fade창 회피 패턴이라 **중첩 위험은 없음**을 확인. Core `TrackGainEnvelope` 패리티 통일은 후속(iOS 테스트 실행은 기존 정책상 불가 — generic device 빌드만).
-- **프리뷰↔출력 음량 직접 대조**: 두 경로가 별도 엔진임이 확정되어 성급한 동일성 주장 대신 후속 과제로 명시적으로 남김.
+- **프리뷰↔출력 음량 직접 대조**: 두 경로가 별도 엔진임이 확정되어 성급한 동일성 주장 대신 후속 과제로 명시적으로 남김(프리뷰 오디오 렌더 경로는 이제 측정 인프라가 갖춰짐 — M5 2차에서 사용).
 - **테스트 호스트 잔존 감시**: xcodebuild 종료 후에도 테스트 호스트/앱이 잔존해 30초 자동저장으로 테스트 데이터를 재기록한 사례 관측(2026-10-05 20:09 — 처음 E2E 격리 유출로 의심했으나 잔존 앱의 소행으로 판명, [CRASH_DIAGNOSIS_20261005.md](CRASH_DIAGNOSIS_20261005.md) §7). 러너 종료 시 잔존 프로세스 확인을 운영 규칙에 반영할 것.

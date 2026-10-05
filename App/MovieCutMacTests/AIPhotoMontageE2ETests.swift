@@ -283,25 +283,109 @@ struct AIPhotoMontageE2ETests {
 
         // 5b. Music is audible through the LAST segment (audio-track presence
         // alone proved too weak) and the junction carries no excessive peak.
-        let tailLevels = try await Self.decodeLevels(of: exportedAsset, from: 13.0, to: 15.0)
+        let tailLevels = try await Self.decodeStats(of: exportedAsset, from: 13.0, to: 15.0)
         #expect(tailLevels != nil, "exported audio must be decodable over the final segment")
         if let tailLevels {
             #expect(tailLevels.rms > 0.001, "music must remain audible in the final segment (rms \(tailLevels.rms))")
             #expect(tailLevels.peak < 0.99, "final segment must not clip (peak \(tailLevels.peak))")
         }
-        let junctionLevels = try await Self.decodeLevels(of: exportedAsset, from: 3.9, to: 4.1)
+        let junctionLevels = try await Self.decodeStats(of: exportedAsset, from: 3.9, to: 4.1)
         #expect(junctionLevels != nil, "exported audio must be decodable across the first loop junction")
         if let junctionLevels {
             #expect(junctionLevels.peak < 0.99, "loop junction must not clip (peak \(junctionLevels.peak))")
             #expect(junctionLevels.rms > 0.001, "loop junction must not be silent (rms \(junctionLevels.rms))")
         }
+
+        // 5c. Junction click measurement on the RENDERED PREVIEW audio
+        // (M5 2차): the export-side numbers go through AAC; this renders the
+        // preview composition itself (the audioMix envelope) and bounds the
+        // junction's sample-level discontinuity against a mid-chunk baseline.
+        let previewAudioURL = outputDir.appendingPathComponent("preview_audio.m4a")
+        try await vm.playbackEngine.renderCurrentPreviewAudio(to: previewAudioURL)
+        let previewAsset = AVAsset(url: previewAudioURL)
+        let junctionDelta = try await Self.decodeStats(of: previewAsset, from: 3.85, to: 4.15)?.maxDelta
+        let baselineDelta = try await Self.decodeStats(of: previewAsset, from: 2.0, to: 2.3)?.maxDelta
+        #expect(junctionDelta != nil, "preview audio must render and decode across the junction")
+        #expect(baselineDelta != nil, "preview audio must decode mid-chunk")
+        if let junctionDelta, let baselineDelta {
+            // A 220 Hz sine's natural inter-sample slope at this rate is
+            // ≈ amplitude×0.029; the 12 ms junction micro-fades keep the
+            // splice discontinuity on that order. A butt-splice click would
+            // approach full-scale. Absolute bound + relative-to-baseline
+            // bound (AAC quantization gets headroom).
+            #expect(junctionDelta < 0.25, "junction click detected (maxDelta \(junctionDelta))")
+            #expect(junctionDelta < baselineDelta * 12, "junction is discontinuous vs baseline (\(junctionDelta) vs \(baselineDelta))")
+        }
+
+        // 6. Save → fresh-session reopen (M3b-lite): persist the montage
+        // project, load it into a NEW view model, resolve every asset's
+        // bookmark, READ the media through it, and rebuild the preview
+        // composition. (Process-level restart remains unverified — a test
+        // host cannot relaunch itself; documented in the repair plan.)
+        let savedURL = storageRoot.appendingPathComponent("saved/MontageSaved.moviecut")
+        try FileManager.default.createDirectory(
+            at: savedURL.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = ProjectStore(autosaveDirectory: nil)
+        try await store.save(vm.currentProject, to: savedURL)
+        let reopenedProject = try await store.load(from: savedURL)
+        #expect(reopenedProject.timeline.tracks.flatMap(\.clips).count == 7)
+        #expect(reopenedProject.canvas == .portrait9x16)
+
+        let reopenedVM = EditorViewModel(
+            project: reopenedProject,
+            autosaveDirectory: storageRoot.appendingPathComponent("autosave2", isDirectory: true)
+        )
+        for asset in reopenedVM.currentProject.mediaLibrary.assets.values {
+            try #require(asset.originalBookmark != nil, "reopened asset must retain its bookmark")
+            let scopedURL = SecurityScopedAccess.beginScope(for: asset)
+            defer { SecurityScopedAccess.endScope(for: scopedURL) }
+            try #require(
+                FileManager.default.fileExists(atPath: scopedURL.path),
+                "reopened asset must resolve to an existing file: \(scopedURL.path)"
+            )
+            if asset.kind == .image {
+                let image = NSImage(contentsOf: scopedURL)
+                try #require(image != nil && image!.isValid, "reopened image must decode: \(scopedURL.path)")
+            } else if asset.kind == .audio {
+                let probed = AVAsset(url: scopedURL)
+                let seconds: Double
+                if #available(macOS 13.0, *) {
+                    seconds = CMTimeGetSeconds(try await probed.load(.duration))
+                } else {
+                    seconds = CMTimeGetSeconds(probed.duration)
+                }
+                #expect(seconds.isFinite && seconds > 0, "reopened audio must decode (duration \(seconds)): \(scopedURL.path)")
+            }
+        }
+
+        await MainActor.run {
+            reopenedVM.rebuildPreviewComposition(preservingPlayback: false)
+        }
+        var reopenedReady = false
+        for _ in 0..<50 where reopenedReady == false {
+            reopenedReady = reopenedVM.playbackEngine.playerItem != nil
+                || reopenedVM.playbackEngine.lastCompositionError != nil
+            if reopenedReady == false {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        #expect(reopenedReady, "reopened preview composition must settle")
+        #expect(
+            reopenedVM.playbackEngine.lastCompositionError == nil,
+            "reopened preview must build without error: \(reopenedVM.playbackEngine.lastCompositionError ?? "")"
+        )
+        #expect(reopenedVM.playbackEngine.playerItem != nil)
     }
 
     /// Decodes a time window of the asset's first audio track to linear PCM
-    /// and returns its RMS and peak (linear amplitude, 0…1).
-    private static func decodeLevels(
+    /// and returns its RMS, peak, and maximum consecutive-sample delta
+    /// (linear amplitude, 0…1). maxDelta is the click detector: a butt-splice
+    /// discontinuity is an order of magnitude above a 220 Hz sine's natural
+    /// inter-sample slope.
+    private static func decodeStats(
         of asset: AVAsset, from startSeconds: Double, to endSeconds: Double
-    ) async throws -> (rms: Double, peak: Double)? {
+    ) async throws -> (rms: Double, peak: Double, maxDelta: Double)? {
         guard let audioTrack = try await asset.loadTracks(withMediaType: .audio).first else {
             return nil
         }
@@ -328,6 +412,8 @@ struct AIPhotoMontageE2ETests {
         var squaredSum: Double = 0
         var sampleCount: Double = 0
         var peak: Double = 0
+        var maxDelta: Double = 0
+        var previous: Double?
         while let sampleBuffer = output.copyNextSampleBuffer() {
             guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
             let length = CMBlockBufferGetDataLength(blockBuffer)
@@ -343,11 +429,15 @@ struct AIPhotoMontageE2ETests {
                 squaredSum += amplitude * amplitude
                 sampleCount += 1
                 peak = max(peak, abs(amplitude))
+                if let previous {
+                    maxDelta = max(maxDelta, abs(amplitude - previous))
+                }
+                previous = amplitude
             }
         }
         guard sampleCount > 0, reader.status == .completed || reader.status == .reading else {
             return nil
         }
-        return (rms: (squaredSum / sampleCount).squareRoot(), peak: peak)
+        return (rms: (squaredSum / sampleCount).squareRoot(), peak: peak, maxDelta: maxDelta)
     }
 }

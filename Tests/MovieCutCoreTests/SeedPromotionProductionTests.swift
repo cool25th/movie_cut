@@ -57,6 +57,15 @@ struct SeedPromotionProductionTests {
             var semantic_identity: String
             var canonical_fixture: SPRegressionFixture
             var seed_observations: [String]
+            // Provenance fields (the ⑥ closure contract, 45th-cycle
+            // judgment): a record must survive the staging wipe AND its
+            // promoted evidence must remain usable after a disk reload.
+            var status: String? = nil               // "known" | "unknown"
+            var disposition: String? = nil          // "promoted" | "discarded"
+            var pre_fix_violation_step: Int? = nil  // the intended invariant violation the faulty replay hits
+            var post_fix_passed: Bool? = nil        // the clean replay holds the contract
+            var fixture_path: String? = nil         // where the fixture evidence lives NOW
+            var registry_target_path: String? = nil // promoted fixture path — nil for discarded synthetics
         }
         var entries: [Entry] = []
 
@@ -104,6 +113,38 @@ struct SeedPromotionProductionTests {
 
     enum FixtureCaptureError: Error {
         case notReproduced(seed: UInt64, step: Int)
+    }
+
+    // MARK: - ⑥ lifecycle: atomic registry persistence + explicit promotion
+
+    /// The registry file the promotion pipeline owns — written atomically
+    /// (45th-cycle judgment D: a failed write must never leave a truncated
+    /// registry behind, and staging is never cleaned before this record and
+    /// the promoted fixture exist).
+    static func save(_ registry: Registry, to url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(registry).write(to: url, options: .atomic)
+    }
+
+    static func loadRegistry(from url: URL) throws -> Registry {
+        try JSONDecoder().decode(Registry.self, from: Data(contentsOf: url))
+    }
+
+    /// Explicit promotion (32nd-cycle contract: capture is automatic,
+    /// promotion is a reviewed step) — copy the staged fixture to the
+    /// PERMANENT directory so its evidence outlives the staging wipe.
+    static func promoteFixture(at stagedURL: URL, to promotedDir: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: promotedDir, withIntermediateDirectories: true)
+        let destination = promotedDir.appendingPathComponent(stagedURL.lastPathComponent)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: stagedURL, to: destination)
+        return destination
     }
 
     // MARK: - P2 + P4: unknown failure captured to staging, replays FAIL RNG-free
@@ -193,5 +234,123 @@ struct SeedPromotionProductionTests {
         // cleanup
         try? FileManager.default.removeItem(at: first.url)
         try? FileManager.default.removeItem(at: second.url)
+    }
+
+    // MARK: - ⑥ (closure condition, 45th-cycle judgment): the registry and its
+    // promoted evidence survive the staging wipe across a disk reload.
+
+    @Test("P6 lifecycle: save → staging wipe → registry reload → identity + provenance survive; promoted fixture still replays")
+    func registrySurvivesStagingWipeAndReload() throws {
+        // Isolated staging path: the sibling tests wipe the shared stagingDir()
+        // at their start/end, and Swift Testing runs suites in parallel.
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qauto/promotion-candidates-lifecycle", isDirectory: true)
+        let promotedDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qauto/promotion-fixtures", isDirectory: true)
+        let registryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qauto/seed-promotion-registry.json")
+        try? FileManager.default.removeItem(at: staging)
+        try? FileManager.default.removeItem(at: promotedDir)
+        try? FileManager.default.removeItem(at: registryURL)
+
+        // Two distinct defects: A is promoted (permanent evidence), B stays a
+        // synthetic staging candidate that is discarded by design.
+        let a = try Self.captureCandidate(seed: 7, steps: 120, injectAt: (7, 73), stagingDir: staging)
+        let b = try Self.captureCandidate(seed: 7, steps: 120, injectAt: (7, 90), stagingDir: staging)
+        let idA = try Self.semanticIdentity(a.candidate)
+        let idB = try Self.semanticIdentity(b.candidate)
+        #expect(idA != idB)
+
+        // A: pre-fix FAIL must be the INTENDED invariant violation (not any
+        // error), post-fix PASS must be a real clean replay — then promote.
+        let preViolation = try SeedPromotionSupport.replayFixture(a.candidate) { command, index, doc in
+            try SeedPromotionSupport.applyFaulty(
+                command, to: &doc, armed: index == a.candidate.failing_step
+            )
+        }
+        #expect(preViolation == a.candidate.failing_step)
+        let cleanViolation = try SeedPromotionSupport.replayFixture(a.candidate) { command, _, doc in
+            try SeedPromotionSupport.applyClean(command, to: &doc)
+        }
+        #expect(cleanViolation == nil)
+        let promotedURL = try Self.promoteFixture(at: a.url, to: promotedDir)
+
+        var reg = Registry()
+        (reg, _) = reg.register(a.candidate, identity: idA)
+        if let i = reg.entries.firstIndex(where: { $0.semantic_identity == idA }) {
+            reg.entries[i].status = "unknown"
+            reg.entries[i].disposition = "promoted"
+            reg.entries[i].pre_fix_violation_step = preViolation
+            reg.entries[i].post_fix_passed = (cleanViolation == nil)
+            reg.entries[i].fixture_path = promotedURL.path
+            reg.entries[i].registry_target_path = promotedURL.path
+        }
+        (reg, _) = reg.register(b.candidate, identity: idB)
+        if let i = reg.entries.firstIndex(where: { $0.semantic_identity == idB }) {
+            reg.entries[i].status = "unknown"
+            reg.entries[i].disposition = "discarded"
+            reg.entries[i].fixture_path = b.url.path // staging only — wiped below
+            reg.entries[i].registry_target_path = nil
+        }
+        try Self.save(reg, to: registryURL)
+
+        // THE ⑥ EVENT: wipe staging, drop the in-memory registry instance.
+        try FileManager.default.removeItem(at: staging)
+        #expect(!FileManager.default.fileExists(atPath: b.url.path),
+                "the synthetic staging candidate is gone by design")
+        reg = Registry() // the old in-memory instance is discarded
+
+        // Reload from disk — the registry file is now the ONLY source of truth.
+        let reloaded = try Self.loadRegistry(from: registryURL)
+        #expect(reloaded.entries.count == 2,
+                "both dispositions keep their record across the reload")
+
+        // A: identity + full provenance survived, and the promoted fixture is
+        // READABLE and still reproduces its violation — evidence usable, not
+        // just a dangling path string.
+        guard let ea = reloaded.entries.first(where: { $0.semantic_identity == idA }) else {
+            Issue.record("promoted entry lost across the staging-wipe reload")
+            return
+        }
+        #expect(ea.disposition == "promoted")
+        #expect(ea.status == "unknown")
+        #expect(ea.pre_fix_violation_step == a.candidate.failing_step)
+        #expect(ea.post_fix_passed == true)
+        let promotedPath = try #require(ea.registry_target_path,
+                                        "a promoted entry must carry its permanent target path")
+        #expect(FileManager.default.fileExists(atPath: promotedPath),
+                "the promoted fixture must survive the staging wipe")
+        let promotedFixture = try JSONDecoder().decode(
+            SPRegressionFixture.self, from: Data(contentsOf: URL(fileURLWithPath: promotedPath))
+        )
+        #expect(try Self.semanticIdentity(promotedFixture) == ea.semantic_identity,
+                "identity recomputed from the reloaded fixture must match the stored identity")
+        let promotedPreViolation = try SeedPromotionSupport.replayFixture(promotedFixture) { command, index, doc in
+            try SeedPromotionSupport.applyFaulty(
+                command, to: &doc, armed: index == promotedFixture.failing_step
+            )
+        }
+        #expect(promotedPreViolation == promotedFixture.failing_step,
+                "the promoted fixture still reproduces its violation after the wipe+reload")
+        let promotedCleanViolation = try SeedPromotionSupport.replayFixture(promotedFixture) { command, _, doc in
+            try SeedPromotionSupport.applyClean(command, to: &doc)
+        }
+        #expect(promotedCleanViolation == nil,
+                "the promoted fixture still PASSES with the clean dispatcher")
+
+        // B: discarded — the entry keeps its disposition and history, and is
+        // NOT presented as replayable (no dangling promoted target).
+        guard let eb = reloaded.entries.first(where: { $0.semantic_identity == idB }) else {
+            Issue.record("discarded entry lost across the staging-wipe reload")
+            return
+        }
+        #expect(eb.disposition == "discarded")
+        #expect(eb.registry_target_path == nil,
+                "a discarded synthetic candidate must not be presented as replayable")
+        #expect(!FileManager.default.fileExists(atPath: eb.fixture_path ?? ""))
+
+        // cleanup
+        try? FileManager.default.removeItem(at: promotedDir)
+        try? FileManager.default.removeItem(at: registryURL)
     }
 }

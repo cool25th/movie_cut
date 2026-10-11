@@ -28,11 +28,11 @@ struct SeedPromotionProductionTests {
             .appendingPathComponent("qauto/promotion-candidates", isDirectory: true)
     }
 
-    /// A candidate's semantic identity: SHA256 over the canonical JSON of
-    /// the MEANINGFUL failure fields (run-start state + command sequence +
-    /// expected invariant). Seed and step are provenance, not identity —
-    /// two discoveries of the same defect share one identity.
-    static func semanticIdentity(_ candidate: SPRegressionFixture) throws -> String {
+    /// The OPERATIVE canonical serialization — the exact bytes whose SHA256
+    /// is the semantic identity. Split out so the QAUTO-08 golden test can
+    /// observe the real normalization output (not a test-side re-derivation):
+    /// sorted object keys, preserved sequence order, minimal-decimal numbers.
+    static func canonicalCoreJSON(_ candidate: SPRegressionFixture) throws -> Data {
         struct Core: Codable {
             var initial_project_state: SPMiniDoc
             var command_sequence: [SPMiniCommand]
@@ -40,13 +40,19 @@ struct SeedPromotionProductionTests {
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let core = try encoder.encode(Core(
+        return try encoder.encode(Core(
             initial_project_state: candidate.initial_project_state,
             command_sequence: candidate.command_sequence,
             expected_invariant: candidate.expected_invariant
         ))
-        let digest = SHA256.hash(data: core)
-        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// A candidate's semantic identity: SHA256 over the canonical JSON of
+    /// the MEANINGFUL failure fields (run-start state + command sequence +
+    /// expected invariant). Seed and step are provenance, not identity —
+    /// two discoveries of the same defect share one identity.
+    static func semanticIdentity(_ candidate: SPRegressionFixture) throws -> String {
+        SeedPromotionSupport.sha256Hex(try canonicalCoreJSON(candidate))
     }
 
     /// The registry: semantic_identity → canonical fixture + seed
@@ -352,5 +358,79 @@ struct SeedPromotionProductionTests {
         // cleanup
         try? FileManager.default.removeItem(at: promotedDir)
         try? FileManager.default.removeItem(at: registryURL)
+    }
+
+    // MARK: - QAUTO-08: golden identity contract (45th-cycle judgment, ⑤ follow-up)
+    //
+    // The golden canonical bytes were HAND-WRITTEN from the normalization
+    // contract (sorted object keys / preserved sequence order / minimal-decimal
+    // numbers) and their digest was fixed with an EXTERNAL tool —
+    // `shasum -a 256 -b` on a 168-byte file with no trailing newline. The
+    // first draft assumed Swift's flat single-payload enum encoding; the
+    // golden test itself caught the mismatch — THIS compiler synthesizes
+    // single-payload enum cases as nested {"case":{"_0":value}} — and the
+    // reviewed bytes were re-confirmed against that specification. The test
+    // does NOT pre-normalize its inputs: the reordered-key case is decoded
+    // through the real Codable entry so the OPERATIVE path does the
+    // normalization.
+
+    @Test("QAUTO-08 golden identity: reviewed canonical bytes + shasum-fixed digest + relations incl. sequence order")
+    func goldenIdentityContract() throws {
+        // The reviewed baseline candidate — hand-constructed, NOT from runTorture.
+        var doc = SPMiniDoc()
+        doc.markers = []
+        doc.volume = 0.75
+        let base = SPRegressionFixture(
+            fixture_id: "qauto08-golden-base", origin_seed: 0, failing_step: 1,
+            initial_project_state: doc,
+            command_sequence: [.addMarker("m1"), .setVolume(0.5)],
+            expected_invariant: "markers_keep_order",
+            discovered_at_commit: "qauto08-golden"
+        )
+        let reviewedCanonical =
+            #"{"command_sequence":[{"addMarker":{"_0":"m1"}},{"setVolume":{"_0":0.5}}],"expected_invariant":"markers_keep_order","initial_project_state":{"markers":[],"volume":0.75}}"#
+        // `shasum -a 256 -b qauto08-reviewed-canonical.json` — fixed 2026-10-11.
+        let goldenDigest = "a27b38f0b2b3f906f2403c0b95f6509bc66cfea1cbc5e19bd43f4a151996cdcf"
+
+        // Relation 1: the OPERATIVE canonicalization produces the reviewed
+        // bytes, and the operative identity matches the externally fixed digest.
+        #expect(String(decoding: try Self.canonicalCoreJSON(base), as: UTF8.self) == reviewedCanonical,
+                "operative canonical bytes must equal the hand-reviewed bytes")
+        #expect(try Self.semanticIdentity(base) == goldenDigest,
+                "operative identity must equal the shasum-fixed golden digest")
+
+        // Relation 2: same meaning, different surface key order (the reordered
+        // JSON also carries a DIFFERENT fixture_id/seed — identity-irrelevant
+        // provenance) → identical canonical bytes and identity. The input goes
+        // through the real decode path; the test pre-sorts nothing.
+        let reorderedJSON =
+            #"{"discovered_at_commit":"qauto08-other-writer","expected_invariant":"markers_keep_order","command_sequence":[{"addMarker":{"_0":"m1"}},{"setVolume":{"_0":0.5}}],"initial_project_state":{"volume":0.75,"markers":[]},"origin_seed":9,"failing_step":42,"fixture_id":"qauto08-reordered"}"#
+        let decoded = try JSONDecoder().decode(
+            SPRegressionFixture.self, from: Data(reorderedJSON.utf8)
+        )
+        #expect(String(decoding: try Self.canonicalCoreJSON(decoded), as: UTF8.self) == reviewedCanonical,
+                "surface key order must not leak into the canonical bytes")
+        #expect(try Self.semanticIdentity(decoded) == goldenDigest,
+                "same meaning must map to the same identity regardless of key order")
+
+        // Relation 3a: a changed MEANING field (invariant) → different bytes
+        // and identity.
+        var invariantChanged = base
+        invariantChanged.expected_invariant = "volume_clamped"
+        #expect(String(decoding: try Self.canonicalCoreJSON(invariantChanged), as: UTF8.self) != reviewedCanonical)
+        #expect(try Self.semanticIdentity(invariantChanged) != goldenDigest)
+
+        // Relation 3b: sequence ORDER swapped (order-meaningful commands) →
+        // different identity — targets a regression where the canonicalizer
+        // wrongly sorts the array like object keys.
+        var sequenceSwapped = base
+        sequenceSwapped.command_sequence = [.setVolume(0.5), .addMarker("m1")]
+        #expect(try Self.semanticIdentity(sequenceSwapped) != goldenDigest,
+                "sequence order is meaning; swapping commands must change the identity")
+
+        // Relation 3c: changed state → different identity.
+        var stateChanged = base
+        stateChanged.initial_project_state.volume = 0.8
+        #expect(try Self.semanticIdentity(stateChanged) != goldenDigest)
     }
 }

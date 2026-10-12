@@ -26,6 +26,26 @@
 | G5 Operational | 배포 증거 체인 | QAUTO-05: main SHA→CI→Archive→Signing→TestFlight→실기기 cold launch→Import/Edit/Save/Reopen/Export 증거 | 🔴 **BLOCKED(사용자 대기)** — 계정/Team ID(Stage-1 가이드 B-1~B-5) |
 | G6 Beta UX | 베타 품질 수치 | §5.1 Beta Launch Gate 8종 + 계측 인프라(CA-30 1차 완료 — 로컬 JSONL 퍼널 양 플랫폼 배선·반출 UI는 2차) | 🟡 수치표 등록 완료(CA-29)·계측 구현 1차 완료(2026-09-21)·반출 표면·실기기 잔여 |
 
+## 0.7 출시 증거 정리 (2026-10-12 — ChatGPT 외부 리뷰 45회차 판정 지시 이행)
+
+> **규약(45회차 2차 판정)**: 각 항목은 **PASS / FAIL / NOT_RUN / BLOCKED_USER** 4상태로만 기록하고, 상태마다 마지막 실측일·실측 SHA(또는 환경)·증거 위치를 연결한다. **준비 문서 작성은 그 테스트의 PASS가 아니다.** 이전 기록의 대기 항목이 해소됐다는 증거가 없으면 임의로 PASS로 승계하지 않고 마지막 상태와 증거일을 유지한다. 배포 체인의 단계(빌드 생성 → ASC 업로드·처리 완료 → 테스터 실제 설치)는 서로 다른 단계로 구분해 증거를 남긴다.
+
+| 항목 | 상태 | 마지막 실측 | 증거 |
+|---|---|---|---|
+| G1 Build(Mac) | **PASS** | 2026-09-24 21:05 · HEAD=acccc65 | `.build-check/history/` verify_gate 5/5 GATE_PASS(swift build·xcodebuild·lint·swift test·measurement) |
+| G1 Build(iOS) | **PASS** | 2026-09-19 · HEAD=해당 회차 | verify_gate iOS 단계(4단 환경 블록 해소 후 generic 빌드 rc=0) — 후속 CI green은 배포 시점 채점 |
+| G2 Project | **PASS** | 2026-09-21 · Core 1,485/224 | `ProjectIntegrityGateTests` 5/5(QAUTO-02 CLOSED)+autosave/복구 E2E — 본 표 §0.5 G2 행 |
+| G3 Media(Mac) | **PASS** | 2026-09 이전 실측 | CA-04 포맷 매트릭스 PASS+CA-03 감사·BUG-01/02/04/05 수리 기록 — QAUTO06 코퍼스 6/6(2026-09-22·`QAUTO06_MEDIA_CORPUS_20260922.md`) 재보강 |
+| G3 Media(iOS relink) | **NOT_RUN** | — | iOS 실기기 relink 수동 확인 미실측(G4 이관 항목과 함께) |
+| G4 Device | **BLOCKED_USER** | 1/3: iPhone 13 Pro 2026-08-22 | G-27 시나리오 1/3 완료 기록 — 대기: 실기기 2종(최저/최신)·해제 조건: 기기 확보 후 G-27 잔여 2종 Blocker 0 |
+| G5 Operational | **BLOCKED_USER** | — | 대기: Team ID(Stage-1 가이드 B-1~B-5)·해제 조건: 계정 수신 후 QAUTO-05 체인(main SHA→CI→Archive→Signing→TestFlight→실기기 cold launch→경로 증거) 실행 |
+| G6 Beta UX | **NOT_RUN** (인프라 1차 PASS) | 계측 배선 2026-09-21 | CA-29 수치표 등록·CA-30 1차(로컬 JSONL 퍼널 양 플랫폼) — §5.1 8종 수치 측정은 실기기 베타 후. 반출 UI 2차 잔여 |
+| §3 첫 아카이브 | **NOT_RUN** | — | release.sh fail-loud 프리플라이트 검증만(2026-09-19) — 실 archive는 Team ID 후 |
+| §5.1 사전 점검 시나리오 | **PASS** | 2026-09-04 · 2회 연속 4/4 | `run_beta_scenarios.sh` — 임포트→첫 컷→출력(3.000s·1920x1080)·색 보정·9:16 세로(1080x1920 기하 실측)·autosave 복구(recovered_clips=1)·ffprobe 검증. **주의: Mac 호스트 실측 — 실기기·배포 빌드 증거 아님(45회차 판정 명시) |
+| 배포 단계 구분 증거(빌드→업로드·처리→테스터 설치) | **NOT_RUN** | — | ASC 계정 전제 — 각 단계별 증거는 G5 해제 후 QAUTO-05 체인으로 구분 수집 |
+
+**판정 이력**: 위 상태의 유일한 근거 원장은 본 섹션과 §0.5 표 — 다른 문서의 "완료" 서술은 이 표의 상태·증거일에 종속된다. 2026-10-10 판정의 지시(4/4 PASS를 배포 증거로 승계 금지)에 따라 seed promotion wiring CLOSED(2026-10-10)는 출시 증거가 아니다.
+
 ## 1. Apple Developer 자격 확보 (사용자)
 
 - [ ] Apple Developer Program 가입 (연 $99, https://developer.apple.com/programs)

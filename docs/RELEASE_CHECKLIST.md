@@ -64,6 +64,24 @@
 
 **판정 기록 방식**: 각 단계 PASS/FAIL+측정값을 회차 보고에 기록하고 §0.7 표의 G4/G5 상태를 갱신한다. FAIL 시: BUG lifecycle 7단계로 등록(재현 최소화 우선)·1줄 FAIL이어도 증거 파일 없이 PASS로 기록하지 않는다. **"시나리오 시트 작성"은 그 실행이 PASS라는 뜻이 아니다 — 현재 상태 NOT_RUN.**
 
+## 0.9 배포 설정 읽기 전용 점검 (2026-10-19 — 45회차 판정 지시: "누락과 사용자 결정 필요 항목만 정리한 점검 결과")
+
+> **성격**: 구성 파일의 읽기 전용 점검 — 실측 아님·설정 PASS는 배포 PASS가 아니다. 점검 대상: project.yml·Entitlements 2종·PrivacyInfo 2종·Info.plist 2종·ExportOptions.plist·release.sh.
+
+| 항목 | 관측값 | 판정 |
+|---|---|---|
+| Bundle ID | `com.moviecut.mac` / `com.moviecut.ios`(+tests 서브 번들 3종 — 배포 타깃 아님) | §2 ASC 등록 예정 ID와 일치 — **누락 없음** |
+| 버전 | MARKETING_VERSION 0.1.0·CURRENT_PROJECT_VERSION 1 | 릴리스 시 루프가 갱신+xcodegen generate(§7 관례) — 사용자 결정 불필요 |
+| Signing | automatic signing·TEAM_ID는 env로 fail-loud(release.sh)·ExportOptions엔 `__TEAM_ID_PLACEHOLDER__`(커밋 금지 계약 유지) | **Team ID만 사용자 대기(§1·§5 BLOCKED_USER 유지)** |
+| Entitlements(Mac) | app-sandbox·files.user-selected.read-write·files.bookmarks.app-scope·device.microphone | MAS 필수 4종 정합·**camera/network 의도적 미포함(App Review 리스크 회피 — 코드 주석에 설계 근거 기록)** |
+| Entitlements(iOS) | 빈 dict(항상 샌드박스·Photos/문서 picker 런타임 권한 — 설계 주석) | 최소 원칙 정합 |
+| 권한 설명 | NSMicrophoneUsageDescription·NSSpeechRecognitionUsageDescription(양 플랫폼) | 미사용 권한 설명 없음. **iOS 사진 임포트는 SwiftUI PhotosPicker(PHPicker·out-of-process)라 사진 라이브러리 권한 설명 불필요 — 구현 확인 완료(PhotosPicker 사용 3파일)** |
+| 개인정보 | PrivacyInfo.xcprivacy 양 플랫폼 존재 | §6 "데이터 수집 없음" 응답과 정합 |
+| Scheme/Release | xcodegen 생성(project.yml)·release.sh fail-loud 프리플라이트가 2026-09-19 실측 검증 | §3 첫 아카이브 NOT_RUN 유지(§0.7) |
+| 베타 제외 기능 | 기능 동결 합의로 신규 기능 미편입·제외 플래그 특이사항 없음. 잔여: 계측 반출 UI 2차(CA-30)·thermal 측정(환경 차단·CODEX 축) | 신규 누락 없음 — 잔여는 §0.5/§0.7 표에 이미 추적됨 |
+
+**점검 결론**: 배포 설정의 신규 누락 0건·코드/구성 정합 — **사용자 결정 필요 항목은 기존 BLOCKED_USER와 동일(Team ID·계정·스크린샷·실기기)**. 이 점검으로 G5가 열리는 것은 아니다. 이후 설정 변경 시 본 섹션을 갱신한다(읽기 전용 점검의 재실행).
+
 ## 1. Apple Developer 자격 확보 (사용자)
 
 - [ ] Apple Developer Program 가입 (연 $99, https://developer.apple.com/programs)

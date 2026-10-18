@@ -340,9 +340,19 @@ struct FilmstripGenerator: Sendable {
             }
         }
         if let providerData = image.dataProvider?.data {
-            for byte in providerData as Data {
-                hash ^= UInt64(byte)
-                hash &*= 1_099_511_628_211
+            let cfData = providerData as CFData
+            let length = CFDataGetLength(cfData)
+            // Constant-cost sampling: walk ~512 bytes of the provider's
+            // memory in place (CFDataGetBytePtr) at a fixed stride instead
+            // of boxing the bytes into a Data and hashing every one.
+            let stride = max(1, length / 512)
+            if let base = CFDataGetBytePtr(cfData) {
+                var offset = 0
+                while offset < length {
+                    hash ^= UInt64(base[offset])
+                    hash &*= 1_099_511_628_211
+                    offset += stride
+                }
             }
         }
         return String(format: "%016llx", hash)

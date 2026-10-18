@@ -723,7 +723,7 @@ struct TimelineView: View {
                 Canvas { context, size in
                     var x: CGFloat = 0
                     var time: TimeInterval = 0
-                    let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+                    let interval = rulerStepInterval(contentWidth: timelineContentWidth)
 
                     while x < size.width {
                         let isMajor = Int(time) % 10 == 0
@@ -806,7 +806,7 @@ struct TimelineView: View {
         Canvas { context, size in
             var x: CGFloat = 0
             var time: TimeInterval = 0
-            let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+            let interval = rulerStepInterval(contentWidth: timelineContentWidth)
 
             while x < size.width {
                 let isMajor = Int(time) % 10 == 0
@@ -825,6 +825,21 @@ struct TimelineView: View {
         }
         .frame(width: timelineContentWidth, height: height)
         .allowsHitTesting(false)
+    }
+
+    /// Ruler/grid step in seconds: the zoom-based base interval, doubled
+    /// until the projected tick count fits under 250 so extreme zoom-out
+    /// cannot flood the canvas with thousands of strokes per frame.
+    private func rulerStepInterval(contentWidth: CGFloat) -> TimeInterval {
+        var interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+        guard pixelsPerSecond > 0, contentWidth.isFinite, contentWidth > 0 else {
+            return interval
+        }
+        let maxTicks: CGFloat = 250
+        while contentWidth / (CGFloat(interval) * CGFloat(pixelsPerSecond)) > maxTicks {
+            interval *= 2
+        }
+        return interval
     }
 
     private var mainVideoTrackBadge: some View {

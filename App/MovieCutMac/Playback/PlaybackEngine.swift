@@ -75,6 +75,15 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     @ObservationIgnored private var karaokeClips: [KaraokePreviewClip] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
+    /// Chase-seek state: true while a player.seek issued by `seek(to:)` is
+    /// still in flight; a newer target arriving in that window parks in
+    /// `pendingSeekTime` and is chased by the in-flight seek's completion.
+    @ObservationIgnored private var isSeeking = false
+    @ObservationIgnored private var pendingSeekTime: CMTime?
+    /// Playback position/state captured before a thermal rebuild, restored
+    /// once the rebuilt composition installs, so a thermal transition cannot
+    /// silently reset the user to t=0 paused.
+    @ObservationIgnored private var playbackRestoreAfterRebuild: (time: TimeInterval, wasPlaying: Bool)?
     @ObservationIgnored private var compositionBuildTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
     /// G-25 2C-2 (spec §0 v1.1): EQ clips' preview audio consumes DERIVED
@@ -156,8 +165,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         } else {
             AppLog.playback.info("thermal preview quality clamp: \(previousQuality.shortLabel, privacy: .public) -> \(nextQuality.shortLabel, privacy: .public)")
         }
-        // Rebuild at the new proxy/quality state. loadProject preserves
-        // playback state (it re-stamps the generation guard).
+        // Rebuild at the new proxy/quality state. The pre-rebuild position
+        // and playing state are captured here and restored once the rebuilt
+        // composition installs (loadProject itself resets to t=0 paused).
+        let priorTime = currentTime
+        let wasPlaying = isPlaying
+        if priorTime > 0 || wasPlaying {
+            playbackRestoreAfterRebuild = (priorTime, wasPlaying)
+        }
         loadProject(project, audioProcessing: loadedAudioProcessing)
     }
 
@@ -249,6 +264,18 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 cleanupTemporaryReverseRenderURLs()
                 self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
+                // Restore the position/playing state captured before a
+                // thermal rebuild (S7): only set on that path — ordinary
+                // loadProject calls keep the reset-to-zero behavior.
+                if let restore = playbackRestoreAfterRebuild {
+                    playbackRestoreAfterRebuild = nil
+                    if restore.time > 0 {
+                        self.seek(to: restore.time)
+                    }
+                    if restore.wasPlaying {
+                        self.play()
+                    }
+                }
                 signposter.endInterval("playback.buildComposition", signpostState)
             } catch {
                 // Stale guard applies to the failure path too.
@@ -264,6 +291,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 AppLog.playback.error("composition build failed: \(errorDetail, privacy: .public)")
                 installedCompositionGeneration = 0
                 lastCompositionError = errorDetail
+                playbackRestoreAfterRebuild = nil
                 clearPreviewVideoOutput()
                 player.replaceCurrentItem(with: nil)
                 cleanupTemporaryReverseRenderURLs()
@@ -397,7 +425,10 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         return image
                     }
                 }
-                Thread.sleep(forTimeInterval: 0.03)
+                // Run the run loop briefly instead of parking the thread, so
+                // the main loop's dispatches (compositor callbacks, seek
+                // completions) keep flowing while the poll waits.
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.015))
             }
             return nil
         }
@@ -604,8 +635,42 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
         currentTime = targetTime
         let cmTime = CMTime(seconds: targetTime, preferredTimescale: 600)
-        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+
+        guard player.currentItem != nil else {
+            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            signposter.endInterval("playback.seek", state)
+            return
+        }
+
+        // Chase-seek: while an earlier seek is still in flight, only the
+        // LATEST target matters — park it and let the in-flight seek's
+        // completion handler pick it up immediately, instead of stacking
+        // competing seeks during fast scrubbing.
+        guard !isSeeking else {
+            pendingSeekTime = cmTime
+            signposter.endInterval("playback.seek", state)
+            return
+        }
+
+        performChaseSeek(to: cmTime)
         signposter.endInterval("playback.seek", state)
+    }
+
+    /// Issues a zero-tolerance seek and chains any target that arrived while
+    /// it was in flight. The pending slot is consumed exactly once by the
+    /// completion handler, so scrubbing collapses to at most one queued seek.
+    private func performChaseSeek(to cmTime: CMTime) {
+        isSeeking = true
+        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isSeeking = false
+                if let pending = self.pendingSeekTime {
+                    self.pendingSeekTime = nil
+                    self.performChaseSeek(to: pending)
+                }
+            }
+        }
     }
 
     func startPlaybackTimer() {

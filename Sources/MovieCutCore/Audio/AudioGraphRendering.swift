@@ -237,22 +237,40 @@ public enum AudioGraphOfflineRenderer {
 
     /// Piecewise-linear automation evaluation at an exact sample position;
     /// constant before the first and after the last point.
+    ///
+    /// Runs per SAMPLE in the render loop, so the per-call work is kept
+    /// allocation-free: a single point resolves in O(1), and multi-point
+    /// curves verify ascending order cheaply (first inversion aborts) and
+    /// bracket the position with a binary search instead of sorting and
+    /// zipping the whole array on every sample.
     static func automationValue(_ points: [AudioGraphAutomationPoint], at position: Int64) -> Double {
         guard !points.isEmpty else { return 0 }
-        let sorted = points.sorted { $0.samplePosition < $1.samplePosition }
-        guard position > sorted.first!.samplePosition, position < sorted.last!.samplePosition else {
-            if position <= sorted.first!.samplePosition { return sorted.first!.value }
-            return sorted.last!.value
+        guard points.count > 1 else { return points[0].value }
+
+        var isSorted = true
+        for index in 1..<points.count where points[index - 1].samplePosition > points[index].samplePosition {
+            isSorted = false
+            break
         }
-        var lower = sorted[0]
-        var upper = sorted[sorted.count - 1]
-        for window in zip(sorted, sorted.dropFirst()) {
-            if window.0.samplePosition <= position, position <= window.1.samplePosition {
-                lower = window.0
-                upper = window.1
-                break
+        let sorted = isSorted ? points : points.sorted { $0.samplePosition < $1.samplePosition }
+
+        if position <= sorted[0].samplePosition { return sorted[0].value }
+        if position >= sorted[sorted.count - 1].samplePosition { return sorted[sorted.count - 1].value }
+
+        // Rightmost point at or before `position`; it and its successor
+        // bracket the evaluation position.
+        var low = 0
+        var high = sorted.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if sorted[mid].samplePosition <= position {
+                low = mid
+            } else {
+                high = mid - 1
             }
         }
+        let lower = sorted[low]
+        let upper = sorted[low + 1]
         let span = upper.samplePosition - lower.samplePosition
         guard span > 0 else { return upper.value }
         let t = Double(position - lower.samplePosition) / Double(span)
@@ -262,7 +280,14 @@ public enum AudioGraphOfflineRenderer {
     /// dB → linear amplitude.
     static func linearGain(value: Double, fallbackDb: Double) -> Double {
         let db = value.isFinite ? value : fallbackDb
-        return pow(10, db / 20)
+        return dbToLinear(db)
+    }
+
+    /// dB → linear amplitude with a unity fast path: 0 dB skips the `pow`
+    /// entirely (the overwhelmingly common fader-at-unity case in the
+    /// per-sample strip loop).
+    static func dbToLinear(_ db: Double) -> Double {
+        db == 0 ? 1 : pow(10, db / 20)
     }
 
     /// Equal-power pan gains.

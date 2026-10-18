@@ -242,8 +242,13 @@ public enum AudioGraphAVAudioEngineRenderer {
 
         func fill(frameCount: AVAudioFrameCount, audioBufferList: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
             let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            let start = cursor.withLock { $0 }
-            cursor.withLock { $0 += Int(frameCount) }
+            // One lock acquisition reads AND advances the cursor — the render
+            // thread is real-time and must not pay for two round trips.
+            let start = cursor.withLock { state -> Int in
+                let current = state
+                state += Int(frameCount)
+                return current
+            }
 
             for (channel, buffer) in buffers.enumerated() {
                 guard let data = buffer.mData else { continue }

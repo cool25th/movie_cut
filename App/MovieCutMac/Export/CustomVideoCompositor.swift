@@ -3,6 +3,7 @@ import CoreImage
 import CoreText
 import ImageIO
 import MovieCutCore
+import os
 import Vision
 
 struct CustomCompositionTransitionEffect {
@@ -244,6 +245,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
     ]
     private let renderQueue = DispatchQueue(label: "com.moviecut.compositor")
+    /// Fast-scrub cancellation: bumped by cancelAllPendingVideoCompositionRequests
+    /// so queued-but-not-started requests die at the head of the render queue
+    /// instead of rendering stale frames to completion.
+    private let cancellationGeneration = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+    /// Decoded sticker images keyed by file URL — loadStickerImage previously
+    /// hit the disk and re-decoded the PNG on EVERY composited frame.
+    private let stickerImageCache = NSCache<NSURL, CGImage>()
     private let ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
@@ -290,6 +298,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         // Boxed for the @Sendable render-queue closure (the request is not
         // Sendable on the macOS 15 SDK; see CompositionRequestBox).
         let sendableRequest = CompositionRequestBox(request: request)
+        let generation = cancellationGeneration.withLock { $0 }
         let probeStart = DispatchTime.now()
         renderQueue.async {
             let probeEnd = {
@@ -299,6 +308,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             }
             defer { probeEnd() }
             let request = sendableRequest.request
+            if self.cancellationGeneration.withLock({ $0 != generation }) {
+                request.finishCancelledRequest()
+                return
+            }
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
                let transition = instruction.activeTransition(at: request.compositionTime),
                let outgoingBuffer = request.sourceFrame(byTrackID: transition.outgoingTrackID),
@@ -554,7 +567,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
     }
     
-    func cancelAllPendingVideoCompositionRequests() {}
+    func cancelAllPendingVideoCompositionRequests() {
+        cancellationGeneration.withLock { $0 &+= 1 }
+    }
 
     private func applyClipEffects(
         to image: CIImage,
@@ -1046,14 +1061,21 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         context.restoreGState()
     }
 
-    private func loadStickerImage(from imageURL: URL) -> CGImage? {
-        guard
-            let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-            let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
-        else {
+    private func loadStickerImage(from url: URL) -> CGImage? {
+        let nsURL = url as NSURL
+        if let cached = stickerImageCache.object(forKey: nsURL) {
+            return cached
+        }
+        guard FileManager.default.fileExists(atPath: url.path),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(
+                  source,
+                  0,
+                  [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+              ) else {
             return nil
         }
-
+        stickerImageCache.setObject(cgImage, forKey: nsURL)
         return cgImage
     }
 
@@ -1218,13 +1240,23 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     private func applyPersonSegmentation(
         to image: CIImage,
         request: AVAsynchronousVideoCompositionRequest,
-        prefersFast: Bool
+        prefersFast: Bool = false
     ) -> CIImage {
+        _ = request
+
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return image }
-        guard let sourceImage = ciContext.createCGImage(image, from: extent) else {
-            // Vision unavailable on this frame: leave it unchanged (F-08 AC④).
-            return image
+
+        // Zero-copy: hand the CIImage straight to Vision (GPU/ANE pipeline)
+        // instead of forcing a CPU bitmap readback via createCGImage. Vision
+        // wants an origin-at-zero input, so non-zero extents translate first.
+        let normalizedInput: CIImage
+        if extent.origin == .zero {
+            normalizedInput = image
+        } else {
+            normalizedInput = image.transformed(
+                by: CGAffineTransform(translationX: -extent.origin.x, y: -extent.origin.y)
+            )
         }
 
         let segmentationRequest = VNGeneratePersonSegmentationRequest()
@@ -1233,8 +1265,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
 
         do {
-            try personSegmentationHandler.perform([segmentationRequest], on: sourceImage)
+            try personSegmentationHandler.perform([segmentationRequest], on: normalizedInput)
         } catch {
+            // Vision unavailable on this frame: leave it unchanged (F-08 AC④).
             return image
         }
 

@@ -284,7 +284,7 @@ struct IOSTimelineView: View {
     }
 
     private func width(for clip: Clip) -> CGFloat {
-        max(112, min(360, clip.timelineRange.duration * secondsWidth))
+        max(112, min(2400, clip.timelineRange.duration * secondsWidth))
     }
 
     private func width(forGap gap: TimeInterval) -> CGFloat {

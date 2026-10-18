@@ -28,22 +28,6 @@ public final class ReverseRenderService: Sendable {
             throw ReverseRenderServiceError.invalidTimeRange
         }
 
-        let reader = try AVAssetReader(asset: clip)
-        reader.timeRange = effectiveTimeRange
-
-        let readerOutput = AVAssetReaderTrackOutput(
-            track: videoTrack,
-            outputSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
-            ]
-        )
-        readerOutput.alwaysCopiesSampleData = false
-
-        guard reader.canAdd(readerOutput) else {
-            throw ReverseRenderServiceError.cannotAddReaderOutput
-        }
-        reader.add(readerOutput)
-
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
         }
@@ -76,95 +60,129 @@ public final class ReverseRenderService: Sendable {
             ]
         )
 
-        var sampleBuffers: [CMSampleBuffer] = []
+        // OOM guard: instead of accumulating the ENTIRE range's decompressed
+        // 32BGRA frames in one array, decode at most 1-second windows from
+        // the END of the range backwards, appending each window reversed
+        // before reading the next.
+        let chunkWindows = Self.chunkWindows(in: effectiveTimeRange, maxSeconds: 1.0)
+        let durationSeconds = effectiveTimeRange.duration.seconds
+
+        let defaultFrameDuration = try await Self.defaultFrameDuration(for: videoTrack)
+        let imageContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
+
+        var writerStarted = false
+        var totalDecodedFrames = 0
+        var nextPresentationTime = CMTime.zero
 
         do {
-            guard reader.startReading() else {
-                throw reader.error ?? ReverseRenderServiceError.readerFailed
-            }
-
-            let durationSeconds = effectiveTimeRange.duration.seconds
-            while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+            for (chunkIndex, window) in chunkWindows.enumerated() {
                 try Task.checkCancellation()
-                sampleBuffers.append(sampleBuffer)
 
-                if durationSeconds.isFinite, durationSeconds > 0 {
-                    let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                    let elapsedSeconds: Double = CMTimeSubtract(
-                        presentationTime,
-                        effectiveTimeRange.start
-                    ).seconds
-                    Self.report(progress, readFraction: elapsedSeconds / durationSeconds, writeFraction: 0)
-                }
-            }
-
-            switch reader.status {
-            case .completed:
-                Self.report(progress, readFraction: 1, writeFraction: 0)
-            case .cancelled:
-                throw CancellationError()
-            case .failed:
-                throw reader.error ?? ReverseRenderServiceError.readerFailed
-            default:
-                break
-            }
-
-            guard !sampleBuffers.isEmpty else {
-                throw ReverseRenderServiceError.noSamples
-            }
-
-            guard writer.startWriting() else {
-                throw writer.error ?? ReverseRenderServiceError.writerFailed
-            }
-            writer.startSession(atSourceTime: .zero)
-
-            let defaultFrameDuration = try await Self.defaultFrameDuration(for: videoTrack)
-            let sampleDurations = sampleBuffers.enumerated().map { index, sampleBuffer in
-                Self.duration(
-                    for: sampleBuffer,
-                    at: index,
-                    in: sampleBuffers,
-                    defaultDuration: defaultFrameDuration
+                let reader = try AVAssetReader(asset: clip)
+                reader.timeRange = window
+                let readerOutput = AVAssetReaderTrackOutput(
+                    track: videoTrack,
+                    outputSettings: [
+                        kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+                    ]
                 )
-            }
-
-            var nextPresentationTime = CMTime.zero
-            let totalSamples = max(sampleBuffers.count, 1)
-            let imageContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
-
-            for (writeIndex, sampleBuffer) in sampleBuffers.reversed().enumerated() {
-                try Task.checkCancellation()
-                try await Self.waitForWriterInput(writerInput, writer: writer)
-
-                let sourceIndex = sampleBuffers.count - 1 - writeIndex
-                let duration = sampleDurations[sourceIndex]
-                guard let sourcePixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-                      let pixelBufferPool = pixelBufferAdaptor.pixelBufferPool else {
-                    throw ReverseRenderServiceError.appendFailed
+                readerOutput.alwaysCopiesSampleData = false
+                guard reader.canAdd(readerOutput) else {
+                    throw ReverseRenderServiceError.cannotAddReaderOutput
                 }
-                var normalizedPixelBuffer: CVPixelBuffer?
-                let poolStatus = CVPixelBufferPoolCreatePixelBuffer(
-                    kCFAllocatorDefault,
-                    pixelBufferPool,
-                    &normalizedPixelBuffer
-                )
-                guard poolStatus == kCVReturnSuccess, let normalizedPixelBuffer else {
-                    throw ReverseRenderServiceError.appendFailed
-                }
-                imageContext.render(CIImage(cvPixelBuffer: sourcePixelBuffer), to: normalizedPixelBuffer)
-                guard pixelBufferAdaptor.append(
-                    normalizedPixelBuffer,
-                    withPresentationTime: nextPresentationTime
-                ) else {
-                    throw writer.error ?? ReverseRenderServiceError.appendFailed
+                reader.add(readerOutput)
+                guard reader.startReading() else {
+                    throw reader.error ?? ReverseRenderServiceError.readerFailed
                 }
 
-                nextPresentationTime = CMTimeAdd(nextPresentationTime, duration)
+                var chunkSamples: [CMSampleBuffer] = []
+                while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+                    try Task.checkCancellation()
+                    chunkSamples.append(sampleBuffer)
+                }
+
+                switch reader.status {
+                case .completed:
+                    break
+                case .cancelled:
+                    throw CancellationError()
+                case .failed:
+                    throw reader.error ?? ReverseRenderServiceError.readerFailed
+                default:
+                    break
+                }
+                reader.cancelReading()
+
+                guard !chunkSamples.isEmpty else {
+                    Self.report(
+                        progress,
+                        readFraction: Double(chunkIndex) / Double(max(chunkWindows.count, 1)),
+                        writeFraction: Self.writeFraction(of: nextPresentationTime, in: durationSeconds)
+                    )
+                    continue
+                }
+
+                // The writer starts only once the first (rearmost) non-empty
+                // chunk is decoded, so an all-empty range never opens a
+                // writing session.
+                if !writerStarted {
+                    guard writer.startWriting() else {
+                        throw writer.error ?? ReverseRenderServiceError.writerFailed
+                    }
+                    writer.startSession(atSourceTime: .zero)
+                    writerStarted = true
+                }
+                totalDecodedFrames += chunkSamples.count
+
+                let sampleDurations = chunkSamples.enumerated().map { index, sampleBuffer in
+                    Self.duration(
+                        for: sampleBuffer,
+                        at: index,
+                        in: chunkSamples,
+                        defaultDuration: defaultFrameDuration
+                    )
+                }
+
+                for (writeIndex, sampleBuffer) in chunkSamples.reversed().enumerated() {
+                    try Task.checkCancellation()
+                    try await Self.waitForWriterInput(writerInput, writer: writer)
+
+                    let sourceIndex = chunkSamples.count - 1 - writeIndex
+                    let duration = sampleDurations[sourceIndex]
+                    guard let sourcePixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+                          let pixelBufferPool = pixelBufferAdaptor.pixelBufferPool else {
+                        throw ReverseRenderServiceError.appendFailed
+                    }
+                    var normalizedPixelBuffer: CVPixelBuffer?
+                    let poolStatus = CVPixelBufferPoolCreatePixelBuffer(
+                        kCFAllocatorDefault,
+                        pixelBufferPool,
+                        &normalizedPixelBuffer
+                    )
+                    guard poolStatus == kCVReturnSuccess, let normalizedPixelBuffer else {
+                        throw ReverseRenderServiceError.appendFailed
+                    }
+                    imageContext.render(CIImage(cvPixelBuffer: sourcePixelBuffer), to: normalizedPixelBuffer)
+                    guard pixelBufferAdaptor.append(
+                        normalizedPixelBuffer,
+                        withPresentationTime: nextPresentationTime
+                    ) else {
+                        throw writer.error ?? ReverseRenderServiceError.appendFailed
+                    }
+
+                    nextPresentationTime = CMTimeAdd(nextPresentationTime, duration)
+                }
+
                 Self.report(
                     progress,
-                    readFraction: 1,
-                    writeFraction: Double(writeIndex + 1) / Double(totalSamples)
+                    readFraction: Double(chunkIndex + 1) / Double(max(chunkWindows.count, 1)),
+                    writeFraction: Self.writeFraction(of: nextPresentationTime, in: durationSeconds)
                 )
+                chunkSamples.removeAll(keepingCapacity: false)
+            }
+
+            guard totalDecodedFrames > 0, writerStarted else {
+                throw ReverseRenderServiceError.noSamples
             }
 
             writerInput.markAsFinished()
@@ -173,8 +191,6 @@ public final class ReverseRenderService: Sendable {
                     continuation.resume()
                 }
             }
-            sampleBuffers.removeAll(keepingCapacity: false)
-            reader.cancelReading()
 
             switch writer.status {
             case .completed:
@@ -198,7 +214,6 @@ public final class ReverseRenderService: Sendable {
                 throw writer.error ?? ReverseRenderServiceError.writerFailed
             }
         } catch {
-            reader.cancelReading()
             writer.cancelWriting()
             let underlyingError = error as NSError
             throw NSError(
@@ -210,6 +225,38 @@ public final class ReverseRenderService: Sendable {
                 ]
             )
         }
+    }
+
+    /// Splits a range into equal windows of at most `maxSeconds`, ordered
+    /// from the END of the range backwards (the reverse-render order).
+    private static func chunkWindows(in range: CMTimeRange, maxSeconds: Double) -> [CMTimeRange] {
+        let totalSeconds = range.duration.seconds
+        guard totalSeconds.isFinite, totalSeconds > 0 else {
+            return [range]
+        }
+
+        let chunkCount = max(1, Int((totalSeconds / maxSeconds).rounded(.up)))
+        let chunkDuration = CMTime(seconds: totalSeconds / Double(chunkCount), preferredTimescale: range.start.timescale)
+        return (0..<chunkCount).map { index in
+            let start = CMTimeAdd(
+                range.start,
+                CMTimeMultiply(chunkDuration, multiplier: Int32(chunkCount - 1 - index))
+            )
+            // index 0 is the rearmost window — pin its end to the range end so
+            // timescale rounding can never truncate the final chunk.
+            let end: CMTime
+            if index == 0 {
+                end = CMTimeRangeGetEnd(range)
+            } else {
+                end = CMTimeAdd(range.start, CMTimeMultiply(chunkDuration, multiplier: Int32(chunkCount - index)))
+            }
+            return CMTimeRange(start: start, duration: CMTimeSubtract(end, start))
+        }
+    }
+
+    private static func writeFraction(of presentationTime: CMTime, in durationSeconds: Double) -> Double {
+        guard durationSeconds.isFinite, durationSeconds > 0 else { return 0 }
+        return presentationTime.seconds / durationSeconds
     }
 
     private static func waitForWriterInput(_ writerInput: AVAssetWriterInput, writer: AVAssetWriter) async throws {

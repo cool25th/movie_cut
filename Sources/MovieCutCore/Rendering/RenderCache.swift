@@ -102,8 +102,14 @@ public actor RenderCache {
     private let directory: URL
     private let fileManager: FileManager
     private let memoryLimit: Int
+    private let maxMemoryBytes: Int?
     private var memory: [RenderCacheKey: Data] = [:]
-    private var recency: [RenderCacheKey] = []
+    /// LRU bookkeeping without the O(N) array: each entry's last-access
+    /// order number. Eviction scans for the minimum only when the limits
+    /// are exceeded (rare) instead of on every touch.
+    private var orderByKey: [RenderCacheKey: UInt64] = [:]
+    private var nextAccessOrder: UInt64 = 0
+    private var memoryBytes = 0
 
     /// Cumulative lookup statistics.
     public private(set) var statistics = Statistics()
@@ -113,10 +119,19 @@ public actor RenderCache {
     /// - Parameters:
     ///   - directory: The on-disk location for cached artifacts. Created lazily.
     ///   - memoryLimit: The maximum number of entries held in the memory tier.
+    ///   - maxMemoryBytes: An optional byte ceiling for the memory tier; when
+    ///     the resident bytes exceed it, the least-recently-used entries are
+    ///     evicted alongside the entry-count limit.
     ///   - fileManager: The file manager used for disk operations.
-    public init(directory: URL, memoryLimit: Int = 128, fileManager: FileManager = .default) {
+    public init(
+        directory: URL,
+        memoryLimit: Int = 128,
+        maxMemoryBytes: Int? = nil,
+        fileManager: FileManager = .default
+    ) {
         self.directory = directory
         self.memoryLimit = max(1, memoryLimit)
+        self.maxMemoryBytes = maxMemoryBytes
         self.fileManager = fileManager
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
@@ -177,8 +192,10 @@ public actor RenderCache {
 
     /// Removes an artifact from both tiers.
     public func remove(_ key: RenderCacheKey) throws {
-        memory.removeValue(forKey: key)
-        recency.removeAll { $0 == key }
+        if let removed = memory.removeValue(forKey: key) {
+            memoryBytes -= removed.count
+        }
+        orderByKey.removeValue(forKey: key)
         let url = fileURL(for: key)
         if fileManager.fileExists(atPath: url.path) {
             try fileManager.removeItem(at: url)
@@ -188,7 +205,9 @@ public actor RenderCache {
     /// Clears both tiers.
     public func clear() throws {
         memory.removeAll()
-        recency.removeAll()
+        orderByKey.removeAll()
+        memoryBytes = 0
+        nextAccessOrder = 0
         if fileManager.fileExists(atPath: directory.path) {
             try fileManager.removeItem(at: directory)
         }
@@ -215,20 +234,29 @@ public actor RenderCache {
     }
 
     private func insertIntoMemory(_ data: Data, for key: RenderCacheKey) {
+        if let existing = memory[key] {
+            memoryBytes -= existing.count
+        }
         memory[key] = data
+        memoryBytes += data.count
         touch(key)
         evictIfNeeded()
     }
 
     private func touch(_ key: RenderCacheKey) {
-        recency.removeAll { $0 == key }
-        recency.append(key)
+        nextAccessOrder &+= 1
+        orderByKey[key] = nextAccessOrder
     }
 
     private func evictIfNeeded() {
-        while memory.count > memoryLimit, let oldest = recency.first {
-            recency.removeFirst()
-            memory.removeValue(forKey: oldest)
+        while memory.count > memoryLimit || (maxMemoryBytes.map { memoryBytes > $0 } ?? false) {
+            guard let oldest = orderByKey.min(by: { $0.value < $1.value })?.key else {
+                return
+            }
+            orderByKey.removeValue(forKey: oldest)
+            if let removed = memory.removeValue(forKey: oldest) {
+                memoryBytes -= removed.count
+            }
         }
     }
 }

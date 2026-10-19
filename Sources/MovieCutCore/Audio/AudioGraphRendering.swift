@@ -143,17 +143,21 @@ public enum AudioGraphOfflineRenderer {
         let absoluteRange = frameRange ?? 0 ..< Int64(frameCount)
         var out = [Float](repeating: 0, count: frameCount * 2)
         let soloedBuses = spec.trackBuses.contains { $0.solo }
+        // Index the strips/sources once: the bus loop previously linearly
+        // scanned both collections for EVERY strip (O(strips × collection)).
+        let stripsById = Dictionary(uniqueKeysWithValues: spec.clipStrips.map { ($0.clipId, $0) })
+        let sourcesById = Dictionary(uniqueKeysWithValues: spec.sources.map { ($0.id, $0) })
 
         for bus in spec.trackBuses {
             if bus.mute || (soloedBuses && !bus.solo) { continue }
             for stripId in bus.inputStripIds {
-                guard let strip = spec.clipStrips.first(where: { $0.clipId == stripId }) else {
+                guard let strip = stripsById[stripId] else {
                     throw AudioGraphRenderError.missingInput(what: "clipStrip", id: stripId)
                 }
                 guard let activation = activations[stripId] else {
                     throw AudioGraphRenderError.missingInput(what: "activation", id: stripId)
                 }
-                guard let source = spec.sources.first(where: { $0.id == strip.sourceId }) else {
+                guard let source = sourcesById[strip.sourceId] else {
                     throw AudioGraphRenderError.missingInput(what: "source", id: strip.sourceId)
                 }
                 guard let audio = sourceAudio(source.id) else {

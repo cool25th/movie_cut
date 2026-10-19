@@ -24,6 +24,10 @@ struct TimelineView: View {
     @State private var dragInitialSourceRange: TimeRange?
     @State private var timelineViewportWidth: CGFloat = 900
     @State private var timelineScrollViewportWidth: CGFloat = 900
+    /// Horizontal scroll offset of the timeline content, quantized to 64 pt
+    /// (see `timelineScrollOffsetReader`) — drives `clipsForDisplay` viewport
+    /// culling on long timelines.
+    @State private var timelineScrollOffsetX: CGFloat = 0
     @State private var filmstripStore = TimelineFilmstripStore()
     @State private var isRulerScrubbing = false
     @State private var isPlayheadScrubbing = false
@@ -224,6 +228,20 @@ struct TimelineView: View {
                 }
                 .onChange(of: proxy.size.width) { _, newWidth in
                     timelineScrollViewportWidth = newWidth
+                }
+        }
+    }
+
+    /// Tracks the timeline's horizontal scroll offset, quantized to 64 pt so
+    /// ordinary scrolling does not re-render the clip lanes on every pixel.
+    private var timelineScrollOffsetReader: some View {
+        GeometryReader { proxy in
+            let rawOffset = max(0, -proxy.frame(in: .named(TimelineFilmstripCoordinateSpace.viewport)).minX)
+            let quantized = (rawOffset / 64).rounded(.down) * 64
+            Color.clear
+                .onAppear { timelineScrollOffsetX = quantized }
+                .onChange(of: quantized) { _, newValue in
+                    timelineScrollOffsetX = newValue
                 }
         }
     }
@@ -793,6 +811,7 @@ struct TimelineView: View {
                 #endif
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
+            .background(timelineScrollOffsetReader)
             .background(MovieCutTheme.rulerBackground)
             .contentShape(Rectangle())
             .simultaneousGesture(rulerScrubGesture())
@@ -1863,7 +1882,28 @@ struct TimelineView: View {
     }
 
     private func clipsForDisplay(_ track: Track) -> [Clip] {
-        track.clipsForLayerDisplay
+        let all = track.clipsForLayerDisplay
+        // Viewport culling: past 32 clips the lane's SwiftUI view-graph cost
+        // grows linearly while the visible window stays constant. At or below
+        // 32 the full list keeps exact legacy behavior (UI/accessibility
+        // test compatibility).
+        guard all.count > 32, pixelsPerSecond > 0 else {
+            return all
+        }
+        let marginPt: CGFloat = 600
+        let minX = max(0, timelineScrollOffsetX - marginPt)
+        let maxX = timelineScrollOffsetX + max(timelineScrollViewportWidth, 900) + marginPt
+        let minTime = Double(minX) / pixelsPerSecond
+        let maxTime = Double(maxX) / pixelsPerSecond
+        let selectedId = viewModel.selectedClipId
+        let activeDraggedId = draggedClipId
+
+        return all.filter { clip in
+            if clip.id == selectedId || clip.id == activeDraggedId {
+                return true
+            }
+            return clip.timelineRange.end >= minTime && clip.timelineRange.start <= maxTime
+        }
     }
 
     /// Snaps a raw time to the nearest clip boundary, marker, playhead, or

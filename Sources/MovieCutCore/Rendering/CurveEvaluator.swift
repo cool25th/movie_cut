@@ -29,16 +29,40 @@ public enum CurveEvaluator {
         }
     }
 
-    public static func evaluate(points: [CurvePoint], at x: Double) -> Double {
-        let points = normalizedPoints(points)
-        let x = x.clamped(to: 0...1, fallback: 0)
+    /// Pre-normalizes the control points and precomputes the monotone
+    /// tangents once, so a caller evaluating many samples (LUT builds,
+    /// per-grid-entry color grading) reuses the arrays instead of paying
+    /// the dictionary/sort/tangent allocations on every single sample.
+    public static func prepare(_ points: [CurvePoint]) -> (normalized: [CurvePoint], tangents: [Double]) {
+        let normalized = normalizedPoints(points)
+        let tangents = monotoneTangents(normalized)
+        return (normalized, tangents)
+    }
 
+    /// Zero-allocation evaluation over `prepare`'s output. Semantically
+    /// identical to `evaluate(points:at:)`, including endpoint pinning.
+    public static func evaluatePrecomputed(
+        normalized points: [CurvePoint],
+        tangents: [Double],
+        at x: Double
+    ) -> Double {
+        let x = x.clamped(to: 0...1, fallback: 0)
         guard points.count > 1 else { return x }
         if x <= 0 { return 0 }
         if x >= 1 { return 1 }
 
-        let tangents = monotoneTangents(points)
-        let upperIndex = points.firstIndex { $0.x >= x } ?? (points.count - 1)
+        // Binary search for the first point at or after `x`.
+        var low = 0
+        var high = points.count - 1
+        while low < high {
+            let mid = (low + high) / 2
+            if points[mid].x < x {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        let upperIndex = low
         let lowerIndex = max(0, upperIndex - 1)
         let lower = points[lowerIndex]
         let upper = points[upperIndex]
@@ -63,12 +87,22 @@ public enum CurveEvaluator {
         return y.clamped(to: 0...1, fallback: 0)
     }
 
+    public static func evaluate(points: [CurvePoint], at x: Double) -> Double {
+        let prepared = prepare(points)
+        return evaluatePrecomputed(normalized: prepared.normalized, tangents: prepared.tangents, at: x)
+    }
+
     public static func lut(points: [CurvePoint], size: Int = defaultLUTSize) -> [Double] {
         let sampleCount = max(size, 2)
+        let prepared = prepare(points)
         return (0..<sampleCount).map { index in
             if index == 0 { return 0 }
             if index == sampleCount - 1 { return 1 }
-            return evaluate(points: points, at: Double(index) / Double(sampleCount - 1))
+            return evaluatePrecomputed(
+                normalized: prepared.normalized,
+                tangents: prepared.tangents,
+                at: Double(index) / Double(sampleCount - 1)
+            )
         }
     }
 

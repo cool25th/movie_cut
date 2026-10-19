@@ -601,7 +601,9 @@ struct TimelineFilmstripHoverModifier: ViewModifier {
 /// scheduled. Decode/cache work remains off the main actor.
 @MainActor
 private final class TimelineFilmstripImageStripNSView: NSView {
-    private var images: [NSImage] = []
+    /// Raw CGImages held directly — the previous `[NSImage]` wrapper array
+    /// allocated one NSImage per frame on every configure pass.
+    private var cgImages: [CGImage] = []
     private var trace: TimelineFilmstripTrace?
     private var onRendered: (@MainActor () -> Void)?
     private(set) var currentRequestID: TimelineFilmstripRequestID?
@@ -615,12 +617,7 @@ private final class TimelineFilmstripImageStripNSView: NSView {
         trace: TimelineFilmstripTrace,
         onRendered: @escaping @MainActor () -> Void
     ) {
-        images = frames.map { frame in
-            NSImage(
-                cgImage: frame.image,
-                size: NSSize(width: frame.image.width, height: frame.image.height)
-            )
-        }
+        cgImages = frames.map(\.image)
         currentRequestID = requestID
         self.trace = trace
         self.onRendered = onRendered
@@ -630,34 +627,51 @@ private final class TimelineFilmstripImageStripNSView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let requestID = currentRequestID,
               let trace,
-              !images.isEmpty,
+              !cgImages.isEmpty,
               bounds.width > 0,
               bounds.height > 0 else {
             return
         }
 
         let start = DispatchTime.now().uptimeNanoseconds
-        trace.beginUIConsumerDraw(frameCount: images.count)
-        NSGraphicsContext.current?.imageInterpolation = .low
-        let availableWidth = max(1, bounds.width - CGFloat(max(0, images.count - 1)))
-        let frameWidth = availableWidth / CGFloat(images.count)
-        for (index, image) in images.enumerated() {
+        trace.beginUIConsumerDraw(frameCount: cgImages.count)
+        guard let cgContext = NSGraphicsContext.current?.cgContext else {
+            trace.endUIConsumerDraw(frameCount: cgImages.count)
+            return
+        }
+        cgContext.interpolationQuality = .low
+        let availableWidth = max(1, bounds.width - CGFloat(max(0, cgImages.count - 1)))
+        let frameWidth = availableWidth / CGFloat(cgImages.count)
+        for (index, cgImage) in cgImages.enumerated() {
             let targetRect = NSRect(
                 x: CGFloat(index) * (frameWidth + 1),
                 y: 0,
                 width: frameWidth,
                 height: bounds.height
             )
-            image.draw(
-                in: targetRect,
-                from: aspectFillSourceRect(imageSize: image.size, targetSize: targetRect.size),
-                operation: .sourceOver,
-                fraction: 1,
-                respectFlipped: true,
-                hints: nil
+            // Viewport culling: tiles outside the dirty rect cost a draw for
+            // pixels nobody sees.
+            guard dirtyRect.intersects(targetRect) else { continue }
+            let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+            guard imageSize.width > 0, imageSize.height > 0,
+                  targetRect.width > 0, targetRect.height > 0 else { continue }
+
+            // Aspect-fill: scale to cover, center, and clip to the tile.
+            let scale = max(targetRect.width / imageSize.width, targetRect.height / imageSize.height)
+            let drawWidth = imageSize.width * scale
+            let drawHeight = imageSize.height * scale
+            let drawRect = CGRect(
+                x: targetRect.minX + (targetRect.width - drawWidth) * 0.5,
+                y: targetRect.minY + (targetRect.height - drawHeight) * 0.5,
+                width: drawWidth,
+                height: drawHeight
             )
+            cgContext.saveGState()
+            cgContext.clip(to: targetRect)
+            cgContext.draw(cgImage, in: drawRect)
+            cgContext.restoreGState()
         }
-        trace.endUIConsumerDraw(frameCount: images.count)
+        trace.endUIConsumerDraw(frameCount: cgImages.count)
         let duration = DispatchTime.now().uptimeNanoseconds - start
         #if DEBUG || MOVIECUT_HARNESS
         TimelineFilmstripDebugProbe.shared.recordMainThreadWork(
@@ -667,33 +681,6 @@ private final class TimelineFilmstripImageStripNSView: NSView {
         )
         #endif
         onRendered?()
-    }
-
-    private func aspectFillSourceRect(imageSize: NSSize, targetSize: NSSize) -> NSRect {
-        guard imageSize.width > 0,
-              imageSize.height > 0,
-              targetSize.width > 0,
-              targetSize.height > 0 else {
-            return NSRect(origin: NSPoint(x: 0, y: 0), size: imageSize)
-        }
-        let imageAspect = imageSize.width / imageSize.height
-        let targetAspect = targetSize.width / targetSize.height
-        if imageAspect > targetAspect {
-            let sourceWidth = imageSize.height * targetAspect
-            return NSRect(
-                x: (imageSize.width - sourceWidth) / 2,
-                y: 0,
-                width: sourceWidth,
-                height: imageSize.height
-            )
-        }
-        let sourceHeight = imageSize.width / targetAspect
-        return NSRect(
-            x: 0,
-            y: (imageSize.height - sourceHeight) / 2,
-            width: imageSize.width,
-            height: sourceHeight
-        )
     }
 }
 

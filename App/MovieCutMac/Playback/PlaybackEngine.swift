@@ -83,7 +83,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// Playback position/state captured before a thermal rebuild, restored
     /// once the rebuilt composition installs, so a thermal transition cannot
     /// silently reset the user to t=0 paused.
-    @ObservationIgnored private var playbackRestoreAfterRebuild: (time: TimeInterval, wasPlaying: Bool)?
+    @ObservationIgnored private var playbackRestoreAfterRebuild: (time: TimeInterval, wasPlaying: Bool, volume: Float?)?
     @ObservationIgnored private var compositionBuildTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
     /// G-25 2C-2 (spec §0 v1.1): EQ clips' preview audio consumes DERIVED
@@ -94,6 +94,22 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// reverse-media precedent); cleaned on clear/loadProject.
     @ObservationIgnored private var equalizedPreviewAudio: [UUID: (preset: EqualizerPreset, url: URL)] = [:]
     @ObservationIgnored private var temporaryEqualizedPreviewURLs: [URL] = []
+    /// Rendered .mp4 segments for image clips, cached per clip while the
+    /// render inputs are unchanged (the `equalizedPreviewAudio` precedent):
+    /// a composition rebuild re-encodes unchanged still clips otherwise.
+    /// Cleaned together with the EQ URLs by
+    /// `cleanupTemporaryEqualizedPreviewURLs()`.
+    @ObservationIgnored private var cachedImagePreviewSegments: [UUID: (key: ImagePreviewCacheKey, url: URL)] = [:]
+
+    /// Identity of an image clip's rendered preview segment: every input the
+    /// render consumes, so a key match guarantees byte-equivalent reuse.
+    private struct ImagePreviewCacheKey: Equatable {
+        let sourceURL: URL
+        let durationMs: Int64
+        let width: Int
+        let height: Int
+        let kenBurns: KenBurnsEffect?
+    }
     /// Security scopes started for the assets in the currently loaded single
     /// asset or composition. Each entry pairs with a `stopAccessing` on clear
     /// or next load so the access pair never leaks across reloads. (S2)
@@ -171,7 +187,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         let priorTime = currentTime
         let wasPlaying = isPlaying
         if priorTime > 0 || wasPlaying {
-            playbackRestoreAfterRebuild = (priorTime, wasPlaying)
+            schedulePlaybackRestore(time: priorTime, wasPlaying: wasPlaying)
         }
         loadProject(project, audioProcessing: loadedAudioProcessing)
     }
@@ -208,6 +224,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// overwrite a newer composition (Step 1 acceptance criterion).
     var currentCompositionGeneration: UInt64 {
         compositionGeneration
+    }
+
+    /// Registers playback state to restore once the NEXT composition build
+    /// installs. Callers use this instead of polling for the async install —
+    /// the restore runs inside `loadProject`'s completion (single path, no
+    /// race with a newer rebuild, which consumes the slot itself).
+    func schedulePlaybackRestore(time: TimeInterval, wasPlaying: Bool, volume: Float? = nil) {
+        playbackRestoreAfterRebuild = (time, wasPlaying, volume)
     }
 
     func loadProject(_ project: Project, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) {
@@ -264,13 +288,17 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 cleanupTemporaryReverseRenderURLs()
                 self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
-                // Restore the position/playing state captured before a
-                // thermal rebuild (S7): only set on that path — ordinary
-                // loadProject calls keep the reset-to-zero behavior.
+                // Restore the state registered via schedulePlaybackRestore
+                // (thermal rebuilds, editor rebuilds preserving playback) —
+                // ordinary loadProject calls keep the reset-to-zero behavior.
                 if let restore = playbackRestoreAfterRebuild {
                     playbackRestoreAfterRebuild = nil
-                    if restore.time > 0 {
-                        self.seek(to: restore.time)
+                    if let volume = restore.volume {
+                        self.player.volume = volume
+                    }
+                    let clampedTarget = min(max(0, restore.time), self.duration)
+                    if clampedTarget > 0 {
+                        self.seek(to: clampedTarget)
                     }
                     if restore.wasPlaying {
                         self.play()
@@ -927,15 +955,30 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     var sourceTrack: AVAssetTrack
                     if mediaAsset.kind == .image {
                         let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
-                        let imageVideoURL = temporaryImageRenderURL(for: clip)
-                        try await ImageVideoRenderService().render(
-                            imageURL: mediaAsset.originalURL,
-                            duration: renderDuration,
-                            renderSize: project.timeline.canvasSize,
-                            outputURL: imageVideoURL,
-                            kenBurnsEffect: clip.kenBurnsEffect
+                        let cacheKey = ImagePreviewCacheKey(
+                            sourceURL: mediaAsset.originalURL,
+                            durationMs: Int64((renderDuration * 1000).rounded()),
+                            width: Int(project.timeline.canvasSize.width.rounded()),
+                            height: Int(project.timeline.canvasSize.height.rounded()),
+                            kenBurns: clip.kenBurnsEffect
                         )
-                        temporaryReverseRenderURLs.append(imageVideoURL)
+                        let imageVideoURL: URL
+                        if let cached = cachedImagePreviewSegments[clip.id],
+                           cached.key == cacheKey,
+                           FileManager.default.fileExists(atPath: cached.url.path) {
+                            imageVideoURL = cached.url
+                        } else {
+                            let renderedURL = temporaryImageRenderURL(for: clip)
+                            try await ImageVideoRenderService().render(
+                                imageURL: mediaAsset.originalURL,
+                                duration: renderDuration,
+                                renderSize: project.timeline.canvasSize,
+                                outputURL: renderedURL,
+                                kenBurnsEffect: clip.kenBurnsEffect
+                            )
+                            cachedImagePreviewSegments[clip.id] = (cacheKey, renderedURL)
+                            imageVideoURL = renderedURL
+                        }
                         sourceAsset = AVURLAsset(url: imageVideoURL)
                         guard let renderedTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
                             continue
@@ -1812,6 +1855,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
         temporaryEqualizedPreviewURLs = []
         equalizedPreviewAudio = [:]
+        // Cached image segments share the EQ URLs' lifecycle: removed on
+        // clear/single-asset load, retained across project rebuilds.
+        for entry in cachedImagePreviewSegments.values where fileManager.fileExists(atPath: entry.url.path) {
+            try? fileManager.removeItem(at: entry.url)
+        }
+        cachedImagePreviewSegments = [:]
     }
 
     private func removeTemporaryReverseRenderURLs(_ urls: [URL]) {

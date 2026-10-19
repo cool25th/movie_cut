@@ -2892,10 +2892,21 @@ final class EditorViewModel {
                 colorSpace: CGColorSpaceCreateDeviceRGB()
             )
         }
-        scopeHistogram = ScopeAnalyzer.histogram(rgba: bytes, binCount: 64)
-        scopeWaveform = ScopeAnalyzer.lumaWaveform(rgba: bytes, width: width, height: height, columns: width, levels: 48)
-        scopeVectorscope = ScopeAnalyzer.vectorscope(rgba: bytes, size: 48)
-        scopeRGBParade = ScopeAnalyzer.rgbParade(rgba: bytes, width: width, height: height, columns: width, levels: 48)
+        // Single pass over the rendered bytes: the four individual reducers
+        // each walked the same 96×54 buffer again (4 redundant pixel loops).
+        let all = ScopeAnalyzer.analyzeAll(
+            rgba: bytes,
+            width: width,
+            height: height,
+            histogramBins: 64,
+            waveformColumns: width,
+            waveformLevels: 48,
+            vectorscopeSize: 48
+        )
+        scopeHistogram = all.histogram
+        scopeWaveform = all.lumaWaveform
+        scopeVectorscope = all.vectorscope
+        scopeRGBParade = all.rgbParade
     }
 
 
@@ -4593,46 +4604,20 @@ final class EditorViewModel {
         let wasPlaying = playbackEngine.isPlaying
         let snapshotVolume = Double(playbackEngine.player.volume)
 
+        if preserve {
+            // Single restore path: the engine applies time/play/volume inside
+            // the build's completion (no 20 ms polling task racing a newer
+            // rebuild; a stale build never consumes the slot).
+            playbackEngine.schedulePlaybackRestore(
+                time: snapshotTime,
+                wasPlaying: wasPlaying,
+                volume: Float(snapshotVolume)
+            )
+        }
+
         let project = currentProject
         let audio = buildAudioProcessingOptions()
         playbackEngine.loadProject(project, audioProcessing: audio)
-
-        if preserve {
-            // Composition install is async (Task inside loadProject). Restore
-            // playback state once the new item reports ready; if the rebuild
-            // fails, lastCompositionError is surfaced to the UI instead.
-            restorePlaybackAfterRebuild(targetTime: snapshotTime,
-                                        shouldPlay: wasPlaying,
-                                        volume: snapshotVolume)
-        }
-    }
-
-    private func restorePlaybackAfterRebuild(targetTime: TimeInterval, shouldPlay: Bool, volume: Double) {
-        // Capture the generation at request time so we can detect if a newer
-        // rebuild supersedes this one (in which case that newer request owns
-        // playback restoration and we should bail out instead of waiting
-        // forever on a generation that will never match again).
-        let requestedGeneration = playbackEngine.currentCompositionGeneration
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            // Wait for the composition to install. Bail if a newer rebuild
-            // supersedes us, or if the build failed, or after ~3s.
-            for _ in 0..<150 {
-                if self.playbackEngine.lastCompositionError != nil { return }
-                if self.playbackEngine.currentCompositionGeneration != requestedGeneration { return }
-                if self.playbackEngine.playerItem != nil { break }
-                try? await Task.sleep(nanoseconds: 20_000_000)
-            }
-            guard self.playbackEngine.playerItem != nil,
-                  self.playbackEngine.lastCompositionError == nil,
-                  self.playbackEngine.currentCompositionGeneration == requestedGeneration else { return }
-
-            self.playbackEngine.player.volume = Float(volume)
-            self.playbackEngine.seek(to: min(max(0, targetTime), self.playbackEngine.duration))
-            if shouldPlay {
-                self.playbackEngine.play()
-            }
-        }
     }
 
     /// BUG-02: the probe is VALIDATED — unknown extensions and content whose

@@ -43,12 +43,17 @@ public enum AudioGraphLoudness {
     public static func measure(_ audio: AudioGraphSourceAudio) -> Measurement {
         var analyzer = Analyzer(sampleRate: audio.sampleRate, channels: audio.channels)
         let channels = max(1, min(2, audio.channels))
-        for frame in 0..<audio.frameCount {
-            var frameSamples = [Double](repeating: 0, count: channels)
-            for channel in 0..<channels {
-                frameSamples[channel] = Double(audio.sample(frame: frame, channel: channel))
+        if channels == 1 {
+            for frame in 0..<audio.frameCount {
+                analyzer.pushFrame(ch0: Double(audio.sample(frame: frame, channel: 0)), ch1: 0)
             }
-            analyzer.push(frameSamples)
+        } else {
+            for frame in 0..<audio.frameCount {
+                analyzer.pushFrame(
+                    ch0: Double(audio.sample(frame: frame, channel: 0)),
+                    ch1: Double(audio.sample(frame: frame, channel: 1))
+                )
+            }
         }
         return analyzer.finish()
     }
@@ -186,6 +191,35 @@ public enum AudioGraphLoudness {
             }
             return outputs
         }
+
+        /// Allocation-free variant of `push` returning only the max absolute
+        /// value of the four interpolated samples — the only quantity the
+        /// true-peak tracker consumes. Same filtering math, no `[Double]`
+        /// heap array per sample (previously millions of allocations over a
+        /// feature-length master).
+        mutating func pushAndMaxAbs(_ input: Double) -> Double {
+            if framesSeen == 0 {
+                for index in 0..<Self.historyLength { history[index] = input }
+            }
+            history[historyIndex] = input
+            historyIndex = (historyIndex + 1) % Self.historyLength
+            framesSeen += 1
+            let newest = (historyIndex - 1 + Self.historyLength) % Self.historyLength
+            var maxAbs = 0.0
+            for phase in 0..<4 {
+                let coeffs = phaseCoefficients[phase]
+                var accumulator = 0.0
+                for k in -Self.halfTaps...Self.halfTaps {
+                    let age = Self.halfTaps + k
+                    var index = newest - age
+                    if index < 0 { index += Self.historyLength }
+                    accumulator += coeffs[k + Self.halfTaps] * history[index]
+                }
+                let absValue = abs(accumulator)
+                if absValue > maxAbs { maxAbs = absValue }
+            }
+            return maxAbs
+        }
     }
 
     /// Streaming analyzer: biquad states, one 400 ms sliding energy window
@@ -225,26 +259,21 @@ public enum AudioGraphLoudness {
             runningSums = [Double](repeating: 0, count: channelCount)
         }
 
+        /// Array-based entry point kept for existing callers/tests; the
+        /// streaming loop uses the allocation-free ``pushFrame(ch0:ch1:)``.
         mutating func push(_ frame: [Double]) {
-            var weightedSum = 0.0
-            for channel in 0..<channels {
-                let input = channel < frame.count ? frame[channel] : 0
-                var filtered = shelfFilters[channel].process(input)
-                filtered = highPassFilters[channel].process(filtered)
-                weightedSum += filtered * filtered
+            pushFrame(
+                ch0: frame.count > 0 ? frame[0] : 0,
+                ch1: frame.count > 1 ? frame[1] : 0
+            )
+        }
 
-                samplePeak = max(samplePeak, abs(input))
-                for oversampled in oversamplers[channel].push(input) {
-                    truePeak = max(truePeak, abs(oversampled))
-                }
-
-                // Sliding 400 ms energy: add the new sample, drop the one
-                // leaving the window.
-                let ring = channel
-                let outgoing = energyRings[ring][energyIndices[ring]]
-                runningSums[ring] += filtered * filtered - outgoing
-                energyRings[ring][energyIndices[ring]] = filtered * filtered
-                energyIndices[ring] = (energyIndices[ring] + 1) % blockLength
+        /// Allocation-free frame entry: identical math to `push`, without
+        /// building a `[Double]` per sample.
+        mutating func pushFrame(ch0: Double, ch1: Double) {
+            processChannel(0, input: ch0)
+            if channels > 1 {
+                processChannel(1, input: ch1)
             }
 
             framesSeen += 1
@@ -257,6 +286,21 @@ public enum AudioGraphLoudness {
                 }
                 blockPowers.append(z)
             }
+        }
+
+        private mutating func processChannel(_ channel: Int, input: Double) {
+            var filtered = shelfFilters[channel].process(input)
+            filtered = highPassFilters[channel].process(filtered)
+
+            samplePeak = max(samplePeak, abs(input))
+            truePeak = max(truePeak, abs(oversamplers[channel].pushAndMaxAbs(input)))
+
+            // Sliding 400 ms energy: add the new sample, drop the one
+            // leaving the window.
+            let outgoing = energyRings[channel][energyIndices[channel]]
+            runningSums[channel] += filtered * filtered - outgoing
+            energyRings[channel][energyIndices[channel]] = filtered * filtered
+            energyIndices[channel] = (energyIndices[channel] + 1) % blockLength
         }
 
         func finish() -> Measurement {

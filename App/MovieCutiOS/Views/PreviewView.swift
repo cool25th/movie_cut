@@ -24,6 +24,11 @@ struct PreviewView: View {
     /// nominal↔fair transition that keeps the policy unchanged must not pay
     /// for a full plan rebuild (EQ'd clips derive media per build).
     @State private var lastResolvedProxyPolicy: Bool?
+    /// Chase-seek state (macOS PlaybackEngine parity): true while a
+    /// zero-tolerance seek is in flight; a newer target arriving in that
+    /// window parks in `pendingSeekTime` and is chased by the completion.
+    @State private var isSeekingPlayer = false
+    @State private var pendingSeekTime: TimeInterval?
 
     /// The preview's source policy for the current project + thermal state
     /// (the caller-resolved half of the stage-4 policy; the engine applies
@@ -308,13 +313,40 @@ struct PreviewView: View {
             return
         }
 
+        // Chase-seek (macOS PlaybackEngine parity): while a zero-tolerance
+        // seek is still in flight, only the LATEST target matters — park it
+        // and let the in-flight seek's completion chase it, instead of
+        // stacking competing seeks that thrash the decoder queue during
+        // scrubbing.
+        if isSeekingPlayer {
+            pendingSeekTime = clampedTime
+            return
+        }
+
+        performChaseSeek(to: clampedTime)
+    }
+
+    /// Issues a zero-tolerance seek and chains any target that arrived while
+    /// it was in flight; the pending slot is consumed exactly once by the
+    /// completion handler.
+    private func performChaseSeek(to targetSeconds: TimeInterval) {
+        isSeekingPlayer = true
+        pendingSeekTime = nil
         // The player layer renders the composited frame at the seek target —
         // the scrub preview needs no separate frame copy (RACE-01 cleanup).
         player.seek(
-            to: cmTime(clampedTime),
+            to: cmTime(targetSeconds),
             toleranceBefore: .zero,
             toleranceAfter: .zero
-        )
+        ) { _ in
+            Task { @MainActor in
+                if let nextTarget = pendingSeekTime {
+                    performChaseSeek(to: nextTarget)
+                } else {
+                    isSeekingPlayer = false
+                }
+            }
+        }
     }
 
     private func cmTime(_ seconds: TimeInterval) -> CMTime {

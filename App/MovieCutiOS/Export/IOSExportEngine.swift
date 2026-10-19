@@ -1272,7 +1272,12 @@ final class IOSExportEngine {
         if clip.isReversed, mediaType == .video {
             // A failed reverse render must FAIL the export with a reason —
             // silently exporting the clip forward mislabels the output.
-            effectiveAsset = AVURLAsset(url: try await renderReversedAsset(for: clip, from: asset))
+            let reversedURL = try await renderReversedAsset(for: clip, from: asset)
+            // Register the temp .mov with the plan's cleanup set: leaving it
+            // unregistered leaked the file on disk past cleanup (the URL was
+            // reachable only from this local scope).
+            imageRenderURLs.append(reversedURL)
+            effectiveAsset = AVURLAsset(url: reversedURL)
             effectiveSourceStart = 0
         } else {
             effectiveAsset = asset

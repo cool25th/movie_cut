@@ -10,6 +10,15 @@ public actor EditorSession {
 
     private var undoStack: [Project] = []
     private var redoStack: [Project] = []
+    /// Cap on retained undo snapshots — the stack previously grew without
+    /// bound (every dispatch retained a full `Project` copy for the whole
+    /// session). When the cap trims old snapshots, `commandCount` keeps its
+    /// cumulative semantics via `dispatchedCommandCount` below.
+    public static let maxUndoHistory = 200
+    /// Cumulative dispatch/undo/redo tally mirroring the uncapped
+    /// `undoStack.count` semantics exactly: +1 per dispatch, −1 per undo,
+    /// +1 per redo.
+    private var dispatchedCommandCount = 0
 
     /// Plan ids that have already been applied successfully. Dispatching the
     /// same prepared plan twice (a lost-response retry or a double click)
@@ -51,6 +60,10 @@ public actor EditorSession {
         try command.apply(to: &project)
         project.updatedAt = Date()
         undoStack.append(previousProject)
+        dispatchedCommandCount += 1
+        if undoStack.count > Self.maxUndoHistory {
+            undoStack.removeFirst(undoStack.count - Self.maxUndoHistory)
+        }
         redoStack.removeAll()
         revision = revision.advanced()
         if let planId {
@@ -62,9 +75,11 @@ public actor EditorSession {
     /// U-08 AC③: the number of commands dispatched this session — each
     /// user-facing action (button click, menu item, drag-commit) routes
     /// through `dispatch`, so this count approximates the interaction step
-    /// count for UX metrics (see docs/UI_METRICS.md).
+    /// count for UX metrics (see docs/UI_METRICS.md). Served from the
+    /// cumulative tally, not the capped stack length, so trimming history
+    /// cannot rewind the metric.
     public var commandCount: Int {
-        undoStack.count
+        dispatchedCommandCount
     }
 
     /// Returns a value snapshot of the current project.
@@ -82,6 +97,7 @@ public actor EditorSession {
         guard let previousProject = undoStack.popLast() else {
             throw EditorCommandError.nothingToUndo
         }
+        dispatchedCommandCount = max(0, dispatchedCommandCount - 1)
         redoStack.append(project)
         project = previousProject
         revision = revision.advanced()
@@ -92,6 +108,7 @@ public actor EditorSession {
         guard let nextProject = redoStack.popLast() else {
             throw EditorCommandError.nothingToRedo
         }
+        dispatchedCommandCount += 1
         undoStack.append(project)
         project = nextProject
         revision = revision.advanced()

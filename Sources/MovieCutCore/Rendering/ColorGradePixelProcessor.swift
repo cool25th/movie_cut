@@ -105,29 +105,60 @@ public enum ColorGradePixelProcessor {
 
     private static func curveCubeData(size: Int, curves: ColorCurves) -> [Float] {
         let size = max(size, 2)
-        var data: [Float] = []
-        data.reserveCapacity(size * size * size * 4)
+        // Separable 1D pre-evaluation: master→channel is a per-channel 1D
+        // function of one grid axis, so 64 evaluations per channel replace
+        // the previous full-curve pipeline call inside every 3D cell (64³
+        // cells × 4 evaluations ≈ 1.57M CurveEvaluator calls → 64 × 4).
+        let masterPrepared = CurveEvaluator.prepare(curves.master)
+        let redPrepared = CurveEvaluator.prepare(curves.red)
+        let greenPrepared = CurveEvaluator.prepare(curves.green)
+        let bluePrepared = CurveEvaluator.prepare(curves.blue)
 
+        var redTable = [Float](repeating: 0, count: size)
+        var greenTable = [Float](repeating: 0, count: size)
+        var blueTable = [Float](repeating: 0, count: size)
+        let denom = Double(size - 1)
+
+        for index in 0..<size {
+            let x = Double(index) / denom
+            let masterValue = CurveEvaluator.evaluatePrecomputed(
+                normalized: masterPrepared.normalized,
+                tangents: masterPrepared.tangents,
+                at: x
+            )
+            redTable[index] = Float(CurveEvaluator.evaluatePrecomputed(
+                normalized: redPrepared.normalized,
+                tangents: redPrepared.tangents,
+                at: masterValue
+            ))
+            greenTable[index] = Float(CurveEvaluator.evaluatePrecomputed(
+                normalized: greenPrepared.normalized,
+                tangents: greenPrepared.tangents,
+                at: masterValue
+            ))
+            blueTable[index] = Float(CurveEvaluator.evaluatePrecomputed(
+                normalized: bluePrepared.normalized,
+                tangents: bluePrepared.tangents,
+                at: masterValue
+            ))
+        }
+
+        var data = [Float](repeating: 1, count: size * size * size * 4)
+        var offset = 0
         for blueIndex in 0..<size {
+            let blueValue = blueTable[blueIndex]
             for greenIndex in 0..<size {
+                let greenValue = greenTable[greenIndex]
                 for redIndex in 0..<size {
-                    let red = Double(redIndex) / Double(size - 1)
-                    let green = Double(greenIndex) / Double(size - 1)
-                    let blue = Double(blueIndex) / Double(size - 1)
-
-                    data.append(Float(applyCurves(to: red, master: curves.master, channel: curves.red)))
-                    data.append(Float(applyCurves(to: green, master: curves.master, channel: curves.green)))
-                    data.append(Float(applyCurves(to: blue, master: curves.master, channel: curves.blue)))
-                    data.append(1)
+                    data[offset] = redTable[redIndex]
+                    data[offset + 1] = greenValue
+                    data[offset + 2] = blueValue
+                    // data[offset + 3] stays 1.0 (pre-filled above)
+                    offset += 4
                 }
             }
         }
         return data
-    }
-
-    private static func applyCurves(to value: Double, master: [CurvePoint], channel: [CurvePoint]) -> Double {
-        let masterValue = CurveEvaluator.evaluate(points: master, at: value)
-        return CurveEvaluator.evaluate(points: channel, at: masterValue)
     }
 
     private static func activeHSLBands(_ bands: [HSLBand]?) -> [HSLBand]? {

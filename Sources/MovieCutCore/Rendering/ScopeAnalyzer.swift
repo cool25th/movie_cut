@@ -159,4 +159,109 @@ public enum ScopeAnalyzer {
         }
         return RGBParade(red: red, green: green, blue: blue)
     }
+
+    // MARK: - Single-pass aggregation
+
+    /// All four scopes from one pixel pass. Feeding a frame through the four
+    /// individual reducers walked the same bytes four times; this struct and
+    /// ``analyzeAll(rgba:width:height:histogramBins:waveformColumns:waveformLevels:vectorscopeSize:)``
+    /// accumulate every scope in a single loop.
+    public struct AllScopes: Sendable, Equatable {
+        public var histogram: Histogram
+        public var lumaWaveform: [[Int]]
+        public var rgbParade: RGBParade
+        public var vectorscope: Vectorscope
+
+        public init(
+            histogram: Histogram,
+            lumaWaveform: [[Int]],
+            rgbParade: RGBParade,
+            vectorscope: Vectorscope
+        ) {
+            self.histogram = histogram
+            self.lumaWaveform = lumaWaveform
+            self.rgbParade = rgbParade
+            self.vectorscope = vectorscope
+        }
+    }
+
+    /// One-pass equivalent of `histogram` + `lumaWaveform` + `rgbParade` +
+    /// `vectorscope`. Luma uses an integer Rec.709 approximation
+    /// (`(2126r + 7152g + 722b + 5000) / 10000`), which matches the Double
+    /// reducer to within one rounding step at 8-bit precision.
+    public static func analyzeAll(
+        rgba: [UInt8],
+        width: Int,
+        height: Int,
+        histogramBins: Int = 64,
+        waveformColumns: Int,
+        waveformLevels: Int = 48,
+        vectorscopeSize: Int = 48
+    ) -> AllScopes {
+        guard width > 0, height > 0, histogramBins > 0,
+              waveformColumns > 0, waveformLevels > 0, vectorscopeSize > 0 else {
+            return AllScopes(
+                histogram: Histogram(red: [], green: [], blue: [], luma: []),
+                lumaWaveform: [],
+                rgbParade: RGBParade(red: [], green: [], blue: []),
+                vectorscope: Vectorscope(size: 0, counts: [])
+            )
+        }
+
+        var histRed = [Int](repeating: 0, count: histogramBins)
+        var histGreen = [Int](repeating: 0, count: histogramBins)
+        var histBlue = [Int](repeating: 0, count: histogramBins)
+        var histLuma = [Int](repeating: 0, count: histogramBins)
+        var waveform = Array(repeating: Array(repeating: 0, count: waveformLevels), count: waveformColumns)
+        var paradeRed = waveform
+        var paradeGreen = waveform
+        var paradeBlue = waveform
+        var vectorscopeCounts = [Int](repeating: 0, count: vectorscopeSize * vectorscopeSize)
+        let chromaScale = 0.5 / 200.0
+
+        let pixelCount = rgba.count / 4
+        for pixel in 0..<pixelCount {
+            let offset = pixel * 4
+            guard offset + 2 < rgba.count else { continue }
+            let r = Int(rgba[offset])
+            let g = Int(rgba[offset + 1])
+            let b = Int(rgba[offset + 2])
+
+            // Histogram (single integer luma, reused by the waveform).
+            histRed[Swift.min(histogramBins - 1, r * histogramBins / 256)] += 1
+            histGreen[Swift.min(histogramBins - 1, g * histogramBins / 256)] += 1
+            histBlue[Swift.min(histogramBins - 1, b * histogramBins / 256)] += 1
+            let lumaValue = (r * 2126 + g * 7152 + b * 722 + 5000) / 10000
+            histLuma[Swift.min(histogramBins - 1, Swift.max(0, lumaValue) * histogramBins / 256)] += 1
+
+            // Column scopes (waveform + parade) need the pixel's x position,
+            // which only exists when the buffer matches the declared geometry.
+            if pixel < width * height {
+                let x = pixel % width
+                let column = Swift.min(waveformColumns - 1, x * waveformColumns / width)
+                waveform[column][Swift.min(waveformLevels - 1, lumaValue * waveformLevels / 256)] += 1
+                paradeRed[column][Swift.min(waveformLevels - 1, r * waveformLevels / 256)] += 1
+                paradeGreen[column][Swift.min(waveformLevels - 1, g * waveformLevels / 256)] += 1
+                paradeBlue[column][Swift.min(waveformLevels - 1, b * waveformLevels / 256)] += 1
+            }
+
+            // Vectorscope (same chroma math as the standalone reducer).
+            let dr = Double(r)
+            let dg = Double(g)
+            let db = Double(b)
+            let y = dr * 0.2126 + dg * 0.7152 + db * 0.0722
+            let u = (db - y) * chromaScale + 0.5
+            let v = (dr - y) * chromaScale + 0.5
+            let gx = Swift.min(vectorscopeSize - 1, Swift.max(0, Int(u * Double(vectorscopeSize))))
+            let gy = Swift.min(vectorscopeSize - 1, Swift.max(0, Int(v * Double(vectorscopeSize))))
+            vectorscopeCounts[gy * vectorscopeSize + gx] += 1
+        }
+
+        return AllScopes(
+            histogram: Histogram(red: histRed, green: histGreen, blue: histBlue, luma: histLuma),
+            lumaWaveform: waveform,
+            rgbParade: RGBParade(red: paradeRed, green: paradeGreen, blue: paradeBlue),
+            vectorscope: Vectorscope(size: vectorscopeSize, counts: vectorscopeCounts)
+        )
+    }
 }

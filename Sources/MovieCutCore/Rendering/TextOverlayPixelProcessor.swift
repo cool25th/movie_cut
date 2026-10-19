@@ -31,6 +31,53 @@ public struct TextOverlayRenderItem: Sendable, Equatable {
 
 /// Renders text/subtitle overlays into Core Image frames for preview and export.
 public enum TextOverlayPixelProcessor {
+    /// Static overlays are re-composited every frame; rasterizing them each
+    /// time (full-size CGContext + CoreText + CIImage texture upload) is the
+    /// single largest avoidable cost in a caption-heavy timeline. The key
+    /// captures every rendering input, so a hit reproduces the exact pixels.
+    /// NSCache is thread-safe; CIImage is immutable, so sharing is safe.
+    private nonisolated(unsafe) static let overlayCache: NSCache<NSString, CIImage> = {
+        let cache = NSCache<NSString, CIImage>()
+        cache.countLimit = 32
+        return cache
+    }()
+
+    /// Cache key over every rendering input of the active items: content
+    /// fields, transforms, opacities, resolved animation state, the active
+    /// karaoke word index, and the raster size. Equal key ⇒ identical raster.
+    private static func resolvedCacheKey(
+        for activeItems: [TextOverlayRenderItem],
+        width: Int,
+        height: Int,
+        renderSize: CGSize,
+        at time: TimeInterval
+    ) -> NSString {
+        var parts: [String] = ["\(width)x\(height)"]
+        parts.reserveCapacity(activeItems.count + 1)
+        for item in activeItems {
+            let tc = item.textContent
+            let state = animatedTextState(for: tc, item: item, renderSize: renderSize, at: time)
+            let localTime = karaokeLocalTime(for: item, at: time)
+            let activeKaraokeIndex: Int
+            if tc.karaokeEnabled, let timings = tc.wordTimings, !timings.isEmpty {
+                activeKaraokeIndex = timings.lastIndex(where: { $0.startTime <= localTime }) ?? -1
+            } else {
+                activeKaraokeIndex = -2
+            }
+            parts.append(
+                "\(tc.text)|\(tc.fontFamily)|\(tc.fontSize)|\(tc.fontColor)|\(tc.backgroundColor ?? "")|" +
+                "\(tc.isBold)|\(tc.isItalic)|\(tc.alignment.rawValue)|\(tc.position.x),\(tc.position.y)|" +
+                "\(tc.strokeColor ?? ""):\(tc.strokeWidth ?? 0)|\(tc.shadowColor ?? ""):\(tc.shadowBlur ?? 0)|" +
+                "\(tc.shadowOffset.map { "\($0.x),\($0.y)" } ?? "")|\(tc.highlightFontColor ?? ""):\(activeKaraokeIndex)|" +
+                "\(item.transform.position.x),\(item.transform.position.y),\(item.transform.offset.x),\(item.transform.offset.y)," +
+                "\(item.transform.scale.width),\(item.transform.scale.height),\(item.transform.rotation)|" +
+                "\(item.opacity)|\(state.visibleText)|\(state.opacity)|\(state.scale)|" +
+                "\(state.translation.x),\(state.translation.y)|\(state.rotationDegrees)"
+            )
+        }
+        return parts.joined(separator: "||") as NSString
+    }
+
     public static func apply(
         _ items: [TextOverlayRenderItem],
         to image: CIImage,
@@ -47,36 +94,53 @@ public enum TextOverlayPixelProcessor {
 
         let width = max(Int(ceil(renderSize.width)), 1)
         let height = max(Int(ceil(renderSize.height)), 1)
-        let bytesPerPixel = 4
-        let bytesPerRow = width * bytesPerPixel
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-
-        guard let context = CGContext(
-            data: nil,
+        let cacheKey = resolvedCacheKey(
+            for: activeItems,
             width: width,
             height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else {
-            return image
+            renderSize: renderSize,
+            at: time
+        )
+
+        let baseOverlay: CIImage
+        if let cached = overlayCache.object(forKey: cacheKey) {
+            baseOverlay = cached
+        } else {
+            let bytesPerPixel = 4
+            let bytesPerRow = width * bytesPerPixel
+            let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+            guard let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            ) else {
+                return image
+            }
+
+            context.clear(CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            context.setShouldAntialias(true)
+            context.setShouldSmoothFonts(true)
+
+            for item in activeItems {
+                draw(item, in: context, renderSize: renderSize, at: time)
+            }
+
+            guard let cgImage = context.makeImage() else {
+                return image
+            }
+
+            let created = CIImage(cgImage: cgImage)
+            overlayCache.setObject(created, forKey: cacheKey)
+            baseOverlay = created
         }
 
-        context.clear(CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
-        context.setShouldAntialias(true)
-        context.setShouldSmoothFonts(true)
-
-        for item in activeItems {
-            draw(item, in: context, renderSize: renderSize, at: time)
-        }
-
-        guard let cgImage = context.makeImage() else {
-            return image
-        }
-
-        var overlay = CIImage(cgImage: cgImage)
+        var overlay = baseOverlay
         if !isZeroPoint(renderBounds.origin) {
             overlay = overlay.transformed(
                 by: CGAffineTransform(

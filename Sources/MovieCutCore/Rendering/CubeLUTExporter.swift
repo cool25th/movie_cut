@@ -24,6 +24,11 @@ public enum CubeLUTExportError: Error, Equatable, Sendable {
 /// Rows are written red-fastest — the exact order `CubeLUTParser` reads.
 /// The alpha channel is not written (`.cube` is RGB-only).
 public enum CubeLUTExporter {
+    /// Shared software-render context for `bake` — CIContext construction
+    /// is heavyweight and was previously paid per call. CIContext is
+    /// documented thread-safe, so one static instance serves all bakes.
+    private nonisolated(unsafe) static let bakeContext = CIContext(options: [.useSoftwareRenderer: true])
+
     /// Serializes a cube. The title is quoted; embedded double quotes are
     /// stripped so the header line stays a single quoted string.
     /// Throws instead of crashing when dimension/data are inconsistent.
@@ -112,7 +117,10 @@ public enum CubeLUTExporter {
 
         var output = [Float16](repeating: 0, count: width * height * 4)
         _ = output.withUnsafeMutableBytes { buffer in
-            CIContext(options: [.useSoftwareRenderer: true]).render(
+            // Static software-render context: constructing a CIContext per
+            // bake re-created the whole (heavyweight) render pipeline each
+            // call. CIContext is thread-safe; one instance is shared.
+            Self.bakeContext.render(
                 corrected,
                 toBitmap: buffer.baseAddress!,
                 rowBytes: width * 8,

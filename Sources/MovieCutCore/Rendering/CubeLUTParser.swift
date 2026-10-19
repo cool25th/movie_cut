@@ -36,59 +36,84 @@ public enum CubeLUTParser {
 
     public static func parse(_ text: String) throws -> CubeLUT {
         var dimension: Int?
-        var entries: [(Float, Float, Float)] = []
+        var data: [Float] = []
+        var entryCount = 0
 
+        // Allocation-light parsing: a 65³ LUT carries ~275k data lines, and
+        // the previous implementation paid two String heap allocations per
+        // line (trimmingCharacters + uppercased). Here trimming walks the
+        // substring in place, the uppercase copy is built only for lines
+        // that START with a letter (metadata keywords — a handful per file),
+        // and floats append straight into the final RGBA buffer.
         for rawLine in text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
+            let line = trimHorizontalWhitespace(rawLine)
+            guard let first = line.first, first != "#" else { continue }
 
-            let upper = line.uppercased()
-            if upper.hasPrefix("LUT_1D_SIZE") {
-                throw ParseError.unsupported1D
-            }
-            if upper.hasPrefix("LUT_3D_SIZE") {
-                let parts = line.split(separator: " ").compactMap { Int($0) }
-                guard let size = parts.last else { throw ParseError.missingSize }
-                guard size >= 2, size <= maximumDimension else { throw ParseError.sizeOutOfRange(size) }
-                dimension = size
-                entries.reserveCapacity(size * size * size)
-                continue
-            }
-            // Skip known non-data keywords.
-            if upper.hasPrefix("TITLE") || upper.hasPrefix("DOMAIN_") || upper.hasPrefix("LUT_3D_INPUT_RANGE") {
-                continue
+            if first.isLetter {
+                let upper = line.uppercased()
+                if upper.hasPrefix("LUT_1D_SIZE") {
+                    throw ParseError.unsupported1D
+                }
+                if upper.hasPrefix("LUT_3D_SIZE") {
+                    let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Int($0) }
+                    guard let size = parts.last else { throw ParseError.missingSize }
+                    guard size >= 2, size <= maximumDimension else { throw ParseError.sizeOutOfRange(size) }
+                    dimension = size
+                    data.reserveCapacity(size * size * size * 4)
+                    continue
+                }
+                // Skip known non-data keywords.
+                if upper.hasPrefix("TITLE") || upper.hasPrefix("DOMAIN_") || upper.hasPrefix("LUT_3D_INPUT_RANGE") {
+                    continue
+                }
             }
 
             // Data line: three floats.
-            let components = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard components.count >= 3,
-                  let r = Float(components[0]),
-                  let g = Float(components[1]),
-                  let b = Float(components[2]) else {
+            var iterator = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).makeIterator()
+            guard let c0 = iterator.next(),
+                  let c1 = iterator.next(),
+                  let c2 = iterator.next(),
+                  let r = Float(c0),
+                  let g = Float(c1),
+                  let b = Float(c2) else {
                 // A non-numeric line before the table (extra metadata) is skipped;
                 // once entries exist, a malformed line is an error.
-                if entries.isEmpty { continue }
-                throw ParseError.malformedEntry(line)
+                if entryCount == 0 { continue }
+                throw ParseError.malformedEntry(String(line))
             }
-            entries.append((r, g, b))
+            data.append(r.clamped(to: 0...1))
+            data.append(g.clamped(to: 0...1))
+            data.append(b.clamped(to: 0...1))
+            data.append(1.0)
+            entryCount += 1
         }
 
         guard let dimension else { throw ParseError.missingSize }
         let expected = dimension * dimension * dimension
-        guard entries.count == expected else {
-            throw ParseError.entryCountMismatch(expected: expected, found: entries.count)
-        }
-
-        var data = [Float]()
-        data.reserveCapacity(expected * 4)
-        for entry in entries {
-            data.append(entry.0.clamped(to: 0...1))
-            data.append(entry.1.clamped(to: 0...1))
-            data.append(entry.2.clamped(to: 0...1))
-            data.append(1.0)
+        guard entryCount == expected else {
+            throw ParseError.entryCountMismatch(expected: expected, found: entryCount)
         }
 
         return CubeLUT(dimension: dimension, data: data)
+    }
+
+    /// Trims spaces/tabs from both ends of a substring without allocating a
+    /// new String.
+    private static func trimHorizontalWhitespace(_ slice: Substring) -> Substring {
+        var start = slice.startIndex
+        var end = slice.endIndex
+        while start < end && (slice[start] == " " || slice[start] == "\t") {
+            slice.formIndex(after: &start)
+        }
+        while end > start {
+            let previous = slice.index(before: end)
+            if slice[previous] == " " || slice[previous] == "\t" {
+                end = previous
+            } else {
+                break
+            }
+        }
+        return slice[start..<end]
     }
 }
 

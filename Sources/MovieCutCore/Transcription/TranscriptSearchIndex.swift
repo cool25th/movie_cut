@@ -167,22 +167,47 @@ public enum TranscriptSearchIndex {
 
     /// Resolves a corpus offset to (card, timeline second): the word whose
     /// span contains it when word timings cover the card, otherwise the
-    /// owning card's start.
+    /// owning card's start. Both span arrays are sorted, non-overlapping,
+    /// so containment is a binary search instead of a full scan per match.
     private static func resolve(
         _ offset: Int,
         cardSpans: [(start: Int, end: Int, item: Item)],
         wordSpans: [(start: Int, end: Int, card: Int, word: WordTiming)]
     ) -> (item: Item, time: TimeInterval) {
-        for span in wordSpans where offset >= span.start && offset < span.end {
-            let item = cardSpans[span.card].item
-            return (item, item.timelineStart + max(0, span.word.startTime))
+        var wordLow = 0
+        var wordHigh = wordSpans.count - 1
+        while wordLow <= wordHigh {
+            let mid = (wordLow + wordHigh) / 2
+            let span = wordSpans[mid]
+            if offset < span.start {
+                wordHigh = mid - 1
+            } else if offset >= span.end {
+                wordLow = mid + 1
+            } else {
+                let item = cardSpans[span.card].item
+                return (item, item.timelineStart + max(0, span.word.startTime))
+            }
         }
-        for span in cardSpans where offset >= span.start && offset < span.end {
-            return (span.item, span.item.timelineStart)
+
+        var cardLow = 0
+        var cardHigh = cardSpans.count - 1
+        var lastPrecedingIndex: Int?
+        while cardLow <= cardHigh {
+            let mid = (cardLow + cardHigh) / 2
+            let span = cardSpans[mid]
+            if offset < span.start {
+                cardHigh = mid - 1
+            } else {
+                lastPrecedingIndex = mid
+                if offset < span.end {
+                    return (span.item, span.item.timelineStart)
+                }
+                cardLow = mid + 1
+            }
         }
+
         // Separator positions resolve to the nearest preceding card.
-        let previous = cardSpans.last { $0.start <= offset }
-        let item = previous?.item ?? Item(clipId: UUID(), text: "", timelineStart: 0)
+        let item = lastPrecedingIndex.map { cardSpans[$0].item } ?? Item(clipId: UUID(), text: "", timelineStart: 0)
         return (item, item.timelineStart)
     }
 

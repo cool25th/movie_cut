@@ -55,7 +55,10 @@ public struct BeatDetectionProvider: Sendable {
         let frameSize = configuration.frameSize
         let hopSize = configuration.hopSize
 
+        // Pre-size the per-hop accumulators: one entry per hop position.
+        let expectedFrames = (monoSamples.count - frameSize) / hopSize + 1
         var energies: [Double] = []
+        energies.reserveCapacity(expectedFrames)
         var start = 0
         while start + frameSize <= monoSamples.count {
             var energy = 0.0
@@ -69,6 +72,7 @@ public struct BeatDetectionProvider: Sendable {
         guard energies.count > 2 else { return [] }
 
         var flux: [Double] = [0]
+        flux.reserveCapacity(expectedFrames)
         for index in 1..<energies.count {
             flux.append(max(0, energies[index] - energies[index - 1]))
         }
@@ -173,28 +177,59 @@ public struct BeatDetectionProvider: Sendable {
         guard reader.startReading() else { return [] }
 
         var samples: [Float] = []
+        let durationSeconds = CMTimeGetSeconds(track.timeRange.duration)
+        if durationSeconds.isFinite && durationSeconds > 0 {
+            samples.reserveCapacity(Int(durationSeconds * Self.analysisSampleRate))
+        }
+        // Zero-copy: contiguous block buffers are walked in place through
+        // their data pointer; only a non-contiguous one pays a copy, into a
+        // scratch buffer reused across every remaining sample buffer. The
+        // normalization keeps the original division (NOT a reciprocal
+        // multiply) so sample values stay bit-identical.
+        var scratchBytes: [UInt8] = []
+
+        func absorb(_ rawBytes: UnsafeRawBufferPointer) {
+            var index = 0
+            while index + 1 < rawBytes.count {
+                let value = Int16(littleEndian: Int16(bitPattern: UInt16(rawBytes[index]) | (UInt16(rawBytes[index + 1]) << 8)))
+                samples.append(Float(value) / Float(Int16.max))
+                index += 2
+            }
+        }
+
         while let buffer = trackOutput.copyNextSampleBuffer() {
             guard let blockBuffer = CMSampleBufferGetDataBuffer(buffer) else { continue }
             let length = CMBlockBufferGetDataLength(blockBuffer)
-            guard length > 0 else { continue }
+            guard length >= 2 else { continue }
 
-            var bytes = [UInt8](repeating: 0, count: length)
-            bytes.withUnsafeMutableBytes { raw in
-                if let baseAddress = raw.baseAddress {
-                    CMBlockBufferCopyDataBytes(
-                        blockBuffer,
-                        atOffset: 0,
-                        dataLength: length,
-                        destination: baseAddress
-                    )
+            var dataPointer: UnsafeMutablePointer<Int8>?
+            var dataLength = 0
+            var totalLength = 0
+            if CMBlockBufferGetDataPointer(
+                blockBuffer,
+                atOffset: 0,
+                lengthAtOffsetOut: &dataLength,
+                totalLengthOut: &totalLength,
+                dataPointerOut: &dataPointer
+            ) == noErr,
+               let dataPointer,
+               dataLength >= length {
+                absorb(UnsafeRawBufferPointer(start: dataPointer, count: length))
+            } else {
+                if scratchBytes.count < length {
+                    scratchBytes = [UInt8](repeating: 0, count: length)
                 }
-            }
-
-            var index = 0
-            while index + 1 < bytes.count {
-                let value = Int16(littleEndian: Int16(bitPattern: UInt16(bytes[index]) | (UInt16(bytes[index + 1]) << 8)))
-                samples.append(Float(value) / Float(Int16.max))
-                index += 2
+                guard CMBlockBufferCopyDataBytes(
+                    blockBuffer,
+                    atOffset: 0,
+                    dataLength: length,
+                    destination: &scratchBytes
+                ) == noErr else {
+                    continue
+                }
+                scratchBytes.withUnsafeBytes { raw in
+                    absorb(UnsafeRawBufferPointer(rebasing: raw.prefix(length)))
+                }
             }
         }
 

@@ -13,6 +13,9 @@ struct IOSTimelineView: View {
     // CA-19: the active snap target during a drag — drives the alignment
     // guide line (Mac TimelineView parity).
     @State private var snapGuideTime: TimeInterval? = nil
+    /// Snap targets materialized once per drag (CA-19) — replaced the
+    /// 5-stage array chain that reallocated on every snappedTime call.
+    @State private var cachedDragSnapPoints: [Double]? = nil
 
     private let secondsWidth: CGFloat = 38
     private let trackHeaderWidth: CGFloat = 76
@@ -217,8 +220,26 @@ struct IOSTimelineView: View {
                     draggedClipId = clip.id
                     dragInitialStartTime = clip.timelineRange.start
                     select(clip)
+                    // Materialize the drag's snap targets once — the dragged
+                    // clip is the only thing moving, so this snapshot stays
+                    // valid for the whole gesture.
+                    cachedDragSnapPoints = viewModel.currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .filter { $0.id != clip.id }
+                        .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
+                        + viewModel.currentProject.markers.map(\.time)
+                        + [viewModel.playheadTime, 0.0]
                 }
                 dragOffset = value.translation.width
+                // Live alignment guide: evaluate the snapped position while
+                // dragging so the overlay (guarded on snapGuideTime) actually
+                // shows mid-gesture, not only for the final commit.
+                let liveStart = max(
+                    0,
+                    (dragInitialStartTime ?? clip.timelineRange.start)
+                        + Double(value.translation.width / secondsWidth)
+                )
+                _ = snappedTime(liveStart, excluding: clip.id)
             }
             .onEnded { value in
                 let initialStart = dragInitialStartTime ?? clip.timelineRange.start
@@ -236,6 +257,7 @@ struct IOSTimelineView: View {
                 draggedClipId = nil
                 dragInitialStartTime = nil
                 snapGuideTime = nil
+                cachedDragSnapPoints = nil
             }
     }
 
@@ -247,8 +269,10 @@ struct IOSTimelineView: View {
     private func snappedTime(_ rawTime: Double, excluding clipId: UUID) -> Double {
         // CA-14: markers (beat markers included) are snap targets too — the
         // same guide set the Mac timeline snaps to, so beats generated on
-        // either platform guide drags identically.
-        let snapPoints = viewModel.currentProject.timeline.tracks
+        // either platform guide drags identically. Uses the gesture's cached
+        // snapshot when available; falls back to a fresh build for callers
+        // outside a drag.
+        let snapPoints = cachedDragSnapPoints ?? viewModel.currentProject.timeline.tracks
             .flatMap(\.clips)
             .filter { $0.id != clipId }
             .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }

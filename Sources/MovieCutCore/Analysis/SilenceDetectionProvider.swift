@@ -150,13 +150,13 @@ public final class SilenceDetectionProvider: AnalysisProvider {
 
         var silentRanges: [TimeRange] = []
         var currentSilenceStart: TimeInterval?
-        var chunkIndex: Int = 0
+        var chunkIndex = 0
         var pendingBytes = [UInt8]()
         pendingBytes.reserveCapacity(bytesPerChunk * 2)
+        // Reused only when a block buffer turns out to be non-contiguous.
+        var scratchBytes: [UInt8] = []
 
-        func processChunk(_ chunkData: ArraySlice<UInt8>) {
-            let rms = Self.computeRMS(chunkData)
-
+        func processRMS(_ rms: Float) {
             let chunkStartTime = Double(chunkIndex) * configuration.chunkDuration
             let isSilent = rms < configuration.silenceThresholdDB
 
@@ -177,6 +177,41 @@ public final class SilenceDetectionProvider: AnalysisProvider {
             chunkIndex += 1
         }
 
+        func processChunk(_ chunkData: ArraySlice<UInt8>) {
+            processRMS(Self.computeRMS(chunkData))
+        }
+
+        func processRawChunk(_ chunkData: UnsafeRawBufferPointer) {
+            processRMS(Self.computeRMS(chunkData))
+        }
+
+        /// Feeds one decoded byte window through the chunk pipeline: completes
+        /// a pending partial chunk first, then walks whole chunks straight
+        /// off the buffer (no pendingBytes copies), stashing only the tail.
+        func consume(_ raw: UnsafeRawBufferPointer) {
+            var cursor = 0
+
+            if !pendingBytes.isEmpty {
+                let needed = bytesPerChunk - pendingBytes.count
+                let take = Swift.min(needed, raw.count)
+                pendingBytes.append(contentsOf: UnsafeRawBufferPointer(rebasing: raw[0..<take]))
+                cursor = take
+                if pendingBytes.count == bytesPerChunk {
+                    processChunk(pendingBytes[...])
+                    pendingBytes.removeAll(keepingCapacity: true)
+                }
+            }
+
+            while cursor + bytesPerChunk <= raw.count {
+                processRawChunk(UnsafeRawBufferPointer(rebasing: raw[cursor..<(cursor + bytesPerChunk)]))
+                cursor += bytesPerChunk
+            }
+
+            if cursor < raw.count {
+                pendingBytes.append(contentsOf: UnsafeRawBufferPointer(rebasing: raw[cursor..<raw.count]))
+            }
+        }
+
         while true {
             let buffer = trackOutput.copyNextSampleBuffer()
             guard let buffer = buffer else { break }
@@ -185,31 +220,39 @@ public final class SilenceDetectionProvider: AnalysisProvider {
             let length = CMBlockBufferGetDataLength(blockBuffer)
             guard length > 0 else { continue }
 
-            let pendingCount = pendingBytes.count
-            pendingBytes.append(contentsOf: repeatElement(0, count: length))
-            pendingBytes.withUnsafeMutableBytes { bytes in
-                if let baseAddress = bytes.baseAddress {
-                    CMBlockBufferCopyDataBytes(
-                        blockBuffer,
-                        atOffset: 0,
-                        dataLength: length,
-                        destination: baseAddress.advanced(by: pendingCount)
-                    )
+            // Zero-copy: a contiguous block buffer is chunked in place; only
+            // a non-contiguous one falls back to a reused scratch copy. The
+            // previous path appended every buffer's bytes into pendingBytes
+            // (zero-initializing `length` bytes per buffer) and then shifted
+            // the array down with removeFirst.
+            var dataPointer: UnsafeMutablePointer<Int8>?
+            var dataLength = 0
+            var totalLength = 0
+            if CMBlockBufferGetDataPointer(
+                blockBuffer,
+                atOffset: 0,
+                lengthAtOffsetOut: &dataLength,
+                totalLengthOut: &totalLength,
+                dataPointerOut: &dataPointer
+            ) == noErr,
+               let dataPointer,
+               dataLength >= length {
+                consume(UnsafeRawBufferPointer(start: dataPointer, count: length))
+            } else {
+                if scratchBytes.count < length {
+                    scratchBytes = [UInt8](repeating: 0, count: length)
                 }
-            }
-
-            // Process fixed-size chunks across CMSampleBuffer boundaries. Keeping the
-            // tail avoids dropping partial audio frames from every reader buffer, which
-            // can shift detected silence ranges and hide short gaps in fixture-sized
-            // media files.
-            var offset = 0
-            while offset + bytesPerChunk <= pendingBytes.count {
-                processChunk(pendingBytes[offset..<(offset + bytesPerChunk)])
-                offset += bytesPerChunk
-            }
-
-            if offset > 0 {
-                pendingBytes.removeFirst(offset)
+                guard CMBlockBufferCopyDataBytes(
+                    blockBuffer,
+                    atOffset: 0,
+                    dataLength: length,
+                    destination: &scratchBytes
+                ) == noErr else {
+                    continue
+                }
+                scratchBytes.withUnsafeBytes { raw in
+                    consume(UnsafeRawBufferPointer(rebasing: raw.prefix(length)))
+                }
             }
         }
 
@@ -231,12 +274,20 @@ public final class SilenceDetectionProvider: AnalysisProvider {
 
     /// Computes RMS power in dB for a chunk of 16-bit PCM samples.
     private static func computeRMS(_ data: ArraySlice<UInt8>) -> Float {
+        data.withUnsafeBytes { raw in
+            computeRMS(raw)
+        }
+    }
+
+    /// Same reduction over a raw contiguous window — lets the zero-copy decode
+    /// path chunk straight off the block buffer without materializing arrays.
+    private static func computeRMS(_ data: UnsafeRawBufferPointer) -> Float {
         var sumSquares: Float = 0
         let sampleCount = data.count / 2
 
         guard sampleCount > 0 else { return -Float.infinity }
 
-        for i in stride(from: data.startIndex, to: data.endIndex - 1, by: 2) {
+        for i in stride(from: 0, to: data.count - 1, by: 2) {
             let lo = Int16(data[i])
             let hi = Int16(data[i + 1]) << 8
             let sample = Float(lo | hi)

@@ -14,9 +14,12 @@ struct HistogramView: View {
 
     var body: some View {
         Canvas { context, size in
-            channelPath(histogram.red, size: size).map { context.fill($0, with: .color(.red.opacity(0.55))) }
-            channelPath(histogram.green, size: size).map { context.fill($0, with: .color(.green.opacity(0.55))) }
-            channelPath(histogram.blue, size: size).map { context.fill($0, with: .color(.blue.opacity(0.55))) }
+            // Compute the shared peak once — channelPath used to re-scan all
+            // 768 bins through the `peak` computed property per channel.
+            let scale = peak
+            channelPath(histogram.red, size: size, scale: scale).map { context.fill($0, with: .color(.red.opacity(0.55))) }
+            channelPath(histogram.green, size: size, scale: scale).map { context.fill($0, with: .color(.green.opacity(0.55))) }
+            channelPath(histogram.blue, size: size, scale: scale).map { context.fill($0, with: .color(.blue.opacity(0.55))) }
         }
         .frame(height: 56)
         .background(MovieCutTheme.previewBackground)
@@ -27,9 +30,8 @@ struct HistogramView: View {
         .accessibilityLabel("RGB histogram")
     }
 
-    private func channelPath(_ counts: [Int], size: CGSize) -> Path? {
+    private func channelPath(_ counts: [Int], size: CGSize, scale: Double) -> Path? {
         guard counts.count > 1 else { return nil }
-        let scale = peak
         let stepX = size.width / CGFloat(counts.count - 1)
         var path = Path()
         path.move(to: CGPoint(x: 0, y: size.height))

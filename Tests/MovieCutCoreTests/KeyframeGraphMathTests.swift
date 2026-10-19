@@ -142,4 +142,52 @@ struct KeyframeGraphMathTests {
         let removed = KeyframeGraphMath.removed(keyframes: withNew, id: base[1].id)
         #expect(removed.count == 2 && !removed.contains { $0.id == base[1].id })
     }
+
+    // MARK: - Custom bezier regressions (GURU V5 Phase 1)
+
+    @Test("custom bezier polyline matches value(at:) and differs from linear")
+    func customBezierPolylineMatchesEvaluator() {
+        // Strongly asymmetric control points: the eased midpoint sits far
+        // from the 0.5 linear midpoint, so a polyline that silently drops
+        // `customCurve` (falling back to linear) cannot pass.
+        let control = CubicBezierControl(x1: 0.9, y1: 0.0, x2: 1.0, y2: 0.2)
+        let keyframes = [
+            Keyframe(property: .opacity, time: 0, value: 0, interpolation: .custom, customCurve: control),
+            Keyframe(property: .opacity, time: 2, value: 1)
+        ]
+
+        let points = KeyframeGraphMath.polyline(for: keyframes, samplesPerSegment: 24)
+        let midpoint = points.first { abs($0.time - 1.0) < 1.0e-12 }
+        #expect(midpoint != nil, "the 24-sample segment must include progress 0.5")
+
+        let evaluated = KeyframeGraphMath.value(at: 1.0, keyframes: keyframes)
+        #expect(evaluated != nil)
+        // Same inputs through the same Keyframe.interpolate call → exact.
+        #expect(midpoint?.value == evaluated,
+                "polyline midpoint must equal the renderer's evaluation exactly")
+        #expect(abs((midpoint?.value ?? 0) - 0.5) > 1.0e-6,
+                "a bezier this asymmetric must not render as the linear midpoint")
+    }
+
+    @Test("moving a custom keyframe preserves its bezier control points")
+    func movedPreservesCustomCurve() {
+        let control = CubicBezierControl(x1: 0.2, y1: 0.8, x2: 0.4, y2: 1.0)
+        let base = [
+            Keyframe(property: .scaleX, time: 0, value: 0, interpolation: .custom, customCurve: control),
+            Keyframe(property: .scaleX, time: 1, value: 1)
+        ]
+
+        let moved = KeyframeGraphMath.moved(
+            keyframes: base, id: base[0].id, time: 0.25, value: 0.4
+        )
+        let movedTarget = moved.first { $0.id == base[0].id }
+        #expect(movedTarget?.customCurve == control,
+                "dragging a keyframe must not erase its bezier control points")
+        #expect(movedTarget?.interpolation == .custom)
+        #expect(movedTarget?.time == 0.25)
+        #expect(movedTarget?.value == 0.4)
+        // The untouched sibling is passed through unchanged.
+        let untouched = moved.first { $0.id == base[1].id }
+        #expect(untouched == base[1])
+    }
 }

@@ -174,21 +174,25 @@ public enum AudioGraphAVAudioEngineRenderer {
 
     /// Resolves every bus→strip→source→audio edge with the SAME missing-input
     /// errors the pure renderer throws, before any engine state exists.
+    /// Strips/sources are dictionary-indexed: the nested loop previously
+    /// linearly scanned both collections per strip (O(strips × collection)).
     private static func resolvedStrips(
         spec: AudioRenderGraphSpec,
         activations: [UUID: AudioGraphStripActivation],
         sourceAudio: (UUID) -> AudioGraphSourceAudio?
     ) throws -> [ResolvedStrip] {
+        let stripsById = Dictionary(uniqueKeysWithValues: spec.clipStrips.map { ($0.clipId, $0) })
+        let sourcesById = Dictionary(uniqueKeysWithValues: spec.sources.map { ($0.id, $0) })
         var resolved: [ResolvedStrip] = []
         for bus in spec.trackBuses {
             for stripId in bus.inputStripIds {
-                guard let strip = spec.clipStrips.first(where: { $0.clipId == stripId }) else {
+                guard let strip = stripsById[stripId] else {
                     throw AudioGraphRenderError.missingInput(what: "clipStrip", id: stripId)
                 }
                 guard let activation = activations[stripId] else {
                     throw AudioGraphRenderError.missingInput(what: "activation", id: stripId)
                 }
-                guard let source = spec.sources.first(where: { $0.id == strip.sourceId }) else {
+                guard let source = sourcesById[strip.sourceId] else {
                     throw AudioGraphRenderError.missingInput(what: "source", id: strip.sourceId)
                 }
                 guard let audio = sourceAudio(source.id) else {
@@ -202,7 +206,10 @@ public enum AudioGraphAVAudioEngineRenderer {
 
     /// The strip's interleaved stereo contribution over the absolute window,
     /// silence outside its activation and for muted/non-soloed buses —
-    /// exactly what the pure renderer accumulates frame by frame.
+    /// exactly what the pure renderer accumulates frame by frame. Only the
+    /// ACTIVE intersection is computed: the previous version walked the whole
+    /// window for every strip and relied on stripFrame's per-frame guards,
+    /// multiplying work by the strip count for short clips.
     private static func precomputedStripBuffer(
         item: ResolvedStrip,
         window: Range<Int64>,
@@ -210,16 +217,33 @@ public enum AudioGraphAVAudioEngineRenderer {
         masterFader: [AudioGraphAutomationPoint]
     ) -> [Float] {
         var buffer = [Float](repeating: 0, count: window.count * 2)
-        for index in 0..<window.count {
+        if item.bus.mute || (anySolo && !item.bus.solo) {
+            return buffer
+        }
+
+        let start = max(window.lowerBound, item.activation.sampleRange.lowerBound)
+        let end = min(window.upperBound, item.activation.sampleRange.upperBound)
+        guard end > start else { return buffer }
+
+        let sortedGain = AudioGraphOfflineRenderer.ensureSorted(item.strip.gain)
+        let sortedPan = AudioGraphOfflineRenderer.ensureSorted(item.strip.pan)
+        let sortedBusFader = AudioGraphOfflineRenderer.ensureSorted(item.bus.fader)
+        let sortedMasterFader = AudioGraphOfflineRenderer.ensureSorted(masterFader)
+
+        for frame in start..<end {
             let (left, right) = AudioGraphOfflineRenderer.stripFrame(
                 strip: item.strip,
                 bus: item.bus,
                 anyBusSoloed: anySolo,
-                masterFader: masterFader,
+                sortedGain: sortedGain,
+                sortedPan: sortedPan,
+                sortedBusFader: sortedBusFader,
+                sortedMasterFader: sortedMasterFader,
                 audio: item.audio,
                 activation: item.activation,
-                at: window.lowerBound + Int64(index)
+                at: frame
             )
+            let index = Int(frame - window.lowerBound)
             buffer[index * 2] = left
             buffer[index * 2 + 1] = right
         }

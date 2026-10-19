@@ -136,10 +136,13 @@ public enum HighlightScorer {
         let silentOverlap = silence.reduce(0.0) { $0 + overlapDuration(window, $1) }
         let speechDensity = max(0, min(1, 1 - silentOverlap / length))
 
-        let sceneCount = Double(scenes.filter { $0 >= window.start && $0 < window.end }.count)
+        // Counting via binary search over the pre-sorted marker arrays: the
+        // previous `.filter { ... }.count` allocated two heap arrays per
+        // sliding window across hundreds-to-thousands of windows.
+        let sceneCount = Double(countInRange(scenes, start: window.start, end: window.end))
         let sceneActivity = min(1, (sceneCount / length) / configuration.referenceScenesPerSecond)
 
-        let energyCount = Double(energy.filter { $0 >= window.start && $0 < window.end }.count)
+        let energyCount = Double(countInRange(energy, start: window.start, end: window.end))
         let energyScore = min(1, (energyCount / length) / configuration.referenceEnergyPerSecond)
 
         let totalWeight = configuration.speechWeight + configuration.sceneWeight + configuration.energyWeight
@@ -175,6 +178,44 @@ public enum HighlightScorer {
             }
         }
         return picked
+    }
+
+    /// Elements of an ascending, non-decreasing array inside the half-open
+    /// range `[start, end)` — allocation-free O(log N) binary search, the
+    /// exact count the previous `.filter { $0 >= start && $0 < end }.count`
+    /// produced.
+    private static func countInRange(_ sorted: [TimeInterval], start: TimeInterval, end: TimeInterval) -> Int {
+        guard !sorted.isEmpty, start < end else { return 0 }
+
+        func lowerBound() -> Int {
+            var low = 0
+            var high = sorted.count
+            while low < high {
+                let mid = (low + high) / 2
+                if sorted[mid] < start {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            return low
+        }
+
+        func upperBound() -> Int {
+            var low = 0
+            var high = sorted.count
+            while low < high {
+                let mid = (low + high) / 2
+                if sorted[mid] < end {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            return low
+        }
+
+        return max(0, upperBound() - lowerBound())
     }
 
     private static func overlapDuration(_ a: TimeRange, _ b: TimeRange) -> TimeInterval {

@@ -147,9 +147,13 @@ public enum AudioGraphOfflineRenderer {
         // scanned both collections for EVERY strip (O(strips × collection)).
         let stripsById = Dictionary(uniqueKeysWithValues: spec.clipStrips.map { ($0.clipId, $0) })
         let sourcesById = Dictionary(uniqueKeysWithValues: spec.sources.map { ($0.id, $0) })
+        // Hoisted curve preparation: sorted once for the whole render, not
+        // re-checked per sample.
+        let sortedMasterFader = ensureSorted(spec.masterBus.fader)
 
         for bus in spec.trackBuses {
             if bus.mute || (soloedBuses && !bus.solo) { continue }
+            let sortedBusFader = ensureSorted(bus.fader)
             for stripId in bus.inputStripIds {
                 guard let strip = stripsById[stripId] else {
                     throw AudioGraphRenderError.missingInput(what: "clipStrip", id: stripId)
@@ -168,12 +172,18 @@ public enum AudioGraphOfflineRenderer {
                 let end = min(absoluteRange.upperBound, activation.sampleRange.upperBound)
                 guard end > start else { continue }
 
+                let sortedGain = ensureSorted(strip.gain)
+                let sortedPan = ensureSorted(strip.pan)
+
                 for frame in start..<end {
                     let (left, right) = stripFrame(
                         strip: strip,
                         bus: bus,
                         anyBusSoloed: soloedBuses,
-                        masterFader: spec.masterBus.fader,
+                        sortedGain: sortedGain,
+                        sortedPan: sortedPan,
+                        sortedBusFader: sortedBusFader,
+                        sortedMasterFader: sortedMasterFader,
                         audio: audio,
                         activation: activation,
                         at: frame
@@ -210,6 +220,36 @@ public enum AudioGraphOfflineRenderer {
         activation: AudioGraphStripActivation,
         at frame: Int64
     ) -> (left: Float, right: Float) {
+        stripFrame(
+            strip: strip,
+            bus: bus,
+            anyBusSoloed: anyBusSoloed,
+            sortedGain: ensureSorted(strip.gain),
+            sortedPan: ensureSorted(strip.pan),
+            sortedBusFader: ensureSorted(bus.fader),
+            sortedMasterFader: ensureSorted(masterFader),
+            audio: audio,
+            activation: activation,
+            at: frame
+        )
+    }
+
+    /// Same evaluation over PRE-SORTED automation curves: frame loops call
+    /// `ensureSorted` once per curve before entering the per-sample loop, so
+    /// this path pays no ordering check per sample. Arithmetic is identical
+    /// to the sorting overload.
+    static func stripFrame(
+        strip: AudioGraphClipStrip,
+        bus: AudioGraphTrackBus,
+        anyBusSoloed: Bool,
+        sortedGain: [AudioGraphAutomationPoint],
+        sortedPan: [AudioGraphAutomationPoint],
+        sortedBusFader: [AudioGraphAutomationPoint],
+        sortedMasterFader: [AudioGraphAutomationPoint],
+        audio: AudioGraphSourceAudio,
+        activation: AudioGraphStripActivation,
+        at frame: Int64
+    ) -> (left: Float, right: Float) {
         if bus.mute || (anyBusSoloed && !bus.solo) { return (0, 0) }
         guard frame >= activation.sampleRange.lowerBound,
               frame < activation.sampleRange.upperBound else { return (0, 0) }
@@ -220,19 +260,19 @@ public enum AudioGraphOfflineRenderer {
         let (left, right) = mappedChannels(strip: strip, audio: audio, frame: sourceFrame)
 
         let gain = linearGain(
-            value: automationValue(strip.gain, at: frame),
+            value: automationValuePresorted(sortedGain, at: frame),
             fallbackDb: 0
         )
         let fade = fadeFactor(strip.fades, at: frame)
-        let (panL, panR) = strip.pan.isEmpty
+        let (panL, panR) = sortedPan.isEmpty
             ? (1.0, 1.0)
-            : panGains(automationValue(strip.pan, at: frame))
+            : panGains(automationValuePresorted(sortedPan, at: frame))
         let busGain = linearGain(
-            value: automationValue(bus.fader, at: frame),
+            value: automationValuePresorted(sortedBusFader, at: frame),
             fallbackDb: 0
         )
         let masterGain = linearGain(
-            value: automationValue(masterFader, at: frame),
+            value: automationValuePresorted(sortedMasterFader, at: frame),
             fallbackDb: 0
         )
         let total = Float(gain * fade * busGain * masterGain)
@@ -248,15 +288,30 @@ public enum AudioGraphOfflineRenderer {
     /// bracket the position with a binary search instead of sorting and
     /// zipping the whole array on every sample.
     static func automationValue(_ points: [AudioGraphAutomationPoint], at position: Int64) -> Double {
-        guard !points.isEmpty else { return 0 }
-        guard points.count > 1 else { return points[0].value }
+        automationValuePresorted(ensureSorted(points), at: position)
+    }
 
-        var isSorted = true
+    /// Returns the points ascending by `samplePosition`, verifying cheaply
+    /// (first inversion aborts) and only paying a sort when the caller handed
+    /// over unordered data. Frame loops call this ONCE per curve before
+    /// entering the per-sample loop.
+    static func ensureSorted(_ points: [AudioGraphAutomationPoint]) -> [AudioGraphAutomationPoint] {
+        guard points.count > 1 else { return points }
         for index in 1..<points.count where points[index - 1].samplePosition > points[index].samplePosition {
-            isSorted = false
-            break
+            return points.sorted { $0.samplePosition < $1.samplePosition }
         }
-        let sorted = isSorted ? points : points.sorted { $0.samplePosition < $1.samplePosition }
+        return points
+    }
+
+    /// Evaluation over an ALREADY-sorted curve — no per-call ordering check,
+    /// just the boundary clamps and the binary search. Bit-identical to
+    /// ``automationValue(_:at:)`` on the same input.
+    static func automationValuePresorted(
+        _ sorted: [AudioGraphAutomationPoint],
+        at position: Int64
+    ) -> Double {
+        guard !sorted.isEmpty else { return 0 }
+        guard sorted.count > 1 else { return sorted[0].value }
 
         if position <= sorted[0].samplePosition { return sorted[0].value }
         if position >= sorted[sorted.count - 1].samplePosition { return sorted[sorted.count - 1].value }

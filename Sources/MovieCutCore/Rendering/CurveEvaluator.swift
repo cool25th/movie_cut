@@ -114,14 +114,16 @@ public enum CurveEvaluator {
             return [slope, slope]
         }
 
-        let slopes = zip(points, points.dropFirst()).map(secant)
+        // Single pass carrying only the two adjacent slopes the Fritsch-
+        // Carlson weighting needs — the previous implementation allocated
+        // a separate `slopes` array. Same secant arguments in the same
+        // order, so the numbers are unchanged.
         var tangents = Array(repeating: 0.0, count: count)
-        tangents[0] = slopes[0]
-        tangents[count - 1] = slopes[count - 2]
+        var previousSlope = secant(points[0], points[1])
+        tangents[0] = previousSlope
 
         for index in 1..<(count - 1) {
-            let previousSlope = slopes[index - 1]
-            let nextSlope = slopes[index]
+            let nextSlope = secant(points[index], points[index + 1])
             if previousSlope == 0 || nextSlope == 0 || previousSlope.sign != nextSlope.sign {
                 tangents[index] = 0
             } else {
@@ -131,8 +133,10 @@ public enum CurveEvaluator {
                 let w2 = nextWidth + 2 * previousWidth
                 tangents[index] = (w1 + w2) / (w1 / previousSlope + w2 / nextSlope)
             }
+            previousSlope = nextSlope
         }
 
+        tangents[count - 1] = previousSlope
         return tangents
     }
 

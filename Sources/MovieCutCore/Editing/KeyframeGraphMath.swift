@@ -51,7 +51,10 @@ public enum KeyframeGraphMath {
     ) -> [(time: TimeInterval, value: Double)] {
         let sorted = keyframes.sorted { $0.time < $1.time }
         guard let first = sorted.first else { return [] }
-        var points: [(TimeInterval, Double)] = [(first.time, first.value)]
+        let count = max(samplesPerSegment, 2)
+        var points: [(time: TimeInterval, value: Double)] = []
+        points.reserveCapacity(1 + max(0, sorted.count - 1) * count)
+        points.append((first.time, first.value))
         for (left, right) in zip(sorted, sorted.dropFirst()) {
             switch left.interpolation {
             case .hold:
@@ -60,21 +63,25 @@ public enum KeyframeGraphMath {
             case .linear:
                 points.append((right.time, right.value))
             case .easeIn, .easeOut, .easeInOut, .custom:
-                let count = max(samplesPerSegment, 2)
                 for step in 1...count {
                     let progress = Double(step) / Double(count)
+                    // customCurve MUST ride along: without it a `.custom`
+                    // bezier segment fell back to linear here while
+                    // `value(at:)` rendered the true curve — graph and
+                    // renderer disagreed.
                     let value = Keyframe.interpolate(
                         from: left.value,
                         to: right.value,
                         progress: progress,
-                        mode: left.interpolation
+                        mode: left.interpolation,
+                        customCurve: left.customCurve
                     )
                     let time = left.time + (right.time - left.time) * progress
                     points.append((time, value))
                 }
             }
         }
-        return points.map { (time: $0.0, value: $0.1) }
+        return points
     }
 
     /// Y-axis display range auto-fit: the property's keyframe value span with
@@ -82,9 +89,14 @@ public enum KeyframeGraphMath {
     /// are fewer than two distinct values) so single-value curves don't
     /// collapse to a line.
     public static func displayRange(for keyframes: [Keyframe]) -> ClosedRange<Double> {
-        let values = keyframes.map(\.value)
-        guard let minimum = values.min(), let maximum = values.max() else {
+        guard let first = keyframes.first else {
             return 0...1
+        }
+        var minimum = first.value
+        var maximum = first.value
+        for keyframe in keyframes.dropFirst() {
+            if keyframe.value < minimum { minimum = keyframe.value }
+            if keyframe.value > maximum { maximum = keyframe.value }
         }
         let span = maximum - minimum
         let minimumSpan = 0.1
@@ -106,16 +118,21 @@ public enum KeyframeGraphMath {
         timeTolerance: TimeInterval,
         valueTolerance: Double
     ) -> Keyframe? {
-        let candidates = keyframes.filter {
-            abs($0.time - time) <= timeTolerance && abs($0.value - value) <= valueTolerance
+        let safeTimeTolerance = max(timeTolerance, .ulpOfOne)
+        let safeValueTolerance = max(valueTolerance, .ulpOfOne)
+        var best: Keyframe?
+        var bestDistance = Double.infinity
+        for candidate in keyframes {
+            let deltaTime = abs(candidate.time - time)
+            let deltaValue = abs(candidate.value - value)
+            guard deltaTime <= timeTolerance, deltaValue <= valueTolerance else { continue }
+            let distance = deltaTime / safeTimeTolerance + deltaValue / safeValueTolerance
+            if distance < bestDistance {
+                bestDistance = distance
+                best = candidate
+            }
         }
-        return candidates.min {
-            let leftDistance = abs($0.time - time) / max(timeTolerance, .ulpOfOne)
-                + abs($0.value - value) / max(valueTolerance, .ulpOfOne)
-            let rightDistance = abs($1.time - time) / max(timeTolerance, .ulpOfOne)
-                + abs($1.value - value) / max(valueTolerance, .ulpOfOne)
-            return leftDistance < rightDistance
-        }
+        return best
     }
 
     /// Moves a keyframe (time clamped to ≥ 0) and returns the re-sorted array.
@@ -131,7 +148,10 @@ public enum KeyframeGraphMath {
                 property: $0.property,
                 time: max(0, time),
                 value: value,
-                interpolation: $0.interpolation
+                interpolation: $0.interpolation,
+                // Preserve the bezier control points: dropping them here
+                // erased a `.custom` keyframe's curve on any drag.
+                customCurve: $0.customCurve
             ) : $0
         }
     }

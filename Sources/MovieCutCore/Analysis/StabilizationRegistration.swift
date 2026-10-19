@@ -171,10 +171,15 @@ public enum StabilizationRegistration {
     ) -> [RegistrationResult] {
         guard window > 1, results.count > 1 else { return results }
         let half = window / 2
-        return results.enumerated().map { index, result in
+        var smoothed: [RegistrationResult] = []
+        smoothed.reserveCapacity(results.count)
+        for (index, result) in results.enumerated() {
             let low = max(0, index - half)
             let high = min(results.count - 1, index + half)
-            guard high > low else { return result }
+            guard high > low else {
+                smoothed.append(result)
+                continue
+            }
             var sumDx: Double = 0
             var sumDy: Double = 0
             var sumConfidence: Double = 0
@@ -184,12 +189,13 @@ public enum StabilizationRegistration {
                 sumConfidence += results[i].confidence
             }
             let count = Double(high - low + 1)
-            return RegistrationResult(
+            smoothed.append(RegistrationResult(
                 dx: sumDx / count,
                 dy: sumDy / count,
                 confidence: sumConfidence / count
-            )
+            ))
         }
+        return smoothed
     }
 
     /// The per-frame CORRECTION (what the warp must undo), clamped by

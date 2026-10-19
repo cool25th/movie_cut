@@ -340,6 +340,58 @@ struct TextOverlayPixelProcessorTests {
                 "highlight must flip within one frame of the word start (before=\(beforeBlue), at=\(startBlue))")
     }
 
+    // MARK: - Overlay cache (GURU V2 UT-03)
+
+    @Test("static caption repeats render pixel-identically through the overlay cache")
+    func staticCaptionCacheReproducesFirstRenderExactly() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0.1, green: 0.2, blue: 0.3)
+        let content = TextClipContent(
+            text: "STATIC",
+            fontFamily: "Helvetica Neue",
+            fontSize: 36,
+            fontColor: "#FFFFFF",
+            backgroundColor: "#000000",
+            position: CGPoint(x: 80, y: 40)
+        )
+
+        // First call rasterizes and populates the cache; repeats take the
+        // cache-hit path and must reproduce the first render's pixels exactly.
+        let first = TextOverlayPixelProcessor.apply(content, to: image, at: 1)
+        let second = TextOverlayPixelProcessor.apply(content, to: image, at: 2)
+        let third = TextOverlayPixelProcessor.apply(content, to: image, at: 3)
+        #expect(renderBytes(in: first) == renderBytes(in: second))
+        #expect(renderBytes(in: first) == renderBytes(in: third))
+    }
+
+    @Test("caption property change invalidates the overlay cache immediately")
+    func captionPropertyChangeInvalidatesCache() {
+        guard coreImageRenderingAvailable() else { return }
+
+        let image = solidColorImage(red: 0, green: 0, blue: 0, alpha: 0)
+        var content = TextClipContent(
+            text: "CAPTION",
+            fontFamily: "Helvetica Neue",
+            fontSize: 36,
+            fontColor: "#FFFFFF",
+            alignment: .center,
+            position: CGPoint(x: 80, y: 40)
+        )
+
+        // Warm the cache with the white rendering, then edit a property that
+        // participates in the cache key.
+        let warm = TextOverlayPixelProcessor.apply(content, to: image, at: 1)
+        content.fontColor = "#00FF00"
+        let recolored = TextOverlayPixelProcessor.apply(content, to: image, at: 1)
+
+        // Green text carries green the white text does not — a stale-cache
+        // ghost would keep the two byte buffers equal.
+        #expect(renderBytes(in: warm) != renderBytes(in: recolored))
+        let recoloredAgain = TextOverlayPixelProcessor.apply(content, to: image, at: 1)
+        #expect(renderBytes(in: recolored) == renderBytes(in: recoloredAgain))
+    }
+
     private func coreImageRenderingAvailable() -> Bool {
         GoldenPixel.assertRendererFunctional()
         return true

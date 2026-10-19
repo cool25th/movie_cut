@@ -152,4 +152,81 @@ struct ScopeAnalyzerTests {
         )
         #expect(zeroLevels.red.isEmpty)
     }
+
+    // MARK: - Single-pass equivalence (GURU V2 UT-04)
+
+    /// Deterministic pseudo-random pixel buffer (fixed-seed LCG), so the
+    /// equivalence expectation is reproducible run to run.
+    private func pseudoRandomRGBA(pixelCount: Int) -> [UInt8] {
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        var pixels = [UInt8]()
+        pixels.reserveCapacity(pixelCount * 4)
+        for _ in 0..<pixelCount {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            pixels.append(UInt8(truncatingIfNeeded: state >> 33))
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            pixels.append(UInt8(truncatingIfNeeded: state >> 33))
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            pixels.append(UInt8(truncatingIfNeeded: state >> 33))
+            pixels.append(255)
+        }
+        return pixels
+    }
+
+    @Test("analyzeAll matches the four standalone reducers (UT-04)")
+    func analyzeAllEquivalence() {
+        let width = 40
+        let height = 25
+        let rgba = pseudoRandomRGBA(pixelCount: width * height)
+        let histogramBins = 64
+        let columns = width
+        let levels = 48
+        let vectorscopeSize = 48
+
+        let all = ScopeAnalyzer.analyzeAll(
+            rgba: rgba,
+            width: width,
+            height: height,
+            histogramBins: histogramBins,
+            waveformColumns: columns,
+            waveformLevels: levels,
+            vectorscopeSize: vectorscopeSize
+        )
+
+        let standaloneHistogram = ScopeAnalyzer.histogram(rgba: rgba, binCount: histogramBins)
+        let standaloneWaveform = ScopeAnalyzer.lumaWaveform(
+            rgba: rgba, width: width, height: height, columns: columns, levels: levels
+        )
+        let standaloneVectorscope = ScopeAnalyzer.vectorscope(rgba: rgba, size: vectorscopeSize)
+        let standaloneParade = ScopeAnalyzer.rgbParade(
+            rgba: rgba, width: width, height: height, columns: columns, levels: levels
+        )
+
+        // Channel bins and chroma math share the standalone formulas exactly.
+        #expect(all.histogram.red == standaloneHistogram.red)
+        #expect(all.histogram.green == standaloneHistogram.green)
+        #expect(all.histogram.blue == standaloneHistogram.blue)
+        #expect(all.vectorscope == standaloneVectorscope)
+        #expect(all.rgbParade == standaloneParade)
+        #expect(all.lumaWaveform.count == standaloneWaveform.count)
+
+        // Luma aggregation uses the integer Rec.709 approximation; a bin
+        // may shift only where the Double rounding differs by one step.
+        // The per-bin population must stay within a rounding step of the
+        // standalone count, and the totals must be exactly equal.
+        let lumaTotalDelta = zip(all.histogram.luma, standaloneHistogram.luma)
+            .reduce(0) { $0 + abs($1.0 - $1.1) }
+        #expect(lumaTotalDelta == 0 || lumaTotalDelta <= (width * height) / 100)
+        #expect(all.histogram.luma.reduce(0, +) == standaloneHistogram.luma.reduce(0, +))
+
+        var waveformDelta = 0
+        for column in 0..<columns {
+            for level in 0..<levels {
+                waveformDelta += abs(
+                    all.lumaWaveform[column][level] - standaloneWaveform[column][level]
+                )
+            }
+        }
+        #expect(waveformDelta == 0 || waveformDelta <= (width * height) / 100)
+    }
 }

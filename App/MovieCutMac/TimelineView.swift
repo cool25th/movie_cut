@@ -28,6 +28,10 @@ struct TimelineView: View {
     /// (see `timelineScrollOffsetReader`) — drives `clipsForDisplay` viewport
     /// culling on long timelines.
     @State private var timelineScrollOffsetX: CGFloat = 0
+    /// Snap points frozen once at drag start (`beginClipDrag`): every drag
+    /// tick previously rebuilt this array via allClips + flatMap + map at
+    /// gesture frequency.
+    @State private var cachedDragSnapPoints: [TimeInterval] = []
     @State private var filmstripStore = TimelineFilmstripStore()
     @State private var isRulerScrubbing = false
     @State private var isPlayheadScrubbing = false
@@ -1524,6 +1528,16 @@ struct TimelineView: View {
     }
     #endif
 
+    /// Decoded clip thumbnails — every view re-render re-decoded the same
+    /// PNG bytes via NSImage(data:). The data-count suffix keys the cache
+    /// tightly enough that a regenerated (different-length) thumbnail
+    /// decodes fresh while unchanged ones are reused.
+    private nonisolated(unsafe) static let decodedThumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 128
+        return cache
+    }()
+
     private func thumbnailImage(for clip: Clip) -> NSImage? {
         guard
             clip.kind == .video || clip.kind == .image,
@@ -1532,7 +1546,15 @@ struct TimelineView: View {
             return nil
         }
 
-        return NSImage(data: thumbnailData)
+        let key = "\((clip.assetId ?? clip.id).uuidString):\(thumbnailData.count)" as NSString
+        if let cached = Self.decodedThumbnailCache.object(forKey: key) {
+            return cached
+        }
+        guard let decoded = NSImage(data: thumbnailData) else {
+            return nil
+        }
+        Self.decodedThumbnailCache.setObject(decoded, forKey: key)
+        return decoded
     }
 
     private func thumbnailStrip(_ image: NSImage) -> some View {
@@ -1585,17 +1607,20 @@ struct TimelineView: View {
             let barWidth = max(1, size.width / CGFloat(sampleCount))
             let midY = size.height / 2
 
+            // One batched fill for all ~200 bars instead of a context.fill
+            // call per bar — same rects, same color, one draw submission.
+            var batchPath = Path()
             for index in 0..<sampleCount {
                 let sample = samples.isEmpty ? fallbackWaveformLevel(index: index) : samples[index]
                 let barHeight = CGFloat(sample) * size.height * 0.8
-                let rect = CGRect(
+                batchPath.addRect(CGRect(
                     x: CGFloat(index) * barWidth,
                     y: midY - barHeight / 2,
                     width: max(1, barWidth - 0.5),
                     height: barHeight
-                )
-                context.fill(Path(rect), with: .color(.white.opacity(selected ? 0.36 : 0.24)))
+                ))
             }
+            context.fill(batchPath, with: .color(.white.opacity(selected ? 0.36 : 0.24)))
         }
         .task(id: requestKey) {
             // Trigger the decode only when the sample array is empty AND a
@@ -1680,7 +1705,7 @@ struct TimelineView: View {
                 guard clipBodyDragMode == .move,
                       let initialRange = dragInitialTimelineRange else { return }
                 let rawStart = max(0, initialRange.start + Double(value.translation.width) / pixelsPerSecond)
-                let newStart = max(0, snappedTimeWithGuide(rawStart, allClips: allClips(excluding: clip.id)))
+                let newStart = max(0, snappedTimeWithGuide(rawStart))
 
                 updateClip(
                     clip.id,
@@ -1734,7 +1759,7 @@ struct TimelineView: View {
                 // matches the committed value (Step 5 of the core-editing
                 // repair). Previously this assumed timeline 1s == source 1s.
                 let rawStart = initialTimelineRange.start + Double(value.translation.width) / pixelsPerSecond
-                let snappedStart = snappedTime(rawStart, allClips: allClips(excluding: clip.id))
+                let snappedStart = snappedTime(rawStart)
                 // Build a working clip from the initial ranges so ClipTrimMath
                 // sees the pre-drag state on every tick (the live mutation
                 // below would otherwise feed it already-mutated ranges).
@@ -1773,7 +1798,7 @@ struct TimelineView: View {
                 guard let initialTimelineRange = dragInitialTimelineRange else { return }
 
                 let rawEnd = initialTimelineRange.end + Double(value.translation.width) / pixelsPerSecond
-                let snappedEnd = snappedTime(rawEnd, allClips: allClips(excluding: clip.id))
+                let snappedEnd = snappedTime(rawEnd)
 
                 var workingClip = clip
                 workingClip.timelineRange = initialTimelineRange
@@ -1805,6 +1830,19 @@ struct TimelineView: View {
         if draggedClipId != clip.id {
             dragInitialTimelineRange = clip.timelineRange
             dragInitialSourceRange = clip.sourceRange
+            // Freeze the drag's snap targets ONCE: other clips' boundaries,
+            // markers, the playhead, and zero. Rebuilt per drag, not per tick.
+            var points: [TimeInterval] = [viewModel.playheadTime, 0.0]
+            for track in viewModel.currentProject.timeline.tracks {
+                for other in track.clips where other.id != clip.id {
+                    points.append(other.timelineRange.start)
+                    points.append(other.timelineRange.start + other.timelineRange.duration)
+                }
+            }
+            for marker in sortedMarkers {
+                points.append(marker.time)
+            }
+            cachedDragSnapPoints = points
         }
         isDragging = true
         draggedClipId = clip.id
@@ -1819,6 +1857,7 @@ struct TimelineView: View {
         dragInitialTimelineRange = nil
         dragInitialSourceRange = nil
         snapGuideTime = nil
+        cachedDragSnapPoints.removeAll(keepingCapacity: true)
     }
 
     private func commitMove(for clipId: UUID) {
@@ -1908,11 +1947,19 @@ struct TimelineView: View {
 
     /// Snaps a raw time to the nearest clip boundary, marker, playhead, or
     /// zero — CA-19: also records the snap target for the alignment guide.
+    /// During a clip drag the frozen `cachedDragSnapPoints` array is walked
+    /// directly (no per-tick rebuild); `allClips` is the fallback outside a
+    /// drag.
     @discardableResult
-    private func snappedTimeWithGuide(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
-        let snapPoints = allClips.flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
-            + sortedMarkers.map(\.time)
-            + [viewModel.playheadTime, 0.0]
+    private func snappedTimeWithGuide(_ rawTime: Double, allClips: [Clip]? = nil, threshold: Double = 5.0) -> Double {
+        let snapPoints: [TimeInterval]
+        if !cachedDragSnapPoints.isEmpty {
+            snapPoints = cachedDragSnapPoints
+        } else {
+            snapPoints = (allClips ?? []).flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
+                + sortedMarkers.map(\.time)
+                + [viewModel.playheadTime, 0.0]
+        }
         let thresholdTime = threshold / pixelsPerSecond
         var nearest: (point: Double, distance: Double)?
         for point in snapPoints {
@@ -1949,7 +1996,7 @@ struct TimelineView: View {
     /// Snap without guide tracking — trim gestures snap to the same targets
     /// but don't drive the alignment guide (they manage their own visual
     /// feedback through the clip's own edges).
-    private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
+    private func snappedTime(_ rawTime: Double, allClips: [Clip]? = nil, threshold: Double = 5.0) -> Double {
         let savedGuide = snapGuideTime
         let result = snappedTimeWithGuide(rawTime, allClips: allClips, threshold: threshold)
         snapGuideTime = savedGuide

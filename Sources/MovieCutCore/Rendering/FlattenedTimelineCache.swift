@@ -22,14 +22,23 @@ public actor FlattenedTimelineCache {
     /// The project identity the snapshot was computed for, or nil if unbound.
     private var boundProjectId: UUID?
 
+    /// The exact project value the snapshot was computed from. A redundant
+    /// `update(for:)` with an unchanged project (a rebuild triggered by an
+    /// unrelated change) skips the flatten entirely.
+    private var lastProject: Project?
+
     public init() {}
 
     /// Recomputes and stores the flattened snapshot for `project`. Call this
     /// once per project change (the orchestrator's responsibility), not per
     /// frame.
     public func update(for project: Project) {
+        if snapshot != nil, lastProject == project {
+            return
+        }
         snapshot = CompoundFlattener.flatten(project)
         boundProjectId = project.id
+        lastProject = project
     }
 
     /// Returns the current snapshot without recomputing. The orchestrator hands
@@ -47,6 +56,7 @@ public actor FlattenedTimelineCache {
     public func clear() {
         snapshot = nil
         boundProjectId = nil
+        lastProject = nil
     }
 
     /// Hands the current snapshot to two consumers (the playback and export

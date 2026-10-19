@@ -47,19 +47,59 @@ public enum AudioGraphLimiter {
 
         var interleaved = audio.interleaved
         var smoothedGain: Double = 1.0
+        let frameCount = audio.frameCount
 
-        for frame in 0..<audio.frameCount {
-            // Find the max peak in the look-ahead window (frames ahead).
-            var windowPeak: Double = 0
-            let scanEnd = min(frame + lookAheadFrames, audio.frameCount - 1)
-            var scanFrame = frame
-            while scanFrame <= scanEnd {
-                for channel in 0..<channelCount {
-                    let magnitude = abs(Double(audio.sample(frame: scanFrame, channel: channel)))
-                    windowPeak = max(windowPeak, magnitude)
-                }
-                scanFrame += 1
+        // 1. Per-frame channel peak, precomputed once over the ORIGINAL
+        //    samples (the window scan always read unmodified input — the
+        //    smoothed gain is applied to a copy below). O(N).
+        var framePeaks = [Double](repeating: 0, count: frameCount)
+        if channelCount == 1 {
+            for f in 0..<frameCount {
+                framePeaks[f] = abs(Double(interleaved[f]))
             }
+        } else {
+            for f in 0..<frameCount {
+                var peak: Double = 0
+                let base = f * channelCount
+                for ch in 0..<channelCount {
+                    let magnitude = abs(Double(interleaved[base + ch]))
+                    if magnitude > peak { peak = magnitude }
+                }
+                framePeaks[f] = peak
+            }
+        }
+
+        // 2. Sliding-window max over [frame ... scanEnd], O(N) amortized:
+        //    while the remembered max still lies inside the window only the
+        //    newly entered frame can challenge it; a full rescan happens
+        //    only when the max expires. The selected VALUE is identical to
+        //    the previous per-frame rescan (max is order-independent), so
+        //    the output is bit-for-bit unchanged.
+        var maxPeak: Double = -1
+        var maxPeakIndex: Int = -1
+
+        for frame in 0..<frameCount {
+            let scanEnd = min(frame + lookAheadFrames, frameCount - 1)
+            if maxPeakIndex >= frame {
+                let incoming = framePeaks[scanEnd]
+                if incoming >= maxPeak {
+                    maxPeak = incoming
+                    maxPeakIndex = scanEnd
+                }
+            } else {
+                maxPeak = 0
+                maxPeakIndex = frame
+                var s = frame
+                while s <= scanEnd {
+                    let candidate = framePeaks[s]
+                    if candidate >= maxPeak {
+                        maxPeak = candidate
+                        maxPeakIndex = s
+                    }
+                    s += 1
+                }
+            }
+            let windowPeak = maxPeak
 
             // The target gain: never above 1, bring the peak to the ceiling.
             let targetGain = min(1.0, windowPeak > 0 ? ceilingLinear / windowPeak : 1.0)

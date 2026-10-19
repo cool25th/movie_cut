@@ -4,6 +4,34 @@ import Foundation
 
 /// Applies clip masks to Core Image frames for preview and export.
 public enum MaskPixelProcessor {
+    /// CPU-rasterized masks (triangle/diamond/brush) redraw a full-size
+    /// grayscale CGContext on EVERY frame while the mask is unchanged — a
+    /// brush mask repaints hundreds of segments per frame. The raster result
+    /// is keyed on every rendering input and cached; NSCache is thread-safe
+    /// and the cached CIImage is immutable, so sharing is safe.
+    private nonisolated(unsafe) static let rasterMaskCache: NSCache<NSString, CIImage> = {
+        let cache = NSCache<NSString, CIImage>()
+        cache.countLimit = 32
+        return cache
+    }()
+
+    /// Cache key over every input the rasterizers consume: shape, raster
+    /// geometry (extent origin + pixel size), and the mask's transform state
+    /// (brush carries its point list instead of relying on position/size).
+    private static func rasterCacheKey(for mask: Mask, in extent: CGRect) -> NSString {
+        let width = max(Int(ceil(extent.width)), 1)
+        let height = max(Int(ceil(extent.height)), 1)
+        var base = "\(mask.shape.rawValue)|\(extent.minX),\(extent.minY)|\(width)x\(height)|" +
+                   "\(mask.position.x),\(mask.position.y)|\(mask.size.width),\(mask.size.height)|\(mask.rotation)"
+        if mask.shape == .brush {
+            base.reserveCapacity(base.count + mask.brushPoints.count * 16)
+            for point in mask.brushPoints {
+                base.append(";\(point.x),\(point.y)")
+            }
+        }
+        return base as NSString
+    }
+
     /// Applies a mask in rendered image pixel coordinates, preserving the input extent.
     public static func apply(_ mask: Mask, to image: CIImage, at time: TimeInterval = 0) -> CIImage {
         _ = time
@@ -43,13 +71,25 @@ public enum MaskPixelProcessor {
         case .ellipse:
             return ellipseMask(for: mask, in: extent)
         case .triangle:
-            return pathMask(points: trianglePoints(for: mask), in: extent)
+            let key = rasterCacheKey(for: mask, in: extent)
+            if let cached = rasterMaskCache.object(forKey: key) { return cached }
+            let rendered = pathMask(points: trianglePoints(for: mask), in: extent)
+            rasterMaskCache.setObject(rendered, forKey: key)
+            return rendered
         case .diamond:
-            return pathMask(points: diamondPoints(for: mask), in: extent)
+            let key = rasterCacheKey(for: mask, in: extent)
+            if let cached = rasterMaskCache.object(forKey: key) { return cached }
+            let rendered = pathMask(points: diamondPoints(for: mask), in: extent)
+            rasterMaskCache.setObject(rendered, forKey: key)
+            return rendered
         case .linear:
             return linearMask(for: mask, in: extent)
         case .brush:
-            return brushMask(for: mask, in: extent)
+            let key = rasterCacheKey(for: mask, in: extent)
+            if let cached = rasterMaskCache.object(forKey: key) { return cached }
+            let rendered = brushMask(for: mask, in: extent)
+            rasterMaskCache.setObject(rendered, forKey: key)
+            return rendered
         }
     }
 

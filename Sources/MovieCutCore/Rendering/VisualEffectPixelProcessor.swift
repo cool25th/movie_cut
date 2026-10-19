@@ -134,6 +134,11 @@ public enum VisualEffectPixelProcessor {
     // Parsed cubes are cached by path so the .cube file is not re-read per frame.
     private nonisolated(unsafe) static let cubeCache = NSCache<NSString, CubeLUTBox>()
 
+    /// Preset gradient maps (.cinematic/.vintage/.vivid) rebuilt the same
+    /// 256-pixel ramp + CIImage bitmap upload on every composited frame; the
+    /// ramp is a pure function of the stops, so it caches exactly.
+    private nonisolated(unsafe) static let gradientMapCache = NSCache<NSString, CIImage>()
+
     private static func applyExternalLUT(_ effect: Effect, to image: CIImage) -> CIImage {
         guard let path = effect.lutPath else { return image }
         let intensity = clamped(effect.parameters["intensity"] ?? 1, lowerBound: 0, upperBound: 1)
@@ -287,6 +292,12 @@ public enum VisualEffectPixelProcessor {
     }
 
     private static func gradientMapImage(stops: [GradientStop]) -> CIImage? {
+        let key = stops.map { "\($0.position):\($0.red),\($0.green),\($0.blue)" }
+            .joined(separator: "|") as NSString
+        if let cached = gradientMapCache.object(forKey: key) {
+            return cached
+        }
+
         let width = 256
         let height = 1
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -301,13 +312,15 @@ public enum VisualEffectPixelProcessor {
             pixels[offset + 3] = UInt8.max
         }
 
-        return CIImage(
+        let created = CIImage(
             bitmapData: Data(pixels),
             bytesPerRow: width * 4,
             size: CGSize(width: width, height: height),
             format: .RGBA8,
             colorSpace: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         )
+        gradientMapCache.setObject(created, forKey: key)
+        return created
     }
 
     private static func interpolatedColor(

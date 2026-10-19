@@ -58,6 +58,11 @@ public enum AudioGraphCompressor {
         let attackCoeff = exp(-1.0 / (parameters.attackSeconds * sampleRate))
         let releaseCoeff = exp(-1.0 / (parameters.releaseSeconds * sampleRate))
         let makeupLinear = pow(10.0, parameters.makeupGainDb / 20.0)
+        // Precomputed linear threshold: a peak at/below it can never clear
+        // `peakDb > thresholdDb`, so the per-sample log10 is skipped entirely
+        // for below-threshold frames (the final dB comparison is unchanged
+        // for frames that do clear the pre-filter).
+        let thresholdLinear = pow(10.0, parameters.thresholdDb / 20.0)
 
         var interleaved = audio.interleaved
         var envelopeDb: Double = 0  // the smoothed gain-reduction level
@@ -70,13 +75,16 @@ public enum AudioGraphCompressor {
                 peak = max(peak, sample)
             }
 
-            // Convert to dB, compute the static gain reduction.
-            let peakDb = peak > 0 ? 20 * log10(peak) : -120
+            // Convert to dB, compute the static gain reduction. Below the
+            // linear threshold the reduction is provably zero — no log10.
             var gainReductionDb: Double = 0
-            if peakDb > parameters.thresholdDb {
-                let excessDb = peakDb - parameters.thresholdDb
-                let compressedDb = excessDb / parameters.ratio
-                gainReductionDb = -(excessDb - compressedDb)
+            if peak > thresholdLinear {
+                let peakDb = peak > 0 ? 20 * log10(peak) : -120
+                if peakDb > parameters.thresholdDb {
+                    let excessDb = peakDb - parameters.thresholdDb
+                    let compressedDb = excessDb / parameters.ratio
+                    gainReductionDb = -(excessDb - compressedDb)
+                }
             }
 
             // Smooth: fast attack (coefficient toward the target when the
@@ -87,8 +95,9 @@ public enum AudioGraphCompressor {
                 envelopeDb = releaseCoeff * envelopeDb + (1 - releaseCoeff) * gainReductionDb
             }
 
-            // Apply gain reduction + makeup to every channel.
-            let linearGain = pow(10.0, envelopeDb / 20.0) * makeupLinear
+            // Apply gain reduction + makeup to every channel. 0 dB of
+            // envelope is an exact unity gain (10^0 == 1) — skip the pow.
+            let linearGain = (envelopeDb == 0 ? 1.0 : pow(10.0, envelopeDb / 20.0)) * makeupLinear
             let base = frame * channelCount
             for channel in 0..<channelCount {
                 let index = base + channel

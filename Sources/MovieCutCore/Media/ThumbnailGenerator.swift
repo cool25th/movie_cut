@@ -8,9 +8,16 @@ import CoreImage
 public struct ThumbnailGenerator: Sendable {
     public static let defaultSize = CGSize(width: 160, height: 90)
 
+    #if canImport(AVFoundation)
+    /// Shared render context — CIContext construction is heavyweight (GPU
+    /// pipeline state) and was paid on every generate call. CIContext is
+    /// documented thread-safe, so one static instance serves all callers.
+    private static let sharedContext = CIContext(options: RenderColorConfiguration.contextOptions)
+    #endif
+
     public static func generate(for asset: MediaAsset, at time: TimeInterval, size: CGSize) -> Data? {
         #if canImport(AVFoundation)
-        let context = CIContext(options: RenderColorConfiguration.contextOptions)
+        let context = Self.sharedContext
 
         if asset.kind == .image || isImageFile(asset.originalURL) {
             guard let image = CIImage(contentsOf: asset.originalURL) else {

@@ -82,6 +82,21 @@
 
 **점검 결론**: 배포 설정의 신규 누락 0건·코드/구성 정합 — **사용자 결정 필요 항목은 기존 BLOCKED_USER와 동일(Team ID·계정·스크린샷·실기기)**. 이 점검으로 G5가 열리는 것은 아니다. 이후 설정 변경 시 본 섹션을 갱신한다(읽기 전용 점검의 재실행).
 
+## 0.10 AI Photo Montage preview/apply/undo 검증 준비 (2026-10-20 고정 — 45회차 판정 지시: "이미 구현된 AI Montage 경로의 검증"·사용자 경로로)
+
+> **구현 확인(호출 경로 추적·읽기 전용)**: Mac 전용 — `AIMontageSection`(View)→`EditorViewModel.applyPhotoMontage`(`EditorViewModel+AssistantProvider.swift:68`): ①`PreparedAssetStore.preparePhotoAssets` ②`session.snapshotWithRevision` ③`PhotoMontagePlanner.plan`(프로덕션 플래너) ④`EditingPlanCompiler.compile`(원자적 배치 준비) ⑤`session.dispatch(batchCommand·planId·expectedRevision)`(적용 — **planId로 이중 디스패치 거부**) ⑥`refreshFromSession`. 준비①~④는 프로젝트를 변경하지 않는다(미리보기 지점) — 적용은 ⑤ 단 한 번. 기존 E2E 스위트 `AIPhotoMontageE2ETests` 존재. **주의: GURU 리팩터(49a0668~bfa18bd)가 EditorViewModel 등을 변경 — 검증 실행은 리팩터 안정화(커밋 종료) 후 HEAD에서.**
+
+| # | 단계 | 입력·절차 | 기대 상태(관찰 지점) | 증거 |
+|---|---|---|---|---|
+| 1 | 제안 준비(plan) | 고정 입력: 픽스처 사진 N장(+음악 1 옵션)·targetDuration·9:16 — `plan` 호출 | **프로젝트 미변경**(revision 불변·타임라인 트랙/클립 수 불변)·plan.actions가 제안 내용을 보유 | plan 스냅샷 기록 |
+| 2 | 준비·미리보기(compile) | `compile`로 prepared 배치 생성 | **프로젝트 미변경**(동일 관찰 지점) — 이 지점까지가 "미리보기" | prepared 라벨+액션 수 기록 |
+| 3 | Apply(dispatch) | prepared 배치 디스패치 | **의도한 편집만 반영**: revision+N·클립 N 추가·캔버스 프리셋 반영·부수 변경 0·동일 planId 재디스패치는 거부 | dispatch 전후 revision·타임라인 상태 비교 기록 |
+| 4 | Undo | undo 1회 | **적용 전 상태 복원**(revision·트랙/클립 수가 3 직전과 동일) | undo 전후 비교 기록 |
+| 5 | Save·Reopen | 저장→재시작→재열기 | 편집 의미 유지(적용 상태 그대로) | reopen 후 상태 비교 |
+| 6 | Export | 9:16 프리셋 출력 | 출력 성공·기하 1080x1920 | ffprobe(호스트 반출분) |
+
+**판정 기록 방식**: §0.7 4상태 규약 준용 — **현재 상태 NOT_RUN**(시나리오 시트 작성은 실행 PASS가 아님). **고정 입력 사용 시 검증 범위는 실행·복구 경로다 — planner 미호출·고정 plan 결과를 "AI 제안 품질까지 검증"으로 표시하지 않는다**(45회차 판정 명시). Mac 호스트 소형 검증(`AIPhotoMontageE2ETests` 스위트)이 선행 가능 — 실기기 불필요. 실행 조건: ①GURU 리팩터 커밋 종료 확인 ②guard가 테스트 실행 허용(WARN 시 소형 스위트라도 재컴파일 리스크 평가) — 이행 전까지 본 시트는 고정 상태 유지.
+
 ## 1. Apple Developer 자격 확보 (사용자)
 
 - [ ] Apple Developer Program 가입 (연 $99, https://developer.apple.com/programs)

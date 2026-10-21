@@ -32,8 +32,9 @@
 
 | 항목 | 상태 | 마지막 실측 | 증거 |
 |---|---|---|---|
-| G1 Build(Mac) | **PASS** | 2026-09-24 21:05 · HEAD=acccc65 | `.build-check/history/` verify_gate 5/5 GATE_PASS(swift build·xcodebuild·lint·swift test·measurement) |
-| G1 Build(iOS) | **PASS** | 2026-09-19 · HEAD=해당 회차 | verify_gate iOS 단계(4단 환경 블록 해소 후 generic 빌드 rc=0) — 후속 CI green은 배포 시점 채점 |
+| G1 Build(Mac) | **PASS(당시 환경)** | 2026-09-24 21:05 · HEAD=acccc65 | `.build-check/history/` verify_gate 5/5 GATE_PASS(swift build·xcodebuild·lint·swift test·measurement). **환경 주석(2026-10-22 관측): 현재 기기에 Xcode 부재(xcode-select=CLT) — xcodebuild 단계 재현 불가. 재검증은 Xcode 재설치 전제** |
+| G1 Build(iOS) | **PASS(당시 환경)** | 2026-09-19 · HEAD=해당 회차 | verify_gate iOS 단계(4단 환경 블록 해소 후 generic 빌드 rc=0) — 후속 CI green은 배포 시점 채점. **동일 환경 주석(Xcode 부재)** |
+| 환경: Xcode 설치 | **BLOCKED_USER(환경)** | 2026-10-22 관측 | `/Applications/Xcode*.app` 부재·`xcode-select -p`=/Library/Developer/CommandLineTools. **xcodebuild 의존 항목 전부(G1 재검증·§3 아카이브·`release.sh` archive/export·`verify_gate.sh` step 3/4·§0.10 AIPhotoMontageE2ETests)가 환경 블록**. 해제 조건: Xcode 재설치(수십 GiB — 현재 가용 ~34GiB·설치 시 guard BLOCK 진입 가능·디스크 정책과 충돌 → **사용자 결정**). CLT만으로 가능한 것: swift build/test(Core)·swiftc -typecheck 워크아라운드 |
 | G2 Project | **PASS** | 2026-09-21 · Core 1,485/224 | `ProjectIntegrityGateTests` 5/5(QAUTO-02 CLOSED)+autosave/복구 E2E — 본 표 §0.5 G2 행 |
 | G3 Media(Mac) | **PASS** | 2026-09 이전 실측 | CA-04 포맷 매트릭스 PASS+CA-03 감사·BUG-01/02/04/05 수리 기록 — QAUTO06 코퍼스 6/6(2026-09-22·`QAUTO06_MEDIA_CORPUS_20260922.md`) 재보강 |
 | G3 Media(iOS relink) | **NOT_RUN** | — | iOS 실기기 relink 수동 확인 미실측(G4 이관 항목과 함께) |
@@ -95,7 +96,7 @@
 | 5 | Save·Reopen | 저장→재시작→재열기 | 편집 의미 유지(적용 상태 그대로) | reopen 후 상태 비교 |
 | 6 | Export | 9:16 프리셋 출력 | 출력 성공·기하 1080x1920 | ffprobe(호스트 반출분) |
 
-**판정 기록 방식**: §0.7 4상태 규약 준용 — **현재 상태 NOT_RUN**(시나리오 시트 작성은 실행 PASS가 아님). **고정 입력 사용 시 검증 범위는 실행·복구 경로다 — planner 미호출·고정 plan 결과를 "AI 제안 품질까지 검증"으로 표시하지 않는다**(45회차 판정 명시). Mac 호스트 소형 검증(`AIPhotoMontageE2ETests` 스위트)이 선행 가능 — 실기기 불필요. 실행 조건: ①GURU 리팩터 커밋 종료 확인 ②guard가 테스트 실행 허용(WARN 시 소형 스위트라도 재컴파일 리스크 평가) — 이행 전까지 본 시트는 고정 상태 유지.
+**판정 기록 방식**: §0.7 4상태 규약 준용 — **현재 상태 NOT_RUN → ENVIRONMENT_BLOCKED(2026-10-22 실행 시도 결과)**(시나리오 시트 작성은 실행 PASS가 아님). **고정 입력 사용 시 검증 범위는 실행·복구 경로다 — planner 미호출·고정 plan 결과를 "AI 제안 품질까지 검증"으로 표시하지 않는다**(45회차 판정 명시). Mac 호스트 소형 검증(`AIPhotoMontageE2ETests` 스위트·1테스트 457줄 — 'Photos+Audio→15s Timeline→Undo/Redo→Real MP4 Export'·본 시트 6단계와 1:1)이 선행 가능 — 실기기 불필요. 실행 조건: ①GURU 리팩터 커밋 종료 확인(**충족 2026-10-21·e87c9be V5·WIP 0**) ②guard가 테스트 실행 허용(**충족 2026-10-22·LARGE ALLOWED 35.61GiB**) ③**환경: Xcode 필요(App 타깃=xcodebuild) — 미충족(2026-10-22 실행 시도: `xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools'`·Xcode.app 부재·DerivedData 미생성·rc=1)**. 실행 명령(확정·Xcode 재설치 후 그대로 사용): `xcodebuild test -project MovieCut.xcodeproj -scheme MovieCutMac -destination 'platform=macOS' -derivedDataPath .build-check/dd-ai-montage -only-testing:MovieCutMacTests/AIPhotoMontageE2ETests`. 해제 조건은 §0.7 "환경: Xcode 설치" 행(BLOCKED_USER).
 
 ## 1. Apple Developer 자격 확보 (사용자)
 

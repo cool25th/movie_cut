@@ -23,9 +23,21 @@ struct SeedPromotionProductionTests {
     /// writes HERE first; promotion to the permanent fixture directory is a
     /// separate, reviewed step (32nd-cycle: capture is automatic, promotion
     /// is reviewed).
+    ///
+    /// QAUTO-09 teardown discipline (52nd-cycle judgment C): TESTS must NOT
+    /// share or wipe this directory — each test owns an ISOLATED staging path
+    /// and removes only what it created. The runner (not a test) is the sole
+    /// owner of this shared root; central cleanup after a full run is a
+    /// separate concern from per-test teardown.
     static func stagingDir() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("qauto/promotion-candidates", isDirectory: true)
+    }
+
+    /// QAUTO-09: a test-scoped staging directory — siblings never see it.
+    static func isolatedStagingDir(_ testID: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("qauto/promotion-candidates-\(testID)", isDirectory: true)
     }
 
     /// The OPERATIVE canonical serialization — the exact bytes whose SHA256
@@ -157,7 +169,9 @@ struct SeedPromotionProductionTests {
 
     @Test("P2+P4: unknown failure captured to staging reproduces its violation RNG-free (pre-fix FAIL)")
     func captureAndPreFixFail() throws {
-        let staging = Self.stagingDir()
+        // QAUTO-09: isolated staging — this test removes only what it created.
+        let staging = Self.isolatedStagingDir("p2p4")
+        defer { try? FileManager.default.removeItem(at: staging) }
         try? FileManager.default.removeItem(at: staging)
 
         let captured = try Self.captureCandidate(
@@ -183,7 +197,9 @@ struct SeedPromotionProductionTests {
 
     @Test("P1+P5+P6: same defect re-discovered → dedup (no new fixture), post-fix PASS, registry cardinality 1")
     func dedupPostFixAndUniqueness() throws {
-        let staging = Self.stagingDir()
+        // QAUTO-09: isolated staging — this test removes only what it created.
+        let staging = Self.isolatedStagingDir("p1p5p6")
+        defer { try? FileManager.default.removeItem(at: staging) }
         try? FileManager.default.removeItem(at: staging)
 
         // Two captures of the SAME defect (same seed → same run → same
@@ -220,26 +236,24 @@ struct SeedPromotionProductionTests {
         let data = try encoder.encode(registry)
         let decoded = try JSONDecoder().decode(Registry.self, from: data)
         #expect(decoded == registry, "registry round-trip must be lossless")
-
-        try? FileManager.default.removeItem(at: staging)
     }
 
     @Test("P4 negative: a DIFFERENT defect gets its own identity — no false dedup")
     func differentDefectDifferentIdentity() throws {
+        // QAUTO-09: isolated staging — this test removes only what it created.
+        let staging = Self.isolatedStagingDir("p4neg")
+        defer { try? FileManager.default.removeItem(at: staging) }
         let first = try Self.captureCandidate(
-            seed: 7, steps: 120, injectAt: (7, 73), stagingDir: FileManager.default.temporaryDirectory
+            seed: 7, steps: 120, injectAt: (7, 73), stagingDir: staging
         )
         // Different inject point → different command history → different
         // state → different identity (no false dedup).
         let second = try Self.captureCandidate(
-            seed: 7, steps: 120, injectAt: (7, 90), stagingDir: FileManager.default.temporaryDirectory
+            seed: 7, steps: 120, injectAt: (7, 90), stagingDir: staging
         )
         let idA = try Self.semanticIdentity(first.candidate)
         let idB = try Self.semanticIdentity(second.candidate)
         #expect(idA != idB, "different failures must not share a semantic identity")
-        // cleanup
-        try? FileManager.default.removeItem(at: first.url)
-        try? FileManager.default.removeItem(at: second.url)
     }
 
     // MARK: - ⑥ (closure condition, 45th-cycle judgment): the registry and its
@@ -247,8 +261,8 @@ struct SeedPromotionProductionTests {
 
     @Test("P6 lifecycle: save → staging wipe → registry reload → identity + provenance survive; promoted fixture still replays")
     func registrySurvivesStagingWipeAndReload() throws {
-        // Isolated staging path: the sibling tests wipe the shared stagingDir()
-        // at their start/end, and Swift Testing runs suites in parallel.
+        // Isolated staging path (QAUTO-09: every test owns its staging path
+        // and removes only what it created — Swift Testing runs in parallel).
         let staging = FileManager.default.temporaryDirectory
             .appendingPathComponent("qauto/promotion-candidates-lifecycle", isDirectory: true)
         let promotedDir = FileManager.default.temporaryDirectory
@@ -432,5 +446,71 @@ struct SeedPromotionProductionTests {
         var stateChanged = base
         stateChanged.initial_project_state.volume = 0.8
         #expect(try Self.semanticIdentity(stateChanged) != goldenDigest)
+    }
+
+    // MARK: - QAUTO-09 ②: write-failure ordering contract — a failed registry
+    // save must never confirm a disposition or trigger staging cleanup.
+
+    @Test("QAUTO-09 ordering: failed registry save leaves staging intact (cleanup only after a confirmed save)")
+    func failedSaveLeavesStagingIntact() throws {
+        // Isolated staging with a real captured fixture in it.
+        let staging = Self.isolatedStagingDir("ordering")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try? FileManager.default.removeItem(at: staging)
+        let captured = try Self.captureCandidate(
+            seed: 7, steps: 120, injectAt: (7, 73), stagingDir: staging
+        )
+
+        var reg = Registry()
+        let id = try Self.semanticIdentity(captured.candidate)
+        (reg, _) = reg.register(captured.candidate, identity: id)
+
+        // Force `save` to fail WITHOUT permissions games: point it at a path
+        // whose parent component is an ordinary FILE, so createDirectory
+        // throws. (.atomic is a single-file guarantee — QAUTO-09 deliberately
+        // does not claim fixture+registry transactional atomicity.)
+        let fileAsDir = staging.appendingPathComponent("not-a-directory")
+        try "x".write(to: fileAsDir, atomically: true, encoding: .utf8)
+        let doomedURL = fileAsDir.appendingPathComponent("seed-promotion-registry.json")
+
+        #expect(throws: (any Error).self) {
+            try Self.save(reg, to: doomedURL)
+        }
+
+        // The ordering contract: the failed save must NOT have cleaned the
+        // staging fixture — cleanup happens only after a confirmed save and
+        // promoted-fixture existence (⑥ lifecycle chain).
+        #expect(FileManager.default.fileExists(atPath: captured.url.path),
+                "a failed registry save must never wipe staging evidence")
+        #expect(!FileManager.default.fileExists(atPath: doomedURL.path),
+                "no partial registry file may be left behind by the failed save")
+    }
+
+    // MARK: - QAUTO-09 ③: legacy 3-field registry compatibility — decode
+    // succeeds with nil provenance fields (unverified state PRESERVED, never
+    // back-filled as PASS).
+
+    @Test("QAUTO-09 legacy: a pre-provenance registry decodes with nil provenance (no PASS back-fill)")
+    func legacyRegistryDecodesWithNilProvenance() throws {
+        // A registry written before the 45th-cycle provenance fields existed.
+        // NOTE: no persistent production registry file exists today
+        // (ACTIONS_20261019 — migration intentionally skipped); this contract
+        // defines how a legacy file WILL be treated if one ever appears.
+        let legacyJSON = """
+        {"entries":[{"canonical_fixture":{"command_sequence":[{"addMarker":{"_0":"m1"}}],"discovered_at_commit":"legacy","expected_invariant":"markers_keep_order","failing_step":1,"fixture_id":"legacy-fixture","initial_project_state":{"markers":[],"volume":1.0},"origin_seed":3},"seed_observations":["seed 3 step 1"],"semantic_identity":"legacy-hex"}]}
+        """
+        let decoded = try JSONDecoder().decode(Registry.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.entries.count == 1)
+        let entry = decoded.entries[0]
+        // Unverified provenance must stay nil — a loader must not invent
+        // PASS/disposition values for records it did not verify.
+        #expect(entry.disposition == nil, "legacy entries keep their unverified disposition")
+        #expect(entry.status == nil)
+        #expect(entry.pre_fix_violation_step == nil)
+        #expect(entry.post_fix_passed == nil)
+        #expect(entry.registry_target_path == nil,
+                "a legacy entry must not be presented as replayable")
+        #expect(entry.semantic_identity == "legacy-hex")
+        #expect(entry.canonical_fixture.fixture_id == "legacy-fixture")
     }
 }

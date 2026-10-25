@@ -325,12 +325,8 @@ public final class ReverseRenderService: Sendable {
         readFraction: Double,
         writeFraction: Double
     ) {
-        let value = (clamped(readFraction) + clamped(writeFraction)) / 2
+        let value = (readFraction.clamped(to: 0...1) + writeFraction.clamped(to: 0...1)) / 2
         progress(value)
-    }
-
-    private static func clamped(_ value: Double) -> Double {
-        min(max(value, 0), 1)
     }
 
     private static func fileType(for url: URL) -> AVFileType {

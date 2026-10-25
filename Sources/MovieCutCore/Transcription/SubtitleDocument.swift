@@ -80,16 +80,26 @@ public enum SubtitleDocument {
         return hours * 3600 + minutes * 60 + seconds
     }
 
+    /// Decomposes a time into (hours, minutes, seconds, subsecond) at the
+    /// given subsecond scale (1000 for milliseconds, 100 for centiseconds),
+    /// clamping negatives to zero. Shared by the SRT/VTT/ASS formatters.
+    private static func decompose(
+        _ time: TimeInterval, subsecondScale: Int
+    ) -> (hours: Int, minutes: Int, seconds: Int, subsecond: Int) {
+        let total = Int((max(0, time) * Double(subsecondScale)).rounded())
+        let totalSeconds = total / subsecondScale
+        return (
+            totalSeconds / 3600,
+            (totalSeconds / 60) % 60,
+            totalSeconds % 60,
+            total % subsecondScale
+        )
+    }
+
     /// Formats seconds as an SRT `HH:MM:SS,mmm` timestamp.
     public static func srtTimestamp(from time: TimeInterval) -> String {
-        let clamped = max(0, time)
-        let totalMilliseconds = Int((clamped * 1000).rounded())
-        let milliseconds = totalMilliseconds % 1000
-        let totalSeconds = totalMilliseconds / 1000
-        let seconds = totalSeconds % 60
-        let minutes = (totalSeconds / 60) % 60
-        let hours = totalSeconds / 3600
-        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds)
+        let t = decompose(time, subsecondScale: 1000)
+        return String(format: "%02d:%02d:%02d,%03d", t.hours, t.minutes, t.seconds, t.subsecond)
     }
 
     private static func parseTimecodeLine(_ line: String) -> (TimeInterval, TimeInterval)? {
@@ -207,14 +217,8 @@ public enum SubtitleDocument {
 
     /// Formats seconds as a WebVTT `HH:MM:SS.mmm` timestamp.
     public static func vttTimestamp(from time: TimeInterval) -> String {
-        let clamped = max(0, time)
-        let totalMilliseconds = Int((clamped * 1000).rounded())
-        let milliseconds = totalMilliseconds % 1000
-        let totalSeconds = totalMilliseconds / 1000
-        let seconds = totalSeconds % 60
-        let minutes = (totalSeconds / 60) % 60
-        let hours = totalSeconds / 3600
-        return String(format: "%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
+        let t = decompose(time, subsecondScale: 1000)
+        return String(format: "%02d:%02d:%02d.%03d", t.hours, t.minutes, t.seconds, t.subsecond)
     }
 
     /// Parses a WebVTT `HH:MM:SS.mmm` (or `MM:SS.mmm`) timestamp into seconds.
@@ -377,14 +381,8 @@ public enum SubtitleDocument {
     /// Formats seconds as an ASS `H:MM:SS.cc` timestamp (single-digit hour,
     /// centisecond precision).
     public static func assTimestamp(from time: TimeInterval) -> String {
-        let clamped = max(0, time)
-        let totalCentiseconds = Int((clamped * 100).rounded())
-        let centiseconds = totalCentiseconds % 100
-        let totalSeconds = totalCentiseconds / 100
-        let seconds = totalSeconds % 60
-        let minutes = (totalSeconds / 60) % 60
-        let hours = totalSeconds / 3600
-        return String(format: "%d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
+        let t = decompose(time, subsecondScale: 100)
+        return String(format: "%d:%02d:%02d.%02d", t.hours, t.minutes, t.seconds, t.subsecond)
     }
 
     /// Parses an ASS `H:MM:SS.cc` timestamp into seconds.

@@ -98,7 +98,7 @@ public enum AudioGraphLoudness {
 
         init(shelfWithGainDb gainDb: Double, cornerHz: Double, q: Double, sampleRate: Double) {
             let k = tan(.pi * cornerHz / sampleRate)
-            let vh = pow(10, gainDb / 20)
+            let vh = GainMath.dbToLinear(gainDb)
             let vb = pow(vh, 0.4996667741545416)
             let denominator = 1 + k / q + k * k
             b0 = (vh + vb * k / q + k * k) / denominator

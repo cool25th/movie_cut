@@ -23,17 +23,13 @@ public struct EffectBrowserParameter: Sendable, Equatable, Identifiable {
         self.key = key
         self.title = title
         self.range = range
-        self.defaultValue = Self.clamped(defaultValue, to: range)
-        self.previewValue = Self.clamped(previewValue ?? defaultValue, to: range)
+        self.defaultValue = defaultValue.clamped(to: range)
+        self.previewValue = (previewValue ?? defaultValue).clamped(to: range)
         self.valueFormat = valueFormat
     }
 
     public func clamped(_ value: Double) -> Double {
-        Self.clamped(value, to: range)
-    }
-
-    private static func clamped(_ value: Double, to range: ClosedRange<Double>) -> Double {
-        min(max(value, range.lowerBound), range.upperBound)
+        value.clamped(to: range)
     }
 }
 

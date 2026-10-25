@@ -1,6 +1,15 @@
 import CoreMedia
 import Foundation
 
+/// dB → linear amplitude with a unity fast path: 0 dB skips the `pow`
+/// entirely (the overwhelmingly common fader-at-unity case in per-sample
+/// strip loops).
+enum GainMath {
+    static func dbToLinear(_ db: Double) -> Double {
+        db == 0 ? 1 : pow(10, db / 20)
+    }
+}
+
 /// G-25 Inc 8 (Core half): the pure engine math shared by the preview and
 /// export generators (docs/AUDIO_RENDER_GRAPH_SPEC_20260817.md §4·§9).
 ///
@@ -339,14 +348,7 @@ public enum AudioGraphOfflineRenderer {
     /// dB → linear amplitude.
     static func linearGain(value: Double, fallbackDb: Double) -> Double {
         let db = value.isFinite ? value : fallbackDb
-        return dbToLinear(db)
-    }
-
-    /// dB → linear amplitude with a unity fast path: 0 dB skips the `pow`
-    /// entirely (the overwhelmingly common fader-at-unity case in the
-    /// per-sample strip loop).
-    static func dbToLinear(_ db: Double) -> Double {
-        db == 0 ? 1 : pow(10, db / 20)
+        return GainMath.dbToLinear(db)
     }
 
     /// Equal-power pan gains.

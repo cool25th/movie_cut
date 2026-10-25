@@ -57,12 +57,12 @@ public enum AudioGraphCompressor {
         let channelCount = audio.channels
         let attackCoeff = exp(-1.0 / (parameters.attackSeconds * sampleRate))
         let releaseCoeff = exp(-1.0 / (parameters.releaseSeconds * sampleRate))
-        let makeupLinear = pow(10.0, parameters.makeupGainDb / 20.0)
+        let makeupLinear = GainMath.dbToLinear(parameters.makeupGainDb)
         // Precomputed linear threshold: a peak at/below it can never clear
         // `peakDb > thresholdDb`, so the per-sample log10 is skipped entirely
         // for below-threshold frames (the final dB comparison is unchanged
         // for frames that do clear the pre-filter).
-        let thresholdLinear = pow(10.0, parameters.thresholdDb / 20.0)
+        let thresholdLinear = GainMath.dbToLinear(parameters.thresholdDb)
 
         var interleaved = audio.interleaved
         var envelopeDb: Double = 0  // the smoothed gain-reduction level
@@ -95,9 +95,9 @@ public enum AudioGraphCompressor {
                 envelopeDb = releaseCoeff * envelopeDb + (1 - releaseCoeff) * gainReductionDb
             }
 
-            // Apply gain reduction + makeup to every channel. 0 dB of
-            // envelope is an exact unity gain (10^0 == 1) — skip the pow.
-            let linearGain = (envelopeDb == 0 ? 1.0 : pow(10.0, envelopeDb / 20.0)) * makeupLinear
+            // Apply gain reduction + makeup to every channel. `GainMath`
+            // skips the pow at exactly 0 dB of envelope (unity gain).
+            let linearGain = GainMath.dbToLinear(envelopeDb) * makeupLinear
             let base = frame * channelCount
             for channel in 0..<channelCount {
                 let index = base + channel

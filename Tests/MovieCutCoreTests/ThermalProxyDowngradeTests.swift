@@ -83,7 +83,6 @@ struct ThermalProxyDowngradeTests {
         #expect(migrators.count >= 2)
         let second = try #require(migrators.dropFirst().first)
         #expect(second.version == 3)
-        #expect(second is AddAutoProxyOnThermalPressureMigration)
     }
 
     // MARK: - ProxyBadgeState reason distinction

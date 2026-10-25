@@ -46,134 +46,35 @@ public enum ProjectSchema {
     /// The ordered migration chain. Index 0 migrates v1 → v2, index 1 migrates
     /// v2 → v3, and so on. A project at version `n` is run through every
     /// migrator from index `n - 1` onward until it reaches `currentSchemaVersion`.
+    /// Every step so far only bumps the version (see `VersionBumpMigration`);
+    /// the per-version payload history is documented on `currentSchemaVersion`.
     public static let migrations: [any ProjectMigration] = [
-        AddSecurityScopedBookmarkMigration(),
-        AddAutoProxyOnThermalPressureMigration(),
-        AddBlendPreviewQualityCompoundMigration(),
-        AddTrackSoloMigration(),
-        AddAdjustmentLayerMigration(),
-        AddStabilizationMigration(),
-        AddMasterAudioProcessingMigration(),
-        AddClipRolesMigration()
+        VersionBumpMigration(version: 2),
+        VersionBumpMigration(version: 3),
+        VersionBumpMigration(version: 4),
+        VersionBumpMigration(version: 5),
+        VersionBumpMigration(version: 6),
+        VersionBumpMigration(version: 7),
+        VersionBumpMigration(version: 8),
+        VersionBumpMigration(version: 9)
     ]
 }
 
-/// v4 → v5: introduces `Track.isSolo` (G-25 Inc 9 audio solo). The field is
-/// optional on decode and falls back to false for v4 projects, so no payload
-/// transform is needed — this migrator only bumps the schema version so the
-/// chain reaches `currentSchemaVersion`.
-public struct AddTrackSoloMigration: ProjectMigration {
-    public let version = 5
+/// A migration step that only advances `schemaVersion`. Every schema change to
+/// date added fields whose decode-time defaults reproduce the pre-feature
+/// state, so the whole production chain is version bumps; the per-version
+/// history lives in the doc comment on `currentSchemaVersion`. A future
+/// migration that transforms payload registers its own `ProjectMigration`
+/// conformer in its place in the chain.
+public struct VersionBumpMigration: ProjectMigration {
+    public let version: Int
 
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: `Track.isSolo` decodes to its default (false).
+    public init(version: Int) {
+        self.version = version
     }
-}
-
-/// v5 → v6: introduces `Clip.isAdjustmentLayer` (G-03 adjustment layers).
-/// The field is optional on decode and falls back to false for v5 projects,
-/// so no payload transform is needed — this migrator only bumps the schema
-/// version so the chain reaches `currentSchemaVersion`.
-public struct AddAdjustmentLayerMigration: ProjectMigration {
-    public let version = 6
-
-    public init() {}
 
     public func migrate(_ project: inout Project) throws {
-        // No payload change: `Clip.isAdjustmentLayer` decodes to its default (false).
-    }
-}
-
-/// v6 → v7: introduces `Clip.stabilization` (G-24 render-chain warp). The
-/// field is optional on decode and falls back to nil for v6 projects, so no
-/// payload transform is needed — this migrator only bumps the schema version
-/// so the chain reaches `currentSchemaVersion`.
-public struct AddStabilizationMigration: ProjectMigration {
-    public let version = 7
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: `Clip.stabilization` decodes to its default (nil).
-    }
-}
-
-/// v7 → v8: introduces `Project.masterAudioProcessing` (G-26 master chain
-/// serialization). The field is optional on decode and falls back to nil for
-/// v7 projects (no master processing — the exact pre-feature behavior), so
-/// no payload transform is needed — this migrator only bumps the schema
-/// version so the chain reaches `currentSchemaVersion`.
-public struct AddMasterAudioProcessingMigration: ProjectMigration {
-    public let version = 8
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: `Project.masterAudioProcessing` decodes to its default (nil).
-    }
-}
-
-/// v8 → v9: introduces `Project.roles` and `Clip.roleId` (CA-20 stage 1 —
-/// FCP-style clip role tags). Both fields are optional on decode and fall
-/// back to their defaults for v8 projects, so this migrator performs no
-/// payload transform — it only bumps the schema version so the chain
-/// reaches `currentSchemaVersion`.
-public struct AddClipRolesMigration: ProjectMigration {
-    public let version = 9
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: `Project.roles` decodes to [] and
-        // `Clip.roleId` to nil for v8 projects.
-    }
-}
-
-/// v3 → v4: introduces `Clip.blendMode`, `PlaybackSettings.previewQuality`,
-/// `Project.compounds`, and `Clip.compoundId`. All four fields are optional on
-/// decode and fall back to their defaults for v3 projects, so this migrator
-/// performs no payload transform — it only bumps the schema version so the chain
-/// reaches `currentSchemaVersion`. (parity spec §6 / task 6.1)
-public struct AddBlendPreviewQualityCompoundMigration: ProjectMigration {
-    public let version = 4
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: the new fields' defaults apply on decode.
-    }
-}
-
-/// v2 → v3: introduces `PlaybackSettings.autoProxyOnThermalPressure`. The field
-/// is optional and v2 projects decode with the default (true), so no payload
-/// transform is needed — this migrator only bumps the version so the chain
-/// reaches `currentSchemaVersion`. (S7)
-public struct AddAutoProxyOnThermalPressureMigration: ProjectMigration {
-    public let version = 3
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: the new field's default (true) applies on decode.
-    }
-}
-
-/// v1 → v2: introduces `MediaAsset.originalBookmark`. No data transformation is
-/// required — the field is optional and v1 projects decode with `nil` bookmarks.
-/// The app layer re-creates bookmarks on load when the file path still lives.
-/// This migrator exists so the loader recognises a v1 file as needing v1→v2
-/// handling and so the chain reaches `currentSchemaVersion`. (S2)
-public struct AddSecurityScopedBookmarkMigration: ProjectMigration {
-    public let version = 2
-
-    public init() {}
-
-    public func migrate(_ project: inout Project) throws {
-        // No payload change: bookmarks are regenerated lazily on load by the
-        // app layer when the resolved path is still reachable. v1 assets keep
-        // `originalBookmark == nil`, which is a valid post-v2 state.
+        // No payload change: the added fields' decode-time defaults apply.
     }
 }
 

@@ -126,7 +126,7 @@ public enum TrackGainEnvelope {
                 } else {
                     db = range.depthDb
                 }
-                factor *= pow(10, db / 20)
+                factor *= GainMath.dbToLinear(db)
             }
             return factor
         }

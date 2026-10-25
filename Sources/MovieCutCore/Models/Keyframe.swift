@@ -147,16 +147,6 @@ public struct Keyframe: Codable, Sendable, Equatable, Identifiable {
         customCurve = try c.decodeIfPresent(CubicBezierControl.self, forKey: .customCurve)
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(id, forKey: .id)
-        try c.encode(property, forKey: .property)
-        try c.encode(time, forKey: .time)
-        try c.encode(value, forKey: .value)
-        try c.encode(interpolation, forKey: .interpolation)
-        try c.encodeIfPresent(customCurve, forKey: .customCurve)
-    }
-
     /// Interpolates between two values using the selected interpolation mode.
     /// When `mode == .custom`, pass the segment's `customCurve`; nil falls
     /// back to linear so a custom keyframe without a curve is never broken.

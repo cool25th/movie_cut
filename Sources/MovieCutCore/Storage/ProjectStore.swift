@@ -1,5 +1,24 @@
 import Foundation
 
+/// The canonical JSON codec configuration for every MovieCut on-disk JSON
+/// file (projects, recent-projects list, templates, presets): ISO-8601 dates
+/// and stable pretty-printed key order (`sortedKeys` keeps file diffs and
+/// golden comparisons deterministic).
+public enum MovieCutJSON {
+    public static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+
+    public static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
 /// Narrow file-I/O seam for project saves. The production adapter preserves
 /// Foundation behavior; tests can inject a deterministic write-stage failure.
 public protocol ProjectFileWriting: Sendable {
@@ -172,9 +191,7 @@ public actor ProjectStore {
 
     /// Saves a project to a JSON file using a temp-file replacement flow.
     public func save(_ project: Project, to url: URL) async throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let encoder = MovieCutJSON.encoder()
 
         let data = try encoder.encode(project)
         let directoryURL = url.deletingLastPathComponent()
@@ -205,8 +222,7 @@ public actor ProjectStore {
     /// See S1 of `docs/PRO_SPEC_GAP_WORKORDER_20260730.md`.
     public func load(from url: URL) async throws -> Project {
         let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = MovieCutJSON.decoder()
         var project = try decoder.decode(Project.self, from: data)
         try ProjectMigrationRunner.migrate(&project)
         // Compound-clip structural validation (Requirement 7.6): enforce

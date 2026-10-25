@@ -50,11 +50,6 @@ public enum AspectRatio: String, Codable, Sendable, Equatable, Hashable, CaseIte
         }
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(rawValue)
-    }
-
     /// The preset's default pixel size.
     public var size: CGSize {
         switch self {

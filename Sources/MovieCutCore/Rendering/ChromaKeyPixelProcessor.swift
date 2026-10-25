@@ -32,9 +32,9 @@ public enum ChromaKeyPixelProcessor {
         // Edge shrink raises the keying threshold so more near-key fringe
         // pixels are removed, eroding the foreground edge inward (F-10). It is
         // orthogonal to feathering.
-        let tolerance = clamped(threshold + clamped(edgeShrink) * 0.25)
-        let feather = max(clamped(softness), 0.001)
-        let spillStrength = clamped(spillSuppression)
+        let tolerance = (threshold + edgeShrink.clamped(to: 0...1) * 0.25).clamped(to: 0...1)
+        let feather = max(softness.clamped(to: 0...1), 0.001)
+        let spillStrength = spillSuppression.clamped(to: 0...1)
 
         guard let kernel = chromaKeyKernel else {
             return image
@@ -83,11 +83,11 @@ public enum ChromaKeyPixelProcessor {
         }
         """)
 
-    private static func clamped(_ value: Float) -> Float {
-        min(max(value, 0), 1)
-    }
-
     private static func clamped(_ color: SIMD3<Float>) -> SIMD3<Float> {
-        SIMD3<Float>(clamped(color.x), clamped(color.y), clamped(color.z))
+        SIMD3<Float>(
+            color.x.clamped(to: 0...1),
+            color.y.clamped(to: 0...1),
+            color.z.clamped(to: 0...1)
+        )
     }
 }

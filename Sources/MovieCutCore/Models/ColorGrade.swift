@@ -85,15 +85,6 @@ public struct ColorGrade: Codable, Sendable, Equatable {
         )
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(lift, forKey: .lift)
-        try container.encode(gamma, forKey: .gamma)
-        try container.encode(gain, forKey: .gain)
-        try container.encodeIfPresent(hslBands, forKey: .hslBands)
-        try container.encodeIfPresent(curves, forKey: .curves)
-    }
-
     private static func sanitizedHSLBands(_ bands: [HSLBand]?) -> [HSLBand]? {
         guard let bands else { return nil }
         var byCenter: [HSLBandCenter: HSLBand] = [:]
@@ -150,14 +141,6 @@ public struct ColorCurves: Codable, Sendable, Equatable, Hashable {
             green: try container.decodeIfPresent([CurvePoint].self, forKey: .green) ?? Self.identityPoints,
             blue: try container.decodeIfPresent([CurvePoint].self, forKey: .blue) ?? Self.identityPoints
         )
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(master, forKey: .master)
-        try container.encode(red, forKey: .red)
-        try container.encode(green, forKey: .green)
-        try container.encode(blue, forKey: .blue)
     }
 
     private static func normalizedPoints(_ points: [CurvePoint]) -> [CurvePoint] {

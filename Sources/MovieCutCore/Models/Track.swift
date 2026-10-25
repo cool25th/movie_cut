@@ -86,16 +86,4 @@ public struct Track: Codable, Sendable, Equatable, Identifiable {
         clips = try container.decode([Clip].self, forKey: .clips)
     }
 
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(kind, forKey: .kind)
-        try container.encode(name, forKey: .name)
-        try container.encode(isMuted, forKey: .isMuted)
-        try container.encode(isSolo, forKey: .isSolo)
-        try container.encode(isLocked, forKey: .isLocked)
-        try container.encode(isHidden, forKey: .isHidden)
-        try container.encode(zIndex, forKey: .zIndex)
-        try container.encode(clips, forKey: .clips)
-    }
 }

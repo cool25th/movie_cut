@@ -65,14 +65,14 @@ public enum VisualEffectPixelProcessor {
                 parameters: [kCIInputEVKey: effect.parameters["ev"] ?? effect.parameters["amount"] ?? 0]
             )
         case .grayscale:
-            let intensity = clamped(effect.parameters["intensity"] ?? 1, lowerBound: 0, upperBound: 1)
+            let intensity = (effect.parameters["intensity"] ?? 1).clamped(to: 0...1)
             let mono = colorControls(image, brightness: 0, contrast: 1, saturation: 0)
             output = blend(original: image, styled: mono, intensity: intensity)
         case .sepia:
             output = filtered(
                 image,
                 name: "CISepiaTone",
-                parameters: [kCIInputIntensityKey: clamped(effect.parameters["intensity"] ?? 0.9, lowerBound: 0, upperBound: 1)]
+                parameters: [kCIInputIntensityKey: (effect.parameters["intensity"] ?? 0.9).clamped(to: 0...1)]
             )
         case .blur:
             output = filtered(
@@ -102,8 +102,8 @@ public enum VisualEffectPixelProcessor {
     }
 
     private static func applyTemperature(_ effect: Effect, to image: CIImage) -> CIImage {
-        let amount = clamped(effect.parameters["amount"] ?? legacyTemperatureAmount(effect), lowerBound: -1, upperBound: 1)
-        let tint = clamped(effect.parameters["tint"] ?? 0, lowerBound: -1, upperBound: 1)
+        let amount = (effect.parameters["amount"] ?? legacyTemperatureAmount(effect)).clamped(to: -1...1)
+        let tint = (effect.parameters["tint"] ?? 0).clamped(to: -1...1)
         let targetTemperature = 6500 + amount * 2_000
         let targetTint = tint * 150
 
@@ -141,7 +141,7 @@ public enum VisualEffectPixelProcessor {
 
     private static func applyExternalLUT(_ effect: Effect, to image: CIImage) -> CIImage {
         guard let path = effect.lutPath else { return image }
-        let intensity = clamped(effect.parameters["intensity"] ?? 1, lowerBound: 0, upperBound: 1)
+        let intensity = (effect.parameters["intensity"] ?? 1).clamped(to: 0...1)
         guard intensity > 0, let cube = loadCube(path: path) else { return image }
 
         guard let filter = CIFilter(name: "CIColorCube") else { return image }
@@ -167,7 +167,7 @@ public enum VisualEffectPixelProcessor {
     }
 
     private static func applyLUTPreset(_ preset: LUTPreset, effect: Effect, to image: CIImage) -> CIImage {
-        let intensity = clamped(effect.parameters["intensity"] ?? preset.defaultIntensity, lowerBound: 0, upperBound: 1)
+        let intensity = (effect.parameters["intensity"] ?? preset.defaultIntensity).clamped(to: 0...1)
         guard intensity > 0 else { return image }
 
         let styled: CIImage
@@ -261,7 +261,7 @@ public enum VisualEffectPixelProcessor {
     }
 
     private static func blend(original: CIImage, styled: CIImage, intensity: Double) -> CIImage {
-        let clampedIntensity = clamped(intensity, lowerBound: 0, upperBound: 1)
+        let clampedIntensity = intensity.clamped(to: 0...1)
         guard clampedIntensity > 0 else { return original }
         guard clampedIntensity < 1 else { return styled.cropped(to: original.extent) }
 
@@ -351,10 +351,6 @@ public enum VisualEffectPixelProcessor {
 
         let last = stops[stops.count - 1]
         return (last.red, last.green, last.blue)
-    }
-
-    private static func clamped(_ value: Double, lowerBound: Double, upperBound: Double) -> Double {
-        min(max(value, lowerBound), upperBound)
     }
 }
 

@@ -43,7 +43,7 @@ public enum AudioGraphLimiter {
         let channelCount = audio.channels
         let lookAheadFrames = Int(parameters.lookAheadSeconds * sampleRate)
         let releaseCoeff = exp(-1.0 / (parameters.releaseSeconds * sampleRate))
-        let ceilingLinear = pow(10.0, parameters.ceilingDb / 20.0)
+        let ceilingLinear = GainMath.dbToLinear(parameters.ceilingDb)
 
         var interleaved = audio.interleaved
         var smoothedGain: Double = 1.0

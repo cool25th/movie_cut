@@ -81,6 +81,7 @@ struct ProjectIntegrityGateTests {
     func truncatedFileRejected() async throws {
         let store = ProjectStore(autosaveDirectory: nil)
         let url = tempURL("truncated.moviecut")
+        defer { try? FileManager.default.removeItem(at: url) }
 
         // 유효한 JSON의 절반만 기록 — decode는 반드시 실패해야 한다.
         let bytes = try minimalProjectJSON(schemaVersion: currentSchemaVersion).data(using: .utf8)!
@@ -99,6 +100,7 @@ struct ProjectIntegrityGateTests {
     func emptyFileRejected() async throws {
         let store = ProjectStore(autosaveDirectory: nil)
         let url = tempURL("empty.moviecut")
+        defer { try? FileManager.default.removeItem(at: url) }
         try Data().write(to: url, options: [.atomic])
 
         await #expect(throws: Error.self) {
@@ -114,6 +116,7 @@ struct ProjectIntegrityGateTests {
 
         for version in 1..<max(1, currentSchemaVersion) {
             let url = tempURL("roundtrip_v\(version).moviecut")
+            defer { try? FileManager.default.removeItem(at: url) }
             try minimalProjectJSON(schemaVersion: version).data(using: .utf8)!
                 .write(to: url, options: [.atomic])
 
@@ -136,6 +139,7 @@ struct ProjectIntegrityGateTests {
     func saveIsDeterministicAcrossReloads() async throws {
         let store = ProjectStore(autosaveDirectory: nil)
         let url = tempURL("canonical.moviecut")
+        defer { try? FileManager.default.removeItem(at: url) }
 
         try minimalProjectJSON(schemaVersion: currentSchemaVersion).data(using: .utf8)!
             .write(to: url, options: [.atomic])
@@ -156,6 +160,7 @@ struct ProjectIntegrityGateTests {
     func migrationIsIdempotent() async throws {
         let store = ProjectStore(autosaveDirectory: nil)
         let url = tempURL("idempotent.moviecut")
+        defer { try? FileManager.default.removeItem(at: url) }
         try minimalProjectJSON(schemaVersion: 1).data(using: .utf8)!
             .write(to: url, options: [.atomic])
 

@@ -26,16 +26,14 @@ struct PipelineTests {
         #expect(codecRawValues == ["h264", "hevc"])
     }
 
+    #if canImport(AVFoundation)
     @Test("Noise reduction service initializes")
     func testNoiseReductionServiceInitializes() {
-        #if canImport(AVFoundation)
-        let service = NoiseReductionService()
-
-        #expect(type(of: service) == NoiseReductionService.self)
-        #else
-        #expect(true)
-        #endif
+        // Constructing without crashing is the contract on Apple platforms;
+        // on others the test compiles out instead of asserting nothing.
+        _ = NoiseReductionService()
     }
+    #endif
 
     @Test("Audio fade command inverts correctly")
     func testAudioFadeCommandInvertsCorrectly() throws {

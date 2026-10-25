@@ -19,6 +19,7 @@ struct BetaDiagnosticsLogTests {
     @Test("Funnel events append in order with the fixed schema and one session id")
     func funnelOrderAndSchema() async throws {
         let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
         let log = BetaDiagnosticsLog(directory: dir, osVersion: "26.5", deviceClass: "mac")
 
         await log.record(.importStart)
@@ -69,6 +70,7 @@ struct BetaDiagnosticsLogTests {
     @Test("export_fail carries a machine error code, never a message")
     func exportFailErrorCode() async throws {
         let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
         let log = BetaDiagnosticsLog(directory: dir, osVersion: "17.0", deviceClass: "iOS-mid")
         await log.record(.exportStart)
         await log.record(.exportFail, errorCode: "FileOperationError.diskFull")
@@ -94,6 +96,7 @@ struct BetaDiagnosticsLogTests {
     @Test("recordOnce fires only the first time per session (first_edit semantics)")
     func recordOnceSemantics() async throws {
         let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
         let log = BetaDiagnosticsLog(directory: dir, osVersion: "26.5", deviceClass: "mac")
         await log.recordOnce(.firstEdit)
         await log.recordOnce(.firstEdit)
@@ -107,6 +110,7 @@ struct BetaDiagnosticsLogTests {
     @Test("Rotation caps the footprint: an oversized active file archives to one .old sibling")
     func rotationCap() async throws {
         let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
         // Tiny cap so the second event trips rotation.
         let log = BetaDiagnosticsLog(directory: dir, osVersion: "26.5", deviceClass: "mac", rotationCapBytes: 1)
         await log.record(.importStart)

@@ -45,7 +45,7 @@
 | §5.1 사전 점검 시나리오 | **PASS** | 2026-09-04 · 2회 연속 4/4 | `run_beta_scenarios.sh` — 임포트→첫 컷→출력(3.000s·1920x1080)·색 보정·9:16 세로(1080x1920 기하 실측)·autosave 복구(recovered_clips=1)·ffprobe 검증. **주의: Mac 호스트 실측 — 실기기·배포 빌드 증거 아님(45회차 판정 명시) |
 | 배포 단계 구분 증거(빌드→업로드·처리→테스터 설치) | **NOT_RUN** | — | ASC 계정 전제 — 각 단계별 증거는 G5 해제 후 QAUTO-05 체인으로 구분 수집 |
 
-**판정 이력**: 위 상태의 유일한 근거 원장은 본 섹션과 §0.5 표 — 다른 문서의 "완료" 서술은 이 표의 상태·증거일에 종속된다. 2026-10-10 판정의 지시(4/4 PASS를 배포 증거로 승계 금지)에 따라 seed promotion wiring CLOSED(2026-10-10)는 출시 증거가 아니다.
+**판정 이력**: 위 상태의 유일한 근거 원장은 본 섹션과 §0.5 표 — 다른 문서의 "완료" 서술은 이 표의 상태·증거일에 종속된다. 2026-10-10 판정의 지시(4/4 PASS를 배포 증거로 승계 금지)에 따라 seed promotion wiring CLOSED(2026-10-10)는 출시 증거가 아니다. **집계 규칙(2026-10-27 판정)**: 현재 준비 상태를 집계할 때 G1의 과거 PASS(당시 환경)만으로 G1을 충족 처리하지 않는다 — "현재 환경 재검증: 미실행(Xcode 부재)"을 함께 본다. 실행 전 보류는 NOT_RUN(비고 GUARD_DEFERRED), 환경 미시작은 NOT_RUN(비고 ENVIRONMENT_BLOCKED·Xcode 행 참조), 사용자 결정 대기는 BLOCKED_USER, 실행 후 기대 위반만 FAIL — 명령 자체의 환경 실패(52회차)를 App 기능 테스트 FAIL로 집계하지 않는다. 준비 문서 완주·설정 점검 PASS·제품 경로 검증 PASS는 각각 별개의 완료다.
 
 ## 0.8 베타 사용자 경로 시나리오 1세트 (2026-10-18 고정 — 45회차 판정 지시: "실기기 수신 후 그대로 실행할 수 있는")
 
@@ -96,7 +96,7 @@
 | 5 | Save·Reopen | 저장→재시작→재열기 | 편집 의미 유지(적용 상태 그대로) | reopen 후 상태 비교 |
 | 6 | Export | 9:16 프리셋 출력 | 출력 성공·기하 1080x1920 | ffprobe(호스트 반출분) |
 
-**판정 기록 방식**: §0.7 4상태 규약 준용 — **현재 상태 NOT_RUN → ENVIRONMENT_BLOCKED(2026-10-22 실행 시도 결과)**(시나리오 시트 작성은 실행 PASS가 아님). **고정 입력 사용 시 검증 범위는 실행·복구 경로다 — planner 미호출·고정 plan 결과를 "AI 제안 품질까지 검증"으로 표시하지 않는다**(45회차 판정 명시). Mac 호스트 소형 검증(`AIPhotoMontageE2ETests` 스위트·1테스트 457줄 — 'Photos+Audio→15s Timeline→Undo/Redo→Real MP4 Export'·본 시트 6단계와 1:1)이 선행 가능 — 실기기 불필요. 실행 조건: ①GURU 리팩터 커밋 종료 확인(**충족 2026-10-21·e87c9be V5·WIP 0**) ②guard가 테스트 실행 허용(**충족 2026-10-22·LARGE ALLOWED 35.61GiB**) ③**환경: Xcode 필요(App 타깃=xcodebuild) — 미충족(2026-10-22 실행 시도: `xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools'`·Xcode.app 부재·DerivedData 미생성·rc=1)**. 실행 명령(확정·Xcode 재설치 후 그대로 사용): `xcodebuild test -project MovieCut.xcodeproj -scheme MovieCutMac -destination 'platform=macOS' -derivedDataPath .build-check/dd-ai-montage -only-testing:MovieCutMacTests/AIPhotoMontageE2ETests`. 해제 조건은 §0.7 "환경: Xcode 설치" 행(BLOCKED_USER).
+**판정 기록 방식**: §0.7 4상태 규약 준용 — **현재 상태 NOT_RUN — 비고: ENVIRONMENT_BLOCKED(2026-10-22 실행 시도 결과·§0.7 "환경: Xcode 설치" 행 참조)**(57회차 판정: GUARD_DEFERRED·ENVIRONMENT_BLOCKED는 4상태와 경쟁하는 판정값이 아니라 NOT_RUN의 사유 비고. 시나리오 시트 작성은 실행 PASS가 아님). **고정 입력 사용 시 검증 범위는 실행·복구 경로다 — planner 미호출·고정 plan 결과를 "AI 제안 품질까지 검증"으로 표시하지 않는다**(45회차 판정 명시). Mac 호스트 소형 검증(`AIPhotoMontageE2ETests` 스위트·1테스트 457줄 — 'Photos+Audio→15s Timeline→Undo/Redo→Real MP4 Export'·본 시트 6단계와 1:1)이 선행 가능 — 실기기 불필요. 실행 조건: ①GURU 리팩터 커밋 종료 확인(**충족 2026-10-21·e87c9be V5·WIP 0**) ②guard가 테스트 실행 허용(**충족 2026-10-22·LARGE ALLOWED 35.61GiB**) ③**환경: Xcode 필요(App 타깃=xcodebuild) — 미충족(2026-10-22 실행 시도: `xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools'`·Xcode.app 부재·DerivedData 미생성·rc=1)**. 실행 명령(확정·Xcode 재설치 후 그대로 사용): `xcodebuild test -project MovieCut.xcodeproj -scheme MovieCutMac -destination 'platform=macOS' -derivedDataPath .build-check/dd-ai-montage -only-testing:MovieCutMacTests/AIPhotoMontageE2ETests`. 해제 조건은 §0.7 "환경: Xcode 설치" 행(BLOCKED_USER).
 
 ## 1. Apple Developer 자격 확보 (사용자)
 

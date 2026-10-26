@@ -460,6 +460,10 @@ struct SeedPromotionProductionTests {
         let captured = try Self.captureCandidate(
             seed: 7, steps: 120, injectAt: (7, 73), stagingDir: staging
         )
+        // Precondition (57th-cycle judgment): the staging fixture must exist
+        // BEFORE the failing save — otherwise "survives" proves nothing.
+        #expect(FileManager.default.fileExists(atPath: captured.url.path),
+                "precondition: staging fixture exists before the failing save")
 
         var reg = Registry()
         let id = try Self.semanticIdentity(captured.candidate)
@@ -473,7 +477,12 @@ struct SeedPromotionProductionTests {
         try "x".write(to: fileAsDir, atomically: true, encoding: .utf8)
         let doomedURL = fileAsDir.appendingPathComponent("seed-promotion-registry.json")
 
-        #expect(throws: (any Error).self) {
+        // The throw must come from the TARGET save step, not "any error":
+        // the closure contains only the save call, and save's first I/O is
+        // createDirectory on the file-as-parent path — a Cocoa file-system
+        // error. Narrowing to CocoaError (not `any Error`) rules out
+        // encoder/logic failures masquerading as the ordering proof.
+        #expect(throws: CocoaError.self) {
             try Self.save(reg, to: doomedURL)
         }
 

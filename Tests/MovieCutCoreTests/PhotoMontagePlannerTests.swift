@@ -309,4 +309,147 @@ struct PhotoMontagePlannerTests {
         #expect(createdTrackIds.contains(lockedTrack.id) == false)
         #expect(createdTrackIds.count >= 1)
     }
+
+    @Test("Follow-up rebalance adjusts target clip duration, preserves 30s total, and restores in single undo")
+    func rebalanceDurationPreservesTotalDurationAndRipplesSubsequentClips() async throws {
+        let photos = makePhotos(count: 4)
+        let session = EditorSession(project: Project(name: "RebalanceTest"))
+        let s0 = await session.snapshotWithRevision()
+
+        let initialPlan = try PhotoMontagePlanner.plan(
+            photos: photos,
+            targetDuration: 30.0,
+            baseRevision: s0.revision
+        )
+        let prepared0 = try await EditingPlanCompiler.compile(
+            initialPlan.actions,
+            for: s0.project,
+            baseRevision: s0.revision
+        )
+        try await session.dispatch(prepared0.batchCommand, expectedRevision: s0.revision)
+
+        let s1 = await session.snapshotWithRevision()
+        let parsed = try #require(PhotoMontagePlanner.parseRebalanceInstruction("3번째 사진 2초 늘리고 전체 30초 유지"))
+        #expect(parsed == PhotoMontagePlanner.MontageRebalanceRequest(
+            targetClipOneBasedIndex: 3,
+            deltaSeconds: 2.0,
+            targetTotalDurationSeconds: 30.0
+        ))
+
+        let rebalanceActions = try PhotoMontagePlanner.planDurationRebalance(
+            project: s1.project,
+            request: parsed
+        )
+        let prepared1 = try await EditingPlanCompiler.compile(
+            rebalanceActions,
+            for: s1.project,
+            baseRevision: s1.revision
+        )
+        try await session.dispatch(prepared1.batchCommand, expectedRevision: s1.revision)
+
+        let rebalanced = await session.snapshot()
+        let videoTrack = try #require(rebalanced.timeline.tracks.first(where: { $0.kind == .video }))
+        let clips = videoTrack.clips
+        try #require(clips.count == 4)
+
+        // Original was 7.5s each; clip #3 (+2s) is now 9.5s, and total remains 30.0s with contiguous starts
+        #expect(abs(clips[2].timelineRange.duration - 9.5) < 1e-6)
+        #expect(abs(rebalanced.timeline.duration - 30.0) < 1e-6)
+        for i in 1..<clips.count {
+            #expect(abs(clips[i].timelineRange.start - clips[i - 1].timelineRange.end) < 1e-6)
+        }
+
+        // Single undo restores uniform 7.5s durations
+        try await session.undo()
+        let undone = await session.snapshot()
+        let undoneClips = try #require(undone.timeline.tracks.first(where: { $0.kind == .video })?.clips)
+        for clip in undoneClips {
+            #expect(abs(clip.timelineRange.duration - 7.5) < 1e-6)
+        }
+    }
+
+    @Test("Beat-aligned montage snaps interior cuts to nearest beats and emits beat markers (AI-06)")
+    func beatAlignedMontageSnapsCutPointsToBeatsAndAddsMarkers() async throws {
+        let photos = makePhotos(count: 3)
+        let session = EditorSession(project: Project(name: "BeatSyncMontage"))
+        let s0 = await session.snapshotWithRevision()
+
+        // Uniform cuts for 3 photos over 15s would be [5.0, 10.0].
+        // Supply beats at [4.8, 10.25] so interior boundaries snap to those beats.
+        let plan = try PhotoMontagePlanner.plan(
+            photos: photos,
+            targetDuration: 15.0,
+            baseRevision: s0.revision,
+            beatTimestamps: [2.1, 4.8, 7.5, 10.25, 13.0],
+            addBeatMarkers: true
+        )
+        let prepared = try await EditingPlanCompiler.compile(
+            plan.actions,
+            for: s0.project,
+            baseRevision: s0.revision
+        )
+        try await session.dispatch(
+            prepared.batchCommand,
+            planId: prepared.planId,
+            expectedRevision: s0.revision
+        )
+
+        let after = await session.snapshot()
+        let clips = try #require(after.timeline.tracks.first(where: { $0.kind == .video })?.clips)
+        try #require(clips.count == 3)
+        #expect(abs(clips[0].timelineRange.start - 0.0) < 1e-6)
+        #expect(abs(clips[0].timelineRange.end - 4.8) < 1e-6)
+        #expect(abs(clips[1].timelineRange.start - 4.8) < 1e-6)
+        #expect(abs(clips[1].timelineRange.end - 10.25) < 1e-6)
+        #expect(abs(clips[2].timelineRange.start - 10.25) < 1e-6)
+        #expect(abs(clips[2].timelineRange.end - 15.0) < 1e-6)
+        #expect(after.markers.map(\.time) == [4.8, 10.25])
+    }
+
+    @Test("ProjectContextBuilder produces privacy-safe JSON snapshot and validates ProductionPlan revision (AI-05)")
+    func projectContextBuilderBuildsPrivacySafeSnapshotAndDecodesPlan() async throws {
+        let photos = makePhotos(count: 2)
+        let session = EditorSession(project: Project(name: "ContextTest"))
+        let s0 = await session.snapshotWithRevision()
+        let plan = try PhotoMontagePlanner.plan(photos: photos, targetDuration: 10.0, baseRevision: s0.revision)
+        let prepared = try await EditingPlanCompiler.compile(
+            plan.actions,
+            for: s0.project,
+            baseRevision: s0.revision
+        )
+        try await session.dispatch(
+            prepared.batchCommand,
+            planId: prepared.planId,
+            expectedRevision: s0.revision
+        )
+
+        let s1 = await session.snapshotWithRevision()
+        let firstClipId = try #require(s1.project.timeline.tracks.first?.clips.first?.id)
+        let contextSnapshot = ProjectContextBuilder.build(
+            from: s1.project,
+            baseRevision: s1.revision,
+            selectedClipIds: [firstClipId],
+            playheadSeconds: 2.5
+        )
+        let jsonString = try contextSnapshot.toJSONString()
+        #expect(!jsonString.contains("/tmp/photo"))
+        #expect(contextSnapshot.aiEditContext.videoClipCount == 2)
+        #expect(contextSnapshot.aiEditContext.hasSelection == true)
+        #expect(contextSnapshot.tracks.first?.clips.map(\.oneBasedIndex) == [1, 2])
+
+        let encodedPlan = try JSONEncoder().encode(plan)
+        let decodedMatching = try ProjectContextBuilder.decodeProductionPlan(
+            from: encodedPlan,
+            expectedRevision: s0.revision
+        )
+        #expect(decodedMatching == plan)
+
+        #expect(throws: EditorCommandError.self) {
+            _ = try ProjectContextBuilder.decodeProductionPlan(
+                from: encodedPlan,
+                expectedRevision: s1.revision
+            )
+        }
+    }
 }
+

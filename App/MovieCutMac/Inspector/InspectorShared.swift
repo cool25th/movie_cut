@@ -333,6 +333,12 @@ struct EffectParameterRow: View {
     let value: Double
     let onChange: (Double) -> Void
 
+    @State private var draftValue: Double?
+
+    private var effectiveValue: Double {
+        draftValue ?? value
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
             HStack {
@@ -340,15 +346,20 @@ struct EffectParameterRow: View {
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(String(format: definition.valueFormat, value))
+                Text(String(format: definition.valueFormat, effectiveValue))
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             Slider(value: Binding(
-                get: { value },
-                set: { onChange($0) }
-            ), in: definition.range)
+                get: { effectiveValue },
+                set: { draftValue = $0 }
+            ), in: definition.range) { isEditing in
+                if !isEditing, let committed = draftValue {
+                    draftValue = nil
+                    onChange(committed)
+                }
+            }
         }
     }
 }

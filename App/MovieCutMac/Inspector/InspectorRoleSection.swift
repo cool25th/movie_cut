@@ -30,6 +30,15 @@ struct InspectorRoleSection: View {
                         Task { await viewModel.assignRoleToSelection(role) }
                     }
                 }
+                if let activeRole = selectedClipsRole,
+                   viewModel.timelineRoles.contains(where: { $0.id == activeRole.id }) {
+                    Divider()
+                    Button(role: .destructive) {
+                        Task { await viewModel.removeRole(id: activeRole.id) }
+                    } label: {
+                        Text(NSLocalizedString("Remove Role", comment: ""))
+                    }
+                }
             } label: {
                 HStack {
                     Image(systemName: "circle.fill")

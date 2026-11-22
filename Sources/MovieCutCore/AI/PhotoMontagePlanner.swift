@@ -43,7 +43,9 @@ public enum PhotoMontagePlanner {
         targetCanvas: CanvasPreset = .portrait9x16,
         existingTracks: [Track] = [],
         baseRevision: SessionRevision,
-        planId: UUID = UUID()
+        planId: UUID = UUID(),
+        beatTimestamps: [TimeInterval] = [],
+        addBeatMarkers: Bool = false
     ) throws -> ProductionPlan {
         guard !photos.isEmpty else {
             throw EditingActionDSL.PlanningError.emptyRange
@@ -68,7 +70,11 @@ public enum PhotoMontagePlanner {
         }
 
         let photoCount = photos.count
-        let baseClipDuration = targetDuration / Double(photoCount)
+        let segmentRanges = computeBeatAlignedSegments(
+            photoCount: photoCount,
+            targetDuration: targetDuration,
+            beatTimestamps: beatTimestamps
+        )
 
         var actions: [EditingActionDSL.Action] = []
         var assumptions: [String] = []
@@ -91,12 +97,8 @@ public enum PhotoMontagePlanner {
             actions.append(.registerAsset(asset: photo))
 
             let clipId = UUID()
-            let startTime = Double(index) * baseClipDuration
-            let duration: TimeInterval = (index == photoCount - 1)
-                ? (targetDuration - startTime)
-                : baseClipDuration
-
-            let timelineRange = TimeRange(start: startTime, duration: duration)
+            let timelineRange = segmentRanges[index]
+            let duration = timelineRange.duration
             let sourceRange = TimeRange(start: 0, duration: duration)
 
             actions.append(.addClip(
@@ -112,8 +114,16 @@ public enum PhotoMontagePlanner {
             let style = motionStyle(for: index)
             let keyframes = generateKeyframes(for: style, duration: duration)
             actions.append(.setClipKeyframes(clipId: clipId, keyframes: keyframes))
+
+            if addBeatMarkers, index > 0 {
+                actions.append(.addMarker(name: "Beat Cut \(index)", time: timelineRange.start))
+            }
         }
-        assumptions.append("Divided \(targetDuration)s across \(photoCount) photos with alternating Ken Burns effects.")
+        if beatTimestamps.isEmpty {
+            assumptions.append("Divided \(targetDuration)s across \(photoCount) photos with alternating Ken Burns effects.")
+        } else {
+            assumptions.append("Beat-aligned \(photoCount) photos across \(targetDuration)s using \(beatTimestamps.count) beat candidates.")
+        }
 
         // 3. Audio track (if provided)
         if let musicAsset = music {
@@ -225,6 +235,57 @@ public enum PhotoMontagePlanner {
         )
     }
 
+    /// Computes sequential photo `TimeRange`s across `0..<targetDuration`.
+    /// When `beatTimestamps` are provided (`AI-06`), interior cut points snap to the closest
+    /// available beat within the valid interval while preserving a minimum clip duration
+    /// (`minRebalancedClipDuration = 0.5s`). Falls back to uniform intervals when no usable
+    /// beats exist.
+    public static func computeBeatAlignedSegments(
+        photoCount: Int,
+        targetDuration: TimeInterval,
+        beatTimestamps: [TimeInterval]
+    ) -> [TimeRange] {
+        guard photoCount > 0 else { return [] }
+        let baseClipDuration = targetDuration / Double(photoCount)
+        guard photoCount > 1, !beatTimestamps.isEmpty else {
+            return (0..<photoCount).map { index in
+                let start = Double(index) * baseClipDuration
+                let duration = (index == photoCount - 1) ? (targetDuration - start) : baseClipDuration
+                return TimeRange(start: start, duration: duration)
+            }
+        }
+
+        let minGap = min(minRebalancedClipDuration, baseClipDuration * 0.5)
+        let sortedBeats = beatTimestamps
+            .filter { $0.isFinite && $0 >= minGap && $0 <= targetDuration - minGap }
+            .sorted()
+
+        var cutPoints: [TimeInterval] = [0]
+        for boundaryIndex in 1..<photoCount {
+            let idealCut = Double(boundaryIndex) * baseClipDuration
+            let prevCut = cutPoints[boundaryIndex - 1]
+            let remainingCutsAfterThis = Double(photoCount - 1 - boundaryIndex)
+            let earliestAllowed = prevCut + minGap
+            let latestAllowed = targetDuration - (remainingCutsAfterThis + 1.0) * minGap
+
+            let candidates = sortedBeats.filter { $0 >= earliestAllowed && $0 <= latestAllowed }
+            if let nearestBeat = candidates.min(by: { abs($0 - idealCut) < abs($1 - idealCut) }),
+               abs(nearestBeat - idealCut) <= baseClipDuration * 0.6 {
+                cutPoints.append(nearestBeat)
+            } else {
+                let fallback = min(max(idealCut, earliestAllowed), latestAllowed)
+                cutPoints.append(fallback)
+            }
+        }
+        cutPoints.append(targetDuration)
+
+        return (0..<photoCount).map { index in
+            let start = cutPoints[index]
+            let end = cutPoints[index + 1]
+            return TimeRange(start: start, duration: max(0.001, end - start))
+        }
+    }
+
     private static func motionStyle(for index: Int) -> MotionStyle {
         switch index % 4 {
         case 0: return .zoomIn
@@ -265,5 +326,223 @@ public enum PhotoMontagePlanner {
                 Keyframe(property: .positionX, time: duration, value: -15.0),
             ]
         }
+    }
+
+    // MARK: - Follow-up Duration Rebalancing (AI-05)
+
+    /// Request parameters for adjusting one clip's duration while keeping the montage's total duration fixed.
+    public struct MontageRebalanceRequest: Sendable, Equatable {
+        public let targetClipOneBasedIndex: Int
+        public let deltaSeconds: TimeInterval
+        public let targetTotalDurationSeconds: TimeInterval?
+
+        public init(
+            targetClipOneBasedIndex: Int,
+            deltaSeconds: TimeInterval,
+            targetTotalDurationSeconds: TimeInterval? = nil
+        ) {
+            self.targetClipOneBasedIndex = targetClipOneBasedIndex
+            self.deltaSeconds = deltaSeconds
+            self.targetTotalDurationSeconds = targetTotalDurationSeconds
+        }
+    }
+
+    /// Minimum allowed per-clip duration when rebalancing a montage.
+    public static let minRebalancedClipDuration: TimeInterval = 0.5
+
+    /// Deterministically plans a `trimClip` + `setClipKeyframes` sequence that adjusts the target
+    /// clip by `deltaSeconds` and redistributes the remaining duration across the other clips on the
+    /// main video track so total duration equals `targetTotalDurationSeconds` (or current total).
+    public static func planDurationRebalance(
+        project: Project,
+        request: MontageRebalanceRequest
+    ) throws -> [EditingActionDSL.Action] {
+        guard let videoTrack = project.timeline.tracks.first(where: { $0.kind == .video && !$0.clips.isEmpty }) else {
+            throw EditingActionDSL.PlanningError.emptyRange
+        }
+        let clips = videoTrack.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
+        guard clips.count >= 2 else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue(
+                "Rebalancing requires at least 2 clips on the main video track"
+            )
+        }
+        let targetIdx = request.targetClipOneBasedIndex - 1
+        guard clips.indices.contains(targetIdx) else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue(
+                "Target clip index \(request.targetClipOneBasedIndex) is out of range (1...\(clips.count))"
+            )
+        }
+        guard request.deltaSeconds.isFinite, abs(request.deltaSeconds) > 0.001 else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue("Delta seconds must be non-zero and finite")
+        }
+
+        let currentTotal = clips.reduce(0.0) { $0 + $1.timelineRange.duration }
+        let desiredTotal = request.targetTotalDurationSeconds ?? currentTotal
+        guard desiredTotal.isFinite, desiredTotal > 0, desiredTotal <= Limits.maxTargetDuration else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue("Invalid target total duration \(desiredTotal)s")
+        }
+
+        let targetClip = clips[targetIdx]
+        let newTargetDuration = targetClip.timelineRange.duration + request.deltaSeconds
+        guard newTargetDuration >= minRebalancedClipDuration else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue(
+                "Target clip duration \(newTargetDuration)s would fall below the \(minRebalancedClipDuration)s minimum"
+            )
+        }
+
+        let otherIndices = clips.indices.filter { $0 != targetIdx }
+        let remainingTotal = desiredTotal - newTargetDuration
+        let minRequiredForOthers = Double(otherIndices.count) * minRebalancedClipDuration
+        guard remainingTotal >= minRequiredForOthers - 1e-6 else {
+            throw EditingActionDSL.PlanningError.invalidTimeValue(
+                "Cannot keep total \(desiredTotal)s: remaining \(remainingTotal)s for \(otherIndices.count) clips is below minimum \(minRequiredForOthers)s"
+            )
+        }
+
+        let currentOthersTotal = otherIndices.reduce(0.0) { $0 + clips[$1].timelineRange.duration }
+        var newDurations = Array(repeating: 0.0, count: clips.count)
+        newDurations[targetIdx] = newTargetDuration
+
+        var allocatedOthers = 0.0
+        for (pos, idx) in otherIndices.enumerated() {
+            if pos == otherIndices.count - 1 {
+                newDurations[idx] = max(minRebalancedClipDuration, remainingTotal - allocatedOthers)
+            } else {
+                let weight = currentOthersTotal > 0
+                    ? (clips[idx].timelineRange.duration / currentOthersTotal)
+                    : (1.0 / Double(otherIndices.count))
+                let raw = max(minRebalancedClipDuration, remainingTotal * weight)
+                newDurations[idx] = raw
+                allocatedOthers += raw
+            }
+        }
+
+        var actions: [EditingActionDSL.Action] = []
+        var cursor: TimeInterval = 0.0
+        for (idx, clip) in clips.enumerated() {
+            let duration = (idx == clips.count - 1) ? max(minRebalancedClipDuration, desiredTotal - cursor) : newDurations[idx]
+            let newTimelineRange = TimeRange(start: cursor, duration: duration)
+            let newSourceDuration: TimeInterval
+            if clip.kind == .image {
+                newSourceDuration = duration
+            } else if let assetId = clip.assetId,
+                      let assetDuration = project.mediaLibrary.assets[assetId]?.duration {
+                newSourceDuration = min(duration, max(0.01, assetDuration - clip.sourceRange.start))
+            } else {
+                newSourceDuration = duration
+            }
+            let newSourceRange = TimeRange(start: clip.sourceRange.start, duration: newSourceDuration)
+
+            actions.append(.trimClip(
+                clipId: clip.id,
+                sourceRange: newSourceRange,
+                timelineRange: newTimelineRange
+            ))
+
+            if !clip.keyframes.isEmpty {
+                let style = motionStyle(for: idx)
+                let updatedKeyframes = generateKeyframes(for: style, duration: duration)
+                actions.append(.setClipKeyframes(clipId: clip.id, keyframes: updatedKeyframes))
+            }
+
+            cursor += duration
+        }
+
+        return actions
+    }
+
+    /// Parses natural-language montage rebalance instructions (Korean & English), e.g.:
+    /// - "3번째 사진 2초 늘리고 전체 30초 유지"
+    /// - "세 번째 사진을 2초 더 보여줘. 전체는 30초를 유지"
+    /// - "make clip 3 longer by 2s and keep total 30s"
+    public static func parseRebalanceInstruction(_ instruction: String) -> MontageRebalanceRequest? {
+        let compact = instruction.lowercased().filter { !$0.isWhitespace }
+        let hasKeepTotal = compact.contains("전체") || compact.contains("유지") || compact.contains("keeptotal") || compact.contains("total")
+        let isIncrease = compact.contains("늘리") || compact.contains("늘려") || compact.contains("더보여") || compact.contains("더길게") || compact.contains("longer") || compact.contains("extend")
+        let isDecrease = compact.contains("줄이") || compact.contains("줄여") || compact.contains("짧게") || compact.contains("shorter") || compact.contains("reduce")
+
+        guard hasKeepTotal, isIncrease || isDecrease else { return nil }
+
+        guard let ordinal = extractOrdinal(from: compact) else { return nil }
+        let secValues = extractSeconds(from: compact)
+        guard let firstSeconds = secValues.first, firstSeconds > 0 else { return nil }
+
+        let signedDelta = isDecrease ? -firstSeconds : firstSeconds
+        let targetTotal: TimeInterval? = secValues.count >= 2 ? secValues.last : nil
+
+        return MontageRebalanceRequest(
+            targetClipOneBasedIndex: ordinal,
+            deltaSeconds: signedDelta,
+            targetTotalDurationSeconds: targetTotal
+        )
+    }
+
+    private static func extractOrdinal(from compact: String) -> Int? {
+        let koreanWords: [(String, Int)] = [
+            ("첫번째", 1), ("두번째", 2), ("세번째", 3), ("네번째", 4), ("다섯번째", 5),
+            ("여섯번째", 6), ("일곱번째", 7), ("여덟번째", 8), ("아홉번째", 9), ("열번째", 10),
+            ("first", 1), ("second", 2), ("third", 3), ("fourth", 4), ("fifth", 5),
+        ]
+        for (word, value) in koreanWords where compact.contains(word) {
+            return value
+        }
+        for suffix in ["번째", "st", "nd", "rd", "th"] {
+            var searchStart = compact.startIndex
+            while let range = compact.range(of: suffix, range: searchStart..<compact.endIndex) {
+                let prefix = compact[..<range.lowerBound]
+                var digits = ""
+                var idx = prefix.endIndex
+                while idx > prefix.startIndex {
+                    let prev = prefix.index(before: idx)
+                    if prefix[prev].isNumber {
+                        digits.insert(prefix[prev], at: digits.startIndex)
+                        idx = prev
+                    } else {
+                        break
+                    }
+                }
+                if let n = Int(digits), n > 0 { return n }
+                searchStart = range.upperBound
+            }
+        }
+        for prefixKey in ["clip", "photo", "사진", "클립"] {
+            var searchStart = compact.startIndex
+            while let range = compact.range(of: prefixKey, range: searchStart..<compact.endIndex) {
+                let suffix = compact[range.upperBound...]
+                var digits = ""
+                var idx = suffix.startIndex
+                while idx < suffix.endIndex, suffix[idx].isNumber {
+                    digits.append(suffix[idx])
+                    idx = suffix.index(after: idx)
+                }
+                if let n = Int(digits), n > 0 { return n }
+                searchStart = range.upperBound
+            }
+        }
+        return nil
+    }
+
+    private static func extractSeconds(from compact: String) -> [TimeInterval] {
+        var values: [TimeInterval] = []
+        var idx = compact.startIndex
+        while idx < compact.endIndex {
+            if compact[idx].isNumber || compact[idx] == "." {
+                var digits = ""
+                var scan = idx
+                while scan < compact.endIndex, compact[scan].isNumber || compact[scan] == "." {
+                    digits.append(compact[scan])
+                    scan = compact.index(after: scan)
+                }
+                if scan < compact.endIndex, (compact[scan] == "초" || compact[scan] == "s"),
+                   let val = Double(digits), val > 0 {
+                    values.append(val)
+                    scan = compact.index(after: scan)
+                }
+                idx = scan
+            } else {
+                idx = compact.index(after: idx)
+            }
+        }
+        return values
     }
 }

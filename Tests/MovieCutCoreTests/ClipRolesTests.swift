@@ -152,4 +152,65 @@ struct ClipRolesTests {
         try SetClipRoleCommand(clipIds: [realId, realId], roleId: dialogue.id).apply(to: &project)
         #expect(project.timeline.tracks[0].clips[0].roleId == dialogue.id)
     }
+
+    @Test("RenameTimelineRoleCommand updates role name, rejects duplicates/empty, and undoes cleanly")
+    func renameRoleAndUndo() async throws {
+        let dialogue = TimelineRole.presets[0]
+        let music = TimelineRole.presets[1]
+        let session = EditorSession(project: makeProject(clipCount: 2))
+        try await session.dispatch(AddTimelineRoleCommand(role: dialogue))
+        try await session.dispatch(AddTimelineRoleCommand(role: music))
+
+        let clipId = await session.snapshot().timeline.tracks[0].clips[0].id
+        try await session.dispatch(SetClipRoleCommand(clipIds: [clipId], roleId: dialogue.id))
+
+        // Duplicate name or empty name rejects without mutating.
+        var snap = await session.snapshot()
+        #expect(throws: EditorCommandError.self) {
+            try RenameTimelineRoleCommand(roleId: dialogue.id, newName: music.name).apply(to: &snap)
+        }
+        #expect(throws: EditorCommandError.self) {
+            try RenameTimelineRoleCommand(roleId: dialogue.id, newName: "   ").apply(to: &snap)
+        }
+        #expect(throws: EditorCommandError.self) {
+            try RenameTimelineRoleCommand(roleId: UUID(), newName: "Narration").apply(to: &snap)
+        }
+
+        try await session.dispatch(RenameTimelineRoleCommand(roleId: dialogue.id, newName: "Host Voice"))
+        snap = await session.snapshot()
+        #expect(snap.roles.first(where: { $0.id == dialogue.id })?.name == "Host Voice")
+        #expect(snap.timeline.tracks[0].clips[0].roleId == dialogue.id)
+
+        try await session.undo()
+        snap = await session.snapshot()
+        #expect(snap.roles.first(where: { $0.id == dialogue.id })?.name == dialogue.name)
+    }
+
+    @Test("RemoveTimelineRoleCommand removes role, clears referencing clips, and restores both on undo")
+    func removeRoleScrubsClipReferencesAndUndoes() async throws {
+        let dialogue = TimelineRole.presets[0]
+        let music = TimelineRole.presets[1]
+        let session = EditorSession(project: makeProject(clipCount: 3))
+        try await session.dispatch(AddTimelineRoleCommand(role: dialogue))
+        try await session.dispatch(AddTimelineRoleCommand(role: music))
+
+        let clipIds = await session.snapshot().timeline.tracks[0].clips.map(\.id)
+        try await session.dispatch(SetClipRoleCommand(clipIds: [clipIds[0], clipIds[1]], roleId: dialogue.id))
+        try await session.dispatch(SetClipRoleCommand(clipIds: [clipIds[2]], roleId: music.id))
+
+        try await session.dispatch(RemoveTimelineRoleCommand(roleId: dialogue.id))
+        var snap = await session.snapshot()
+        #expect(snap.roles == [music])
+        #expect(snap.timeline.tracks[0].clips[0].roleId == nil)
+        #expect(snap.timeline.tracks[0].clips[1].roleId == nil)
+        #expect(snap.timeline.tracks[0].clips[2].roleId == music.id)
+
+        try await session.undo()
+        snap = await session.snapshot()
+        #expect(snap.roles == [dialogue, music])
+        #expect(snap.timeline.tracks[0].clips[0].roleId == dialogue.id)
+        #expect(snap.timeline.tracks[0].clips[1].roleId == dialogue.id)
+        #expect(snap.timeline.tracks[0].clips[2].roleId == music.id)
+    }
 }
+

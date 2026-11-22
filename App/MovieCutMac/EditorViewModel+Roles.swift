@@ -118,4 +118,38 @@ extension EditorViewModel {
     func clearRoleOnSelection() async {
         await clearRole(from: Array(selectedClipIds))
     }
+
+    /// Renames a registered role in the project registry via `RenameTimelineRoleCommand`.
+    func renameRole(id roleId: UUID, newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await session.dispatch(RenameTimelineRoleCommand(roleId: roleId, newName: trimmed))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = String(
+                format: NSLocalizedString("Renamed role to %@", comment: ""),
+                trimmed
+            )
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Removes a registered role and clears its tag from all referencing clips via `RemoveTimelineRoleCommand`.
+    func removeRole(id roleId: UUID) async {
+        let oldName = currentProject.roles.first(where: { $0.id == roleId })?.name ?? ""
+        do {
+            try await session.dispatch(RemoveTimelineRoleCommand(roleId: roleId))
+            try await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = String(
+                format: NSLocalizedString("Removed role %@", comment: ""),
+                oldName
+            )
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
 }
+

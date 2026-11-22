@@ -329,6 +329,24 @@ final class IOSEditorViewModel {
         await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
     }
 
+    var canFreezeSelectedClipAtPlayhead: Bool {
+        guard let selectedClip, selectedClip.kind == .video else { return false }
+        let freezeTime = playheadTime - selectedClip.timelineRange.start
+        return freezeTime > 0 && freezeTime < selectedClip.timelineRange.duration
+    }
+
+    func toggleReverseSelectedClip() async {
+        guard let selectedClipId, let selectedClip, selectedClip.kind == .video else { return }
+        await apply(ReverseClipCommand(clipId: selectedClipId))
+    }
+
+    func freezeFrameSelectedClipAtPlayhead(freezeDuration: TimeInterval = 2.0) async {
+        guard let selectedClipId, let selectedClip, selectedClip.kind == .video else { return }
+        let freezeTime = playheadTime - selectedClip.timelineRange.start
+        guard freezeTime > 0, freezeTime < selectedClip.timelineRange.duration else { return }
+        await apply(FreezeFrameCommand(clipId: selectedClipId, freezeTime: freezeTime, freezeDuration: freezeDuration))
+    }
+
     func updateSelectedColorCorrection(_ correction: ColorCorrection) async {
         guard let selectedClipId else { return }
         await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: correction))
@@ -1745,5 +1763,63 @@ final class IOSEditorViewModel {
             sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
             timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
         )
+    }
+
+    // MARK: - AI Photo Montage (iOS Parity — AI-03a)
+
+    /// Whether the current project can generate an AI photo montage from imported library photos.
+    var canApplyPhotoMontageFromLibrary: Bool {
+        let timelineEmpty = currentProject.timeline.tracks.allSatisfy { $0.clips.isEmpty }
+        let hasPhotos = currentProject.mediaLibrary.assets.values.contains { $0.kind == .image }
+        return timelineEmpty && hasPhotos
+    }
+
+    /// Plans, compiles, and atomically applies an AI photo montage on iOS using imported
+    /// image assets (and optional audio asset) from the project's media library.
+    func applyPhotoMontageFromLibrary(
+        targetDuration: TimeInterval = 15.0,
+        targetCanvas: CanvasPreset = .portrait9x16
+    ) async {
+        let photos = currentProject.mediaLibrary.assets.values
+            .filter { $0.kind == .image }
+            .sorted { $0.originalURL.lastPathComponent < $1.originalURL.lastPathComponent }
+        let music = currentProject.mediaLibrary.assets.values
+            .filter { $0.kind == .audio && ($0.duration ?? 0) >= PhotoMontagePlanner.Limits.minMusicDuration }
+            .sorted { $0.originalURL.lastPathComponent < $1.originalURL.lastPathComponent }
+            .first
+        let beatTimes = currentProject.markers
+            .filter { $0.kind == .beat }
+            .map(\.time)
+
+        do {
+            let snapshot = await session.snapshotWithRevision()
+            let productionPlan = try PhotoMontagePlanner.plan(
+                photos: photos,
+                music: music,
+                targetDuration: targetDuration,
+                targetCanvas: targetCanvas,
+                existingTracks: snapshot.project.timeline.tracks,
+                baseRevision: snapshot.revision,
+                beatTimestamps: beatTimes
+            )
+            let preparedPlan = try await EditingPlanCompiler.compile(
+                productionPlan.actions,
+                for: snapshot.project,
+                baseRevision: snapshot.revision,
+                planId: productionPlan.planId,
+                label: productionPlan.userIntent
+            )
+            try await session.dispatch(
+                preparedPlan.batchCommand,
+                planId: preparedPlan.planId,
+                expectedRevision: snapshot.revision
+            )
+            await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Created photo montage (\(photos.count) photos)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
     }
 }

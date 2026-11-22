@@ -742,6 +742,23 @@
         }
       }
     },
+    "AI Photo Montage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Photo Montage"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 포토 몽타주"
+          }
+        }
+      }
+    },
     "AI tools and automation": {
       "extractionState": "manual",
       "localizations": {
@@ -2103,6 +2120,23 @@
         }
       }
     },
+    "Create Montage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Montage"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "몽타주 만들기"
+          }
+        }
+      }
+    },
     "Creates a lower-resolution proxy file for smoother editing.": {
       "extractionState": "manual",
       "localizations": {
@@ -3140,6 +3174,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "내보낼 때 프레임 보간이 적용됩니다"
+          }
+        }
+      }
+    },
+    "Freeze Frame (2s)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freeze Frame (2s)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프리즈 프레임 (2초)"
           }
         }
       }
@@ -5236,6 +5287,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "리버스 & 프리즈"
+          }
+        }
+      }
+    },
+    "Reverse Clip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reverse Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립 역재생"
           }
         }
       }

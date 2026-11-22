@@ -106,7 +106,7 @@ echo "sandbox network violations for MovieCutMac: ${VIOLATIONS:-0}"
 echo ""
 echo "=== Leg 2: iOS — socket capture during G-27 simulator harness ==="
 
-BUNDLE_ID="com.moviecut.ios"
+BUNDLE_ID="${MOVIECUT_IOS_BUNDLE_ID:-com.moviecut.ios}"
 TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
 [ -s "$TONE" ] || { echo "missing tone fixture" >&2; exit 1; }
 

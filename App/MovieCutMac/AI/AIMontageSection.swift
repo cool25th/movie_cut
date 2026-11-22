@@ -53,18 +53,18 @@ struct AIMontageSection: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                        .accessibilityLabel("Selected photos summary")
+                        .accessibilityLabel(NSLocalizedString("Selected photos summary", comment: "AI montage selected photos summary a11y"))
                 }
 
                 HStack(spacing: MovieCutSpacing.small) {
-                    Picker("Length", selection: $targetDuration) {
+                    Picker(NSLocalizedString("Length", comment: "AI montage target duration picker"), selection: $targetDuration) {
                         ForEach(durationOptions, id: \.seconds) { option in
                             Text(option.label).tag(option.seconds)
                         }
                     }
                     .controlSize(.small)
 
-                    Picker("Canvas", selection: $targetRatio) {
+                    Picker(NSLocalizedString("Canvas", comment: "AI montage target canvas picker"), selection: $targetRatio) {
                         ForEach(ratioOptions, id: \.ratio) { option in
                             Text(option.label).tag(option.ratio)
                         }
@@ -78,15 +78,15 @@ struct AIMontageSection: View {
                     if isCreating {
                         HStack(spacing: MovieCutSpacing.xSmall) {
                             ProgressView().controlSize(.small)
-                            Text("Creating…")
+                            Text(NSLocalizedString("Creating…", comment: "AI montage creating progress"))
                         }
                     } else {
-                        Text("Create Montage")
+                        Text(NSLocalizedString("Create Montage", comment: "AI montage create button"))
                     }
                 }
                 .controlSize(.small)
                 .disabled(photoURLs.isEmpty || isCreating)
-                .accessibilityHint("Creates a photo montage video on the timeline")
+                .accessibilityHint(NSLocalizedString("Creates a photo montage video on the timeline", comment: "AI montage create hint"))
 
                 if let errorMessage {
                     Text(errorMessage)
@@ -105,7 +105,7 @@ struct AIMontageSection: View {
             }
             .padding(.top, MovieCutSpacing.small)
         } label: {
-            Label("AI Photo Montage", systemImage: "photo.on.rectangle.angled")
+            Label(NSLocalizedString("AI Photo Montage", comment: "AI photo montage section title"), systemImage: "photo.on.rectangle.angled")
                 .font(.subheadline.weight(.semibold))
         }
     }
@@ -113,29 +113,33 @@ struct AIMontageSection: View {
     // MARK: - Labels
 
     private var photoPickerLabel: String {
-        photoURLs.isEmpty ? "Choose Photos…" : "Photos (\(photoURLs.count))"
+        photoURLs.isEmpty
+            ? NSLocalizedString("Choose Photos…", comment: "AI montage choose photos button")
+            : String(format: NSLocalizedString("Photos (%d)", comment: "AI montage selected photos count"), photoURLs.count)
     }
 
     private var musicPickerLabel: String {
         if let musicURL {
-            return "Music: \(musicURL.lastPathComponent)"
+            return String(format: NSLocalizedString("Music: %@", comment: "AI montage selected music label"), musicURL.lastPathComponent)
         }
-        return "Choose Music…"
+        return NSLocalizedString("Choose Music…", comment: "AI montage choose music button")
     }
 
     private var photoSummary: String {
         let names = photoURLs.map(\.lastPathComponent)
         let shown = names.prefix(3).joined(separator: ", ")
         let remainder = names.count - min(3, names.count)
-        return remainder > 0 ? "\(shown) and \(remainder) more" : shown
+        return remainder > 0
+            ? String(format: NSLocalizedString("%@ and %d more", comment: "AI montage photo summary overflow"), shown, remainder)
+            : shown
     }
 
     // MARK: - Pickers
 
     private func pickPhotos() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Photos"
-        panel.message = "Photos are arranged into a montage with Ken Burns motion."
+        panel.title = NSLocalizedString("Choose Photos", comment: "AI montage open panel title")
+        panel.message = NSLocalizedString("Photos are arranged into a montage with Ken Burns motion.", comment: "AI montage open panel message")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.image]
@@ -153,8 +157,8 @@ struct AIMontageSection: View {
             return
         }
         let panel = NSOpenPanel()
-        panel.title = "Choose Music"
-        panel.message = "One audio file. Short tracks loop to fill the montage."
+        panel.title = NSLocalizedString("Choose Music", comment: "AI montage music open panel title")
+        panel.message = NSLocalizedString("One audio file. Short tracks loop to fill the montage.", comment: "AI montage music open panel message")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.audio]
@@ -187,7 +191,10 @@ struct AIMontageSection: View {
                 if case .timelineNotEmpty = error {
                     // Montage is a new-project creation — surface the policy
                     // instead of the raw enum.
-                    errorMessage = "The timeline already has clips. Montages are created in a new project — clear the timeline or open a new one first."
+                    errorMessage = NSLocalizedString(
+                        "The timeline already has clips. Montages are created in a new project — clear the timeline or open a new one first.",
+                        comment: "AI montage non-empty timeline error"
+                    )
                 } else {
                     errorMessage = error.localizedDescription
                 }
@@ -199,7 +206,10 @@ struct AIMontageSection: View {
 
     private func friendlyMessage(for error: Error) -> String {
         if case EditorCommandError.duplicatePlanApplication = error {
-            return "This montage was already created. Click Create again to make a new one."
+            return NSLocalizedString(
+                "This montage was already created. Click Create again to make a new one.",
+                comment: "AI montage duplicate plan error"
+            )
         }
         return error.localizedDescription
     }

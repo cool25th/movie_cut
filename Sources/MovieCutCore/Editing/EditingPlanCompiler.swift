@@ -171,6 +171,22 @@ public enum EditingPlanCompiler {
 
         case let .setCanvas(canvas):
             return [SetProjectCanvasCommand(canvas: canvas)]
+
+        case let .trimClip(clipId, sourceRange, timelineRange):
+            return [TrimClipCommand(
+                clipId: clipId,
+                newSourceRange: sourceRange,
+                newTimelineRange: timelineRange
+            )]
+
+        case let .setClipEffects(clipId, effects):
+            return [SetClipPropertyCommand(clipId: clipId, property: .effects(effects))]
+
+        case let .setClipColorCorrection(clipId, colorCorrection):
+            return [SetClipPropertyCommand(clipId: clipId, property: .colorCorrection(colorCorrection))]
+
+        case let .addMarker(name, time):
+            return [AddMarkerCommand(marker: Marker(time: time, name: name))]
         }
     }
 

@@ -167,7 +167,7 @@ swift test --filter "CurveEvaluatorTests|HSLCubeBuilderTests|TextOverlayPixelPro
 
 ### 작업 지침 (작업자 에이전트용)
 
-1. 신규 테스트 파일 [`Tests/MovieCutCoreTests/GuruArchitectureVerificationTests.swift`](file:///Users/cool-mini4/MyDev/automation/movie_cut/Tests/MovieCutCoreTests/GuruArchitectureVerificationTests.swift)를 생성하고 아래 **7개 테스트 케이스**를 구현하십시오:
+1. 신규 테스트 파일 `GuruArchitectureVerificationTests.swift`(`Tests/MovieCutCoreTests/` 하위 예정)를 생성하고 아래 **7개 테스트 케이스**를 구현하십시오:
    - **`reverseRenderServiceMultiChunkReversesFrameOrder` (TC-M02 런타임)**:
      - 1.6초(`maxSeconds: 1.0` 청크 경계를 넘어 **2개 이상의 역방향 청크**로 분할되는 길이) 합성 비디오(예: 64×64, 전반부 0~0.8초는 순수 Red, 후반부 0.8~1.6초는 순수 Blue)를 임시 `.mp4`로 생성한 뒤 `ReverseRenderService().renderReversed(clip:timeRange:outputURL:progress:)`를 실행합니다.
      - 결과 역재생 `.mov`/`.mp4` 파일의 duration이 유효하고, 시작 구간 프레임은 Blue가 우세($B > R$)하며 끝 구간 프레임은 Red가 우세($R > B$)한지 확인하여 멀티 청크 역방향 렌더링을 런타임 검증합니다.

@@ -41,6 +41,10 @@ public enum EditingActionDSL {
         case setClipFade(clipId: UUID, fadeIn: TimeInterval, fadeOut: TimeInterval)
         case setClipTextContent(clipId: UUID, textContent: TextClipContent)
         case setCanvas(canvas: CanvasPreset)
+        case trimClip(clipId: UUID, sourceRange: TimeRange, timelineRange: TimeRange)
+        case setClipEffects(clipId: UUID, effects: [Effect])
+        case setClipColorCorrection(clipId: UUID, colorCorrection: ColorCorrection?)
+        case addMarker(name: String, time: TimeInterval)
     }
 
     /// Why an action cannot be planned — typed, so a validator can reject
@@ -302,6 +306,46 @@ public enum EditingActionDSL {
         case let .setClipTextContent(clipId, textContent):
             _ = try clip(clipId)
             return [Plan.CommandBox(kind: "SetClipPropertyCommand(textContent)", clipId: clipId, detail: textContent.text)]
+
+        case let .trimClip(clipId, sourceRange, timelineRange):
+            _ = try clip(clipId)
+            guard timelineRange.start.isFinite, timelineRange.start >= 0,
+                  timelineRange.duration.isFinite, timelineRange.duration > 0,
+                  sourceRange.start.isFinite, sourceRange.start >= 0,
+                  sourceRange.duration.isFinite, sourceRange.duration >= 0 else {
+                throw PlanningError.invalidTimeValue("Trim ranges must be finite and non-negative with positive timeline duration")
+            }
+            return [Plan.CommandBox(
+                kind: "TrimClipCommand",
+                clipId: clipId,
+                detail: "timeline[\(timelineRange.start),\(timelineRange.end))"
+            )]
+
+        case let .setClipEffects(clipId, effects):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(
+                kind: "SetClipPropertyCommand(effects)",
+                clipId: clipId,
+                detail: "\(effects.count) effect(s)"
+            )]
+
+        case let .setClipColorCorrection(clipId, colorCorrection):
+            _ = try clip(clipId)
+            return [Plan.CommandBox(
+                kind: "SetClipPropertyCommand(colorCorrection)",
+                clipId: clipId,
+                detail: colorCorrection == nil ? "reset" : "adjusted"
+            )]
+
+        case let .addMarker(name, time):
+            guard time.isFinite, time >= 0 else {
+                throw PlanningError.invalidTimeValue("Marker time must be finite and >= 0")
+            }
+            return [Plan.CommandBox(
+                kind: "AddMarkerCommand",
+                clipId: nil,
+                detail: "\(name)@\(time)"
+            )]
         }
     }
 

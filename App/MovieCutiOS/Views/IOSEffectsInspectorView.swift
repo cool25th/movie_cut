@@ -7,6 +7,11 @@ struct IOSEffectsInspectorView: View {
     let clip: Clip
 
     @State private var selectedTab: InspectorTab = .basic
+    @State private var draftOpacity: Double?
+    @State private var draftSpeed: Double?
+    @State private var draftVolume: Double?
+    @State private var draftFadeIn: Double?
+    @State private var draftFadeOut: Double?
 
     private enum InspectorTab: String, CaseIterable {
         case basic = "Basic"
@@ -124,42 +129,54 @@ struct IOSEffectsInspectorView: View {
     }
 
     private var opacitySection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let effectiveOpacity = draftOpacity ?? clip.opacity
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(opacityTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Text(String(format: "%.0f%%", clip.opacity * 100))
+                Text(String(format: "%.0f%%", effectiveOpacity * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Slider(value: Binding(
-                get: { clip.opacity },
-                set: { newValue in Task { await viewModel.updateSelectedOpacity(newValue) } }
-            ), in: 0...1)
+                get: { effectiveOpacity },
+                set: { newValue in draftOpacity = newValue }
+            ), in: 0...1) { isEditing in
+                if !isEditing, let newValue = draftOpacity {
+                    draftOpacity = nil
+                    Task { await viewModel.updateSelectedOpacity(newValue) }
+                }
+            }
             .accessibilityLabel(Text(opacityTitle))
-            .accessibilityValue(Text(String(format: "%.0f%%", clip.opacity * 100)))
+            .accessibilityValue(Text(String(format: "%.0f%%", effectiveOpacity * 100)))
         }
     }
 
     private var speedSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let effectiveSpeed = draftSpeed ?? clip.playbackRate
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(speedTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Text(String(format: "%.2gx", clip.playbackRate))
+                Text(String(format: "%.2gx", effectiveSpeed))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Slider(value: Binding(
-                get: { clip.playbackRate },
-                set: { newValue in Task { await viewModel.updateSelectedPlaybackRate(newValue) } }
-            ), in: 0.25...4.0)
+                get: { effectiveSpeed },
+                set: { newValue in draftSpeed = newValue }
+            ), in: 0.25...4.0) { isEditing in
+                if !isEditing, let newValue = draftSpeed {
+                    draftSpeed = nil
+                    Task { await viewModel.updateSelectedPlaybackRate(newValue) }
+                }
+            }
             .accessibilityLabel(Text(speedTitle))
-            .accessibilityValue(Text(String(format: "%.2gx", clip.playbackRate)))
+            .accessibilityValue(Text(String(format: "%.2gx", effectiveSpeed)))
         }
     }
 
@@ -504,25 +521,33 @@ struct IOSEffectsInspectorView: View {
     }
 
     private var volumeSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let effectiveVolume = draftVolume ?? clip.volume
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Volume")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Text(String(format: "%.0f%%", clip.volume * 100))
+                Text(String(format: "%.0f%%", effectiveVolume * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Slider(value: Binding(
-                get: { clip.volume },
-                set: { newValue in Task { await viewModel.updateSelectedVolume(newValue) } }
-            ), in: 0...2)
+                get: { effectiveVolume },
+                set: { newValue in draftVolume = newValue }
+            ), in: 0...2) { isEditing in
+                if !isEditing, let newValue = draftVolume {
+                    draftVolume = nil
+                    Task { await viewModel.updateSelectedVolume(newValue) }
+                }
+            }
         }
     }
 
     private var fadeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let effectiveFadeIn = draftFadeIn ?? clip.fadeInDuration
+        let effectiveFadeOut = draftFadeOut ?? clip.fadeOutDuration
+        return VStack(alignment: .leading, spacing: 8) {
             Text("Fade")
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -533,14 +558,19 @@ struct IOSEffectsInspectorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(String(format: "%.1fs", clip.fadeInDuration))
+                    Text(String(format: "%.1fs", effectiveFadeIn))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Slider(value: Binding(
-                    get: { clip.fadeInDuration },
-                    set: { newValue in Task { await viewModel.updateSelectedAudioFade(fadeInDuration: newValue) } }
-                ), in: 0...5)
+                    get: { effectiveFadeIn },
+                    set: { newValue in draftFadeIn = newValue }
+                ), in: 0...5) { isEditing in
+                    if !isEditing, let newValue = draftFadeIn {
+                        draftFadeIn = nil
+                        Task { await viewModel.updateSelectedAudioFade(fadeInDuration: newValue) }
+                    }
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -549,14 +579,19 @@ struct IOSEffectsInspectorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(String(format: "%.1fs", clip.fadeOutDuration))
+                    Text(String(format: "%.1fs", effectiveFadeOut))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Slider(value: Binding(
-                    get: { clip.fadeOutDuration },
-                    set: { newValue in Task { await viewModel.updateSelectedAudioFade(fadeOutDuration: newValue) } }
-                ), in: 0...5)
+                    get: { effectiveFadeOut },
+                    set: { newValue in draftFadeOut = newValue }
+                ), in: 0...5) { isEditing in
+                    if !isEditing, let newValue = draftFadeOut {
+                        draftFadeOut = nil
+                        Task { await viewModel.updateSelectedAudioFade(fadeOutDuration: newValue) }
+                    }
+                }
             }
         }
     }
@@ -569,23 +604,54 @@ struct IOSEffectsInspectorView: View {
         range: ClosedRange<Double>,
         binding: Binding<Double>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(String(format: "%.2f", value))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 38, alignment: .trailing)
-            }
-            Slider(value: binding, in: range, step: 0.01)
+        IOSTransactionalInspectorSlider(
+            title: title,
+            value: value,
+            range: range,
+            commitBinding: binding
+        )
+    }
+
+    private struct IOSTransactionalInspectorSlider: View {
+        let title: String
+        let value: Double
+        let range: ClosedRange<Double>
+        let commitBinding: Binding<Double>
+
+        @State private var draftValue: Double?
+
+        private var effectiveValue: Double {
+            draftValue ?? value
+        }
+
+        var body: some View {
+            let binding = Binding<Double>(
+                get: { effectiveValue },
+                set: { draftValue = $0 }
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: "%.2f", effectiveValue))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(width: 38, alignment: .trailing)
+                }
+                Slider(value: binding, in: range, step: 0.01) { isEditing in
+                    if !isEditing, let committed = draftValue {
+                        draftValue = nil
+                        commitBinding.wrappedValue = committed
+                    }
+                }
                 // A11Y-01: the visible title lives in a sibling Text — without
                 // an explicit label VoiceOver announces a bare "slider".
                 .accessibilityLabel(Text(title))
-                .accessibilityValue(Text(String(format: "%.2f", value)))
+                .accessibilityValue(Text(String(format: "%.2f", effectiveValue)))
+            }
         }
     }
 

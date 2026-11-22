@@ -168,6 +168,23 @@
         }
       }
     },
+    "%@ and %d more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ and %d more"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 외 %2$d개"
+          }
+        }
+      }
+    },
     "%@ background color": {
       "extractionState": "manual",
       "localizations": {
@@ -721,6 +738,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "AAC"
+          }
+        }
+      }
+    },
+    "AI Photo Montage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Photo Montage"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 포토 몽타주"
+          }
+        }
+      }
+    },
+    "AI Photo Montage (%d photos, %ds)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Photo Montage (%d photos, %ds)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 포토 몽타주 (사진 %1$d장, %2$d초)"
           }
         }
       }
@@ -1841,6 +1892,74 @@
         }
       }
     },
+    "Choose Music": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Music"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음악 선택"
+          }
+        }
+      }
+    },
+    "Choose Music…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Music…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음악 선택…"
+          }
+        }
+      }
+    },
+    "Choose Photos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Photos"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사진 선택"
+          }
+        }
+      }
+    },
+    "Choose Photos…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Photos…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사진 선택…"
+          }
+        }
+      }
+    },
     "Choose a timeline clip to preview it.": {
       "extractionState": "manual",
       "localizations": {
@@ -1954,6 +2073,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "라이브러리 검색 지우기"
+          }
+        }
+      }
+    },
+    "Clear range mark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear range mark"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구간 표시 지우기"
           }
         }
       }
@@ -2410,6 +2546,40 @@
         }
       }
     },
+    "Create Montage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Montage"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "몽타주 만들기"
+          }
+        }
+      }
+    },
+    "Created %ds video with %d photo(s).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Created %ds video with %d photo(s)."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사진 %2$d장으로 %1$d초 영상을 생성했습니다."
+          }
+        }
+      }
+    },
     "Creates a lower-resolution proxy file for smoother editing.": {
       "extractionState": "manual",
       "localizations": {
@@ -2440,6 +2610,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "새 텍스트 클립을 만듭니다."
+          }
+        }
+      }
+    },
+    "Creates a photo montage video on the timeline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creates a photo montage video on the timeline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인에 포토 몽타주 영상을 생성합니다"
+          }
+        }
+      }
+    },
+    "Creating…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "생성 중…"
           }
         }
       }
@@ -3755,6 +3959,23 @@
         }
       }
     },
+    "I couldn't map that to an edit. Try one of the examples.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I couldn't map that to an edit. Try one of the examples."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해당 요청을 편집 명령으로 변환할 수 없습니다. 예시 명령 중 하나를 시도해 보세요."
+          }
+        }
+      }
+    },
     "IDs and normalized element frames are preserved across format changes": {
       "localizations": {
         "en": {
@@ -4105,6 +4326,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "마지막 자동 저장: %@"
+          }
+        }
+      }
+    },
+    "Length": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Length"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "길이"
           }
         }
       }
@@ -4699,6 +4937,23 @@
         }
       }
     },
+    "Music: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Music: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음악: %@"
+          }
+        }
+      }
+    },
     "Mute track": {
       "extractionState": "manual",
       "localizations": {
@@ -4908,6 +5163,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "일치하는 효과음 없음"
+          }
+        }
+      }
+    },
+    "No matching clips for that instruction.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching clips for that instruction."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해당 명령과 일치하는 클립이 없습니다."
           }
         }
       }
@@ -5196,6 +5468,23 @@
         }
       }
     },
+    "One audio file. Short tracks loop to fill the montage.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One audio file. Short tracks loop to fill the montage."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오디오 파일 1개를 선택하세요. 짧은 트랙은 몽타주 길이에 맞춰 반복됩니다."
+          }
+        }
+      }
+    },
     "Opacity": {
       "localizations": {
         "en": {
@@ -5358,6 +5647,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "일시정지"
+          }
+        }
+      }
+    },
+    "Photos (%d)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos (%d)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사진 (%d)"
+          }
+        }
+      }
+    },
+    "Photos are arranged into a montage with Ken Burns motion.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos are arranged into a montage with Ken Burns motion."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 사진들이 켄 번스(Ken Burns) 모션이 적용된 몽타주로 배치됩니다."
           }
         }
       }
@@ -5897,6 +6220,23 @@
         }
       }
     },
+    "Rebalanced clip #%d (%+.1fs) while keeping %.1fs total.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebalanced clip #%d (%+.1fs) while keeping %.1fs total."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d번째 클립을 %2$+.1f초 조정하고 전체 %3$.1f초를 유지했습니다."
+          }
+        }
+      }
+    },
     "Recover": {
       "extractionState": "manual",
       "localizations": {
@@ -5965,6 +6305,23 @@
         }
       }
     },
+    "Remove Role": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Role"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할 삭제"
+          }
+        }
+      }
+    },
     "Remove the selected clip transition": {
       "extractionState": "manual",
       "localizations": {
@@ -5978,6 +6335,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "선택한 클립 전환 제거"
+          }
+        }
+      }
+    },
+    "Removed role %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed role %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할 %@ 삭제됨"
+          }
+        }
+      }
+    },
+    "Renamed role to %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renamed role to %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역할 이름을 %@(으)로 변경함"
           }
         }
       }
@@ -6497,6 +6888,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "선택된 페이지 %@ / %@"
+          }
+        }
+      }
+    },
+    "Selected photos summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected photos summary"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택된 사진 요약"
           }
         }
       }
@@ -7391,6 +7799,23 @@
         }
       }
     },
+    "That instruction doesn't apply to the selected clips.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That instruction doesn't apply to the selected clips."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택된 클립에 해당 명령을 적용할 수 없습니다."
+          }
+        }
+      }
+    },
     "The sample project isn't available in this build.": {
       "extractionState": "manual",
       "localizations": {
@@ -7421,6 +7846,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 검색 결과의 자막 카드가 타임라인에 더 이상 없습니다."
+          }
+        }
+      }
+    },
+    "The timeline already has clips. Montages are created in a new project — clear the timeline or open a new one first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The timeline already has clips. Montages are created in a new project — clear the timeline or open a new one first."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인에 이미 클립이 있습니다. 몽타주는 새 프로젝트에서 생성되므로 타임라인을 비우거나 새 프로젝트를 먼저 열어주세요."
           }
         }
       }
@@ -7487,6 +7929,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 클립 유형은 속도 컨트롤을 지원하지 않습니다."
+          }
+        }
+      }
+    },
+    "This montage was already created. Click Create again to make a new one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This montage was already created. Click Create again to make a new one."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 몽타주는 이미 생성되었습니다. 새로 만들려면 몽타주 만들기를 다시 클릭하세요."
           }
         }
       }

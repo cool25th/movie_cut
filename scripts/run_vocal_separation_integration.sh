@@ -21,7 +21,7 @@ APP_BUNDLE="$PRODUCTS_DIR/MovieCutMac.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
-APP_TMP="$HOME/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-vocal-integration"
+APP_TMP="$HOME/Library/Containers/${MOVIECUT_MAC_BUNDLE_ID:-com.moviecut.mac}/Data/tmp/moviecut-vocal-integration"
 mkdir -p "$APP_TMP"
 WORK_DIR="$(mktemp -d "$APP_TMP/run.XXXXXX")"
 INPUT_WAV="$WORK_DIR/center-side.wav"

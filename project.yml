@@ -11,6 +11,8 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    MOVIECUT_MAC_BUNDLE_ID: com.moviecut.mac
+    MOVIECUT_IOS_BUNDLE_ID: com.moviecut.ios
 packages:
   MovieCut:
     path: .
@@ -43,7 +45,7 @@ targets:
         product: MovieCutCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.mac
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MOVIECUT_MAC_BUNDLE_ID)"
         INFOPLIST_FILE: App/MovieCutMac/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/MovieCutMac/MovieCutMac.entitlements
         ENABLE_APP_SANDBOX: YES
@@ -66,7 +68,7 @@ targets:
         product: MovieCutCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.moviecut.ios
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MOVIECUT_IOS_BUNDLE_ID)"
         INFOPLIST_FILE: App/MovieCutiOS/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/MovieCutiOS/MovieCutiOS.entitlements
         SWIFT_VERSION: "6.0"

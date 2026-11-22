@@ -94,30 +94,48 @@ struct ChromaKeyView: View {
     // context) but Xcode 16 treats the closure as nonisolated and rejects the
     // MainActor call. A @MainActor closure is Sendable by definition.
     private func slider(title: String, value: Double, onChange: @escaping @MainActor (Double) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(String(format: "%.0f%%", value * 100))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Slider(value: Binding(
-                get: { value },
-                // Slider writes arrive on the main thread; assumeIsolated hops
-                // to the MainActor closure without a conversion the older
-                // compiler crashes on.
-                set: { newValue in MainActor.assumeIsolated { onChange(newValue) } }
-            ), in: 0 ... 1)
-        }
+        ChromaKeyParameterSlider(title: title, value: value, onChange: onChange)
     }
 
     private func updateSettings(_ update: (inout ChromaKeySettings) -> Void) {
         var settings = activeSettings
         update(&settings)
         onChange(settings)
+    }
+}
+
+private struct ChromaKeyParameterSlider: View {
+    let title: String
+    let value: Double
+    let onChange: @MainActor (Double) -> Void
+
+    @State private var draftValue: Double?
+
+    private var effectiveValue: Double {
+        draftValue ?? value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: "%.0f%%", effectiveValue * 100))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(
+                get: { effectiveValue },
+                set: { newValue in draftValue = newValue }
+            ), in: 0 ... 1) { isEditing in
+                if !isEditing, let committed = draftValue {
+                    draftValue = nil
+                    MainActor.assumeIsolated { onChange(committed) }
+                }
+            }
+        }
     }
 }
 

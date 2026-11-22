@@ -207,7 +207,7 @@ UI 일반 편집까지 전부 DSL로 옮기는 대규모 리팩터링은 필요 
 - `GenerationProvider`: `capabilities / estimate / submit / status / cancel / retrieve` 지원 여부 제공.
 - `ProviderCapabilities`: 미디어 종류, 입력 참조 수, 길이·화면비·해상도·크기 제한, 과금 단위, 취소·idempotency 지원 여부.
 
-구현 시 후보 공급자의 공식 API 문서로 기능·가격·보관 정책을 확인해 `docs/AI_PROVIDER_DECISIONS.md`(신규)에 날짜·근거를 기록한다. 이 계획에서는 검증하지 않은 모델명·정확한 비용을 고정하지 않는다. 키가 없으면 mock 기반 통합까지 진행하고 실제 공급자 검증은 미완료로 남긴다.
+구현 시 후보 공급자의 공식 API 문서로 기능·가격·보관 정책을 확인해 `AI_PROVIDER_DECISIONS.md`(`docs/` 하위 신규 예정)에 날짜·근거를 기록한다. 이 계획에서는 검증하지 않은 모델명·정확한 비용을 고정하지 않는다. 키가 없으면 mock 기반 통합까지 진행하고 실제 공급자 검증은 미완료로 남긴다.
 
 ### 네트워크·키
 
@@ -266,7 +266,7 @@ UI 상태: idle / analyzing / planning / preparing / applying / ready / exportin
 
 ### P2 — 첨부·사진 초안·기존 도우미 통합
 
-**주요 대상**: 신규 `Sources/MovieCutCore/AI/ProductionPlan.swift`, `ProjectContextSnapshot.swift`, `PhotoMontagePlanner.swift`; 신규 `App/MovieCutMac/AI/ProjectContextBuilder.swift`, `PreparedAssetStore.swift`; 기존 `EditorViewModel+AssistantProvider.swift`.
+**주요 대상**: 신규 `Sources/MovieCutCore/AI/ProductionPlan.swift`, `ProjectContextSnapshot.swift`, `PhotoMontagePlanner.swift`; 신규 `App/MovieCutMac/AI/PreparedAssetStore.swift`, `ProjectContextBuilder.swift`(P3 예정); 기존 `EditorViewModel+AssistantProvider.swift`.
 
 - 실제 파일 probe·썸네일·안정 자산 핸들 및 사진 구간 배분 구현.
 - 기존 AssistantIntent의 대응 가능한 편집을 공통 실행 경계로 연결, 기존 도우미 UX 유지.

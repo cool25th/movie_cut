@@ -82,7 +82,7 @@ check_backtick() {
     *) return ;;
   esac
   case "$ref" in
-    *...*) return ;;
+    *...*|*YYYYMMDD*) return ;;
   esac
   known_stale_ref "$ref" && return
   is_known_root "$ref" || return

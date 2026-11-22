@@ -13,7 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BUNDLE_ID="com.moviecut.ios"
+BUNDLE_ID="${MOVIECUT_IOS_BUNDLE_ID:-com.moviecut.ios}"
 FIXTURE="$ROOT/Tests/Fixtures/solid_red_320x240_2s_30fps.mp4"
 TONE="$ROOT/Tests/Fixtures/tone_440hz_2s_mono.wav"
 for f in "$FIXTURE" "$TONE"; do

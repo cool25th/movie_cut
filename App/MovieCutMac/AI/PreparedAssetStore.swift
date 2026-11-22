@@ -27,6 +27,12 @@ public enum PreparedAssetStore {
     /// Prepares verified image assets from local URLs.
     public static func preparePhotoAssets(from urls: [URL]) throws -> [MediaAsset] {
         try urls.map { url in
+            let didStart = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStart {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw StoreError.fileNotFound(url)
             }
@@ -51,6 +57,12 @@ public enum PreparedAssetStore {
 
     /// Prepares a verified audio asset from a local URL.
     public static func prepareMusicAsset(from url: URL) async throws -> MediaAsset {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStart {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw StoreError.fileNotFound(url)
         }
@@ -76,5 +88,31 @@ public enum PreparedAssetStore {
             duration: durationSeconds,
             originalBookmark: bookmark
         )
+    }
+
+    /// Resolves and refreshes a prepared asset's security-scoped bookmark across process restarts (`AI-03a` M3b).
+    public static func verifyAndRefreshBookmark(for asset: MediaAsset) throws -> MediaAsset {
+        var updated = asset
+        if let resolved = SecurityScopedAccess.resolveBookmark(for: asset) {
+            updated.originalURL = resolved.url
+            if resolved.isStale {
+                let didStart = resolved.url.startAccessingSecurityScopedResource()
+                defer {
+                    if didStart {
+                        resolved.url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                if let refreshed = SecurityScopedAccess.makeBookmark(for: resolved.url) {
+                    updated.originalBookmark = refreshed
+                }
+            }
+        }
+        let exists = try SecurityScopedAccess.withSecurityScope(for: updated) { scopedURL in
+            FileManager.default.fileExists(atPath: scopedURL.path)
+        }
+        guard exists else {
+            throw StoreError.fileNotFound(updated.originalURL)
+        }
+        return updated
     }
 }

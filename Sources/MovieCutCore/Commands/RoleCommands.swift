@@ -74,3 +74,61 @@ public struct SetClipRoleCommand: EditorCommand {
         }
     }
 }
+
+/// Renames an existing role in `project.roles` while preserving its `UUID` so
+/// all clips tagged with `roleId` automatically reflect the new name without
+/// re-tagging. Rejects empty names, unknown `roleId`, or collisions with
+/// another registered role's name.
+public struct RenameTimelineRoleCommand: EditorCommand {
+    public let id: UUID
+    public var roleId: UUID
+    public var newName: String
+
+    public init(id: UUID = UUID(), roleId: UUID, newName: String) {
+        self.id = id
+        self.roleId = roleId
+        self.newName = newName
+    }
+
+    public func apply(to project: inout Project) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw EditorCommandError.invalidCommand("Role name cannot be empty")
+        }
+        guard let roleIndex = project.roles.firstIndex(where: { $0.id == roleId }) else {
+            throw EditorCommandError.invalidCommand("Unknown role: \(roleId)")
+        }
+        guard !project.roles.enumerated().contains(where: { $0.offset != roleIndex && $0.element.name == trimmed }) else {
+            throw EditorCommandError.invalidCommand("Role name already exists: \(trimmed)")
+        }
+        project.roles[roleIndex].name = trimmed
+    }
+}
+
+/// Removes a role from `project.roles` and atomically clears `clip.roleId` on
+/// any timeline clip referencing it so no dangling `roleId` remains. Undo via
+/// `EditorSession` snapshot restores both the registry entry (at its original
+/// order) and all previously tagged clips.
+public struct RemoveTimelineRoleCommand: EditorCommand {
+    public let id: UUID
+    public var roleId: UUID
+
+    public init(id: UUID = UUID(), roleId: UUID) {
+        self.id = id
+        self.roleId = roleId
+    }
+
+    public func apply(to project: inout Project) throws {
+        guard let roleIndex = project.roles.firstIndex(where: { $0.id == roleId }) else {
+            throw EditorCommandError.invalidCommand("Unknown role: \(roleId)")
+        }
+        project.roles.remove(at: roleIndex)
+        for trackIndex in project.timeline.tracks.indices {
+            for clipIndex in project.timeline.tracks[trackIndex].clips.indices
+            where project.timeline.tracks[trackIndex].clips[clipIndex].roleId == roleId {
+                project.timeline.tracks[trackIndex].clips[clipIndex].roleId = nil
+            }
+        }
+    }
+}
+

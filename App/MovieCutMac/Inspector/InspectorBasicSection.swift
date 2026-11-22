@@ -14,6 +14,10 @@ struct InspectorBasicSection: View {
     let clip: Clip
     let mode: InspectorBasicMode
 
+    @State private var draftOpacity: Double?
+    @State private var draftVolume: Double?
+    @State private var draftTransformValues: [String: Double] = [:]
+
     private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
     private let minimumSpeedCurvePointCount = 2
 
@@ -481,18 +485,28 @@ struct InspectorBasicSection: View {
     }
 
     private var opacitySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let displayedOpacity = draftOpacity ?? clip.opacity
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Opacity")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Slider(value: Binding(
-                    get: { clip.opacity },
-                    set: { newValue in
-                        Task { await viewModel.updateSelectedOpacity(newValue) }
+                Slider(
+                    value: Binding(
+                        get: { displayedOpacity },
+                        set: { newValue in
+                            draftOpacity = newValue
+                        }
+                    ),
+                    in: 0 ... 1,
+                    onEditingChanged: { isEditing in
+                        if !isEditing, let newValue = draftOpacity {
+                            draftOpacity = nil
+                            Task { await viewModel.updateSelectedOpacity(newValue) }
+                        }
                     }
-                ), in: 0 ... 1)
-                Text(String(format: "%.0f%%", clip.opacity * 100))
+                )
+                Text(String(format: "%.0f%%", displayedOpacity * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
@@ -637,18 +651,28 @@ struct InspectorBasicSection: View {
     }
 
     private var volumeSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let displayedVolume = draftVolume ?? clip.volume
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Volume")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Slider(value: Binding(
-                    get: { clip.volume },
-                    set: { newValue in
-                        Task { await viewModel.updateSelectedVolume(newValue) }
+                Slider(
+                    value: Binding(
+                        get: { displayedVolume },
+                        set: { newValue in
+                            draftVolume = newValue
+                        }
+                    ),
+                    in: 0 ... 2,
+                    onEditingChanged: { isEditing in
+                        if !isEditing, let newValue = draftVolume {
+                            draftVolume = nil
+                            Task { await viewModel.updateSelectedVolume(newValue) }
+                        }
                     }
-                ), in: 0 ... 2)
-                Text(String(format: "%.0f%%", clip.volume * 100))
+                )
+                Text(String(format: "%.0f%%", displayedVolume * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
@@ -1817,19 +1841,25 @@ struct InspectorBasicSection: View {
         range: ClosedRange<Double>,
         onChange: @escaping (Double) -> Void
     ) -> some View {
-        HStack(spacing: 8) {
+        let displayedValue = draftTransformValues[title] ?? value
+        return HStack(spacing: 8) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 42, alignment: .leading)
             Slider(
                 value: Binding(
-                    get: { value },
-                    set: { onChange($0) }
+                    get: { displayedValue },
+                    set: { draftTransformValues[title] = $0 }
                 ),
-                in: range
+                in: range,
+                onEditingChanged: { isEditing in
+                    if !isEditing, let committed = draftTransformValues.removeValue(forKey: title) {
+                        onChange(committed)
+                    }
+                }
             )
-            Text(sliderValueLabel(title: title, value: value))
+            Text(sliderValueLabel(title: title, value: displayedValue))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)

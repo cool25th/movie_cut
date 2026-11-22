@@ -125,8 +125,9 @@ struct DiarizationMeasurementTests {
         }
     }
 
-    /// Mean log-magnitude spectrum over up to 8 frames inside the segment
-    /// (512-point FFT, lower 64 bins — the voice band at 44.1kHz).
+    /// Mean-centered, L2-normalized log-magnitude spectrum (512-point FFT, lower
+    /// 60 bins) combined with voiced fundamental frequency (F0 autocorrelation
+    /// in 75...350 Hz) in the last 4 dimensions (64 dims total).
     private static func feature(for seg: (start: Double, end: Double), samples: [Float], rate: Double) -> [Float] {
         let n = 512
         let fftSetup = vDSP_create_fftsetup(vDSP_Length(log2(Double(n))), FFTRadix(kFFTRadix2))!
@@ -136,8 +137,14 @@ struct DiarizationMeasurementTests {
 
         let segSamples = samples[max(0, Int(seg.start * rate))..<min(samples.count, Int(seg.end * rate))]
         guard !segSamples.isEmpty else { return [Float](repeating: 0, count: 64) }
-        let frameCount = min(8, max(1, segSamples.count / n))
+        let frameCount = min(12, max(1, segSamples.count / n))
         var mean = [Float](repeating: 0, count: 64)
+        var voicedF0Estimates: [Float] = []
+
+        let minLag = max(1, Int(rate / 350.0))
+        let maxLag = max(minLag + 1, Int(rate / 75.0))
+        let pitchWindow = min(segSamples.count, max(n, maxLag * 2 + 64))
+
         for f in 0..<frameCount {
             let startIdx = segSamples.startIndex + (segSamples.count - n) * f / max(1, frameCount)
             guard startIdx + n <= segSamples.endIndex else { continue }
@@ -154,15 +161,65 @@ struct DiarizationMeasurementTests {
                     vDSP_fft_zrip(fftSetup, &split, 1, vDSP_Length(log2(Double(n))), FFTDirection(FFT_FORWARD))
                     var mags = [Float](repeating: 0, count: n / 2)
                     vDSP_zvabs(&split, 1, &mags, 1, vDSP_Length(n / 2))
-                    var logMags = [Float](repeating: 0, count: 64)
-                    for b in 0..<64 {
-                        logMags[b] = 20 * log10(max(mags[b], 1e-9))
-                        mean[b] += logMags[b]
+                    for b in 0..<60 {
+                        let logMag = 20 * log10(max(mags[b], 1e-9))
+                        mean[b] += logMag
+                    }
+                }
+            }
+
+            // Voiced F0 estimation via normalized autocorrelation over pitchWindow
+            let pitchStart = min(startIdx, max(segSamples.startIndex, segSamples.endIndex - pitchWindow))
+            if pitchStart + pitchWindow <= segSamples.endIndex, pitchWindow > maxLag {
+                let slice = Array(segSamples[pitchStart..<(pitchStart + pitchWindow)])
+                var energy0: Float = 0
+                vDSP_dotpr(slice, 1, slice, 1, &energy0, vDSP_Length(pitchWindow))
+                if energy0 > 1e-6 {
+                    var bestLag = minLag
+                    var bestCorr: Float = -1
+                    for lag in stride(from: minLag, through: min(maxLag, pitchWindow - 16), by: 2) {
+                        let len = pitchWindow - lag
+                        var corr: Float = 0
+                        slice.withUnsafeBufferPointer { ptr in
+                            vDSP_dotpr(ptr.baseAddress!, 1, ptr.baseAddress! + lag, 1, &corr, vDSP_Length(len))
+                        }
+                        let normCorr = corr / energy0
+                        if normCorr > bestCorr {
+                            bestCorr = normCorr
+                            bestLag = lag
+                        }
+                    }
+                    if bestCorr > 0.25 {
+                        let f0 = Float(rate) / Float(bestLag)
+                        voicedF0Estimates.append((f0 - 75.0) / 275.0)
                     }
                 }
             }
         }
-        for k in 0..<64 { mean[k] /= Float(frameCount) }
+        for k in 0..<60 { mean[k] /= Float(frameCount) }
+
+        // Mean-center and L2-normalize the 60 spectral bins so utterance loudness doesn't dominate
+        let specMean = mean[0..<60].reduce(0, +) / 60.0
+        var specNormSq: Float = 0
+        for k in 0..<60 {
+            mean[k] -= specMean
+            specNormSq += mean[k] * mean[k]
+        }
+        let specScale = 1.0 / max(sqrt(specNormSq), 1e-6)
+        for k in 0..<60 {
+            mean[k] *= specScale
+        }
+
+        // Populate F0 summary statistics in bins 60..<64 with speaker-discriminative weight
+        let sortedF0 = voicedF0Estimates.sorted()
+        let medianF0 = sortedF0.isEmpty ? 0.5 : sortedF0[sortedF0.count / 2]
+        let p25F0 = sortedF0.isEmpty ? 0.5 : sortedF0[sortedF0.count / 4]
+        let p75F0 = sortedF0.isEmpty ? 0.5 : sortedF0[(sortedF0.count * 3) / 4]
+        let f0Weight: Float = 2.5
+        mean[60] = medianF0 * f0Weight
+        mean[61] = p25F0 * f0Weight
+        mean[62] = p75F0 * f0Weight
+        mean[63] = (voicedF0Estimates.reduce(0, +) / Float(max(1, voicedF0Estimates.count))) * f0Weight
         return mean
     }
 
@@ -301,4 +358,49 @@ struct DiarizationMeasurementTests {
         }
         #expect(failures.isEmpty)
     }
+
+    @Test("F0-enhanced normalized spectral features achieve 0% confusion across alternating speakers with varying loudness and formants")
+    func f0EnhancedFeatureSeparatesTwoHarmonicSpeakers() {
+        let rate = 44_100.0
+        let utteranceDuration = 0.6
+        let gapDuration = 0.4
+        let utteranceSamples = Int(utteranceDuration * rate)
+        let gapSamples = Int(gapDuration * rate)
+
+        var stream: [Float] = []
+        let speakerF0s: [Double] = [118.0, 218.0]
+
+        for u in 0..<6 {
+            let speaker = u % 2
+            let f0 = speakerF0s[speaker]
+            // Vary overall amplitude and harmonic formant weights per utterance to simulate different vowels
+            let amp = Float(0.35 + 0.12 * Double(u % 3))
+            let formantTilt = Double((u / 2) + 1)
+            for i in 0..<utteranceSamples {
+                let t = Double(i) / rate
+                var sample: Double = 0
+                for h in 1...8 {
+                    let weight = 1.0 / pow(Double(h), 0.7 + 0.15 * sin(Double(h) * formantTilt))
+                    sample += weight * sin(2.0 * .pi * f0 * Double(h) * t)
+                }
+                stream.append(amp * Float(sample / 4.0))
+            }
+            stream.append(contentsOf: [Float](repeating: 0, count: gapSamples))
+        }
+
+        let detected = Self.detectSegments(samples: stream, rate: rate)
+        #expect(detected.count == 6)
+
+        let clustered = Self.twoMeans(detected.map(\.feature))
+        #expect(clustered.changed)
+        // Utterances 0, 2, 4 belong to speaker 0; utterances 1, 3, 5 belong to speaker 1.
+        let label0 = clustered.labels[0]
+        let label1 = clustered.labels[1]
+        #expect(label0 != label1)
+        for u in 0..<6 {
+            let expectedLabel = (u % 2 == 0) ? label0 : label1
+            #expect(clustered.labels[u] == expectedLabel)
+        }
+    }
 }
+

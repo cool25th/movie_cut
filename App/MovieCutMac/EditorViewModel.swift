@@ -4123,7 +4123,7 @@ final class EditorViewModel {
         }
     }
 
-    private func assistantTargetClips(_ target: AssistantTarget, in project: Project) -> [Clip] {
+    func assistantTargetClips(_ target: AssistantTarget, in project: Project) -> [Clip] {
         let allClips = project.timeline.tracks.flatMap(\.clips)
         switch target {
         case .selection:
@@ -4206,7 +4206,7 @@ final class EditorViewModel {
         }
     }
 
-    private func assistantActionLabel(_ action: AssistantAction) -> String {
+    func assistantActionLabel(_ action: AssistantAction) -> String {
         switch action {
         case .applyFilter(let type): return "Filter (\(type.rawValue))"
         case .removeFilters: return "Remove filters"
@@ -4234,6 +4234,7 @@ final class EditorViewModel {
             try await session.dispatch(command)
             try await refreshFromSession()
         } catch {
+            try? await refreshFromSession()
             lastErrorMessage = error.localizedDescription
         }
     }

@@ -14,6 +14,11 @@ struct TimelineView: View {
         case slide
     }
 
+    private struct ClipDragPreview: Equatable {
+        var sourceRange: TimeRange?
+        var timelineRange: TimeRange
+    }
+
     var viewModel: EditorViewModel
 
     @State private var dragOffset: CGFloat = 0
@@ -22,6 +27,7 @@ struct TimelineView: View {
     @State private var clipBodyDragMode: ClipBodyDragMode?
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
+    @State private var dragPreviewRanges: [UUID: ClipDragPreview] = [:]
     @State private var timelineViewportWidth: CGFloat = 900
     @State private var timelineScrollViewportWidth: CGFloat = 900
     /// Horizontal scroll offset of the timeline content, quantized to 64 pt
@@ -1082,6 +1088,7 @@ struct TimelineView: View {
 
     @MainActor
     private func clipView(_ clip: Clip, trackKind: TrackKind) -> some View {
+        let clip = effectiveClip(clip)
         let x = CGFloat(clip.timelineRange.start) * CGFloat(pixelsPerSecond)
         let width = CGFloat(clip.timelineRange.duration) * CGFloat(pixelsPerSecond)
         let isSelected = viewModel.selectedClipIds.contains(clip.id)
@@ -1856,12 +1863,15 @@ struct TimelineView: View {
         clipBodyDragMode = nil
         dragInitialTimelineRange = nil
         dragInitialSourceRange = nil
+        dragPreviewRanges.removeAll()
         snapGuideTime = nil
         cachedDragSnapPoints.removeAll(keepingCapacity: true)
     }
 
     private func commitMove(for clipId: UUID) {
-        guard let clip = clip(for: clipId) else { return }
+        guard let rawClip = clip(for: clipId) else { return }
+        let clip = effectiveClip(rawClip)
+        let targetTimelineRange = clip.timelineRange
         let trackId = trackId(containing: clipId)
 
         Task {
@@ -1869,37 +1879,44 @@ struct TimelineView: View {
                 clipId: clipId,
                 sourceTrackId: trackId,
                 targetTrackId: trackId,
-                timelineRange: clip.timelineRange
+                timelineRange: targetTimelineRange
             )
         }
     }
 
     private func commitTrim(for clipId: UUID) {
-        guard let clip = clip(for: clipId) else { return }
+        guard let rawClip = clip(for: clipId) else { return }
+        let clip = effectiveClip(rawClip)
+        let targetSourceRange = clip.sourceRange
+        let targetTimelineRange = clip.timelineRange
         let trackId = trackId(containing: clipId)
 
         Task {
             await viewModel.trimClip(
                 clipId: clipId,
                 trackId: trackId,
-                sourceRange: clip.sourceRange,
-                timelineRange: clip.timelineRange
+                sourceRange: targetSourceRange,
+                timelineRange: targetTimelineRange
             )
         }
     }
 
-    private func updateClip(_ clipId: UUID, sourceRange: TimeRange? = nil, timelineRange: TimeRange) {
-        for trackIndex in viewModel.currentProject.timeline.tracks.indices {
-            guard let clipIndex = viewModel.currentProject.timeline.tracks[trackIndex].clips.firstIndex(where: { $0.id == clipId }) else {
-                continue
-            }
-
-            if let sourceRange {
-                viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].sourceRange = sourceRange
-            }
-            viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].timelineRange = timelineRange
-            return
+    private func effectiveClip(_ clip: Clip) -> Clip {
+        guard let preview = dragPreviewRanges[clip.id] else { return clip }
+        var copy = clip
+        if let sourceRange = preview.sourceRange {
+            copy.sourceRange = sourceRange
         }
+        copy.timelineRange = preview.timelineRange
+        return copy
+    }
+
+    private func updateClip(_ clipId: UUID, sourceRange: TimeRange? = nil, timelineRange: TimeRange) {
+        let existingSource = dragPreviewRanges[clipId]?.sourceRange
+        dragPreviewRanges[clipId] = ClipDragPreview(
+            sourceRange: sourceRange ?? existingSource,
+            timelineRange: timelineRange
+        )
     }
 
     private func clip(for clipId: UUID) -> Clip? {

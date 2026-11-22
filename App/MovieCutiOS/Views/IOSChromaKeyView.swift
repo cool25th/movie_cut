@@ -71,31 +71,52 @@ struct IOSChromaKeyView: View {
     }
 
     private func slider(title: String, value: Double, onChange: @escaping (Double) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(Int((value * 100).rounded()))%")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            Slider(value: Binding(
-                get: { value },
-                set: onChange
-            ), in: 0 ... 1)
-            .frame(minHeight: 44)
-            // A11Y-01: explicit label/value — the visible title is a sibling
-            // Text, so without this VoiceOver announces a bare "slider".
-            .accessibilityLabel(Text(title))
-            .accessibilityValue(Text("\(Int((value * 100).rounded()))%"))
-        }
+        IOSChromaKeyParameterSlider(title: title, value: value, onChange: onChange)
     }
 
     private func updateSettings(_ update: (inout ChromaKeySettings) -> Void) {
         var settings = activeSettings
         update(&settings)
         onChange(settings)
+    }
+}
+
+private struct IOSChromaKeyParameterSlider: View {
+    let title: String
+    let value: Double
+    let onChange: (Double) -> Void
+
+    @State private var draftValue: Double?
+
+    private var effectiveValue: Double {
+        draftValue ?? value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(Int((effectiveValue * 100).rounded()))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            Slider(value: Binding(
+                get: { effectiveValue },
+                set: { draftValue = $0 }
+            ), in: 0 ... 1) { isEditing in
+                if !isEditing, let committed = draftValue {
+                    draftValue = nil
+                    onChange(committed)
+                }
+            }
+            .frame(minHeight: 44)
+            // A11Y-01: explicit label/value — the visible title is a sibling
+            // Text, so without this VoiceOver announces a bare "slider".
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text("\(Int((effectiveValue * 100).rounded()))%"))
+        }
     }
 }
 

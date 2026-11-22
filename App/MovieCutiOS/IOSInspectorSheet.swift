@@ -66,6 +66,28 @@ struct IOSInspectorSheet: View {
                                 range: 0.25...4,
                                 valueText: String(format: "%.2fx", viewModel.selectedClip?.playbackRate ?? clip.playbackRate)
                             )
+
+                            if clip.kind == .video {
+                                Toggle(
+                                    NSLocalizedString("Reverse Clip", comment: "iOS inspector reverse clip toggle"),
+                                    isOn: Binding(
+                                        get: { viewModel.selectedClip?.isReversed ?? clip.isReversed },
+                                        set: { _ in
+                                            Task { await viewModel.toggleReverseSelectedClip() }
+                                        }
+                                    )
+                                )
+
+                                Button {
+                                    Task { await viewModel.freezeFrameSelectedClipAtPlayhead() }
+                                } label: {
+                                    Label(
+                                        NSLocalizedString("Freeze Frame (2s)", comment: "iOS inspector freeze frame button"),
+                                        systemImage: "camera.viewfinder"
+                                    )
+                                }
+                                .disabled(!viewModel.canFreezeSelectedClipAtPlayhead)
+                            }
                         }
 
                         if clip.kind == .video || clip.kind == .image {
@@ -128,43 +150,45 @@ struct IOSInspectorSheet: View {
                                 }
                                 .pickerStyle(.menu)
                             }
+                        }
 
-                            // CA-31(a): audio presets — the render paths
-                            // already consume clip EQ (eqDerivations) and
-                            // ducking metadata (placed-span ducking); this is
-                            // the missing iOS action surface.
-                            if clip.kind == .audio || clip.kind == .video {
-                                Section("Audio") {
-                                    eqPresetChips(for: clip)
-                                    Button {
-                                        Task { await viewModel.duckBackgroundUnderSelectedClip() }
-                                    } label: {
-                                        Label(
-                                            NSLocalizedString("Duck Background", comment: "CA-31 audio preset action"),
-                                            systemImage: "waveform.badge.minus"
-                                        )
-                                    }
-                                    .disabled(!viewModel.canDuckBackground)
-                                    .accessibilityHint(NSLocalizedString(
-                                        "Ducks overlapping music under this clip's speech",
-                                        comment: "CA-31 duck action hint"
-                                    ))
-                                    // CA-31(a) 2차: Noise Reduce — Mac's
-                                    // destructive-apply parity.
-                                    Button {
-                                        Task { await viewModel.applyNoiseReductionToSelectedClip() }
-                                    } label: {
-                                        Label(
-                                            NSLocalizedString("Noise Reduce", comment: "CA-31 audio preset action"),
-                                            systemImage: "waveform.and.sparkle"
-                                        )
-                                    }
-                                    .disabled(!viewModel.canDuckBackground)
-                                    .accessibilityHint(NSLocalizedString(
-                                        "Reduces background noise in the selected clip",
-                                        comment: "CA-31 noise reduce hint"
-                                    ))
+                        // CA-31(a): audio presets — the render paths
+                        // already consume clip EQ (eqDerivations) and
+                        // ducking metadata (placed-span ducking); this is
+                        // the missing iOS action surface. Unnested from
+                        // `if clip.kind == .video` so standalone `.audio`
+                        // clips also display the Audio section.
+                        if clip.kind == .audio || clip.kind == .video {
+                            Section("Audio") {
+                                eqPresetChips(for: clip)
+                                Button {
+                                    Task { await viewModel.duckBackgroundUnderSelectedClip() }
+                                } label: {
+                                    Label(
+                                        NSLocalizedString("Duck Background", comment: "CA-31 audio preset action"),
+                                        systemImage: "waveform.badge.minus"
+                                    )
                                 }
+                                .disabled(!viewModel.canDuckBackground)
+                                .accessibilityHint(NSLocalizedString(
+                                    "Ducks overlapping music under this clip's speech",
+                                    comment: "CA-31 duck action hint"
+                                ))
+                                // CA-31(a) 2차: Noise Reduce — Mac's
+                                // destructive-apply parity.
+                                Button {
+                                    Task { await viewModel.applyNoiseReductionToSelectedClip() }
+                                } label: {
+                                    Label(
+                                        NSLocalizedString("Noise Reduce", comment: "CA-31 audio preset action"),
+                                        systemImage: "waveform.and.sparkle"
+                                    )
+                                }
+                                .disabled(!viewModel.canDuckBackground)
+                                .accessibilityHint(NSLocalizedString(
+                                    "Reduces background noise in the selected clip",
+                                    comment: "CA-31 noise reduce hint"
+                                ))
                             }
                         }
 
@@ -187,6 +211,13 @@ struct IOSInspectorSheet: View {
                         }
                     }
                 } else {
+                    if viewModel.canApplyPhotoMontageFromLibrary {
+                        Section(NSLocalizedString("AI Photo Montage", comment: "iOS AI photo montage section")) {
+                            Button(NSLocalizedString("Create Montage", comment: "iOS create photo montage button"), systemImage: "wand.and.stars") {
+                                Task { await viewModel.applyPhotoMontageFromLibrary() }
+                            }
+                        }
+                    }
                     ContentUnavailableView(
                         "No Clip Selected",
                         systemImage: "slider.horizontal.3",
@@ -205,17 +236,44 @@ struct IOSInspectorSheet: View {
         range: ClosedRange<Double>,
         valueText: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(valueText)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+        IOSSheetTransactionalSliderRow(
+            title: title,
+            commitBinding: value,
+            range: range,
+            valueText: valueText
+        )
+    }
 
-            Slider(value: value, in: range)
+    private struct IOSSheetTransactionalSliderRow: View {
+        let title: String
+        let commitBinding: Binding<Double>
+        let range: ClosedRange<Double>
+        let valueText: String
+
+        @State private var draftValue: Double?
+
+        var body: some View {
+            let value = Binding<Double>(
+                get: { draftValue ?? commitBinding.wrappedValue },
+                set: { draftValue = $0 }
+            )
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    Text(valueText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Slider(value: value, in: range) { isEditing in
+                    if !isEditing, let committed = draftValue {
+                        draftValue = nil
+                        commitBinding.wrappedValue = committed
+                    }
+                }
                 .frame(minHeight: 44)
+            }
         }
     }
 

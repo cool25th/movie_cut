@@ -102,4 +102,65 @@ struct EditingPlanCompilerTests {
         let current = await session.snapshot()
         #expect(current.timeline.tracks.isEmpty)
     }
+
+    @Test("Filter, color correction, trim, and marker actions compile into one atomic undoable batch")
+    func compileFilterColorCorrectionAndMarkerActionsAtomically() async throws {
+        let initialProject = makeEmptyProject()
+        let session = EditorSession(project: initialProject)
+        let snapshot = await session.snapshotWithRevision()
+
+        let trackId = UUID()
+        let assetId = UUID()
+        let clipId = UUID()
+        let asset = MediaAsset(
+            id: assetId,
+            originalURL: URL(fileURLWithPath: "/tmp/test_video.mp4"),
+            kind: .video,
+            duration: 10.0
+        )
+
+        let actions: [EditingActionDSL.Action] = [
+            .createTrack(trackId: trackId, kind: .video, name: "Video"),
+            .registerAsset(asset: asset),
+            .addClip(
+                clipId: clipId,
+                trackId: trackId,
+                assetId: assetId,
+                timelineRange: TimeRange(start: 0, duration: 5),
+                sourceRange: TimeRange(start: 0, duration: 5),
+                kind: .video
+            ),
+            .trimClip(
+                clipId: clipId,
+                sourceRange: TimeRange(start: 0, duration: 8),
+                timelineRange: TimeRange(start: 0, duration: 8)
+            ),
+            .setClipEffects(clipId: clipId, effects: [Effect(type: .grayscale)]),
+            .setClipColorCorrection(
+                clipId: clipId,
+                colorCorrection: ColorCorrection(brightness: 0.2, contrast: 1.1, saturation: 0.9)
+            ),
+            .addMarker(name: "Marker 1", time: 4.0),
+        ]
+
+        let prepared = try await EditingPlanCompiler.compile(
+            actions,
+            for: snapshot.project,
+            baseRevision: snapshot.revision
+        )
+
+        try await session.dispatch(prepared.batchCommand, expectedRevision: snapshot.revision)
+        let applied = await session.snapshot()
+        let clip = try #require(applied.timeline.tracks.first?.clips.first)
+        #expect(clip.timelineRange.duration == 8.0)
+        #expect(clip.effects.map(\.type) == [.grayscale])
+        #expect(abs((clip.colorCorrection?.brightness ?? 0) - 0.2) < 1e-6)
+        #expect(applied.markers.count == 1)
+        #expect(applied.markers.first?.name == "Marker 1")
+
+        try await session.undo()
+        let undone = await session.snapshot()
+        #expect(undone.timeline.tracks.isEmpty)
+        #expect(undone.markers.isEmpty)
+    }
 }

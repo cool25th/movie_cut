@@ -42,6 +42,9 @@
 		183E7858F1C8770A28E7ADAE /* EditorViewModel+TimelineEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244F372F5786A4A83EE3AA62 /* EditorViewModel+TimelineEditing.swift */; };
 		19534F93007B9370DC508594 /* ExportOptionsUIStaticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8164B1B9F14CC00FF71BAA9 /* ExportOptionsUIStaticContractTests.swift */; };
 		196E95FBB121C9F23F2983D5 /* TrackSoloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF59E714D0578303EDA0906 /* TrackSoloTests.swift */; };
+		1A0000014E5D00010000A001 /* EditorViewModel+Autosave.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410000014E5D00010000F001 /* EditorViewModel+Autosave.swift */; };
+		1A0000024E5D00020000A002 /* EditorViewModel+CardDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410000024E5D00020000F002 /* EditorViewModel+CardDocument.swift */; };
+		1A0000034E5D00030000A003 /* EditorViewModel+ColorScopes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410000034E5D00030000F003 /* EditorViewModel+ColorScopes.swift */; };
 		1A29ADB5AB21A944A4F3FD7D /* EditingSemanticContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6B5EFA7CA5B95C852CD935 /* EditingSemanticContractTests.swift */; };
 		1A9456DDEB66DC9C0E600801 /* Phase2FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3EBCCE92AD75E3767AA5C1 /* Phase2FeatureTests.swift */; };
 		1AA33E18BCD110345282B211 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B713B73E3776396E1A4E5F1C /* Assets.xcassets */; };
@@ -527,6 +530,9 @@
 		3FA70D7770612A05CC44B498 /* AudioGraphEngineNullTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioGraphEngineNullTests.swift; sourceTree = "<group>"; };
 		408DC6C773CA6902E1896B6C /* HighlightScorerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightScorerTests.swift; sourceTree = "<group>"; };
 		40F105C5DC9436146754755B /* EditorViewModel+SlipSlide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+SlipSlide.swift"; sourceTree = "<group>"; };
+		410000014E5D00010000F001 /* EditorViewModel+Autosave.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+Autosave.swift"; sourceTree = "<group>"; };
+		410000024E5D00020000F002 /* EditorViewModel+CardDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+CardDocument.swift"; sourceTree = "<group>"; };
+		410000034E5D00030000F003 /* EditorViewModel+ColorScopes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorViewModel+ColorScopes.swift"; sourceTree = "<group>"; };
 		4230BF3E0B1059DE69D11670 /* InspectorVocalSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorVocalSection.swift; sourceTree = "<group>"; };
 		4258C2155DCC57FF06BF0687 /* InspectorAnalysisSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorAnalysisSection.swift; sourceTree = "<group>"; };
 		43010EB9EC05F5BCBACEC3B6 /* EffectBrowserPreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectBrowserPreviewRenderer.swift; sourceTree = "<group>"; };
@@ -1208,7 +1214,10 @@
 				BD7234313775A9C045C724CB /* EditorViewModel+AssistantProvider.swift */,
 				464BCF6516C7E61CAC5AE018 /* EditorViewModel+Audio.swift */,
 				FB74A34CA9F74E40DC99D4F4 /* EditorViewModel+AutoHighlights.swift */,
+				410000014E5D00010000F001 /* EditorViewModel+Autosave.swift */,
 				4528A5B6B37026AD16E3F331 /* EditorViewModel+CanvasGeometry.swift */,
+				410000024E5D00020000F002 /* EditorViewModel+CardDocument.swift */,
+				410000034E5D00030000F003 /* EditorViewModel+ColorScopes.swift */,
 				91967F0CD3036FAEBF3629AB /* EditorViewModel+Compound.swift */,
 				99958F9796E4A62BF55282E1 /* EditorViewModel+Export.swift */,
 				FFCE4F47F26BABCF0A21BFCA /* EditorViewModel+Inspector.swift */,
@@ -1979,7 +1988,10 @@
 				F165B4A2B478B72FADF2F8E8 /* EditorViewModel+AssistantProvider.swift in Sources */,
 				DBDC259B314953A9DECDE38E /* EditorViewModel+Audio.swift in Sources */,
 				D120BC0E0115192F115466C7 /* EditorViewModel+AutoHighlights.swift in Sources */,
+				1A0000014E5D00010000A001 /* EditorViewModel+Autosave.swift in Sources */,
 				55051CC3289D6C31FE18B3EF /* EditorViewModel+CanvasGeometry.swift in Sources */,
+				1A0000024E5D00020000A002 /* EditorViewModel+CardDocument.swift in Sources */,
+				1A0000034E5D00030000A003 /* EditorViewModel+ColorScopes.swift in Sources */,
 				3CFE075F24B519D76EEF819D /* EditorViewModel+Compound.swift in Sources */,
 				7E09C3090F6006B7A9D84299 /* EditorViewModel+Export.swift in Sources */,
 				61B099D9C732AA273D8AF075 /* EditorViewModel+HomeRouting.swift in Sources */,

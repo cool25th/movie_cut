@@ -89,7 +89,9 @@ struct SeedPromotionE2ETests {
         // no wall clock or machine fields).
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let obj = try JSONSerialization.jsonObject(with: encoder.encode(fixture)) as! [String: Any]
+        let obj = try #require(
+            try JSONSerialization.jsonObject(with: encoder.encode(fixture)) as? [String: Any]
+        )
         let keys = Set(obj.keys)
         #expect(keys == ["fixture_id", "origin_seed", "failing_step",
                          "initial_project_state", "command_sequence",

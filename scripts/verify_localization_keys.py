@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -652,6 +653,40 @@ def run_self_test() -> int:
     return 1 if failed else 0
 
 
+SWIFTUI_UI_LITERAL_RE = re.compile(
+    r'\b(?:Text|Button|Label|Toggle|Picker|Section|navigationTitle)\("([^"\\]+)"'
+)
+
+
+def find_missing_swiftui_literals(
+    roots: list[Path],
+    repo_root: Path,
+    catalog_keys: set[str],
+) -> dict[str, list[str]]:
+    """Scan SwiftUI UI constructor literals not present in Localizable.xcstrings."""
+    missing: dict[str, list[str]] = {}
+    for root in roots:
+        base = root if root.is_absolute() else (repo_root / root)
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.swift")):
+            if "Tests" in path.parts or "UITests" in path.parts:
+                continue
+            if path.name in {"UITestHarness.swift", "IOSUITestHarness.swift"}:
+                continue
+            rel = str(path.relative_to(repo_root))
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if line.lstrip().startswith("//"):
+                    continue
+                for match in SWIFTUI_UI_LITERAL_RE.finditer(line):
+                    key = match.group(1)
+                    if len(key) <= 1 or not any(ch.isalpha() for ch in key):
+                        continue
+                    if key not in catalog_keys:
+                        missing.setdefault(key, []).append(f"{rel}:{lineno}")
+    return missing
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Reconcile NSLocalizedString keys in Swift sources against a string catalog.",
@@ -671,6 +706,11 @@ def main(argv: list[str]) -> int:
         "--fail-on-korean",
         action="store_true",
         help="also exit non-zero while any Korean key is still used in code",
+    )
+    parser.add_argument(
+        "--check-swiftui-literals",
+        action="store_true",
+        help="also fail if SwiftUI Text/Button/Label/Toggle/Picker/Section/navigationTitle string literals are missing from the catalog",
     )
     parser.add_argument("--quiet", action="store_true", help="print only the verdict line")
     parser.add_argument(
@@ -693,10 +733,20 @@ def main(argv: list[str]) -> int:
         return 2
 
     report = build_report(scan, catalog)
+    missing_swiftui = (
+        find_missing_swiftui_literals(roots, repo_root, set(catalog.keys))
+        if args.check_swiftui_literals
+        else {}
+    )
+    if args.check_swiftui_literals:
+        report["counts"]["missing_swiftui_literals"] = len(missing_swiftui)
+        report["missing_swiftui_literals"] = missing_swiftui
 
     failures: list[str] = []
     if report["counts"]["missing_from_catalog"]:
         failures.append(f"{report['counts']['missing_from_catalog']} key(s) missing from catalog")
+    if missing_swiftui:
+        failures.append(f"{len(missing_swiftui)} SwiftUI UI literal(s) missing from catalog")
     if report["sources"]["call_sites_with_interpolated_key"]:
         failures.append(
             f"{report['sources']['call_sites_with_interpolated_key']} interpolated key call site(s)"
@@ -733,6 +783,10 @@ def main(argv: list[str]) -> int:
     else:
         if not args.quiet:
             print_report(report, scan, args.list_files)
+            if missing_swiftui:
+                print(f"\n[SwiftUI UI literals missing from catalog] {len(missing_swiftui)}")
+                for key, sites in sorted(missing_swiftui.items()):
+                    print(f"  {key!r} <- {sites[0]}")
         print(verdict)
     return 1 if failures else 0
 

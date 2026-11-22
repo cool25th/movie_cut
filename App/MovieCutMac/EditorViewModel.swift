@@ -208,7 +208,7 @@ final class EditorViewModel {
     var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession
-    @ObservationIgnored private let projectStore: ProjectStore
+    @ObservationIgnored let projectStore: ProjectStore
     /// Single owner of compound flattening. Engines receive the same value
     /// snapshot and never compute or cache flattened timelines themselves.
     @ObservationIgnored private let flattenedTimelineCache = FlattenedTimelineCache()
@@ -271,105 +271,15 @@ final class EditorViewModel {
     // saves run serially (never interleaved temp-file replaces), and a save
     // requested while one is in flight re-fires with the LATEST snapshot
     // afterwards — last snapshot always wins.
-    @ObservationIgnored private var pendingAutosaveTask: Task<Void, Never>?
-    @ObservationIgnored private var autosaveSaveInFlight = false
-    @ObservationIgnored private var autosaveDirty = false
-    @ObservationIgnored private var lastAutosavedProject: Project?
-
-    private func scheduleAutosave() {
-        // A no-op re-publish of identical content skips the write entirely.
-        if let lastAutosavedProject, lastAutosavedProject == currentProject, !autosaveSaveInFlight {
-            return
-        }
-        pendingAutosaveTask?.cancel()
-        pendingAutosaveTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 750_000_000) // 0.75 s debounce
-            guard !Task.isCancelled else { return }
-            await self?.performAutosave()
-        }
-    }
-
-    /// Serial, latest-snapshot-wins autosave. Recommitted after an in-flight
-    /// save when an edit landed mid-save (autosaveDirty).
-    private func performAutosave() async {
-        if autosaveSaveInFlight {
-            autosaveDirty = true
-            return
-        }
-        let snapshot = currentProject
-        if let lastAutosavedProject, lastAutosavedProject == snapshot {
-            autosaveDirty = false
-            return
-        }
-        autosaveSaveInFlight = true
-        defer { autosaveSaveInFlight = false }
-        do {
-            try await projectStore.saveAutosave(snapshot)
-            lastAutosavedProject = snapshot
-            autosaveSaveSucceeded()
-        } catch {
-            autosaveSaveFailed(FileOperationError.classify(error))
-        }
-        if autosaveDirty {
-            autosaveDirty = false
-            await performAutosave()
-        }
-    }
-
-    /// Awaitable autosave flush (used by automation to deterministically persist
-    /// recovery state before quitting; same path as the edit-driven autosave).
-    /// Cancels any pending debounced save and writes the latest snapshot now.
-    func flushAutosave() async {
-        pendingAutosaveTask?.cancel()
-        pendingAutosaveTask = nil
-        await performAutosave()
-    }
+    @ObservationIgnored var pendingAutosaveTask: Task<Void, Never>?
+    @ObservationIgnored var autosaveSaveInFlight = false
+    @ObservationIgnored var autosaveDirty = false
+    @ObservationIgnored var lastAutosavedProject: Project?
 
     /// Non-blocking crash-recovery warning. nil while autosaves succeed;
     /// set when the latest autosave failed (shown in the status bar).
     var autosaveFailureMessage: String?
-    @ObservationIgnored private var consecutiveAutosaveFailures = 0
-
-    private func autosaveSaveSucceeded() {
-        guard autosaveFailureMessage != nil || consecutiveAutosaveFailures > 0 else { return }
-        consecutiveAutosaveFailures = 0
-        autosaveFailureMessage = nil
-    }
-
-    private func autosaveSaveFailed(_ failure: FileOperationError) {
-        consecutiveAutosaveFailures += 1
-        autosaveFailureMessage = String(
-            format: NSLocalizedString(
-                "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space.",
-                comment: "Warning shown when the crash-recovery autosave cannot be written"
-            ),
-            failure.userMessage
-        )
-    }
-
-    /// A project recovered from a non-clean previous session, if any.
-    func recoverableProject() async -> Project? {
-        await projectStore.loadAutosaveIfAvailable()
-    }
-
-    /// The reason a recovery file existed but could not be loaded (corrupt),
-    /// if the last `recoverableProject()` call hit that case. The launch flow
-    /// surfaces this so the user is told their recovery file was damaged
-    /// instead of the previous silent `try?` swallow.
-    func autosaveLoadFailure() async -> FileOperationError? {
-        await projectStore.lastAutosaveLoadFailure
-    }
-
-    /// When the crash-recovery autosave was last written, for the launch
-    /// recovery prompt's identification line (project name + backup time).
-    func recoverableAutosaveDate() async -> Date? {
-        await projectStore.autosaveModificationDate()
-    }
-
-    /// Removes the crash-recovery autosave (clean quit or after a manual save).
-    func clearRecoveryAutosave() async {
-        await projectStore.clearAutosave()
-    }
+    @ObservationIgnored var consecutiveAutosaveFailures = 0
     private var currentProjectURL: URL?
     /// Whether the current project has unsaved changes. Observed so the UI can
     /// reflect the dirty state (e.g. window title dot) and guard destructive
@@ -380,7 +290,7 @@ final class EditorViewModel {
     /// dirty flag — a plain boolean set on every mutation would stay true even
     /// after undoing back to the on-disk bytes.
     @ObservationIgnored private var lastSavedProject: Project?
-    @ObservationIgnored private var isAutoSaveRunning = false
+    @ObservationIgnored var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
     /// Waveform bins per clip, populated lazily off the main thread. Observed
     /// (not ignored) so that filling a cache miss after a background decode
@@ -727,187 +637,7 @@ final class EditorViewModel {
     /// scenarios/e2e G-18/G-19, which keep the surface exercised and tested).
     /// The Core CardNews models + commands stay for the later authoring
     /// feature; until an entry ships, this exists so those project files
-    /// still open into their editor.
-    var isCardEditorMode: Bool {
-        currentProject.cardDocument != nil
-    }
-
-    /// Applies a complete template set through one Core command. The gallery
-    /// and DEBUG actual-app harness share this entry point.
-    @discardableResult
-    func applyCardTemplate(_ template: CardTemplateSet) async -> Bool {
-        await applyCardTemplate(template, seed: UInt64.random(in: UInt64.min...UInt64.max))
-    }
-
-    /// Seeded overload used by deterministic actual-app evidence.
-    @discardableResult
-    func applyCardTemplate(_ template: CardTemplateSet, seed: UInt64) async -> Bool {
-        await dispatchCardMutation(
-            ApplyCardTemplateCommand(template: template, seed: seed),
-            successMessage: "Applied \(template.name)."
-        )
-    }
-
-    /// Applies one document-wide master style through one Core command while
-    /// retaining page-local overrides.
-    @discardableResult
-    func setCardMasterStyle(_ masterStyle: CardMasterStyle) async -> Bool {
-        await dispatchCardMutation(
-            SetCardMasterStyleCommand(masterStyle: masterStyle),
-            successMessage: "Updated the card master style."
-        )
-    }
-
-    /// Adds a blank body page after the selected page, or at the end when no
-    /// selection is supplied. The returned identifier is the persisted page ID.
-    @discardableResult
-    func addCardPage(after pageId: UUID?, pageID: UUID = UUID()) async -> UUID? {
-        let snapshot = await session.snapshot()
-        guard let document = snapshot.cardDocument else {
-            lastErrorMessage = "This project does not contain a card document."
-            return nil
-        }
-
-        let insertionIndex: Int
-        if let pageId {
-            guard let sourceIndex = document.pages.firstIndex(where: { $0.id == pageId }) else {
-                lastErrorMessage = "The selected card page no longer exists."
-                return nil
-            }
-            insertionIndex = sourceIndex + 1
-        } else {
-            insertionIndex = document.pages.endIndex
-        }
-
-        let page = CardPage(id: pageID, role: .body)
-        let didApply = await dispatchCardMutation(
-            AddCardPageCommand(page: page, insertionIndex: insertionIndex),
-            successMessage: "Added page \(insertionIndex + 1)."
-        )
-        return didApply ? page.id : nil
-    }
-
-    /// Duplicates a page through the Core command layer and returns the fresh,
-    /// stable identifier selected by the command.
-    @discardableResult
-    func duplicateCardPage(_ pageId: UUID, duplicatePageID: UUID = UUID()) async -> UUID? {
-        let didApply = await dispatchCardMutation(
-            DuplicateCardPageCommand(pageId: pageId, duplicatePageId: duplicatePageID),
-            successMessage: "Duplicated the selected page."
-        )
-        return didApply ? duplicatePageID : nil
-    }
-
-    /// Deletes a page and returns the adjacent surviving page that the UI should
-    /// select. The final page remains protected by the Core command invariant.
-    @discardableResult
-    func deleteCardPage(_ pageId: UUID) async -> UUID? {
-        let snapshot = await session.snapshot()
-        guard let pages = snapshot.cardDocument?.pages,
-              let deletedIndex = pages.firstIndex(where: { $0.id == pageId }) else {
-            lastErrorMessage = "The selected card page no longer exists."
-            return nil
-        }
-
-        let didApply = await dispatchCardMutation(
-            DeleteCardPageCommand(pageId: pageId),
-            successMessage: "Deleted page \(deletedIndex + 1)."
-        )
-        guard didApply, let remainingPages = currentProject.cardDocument?.pages, !remainingPages.isEmpty else {
-            return nil
-        }
-        return remainingPages[min(deletedIndex, remainingPages.count - 1)].id
-    }
-
-    /// Reorders a page to its final array index. Drag/drop and accessible move
-    /// controls intentionally share this single command-backed entry point.
-    @discardableResult
-    func moveCardPage(_ pageId: UUID, to destinationIndex: Int) async -> Bool {
-        let snapshot = await session.snapshot()
-        guard let pages = snapshot.cardDocument?.pages,
-              let sourceIndex = pages.firstIndex(where: { $0.id == pageId }) else {
-            lastErrorMessage = "The selected card page no longer exists."
-            return false
-        }
-        guard sourceIndex != destinationIndex else { return true }
-
-        return await dispatchCardMutation(
-            MoveCardPageCommand(pageId: pageId, destinationIndex: destinationIndex),
-            successMessage: "Moved page to position \(destinationIndex + 1)."
-        )
-    }
-
-    /// Changes the card aspect preset while leaving normalized element frames
-    /// and all stable page/element identifiers untouched.
-    @discardableResult
-    func setCardFormat(_ format: CardFormat) async -> Bool {
-        let snapshot = await session.snapshot()
-        guard let document = snapshot.cardDocument else {
-            lastErrorMessage = "This project does not contain a card document."
-            return false
-        }
-        guard document.format != format else { return true }
-
-        return await dispatchCardMutation(
-            SetCardFormatCommand(format: format),
-            successMessage: "Changed card format to \(format.accessibilityTitle)."
-        )
-    }
-
-    /// Commits one completed card-canvas interaction. Gesture ticks and inline
-    /// IME composition stay local to CardCanvasView; callers invoke this only at
-    /// move/resize/edit completion so the session records exactly one snapshot.
-    @discardableResult
-    func updateCardElement(pageId: UUID, element: CardElement) async -> Bool {
-        await dispatchCardMutation(
-            UpdateCardElementCommand(
-                pageId: pageId,
-                elementId: element.id,
-                element: element
-            ),
-            successMessage: "Updated card element \(element.id.uuidString)."
-        )
-    }
-
-    /// Imports or reuses an image and updates the selected image/logo element in
-    /// one Core command. Non-image inputs fail before any project mutation.
-    @discardableResult
-    func replaceCardElementImage(
-        pageId: UUID,
-        elementId: UUID,
-        with url: URL
-    ) async -> Bool {
-        let probedAsset: MediaAsset
-        do {
-            probedAsset = try await mediaAssetWithAppProbe(for: url)
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = error.localizedDescription
-            return false
-        }
-        guard probedAsset.kind == .image else {
-            lastStatusMessage = nil
-            lastErrorMessage = "Card image replacement requires an image file."
-            return false
-        }
-
-        let replacementAsset = currentProject.mediaLibrary.assets.values.first {
-            $0.kind == .image && $0.originalURL.standardizedFileURL == url.standardizedFileURL
-        } ?? probedAsset
-
-        let didApply = await dispatchCardMutation(
-            ReplaceCardElementImageCommand(
-                pageId: pageId,
-                elementId: elementId,
-                asset: replacementAsset
-            ),
-            successMessage: "Replaced the selected card image with \(url.lastPathComponent)."
-        )
-        if didApply {
-            selectedAssetId = replacementAsset.id
-        }
-        return didApply
-    }
+    // Card document methods live in EditorViewModel+CardDocument.swift.
 
     @discardableResult
     func newProject() async -> Bool {
@@ -1371,27 +1101,9 @@ final class EditorViewModel {
     }
 
     // MARK: - Periodic project autosave (named-file durability)
-    //
-    // This 30s timer writes the current project to a NAMED file
-    // (Application Support/MovieCut/Autosave/<name>-<uuid>.moviecut) every 30s
-    // so a long unsaved session is durable on disk. It is DISTINCT from the
-    // crash-recovery path in ProjectStore (recovery.moviecut, written on every
-    // edit via scheduleAutosave): that one is a single rolling recovery
-    // snapshot offered on next launch; this one is a per-project durable copy.
-    // Both paths go through ProjectStore.save, so both now surface classified
-    // FileOperationError messages (e.g. disk-full) instead of raw strings.
-    // The harness calls stopAutoSave() to make export/reload deterministic.
-
-    func startAutoSave() {
-        guard !isAutoSaveRunning else { return }
-
-        isAutoSaveRunning = true
-        scheduleNextAutoSave()
-    }
-
-    func stopAutoSave() {
-        isAutoSaveRunning = false
-    }
+    // Timer scheduling, crash-recovery autosave, and export reachability live
+    // in EditorViewModel+Autosave.swift; saveCurrentProject stays here because
+    // it touches `private var currentProjectURL` and `isSavingCurrentProject`.
 
     func saveCurrentProject() {
         guard !isSavingCurrentProject else { return }
@@ -1413,56 +1125,6 @@ final class EditorViewModel {
                 lastErrorMessage = FileOperationError.classify(error).userMessage
             }
         }
-    }
-
-    private func scheduleNextAutoSave() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
-            guard let self else { return }
-
-            self.saveCurrentProject()
-            if self.isAutoSaveRunning {
-                self.scheduleNextAutoSave()
-            }
-        }
-    }
-
-    private func defaultAutoSaveURL(for project: Project) -> URL {
-        // Routes through the project store so an injected test autosave
-        // directory isolates the NAMED autosave too (the 30 s timer below
-        // outlives short tests in lingering hosts — CRASH_DIAGNOSIS_20261005
-        // §3). The store's default equals the previous hardcoded path.
-        let baseDirectory = projectStore.namedAutosaveDirectory
-            ?? FileManager.default.temporaryDirectory
-
-        let sanitizedName = project.name
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
-        let fileName = sanitizedName.isEmpty ? "Untitled" : sanitizedName
-
-        return baseDirectory
-            .appendingPathComponent("Autosave", isDirectory: true)
-            .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
-    }
-
-    /// BUG-04 (CA-03 audit): export/package pre-flight. Missing-media
-    /// detection and the relink prompt only run at project OPEN — a disk
-    /// ejected mid-session used to fail the export minutes into the render.
-    /// Re-evaluate reachability NOW and refuse explicitly with relink
-    /// guidance before any render work starts.
-    func ensureAllMediaReachableForExport() -> Bool {
-        evaluateMissingMedia(in: currentProject)
-        guard !missingMediaAssets.isEmpty else { return true }
-        lastExportURL = nil
-        lastStatusMessage = nil
-        lastErrorMessage = String(
-            format: NSLocalizedString(
-                "Can't export: %d media file(s) can't be found. Use “Re-link Missing Media” to locate them, then export again.",
-                comment: "Export pre-flight refusal when source media is unreachable"
-            ),
-            missingMediaAssets.count
-        )
-        return false
     }
 
     func exportProject() async {
@@ -2790,60 +2452,11 @@ final class EditorViewModel {
     }
 
 
-    // MARK: - Chroma key eyedropper (F-10)
+    // MARK: - Chroma key eyedropper & color scopes state
+    // Methods live in EditorViewModel+ColorScopes.swift.
 
     /// Whether the preview is in eyedropper mode for picking the key color.
     var isChromaKeyEyedropperActive = false
-
-    func toggleChromaKeyEyedropper() {
-        isChromaKeyEyedropperActive.toggle()
-        lastStatusMessage = isChromaKeyEyedropperActive
-            ? "Eyedropper on: click the preview to pick the key color."
-            : nil
-    }
-
-    /// Samples the selected video clip's frame at a normalized preview point and
-    /// sets it as the chroma key color (F-10 eyedropper).
-    func pickChromaKeyColor(atNormalizedPoint point: CGPoint) async {
-        defer { isChromaKeyEyedropperActive = false }
-
-        guard let selectedClipId, let clip = selectedClip, clip.kind == .video,
-              let assetId = clip.assetId,
-              let asset = currentProject.mediaLibrary.assets[assetId] else {
-            lastErrorMessage = "Select a video clip to pick a key color."
-            return
-        }
-        _ = selectedClipId
-
-        let localTime = max(0, playheadTime - clip.timelineRange.start)
-        let sourceTime = clip.sourceRange.start + localTime
-        let avAsset = AVAsset(url: asset.originalURL)
-        let generator = AVAssetImageGenerator(asset: avAsset)
-        generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
-
-        do {
-            let cmTime = CMTime(seconds: sourceTime, preferredTimescale: 600)
-            let cgImage = try generator.copyCGImage(at: cmTime, actualTime: nil)
-            guard let color = PixelSampler.color(in: cgImage, atNormalizedPoint: point) else {
-                lastErrorMessage = "Couldn't sample that point."
-                return
-            }
-
-            let hex = PixelSampler.hexString(from: color)
-            var settings = clip.chromaKey ?? ChromaKeySettings.greenScreen()
-            settings.keyColor = hex
-            await updateSelectedChromaKey(settings)
-            lastErrorMessage = nil
-            lastStatusMessage = "Key color set to \(hex)."
-        } catch {
-            lastErrorMessage = "Couldn't read the frame: \(error.localizedDescription)"
-        }
-    }
-
-
-    // MARK: - Color scopes (Phase 2A)
 
     /// Scopes of the selected clip's frame with its grade applied, shown in the
     /// grading panel. Computed from the cached thumbnail (cheap, grade-accurate)
@@ -2853,97 +2466,7 @@ final class EditorViewModel {
     var scopeVectorscope: ScopeAnalyzer.Vectorscope?
     var scopeRGBParade: ScopeAnalyzer.RGBParade?
 
-    @ObservationIgnored private let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
-
-    private func clearScopes() {
-        scopeHistogram = nil
-        scopeWaveform = nil
-        scopeVectorscope = nil
-        scopeRGBParade = nil
-    }
-
-
-    /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
-    func refreshScopes() {
-        guard let clip = selectedClip,
-              let assetId = clip.assetId,
-              let asset = currentProject.mediaLibrary.assets[assetId],
-              let thumbnailData = asset.thumbnailData,
-              let source = CIImage(data: thumbnailData) else {
-            clearScopes()
-            return
-        }
-
-        var image = source
-        if let colorCorrection = clip.colorCorrection {
-            image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
-        }
-        if let colorGrade = clip.colorGrade {
-            image = ColorGradePixelProcessor.apply(colorGrade, to: image)
-        }
-
-        let width = 96
-        let height = 54
-        let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { clearScopes(); return }
-        let scaled = image.transformed(by: CGAffineTransform(
-            scaleX: CGFloat(width) / extent.width,
-            y: CGFloat(height) / extent.height
-        ))
-        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
-
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        bytes.withUnsafeMutableBytes { buffer in
-            guard let base = buffer.baseAddress else { return }
-            scopeContext.render(
-                scaled,
-                toBitmap: base,
-                rowBytes: width * 4,
-                bounds: bounds,
-                format: .RGBA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
-            )
-        }
-        // Single pass over the rendered bytes: the four individual reducers
-        // each walked the same 96×54 buffer again (4 redundant pixel loops).
-        let all = ScopeAnalyzer.analyzeAll(
-            rgba: bytes,
-            width: width,
-            height: height,
-            histogramBins: 64,
-            waveformColumns: width,
-            waveformLevels: 48,
-            vectorscopeSize: 48
-        )
-        scopeHistogram = all.histogram
-        scopeWaveform = all.lumaWaveform
-        scopeVectorscope = all.vectorscope
-        scopeRGBParade = all.rgbParade
-    }
-
-
-    func suggestCuts() async throws {
-        guard let clipId = selectedClipId else { return }
-        // Attempt BOTH tools (a silence-cut result is still useful when scene
-        // detection fails), but never swallow the failures — report which
-        // ones failed so the user knows what they got.
-        var failures: [String] = []
-        do {
-            _ = try await autoCutSilence(for: clipId)
-        } catch {
-            failures.append("silence cut")
-        }
-        do {
-            _ = try await detectAndSplitScenes(for: clipId)
-        } catch {
-            failures.append("scene detection")
-        }
-        if !failures.isEmpty {
-            lastStatusMessage = nil
-            lastErrorMessage = "Cut suggestion failed for: \(failures.joined(separator: ", "))."
-        }
-    }
-
+    @ObservationIgnored let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
 
     func applyNoiseReduction(for clipId: UUID) async throws {
         let snapshot = await session.snapshot()
@@ -4253,23 +3776,6 @@ final class EditorViewModel {
         }
     }
 
-    private func dispatchCardMutation(
-        _ command: any EditorCommand,
-        successMessage: String
-    ) async -> Bool {
-        do {
-            try await session.dispatch(command)
-            try await refreshFromSession()
-            lastErrorMessage = nil
-            lastStatusMessage = successMessage
-            return true
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = error.localizedDescription
-            return false
-        }
-    }
-
     private func defaultMask(shape: MaskShape = .rectangle) -> Mask {
         let canvasSize = currentProject.canvas.size
         return Mask(
@@ -4638,7 +4144,7 @@ final class EditorViewModel {
     /// BUG-02: the probe is VALIDATED — unknown extensions and content whose
     /// header bytes match no known media signature are rejected at import
     /// with an explicit reason instead of exploding at preview/export.
-    private func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
+    func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
         var asset = try MediaImporter.validatedProbe(url: url)
 
         // Capture a security-scoped bookmark at import time so the file stays

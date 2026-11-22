@@ -758,6 +758,22 @@
         }
       }
     },
+    "AI Assistant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Assistant"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 어시스턴트"
+          }
+        }
+      }
+    },
     "AI Photo Montage": {
       "extractionState": "manual",
       "localizations": {
@@ -909,6 +925,70 @@
         }
       }
     },
+    "Add Effect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Effect"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "효과 추가"
+          }
+        }
+      }
+    },
+    "Add Marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Marker"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마커 추가"
+          }
+        }
+      }
+    },
+    "Add Point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Point"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포인트 추가"
+          }
+        }
+      }
+    },
+    "Add Sticker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Sticker"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스티커 추가"
+          }
+        }
+      }
+    },
     "Add Text": {
       "extractionState": "manual",
       "localizations": {
@@ -938,6 +1018,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "시작하려면 페이지를 추가하세요"
+          }
+        }
+      }
+    },
+    "Add a slow zoom to each photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a slow zoom to each photo."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각 사진에 부드러운 줌 효과를 추가합니다."
           }
         }
       }
@@ -1161,6 +1257,22 @@
         }
       }
     },
+    "Adjustment layer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjustment layer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "조정 레이어"
+          }
+        }
+      }
+    },
     "Adjustments": {
       "extractionState": "manual",
       "localizations": {
@@ -1246,6 +1358,38 @@
         }
       }
     },
+    "Alignment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alignment"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정렬"
+          }
+        }
+      }
+    },
+    "Analysis Results": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analysis Results"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "분석 결과"
+          }
+        }
+      }
+    },
     "Analyze silence and prepare automatic cuts for the selected clip.": {
       "extractionState": "manual",
       "localizations": {
@@ -1276,6 +1420,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "무음 구간 분석 중..."
+          }
+        }
+      }
+    },
+    "Animated GIF…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated GIF…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "애니메이션 GIF…"
           }
         }
       }
@@ -1312,6 +1472,38 @@
         }
       }
     },
+    "Apply Master Style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply Master Style"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 스타일 적용"
+          }
+        }
+      }
+    },
+    "Apply Template": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply Template"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "템플릿 적용"
+          }
+        }
+      }
+    },
     "Apply the %@ subtitle style to the selected clip.": {
       "extractionState": "manual",
       "localizations": {
@@ -1325,6 +1517,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "선택한 클립에 %@ 자막 스타일을 적용합니다."
+          }
+        }
+      }
+    },
+    "Apply to Clip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply to Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립에 적용"
+          }
+        }
+      }
+    },
+    "Apply to Timeline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply to Timeline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임라인에 적용"
+          }
+        }
+      }
+    },
+    "Applying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용 중…"
           }
         }
       }
@@ -1380,6 +1620,22 @@
         }
       }
     },
+    "Audio Codec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Codec"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오디오 코덱"
+          }
+        }
+      }
+    },
     "Audio Ducking": {
       "localizations": {
         "en": {
@@ -1409,6 +1665,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "오디오 마스터"
+          }
+        }
+      }
+    },
+    "Audio Only (M4A)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Only (M4A)…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오디오 전용 (M4A)…"
           }
         }
       }
@@ -1464,6 +1736,22 @@
         }
       }
     },
+    "Auto Color Correct": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Color Correct"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 색보정"
+          }
+        }
+      }
+    },
     "Auto Cut": {
       "extractionState": "manual",
       "localizations": {
@@ -1497,6 +1785,70 @@
         }
       }
     },
+    "Auto Cut Silence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Cut Silence"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "무음 자동 컷"
+          }
+        }
+      }
+    },
+    "Auto Enhance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Enhance"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 보정"
+          }
+        }
+      }
+    },
+    "Auto Highlights": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Highlights"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 하이라이트"
+          }
+        }
+      }
+    },
+    "Auto Levels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Levels"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 레벨"
+          }
+        }
+      }
+    },
     "Auto Reframe": {
       "extractionState": "manual",
       "localizations": {
@@ -1510,6 +1862,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "자동 리프레임"
+          }
+        }
+      }
+    },
+    "Auto Subtitles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Subtitles"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 자막"
+          }
+        }
+      }
+    },
+    "Auto White Balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto White Balance"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 화이트 밸런스"
           }
         }
       }
@@ -1548,6 +1932,22 @@
         }
       }
     },
+    "Auto-generate proxy on import": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-generate proxy on import"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져오기 시 프록시 자동 생성"
+          }
+        }
+      }
+    },
     "Auto-transcribe your speech.": {
       "extractionState": "manual",
       "localizations": {
@@ -1561,6 +1961,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "말하는 내용이 자동으로 자막이 됩니다."
+          }
+        }
+      }
+    },
+    "Auto-use proxy under thermal pressure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-use proxy under thermal pressure"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발열 시 프록시 자동 전환"
+          }
+        }
+      }
+    },
+    "Automation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동화"
           }
         }
       }
@@ -1646,6 +2078,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "배경"
+          }
+        }
+      }
+    },
+    "Background Removal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background Removal"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "배경 제거"
           }
         }
       }
@@ -1752,6 +2200,70 @@
         }
       }
     },
+    "Blade Tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blade Tool"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "블레이드 도구"
+          }
+        }
+      }
+    },
+    "Blend": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blend"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "블렌드"
+          }
+        }
+      }
+    },
+    "Blend Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blend Mode"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "블렌드 모드"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파랑"
+          }
+        }
+      }
+    },
     "Blur": {
       "extractionState": "manual",
       "localizations": {
@@ -1798,6 +2310,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "경계 픽스처: 페이드-스루-블랙 중간점 수용 · 세로 슬라이드 대기"
+          }
+        }
+      }
+    },
+    "Bring to Front": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bring to Front"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "맨 앞으로 가져오기"
+          }
+        }
+      }
+    },
+    "Browse": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "찾아보기"
           }
         }
       }
@@ -1971,6 +2515,22 @@
         }
       }
     },
+    "Center": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가운데"
+          }
+        }
+      }
+    },
     "Change...": {
       "extractionState": "manual",
       "localizations": {
@@ -2073,6 +2633,22 @@
         }
       }
     },
+    "Choose an effect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an effect"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "효과를 선택하세요"
+          }
+        }
+      }
+    },
     "Chooses bypass or the SNS preset for this project.": {
       "extractionState": "manual",
       "localizations": {
@@ -2135,6 +2711,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "지우기"
+          }
+        }
+      }
+    },
+    "Clear Ducking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Ducking"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덕킹 초기화"
+          }
+        }
+      }
+    },
+    "Clear Mask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Mask"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스크 지우기"
           }
         }
       }
@@ -2623,6 +3231,22 @@
         }
       }
     },
+    "Copy Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립 복사"
+          }
+        }
+      }
+    },
     "Could not open the sample project: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -2657,6 +3281,22 @@
         }
       }
     },
+    "Create": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "생성"
+          }
+        }
+      }
+    },
     "Create Compound Clip": {
       "extractionState": "manual",
       "localizations": {
@@ -2687,6 +3327,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "몽타주 만들기"
+          }
+        }
+      }
+    },
+    "Create from Template": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create from Template"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "템플릿으로 만들기"
           }
         }
       }
@@ -2789,6 +3445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "선택한 클립의 크리에이티브 효과"
+          }
+        }
+      }
+    },
+    "Crop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자르기"
           }
         }
       }
@@ -2927,6 +3599,22 @@
         }
       }
     },
+    "Cut Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립 잘라내기"
+          }
+        }
+      }
+    },
     "Decreases the preview zoom.": {
       "extractionState": "manual",
       "localizations": {
@@ -2974,6 +3662,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "여기까지 삭제 (시작 %d초)"
+          }
+        }
+      }
+    },
+    "Delete Selected Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Selected Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립 삭제"
           }
         }
       }
@@ -3317,6 +4021,22 @@
         }
       }
     },
+    "Duck Other Audio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duck Other Audio"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "배경 오디오 덕킹"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "extractionState": "manual",
       "localizations": {
@@ -3330,6 +4050,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "복제"
+          }
+        }
+      }
+    },
+    "Duplicate Selected Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate Selected Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립 복제"
           }
         }
       }
@@ -3419,6 +4155,70 @@
         }
       }
     },
+    "Enable Chroma Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Chroma Key"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "크로마키 활성화"
+          }
+        }
+      }
+    },
+    "End Card": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End Card"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "엔드 카드"
+          }
+        }
+      }
+    },
+    "Equalizer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Equalizer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이퀄라이저"
+          }
+        }
+      }
+    },
+    "Estimated Size": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated Size"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예상 용량"
+          }
+        }
+      }
+    },
     "Evidence scope: inspector + pixel processor only": {
       "localizations": {
         "en": {
@@ -3452,6 +4252,22 @@
         }
       }
     },
+    "Exit to Parent Timeline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit to Parent Timeline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상위 타임라인으로 나가기"
+          }
+        }
+      }
+    },
     "Export": {
       "localizations": {
         "en": {
@@ -3468,6 +4284,54 @@
         }
       }
     },
+    "Export LUT…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export LUT…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LUT 내보내기…"
+          }
+        }
+      }
+    },
+    "Export Package…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Package…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지 내보내기…"
+          }
+        }
+      }
+    },
+    "Export Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Settings"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내보내기 설정"
+          }
+        }
+      }
+    },
     "Export Summary": {
       "localizations": {
         "en": {
@@ -3480,6 +4344,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "내보내기 요약"
+          }
+        }
+      }
+    },
+    "Export...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내보내기..."
           }
         }
       }
@@ -3551,6 +4431,22 @@
         }
       }
     },
+    "Extract Audio from Video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract Audio from Video"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비디오에서 오디오 추출"
+          }
+        }
+      }
+    },
     "Extract the selected video clip's audio onto the timeline.": {
       "extractionState": "manual",
       "localizations": {
@@ -3581,6 +4477,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "오디오 추출 중..."
+          }
+        }
+      }
+    },
+    "Eyedropper — click to pick key color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eyedropper — click to pick key color"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스포이드 — 클릭하여 키 색상 선택"
           }
         }
       }
@@ -3669,6 +4581,22 @@
         }
       }
     },
+    "File missing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File missing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일 누락"
+          }
+        }
+      }
+    },
     "Filmstrip hover preview": {
       "extractionState": "manual",
       "localizations": {
@@ -3753,6 +4681,22 @@
         }
       }
     },
+    "Find Highlights": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find Highlights"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "하이라이트 찾기"
+          }
+        }
+      }
+    },
     "Find visual scene changes and add cut markers for review.": {
       "extractionState": "manual",
       "localizations": {
@@ -3804,6 +4748,22 @@
         }
       }
     },
+    "Font": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Font"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글꼴"
+          }
+        }
+      }
+    },
     "Font family": {
       "localizations": {
         "en": {
@@ -3816,6 +4776,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "글꼴"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포맷"
           }
         }
       }
@@ -3836,6 +4812,22 @@
         }
       }
     },
+    "Frame Rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frame Rate"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프레임 레이트"
+          }
+        }
+      }
+    },
     "Frame interpolation is applied on export": {
       "extractionState": "manual",
       "localizations": {
@@ -3849,6 +4841,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "내보낼 때 프레임 보간이 적용됩니다"
+          }
+        }
+      }
+    },
+    "Freeze Frame": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freeze Frame"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정지 프레임"
           }
         }
       }
@@ -3886,6 +4894,54 @@
         }
       }
     },
+    "Generate Subtitles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate Subtitles"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자막 생성"
+          }
+        }
+      }
+    },
+    "Generate Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate Voice"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음성 생성"
+          }
+        }
+      }
+    },
+    "Generate missing proxies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate missing proxies"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "누락된 프록시 생성"
+          }
+        }
+      }
+    },
     "Gentle compression · room reverb · −1 dBTP limiter.": {
       "extractionState": "manual",
       "localizations": {
@@ -3899,6 +4955,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "부드러운 컴프레션 · 룸 리버브 · −1 dBTP 리미터."
+          }
+        }
+      }
+    },
+    "Go to Home": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Home"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈으로 이동"
+          }
+        }
+      }
+    },
+    "Green": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초록"
           }
         }
       }
@@ -3953,6 +5041,22 @@
         }
       }
     },
+    "HDR Master (HEVC 10-bit, HLG)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR Master (HEVC 10-bit, HLG)…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR 마스터 (HEVC 10비트, HLG)…"
+          }
+        }
+      }
+    },
     "HEVC": {
       "localizations": {
         "en": {
@@ -3965,6 +5069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "HEVC"
+          }
+        }
+      }
+    },
+    "HSL Bands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HSL Bands"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HSL 밴드"
           }
         }
       }
@@ -4015,6 +5135,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "하이라이트"
+          }
+        }
+      }
+    },
+    "Highlight words": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlight words"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "단어 강조"
           }
         }
       }
@@ -4171,6 +5307,22 @@
         }
       }
     },
+    "Import LUT…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import LUT…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LUT 가져오기…"
+          }
+        }
+      }
+    },
     "Import Media": {
       "extractionState": "manual",
       "localizations": {
@@ -4184,6 +5336,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "미디어 가져오기"
+          }
+        }
+      }
+    },
+    "Import Media...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미디어 가져오기..."
+          }
+        }
+      }
+    },
+    "Import Package…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Package…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지 가져오기…"
+          }
+        }
+      }
+    },
+    "Import SRT...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import SRT..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SRT 가져오기..."
           }
         }
       }
@@ -4340,6 +5540,22 @@
         }
       }
     },
+    "Inspector section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspector section"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인스펙터 섹션"
+          }
+        }
+      }
+    },
     "Integrated Loudness": {
       "extractionState": "manual",
       "localizations": {
@@ -4357,6 +5573,102 @@
         }
       }
     },
+    "Interpolation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interpolation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보간"
+          }
+        }
+      }
+    },
+    "Inverted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inverted"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "반전"
+          }
+        }
+      }
+    },
+    "Isolate Center": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Isolate Center"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "센터 분리"
+          }
+        }
+      }
+    },
+    "Jump to Next Clip Boundary": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to Next Clip Boundary"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 클립 경계로 이동"
+          }
+        }
+      }
+    },
+    "Jump to Previous Clip Boundary": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to Previous Clip Boundary"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 클립 경계로 이동"
+          }
+        }
+      }
+    },
+    "Justify": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Justify"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "양쪽 정렬"
+          }
+        }
+      }
+    },
     "Karaoke": {
       "localizations": {
         "en": {
@@ -4369,6 +5681,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "카라오케"
+          }
+        }
+      }
+    },
+    "Karaoke highlight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karaoke highlight"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가라오케 하이라이트"
           }
         }
       }
@@ -4454,6 +5782,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "마지막 자동 저장: %@"
+          }
+        }
+      }
+    },
+    "Left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "왼쪽"
           }
         }
       }
@@ -4610,6 +5954,22 @@
         }
       }
     },
+    "Long": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Long"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "길게"
+          }
+        }
+      }
+    },
     "Looks and LUT-style filters": {
       "extractionState": "manual",
       "localizations": {
@@ -4702,6 +6062,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marker"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마커"
+          }
+        }
+      }
+    },
+    "Markers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markers"
           }
         },
         "ko": {
@@ -4808,6 +6184,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "마스터 룩"
+          }
+        }
+      }
+    },
+    "Master processing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master processing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마스터 처리"
           }
         }
       }
@@ -4929,6 +6321,38 @@
         }
       }
     },
+    "Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모드"
+          }
+        }
+      }
+    },
+    "Motion (Ken Burns)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motion (Ken Burns)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모션 (켄 번즈)"
+          }
+        }
+      }
+    },
     "Motion Tracking": {
       "extractionState": "manual",
       "localizations": {
@@ -5010,6 +6434,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "재생 헤드를 이 항목으로 이동합니다."
+          }
+        }
+      }
+    },
+    "MovieCut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut"
+          }
+        }
+      }
+    },
+    "MovieCut Keyboard Shortcuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut Keyboard Shortcuts"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MovieCut 키보드 단축키"
           }
         }
       }
@@ -5112,6 +6568,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "음소거됨"
+          }
+        }
+      }
+    },
+    "New Project": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Project"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 프로젝트"
           }
         }
       }
@@ -5378,6 +6850,22 @@
         }
       }
     },
+    "No recent projects yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No recent projects yet"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 프로젝트가 없습니다"
+          }
+        }
+      }
+    },
     "No results for \"%@\"": {
       "extractionState": "manual",
       "localizations": {
@@ -5484,6 +6972,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noise Reduce"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "노이즈 감소"
+          }
+        }
+      }
+    },
+    "Noise Reduction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noise Reduction"
           }
         },
         "ko": {
@@ -5629,6 +7133,22 @@
         }
       }
     },
+    "Open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열기"
+          }
+        }
+      }
+    },
     "Open the sample project": {
       "extractionState": "manual",
       "localizations": {
@@ -5642,6 +7162,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "샘플 프로젝트 열기"
+          }
+        }
+      }
+    },
+    "Open...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열기..."
           }
         }
       }
@@ -5697,6 +7233,22 @@
         }
       }
     },
+    "Open…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열기…"
+          }
+        }
+      }
+    },
     "Outline": {
       "localizations": {
         "en": {
@@ -5729,6 +7281,38 @@
         }
       }
     },
+    "Pace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pace"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "템포"
+          }
+        }
+      }
+    },
+    "Package": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Package"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지"
+          }
+        }
+      }
+    },
     "Page %@ of %@": {
       "localizations": {
         "en": {
@@ -5741,6 +7325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "페이지 %@ / %@"
+          }
+        }
+      }
+    },
+    "Parameters": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parameters"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파라미터"
           }
         }
       }
@@ -5762,6 +7362,22 @@
         }
       }
     },
+    "Paste Clips": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Clips"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클립 붙여넣기"
+          }
+        }
+      }
+    },
     "Pause": {
       "extractionState": "manual",
       "localizations": {
@@ -5775,6 +7391,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "일시정지"
+          }
+        }
+      }
+    },
+    "Photo to Video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo to Video"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사진으로 영상 만들기"
           }
         }
       }
@@ -5813,6 +7445,22 @@
         }
       }
     },
+    "Pick": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택"
+          }
+        }
+      }
+    },
     "Platform Presets": {
       "localizations": {
         "en": {
@@ -5842,6 +7490,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "재생"
+          }
+        }
+      }
+    },
+    "Play/Pause": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play/Pause"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생/일시정지"
           }
         }
       }
@@ -5945,6 +7609,22 @@
         }
       }
     },
+    "Preset": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프리셋"
+          }
+        }
+      }
+    },
     "Presets": {
       "localizations": {
         "en": {
@@ -5991,6 +7671,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "보정 미리보기: %@"
+          }
+        }
+      }
+    },
+    "Preview and tune before adding this effect to the selected clip.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview and tune before adding this effect to the selected clip."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립에 효과를 추가하기 전에 미리 보고 조정하세요."
           }
         }
       }
@@ -6182,6 +7878,22 @@
         }
       }
     },
+    "ProRes Master…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ProRes Master…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ProRes 마스터…"
+          }
+        }
+      }
+    },
     "Progressively highlight subtitle words during playback.": {
       "extractionState": "manual",
       "localizations": {
@@ -6233,6 +7945,38 @@
         }
       }
     },
+    "Property": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Property"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "속성"
+          }
+        }
+      }
+    },
+    "Provider": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제공자"
+          }
+        }
+      }
+    },
     "Proxy ready": {
       "extractionState": "manual",
       "localizations": {
@@ -6262,6 +8006,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "프록시 해상도"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quality"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "품질"
           }
         }
       }
@@ -6348,6 +8108,22 @@
         }
       }
     },
+    "Re-link Missing Media...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-link Missing Media..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "누락된 미디어 다시 연결..."
+          }
+        }
+      }
+    },
     "Rebalance clip #%d (%+.1fs)": {
       "localizations": {
         "en": {
@@ -6377,6 +8153,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$d번째 클립을 %2$+.1f초 조정하고 전체 %3$.1f초를 유지했습니다."
+          }
+        }
+      }
+    },
+    "Recent Projects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent Projects"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 프로젝트"
+          }
+        }
+      }
+    },
+    "Record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "녹음"
           }
         }
       }
@@ -6432,6 +8240,22 @@
         }
       }
     },
+    "Redo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 실행"
+          }
+        }
+      }
+    },
     "Release Compound Clip": {
       "extractionState": "manual",
       "localizations": {
@@ -6449,6 +8273,38 @@
         }
       }
     },
+    "Remove Background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Background"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "배경 제거"
+          }
+        }
+      }
+    },
+    "Remove Point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Point"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포인트 제거"
+          }
+        }
+      }
+    },
     "Remove Role": {
       "extractionState": "manual",
       "localizations": {
@@ -6462,6 +8318,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "역할 삭제"
+          }
+        }
+      }
+    },
+    "Remove Vocals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Vocals"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보컬 제거"
+          }
+        }
+      }
+    },
+    "Remove from Recent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from Recent"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 목록에서 제거"
           }
         }
       }
@@ -6551,6 +8439,86 @@
         }
       }
     },
+    "Replace Image…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace Image…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이미지 교체…"
+          }
+        }
+      }
+    },
+    "Reset": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초기화"
+          }
+        }
+      }
+    },
+    "Reset Band": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Band"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "밴드 초기화"
+          }
+        }
+      }
+    },
+    "Reset Channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Channel"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "채널 초기화"
+          }
+        }
+      }
+    },
+    "Reset Fades": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Fades"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페이드 초기화"
+          }
+        }
+      }
+    },
     "Resets preview zoom to fit the canvas in the preview.": {
       "extractionState": "manual",
       "localizations": {
@@ -6564,6 +8532,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "미리보기 확대/축소를 캔버스에 맞추도록 초기화합니다."
+          }
+        }
+      }
+    },
+    "Resolution": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resolution"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해상도"
           }
         }
       }
@@ -6617,6 +8601,22 @@
         }
       }
     },
+    "Reverse playback": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reverse playback"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "역재생"
+          }
+        }
+      }
+    },
     "Review handoff: Accepted evidence · Blocked claim · Next artifact · Owner": {
       "localizations": {
         "en": {
@@ -6665,6 +8665,22 @@
         }
       }
     },
+    "Right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오른쪽"
+          }
+        }
+      }
+    },
     "Ripple Delete": {
       "extractionState": "manual",
       "localizations": {
@@ -6678,6 +8694,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "리플 삭제"
+          }
+        }
+      }
+    },
+    "Ripple Delete Selected Clip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripple Delete Selected Clip"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 클립 리플 삭제"
           }
         }
       }
@@ -6710,6 +8742,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "타임라인에 역할 레인이 표시되어 있습니다."
+          }
+        }
+      }
+    },
+    "Run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행"
           }
         }
       }
@@ -6764,6 +8812,22 @@
         }
       }
     },
+    "Safe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safe"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "안전 영역"
+          }
+        }
+      }
+    },
     "Safe zone guides": {
       "extractionState": "manual",
       "localizations": {
@@ -6794,6 +8858,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "샘플 프로젝트를 열었습니다. 자르기 → 자막 → 출력을 순서대로 시도해 보세요."
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장"
+          }
+        }
+      }
+    },
+    "Save Style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Style"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스타일 저장"
+          }
+        }
+      }
+    },
+    "Save...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장..."
           }
         }
       }
@@ -6832,6 +8944,22 @@
         }
       }
     },
+    "Seek Back 1 Second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seek Back 1 Second"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1초 뒤로 이동"
+          }
+        }
+      }
+    },
     "Seek Back One Frame": {
       "extractionState": "manual",
       "localizations": {
@@ -6849,6 +8977,22 @@
         }
       }
     },
+    "Seek Forward 1 Second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seek Forward 1 Second"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1초 앞으로 이동"
+          }
+        }
+      }
+    },
     "Seek Forward One Frame": {
       "extractionState": "manual",
       "localizations": {
@@ -6862,6 +9006,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "한 프레임 앞으로"
+          }
+        }
+      }
+    },
+    "Select Tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select Tool"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택 도구"
+          }
+        }
+      }
+    },
+    "Select a card to preview and tune it before applying.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a card to preview and tune it before applying."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용 전에 미리 보고 조정할 카드를 선택하세요."
           }
         }
       }
@@ -7119,6 +9295,22 @@
         }
       }
     },
+    "Send to Back": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to Back"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "맨 뒤로 보내기"
+          }
+        }
+      }
+    },
     "Sets the resolution used when generating new proxies. Existing proxies are kept; each resolution is stored separately, so switching back reuses what was already generated.": {
       "localizations": {
         "en": {
@@ -7131,6 +9323,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "새 프록시를 생성할 때 사용할 해상도를 설정합니다. 기존 프록시는 유지되며, 해상도별로 따로 저장되므로 이전 해상도로 되돌리면 이미 생성된 파일을 재사용합니다."
+          }
+        }
+      }
+    },
+    "Shadow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shadow"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "그림자"
+          }
+        }
+      }
+    },
+    "Shape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shape"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모양"
+          }
+        }
+      }
+    },
+    "Share latest export": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share latest export"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 내보내기 공유"
           }
         }
       }
@@ -7253,6 +9493,54 @@
         }
       }
     },
+    "Shuttle Forward (L)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuttle Forward (L)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "셔틀 빨리감기 (L)"
+          }
+        }
+      }
+    },
+    "Shuttle Reverse (J)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuttle Reverse (J)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "셔틀 되감기 (J)"
+          }
+        }
+      }
+    },
+    "Shuttle Stop (K)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuttle Stop (K)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "셔틀 정지 (K)"
+          }
+        }
+      }
+    },
     "Silence": {
       "extractionState": "manual",
       "localizations": {
@@ -7371,6 +9659,22 @@
         }
       }
     },
+    "Slide Tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slide Tool"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "슬라이드 도구"
+          }
+        }
+      }
+    },
     "Slide Up": {
       "extractionState": "manual",
       "localizations": {
@@ -7384,6 +9688,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "위로 슬라이드"
+          }
+        }
+      }
+    },
+    "Slip Tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slip Tool"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "슬립 도구"
           }
         }
       }
@@ -7435,6 +9755,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "부드러운 슬로우모션"
+          }
+        }
+      }
+    },
+    "Snap Playhead to End": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snap Playhead to End"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생헤드를 끝으로 맞춤"
+          }
+        }
+      }
+    },
+    "Snap Playhead to Start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snap Playhead to Start"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생헤드를 시작으로 맞춤"
+          }
+        }
+      }
+    },
+    "Social": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Social"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "소셜"
+          }
+        }
+      }
+    },
+    "Soft": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soft"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "부드럽게"
           }
         }
       }
@@ -7589,6 +9973,22 @@
         }
       }
     },
+    "Split at Playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split at Playhead"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생헤드에서 분할"
+          }
+        }
+      }
+    },
     "Split subtitle": {
       "extractionState": "manual",
       "localizations": {
@@ -7623,6 +10023,22 @@
         }
       }
     },
+    "Start something new": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start something new"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 작업 시작"
+          }
+        }
+      }
+    },
     "Starts at %@, duration %@, layer %d": {
       "extractionState": "manual",
       "localizations": {
@@ -7653,6 +10069,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "미리보기 재생을 시작하거나 일시정지합니다."
+          }
+        }
+      }
+    },
+    "Static preview only · export/device not verified · next: golden export sample": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Static preview only · export/device not verified · next: golden export sample"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정적 미리보기 전용 · 내보내기/기기 미검증 · 다음 단계: 골든 출력 샘플"
+          }
+        }
+      }
+    },
+    "Step Back One Frame": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step Back One Frame"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 프레임"
+          }
+        }
+      }
+    },
+    "Step Forward One Frame": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step Forward One Frame"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 프레임"
           }
         }
       }
@@ -7724,6 +10188,22 @@
         }
       }
     },
+    "Sticker kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sticker kind"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스티커 종류"
+          }
+        }
+      }
+    },
     "Stickers": {
       "extractionState": "manual",
       "localizations": {
@@ -7737,6 +10217,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "스티커"
+          }
+        }
+      }
+    },
+    "Still Frame (PNG)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still Frame (PNG)…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스틸 프레임 (PNG)…"
+          }
+        }
+      }
+    },
+    "Stop & Save": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop & Save"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정지 및 저장"
+          }
+        }
+      }
+    },
+    "Strength": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strength"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강도"
+          }
+        }
+      }
+    },
+    "Style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스타일"
+          }
+        }
+      }
+    },
+    "Style Transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style Transfer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스타일 변환"
+          }
+        }
+      }
+    },
+    "Style:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style:"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스타일:"
           }
         }
       }
@@ -7842,6 +10418,22 @@
         }
       }
     },
+    "Suggest Cuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggest Cuts"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컷 제안"
+          }
+        }
+      }
+    },
     "Tagged %d clips as %@": {
       "localizations": {
         "en": {
@@ -7920,6 +10512,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "텍스트 클립"
+          }
+        }
+      }
+    },
+    "Text Templates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Templates"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "텍스트 템플릿"
           }
         }
       }
@@ -8480,6 +11088,22 @@
         }
       }
     },
+    "Titles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titles"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타이틀"
+          }
+        }
+      }
+    },
     "Titles and captions": {
       "extractionState": "manual",
       "localizations": {
@@ -8544,6 +11168,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 트랙의 영상 출력을 켜거나 끕니다."
+          }
+        }
+      }
+    },
+    "Tone Curves": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tone Curves"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "톤 커브"
+          }
+        }
+      }
+    },
+    "Track": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "트랙"
           }
         }
       }
@@ -8682,6 +11338,22 @@
         }
       }
     },
+    "Transition": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transition"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 전환"
+          }
+        }
+      }
+    },
     "Transition browser": {
       "extractionState": "manual",
       "localizations": {
@@ -8716,6 +11388,38 @@
         }
       }
     },
+    "Trim End to Playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trim End to Playhead"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "끝점을 재생헤드로 트림"
+          }
+        }
+      }
+    },
+    "Trim Start to Playhead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trim Start to Playhead"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작점을 재생헤드로 트림"
+          }
+        }
+      }
+    },
     "True Peak": {
       "extractionState": "manual",
       "localizations": {
@@ -8729,6 +11433,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "트루 피크"
+          }
+        }
+      }
+    },
+    "Type": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "유형"
           }
         }
       }
@@ -8780,6 +11500,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "타자기"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 취소"
           }
         }
       }
@@ -8852,6 +11588,22 @@
         }
       }
     },
+    "Use proxy media for playback": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use proxy media for playback"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생 시 프록시 미디어 사용"
+          }
+        }
+      }
+    },
     "Use the Music and Sound Effects search fields below to filter audio.": {
       "extractionState": "manual",
       "localizations": {
@@ -8865,6 +11617,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "아래의 음악 및 효과음 검색 필드를 사용해 오디오를 필터링하세요."
+          }
+        }
+      }
+    },
+    "Video (Explicit Bitrate)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video (Explicit Bitrate)…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비디오 (비트레이트 지정)…"
+          }
+        }
+      }
+    },
+    "Video Codec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video Codec"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비디오 코덱"
           }
         }
       }
@@ -8982,6 +11766,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "비비드"
+          }
+        }
+      }
+    },
+    "Vocal Separation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vocal Separation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보컬 분리"
+          }
+        }
+      }
+    },
+    "Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음성"
           }
         }
       }
@@ -9117,6 +11933,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "확대"
+          }
+        }
+      }
+    },
+    "Zoom In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom In"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확대"
+          }
+        }
+      }
+    },
+    "Zoom Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom Out"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "축소"
           }
         }
       }

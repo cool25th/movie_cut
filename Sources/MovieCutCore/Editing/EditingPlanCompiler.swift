@@ -19,7 +19,8 @@ public enum EditingPlanCompiler {
         for project: Project,
         baseRevision: SessionRevision,
         planId: UUID = UUID(),
-        label: String? = nil
+        label: String? = nil,
+        summaryLines: [String] = []
     ) async throws -> PreparedEditPlan {
         var draft = project
         var compiledCommands: [any EditorCommand] = []
@@ -44,12 +45,19 @@ public enum EditingPlanCompiler {
             label: batchLabel,
             commands: compiledCommands
         )
+        let affectedClips = Set(actions.compactMap(\.affectedClipId))
+        let containsDestructive = actions.contains { $0.isDestructive }
 
         return PreparedEditPlan(
             planId: planId,
             baseRevision: baseRevision,
             batchCommand: batchCommand,
-            expectedDuration: draft.timeline.duration
+            expectedDuration: draft.timeline.duration,
+            durationDeltaSeconds: draft.timeline.duration - project.timeline.duration,
+            actionCount: actions.count,
+            affectedClipCount: affectedClips.count,
+            containsDestructiveActions: containsDestructive,
+            summaryLines: summaryLines
         )
     }
 

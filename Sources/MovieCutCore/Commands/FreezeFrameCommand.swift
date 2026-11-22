@@ -52,34 +52,3 @@ public struct FreezeFrameCommand: EditorCommand, Sendable, Codable {
         }
     }
 }
-
-private struct RemoveFreezeFrameCommand: EditorCommand {
-    let id = UUID()
-    var originalClipId: UUID
-    var freezeClipId: UUID
-    var trailingClipId: UUID
-    var trackId: UUID
-    var originalClipIndex: Int
-    var originalClip: Clip
-    var freezeTime: TimeInterval
-    var freezeDuration: TimeInterval
-
-    func apply(to project: inout Project) throws {
-        let trackIndex = try project.trackIndex(for: trackId)
-        try project.ensureTrackIsEditable(at: trackIndex)
-        var clips = project.timeline.tracks[trackIndex].clips
-        guard originalClipIndex + 2 < clips.count,
-              clips[originalClipIndex].id == originalClipId,
-              clips[originalClipIndex + 1].id == freezeClipId,
-              clips[originalClipIndex + 2].id == trailingClipId else {
-            throw EditorCommandError.invalidCommand("Freeze-frame clips are not adjacent.")
-        }
-        clips.remove(at: originalClipIndex + 2)
-        clips.remove(at: originalClipIndex + 1)
-        clips[originalClipIndex] = originalClip
-        for index in (originalClipIndex + 1)..<clips.count {
-            clips[index].timelineRange.start -= freezeDuration
-        }
-        project.timeline.tracks[trackIndex].clips = clips
-    }
-}

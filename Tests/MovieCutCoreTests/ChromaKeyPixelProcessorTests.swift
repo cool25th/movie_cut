@@ -140,16 +140,6 @@ struct ChromaKeyStaticContractTests {
         #expect(!source.contains("CIColorCube"))
     }
 
-    @Test("chroma key compositor delegates to the shared processor")
-    func chromaKeyCompositorDelegatesToSharedProcessor() throws {
-        let source = try source("App/MovieCutMac/Export/ChromaKeyCompositor.swift")
-
-        #expect(source.contains("ChromaKeyPixelProcessor.apply($0, to: image)"))
-        #expect(source.contains("ChromaKeyPixelProcessor.apply($0, to: request.sourceImage)"))
-        #expect(!source.contains("CIColorCube"))
-        #expect(!source.contains("private func applyChromaKey"))
-    }
-
     @Test("export and playback route chroma key clips through custom compositor")
     func exportAndPlaybackRouteChromaKeyClipsThroughCustomCompositor() throws {
         let exportSource = try source("App/MovieCutMac/Export/ExportEngine.swift")

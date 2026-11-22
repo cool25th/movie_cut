@@ -30,9 +30,11 @@ struct Phase33SpeedCurveEditorStaticContractTests {
         )
 
         #expect(speedSection.contains("Text(\"Speed\")"))
-        #expect(speedSection.contains("Text(String(format: \"%.0f%%\", clip.playbackRate * 100))"))
+        #expect(speedSection.contains("Text(String(format: \"%.0f%%\", (draftPlaybackRate ?? clip.playbackRate) * 100))"))
         #expect(speedSection.contains("Slider(value: Binding("))
-        #expect(speedSection.contains("get: { clip.playbackRate }"))
+        #expect(speedSection.contains("let displayedRate = draftPlaybackRate ?? clip.playbackRate"))
+        #expect(speedSection.contains("get: { displayedRate }"))
+        #expect(speedSection.contains("onEditingChanged:"))
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(newValue)"))
         #expect(speedSection.contains("ForEach(speedPresets, id: \\.self)"))
         #expect(speedSection.contains("viewModel.updateSelectedPlaybackRate(preset)"))

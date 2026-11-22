@@ -219,7 +219,8 @@ private struct MasterLoudnessSection: View {
 
                     Picker("Master processing", selection: masterProcessingBinding) {
                         Text(NSLocalizedString("Off", comment: "")).tag(nil as MasterAudioProcessing?)
-                        Text("SNS 좋은 소리").tag(MasterAudioProcessing.sns as MasterAudioProcessing?)
+                        Text(NSLocalizedString("SNS Audio Polish", comment: "G-26 master audio SNS preset label"))
+                            .tag(MasterAudioProcessing.sns as MasterAudioProcessing?)
                     }
                     .pickerStyle(.segmented)
                     .controlSize(.small)
@@ -895,6 +896,50 @@ private struct AssistantSection: View {
                     Button("Run") { run() }
                         .controlSize(.small)
                         .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                if let pending = viewModel.pendingAssistantPlan {
+                    VStack(alignment: .leading, spacing: MovieCutSpacing.xSmall) {
+                        Label(
+                            NSLocalizedString("Confirm Edit Plan", comment: "CA-35 confirmation header"),
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+
+                        Text(pending.summary)
+                            .font(.caption2)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(
+                            String(
+                                format: NSLocalizedString(
+                                    "Actions: %d · Duration change: %+.1fs",
+                                    comment: "CA-35 confirmation metadata"
+                                ),
+                                pending.prepared.actionCount,
+                                pending.prepared.durationDeltaSeconds
+                            )
+                        )
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                        HStack(spacing: MovieCutSpacing.small) {
+                            Button(NSLocalizedString("Apply", comment: "CA-35 confirm apply button")) {
+                                Task { await viewModel.confirmPendingAssistantPlan() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+
+                            Button(NSLocalizedString("Cancel", comment: "CA-35 cancel button")) {
+                                viewModel.cancelPendingAssistantPlan()
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(MovieCutSpacing.small)
+                    .background(MovieCutTheme.panelBackgroundRaised, in: RoundedRectangle(cornerRadius: MovieCutRadius.small))
                 }
 
                 if let message = viewModel.assistantResultMessage {

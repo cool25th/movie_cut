@@ -29,13 +29,13 @@ struct MasterAudioInspectorStaticContractTests {
         #expect(master.contains("Text(NSLocalizedString(\"Master Processing\", comment: \"\"))"))
         #expect(master.contains("Picker(\"Master processing\", selection: masterProcessingBinding)"))
         #expect(master.contains("Text(NSLocalizedString(\"Off\", comment: \"\")).tag(nil as MasterAudioProcessing?)"))
-        #expect(master.contains("Text(\"SNS 좋은 소리\").tag(MasterAudioProcessing.sns as MasterAudioProcessing?)"))
+        #expect(master.contains("Text(NSLocalizedString(\"SNS Audio Polish\", comment: \"G-26 master audio SNS preset label\"))"))
+        #expect(master.contains(".tag(MasterAudioProcessing.sns as MasterAudioProcessing?)"))
         #expect(master.contains(".pickerStyle(.segmented)"))
         #expect(master.contains(".accessibilityLabel(Text(NSLocalizedString(\"Master audio processing\", comment: \"\")))"))
         #expect(master.contains("viewModel.setMasterAudioProcessing(processing)"))
         #expect(!master.contains("Task { await viewModel.setMasterAudioProcessing(processing) }"))
-        // sourceLanguage=en: user-facing G-26 chrome must use English keys
-        // (the picker's preset NAME stays a locale-invariant literal).
+        // sourceLanguage=en: all user-facing G-26 chrome uses English catalog keys.
         #expect(master.contains("NSLocalizedString(\"SNS guideline: −16…−14 LUFS-I, ≤ −1 dBTP (§7)\", comment: \"\")"))
     }
 

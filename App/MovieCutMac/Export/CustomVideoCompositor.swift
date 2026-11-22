@@ -251,7 +251,19 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     private let cancellationGeneration = OSAllocatedUnfairLock<UInt64>(initialState: 0)
     /// Decoded sticker images keyed by file URL — loadStickerImage previously
     /// hit the disk and re-decoded the PNG on EVERY composited frame.
-    private let stickerImageCache = NSCache<NSURL, CGImage>()
+    private let stickerImageCache: NSCache<NSURL, CGImage> = {
+        let cache = NSCache<NSURL, CGImage>()
+        cache.countLimit = 64
+        return cache
+    }()
+    /// Tight-bounds rasterized emoji/fallback sticker CIImages centered at (0,0),
+    /// eliminating per-frame full-canvas (4K ~33MB) CPU CGContext allocation.
+    private let stickerRasterCache: NSCache<NSString, CIImage> = {
+        let cache = NSCache<NSString, CIImage>()
+        cache.countLimit = 64
+        return cache
+    }()
+    private static let stickerColorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
     private let ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
@@ -908,65 +920,123 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             return image
         }
 
-        let width = max(Int(ceil(renderSize.width)), 1)
-        let height = max(Int(ceil(renderSize.height)), 1)
-        let bytesPerPixel = 4
-        let bytesPerRow = width * bytesPerPixel
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else {
-            return image
-        }
-
-        context.clear(CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
-
+        var output = image
         for stickerEffect in activeStickerEffects {
-            drawStickerEffect(stickerEffect, in: context, renderSize: renderSize, at: time)
-        }
-
-        if let stickerEmoji = instruction.stickerEmoji {
-            drawStickerEmoji(
-                stickerEmoji,
-                transform: ClipTransform(),
-                opacity: 1,
-                in: context,
-                renderSize: renderSize
+            output = compositeStickerEffect(
+                stickerEffect,
+                onto: output,
+                renderBounds: renderBounds,
+                at: time
             )
         }
 
-        if let stickerImageURL = instruction.stickerImageURL {
-            drawStickerImage(
-                stickerImageURL,
-                fallbackText: nil,
+        if let stickerEmoji = instruction.stickerEmoji,
+           let sticker = cachedStickerEmojiImage(stickerEmoji, fontSize: 88) {
+            output = compositeCenteredSticker(
+                sticker,
                 transform: ClipTransform(),
                 opacity: 1,
-                fontSize: 88,
-                in: context,
-                renderSize: renderSize
+                onto: output,
+                renderBounds: renderBounds
             )
         }
 
-        guard let cgImage = context.makeImage() else {
+        if let stickerImageURL = instruction.stickerImageURL,
+           let sticker = stickerImageCIImage(from: stickerImageURL, fontSize: 88, renderSize: renderSize) {
+            output = compositeCenteredSticker(
+                sticker,
+                transform: ClipTransform(),
+                opacity: 1,
+                onto: output,
+                renderBounds: renderBounds
+            )
+        }
+
+        return output
+    }
+
+    private func compositeStickerEffect(
+        _ stickerEffect: CustomCompositionClipEffect,
+        onto image: CIImage,
+        renderBounds: CGRect,
+        at time: CMTime
+    ) -> CIImage {
+        let animationState = stickerEffect.animationState(at: time)
+        let transform = animationState?.transform ?? stickerEffect.transform
+        let opacity = animationState?.opacity ?? stickerEffect.opacity
+        let fontSize = stickerEffect.stickerFontSize ?? 88
+        let renderSize = renderBounds.size
+
+        if let stickerImageURL = stickerEffect.stickerImageURL {
+            if let sticker = stickerImageCIImage(from: stickerImageURL, fontSize: fontSize, renderSize: renderSize) {
+                return compositeCenteredSticker(
+                    sticker,
+                    transform: transform,
+                    opacity: opacity,
+                    onto: image,
+                    renderBounds: renderBounds
+                )
+            }
+            if let fallbackText = stickerEffect.stickerFallbackText ?? stickerEffect.stickerEmoji,
+               let fallback = cachedStickerFallbackTextImage(fallbackText, fontSize: fontSize, renderSize: renderSize) {
+                return compositeCenteredSticker(
+                    fallback,
+                    transform: transform,
+                    opacity: opacity,
+                    onto: image,
+                    renderBounds: renderBounds
+                )
+            }
             return image
         }
 
-        var overlay = CIImage(cgImage: cgImage)
-        if !isZeroPoint(renderBounds.origin) {
-            overlay = overlay.transformed(
-                by: CGAffineTransform(
-                    translationX: renderBounds.origin.x,
-                    y: renderBounds.origin.y
-                )
+        if let stickerEmoji = stickerEffect.stickerEmoji,
+           let sticker = cachedStickerEmojiImage(stickerEmoji, fontSize: fontSize) {
+            return compositeCenteredSticker(
+                sticker,
+                transform: transform,
+                opacity: opacity,
+                onto: image,
+                renderBounds: renderBounds
             )
+        }
+
+        return image
+    }
+
+    private func compositeCenteredSticker(
+        _ centeredSticker: CIImage,
+        transform: ClipTransform,
+        opacity: Double,
+        onto image: CIImage,
+        renderBounds: CGRect
+    ) -> CIImage {
+        let effectiveOpacity = min(max(opacity, 0), 1)
+        guard effectiveOpacity > 0 else { return image }
+
+        let renderSize = renderBounds.size
+        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
+        let center = CGPoint(
+            x: renderBounds.origin.x + basePosition.x + transform.offset.x,
+            y: renderBounds.origin.y + renderSize.height - basePosition.y - transform.offset.y
+        )
+
+        var affine = CGAffineTransform(translationX: center.x, y: center.y)
+        affine = affine.rotated(by: CGFloat(transform.rotation * .pi / 180))
+        affine = affine.scaledBy(x: transform.scale.width, y: transform.scale.height)
+
+        var overlay = centeredSticker.transformed(by: affine)
+        if effectiveOpacity < 0.9999,
+           let alphaFilter = CIFilter(name: "CIColorMatrix") {
+            alphaFilter.setValue(overlay, forKey: kCIInputImageKey)
+            alphaFilter.setValue(CIVector(x: 1, y: 0, z: 0, w: 0), forKey: "inputRVector")
+            alphaFilter.setValue(CIVector(x: 0, y: 1, z: 0, w: 0), forKey: "inputGVector")
+            alphaFilter.setValue(CIVector(x: 0, y: 0, z: 1, w: 0), forKey: "inputBVector")
+            alphaFilter.setValue(CIVector(x: 0, y: 0, z: 0, w: CGFloat(effectiveOpacity)), forKey: "inputAVector")
+            alphaFilter.setValue(CIVector(x: 0, y: 0, z: 0, w: 0), forKey: "inputBiasVector")
+            if let faded = alphaFilter.outputImage {
+                overlay = faded
+            }
         }
 
         return overlay
@@ -974,91 +1044,28 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             .cropped(to: renderBounds)
     }
 
-    private func drawStickerEffect(
-        _ stickerEffect: CustomCompositionClipEffect,
-        in context: CGContext,
-        renderSize: CGSize,
-        at time: CMTime
-    ) {
-        let animationState = stickerEffect.animationState(at: time)
-        let transform = animationState?.transform ?? stickerEffect.transform
-        let opacity = animationState?.opacity ?? stickerEffect.opacity
-        let fontSize = stickerEffect.stickerFontSize ?? 88
-
-        if let stickerImageURL = stickerEffect.stickerImageURL {
-            drawStickerImage(
-                stickerImageURL,
-                fallbackText: stickerEffect.stickerFallbackText ?? stickerEffect.stickerEmoji,
-                transform: transform,
-                opacity: opacity,
-                fontSize: fontSize,
-                in: context,
-                renderSize: renderSize
-            )
-            return
-        }
-
-        if let stickerEmoji = stickerEffect.stickerEmoji {
-            drawStickerEmoji(
-                stickerEmoji,
-                transform: transform,
-                opacity: opacity,
-                fontSize: fontSize,
-                in: context,
-                renderSize: renderSize
-            )
-        }
-    }
-
-    private func drawStickerImage(
-        _ imageURL: URL,
-        fallbackText: String?,
-        transform: ClipTransform,
-        opacity: Double,
+    private func stickerImageCIImage(
+        from imageURL: URL,
         fontSize: CGFloat,
-        in context: CGContext,
         renderSize: CGSize
-    ) {
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
-
+    ) -> CIImage? {
         guard let cgImage = loadStickerImage(from: imageURL) else {
-            if let fallbackText, !fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                drawStickerFallbackText(
-                    fallbackText,
-                    transform: transform,
-                    opacity: opacity,
-                    fontSize: fontSize,
-                    in: context,
-                    renderSize: renderSize
-                )
-            }
-            return
+            return nil
         }
+        let sourceWidth = CGFloat(cgImage.width)
+        let sourceHeight = CGFloat(cgImage.height)
+        guard sourceWidth > 0, sourceHeight > 0 else { return nil }
 
-        let sourceSize = CGSize(width: cgImage.width, height: cgImage.height)
-        let displaySize = stickerDisplaySize(sourceSize: sourceSize, fontSize: fontSize, renderSize: renderSize)
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
+        let displaySize = stickerDisplaySize(
+            sourceSize: CGSize(width: sourceWidth, height: sourceHeight),
+            fontSize: fontSize,
+            renderSize: renderSize
         )
-
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
-        context.draw(
-            cgImage,
-            in: CGRect(
-                x: -displaySize.width * 0.5,
-                y: -displaySize.height * 0.5,
-                width: displaySize.width,
-                height: displaySize.height
-            )
-        )
-        context.restoreGState()
+        let scaleX = displaySize.width / sourceWidth
+        let scaleY = displaySize.height / sourceHeight
+        let transform = CGAffineTransform(scaleX: scaleX, y: scaleY)
+            .translatedBy(x: -sourceWidth * 0.5, y: -sourceHeight * 0.5)
+        return CIImage(cgImage: cgImage).transformed(by: transform)
     }
 
     private func loadStickerImage(from url: URL) -> CGImage? {
@@ -1093,22 +1100,21 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         return CGSize(width: width, height: height)
     }
 
-    private func drawStickerFallbackText(
+    private func cachedStickerFallbackTextImage(
         _ text: String,
-        transform: ClipTransform,
-        opacity: Double,
         fontSize: CGFloat,
-        in context: CGContext,
         renderSize: CGSize
-    ) {
+    ) -> CIImage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
+        guard !trimmedText.isEmpty else { return nil }
 
         let label = String(trimmedText.prefix(12)).uppercased()
         let baseFontSize = max(fontSize * 0.54, 24)
+        let cacheKey = "fallback:\(label):\(Int(baseFontSize.rounded())):\(Int(renderSize.width.rounded()))x\(Int(renderSize.height.rounded()))" as NSString
+        if let cached = stickerRasterCache.object(forKey: cacheKey) {
+            return cached
+        }
+
         let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, baseFontSize, nil)
         let line = CTLineCreateWithAttributedString(NSAttributedString(
             string: label,
@@ -1127,18 +1133,25 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             width: min(max(lineWidth + paddingX * 2, baseFontSize * 3.0), renderSize.width * 0.7),
             height: min(max(ascent + descent + paddingY * 2, baseFontSize * 1.7), renderSize.height * 0.35)
         )
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
-        )
+        let strokeWidth = max(baseFontSize * 0.08, 3)
+        let margin = ceil(strokeWidth) + 2
+        let width = max(Int(ceil(boxSize.width + margin * 2)), 1)
+        let height = max(Int(ceil(boxSize.height + margin * 2)), 1)
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
 
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: Self.stickerColorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return nil
+        }
 
+        context.translateBy(x: CGFloat(width) * 0.5, y: CGFloat(height) * 0.5)
         let box = CGRect(x: -boxSize.width * 0.5, y: -boxSize.height * 0.5, width: boxSize.width, height: boxSize.height)
         let boxPath = CGPath(
             roundedRect: box,
@@ -1150,7 +1163,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         context.addPath(boxPath)
         context.fillPath()
         context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.95))
-        context.setLineWidth(max(baseFontSize * 0.08, 3))
+        context.setLineWidth(strokeWidth)
         context.addPath(boxPath)
         context.strokePath()
 
@@ -1160,25 +1173,29 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             y: -((ascent + descent) * 0.5) + descent
         )
         CTLineDraw(line, context)
-        context.restoreGState()
+
+        guard let cgImage = context.makeImage() else { return nil }
+        let centered = CIImage(cgImage: cgImage).transformed(
+            by: CGAffineTransform(translationX: -CGFloat(width) * 0.5, y: -CGFloat(height) * 0.5)
+        )
+        stickerRasterCache.setObject(centered, forKey: cacheKey)
+        return centered
     }
 
-    private func drawStickerEmoji(
+    private func cachedStickerEmojiImage(
         _ stickerEmoji: String,
-        transform: ClipTransform,
-        opacity: Double,
-        fontSize: CGFloat = 88,
-        in context: CGContext,
-        renderSize: CGSize
-    ) {
+        fontSize: CGFloat = 88
+    ) -> CIImage? {
         let emoji = stickerEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !emoji.isEmpty else { return }
+        guard !emoji.isEmpty else { return nil }
 
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
+        let safeFontSize = max(fontSize, 1)
+        let cacheKey = "emoji:\(emoji):\(Int(safeFontSize.rounded()))" as NSString
+        if let cached = stickerRasterCache.object(forKey: cacheKey) {
+            return cached
+        }
 
-        let fontSize = max(fontSize, 1)
-        let font = CTFontCreateWithName("Apple Color Emoji" as CFString, fontSize, nil)
+        let font = CTFontCreateWithName("Apple Color Emoji" as CFString, safeFontSize, nil)
         let attributedString = NSAttributedString(
             string: emoji,
             attributes: [
@@ -1197,27 +1214,40 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         var leading = CGFloat(0)
         let lineWidth = max(
             CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading)),
-            fontSize
+            safeFontSize
         )
+        let glyphHeight = max(ascent + descent, safeFontSize)
+        let pad = ceil(safeFontSize * 0.25)
+        let width = max(Int(ceil(lineWidth + pad * 2)), 1)
+        let height = max(Int(ceil(glyphHeight + pad * 2)), 1)
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
 
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
-        )
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: Self.stickerColorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return nil
+        }
 
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
+        context.translateBy(x: CGFloat(width) * 0.5, y: CGFloat(height) * 0.5)
         context.textMatrix = .identity
         context.textPosition = CGPoint(
             x: -lineWidth * 0.5,
             y: (descent - ascent) * 0.5
         )
         CTLineDraw(line, context)
-        context.restoreGState()
+
+        guard let cgImage = context.makeImage() else { return nil }
+        let centered = CIImage(cgImage: cgImage).transformed(
+            by: CGAffineTransform(translationX: -CGFloat(width) * 0.5, y: -CGFloat(height) * 0.5)
+        )
+        stickerRasterCache.setObject(centered, forKey: cacheKey)
+        return centered
     }
 
     private func stickerPosition(

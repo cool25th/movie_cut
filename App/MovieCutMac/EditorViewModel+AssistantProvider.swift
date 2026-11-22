@@ -20,28 +20,107 @@ extension EditorViewModel {
 
     /// Builds the structured project context snapshot (`AI-05`) and derives the
     /// lightweight `AIEditContext` handed to an `AIEditingProvider`.
-    func buildProjectContextSnapshot(baseRevision: SessionRevision = SessionRevision(0)) -> ProjectContextSnapshot {
+    func buildProjectContextSnapshot(
+        from project: Project? = nil,
+        baseRevision: SessionRevision = SessionRevision(0)
+    ) -> ProjectContextSnapshot {
         ProjectContextBuilder.build(
-            from: currentProject,
+            from: project ?? currentProject,
             baseRevision: baseRevision,
             selectedClipIds: selectedClipIds,
             playheadSeconds: playheadTime
         )
     }
 
-    private func assistantContext() -> AIEditContext {
-        buildProjectContextSnapshot().aiEditContext
+    private func assistantContext(
+        for project: Project,
+        baseRevision: SessionRevision
+    ) -> AIEditContext {
+        buildProjectContextSnapshot(from: project, baseRevision: baseRevision).aiEditContext
+    }
+
+    /// Commits a compiled plan immediately when non-destructive, or stages it for
+    /// explicit user confirmation when it contains destructive timeline changes (CA-35).
+    private func commitOrStageAssistantPlan(
+        prepared: PreparedEditPlan,
+        expectedRevision: SessionRevision,
+        summary: String,
+        completionMessage: String
+    ) async throws {
+        if prepared.containsDestructiveActions {
+            pendingAssistantPlan = PendingAssistantPlan(
+                prepared: prepared,
+                expectedRevision: expectedRevision,
+                summary: summary,
+                completionMessage: completionMessage
+            )
+            assistantResultMessage = NSLocalizedString(
+                "Review the planned edit below and click Apply to commit.",
+                comment: "CA-35 assistant confirmation prompt"
+            )
+            lastStatusMessage = nil
+            assistantSuggestions = []
+            return
+        }
+
+        try await session.dispatch(
+            prepared.batchCommand,
+            planId: prepared.planId,
+            expectedRevision: expectedRevision
+        )
+        try await refreshFromSession()
+        pendingAssistantPlan = nil
+        assistantResultMessage = completionMessage
+        lastStatusMessage = completionMessage
+        assistantSuggestions = []
+    }
+
+    /// Confirms and dispatches a staged destructive assistant plan after re-verifying
+    /// its expected session revision against the live session (CA-35).
+    func confirmPendingAssistantPlan() async {
+        guard let pending = pendingAssistantPlan else { return }
+        do {
+            try await session.dispatch(
+                pending.prepared.batchCommand,
+                planId: pending.prepared.planId,
+                expectedRevision: pending.expectedRevision
+            )
+            try await refreshFromSession()
+            pendingAssistantPlan = nil
+            assistantResultMessage = pending.completionMessage
+            lastStatusMessage = pending.completionMessage
+            assistantSuggestions = []
+        } catch EditorCommandError.staleRevision {
+            pendingAssistantPlan = nil
+            assistantResultMessage = NSLocalizedString(
+                "The timeline changed while reviewing this plan. Run the instruction again.",
+                comment: "CA-35 stale revision rejection on confirmation"
+            )
+            lastStatusMessage = nil
+        } catch {
+            pendingAssistantPlan = nil
+            assistantResultMessage = error.localizedDescription
+            lastStatusMessage = nil
+        }
+    }
+
+    /// Discards a staged destructive assistant plan without modifying the session.
+    func cancelPendingAssistantPlan() {
+        guard pendingAssistantPlan != nil else { return }
+        pendingAssistantPlan = nil
+        assistantResultMessage = NSLocalizedString(
+            "Cancelled pending edit plan.",
+            comment: "CA-35 assistant plan cancelled message"
+        )
+        lastStatusMessage = nil
     }
 
     /// Runs a natural-language instruction via `AIEditingProvider` and applies the
-    /// resulting plan to the timeline through the existing intent executor.
-    ///
-    /// The provider is the primary path. When it reports no applicable action
-    /// (`AIEditingError.noApplicableActions`), the suggestion list from the parser
-    /// is surfaced so the user-visible "try one of the examples" UX is preserved.
+    /// resulting plan to the timeline (staging destructive plans for confirmation).
     func executeAssistantPlan(for text: String) async {
         assistantResultMessage = nil
         assistantSuggestions = []
+        pendingAssistantPlan = nil
 
         let snapshot = await session.snapshotWithRevision()
 
@@ -52,19 +131,22 @@ extension EditorViewModel {
                     project: snapshot.project,
                     request: rebalanceRequest
                 )
+                let summary = String(
+                    format: NSLocalizedString(
+                        "Rebalance clip #%d (%+.1fs)",
+                        comment: "AI montage rebalance confirmation summary"
+                    ),
+                    rebalanceRequest.targetClipOneBasedIndex,
+                    rebalanceRequest.deltaSeconds
+                )
                 let prepared = try await EditingPlanCompiler.compile(
                     actions,
                     for: snapshot.project,
                     baseRevision: snapshot.revision,
-                    label: "AI Montage Rebalance"
+                    label: "AI Montage Rebalance",
+                    summaryLines: [summary]
                 )
-                try await session.dispatch(
-                    prepared.batchCommand,
-                    planId: prepared.planId,
-                    expectedRevision: snapshot.revision
-                )
-                try await refreshFromSession()
-                assistantResultMessage = String(
+                let completionMessage = String(
                     format: NSLocalizedString(
                         "Rebalanced clip #%d (%+.1fs) while keeping %.1fs total.",
                         comment: "AI montage rebalance completion message"
@@ -73,7 +155,12 @@ extension EditorViewModel {
                     rebalanceRequest.deltaSeconds,
                     prepared.expectedDuration
                 )
-                lastStatusMessage = assistantResultMessage
+                try await commitOrStageAssistantPlan(
+                    prepared: prepared,
+                    expectedRevision: snapshot.revision,
+                    summary: summary,
+                    completionMessage: completionMessage
+                )
                 return
             } catch {
                 assistantResultMessage = error.localizedDescription
@@ -84,7 +171,8 @@ extension EditorViewModel {
 
         // 2. Primary provider path (`AIEditingProvider`) compiled into an atomic, revision-checked batch (AI-04)
         do {
-            let plan = try await assistantEditingProvider.plan(for: text, context: assistantContext())
+            let context = assistantContext(for: snapshot.project, baseRevision: snapshot.revision)
+            let plan = try await assistantEditingProvider.plan(for: text, context: context)
             let mapped = compileIntentsToDSLActions(plan.intents, in: snapshot.project)
             if mapped.hadMissingTargets {
                 assistantResultMessage = NSLocalizedString(
@@ -107,44 +195,68 @@ extension EditorViewModel {
                 mapped.actions,
                 for: snapshot.project,
                 baseRevision: snapshot.revision,
-                label: mapped.summaryLabel
+                label: mapped.summaryLabel,
+                summaryLines: [mapped.resultMessage]
             )
-            try await session.dispatch(
-                prepared.batchCommand,
-                planId: prepared.planId,
-                expectedRevision: snapshot.revision
+            try await commitOrStageAssistantPlan(
+                prepared: prepared,
+                expectedRevision: snapshot.revision,
+                summary: mapped.resultMessage,
+                completionMessage: mapped.resultMessage
             )
-            try await refreshFromSession()
-            assistantResultMessage = mapped.resultMessage
-            lastStatusMessage = assistantResultMessage
-            assistantSuggestions = []
         } catch AIEditingError.noApplicableActions {
             // 3. P3 deterministic intent planner (ko/en split, range delete/keep, speed, EQ, ducking, silence)
-            if let p3Result = try? EditingIntentPlanner.plan(instruction: text, for: snapshot.project),
-               !p3Result.actions.isEmpty {
-                do {
+            do {
+                let p3Result = try EditingIntentPlanner.plan(instruction: text, for: snapshot.project)
+                if !p3Result.actions.isEmpty {
                     let label = p3Result.rationale.first ?? "AI Edit Plan"
+                    let summary = p3Result.rationale.joined(separator: " · ")
                     let prepared = try await EditingPlanCompiler.compile(
                         p3Result.actions,
                         for: snapshot.project,
                         baseRevision: snapshot.revision,
-                        label: label
+                        label: label,
+                        summaryLines: p3Result.rationale
                     )
-                    try await session.dispatch(
-                        prepared.batchCommand,
-                        planId: prepared.planId,
-                        expectedRevision: snapshot.revision
+                    try await commitOrStageAssistantPlan(
+                        prepared: prepared,
+                        expectedRevision: snapshot.revision,
+                        summary: summary,
+                        completionMessage: summary
                     )
-                    try await refreshFromSession()
-                    assistantResultMessage = p3Result.rationale.joined(separator: " · ")
-                    lastStatusMessage = assistantResultMessage
-                    assistantSuggestions = []
-                    return
-                } catch {
-                    assistantResultMessage = error.localizedDescription
-                    lastStatusMessage = nil
                     return
                 }
+            } catch EditingIntentPlanner.PlannerError.unrecognized {
+                // Fall through to suggestion list below.
+            } catch EditingIntentPlanner.PlannerError.noClips {
+                assistantResultMessage = NSLocalizedString(
+                    "Add at least one clip to the timeline before running that instruction.",
+                    comment: "Assistant planner no clips error"
+                )
+                lastStatusMessage = nil
+                return
+            } catch EditingIntentPlanner.PlannerError.clipOrdinal(let requested, let count) {
+                assistantResultMessage = String(
+                    format: NSLocalizedString(
+                        "Clip #%d is out of range (timeline has %d clip(s)).",
+                        comment: "Assistant planner clip ordinal out of range error"
+                    ),
+                    requested,
+                    count
+                )
+                lastStatusMessage = nil
+                return
+            } catch EditingIntentPlanner.PlannerError.noTime {
+                assistantResultMessage = NSLocalizedString(
+                    "Specify a timestamp (e.g. 3s) for that instruction.",
+                    comment: "Assistant planner missing timestamp error"
+                )
+                lastStatusMessage = nil
+                return
+            } catch {
+                assistantResultMessage = error.localizedDescription
+                lastStatusMessage = nil
+                return
             }
 
             // 4. Fall back to the parser's suggestions to preserve the existing UX.
@@ -206,13 +318,25 @@ extension EditorViewModel {
                 }
             }
             if appliedForIntent > 0 {
-                labels.append("\(assistantActionLabel(intent.action)) applied to \(appliedForIntent) clip(s).")
+                labels.append(
+                    String(
+                        format: NSLocalizedString(
+                            "%@ applied to %d clip(s).",
+                            comment: "Assistant action applied to clip count"
+                        ),
+                        assistantActionLabel(intent.action),
+                        appliedForIntent
+                    )
+                )
             }
         }
 
         let resultMessage: String
         if intents.count == 1, case .addMarker = intents[0].action {
-            resultMessage = "Added a marker at the playhead."
+            resultMessage = NSLocalizedString(
+                "Added a marker at the playhead.",
+                comment: "Assistant added marker message"
+            )
         } else {
             resultMessage = labels.joined(separator: " ")
         }
@@ -254,7 +378,7 @@ extension EditorViewModel {
             guard clip.kind == .video || clip.kind == .image else { return nil }
             let current = clip.colorCorrection ?? ColorCorrection()
             let updated = ColorCorrection(
-                brightness: current.brightness + delta,
+                brightness: min(max(current.brightness + delta, -1.0), 1.0),
                 contrast: current.contrast,
                 saturation: current.saturation,
                 warmth: current.warmth,
@@ -267,7 +391,7 @@ extension EditorViewModel {
             let current = clip.colorCorrection ?? ColorCorrection()
             let updated = ColorCorrection(
                 brightness: current.brightness,
-                contrast: current.contrast + delta,
+                contrast: min(max(current.contrast + delta, 0.0), 2.0),
                 saturation: current.saturation,
                 warmth: current.warmth,
                 tint: current.tint
@@ -280,7 +404,7 @@ extension EditorViewModel {
             let updated = ColorCorrection(
                 brightness: current.brightness,
                 contrast: current.contrast,
-                saturation: current.saturation + delta,
+                saturation: min(max(current.saturation + delta, 0.0), 2.0),
                 warmth: current.warmth,
                 tint: current.tint
             )

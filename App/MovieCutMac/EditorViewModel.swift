@@ -8,6 +8,14 @@ import MovieCutCore
 import Observation
 import UniformTypeIdentifiers
 
+/// CA-35: staged destructive AI edit plan awaiting explicit user confirmation.
+struct PendingAssistantPlan: Equatable, Sendable {
+    let prepared: PreparedEditPlan
+    let expectedRevision: SessionRevision
+    let summary: String
+    let completionMessage: String
+}
+
 enum TimelineScrubPhase: Sendable {
     case began
     case changed
@@ -168,8 +176,12 @@ final class EditorViewModel {
     /// directory under the UI-test harness so harness runs never pollute it.
     @ObservationIgnored
     let betaDiagnostics: BetaDiagnosticsLog = {
+        #if DEBUG || MOVIECUT_HARNESS
         let harness = ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1"
             || ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_PROJECT"] != nil
+        #else
+        let harness = false
+        #endif
         let directory: URL? = harness
             ? nil
             : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
@@ -193,7 +205,7 @@ final class EditorViewModel {
     /// management surface the user opts into.
     var showTimelineIndex: Bool = false
 
-    @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
+    var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession
     @ObservationIgnored private let projectStore: ProjectStore
@@ -4069,6 +4081,8 @@ final class EditorViewModel {
     var assistantResultMessage: String?
     /// Suggestions shown when the last instruction was not understood.
     var assistantSuggestions: [String] = []
+    /// Staged destructive plan waiting for Apply/Cancel confirmation (CA-35).
+    var pendingAssistantPlan: PendingAssistantPlan?
 
     /// Parses a natural-language instruction and executes the mapped intent
     /// across the targeted clips using existing commands (F-21).

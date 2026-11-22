@@ -40,8 +40,6 @@ struct TimelineView: View {
     @State private var cachedDragSnapPoints: [TimeInterval] = []
     @State private var filmstripStore = TimelineFilmstripStore()
     @State private var isRulerScrubbing = false
-    @State private var isPlayheadScrubbing = false
-    @State private var playheadDragStartTime: TimeInterval = 0
     /// CA-19: the snap target the dragged clip is currently aligned to
     /// (nil when the drag has no active snap). Drives the alignment guide.
     @State private var snapGuideTime: TimeInterval? = nil
@@ -74,7 +72,7 @@ struct TimelineView: View {
     }
 
     private var timelineContentWidth: CGFloat {
-        let markerEnd = sortedMarkers.map(\.time).max() ?? 0
+        let markerEnd = viewModel.currentProject.markers.lazy.map(\.time).max() ?? 0
         let visibleSeconds = max(viewModel.visibleTimelineDuration, markerEnd + 2)
         return max(minimumTimelineContentWidth, CGFloat(visibleSeconds) * CGFloat(pixelsPerSecond) + markerLabelWidth)
     }
@@ -700,39 +698,13 @@ struct TimelineView: View {
             }
     }
 
-    private func playheadScrubGesture() -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isPlayheadScrubbing {
-                    isPlayheadScrubbing = true
-                    playheadDragStartTime = viewModel.playheadTime
-                    viewModel.scrubPlayhead(to: playheadDragStartTime, phase: .began)
-                }
-                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
-                scrubTimeline(atLocalX: targetX, phase: .changed)
-            }
-            .onEnded { value in
-                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
-                scrubTimeline(atLocalX: targetX, phase: .ended)
-                isPlayheadScrubbing = false
-            }
-    }
-
     private var playheadOverlay: some View {
-        ZStack {
-            Color.clear
-            Rectangle()
-                .fill(MovieCutTheme.accentCyan)
-                .frame(width: 2)
-        }
-        .frame(width: 14, height: trackHeight)
-        .contentShape(Rectangle())
-        .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
-        .highPriorityGesture(playheadScrubGesture())
-        .accessibilityElement()
-        .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
-        .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
-        .accessibilityHint(NSLocalizedString("Drag to scrub the timeline frame by frame.", comment: ""))
+        TimelinePlayheadOverlay(
+            viewModel: viewModel,
+            pixelsPerSecond: pixelsPerSecond,
+            trackHeight: trackHeight,
+            onScrub: scrubTimeline(atLocalX:phase:)
+        )
     }
 
     private var timeRuler: some View {
@@ -2208,6 +2180,58 @@ private final class OrderedDropPayloadAccumulator<Value>: @unchecked Sendable {
         if let finishedValues {
             completion(finishedValues)
         }
+    }
+}
+
+/// Dedicated lightweight subview that alone observes `viewModel.playheadTime`,
+/// isolating 30–60fps playback ticks from invalidating the entire `TimelineView` body.
+private struct TimelinePlayheadOverlay: View {
+    let viewModel: EditorViewModel
+    let pixelsPerSecond: Double
+    let trackHeight: CGFloat
+    let onScrub: (CGFloat, TimelineScrubPhase) -> Void
+
+    @State private var isPlayheadScrubbing = false
+    @State private var playheadDragStartTime: TimeInterval = 0
+
+    var body: some View {
+        ZStack {
+            Color.clear
+            Rectangle()
+                .fill(MovieCutTheme.accentCyan)
+                .frame(width: 2)
+        }
+        .frame(width: 14, height: trackHeight)
+        .contentShape(Rectangle())
+        .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
+        .highPriorityGesture(playheadScrubGesture())
+        .accessibilityElement()
+        .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
+        .accessibilityValue(formattedPlayheadSeconds(viewModel.playheadTime))
+        .accessibilityHint(NSLocalizedString("Drag to scrub the timeline frame by frame.", comment: ""))
+    }
+
+    private func playheadScrubGesture() -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isPlayheadScrubbing {
+                    isPlayheadScrubbing = true
+                    playheadDragStartTime = viewModel.playheadTime
+                    viewModel.scrubPlayhead(to: playheadDragStartTime, phase: .began)
+                }
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                onScrub(targetX, .changed)
+            }
+            .onEnded { value in
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                onScrub(targetX, .ended)
+                isPlayheadScrubbing = false
+            }
+    }
+
+    private func formattedPlayheadSeconds(_ seconds: TimeInterval) -> String {
+        let clamped = max(0, seconds.isFinite ? seconds : 0)
+        return String(format: NSLocalizedString("%.2fs", comment: ""), clamped)
     }
 }
 

@@ -1,8 +1,10 @@
 import Foundation
 import AVFoundation
+import CoreTransferable
 import MovieCutCore
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// CA-17: subtitle sidecar export formats — the same pair the Mac offers.
 enum SubtitleExportFormat: String, CaseIterable, Identifiable {
@@ -16,6 +18,48 @@ enum SubtitleExportFormat: String, CaseIterable, Identifiable {
         case .srt: "SubRip (.srt)"
         case .vtt: "WebVTT (.vtt)"
         }
+    }
+}
+
+/// CODEX-04: `PhotosPickerItem` does not expose `URL` transferables for
+/// library assets and deletes `ReceivedTransferredFile.file` as soon as the
+/// `FileRepresentation` importing closure returns. Stream-copy the received
+/// file inside the closure into a per-pick staging file so 4K assets never
+/// buffer in RAM and survive until moved into the project's managed Imports
+/// directory. Declared at file scope so Swift 6 `@MainActor` isolation on
+/// `IOSEditorViewModel` does not bleed into `Transferable`'s nonisolated
+/// `transferRepresentation` requirement.
+private struct StagedPickerMedia: Transferable, Sendable {
+    let fileURL: URL
+    let fileExtension: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            try Self.stage(received: received, fallbackExtension: "mov")
+        }
+        FileRepresentation(importedContentType: .image) { received in
+            try Self.stage(received: received, fallbackExtension: "jpg")
+        }
+        FileRepresentation(importedContentType: .audiovisualContent) { received in
+            try Self.stage(received: received, fallbackExtension: "mov")
+        }
+    }
+
+    private static func stage(
+        received: ReceivedTransferredFile,
+        fallbackExtension: String
+    ) throws -> StagedPickerMedia {
+        let ext = received.file.pathExtension.isEmpty
+            ? fallbackExtension
+            : received.file.pathExtension
+        let stagingDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutPickerStaging", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+        let stagedURL = stagingDir
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(ext)
+        try IOSEditorViewModel.copyFileBuffered(from: received.file, to: stagedURL)
+        return StagedPickerMedia(fileURL: stagedURL, fileExtension: ext)
     }
 }
 
@@ -586,24 +630,34 @@ final class IOSEditorViewModel {
         await projectStore.clearAutosave()
     }
 
-    /// BUG-IOS-06: the ONE file-based photo/video import path. Both picker
-    /// surfaces (the top bar and the media browser) previously each had their
-    /// own copy — the browser's loaded the ENTIRE asset into memory
-    /// (`loadTransferable(Data.self)` — a 4K video could OOM) and swallowed
-    /// every failure. Requests a FILE URL, streams a 1 MiB-buffered copy into
-    /// the managed imports directory, imports through the validated probe,
-    /// and adds the clip to the timeline. Failures surface through
-    /// `lastErrorMessage`.
+    /// BUG-IOS-06 / CODEX-04: the ONE file-based photo/video import path.
+    /// Streams a 1 MiB-buffered copy via `FileRepresentation` inside the
+    /// `PhotosPickerItem` importing closure, then moves it into the managed
+    /// imports directory (`Application Support/MovieCut/Imports/<projectId>/`),
+    /// imports through the validated probe, and adds the clip to the timeline.
+    /// Failures are logged and surfaced through `lastErrorMessage`.
     func importFromPhotosPicker(_ item: PhotosPickerItem) async {
-        guard let stagedURL = try? await item.loadTransferable(type: URL.self) else {
-            lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+        let staged: StagedPickerMedia
+        do {
+            guard let loaded = try await item.loadTransferable(type: StagedPickerMedia.self) else {
+                lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+                return
+            }
+            staged = loaded
+        } catch {
+            AppLog.storage.error("PhotosPicker loadTransferable failed: \(error.localizedDescription, privacy: .public)")
+            lastErrorMessage = "Couldn't load the selected media: \(error.localizedDescription)"
             return
         }
 
+        defer {
+            try? FileManager.default.removeItem(at: staged.fileURL)
+        }
+
         let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
-            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
+            ?? (staged.fileExtension.isEmpty ? "mov" : staged.fileExtension)
         // SURV-01 (리뷰 2026-08-26): 임시 디렉터리 대신 관리 Imports 영역
-        // (Application Support/MovieCut/Imports/<projectId>/)으로 복사 —
+        // (Application Support/MovieCut/Imports/<projectId>/)으로 이동/복사 —
         // OS가 임시 파일을 정리하면 복구 프로젝트만 남고 원본이 사라졌다.
         let fileURL = stagedImportDestination(fileExtension: fileExtension)
 
@@ -612,7 +666,11 @@ final class IOSEditorViewModel {
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
+            do {
+                try FileManager.default.moveItem(at: staged.fileURL, to: fileURL)
+            } catch {
+                try Self.copyFileBuffered(from: staged.fileURL, to: fileURL)
+            }
             await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
             if var importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
                 // SURV-01 2차: stamp the imports-root-relative reference so a
@@ -627,6 +685,7 @@ final class IOSEditorViewModel {
                 await addClipToTimeline(asset: importedAsset)
             }
         } catch {
+            AppLog.storage.error("PhotosPicker import failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
         }
     }
@@ -687,8 +746,9 @@ final class IOSEditorViewModel {
     }
 
     /// Streams a file copy in bounded chunks so a large 4K video never has to
-    /// fit in memory.
-    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
+    /// fit in memory. Marked `nonisolated` so `StagedPickerMedia`'s off-actor
+    /// `FileRepresentation` importing closure can call it directly under Swift 6.
+    nonisolated fileprivate static func copyFileBuffered(from source: URL, to destination: URL) throws {
         let chunkSize = 1024 * 1024
         FileManager.default.createFile(atPath: destination.path, contents: nil)
         let input = try FileHandle(forReadingFrom: source)

@@ -1,4 +1,4 @@
-#if os(iOS)
+#if os(iOS) && (DEBUG || MOVIECUT_HARNESS)
 import AVFoundation
 import CoreMedia
 import Foundation

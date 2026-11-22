@@ -233,6 +233,7 @@ struct IOSContentView: View {
                 // BUG-IOS-02: restore crash-recovery autosave BEFORE the
                 // harness or user interaction — work from a terminated or
                 // evicted session survives launches now.
+                #if DEBUG || MOVIECUT_HARNESS
                 if ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] != "1" {
                     await viewModel.restoreAutosaveIfAvailable()
                 }
@@ -240,6 +241,9 @@ struct IOSContentView: View {
                 // launches) — drives the real import/preview/export/audio/
                 // persistence paths and reports to Documents/g27-result.txt.
                 await IOSUITestHarness.runIfRequested(viewModel: viewModel)
+                #else
+                await viewModel.restoreAutosaveIfAvailable()
+                #endif
                 // UX-REC-02: the restore above adopts silently — offer the
                 // user an explicit choice to keep or discard the recovered
                 // work (the old recovery file may be stale).

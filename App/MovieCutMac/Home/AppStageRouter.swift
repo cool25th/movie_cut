@@ -42,11 +42,15 @@ final class AppStageRouter {
         viewModel.recentProjectsStore = store
         // Read the harness gate once at construction (launch). The gate is
         // static for the process lifetime, so this is the only read.
+        #if DEBUG || MOVIECUT_HARNESS
         let env = ProcessInfo.processInfo.environment
         self.stage = AppStagePolicy.initialStage(
             uiTestEnv: env["MOVIECUT_UITEST"],
             bootstrapProjectEnv: env["MOVIECUT_BOOTSTRAP_PROJECT"]
         )
+        #else
+        self.stage = .home
+        #endif
     }
 
     // MARK: - Transitions the views request
@@ -131,6 +135,7 @@ final class AppStageRouter {
         // Fast path: the harness gate is active. The harness never expects a
         // modal and cannot be in the home stage (it bypasses home), so this is
         // purely defensive — but mirrors confirmDiscardUnsavedChanges' gate.
+        #if DEBUG || MOVIECUT_HARNESS
         let env = ProcessInfo.processInfo.environment
         if !AppStagePolicy.harnessGateKeys(
             uiTestEnv: env["MOVIECUT_UITEST"],
@@ -139,6 +144,7 @@ final class AppStageRouter {
             stage = .home
             return
         }
+        #endif
 
         guard AppStagePolicy.editorToHomeRequiresPrompt(isDirty: viewModel.isDirty) else {
             stage = .home

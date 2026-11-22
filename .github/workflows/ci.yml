@@ -80,6 +80,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Build Mac app (Release, blocking)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build iOS app (Release generic, blocking)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
   # STAB-06: the single 30-min iOS job previously died mid-run (8 PASS at
   # 1,047.8s then cancelled). Split by measured runtime — the state suites
   # finish in under a second of test time (14 tests / 0.55s local), so they

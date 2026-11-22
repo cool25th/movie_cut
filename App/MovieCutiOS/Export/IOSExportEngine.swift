@@ -754,9 +754,10 @@ final class IOSExportEngine {
                         start: cmTime(clip.timelineRange.start),
                         duration: cmTime(clip.timelineRange.duration)
                     )
-                    let stickerEmoji = clip.textContent.flatMap(stickerEmoji(from:))
-                    let exportTextContent = stickerEmoji == nil ? clip.textContent : nil
-                    let stickerFontSize = stickerEmoji == nil ? nil : clip.textContent.map { CGFloat($0.fontSize) }
+                    let stickerImageURL = clip.textContent.flatMap(stickerImageURL(from:))
+                    let stickerEmoji = stickerImageURL == nil ? clip.textContent.flatMap(stickerEmoji(from:)) : nil
+                    let exportTextContent = (stickerEmoji == nil && stickerImageURL == nil) ? clip.textContent : nil
+                    let stickerFontSize = (stickerEmoji == nil && stickerImageURL == nil) ? nil : clip.textContent.map { CGFloat($0.fontSize) }
 
                     guard let clipEffect = CustomCompositionClipEffect(
                         trackID: kCMPersistentTrackID_Invalid,
@@ -773,6 +774,8 @@ final class IOSExportEngine {
                         effects: clip.effects,
                         textContent: exportTextContent,
                         stickerEmoji: stickerEmoji,
+                        stickerFallbackText: stickerImageURL == nil ? nil : clip.textContent?.text,
+                        stickerImageURL: stickerImageURL,
                         stickerFontSize: stickerFontSize,
                         isBackgroundRemoved: clip.isBackgroundRemoved,
                         blendMode: clip.blendMode
@@ -858,6 +861,14 @@ final class IOSExportEngine {
 
     private func stickerEmoji(from textContent: TextClipContent) -> String? {
         StickerDetection.stickerEmoji(from: textContent)
+    }
+
+    private func stickerImageURL(from textContent: TextClipContent) -> URL? {
+        guard textContent.isSticker else {
+            return nil
+        }
+
+        return textContent.stickerImageURL
     }
 
     /// BUG-IOS-09: per-clip metadata for transition pairing (Mac

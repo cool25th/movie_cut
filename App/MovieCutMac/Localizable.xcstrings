@@ -185,6 +185,22 @@
         }
       }
     },
+    "%@ applied to %d clip(s).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ applied to %d clip(s)."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@을(를) 클립 %d개에 적용했습니다."
+          }
+        }
+      }
+    },
     "%@ background color": {
       "extractionState": "manual",
       "localizations": {
@@ -809,6 +825,22 @@
         }
       }
     },
+    "Actions: %d · Duration change: %+.1fs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions: %d · Duration change: %+.1fs"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작업: %d개 · 길이 변화: %+.1f초"
+          }
+        }
+      }
+    },
     "Add": {
       "extractionState": "manual",
       "localizations": {
@@ -910,6 +942,22 @@
         }
       }
     },
+    "Add at least one clip to the timeline before running that instruction.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add at least one clip to the timeline before running that instruction."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 명령을 실행하려면 타임라인에 클립을 하나 이상 추가하세요."
+          }
+        }
+      }
+    },
     "Add custom text": {
       "extractionState": "manual",
       "localizations": {
@@ -957,6 +1005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "타임라인에 추가"
+          }
+        }
+      }
+    },
+    "Added a marker at the playhead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added a marker at the playhead."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재생헤드 위치에 마커를 추가했습니다."
           }
         }
       }
@@ -1228,6 +1292,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "애니메이션"
+          }
+        }
+      }
+    },
+    "Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용"
           }
         }
       }
@@ -1773,6 +1853,22 @@
         }
       }
     },
+    "Cancelled pending edit plan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled pending edit plan."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대기 중인 편집 계획을 취소했습니다."
+          }
+        }
+      }
+    },
     "Canvas": {
       "extractionState": "manual",
       "localizations": {
@@ -2229,6 +2325,22 @@
         }
       }
     },
+    "Clip #%d is out of range (timeline has %d clip(s)).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clip #%d is out of range (timeline has %d clip(s))."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d번 클립은 범위를 벗어났습니다(현재 타임라인 클립 %d개)."
+          }
+        }
+      }
+    },
     "Clip Info": {
       "localizations": {
         "en": {
@@ -2408,6 +2520,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "컴파운드 클립"
+          }
+        }
+      }
+    },
+    "Confirm Edit Plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Edit Plan"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "편집 계획 확인"
           }
         }
       }
@@ -6220,6 +6348,22 @@
         }
       }
     },
+    "Rebalance clip #%d (%+.1fs)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebalance clip #%d (%+.1fs)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d번 클립 길이 재분배 (%+.1f초)"
+          }
+        }
+      }
+    },
     "Rebalanced clip #%d (%+.1fs) while keeping %.1fs total.": {
       "extractionState": "manual",
       "localizations": {
@@ -6489,6 +6633,22 @@
         }
       }
     },
+    "Review the planned edit below and click Apply to commit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review the planned edit below and click Apply to commit."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아래 편집 계획을 확인한 뒤 적용을 눌러 반영하세요."
+          }
+        }
+      }
+    },
     "Review-safe wording: do not say exported or device verified": {
       "localizations": {
         "en": {
@@ -6567,6 +6727,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 스마트 도구를 실행합니다."
+          }
+        }
+      }
+    },
+    "SNS Audio Polish": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SNS Audio Polish"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SNS 좋은 소리"
           }
         }
       }
@@ -7348,6 +7524,22 @@
         }
       }
     },
+    "Specify a timestamp (e.g. 3s) for that instruction.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Specify a timestamp (e.g. 3s) for that instruction."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 명령에는 시점(예: 3초)을 지정해 주세요."
+          }
+        }
+      }
+    },
     "Speed": {
       "localizations": {
         "en": {
@@ -7863,6 +8055,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "타임라인에 이미 클립이 있습니다. 몽타주는 새 프로젝트에서 생성되므로 타임라인을 비우거나 새 프로젝트를 먼저 열어주세요."
+          }
+        }
+      }
+    },
+    "The timeline changed while reviewing this plan. Run the instruction again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The timeline changed while reviewing this plan. Run the instruction again."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계획을 검토하는 동안 타임라인이 변경되었습니다. 명령을 다시 실행해 주세요."
           }
         }
       }

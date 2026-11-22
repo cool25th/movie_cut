@@ -13,13 +13,12 @@ import Foundation
 ///
 /// The swap itself follows the same semantics as
 /// ``SetClipSourceAssetCommand.apply(to:)``: it locates the clip, enforces the
-/// editable-track guard, validates the asset exists in the library after import,
-/// captures the previous clip for the inverse, and reassigns `assetId`/`kind`.
-/// `kind` is optional so callers can keep the clip kind unchanged.
+/// editable-track guard before mutating any state, registers the asset in the
+/// library, and reassigns `assetId`/`kind`. `kind` is optional so callers can
+/// keep the clip kind unchanged.
 ///
 /// Undo is handled by the session's whole-project snapshot restore (see
-/// ``AutoCutCommand``), so ``invert(from:)`` returns a no-op rather than
-/// duplicating import/swap reconstruction.
+/// ``AutoCutCommand``).
 public struct ImportAndSetClipSourceCommand: EditorCommand {
     /// The command identifier.
     public let id: UUID
@@ -47,24 +46,18 @@ public struct ImportAndSetClipSourceCommand: EditorCommand {
     }
 
     public func apply(to project: inout Project) throws {
-        // Mirror ImportMediaCommand: register the asset in the library.
-        project.mediaLibrary.assets[asset.id] = asset
-
-        // Mirror SetClipSourceAssetCommand: locate, guard, validate, swap.
+        // Pre-validate before mutating the project so failed calls leave no
+        // orphan asset in the media library even when invoked outside EditorSession.
         let location = try project.clipLocation(for: clipId)
         try project.ensureTrackIsEditable(at: location.trackIndex)
 
-        // The asset must now resolve in the library. This also covers the
-        // (pathological) case where a concurrent mutation removed it.
-        guard project.mediaLibrary.assets[asset.id] != nil else {
-            throw EditorCommandError.assetNotFound(asset.id)
-        }
+        // Mirror ImportMediaCommand: register the asset in the library.
+        project.mediaLibrary.assets[asset.id] = asset
 
-        let previousClip = project.timeline.tracks[location.trackIndex].clips[location.clipIndex]
+        // Mirror SetClipSourceAssetCommand: swap asset reference and optional kind.
         project.timeline.tracks[location.trackIndex].clips[location.clipIndex].assetId = asset.id
         if let kind {
             project.timeline.tracks[location.trackIndex].clips[location.clipIndex].kind = kind
         }
     }
-
-    }
+}

@@ -54,6 +54,7 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
             try project.insertClip(audioClip, into: targetTrackId, at: insertionIndex)
             try project.normalizeClipZIndexes(in: targetTrackId)
             project.normalizeTrackZIndexes()
+            return
         }
 
         let audioTrack = Track(
@@ -66,7 +67,7 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
         project.normalizeTrackZIndexes()
     }
 
-        private func firstAvailableAudioTrackIndex(for range: TimeRange, in project: Project) -> Int? {
+    private func firstAvailableAudioTrackIndex(for range: TimeRange, in project: Project) -> Int? {
         for index in project.timeline.tracks.indices {
             let track = project.timeline.tracks[index]
             guard track.kind == .audio, !track.isLocked else { continue }
@@ -84,34 +85,6 @@ public struct ExtractAudioCommand: EditorCommand, Sendable, Codable {
     private func nextAudioTrackName(in project: Project) -> String {
         let nextIndex = project.timeline.tracks.filter { $0.kind == .audio }.count + 1
         return "Audio \(nextIndex)"
-    }
-}
-
-private struct RemoveExtractedAudioClipCommand: EditorCommand {
-    let id: UUID
-    var clipId: UUID
-    var createdTrackId: UUID?
-
-    init(id: UUID = UUID(), clipId: UUID, createdTrackId: UUID?) {
-        self.id = id
-        self.clipId = clipId
-        self.createdTrackId = createdTrackId
-    }
-
-    func apply(to project: inout Project) throws {
-        let location = try project.clipLocation(for: clipId)
-        try project.ensureTrackIsEditable(at: location.trackIndex)
-
-        let trackId = project.timeline.tracks[location.trackIndex].id
-        let previousClips = project.timeline.tracks[location.trackIndex].clips
-        let removedClip = project.timeline.tracks[location.trackIndex].clips.remove(at: location.clipIndex)
-
-        if createdTrackId == trackId, project.timeline.tracks[location.trackIndex].clips.isEmpty {
-            project.timeline.tracks.remove(at: location.trackIndex)
-            project.normalizeTrackZIndexes()
-        } else {
-            try project.normalizeClipZIndexes(in: trackId)
-        }
     }
 }
 

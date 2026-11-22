@@ -57,8 +57,10 @@ public actor EditorSession {
         }
 
         let previousProject = project
-        try command.apply(to: &project)
-        project.updatedAt = Date()
+        var draft = project
+        try command.apply(to: &draft)
+        draft.updatedAt = Date()
+        project = draft
         undoStack.append(previousProject)
         dispatchedCommandCount += 1
         if undoStack.count > Self.maxUndoHistory {
@@ -99,6 +101,9 @@ public actor EditorSession {
         }
         dispatchedCommandCount = max(0, dispatchedCommandCount - 1)
         redoStack.append(project)
+        if redoStack.count > Self.maxUndoHistory {
+            redoStack.removeFirst(redoStack.count - Self.maxUndoHistory)
+        }
         project = previousProject
         revision = revision.advanced()
     }

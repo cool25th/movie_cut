@@ -163,4 +163,100 @@ struct EditingPlanCompilerTests {
         #expect(undone.timeline.tracks.isEmpty)
         #expect(undone.markers.isEmpty)
     }
+
+    @Test("CA-35: destructive action classification, stale-revision rejection, and single-undo recovery")
+    func destructivePlanMetadataAndConfirmationContract() async throws {
+        let trackId = UUID()
+        let assetId = UUID()
+        let clipId = UUID()
+        let asset = MediaAsset(
+            id: assetId,
+            originalURL: URL(fileURLWithPath: "/tmp/sample.mp4"),
+            kind: .video,
+            duration: 10.0
+        )
+        let clip = Clip(
+            id: clipId,
+            assetId: assetId,
+            kind: .video,
+            sourceRange: TimeRange(start: 0, duration: 10.0),
+            timelineRange: TimeRange(start: 0, duration: 10.0)
+        )
+        let initialProject = Project(
+            name: "DestructiveGate",
+            mediaLibrary: MediaLibrary(assets: [assetId: asset]),
+            timeline: Timeline(tracks: [Track(id: trackId, kind: .video, name: "V1", zIndex: 0, clips: [clip])])
+        )
+
+        #expect(EditingActionDSL.Action.trimClip(
+            clipId: clipId,
+            sourceRange: TimeRange(start: 0, duration: 6),
+            timelineRange: TimeRange(start: 0, duration: 6)
+        ).isDestructive)
+        #expect(EditingActionDSL.Action.deleteTimelineRange(start: 2, end: 4).isDestructive)
+        #expect(EditingActionDSL.Action.deleteClip(clipId: clipId).isDestructive)
+        #expect(EditingActionDSL.Action.removeSilence(clipId: clipId).isDestructive)
+        #expect(!EditingActionDSL.Action.setVolume(clipId: clipId, volume: 0.5).isDestructive)
+        #expect(!EditingActionDSL.Action.addMarker(name: "M1", time: 1.0).isDestructive)
+
+        let session = EditorSession(project: initialProject)
+        let snapshot = await session.snapshotWithRevision()
+
+        let prepared = try await EditingPlanCompiler.compile(
+            [
+                .trimClip(
+                    clipId: clipId,
+                    sourceRange: TimeRange(start: 0, duration: 6.0),
+                    timelineRange: TimeRange(start: 0, duration: 6.0)
+                )
+            ],
+            for: snapshot.project,
+            baseRevision: snapshot.revision,
+            label: "Trim clip",
+            summaryLines: ["Trim clip #1 to 6.0s"]
+        )
+
+        // Compiling a destructive plan must NOT mutate the session until confirmed.
+        let beforeConfirm = await session.snapshotWithRevision()
+        #expect(beforeConfirm.revision == snapshot.revision)
+        #expect(beforeConfirm.project.timeline.duration == 10.0)
+        #expect(prepared.containsDestructiveActions)
+        #expect(prepared.actionCount == 1)
+        #expect(prepared.affectedClipCount == 1)
+        #expect(abs(prepared.durationDeltaSeconds - (-4.0)) < 1e-6)
+        #expect(prepared.summaryLines == ["Trim clip #1 to 6.0s"])
+
+        // If an intervening edit happens before confirmation, stale revision must fail closed.
+        try await session.dispatch(AddMarkerCommand(marker: Marker(time: 1.0, name: "Intervening")))
+        await #expect(throws: EditorCommandError.self) {
+            try await session.dispatch(
+                prepared.batchCommand,
+                planId: prepared.planId,
+                expectedRevision: snapshot.revision
+            )
+        }
+
+        // Re-compiling against the latest revision and confirming applies atomically and undoes in 1 step.
+        let latest = await session.snapshotWithRevision()
+        let freshPrepared = try await EditingPlanCompiler.compile(
+            [
+                .trimClip(
+                    clipId: clipId,
+                    sourceRange: TimeRange(start: 0, duration: 6.0),
+                    timelineRange: TimeRange(start: 0, duration: 6.0)
+                )
+            ],
+            for: latest.project,
+            baseRevision: latest.revision
+        )
+        try await session.dispatch(
+            freshPrepared.batchCommand,
+            planId: freshPrepared.planId,
+            expectedRevision: latest.revision
+        )
+        #expect(abs((await session.snapshot()).timeline.duration - 6.0) < 1e-6)
+
+        try await session.undo()
+        #expect(abs((await session.snapshot()).timeline.duration - 10.0) < 1e-6)
+    }
 }

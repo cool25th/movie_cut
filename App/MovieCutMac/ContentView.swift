@@ -53,8 +53,12 @@ struct ContentView: View {
             // (which never fires willTerminate) leaves it so the next launch
             // can offer recovery. The harness skips this clear to simulate a
             // crash — leaving the recovery file behind across a terminate.
+            #if DEBUG || MOVIECUT_HARNESS
             let skipClear = ProcessInfo.processInfo.environment["MOVIECUT_UITEST_SKIP_RECOVERY_CLEAR"] == "1"
             Task { guard !skipClear else { return }; await viewModel.clearRecoveryAutosave() }
+            #else
+            Task { await viewModel.clearRecoveryAutosave() }
+            #endif
         }
         .toolbar {
             if !isPreviewExportParityHarness {
@@ -426,9 +430,8 @@ struct ContentView: View {
     /// gate exercises the same `recoverableProject` → `adoptRecoveredProject`
     /// logic through injection rather than tapping the alert.
     private func presentRecoveryIfNeeded() async {
-        let env = ProcessInfo.processInfo.environment
-
         #if DEBUG || MOVIECUT_HARNESS
+        let env = ProcessInfo.processInfo.environment
         // Headless recovery regression: create the autosave via flushAutosave()
         // in the harness scenario, then this injection path runs the same
         // recover/discard logic the modal would, reporting the outcome.
@@ -436,9 +439,8 @@ struct ContentView: View {
             await runRecoveryInjection(environment: env)
             return
         }
-        #endif
-
         guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else { return }
+        #endif
         let recovered = await viewModel.recoverableProject()
 
         // If a recovery file existed but was corrupt, the store has already

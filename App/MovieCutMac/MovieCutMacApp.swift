@@ -395,11 +395,15 @@ struct MovieCutMacApp: App {
     }
 
     private var bootstrapProjectPath: String? {
+        #if DEBUG || MOVIECUT_HARNESS
         guard let path = ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_PROJECT"],
               !path.isEmpty else {
             return nil
         }
         return path
+        #else
+        return nil
+        #endif
     }
 
     private var defaultWindowSize: CGSize {
@@ -408,6 +412,7 @@ struct MovieCutMacApp: App {
 
     @MainActor
     private func loadBootstrapProjectIfNeeded() async {
+        #if DEBUG || MOVIECUT_HARNESS
         guard !didLoadBootstrapProject else { return }
         guard let path = bootstrapProjectPath else {
             return
@@ -421,6 +426,7 @@ struct MovieCutMacApp: App {
         }
 
         applyBootstrapWindowFrame()
+        #endif
     }
 
     @MainActor
@@ -539,10 +545,12 @@ final class MovieCutAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let viewModel, viewModel.isDirty else { return .terminateNow }
 
+        #if DEBUG || MOVIECUT_HARNESS
         let env = ProcessInfo.processInfo.environment
         guard env["MOVIECUT_UITEST"] != "1", env["MOVIECUT_BOOTSTRAP_PROJECT"] == nil else {
             return .terminateNow
         }
+        #endif
 
         let alert = NSAlert()
         alert.messageText = "Save changes to \"\(viewModel.currentProject.name)\"?"

@@ -45,6 +45,70 @@ public enum EditingActionDSL {
         case setClipEffects(clipId: UUID, effects: [Effect])
         case setClipColorCorrection(clipId: UUID, colorCorrection: ColorCorrection?)
         case addMarker(name: String, time: TimeInterval)
+
+        /// CA-35: classifies whether this action destructively modifies or removes
+        /// existing timeline content/structure and therefore requires explicit user
+        /// preview & confirmation before dispatch from natural-language surfaces.
+        public var isDestructive: Bool {
+            switch self {
+            case .deleteTimelineRange,
+                 .keepTimelineRange,
+                 .deleteClip,
+                 .trimClip,
+                 .removeSilence,
+                 .splitClip,
+                 .setCanvas:
+                return true
+            case .moveClip,
+                 .setVolume,
+                 .setSpeed,
+                 .applyAudioPreset,
+                 .duckBackground,
+                 .registerAsset,
+                 .createTrack,
+                 .addClip,
+                 .setClipTransform,
+                 .setClipKeyframes,
+                 .setClipTransition,
+                 .setClipFade,
+                 .setClipTextContent,
+                 .setClipEffects,
+                 .setClipColorCorrection,
+                 .addMarker:
+                return false
+            }
+        }
+
+        /// The primary clip targeted by this action, when clip-scoped.
+        public var affectedClipId: UUID? {
+            switch self {
+            case .deleteClip(let clipId),
+                 .splitClip(let clipId, _),
+                 .moveClip(let clipId, _),
+                 .setVolume(let clipId, _),
+                 .setSpeed(let clipId, _),
+                 .applyAudioPreset(let clipId, _),
+                 .duckBackground(let clipId),
+                 .removeSilence(let clipId),
+                 .addClip(let clipId, _, _, _, _, _),
+                 .setClipTransform(let clipId, _),
+                 .setClipKeyframes(let clipId, _),
+                 .setClipTransition(let clipId, _),
+                 .setClipFade(let clipId, _, _),
+                 .setClipTextContent(let clipId, _),
+                 .trimClip(let clipId, _, _),
+                 .setClipEffects(let clipId, _),
+                 .setClipColorCorrection(let clipId, _):
+                return clipId
+            case .deleteTimelineRange,
+                 .keepTimelineRange,
+                 .registerAsset,
+                 .createTrack,
+                 .setCanvas,
+                 .addMarker:
+                return nil
+            }
+        }
     }
 
     /// Why an action cannot be planned — typed, so a validator can reject

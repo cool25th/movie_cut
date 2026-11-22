@@ -74,7 +74,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// unique within a track and stable across the composition build.
     @ObservationIgnored private var karaokeClips: [KaraokePreviewClip] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
-    @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var timeObserverToken: Any?
     /// Chase-seek state: true while a player.seek issued by `seek(to:)` is
     /// still in flight; a newer target arriving in that window parks in
     /// `pendingSeekTime` and is chased by the in-flight seek's completion.
@@ -702,20 +702,21 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     }
 
     func startPlaybackTimer() {
-        guard playbackTimerTask == nil else { return }
+        guard timeObserverToken == nil else { return }
 
-        playbackTimerTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                self.updateCurrentTimeFromPlayer()
-                try? await Task.sleep(nanoseconds: 33_333_333)
+        let interval = CMTime(value: 1, timescale: 30)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateCurrentTimeFromPlayer()
             }
         }
     }
 
     func stopPlaybackTimer() {
-        playbackTimerTask?.cancel()
-        playbackTimerTask = nil
+        if let token = timeObserverToken {
+            player.removeTimeObserver(token)
+            timeObserverToken = nil
+        }
     }
 
     private func observeStatus(for item: AVPlayerItem) {

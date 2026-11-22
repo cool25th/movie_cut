@@ -47,31 +47,11 @@ public struct AudioDuckingCommand: EditorCommand, Sendable, Codable {
         for trackIndex in editableTrackIndexes {
             try project.ensureTrackIsEditable(at: trackIndex)
         }
+
+        for target in targets {
+            let clip = project.timeline.tracks[target.trackIndex].clips[target.clipIndex]
+            project.timeline.tracks[target.trackIndex].clips[target.clipIndex].volume = clip.volume * multiplier
+        }
     }
 }
-
-private struct RestoreClipVolumesCommand: EditorCommand, Sendable, Codable {
-    let id: UUID
-    var volumes: [UUID: Double]
-
-    init(id: UUID = UUID(), volumes: [UUID: Double]) {
-        self.id = id
-        self.volumes = volumes
-    }
-
-    func apply(to project: inout Project) throws {
-        var targets: [(clipId: UUID, trackIndex: Int, clipIndex: Int, volume: Double)] = []
-        for (clipId, volume) in volumes {
-            let location = try project.clipLocation(for: clipId)
-            targets.append((clipId, location.trackIndex, location.clipIndex, volume))
-        }
-
-        let editableTrackIndexes = Set(targets.map(\.trackIndex)).sorted()
-        for trackIndex in editableTrackIndexes {
-            try project.ensureTrackIsEditable(at: trackIndex)
-        }
-
-    }
-
-    }
 

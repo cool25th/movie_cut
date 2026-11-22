@@ -203,7 +203,6 @@
 		7B574257CD8646D0165EA1B2 /* TemplatePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18B8335F6E5C7F7C27CA6E2 /* TemplatePickerView.swift */; };
 		7C50313BEBCAD29DEDB28A13 /* RecoveryAlertDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CA5B5FA8BBE76A9474081B /* RecoveryAlertDetailTests.swift */; };
 		7CAB30640D3FBAB55485C4F4 /* EditorViewModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFCE4F47F26BABCF0A21BFCA /* EditorViewModel+Inspector.swift */; };
-		7DBBF375C07C102B5BAAB181 /* ChromaKeyCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7FC3496AF71946B48FC4185 /* ChromaKeyCompositor.swift */; };
 		7DF0C6B50588677F0F6438C8 /* ProjectStoreNamedAutosaveDirectoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD75CE20D8E30ACAE7863340 /* ProjectStoreNamedAutosaveDirectoryTests.swift */; };
 		7E09C3090F6006B7A9D84299 /* EditorViewModel+Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99958F9796E4A62BF55282E1 /* EditorViewModel+Export.swift */; };
 		7FDA55D8778F66FBC8C35CCC /* IOSAudioPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8FBDD28545B7BAEE4D0BBA /* IOSAudioPresetTests.swift */; };
@@ -735,7 +734,6 @@
 		C78ED51705450FB92B36436E /* KenBurnsEffectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KenBurnsEffectTests.swift; sourceTree = "<group>"; };
 		C7BFC622AED28E43A15EB2FA /* UndoRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoRoundTripTests.swift; sourceTree = "<group>"; };
 		C7CD67187088D82383D00EEC /* WaveformTaskIdentityStaticContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformTaskIdentityStaticContractTests.swift; sourceTree = "<group>"; };
-		C7FC3496AF71946B48FC4185 /* ChromaKeyCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyCompositor.swift; sourceTree = "<group>"; };
 		C834F5C80A614BA20A20BA1C /* TimelineScrubBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrubBehaviorTests.swift; sourceTree = "<group>"; };
 		C9A45A72217F17E269568902 /* ReverseRenderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReverseRenderService.swift; sourceTree = "<group>"; };
 		CA1F2E95680DF4F98D99D668 /* SlipSlideCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlipSlideCommandTests.swift; sourceTree = "<group>"; };
@@ -1405,7 +1403,6 @@
 		CF0F99891ED8642B9727AD98 /* Export */ = {
 			isa = PBXGroup;
 			children = (
-				C7FC3496AF71946B48FC4185 /* ChromaKeyCompositor.swift */,
 				F98F57EAE1AF667CC610EED9 /* CompositionRenderHelpers.swift */,
 				D9963AE87F9130856475713A /* CustomVideoCompositor.swift */,
 				7C70FA8B23C5C5C662723D31 /* ExportEngine.swift */,
@@ -1969,7 +1966,6 @@
 				8617CFC2E6189B8A00D12AA9 /* CardCanvasView.swift in Sources */,
 				DDE28231596692471A3A6D8A /* CardEditorView.swift in Sources */,
 				06AEEB26BD4568D58B880405 /* CardTemplateGallery.swift in Sources */,
-				7DBBF375C07C102B5BAAB181 /* ChromaKeyCompositor.swift in Sources */,
 				67CB0A974A9ABFD3B8C6896A /* ChromaKeyView.swift in Sources */,
 				A67120E48CB993CDC1AA9F65 /* ClipEqualizerProcessing.swift in Sources */,
 				BB74B810D762EEC0D65AC65D /* ColorCurvesView.swift in Sources */,

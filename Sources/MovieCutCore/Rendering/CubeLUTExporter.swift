@@ -72,8 +72,8 @@ public enum CubeLUTExporter {
     /// LUTs are excluded; callers must surface this scope when writing the
     /// file so users do not assume a full-grade bake.
     ///
-    /// Precision: the grid renders through a half-float bitmap (standard
-    /// LUT precision, ~1e-3 per channel).
+    /// Precision: the grid renders through a 32-bit float bitmap (`.RGBAf`,
+    /// compatible across both arm64 and x86_64 builds).
     ///
     /// Invalid dimensions are rejected explicitly — an out-of-range request
     /// must never silently produce an identity/clamped cube.
@@ -87,15 +87,16 @@ public enum CubeLUTExporter {
 
         let width = dimension * dimension
         let height = dimension
+        let rowBytes = width * 4 * MemoryLayout<Float>.size
 
         // Identity grid: pixel (x, y) = (r, g, b) with x = g*N + r, y = b.
-        var grid = [Float16](repeating: 0, count: width * height * 4)
-        let scale = Float16(dimension - 1)
+        var grid = [Float](repeating: 0, count: width * height * 4)
+        let scale = Float(dimension - 1)
         for y in 0..<height {
             for x in 0..<width {
-                let r = Float16(x % dimension) / scale
-                let g = Float16(x / dimension) / scale
-                let b = Float16(y) / scale
+                let r = Float(x % dimension) / scale
+                let g = Float(x / dimension) / scale
+                let b = Float(y) / scale
                 let offset = ((y * width) + x) * 4
                 grid[offset] = r
                 grid[offset + 1] = g
@@ -107,15 +108,15 @@ public enum CubeLUTExporter {
         let inputData = grid.withUnsafeBufferPointer { Data(buffer: $0) }
         let input = CIImage(
             bitmapData: inputData,
-            bytesPerRow: width * 8,
+            bytesPerRow: rowBytes,
             size: CGSize(width: width, height: height),
-            format: .RGBAh,
+            format: .RGBAf,
             colorSpace: nil
         )
 
         let corrected = ColorCorrectionPixelProcessor.apply(colorCorrection, to: input)
 
-        var output = [Float16](repeating: 0, count: width * height * 4)
+        var output = [Float](repeating: 0, count: width * height * 4)
         _ = output.withUnsafeMutableBytes { buffer in
             // Static software-render context: constructing a CIContext per
             // bake re-created the whole (heavyweight) render pipeline each
@@ -123,9 +124,9 @@ public enum CubeLUTExporter {
             Self.bakeContext.render(
                 corrected,
                 toBitmap: buffer.baseAddress!,
-                rowBytes: width * 8,
+                rowBytes: rowBytes,
                 bounds: corrected.extent,
-                format: .RGBAh,
+                format: .RGBAf,
                 colorSpace: nil
             )
         }
@@ -134,9 +135,9 @@ public enum CubeLUTExporter {
         data.reserveCapacity(width * height * 4)
         for index in 0..<(width * height) {
             let offset = index * 4
-            data.append(Float(output[offset]).clamped(to: 0...1))
-            data.append(Float(output[offset + 1]).clamped(to: 0...1))
-            data.append(Float(output[offset + 2]).clamped(to: 0...1))
+            data.append(output[offset].clamped(to: 0...1))
+            data.append(output[offset + 1].clamped(to: 0...1))
+            data.append(output[offset + 2].clamped(to: 0...1))
             data.append(1)
         }
         return CubeLUT(dimension: dimension, data: data)

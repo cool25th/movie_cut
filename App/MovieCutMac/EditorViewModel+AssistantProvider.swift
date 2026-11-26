@@ -22,7 +22,7 @@ extension EditorViewModel {
     /// lightweight `AIEditContext` handed to an `AIEditingProvider`.
     func buildProjectContextSnapshot(
         from project: Project? = nil,
-        baseRevision: SessionRevision = SessionRevision(0)
+        baseRevision: SessionRevision = SessionRevision()
     ) -> ProjectContextSnapshot {
         ProjectContextBuilder.build(
             from: project ?? currentProject,

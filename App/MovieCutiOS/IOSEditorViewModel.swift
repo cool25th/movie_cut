@@ -2,9 +2,15 @@ import Foundation
 import AVFoundation
 import CoreTransferable
 import MovieCutCore
+import OSLog
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+
+private let iosImportLog = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.moviecut.ios",
+    category: "import"
+)
 
 /// CA-17: subtitle sidecar export formats — the same pair the Mac offers.
 enum SubtitleExportFormat: String, CaseIterable, Identifiable {
@@ -645,7 +651,7 @@ final class IOSEditorViewModel {
             }
             staged = loaded
         } catch {
-            AppLog.storage.error("PhotosPicker loadTransferable failed: \(error.localizedDescription, privacy: .public)")
+            iosImportLog.error("PhotosPicker loadTransferable failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = "Couldn't load the selected media: \(error.localizedDescription)"
             return
         }
@@ -685,7 +691,7 @@ final class IOSEditorViewModel {
                 await addClipToTimeline(asset: importedAsset)
             }
         } catch {
-            AppLog.storage.error("PhotosPicker import failed: \(error.localizedDescription, privacy: .public)")
+            iosImportLog.error("PhotosPicker import failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
         }
     }

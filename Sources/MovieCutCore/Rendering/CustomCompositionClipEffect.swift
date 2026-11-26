@@ -37,6 +37,13 @@ public struct CustomCompositionClipEffect: Sendable {
     /// with this transform before the canvas fit. Identity for unrotated
     /// sources; does not by itself trigger the custom compositor.
     public let sourcePreferredTransform: CGAffineTransform
+    /// Precomputed at init: keyframes grouped per property and time-sorted.
+    /// The per-frame animation query previously ran filter+sorted SIX times
+    /// per frame (12 heap arrays + 6 O(K log K) sorts); these fields make
+    /// `animationState(at:)` allocation-free.
+    private let hasVisualAnimationFlag: Bool
+    private let hasTransformKeyframesFlag: Bool
+    private let sortedKeyframesByProperty: [AnimatableProperty: [Keyframe]]
 
     public init?(
         trackID: CMPersistentTrackID,
@@ -64,6 +71,9 @@ public struct CustomCompositionClipEffect: Sendable {
         includeIdentitySource: Bool = false
     ) {
         let clampedOpacity = min(max(opacity, 0), 1)
+        // Computed once: the guard below and the per-frame
+        // `animationState(at:)` flag share this result.
+        let hasVisual = Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
         guard colorCorrection != nil
             || colorGrade != nil
             || chromaKey != nil
@@ -77,7 +87,7 @@ public struct CustomCompositionClipEffect: Sendable {
             || blendMode != .normal
             || cropRect != nil
             || stabilization != nil
-            || Self.hasVisualAnimation(transform: transform, opacity: clampedOpacity, keyframes: keyframes)
+            || hasVisual
             || (includeIdentitySource && trackID != kCMPersistentTrackID_Invalid)
         else {
             return nil
@@ -105,6 +115,24 @@ public struct CustomCompositionClipEffect: Sendable {
         self.cropRect = cropRect
         self.stabilization = stabilization
         self.sourcePreferredTransform = sourcePreferredTransform
+
+        // Group + time-sort each property's keyframes once, at construction.
+        var grouped: [AnimatableProperty: [Keyframe]] = [:]
+        var hasTransform = false
+        if !keyframes.isEmpty {
+            for keyframe in keyframes {
+                grouped[keyframe.property, default: []].append(keyframe)
+                if Self.transformKeyframeProperties.contains(keyframe.property) {
+                    hasTransform = true
+                }
+            }
+            for property in grouped.keys {
+                grouped[property]?.sort { $0.time < $1.time }
+            }
+        }
+        self.hasVisualAnimationFlag = hasVisual
+        self.hasTransformKeyframesFlag = hasTransform
+        self.sortedKeyframesByProperty = grouped
     }
 
     public var hasStickerOverlay: Bool {
@@ -116,15 +144,25 @@ public struct CustomCompositionClipEffect: Sendable {
     }
 
     public func animationState(at time: CMTime) -> CustomCompositionAnimationState? {
-        guard Self.hasVisualAnimation(transform: transform, opacity: opacity, keyframes: keyframes) else {
+        guard hasVisualAnimationFlag else {
             return nil
         }
 
         let rawLocalTime = CMTimeSubtract(time, timeRange.start).seconds
         let localTime = rawLocalTime.isFinite ? max(0, rawLocalTime) : 0
         return CustomCompositionAnimationState(
-            transform: Self.keyframedTransform(base: transform, keyframes: keyframes, at: localTime),
-            opacity: Self.keyframedValue(for: .opacity, defaultValue: opacity, keyframes: keyframes, at: localTime)
+            transform: Self.keyframedTransform(
+                base: transform,
+                hasTransformKeyframes: hasTransformKeyframesFlag,
+                sortedByProperty: sortedKeyframesByProperty,
+                at: localTime
+            ),
+            opacity: Self.keyframedValue(
+                for: .opacity,
+                defaultValue: opacity,
+                sortedByProperty: sortedKeyframesByProperty,
+                at: localTime
+            )
         )
     }
 
@@ -157,10 +195,11 @@ public struct CustomCompositionClipEffect: Sendable {
 
     private static func keyframedTransform(
         base transform: ClipTransform,
-        keyframes: [Keyframe],
+        hasTransformKeyframes: Bool,
+        sortedByProperty: [AnimatableProperty: [Keyframe]],
         at localTime: TimeInterval
     ) -> ClipTransform {
-        guard keyframes.contains(where: { transformKeyframeProperties.contains($0.property) }) else {
+        guard hasTransformKeyframes else {
             return transform
         }
 
@@ -168,47 +207,47 @@ public struct CustomCompositionClipEffect: Sendable {
         resolvedTransform.position.x = CGFloat(keyframedValue(
             for: .positionX,
             defaultValue: Double(transform.position.x),
-            keyframes: keyframes,
+            sortedByProperty: sortedByProperty,
             at: localTime
         ))
         resolvedTransform.position.y = CGFloat(keyframedValue(
             for: .positionY,
             defaultValue: Double(transform.position.y),
-            keyframes: keyframes,
+            sortedByProperty: sortedByProperty,
             at: localTime
         ))
         resolvedTransform.scale.width = CGFloat(keyframedValue(
             for: .scaleX,
             defaultValue: Double(transform.scale.width),
-            keyframes: keyframes,
+            sortedByProperty: sortedByProperty,
             at: localTime
         ))
         resolvedTransform.scale.height = CGFloat(keyframedValue(
             for: .scaleY,
             defaultValue: Double(transform.scale.height),
-            keyframes: keyframes,
+            sortedByProperty: sortedByProperty,
             at: localTime
         ))
         resolvedTransform.rotation = keyframedValue(
             for: .rotation,
             defaultValue: transform.rotation,
-            keyframes: keyframes,
+            sortedByProperty: sortedByProperty,
             at: localTime
         )
         return resolvedTransform
     }
 
+    /// Interpolation over the pre-sorted per-property keyframes. Same math
+    /// as the previous filter+sorted implementation; the segment lookup is
+    /// a binary search instead of a linear scan.
     private static func keyframedValue(
         for property: AnimatableProperty,
         defaultValue: Double,
-        keyframes: [Keyframe],
+        sortedByProperty: [AnimatableProperty: [Keyframe]],
         at localTime: TimeInterval
     ) -> Double {
-        let propertyKeyframes = keyframes
-            .filter { $0.property == property }
-            .sorted { $0.time < $1.time }
-
-        guard let firstKeyframe = propertyKeyframes.first else {
+        guard let propertyKeyframes = sortedByProperty[property],
+              let firstKeyframe = propertyKeyframes.first else {
             return defaultValue
         }
 
@@ -220,7 +259,20 @@ public struct CustomCompositionClipEffect: Sendable {
             return propertyKeyframes.last?.value ?? defaultValue
         }
 
-        for index in 0..<(propertyKeyframes.count - 1) {
+        // Binary search for the first segment whose end keyframe time is at
+        // or after localTime.
+        var low = 0
+        var high = propertyKeyframes.count - 2
+        while low < high {
+            let mid = (low + high) / 2
+            if propertyKeyframes[mid + 1].time < localTime {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        for index in low..<(propertyKeyframes.count - 1) {
             let startKeyframe = propertyKeyframes[index]
             let endKeyframe = propertyKeyframes[index + 1]
             guard localTime >= startKeyframe.time && localTime <= endKeyframe.time else {

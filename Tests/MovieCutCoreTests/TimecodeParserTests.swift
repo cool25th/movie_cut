@@ -128,3 +128,40 @@ struct TimecodeParserTests {
         #expect(TimecodeParser.rulerLabel(forSeconds: 7325) == "2:02:05")
     }
 }
+
+/// OC-01 / CODEX-01: rounded frame derivation — exact frame boundaries
+/// must display their own frame, and display↔parse must round-trip.
+@Suite("Frame number derivation (OC-01)")
+struct FrameNumberDerivationTests {
+    @Test("An exact frame boundary maps to its own frame, not the one below")
+    func exactBoundariesHold() {
+        // The CODEX-01 case: (1 + 2/30 − 1) × 30 computes to 1.999…96 and
+        // truncation showed FF=01. Rounding shows FF=02.
+        let t = 1.0 + 2.0 / 30.0
+        #expect(TimecodeParser.frameNumber(atSeconds: t, frameRate: 30) == 2)
+        #expect(TimecodeParser.frameNumber(atSeconds: 0, frameRate: 30) == 0)
+        // Sub-half-frame times round down to the frame they are IN; the
+        // last sliver of a second clamps to the rate's last frame.
+        #expect(TimecodeParser.frameNumber(atSeconds: 1.001, frameRate: 30) == 0)
+        #expect(TimecodeParser.frameNumber(atSeconds: 59.999, frameRate: 30) == 29)
+    }
+
+    @Test("Round-trip: parse(MM:SS:FF) → seconds → frameNumber == FF")
+    func parserRoundTrip() throws {
+        for frame in [0, 7, 15, 23, 29] {
+            let input = String(format: "01:02:%02d", frame)
+            let seconds = try #require(TimecodeParser.seconds(from: input, frameRate: 30))
+            #expect(TimecodeParser.frameNumber(atSeconds: seconds, frameRate: 30) == frame,
+                    "frame \(frame) did not survive the round-trip")
+        }
+    }
+
+    @Test("NTSC rates keep their last frame and reject none")
+    func ntscLastFrame() {
+        // 29.97: max displayable FF is 29 (ceil−1).
+        #expect(TimecodeParser.frameNumber(atSeconds: 0.999, frameRate: 29.97) == 29)
+        // Degenerate inputs never crash and clamp to 0.
+        #expect(TimecodeParser.frameNumber(atSeconds: -5, frameRate: 30) == 0)
+        #expect(TimecodeParser.frameNumber(atSeconds: 1, frameRate: 0) == 0)
+    }
+}

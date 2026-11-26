@@ -54,14 +54,6 @@ public struct NormalizedRect: Codable, Sendable, Equatable {
         self.height = height
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(x, forKey: .x)
-        try container.encode(y, forKey: .y)
-        try container.encode(width, forKey: .width)
-        try container.encode(height, forKey: .height)
-    }
-
     /// Trailing horizontal edge (leading + width).
     public var maxX: Double { x + width }
 
@@ -255,12 +247,4 @@ public struct CardDocument: Codable, Sendable, Equatable, Identifiable {
         masterStyle = try container.decodeIfPresent(CardMasterStyle.self, forKey: .masterStyle)
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(title, forKey: .title)
-        try container.encode(format, forKey: .format)
-        try container.encode(pages, forKey: .pages)
-        try container.encodeIfPresent(masterStyle, forKey: .masterStyle)
-    }
 }

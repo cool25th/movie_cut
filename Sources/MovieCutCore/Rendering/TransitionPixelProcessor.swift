@@ -16,7 +16,7 @@ public enum TransitionPixelProcessor {
         let extent = outgoing.extent
         guard !extent.isEmpty else { return outgoing }
 
-        let progress = clamped(progress)
+        let progress = progress.clamped(to: 0...1, fallback: 0)
         let outgoing = outgoing.cropped(to: extent)
         let incoming = incoming.cropped(to: extent)
 
@@ -56,10 +56,6 @@ public enum TransitionPixelProcessor {
         case right
         case up
         case down
-    }
-
-    private static func clamped(_ progress: Double) -> Double {
-        min(max(progress.isFinite ? progress : 0, 0), 1)
     }
 
     private static func dissolve(

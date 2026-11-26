@@ -8,6 +8,14 @@ import Foundation
 /// alignment and alpha composite so preview and export match and the logic is
 /// unit-testable with synthetic masks.
 public enum PersonSegmentationCompositor {
+    /// Shared immutable resources: the per-frame paths below previously
+    /// constructed the device-RGB color space and the constant clear/white
+    /// images on EVERY composited frame. CIImage constants are infinite and
+    /// get cropped per use, so one instance serves every frame.
+    private nonisolated(unsafe) static let deviceRGBColorSpace = CGColorSpaceCreateDeviceRGB()
+    private nonisolated(unsafe) static let clearImage = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
+    private nonisolated(unsafe) static let whiteImage = CIImage(color: .white)
+
     /// Scales the mask to the image extent and blends, replacing the
     /// background (mask black) with transparency while keeping the foreground
     /// (mask white).
@@ -23,8 +31,7 @@ public enum PersonSegmentationCompositor {
         }
 
         let alignedMask = align(mask, to: extent)
-        let transparentBackground = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: extent)
+        let transparentBackground = clearImage.cropped(to: extent)
 
         return image.applyingFilter(
             "CIBlendWithMask",
@@ -77,7 +84,7 @@ public enum PersonSegmentationCompositor {
                 rowBytes: 4,
                 bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
                 format: .RGBA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
+                colorSpace: deviceRGBColorSpace
             )
         }
 
@@ -92,10 +99,9 @@ public enum PersonSegmentationCompositor {
         let size = image.extent.size
         guard size.width > 0, size.height > 0 else { return image }
 
-        let maskImage = CIImage(color: .white).cropped(to: image.extent)
+        let maskImage = whiteImage.cropped(to: image.extent)
         let vignetteRadius = min(size.width, size.height) * 0.4
-        let backgroundColor = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
-            .cropped(to: image.extent)
+        let backgroundColor = clearImage.cropped(to: image.extent)
 
         let gradientMask = CIFilter(
             name: "CIRadialGradient",

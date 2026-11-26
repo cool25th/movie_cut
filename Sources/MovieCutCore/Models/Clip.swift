@@ -185,6 +185,11 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
     /// persisted when set, keeping unstabilized JSON byte-identical.
     public var stabilization: StabilizationPlan?
 
+    /// CA-20 (W4): the clip's role tag — a reference into
+    /// `Project.roles`. Nil (the default, and what pre-v9 projects decode
+    /// to) means unassigned; persisted only when set.
+    public var roleId: UUID?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case assetId
@@ -219,6 +224,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         case compoundId
         case cropRect
         case stabilization
+        case roleId
     }
 
     /// Creates a clip.
@@ -305,6 +311,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         self.compoundId = compoundId
         self.cropRect = cropRect
         self.stabilization = stabilization
+        self.roleId = nil
     }
 
     public init(from decoder: any Decoder) throws {
@@ -347,6 +354,7 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         compoundId = try container.decodeIfPresent(UUID.self, forKey: .compoundId) ?? nil
         cropRect = try container.decodeIfPresent(NormalizedRect.self, forKey: .cropRect)
         stabilization = try container.decodeIfPresent(StabilizationPlan.self, forKey: .stabilization)
+        roleId = try container.decodeIfPresent(UUID.self, forKey: .roleId) ?? nil
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -394,6 +402,9 @@ public struct Clip: Codable, Sendable, Equatable, Identifiable {
         // Persist the stabilization plan only when set — the analysis
         // output is re-derivable and unstabilized clips stay byte-identical.
         try container.encodeIfPresent(stabilization, forKey: .stabilization)
+        // CA-20: persist the role reference only when assigned, so an
+        // untagged clip stays byte-identical to its pre-v9 JSON.
+        try container.encodeIfPresent(roleId, forKey: .roleId)
     }
 
     private static func rgb(fromHex hexRGB: String) -> SIMD3<Float>? {

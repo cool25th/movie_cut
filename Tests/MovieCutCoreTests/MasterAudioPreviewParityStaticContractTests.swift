@@ -25,7 +25,9 @@ struct MasterAudioPreviewParityStaticContractTests {
 
         #expect(playback.contains("if usesGraphMasterAudio || track.isMuted || (anyTrackSoloed && !track.isSolo)"))
         #expect(playback.contains("guard !usesGraphMasterAudio else { continue }"))
-        #expect(playback.contains("applyAudioVolumeAndFades("))
+        // AI-03a M1: the legacy path's per-clip gain application is the
+        // composed TrackGainEnvelope emission (formerly applyAudioVolumeAndFades).
+        #expect(playback.contains("applyGainEnvelope("))
         #expect(playback.contains("let mutableAudioMix = AVMutableAudioMix()"))
     }
 

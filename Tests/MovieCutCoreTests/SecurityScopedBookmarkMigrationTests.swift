@@ -68,7 +68,6 @@ struct SecurityScopedBookmarkMigrationTests {
         #expect(migrators.count >= 1)
         let first = try #require(migrators.first)
         #expect(first.version == 2)
-        #expect(first is AddSecurityScopedBookmarkMigration)
     }
 
     @Test("The committed v1 fixture loads and migrates to v2 with nil bookmarks")

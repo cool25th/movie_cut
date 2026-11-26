@@ -145,6 +145,40 @@ extension MovieCutPanelHeader where Trailing == EmptyView {
     }
 }
 
+/// Reusable drag-buffered slider that holds transient values locally while
+/// dragging and commits once on drag end, preventing per-tick Undo/rebuild storms.
+struct BufferedSlider: View {
+    let value: Double
+    let range: ClosedRange<Double>
+    var step: Double? = nil
+    let onCommit: (Double) -> Void
+
+    @State private var draftValue: Double?
+
+    private var displayedValue: Double {
+        draftValue ?? value
+    }
+
+    var body: some View {
+        let binding = Binding<Double>(
+            get: { displayedValue },
+            set: { draftValue = $0 }
+        )
+        if let step {
+            Slider(value: binding, in: range, step: step, onEditingChanged: handleEditingChanged)
+        } else {
+            Slider(value: binding, in: range, onEditingChanged: handleEditingChanged)
+        }
+    }
+
+    private func handleEditingChanged(_ isEditing: Bool) {
+        if !isEditing, let committed = draftValue {
+            draftValue = nil
+            onCommit(committed)
+        }
+    }
+}
+
 struct MovieCutSectionCard<Content: View>: View {
     let title: String
     let systemImage: String
@@ -333,6 +367,12 @@ struct EffectParameterRow: View {
     let value: Double
     let onChange: (Double) -> Void
 
+    @State private var draftValue: Double?
+
+    private var effectiveValue: Double {
+        draftValue ?? value
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MovieCutSpacing.xxSmall) {
             HStack {
@@ -340,15 +380,20 @@ struct EffectParameterRow: View {
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(String(format: definition.valueFormat, value))
+                Text(String(format: definition.valueFormat, effectiveValue))
                     .font(MovieCutTypography.metadata)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             Slider(value: Binding(
-                get: { value },
-                set: { onChange($0) }
-            ), in: definition.range)
+                get: { effectiveValue },
+                set: { draftValue = $0 }
+            ), in: definition.range) { isEditing in
+                if !isEditing, let committed = draftValue {
+                    draftValue = nil
+                    onChange(committed)
+                }
+            }
         }
     }
 }

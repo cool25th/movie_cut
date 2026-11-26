@@ -161,3 +161,21 @@ private enum NoiseReductionServiceError: Error, Sendable, Equatable {
     case renderBufferUnavailable
 }
 #endif
+
+public extension NoiseReductionService {
+    /// The denoised audio twin of a video clip, placed at the same span —
+    /// the shared construction both view models' video branches use (the
+    /// original is muted; the twin carries the cleaned audio).
+    static func denoisedTwin(of clip: Clip, assetId: UUID) -> Clip {
+        Clip(
+            assetId: assetId,
+            kind: .audio,
+            sourceRange: clip.sourceRange,
+            timelineRange: clip.timelineRange,
+            volume: clip.volume,
+            fadeInDuration: clip.fadeInDuration,
+            fadeOutDuration: clip.fadeOutDuration,
+            playbackRate: clip.playbackRate
+        )
+    }
+}

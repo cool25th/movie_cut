@@ -241,61 +241,9 @@ public struct ReplaceCardElementImageCommand: EditorCommand {
             throw EditorCommandError.invalidCommand("A different media asset already uses the replacement identifier.")
         }
 
-        let previousDocument = document
-        let previousAsset = project.mediaLibrary.assets[asset.id]
-        project.mediaLibrary.assets[asset.id] = asset
         document.pages[pageIndex].elements[elementIndex].mediaAssetID = asset.id
         try CardDocumentCommandValidation.validate(document)
-        project.cardDocument = document
-
-}
-
-    }
-
-private struct RestoreCardImageReplacementCommand: EditorCommand {
-    let id: UUID
-    let document: CardDocument?
-    let replacementAssetID: UUID
-    let previousAsset: MediaAsset?
-
-    init(
-        id: UUID = UUID(),
-        document: CardDocument?,
-        replacementAssetID: UUID,
-        previousAsset: MediaAsset?
-    ) {
-        self.id = id
-        self.document = document
-        self.replacementAssetID = replacementAssetID
-        self.previousAsset = previousAsset
-    }
-
-    func apply(to project: inout Project) throws {
-        let currentDocument = project.cardDocument
-        let currentAsset = project.mediaLibrary.assets[replacementAssetID]
-        project.cardDocument = document
-        if let previousAsset {
-            project.mediaLibrary.assets[replacementAssetID] = previousAsset
-        } else {
-            project.mediaLibrary.assets.removeValue(forKey: replacementAssetID)
-        }
-
-}
-
-    }
-
-private struct RestoreCardDocumentCommand: EditorCommand {
-    let id: UUID
-    let document: CardDocument?
-    let restoreDescription: String
-
-    init(id: UUID = UUID(), document: CardDocument?, description: String) {
-        self.id = id
-        self.document = document
-        self.restoreDescription = description
-    }
-
-    func apply(to project: inout Project) throws {
+        project.mediaLibrary.assets[asset.id] = asset
         project.cardDocument = document
     }
 }

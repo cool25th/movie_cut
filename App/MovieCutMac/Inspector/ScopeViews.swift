@@ -6,7 +6,7 @@ struct WaveformView: View {
     let waveform: [[Int]]
 
     private var peak: Double {
-        Double(max(1, waveform.flatMap { $0 }.max() ?? 1))
+        Double(maxWaveformCount(waveform))
     }
 
     var body: some View {
@@ -117,7 +117,7 @@ struct RGBParadeView: View {
             guard columns > 0, let levels = waveform.first?.count, levels > 0 else { return }
             let cellWidth = size.width / CGFloat(columns)
             let cellHeight = size.height / CGFloat(levels)
-            let scale = Double(max(1, waveform.flatMap { $0 }.max() ?? 1))
+            let scale = Double(maxWaveformCount(waveform))
             for (column, levelsCounts) in waveform.enumerated() {
                 for (level, count) in levelsCounts.enumerated() where count > 0 {
                     let intensity = min(1, Double(count) / scale)
@@ -133,4 +133,16 @@ struct RGBParadeView: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
+
+/// Allocation-free column-count maximum — replaces the per-draw
+/// `waveform.flatMap { $0 }.max()` heap round-trip (4× 4,096-Int arrays).
+private func maxWaveformCount(_ waveform: [[Int]]) -> Int {
+    var best = 1
+    for column in waveform {
+        for count in column where count > best {
+            best = count
+        }
+    }
+    return best
 }

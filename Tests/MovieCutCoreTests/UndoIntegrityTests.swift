@@ -76,6 +76,55 @@ struct UndoIntegrityTests {
         }
     }
 
+    // MARK: - Undo history cap (GURU V2 UT-06)
+
+    @Test("undo history caps at maxUndoHistory while commandCount stays cumulative")
+    func undoCapAndCumulativeCommandCount() async throws {
+        let trackId = UUID()
+        let track = Track(id: trackId, kind: .video, name: "Video 1", zIndex: 0, clips: [])
+        let session = EditorSession(project: makeProject(tracks: [track]))
+
+        // 50 more dispatches than the retained-history cap.
+        let dispatchCount = EditorSession.maxUndoHistory + 50
+        var states: [Project] = []
+        states.reserveCapacity(dispatchCount)
+        for index in 0..<dispatchCount {
+            try await session.dispatch(
+                AddMarkerCommand(marker: Marker(time: Double(index), name: "M\(index)"))
+            )
+            states.append(await session.snapshot())
+        }
+
+        // The cumulative dispatch count survives the stack trim: the metric
+        // must NOT rewind to the capped stack length.
+        let counted = await session.commandCount
+        #expect(counted == dispatchCount)
+
+        // Undo can only walk back maxUndoHistory steps — the trim dropped
+        // the oldest 50 snapshots, and further undo attempts must fail.
+        var undos = 0
+        while true {
+            do {
+                try await session.undo()
+                undos += 1
+            } catch EditorCommandError.nothingToUndo {
+                break
+            }
+            #expect(undos <= EditorSession.maxUndoHistory, "undo walked past the history cap")
+        }
+        #expect(undos == EditorSession.maxUndoHistory)
+
+        // The final reachable state is exactly the snapshot taken right
+        // after the dispatch that survived the trim (dispatch #50, 0-based 49).
+        #expect(await session.snapshot() == states[dispatchCount - EditorSession.maxUndoHistory - 1])
+
+        // commandCount keeps its (dispatch − undo + dispatch) semantics after
+        // the full undo walk and a fresh dispatch.
+        try await session.dispatch(AddMarkerCommand(marker: Marker(time: 0, name: "post")))
+        let afterNewDispatch = await session.commandCount
+        #expect(afterNewDispatch == dispatchCount - undos + 1)
+    }
+
     // MARK: - Builders
 
     private func makeProject(tracks: [Track], assets: [UUID] = []) -> Project {

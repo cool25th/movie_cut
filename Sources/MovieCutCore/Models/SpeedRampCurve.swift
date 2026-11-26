@@ -5,6 +5,25 @@ public struct SpeedRampCurve: Sendable {
     /// Speed-ramp points sorted by normalized source time.
     public let points: [SpeedRampPoint]
 
+    /// One ramp segment with its boundaries, rates, and pre-integrated
+    /// output-time bookkeeping — the mapping queries previously re-walked
+    /// and re-integrated every segment on EVERY call; the curve is an
+    /// immutable value, so the table is built once at init.
+    private struct PrecomputedSegment: Sendable {
+        let sourceStart: TimeInterval
+        let sourceEnd: TimeInterval
+        let startRate: Double
+        let endRate: Double
+        let outputStart: TimeInterval
+        let outputDuration: TimeInterval
+    }
+
+    private let segments: [PrecomputedSegment]
+    private let initialRate: Double
+    private let trailingSourceStart: TimeInterval
+    private let trailingOutputStart: TimeInterval
+    private let trailingRate: Double
+
     /// Creates a speed-ramp curve with points sorted by time.
     public init(points: [SpeedRampPoint]) {
         let sortedPoints = points.enumerated().sorted { lhs, rhs in
@@ -14,97 +33,124 @@ public struct SpeedRampCurve: Sendable {
             return lhs.element.time < rhs.element.time
         }.map(\.element)
 
-        self.points = sortedPoints.reduce(into: []) { result, point in
+        let normalized: [SpeedRampPoint] = sortedPoints.reduce(into: []) { result, point in
             if result.last?.time == point.time {
                 result[result.count - 1] = point
             } else {
                 result.append(point)
             }
         }
+        self.points = normalized
+
+        // Pre-integrate the segment table once (identical accumulation
+        // order to the previous per-call loops, so the values are
+        // bit-identical).
+        var builtSegments: [PrecomputedSegment] = []
+        builtSegments.reserveCapacity(normalized.count)
+        var segmentStart: TimeInterval = 0
+        var startRate = Self.rate(atStartFor: normalized)
+        var outputStart: TimeInterval = 0
+        for point in normalized where point.time > segmentStart {
+            let segmentEnd = point.time
+            let endRate = Self.sanitizedRate(point.rate)
+            let outputDuration = Self.integralOfReciprocalRate(
+                from: segmentStart,
+                to: segmentEnd,
+                startRate: startRate,
+                endRate: endRate,
+                segmentEnd: segmentEnd
+            )
+            builtSegments.append(PrecomputedSegment(
+                sourceStart: segmentStart,
+                sourceEnd: segmentEnd,
+                startRate: startRate,
+                endRate: endRate,
+                outputStart: outputStart,
+                outputDuration: outputDuration
+            ))
+            outputStart += outputDuration
+            segmentStart = segmentEnd
+            startRate = endRate
+        }
+        self.segments = builtSegments
+        self.initialRate = normalized.first.map { Self.sanitizedRate($0.rate) } ?? 1
+        self.trailingSourceStart = segmentStart
+        self.trailingOutputStart = outputStart
+        self.trailingRate = startRate
     }
 
     /// Maps source time to output time by integrating the reciprocal playback rate.
     public func timeMapping(sourceTime: TimeInterval) -> TimeInterval {
-        guard let firstPoint = points.first else {
+        guard points.first != nil else {
             return sourceTime
         }
 
         if sourceTime <= 0 {
-            return sourceTime / Self.sanitizedRate(firstPoint.rate)
+            return sourceTime / initialRate
         }
 
-        var outputTime: TimeInterval = 0
-        var segmentStart: TimeInterval = 0
-        var startRate = Self.rate(atStartFor: points)
-
-        for point in points where point.time > segmentStart {
-            let segmentEnd = point.time
-            let endRate = Self.sanitizedRate(point.rate)
-            if sourceTime <= segmentEnd {
-                return outputTime + Self.integralOfReciprocalRate(
-                    from: segmentStart,
+        // First segment whose end boundary is at or after sourceTime.
+        if !segments.isEmpty {
+            var low = 0
+            var high = segments.count - 1
+            while low < high {
+                let mid = (low + high) / 2
+                if segments[mid].sourceEnd < sourceTime {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            let segment = segments[low]
+            if sourceTime <= segment.sourceEnd {
+                return segment.outputStart + Self.integralOfReciprocalRate(
+                    from: segment.sourceStart,
                     to: sourceTime,
-                    startRate: startRate,
-                    endRate: endRate,
-                    segmentEnd: segmentEnd
+                    startRate: segment.startRate,
+                    endRate: segment.endRate,
+                    segmentEnd: segment.sourceEnd
                 )
             }
-
-            outputTime += Self.integralOfReciprocalRate(
-                from: segmentStart,
-                to: segmentEnd,
-                startRate: startRate,
-                endRate: endRate,
-                segmentEnd: segmentEnd
-            )
-            segmentStart = segmentEnd
-            startRate = endRate
         }
 
-        return outputTime + (sourceTime - segmentStart) / startRate
+        return trailingOutputStart + (sourceTime - trailingSourceStart) / trailingRate
     }
 
     /// Maps output time back to source time.
     public func inverseMapping(outputTime: TimeInterval) -> TimeInterval {
-        guard let firstPoint = points.first else {
+        guard points.first != nil else {
             return outputTime
         }
 
         if outputTime <= 0 {
-            return outputTime * Self.sanitizedRate(firstPoint.rate)
+            return outputTime * initialRate
         }
 
-        var accumulatedOutputTime: TimeInterval = 0
-        var segmentStart: TimeInterval = 0
-        var startRate = Self.rate(atStartFor: points)
-
-        for point in points where point.time > segmentStart {
-            let segmentEnd = point.time
-            let endRate = Self.sanitizedRate(point.rate)
-            let segmentOutputTime = Self.integralOfReciprocalRate(
-                from: segmentStart,
-                to: segmentEnd,
-                startRate: startRate,
-                endRate: endRate,
-                segmentEnd: segmentEnd
-            )
-
-            if outputTime <= accumulatedOutputTime + segmentOutputTime {
+        // First segment whose accumulated output end is at or after outputTime.
+        if !segments.isEmpty {
+            var low = 0
+            var high = segments.count - 1
+            while low < high {
+                let mid = (low + high) / 2
+                if segments[mid].outputStart + segments[mid].outputDuration < outputTime {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            let segment = segments[low]
+            if outputTime <= segment.outputStart + segment.outputDuration {
                 return Self.sourceOffset(
-                    forOutputOffset: outputTime - accumulatedOutputTime,
-                    segmentStart: segmentStart,
-                    segmentEnd: segmentEnd,
-                    startRate: startRate,
-                    endRate: endRate
+                    forOutputOffset: outputTime - segment.outputStart,
+                    segmentStart: segment.sourceStart,
+                    segmentEnd: segment.sourceEnd,
+                    startRate: segment.startRate,
+                    endRate: segment.endRate
                 )
             }
-
-            accumulatedOutputTime += segmentOutputTime
-            segmentStart = segmentEnd
-            startRate = endRate
         }
 
-        return segmentStart + (outputTime - accumulatedOutputTime) * startRate
+        return trailingSourceStart + (outputTime - trailingOutputStart) * trailingRate
     }
 
     /// Returns true when every point uses normal 1.0x playback.

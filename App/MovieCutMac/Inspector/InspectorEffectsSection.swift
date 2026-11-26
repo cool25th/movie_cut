@@ -677,20 +677,12 @@ struct InspectorEffectsSection: View {
         range: ClosedRange<Double>,
         binding: Binding<Double>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(String(format: "%.2f", value))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 38, alignment: .trailing)
-            }
-            Slider(value: binding, in: range, step: 0.01)
-        }
+        TransactionalInspectorSlider(
+            title: title,
+            value: value,
+            range: range,
+            binding: binding
+        )
     }
 
     private func colorCorrectionBinding(
@@ -851,6 +843,49 @@ struct InspectorEffectsSection: View {
             return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 0.9)]
         case .externalLUT:
             return [EffectParameterDefinition(key: "intensity", title: "Intensity", range: 0 ... 1, defaultValue: 1)]
+        }
+    }
+}
+
+private struct TransactionalInspectorSlider: View {
+    let title: String
+    let value: Double
+    let range: ClosedRange<Double>
+    let binding: Binding<Double>
+
+    @State private var draftValue: Double?
+
+    private var displayedValue: Double {
+        draftValue ?? value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: "%.2f", displayedValue))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 38, alignment: .trailing)
+            }
+            Slider(
+                value: Binding(
+                    get: { displayedValue },
+                    set: { draftValue = $0 }
+                ),
+                in: range,
+                step: 0.01,
+                onEditingChanged: { isEditing in
+                    if !isEditing, let committed = draftValue {
+                        draftValue = nil
+                        binding.wrappedValue = committed
+                    }
+                }
+            )
         }
     }
 }

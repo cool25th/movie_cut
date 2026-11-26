@@ -50,22 +50,6 @@ public struct SetCardMasterStyleCommand: EditorCommand {
         guard resolved != previousDocument else {
             throw EditorCommandError.invalidCommand("Card document already uses the requested master style.")
         }
-        project.cardDocument = resolved    }
-
-    }
-
-private struct RestoreTemplateCardDocumentCommand: EditorCommand {
-    let id: UUID
-    let document: CardDocument?
-    let restoreDescription: String
-
-    init(id: UUID = UUID(), document: CardDocument?, description: String) {
-        self.id = id
-        self.document = document
-        self.restoreDescription = description
-    }
-
-    func apply(to project: inout Project) throws {
-        project.cardDocument = document
+        project.cardDocument = resolved
     }
 }

@@ -60,6 +60,12 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// processing; persisted only when set.
     public var masterAudioProcessing: MasterAudioProcessing?
 
+    /// CA-20 (W4): the project's role registry — FCP-style roles clips are
+    /// tagged with (`Clip.roleId` references an entry). Empty for projects
+    /// predating v9, which decode to `[]`; persisted only when non-empty
+    /// so role-free projects stay byte-identical.
+    public var roles: [TimelineRole]
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -77,6 +83,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         case playbackSettings
         case compounds
         case masterAudioProcessing
+        case roles
     }
 
     /// Creates a project with Phase 0 defaults.
@@ -96,7 +103,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         cardDocument: CardDocument? = nil,
         playbackSettings: PlaybackSettings = PlaybackSettings(),
         compounds: [CompoundDefinition] = [],
-        masterAudioProcessing: MasterAudioProcessing? = nil
+        masterAudioProcessing: MasterAudioProcessing? = nil,
+        roles: [TimelineRole] = []
     ) {
         self.id = id
         self.name = name
@@ -114,6 +122,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.playbackSettings = playbackSettings
         self.compounds = compounds
         self.masterAudioProcessing = masterAudioProcessing
+        self.roles = roles
     }
 
     public init(from decoder: any Decoder) throws {
@@ -137,6 +146,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         // deferred to task 6.
         compounds = try container.decodeIfPresent([CompoundDefinition].self, forKey: .compounds) ?? []
         masterAudioProcessing = try container.decodeIfPresent(MasterAudioProcessing.self, forKey: .masterAudioProcessing)
+        roles = try container.decodeIfPresent([TimelineRole].self, forKey: .roles) ?? []
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -161,5 +171,10 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
             try container.encode(compounds, forKey: .compounds)
         }
         try container.encodeIfPresent(masterAudioProcessing, forKey: .masterAudioProcessing)
+        // Persist roles only when non-empty so a role-free project stays
+        // byte-identical to its pre-v9 JSON (the compounds precedent).
+        if !roles.isEmpty {
+            try container.encode(roles, forKey: .roles)
+        }
     }
 }

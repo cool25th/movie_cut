@@ -71,13 +71,12 @@ public enum UserTextStylePresetStore {
     /// Loads presets; a missing or unreadable file yields an empty list.
     public static func load(from url: URL) -> [UserTextStylePreset] {
         guard let data = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([UserTextStylePreset].self, from: data)) ?? []
+        return (try? MovieCutJSON.decoder().decode([UserTextStylePreset].self, from: data)) ?? []
     }
 
     /// Saves presets atomically.
     public static func save(_ presets: [UserTextStylePreset], to url: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let encoder = MovieCutJSON.encoder()
         try encoder.encode(presets).write(to: url, options: .atomic)
     }
 }

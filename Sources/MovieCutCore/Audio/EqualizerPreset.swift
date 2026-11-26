@@ -22,17 +22,18 @@ public enum EqualizerPresetID: String, Codable, Sendable, Equatable, CaseIterabl
 
     /// The user-visible preset name.
     public var displayName: String {
+        preset.name
+    }
+
+    /// The built-in preset this identifier denotes (the single authority the
+    /// static members, `EqualizerPreset.preset(for:)`, and `displayName` read).
+    public var preset: EqualizerPreset {
         switch self {
-        case .flat:
-            return "Flat"
-        case .voiceEnhance:
-            return "Voice Enhance"
-        case .bassBoost:
-            return "Bass Boost"
-        case .trebleBoost:
-            return "Treble Boost"
-        case .custom:
-            return "Custom"
+        case .flat: .flat
+        case .voiceEnhance: .voiceEnhance
+        case .bassBoost: .bassBoost
+        case .trebleBoost: .trebleBoost
+        case .custom: .custom
         }
     }
 }
@@ -56,7 +57,7 @@ public struct EQBand: Codable, Sendable, Equatable {
     }
 
     private static func clampedGain(_ gain: Float) -> Float {
-        min(max(gain, -12), 12)
+        gain.clamped(to: -12...12)
     }
 }
 
@@ -123,18 +124,7 @@ public struct EqualizerPreset: Codable, Sendable, Equatable, Identifiable {
 
     /// Returns the preset for a shared identifier.
     public static func preset(for id: EqualizerPresetID) -> EqualizerPreset {
-        switch id {
-        case .flat:
-            return .flat
-        case .voiceEnhance:
-            return .voiceEnhance
-        case .bassBoost:
-            return .bassBoost
-        case .trebleBoost:
-            return .trebleBoost
-        case .custom:
-            return .custom
-        }
+        id.preset
     }
 
     private static func bands(gains: [Float]) -> [EQBand] {

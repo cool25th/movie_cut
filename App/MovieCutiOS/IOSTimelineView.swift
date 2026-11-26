@@ -13,12 +13,25 @@ struct IOSTimelineView: View {
     // CA-19: the active snap target during a drag — drives the alignment
     // guide line (Mac TimelineView parity).
     @State private var snapGuideTime: TimeInterval? = nil
+    /// Snap targets materialized once per drag (CA-19) — replaced the
+    /// 5-stage array chain that reallocated on every snappedTime call.
+    @State private var cachedDragSnapPoints: [Double]? = nil
 
     private let secondsWidth: CGFloat = 38
     private let trackHeaderWidth: CGFloat = 76
+    private let trackLaneHeight: CGFloat = 76
+    private let trackRowVerticalPadding: CGFloat = 10
+    private let beatBandHeight: CGFloat = 14
     /// CA-19: snap radius in points — a drag within this distance of a snap
     /// target (other clips' edges, playhead, zero) locks to it.
     private let snapRadius: CGFloat = 14
+
+    private var timelineContentWidth: CGFloat {
+        let clipEnd = viewModel.currentProject.timeline.duration
+        let markerEnd = viewModel.currentProject.markers.lazy.map(\.time).max() ?? 0
+        let visibleSeconds = max(clipEnd, markerEnd) + 4
+        return max(360, CGFloat(visibleSeconds) * secondsWidth + 64)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -27,70 +40,82 @@ struct IOSTimelineView: View {
             Divider()
 
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(viewModel.currentProject.timeline.tracks) { track in
-                        trackRow(track)
+                HStack(alignment: .top, spacing: 10) {
+                    // Fixed left track-header column aligned 1:1 with the shared
+                    // horizontal track lanes on the right.
+                    VStack(alignment: .leading, spacing: 14) {
+                        Color.clear
+                            .frame(width: trackHeaderWidth, height: beatBandHeight)
+
+                        ForEach(viewModel.currentProject.timeline.tracks) { track in
+                            trackHeader(track)
+                        }
                     }
+
+                    // Single shared horizontal ScrollView so all tracks, beat ticks,
+                    // snap alignment guides, and the playhead scroll in lockstep.
+                    ScrollView(.horizontal) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            beatTickStrip
+
+                            ZStack(alignment: .topLeading) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    ForEach(viewModel.currentProject.timeline.tracks) { track in
+                                        trackLane(track)
+                                    }
+                                }
+
+                                // CA-19: alignment guide at the exact linear snap x-coordinate.
+                                if let guideTime = snapGuideTime, draggedClipId != nil {
+                                    Rectangle()
+                                        .fill(Color.accentColor.opacity(0.65))
+                                        .frame(width: 1.5)
+                                        .frame(maxHeight: .infinity)
+                                        .offset(x: CGFloat(guideTime) * secondsWidth)
+                                        .allowsHitTesting(false)
+                                        .accessibilityHidden(true)
+                                        .transition(.opacity)
+                                }
+
+                                IOSTimelinePlayheadLine(
+                                    viewModel: viewModel,
+                                    secondsWidth: secondsWidth
+                                )
+                            }
+                            .animation(.easeInOut(duration: 0.1), value: snapGuideTime)
+                        }
+                        .frame(width: timelineContentWidth, alignment: .leading)
+                        .padding(.trailing, 24)
+                    }
+                    .scrollIndicators(.visible)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 16)
-                .overlay(alignment: .leading) {
-                    // CA-19: the alignment guide — a vertical line at the
-                    // active snap target, spanning all track lanes. The
-                    // user SEES what the clip aligned to, not just feels the
-                    // snap (Mac parity).
-                    if let guideTime = snapGuideTime, draggedClipId != nil {
-                        let x = CGFloat(guideTime) * secondsWidth
-                        Rectangle()
-                            .fill(Color.accentColor.opacity(0.6))
-                            .frame(width: 1.5)
-                            .frame(maxHeight: .infinity)
-                            .offset(x: x + 14)  // + horizontal padding
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                            .transition(.opacity)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.1), value: snapGuideTime)
-            }
-            .overlay(alignment: .topLeading) {
-                // CA-14: generated beat markers render as compact ticks along
-                // the top of the track lanes (Mac renders them in the ruler;
-                // iOS has no ruler strip, so the lane-top band is the surface).
-                // A full flag per beat would flood the view on real music
-                // tracks — same compact-tick rationale as the Mac ruler.
-                beatTickOverlay
             }
         }
     }
 
-    /// CA-14: one 2pt orange tick per beat marker at its timeline position.
-    /// Decorative-by-design: taps land on the clips below (2pt targets are
-    /// hostile to touch), and the beat COUNT is surfaced by the detect/clear
-    /// status instead. VoiceOver therefore hides the ticks; discoverability
-    /// comes from the toolbar action that created them.
-    @ViewBuilder
-    private var beatTickOverlay: some View {
+    /// CA-14: one 2pt orange tick per beat marker placed in a ZStack at its exact
+    /// linear timeline coordinate inside the shared horizontal scroll strip.
+    private var beatTickStrip: some View {
         let beats = viewModel.currentProject.markers.filter { $0.kind == .beat }
-        if !beats.isEmpty {
-            HStack(spacing: 0) {
-                ForEach(beats) { marker in
-                    Rectangle()
-                        .fill(Color.orange.opacity(0.85))
-                        .frame(width: 2, height: 12)
-                        .offset(x: CGFloat(marker.time) * secondsWidth + 14)  // + horizontal padding
-                }
+        return ZStack(alignment: .leading) {
+            Color.clear
+            ForEach(beats) { marker in
+                Rectangle()
+                    .fill(Color.orange.opacity(0.85))
+                    .frame(width: 2, height: 12)
+                    .offset(x: CGFloat(marker.time) * secondsWidth)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
+        .frame(width: timelineContentWidth, height: beatBandHeight, alignment: .leading)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var timelineHeader: some View {
         HStack(spacing: 12) {
-            Label(timeString(viewModel.playheadTime), systemImage: "timeline.selection")
-                .font(.caption.monospacedDigit())
+            IOSTimelinePlayheadLabel(viewModel: viewModel)
 
             Spacer()
 
@@ -103,46 +128,45 @@ struct IOSTimelineView: View {
         .background(Color(uiColor: .systemBackground))
     }
 
-    private func trackRow(_ track: Track) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: trackIcon(for: track.kind))
-                    .font(.title3)
-                    .frame(width: 44, height: 44)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+    private func trackHeader(_ track: Track) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: trackIcon(for: track.kind))
+                .font(.title3)
+                .frame(width: 44, height: 44)
+                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
 
-                Text(track.name)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(width: trackHeaderWidth, alignment: .leading)
-
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(clipSegments(for: track)) { segment in
-                        Color.clear
-                            .frame(width: width(forGap: segment.leadingGap))
-
-                        clipButton(segment.clip)
-                    }
-
-                    if track.clips.isEmpty {
-                        emptyTrackPlaceholder
-                    }
-                }
-                .frame(minHeight: 76, alignment: .leading)
-                .padding(.trailing, 24)
-            }
-            .scrollIndicators(.visible)
+            Text(track.name)
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
-        .padding(10)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .frame(width: trackHeaderWidth, height: trackLaneHeight, alignment: .leading)
+        .padding(.vertical, trackRowVerticalPadding)
+    }
+
+    private func trackLane(_ track: Track) -> some View {
+        let sortedClips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
+        return ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .frame(width: timelineContentWidth, height: trackLaneHeight + trackRowVerticalPadding * 2)
+
+            if sortedClips.isEmpty {
+                emptyTrackPlaceholder
+                    .padding(.leading, 8)
+            } else {
+                ForEach(sortedClips) { clip in
+                    clipButton(clip)
+                }
+            }
+        }
+        .frame(width: timelineContentWidth, height: trackLaneHeight + trackRowVerticalPadding * 2, alignment: .leading)
     }
 
     private func clipButton(_ clip: Clip) -> some View {
         let isSelected = viewModel.selectedClipId == clip.id
         let activeDragOffset = draggedClipId == clip.id ? (dragTranslation == 0 ? dragOffset : dragTranslation) : 0
+        let linearX = CGFloat(clip.timelineRange.start) * secondsWidth
 
         return Button {
             select(clip)
@@ -161,7 +185,7 @@ struct IOSTimelineView: View {
                     .foregroundStyle(.white.opacity(0.86))
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .frame(width: width(for: clip), height: 64, alignment: .leading)
             .background(fillColor(for: clip.kind), in: RoundedRectangle(cornerRadius: 8))
             .overlay {
@@ -171,7 +195,7 @@ struct IOSTimelineView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .offset(x: activeDragOffset)
+        .offset(x: linearX + activeDragOffset)
         .zIndex(draggedClipId == clip.id ? 1 : 0)
         .contextMenu {
             Button("Inspect", systemImage: "slider.horizontal.3") {
@@ -217,8 +241,26 @@ struct IOSTimelineView: View {
                     draggedClipId = clip.id
                     dragInitialStartTime = clip.timelineRange.start
                     select(clip)
+                    // Materialize the drag's snap targets once — the dragged
+                    // clip is the only thing moving, so this snapshot stays
+                    // valid for the whole gesture.
+                    cachedDragSnapPoints = viewModel.currentProject.timeline.tracks
+                        .flatMap(\.clips)
+                        .filter { $0.id != clip.id }
+                        .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
+                        + viewModel.currentProject.markers.map(\.time)
+                        + [viewModel.playheadTime, 0.0]
                 }
                 dragOffset = value.translation.width
+                // Live alignment guide: evaluate the snapped position while
+                // dragging so the overlay (guarded on snapGuideTime) actually
+                // shows mid-gesture, not only for the final commit.
+                let liveStart = max(
+                    0,
+                    (dragInitialStartTime ?? clip.timelineRange.start)
+                        + Double(value.translation.width / secondsWidth)
+                )
+                _ = snappedTime(liveStart, excluding: clip.id)
             }
             .onEnded { value in
                 let initialStart = dragInitialStartTime ?? clip.timelineRange.start
@@ -236,6 +278,7 @@ struct IOSTimelineView: View {
                 draggedClipId = nil
                 dragInitialStartTime = nil
                 snapGuideTime = nil
+                cachedDragSnapPoints = nil
             }
     }
 
@@ -247,8 +290,10 @@ struct IOSTimelineView: View {
     private func snappedTime(_ rawTime: Double, excluding clipId: UUID) -> Double {
         // CA-14: markers (beat markers included) are snap targets too — the
         // same guide set the Mac timeline snaps to, so beats generated on
-        // either platform guide drags identically.
-        let snapPoints = viewModel.currentProject.timeline.tracks
+        // either platform guide drags identically. Uses the gesture's cached
+        // snapshot when available; falls back to a fresh build for callers
+        // outside a drag.
+        let snapPoints = cachedDragSnapPoints ?? viewModel.currentProject.timeline.tracks
             .flatMap(\.clips)
             .filter { $0.id != clipId }
             .flatMap { [$0.timelineRange.start, $0.timelineRange.end] }
@@ -272,23 +317,8 @@ struct IOSTimelineView: View {
         return rawTime
     }
 
-    private func clipSegments(for track: Track) -> [TimelineClipSegment] {
-        let clips = track.clips.sorted { $0.timelineRange.start < $1.timelineRange.start }
-        var cursor: TimeInterval = 0
-
-        return clips.map { clip in
-            let gap = max(0, clip.timelineRange.start - cursor)
-            cursor = max(cursor, clip.timelineRange.end)
-            return TimelineClipSegment(clip: clip, leadingGap: gap)
-        }
-    }
-
     private func width(for clip: Clip) -> CGFloat {
-        max(112, min(360, clip.timelineRange.duration * secondsWidth))
-    }
-
-    private func width(forGap gap: TimeInterval) -> CGFloat {
-        min(1_200, max(0, gap * secondsWidth))
+        max(44, min(2400, clip.timelineRange.duration * secondsWidth))
     }
 
     private func fillColor(for kind: ClipKind) -> Color {
@@ -320,8 +350,19 @@ struct IOSTimelineView: View {
     private func durationText(_ duration: TimeInterval) -> String {
         String(format: "%.1fs", duration)
     }
+}
 
-    private func timeString(_ time: TimeInterval) -> String {
+/// Lightweight child view isolating `viewModel.playheadTime` observation for the
+/// timeline header readout so playback ticks do not invalidate `IOSTimelineView.body`.
+private struct IOSTimelinePlayheadLabel: View {
+    let viewModel: IOSEditorViewModel
+
+    var body: some View {
+        Label(Self.timeString(viewModel.playheadTime), systemImage: "timeline.selection")
+            .font(.caption.monospacedDigit())
+    }
+
+    private static func timeString(_ time: TimeInterval) -> String {
         let clampedTime = max(0, time.isFinite ? time : 0)
         let totalSeconds = Int(clampedTime.rounded(.down))
         let minutes = totalSeconds / 60
@@ -330,12 +371,19 @@ struct IOSTimelineView: View {
     }
 }
 
-private struct TimelineClipSegment: Identifiable {
-    var clip: Clip
-    var leadingGap: TimeInterval
+/// Shared vertical playhead indicator aligned across all iOS timeline tracks.
+private struct IOSTimelinePlayheadLine: View {
+    let viewModel: IOSEditorViewModel
+    let secondsWidth: CGFloat
 
-    var id: UUID {
-        clip.id
+    var body: some View {
+        Rectangle()
+            .fill(Color.cyan)
+            .frame(width: 2)
+            .frame(maxHeight: .infinity)
+            .offset(x: CGFloat(viewModel.playheadTime) * secondsWidth)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 #endif

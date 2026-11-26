@@ -79,8 +79,7 @@ public actor RecentProjectsStore {
     /// descending. A missing or unreadable file yields an empty list.
     public func load() -> [RecentProject] {
         guard let data = try? Data(contentsOf: storeURL) else { return [] }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = MovieCutJSON.decoder()
         return (try? decoder.decode([RecentProject].self, from: data)) ?? []
     }
 
@@ -88,9 +87,7 @@ public actor RecentProjectsStore {
     /// caller normally passes the result of ``upsert(_:)`` or a filtered list.
     public func save(_ entries: [RecentProject]) throws {
         let sorted = Self.sorted(entries)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let encoder = MovieCutJSON.encoder()
         let directory = storeURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try encoder.encode(sorted).write(to: storeURL, options: [.atomic])

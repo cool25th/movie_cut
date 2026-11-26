@@ -194,12 +194,16 @@ struct AudioGraphRenderingTests {
                 sourceAudio: { _ in nil },
                 frameCount: 1
             )
+            Issue.record("limiter render should report missing input for the absent source, but succeeded")
         } catch let error as AudioGraphRenderError {
-            if case .unsupportedNodeKind = error {
-                Issue.record("limiter should be supported, got \(error)")
+            if case .missingInput = error {
+                // The expected failure: no source audio is wired.
+            } else {
+                Issue.record("limiter render failed with an unexpected error: \(error)")
             }
-            // missingInput is expected and correct.
-        } catch {}
+        } catch {
+            Issue.record("limiter render failed with an unexpected error: \(error)")
+        }
     }
 
     @Test("missing activation for a bus input is an explicit error")

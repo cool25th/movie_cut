@@ -84,9 +84,7 @@ public enum ProjectPackage {
 
         packaged.mediaLibrary.assets = rewritten
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
+        let encoder = MovieCutJSON.encoder()
         let data = try encoder.encode(packaged)
         try data.write(to: packageURL.appendingPathComponent(manifestName), options: .atomic)
 
@@ -104,8 +102,7 @@ public enum ProjectPackage {
             throw PackageError.manifestMissing
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = MovieCutJSON.decoder()
         var project = try decoder.decode(Project.self, from: Data(contentsOf: manifestURL))
 
         let mediaURL = packageURL.appendingPathComponent(mediaDirectoryName, isDirectory: true)

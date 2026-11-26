@@ -100,7 +100,14 @@ struct CubeLUTExporterTests {
         let clock = ContinuousClock()
         let heavyStarted = clock.now
 
+        // Gate the hop batch on the heavy task actually STARTING, instead of
+        // a fixed 50 ms sleep: under full-suite contention the detached task
+        // can be scheduled later than the sleep, silently shrinking the
+        // overlap window the ORDER assertion depends on.
+        let (startedStream, startedContinuation) = AsyncStream<Void>.makeStream()
         let heavy = Task.detached(priority: .userInitiated) {
+            defer { startedContinuation.finish() }
+            startedContinuation.yield(())
             // Two rounds keep the heavy window comfortably multi-second so
             // the hop batch has ample time to complete inside it.
             for _ in 0..<2 {
@@ -109,8 +116,7 @@ struct CubeLUTExporterTests {
             }
         }
 
-        // Give the detached task a moment to start, then run the hop batch.
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        for await _ in startedStream { break }
         for _ in 0..<20 {
             await MainActor.run {}
         }

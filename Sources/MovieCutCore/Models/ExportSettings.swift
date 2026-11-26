@@ -211,19 +211,6 @@ public struct ExportSettings: Codable, Sendable, Equatable {
         includeBeatChapters = try container.decodeIfPresent(Bool.self, forKey: .includeBeatChapters) ?? false
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(resolution, forKey: .resolution)
-        try container.encode(frameRate, forKey: .frameRate)
-        try container.encode(codec, forKey: .codec)
-        try container.encode(audioCodec, forKey: .audioCodec)
-        try container.encode(containerFormat, forKey: .containerFormat)
-        try container.encode(quality, forKey: .quality)
-        try container.encodeIfPresent(videoBitrateMbps, forKey: .videoBitrateMbps)
-        try container.encode(includeChapters, forKey: .includeChapters)
-        try container.encode(includeBeatChapters, forKey: .includeBeatChapters)
-    }
-
     /// Resolved target video bitrate in megabits per second.
     public var resolvedVideoBitrateMbps: Int? {
         if quality == .custom {

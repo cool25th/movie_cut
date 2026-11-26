@@ -25,14 +25,14 @@ graph TD
     Export --> Compositor
     Compositor --> SharedPixel[Shared PixelProcessors<br/>Blend / Chroma / Mask / PersonSegmentation / Text / Transition]
     
-    Model --> Storage[Storage Layer: ProjectStore / SchemaMigrations v1-v4]
+    Model --> Storage[Storage Layer: ProjectStore / SchemaMigrations v1-v9]
     Storage --> Bookmark[SecurityScopedAccess: App Sandbox]
 ```
 
 ### 핵심 설계 원칙
 1. **렌더링 파리티 (Rendering Parity)**: 메인 프리뷰(`PlaybackEngine`)와 내보내기(`ExportEngine`)는 완전히 동일한 snapshot(`FlattenedTimeline`)과 공유 픽셀 프로세서(`PixelProcessor`) 파이프라인을 통과합니다.
 2. **트랜잭션 기반 단일 변경 (Command Pattern)**: 모든 타임라인 변경 및 프로퍼티 수정은 `EditorSession.dispatch(Command)`를 경유하며, 원자적 Undo/Redo 단위를 보장합니다.
-3. **App Sandbox & 보안 북마크 격리**: 파일 I/O는 `SecurityScopedAccess`가 단일 소유하며, 프로젝트 파일은 스키마 버전 체인(v1~v4)을 통해 무손실 로드/마이그레이션됩니다.
+3. **App Sandbox & 보안 북마크 격리**: 파일 I/O는 `SecurityScopedAccess`가 단일 소유하며, 프로젝트 파일은 스키마 버전 체인(v1~v9)을 통해 무손실 로드/마이그레이션됩니다.
 4. **로컬 우선 & 외부 전송 없음**: Mac 앱은 App Sandbox에서 `network.client` entitlement가 없어 외부 발신이 OS 수준에서 차단된다(2026-08-22 entitlements 확인). iOS는 별도 증명 체계를 사용한다 — ① 코드 감사(네트워크 API 부재, 2026-08-22 확인) ② 네트워크 차단 환경 대표 작업 통과 ③ 트래픽 캡처(②③은 P0 미실행). STT는 `requiresOnDeviceRecognition` 강제 + 미지원 시 명시적 실패로 서버 폴백이 없다. 모든 AI/DSP(STT, 보컬 분리, 인물 세그멘테이션)가 온디바이스에서 처리된다.
 
 ---
@@ -96,7 +96,7 @@ macOS/iOS의 `CustomVideoCompositor`는 프레임 단위로 CoreImage 기반의 
 ### 2.5 스토리지 & App Sandbox (`Sources/MovieCutCore/Storage/`)
 
 * **`ProjectStore`**: `.moviecut` 번들/JSON 파일 저장 및 로드.
-* **`ProjectSchemaVersioning`**: 스키마 버전 1 → 2(Security Bookmark) → 3(Thermal/Preview) → 4(Blend/Compound) 마이그레이션 체인 보장.
+* **`ProjectSchemaVersioning`**: 스키마 버전 1 → 2(Security Bookmark) → 3(Thermal/Preview) → 4(Blend/Compound) → 5~9(ColorGrade/AudioGraph/Keyframe/AI Metadata) 마이그레이션 체인 보장.
 * **`RecentProjectsStore`**: Application Support 디렉토리에 보안 북마크와 메타데이터가 포함된 최근 프로젝트 목록 영속화.
 * **`SecurityScopedAccess`**: macOS App Sandbox 환경에서 외부 미디어 파일 접근 권한을 유지하기 위한 Bookmark 생성/해석/Scope 단일 관리자.
 

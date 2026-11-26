@@ -845,15 +845,12 @@ struct PreviewPanel: View {
         let seconds = totalSeconds % 60
         // CA-27: frame count follows the project frame rate so the display,
         // the parser, and the seek all agree (was a hard-coded 30).
+        // OC-01/CODEX-01: frame derivation is the shared, ROUNDED Core
+        // helper — truncation dropped a frame at exact boundaries
+        // (1+2/30 s at 30 fps displayed FF=01).
         let fps = viewModel.currentProject.timeline.frameRate.doubleValue
         let effectiveFps = (fps.isFinite && fps > 0) ? fps : 30
-        let frames = Int((t - Double(totalSeconds)) * effectiveFps)
-        // The largest displayable frame index is the largest whole number
-        // strictly below the rate — ceil(fps) − 1. Int(fps) − 1 wrongly
-        // shaved NTSC rates' last frame (29.97fps showed max FF=28,
-        // 23.976fps max FF=22) and broke the display↔parser round-trip.
-        let maxFrame = Int(ceil(effectiveFps)) - 1
-        let clampedFrames = min(frames, maxFrame)
+        let clampedFrames = TimecodeParser.frameNumber(atSeconds: t, frameRate: effectiveFps)
         let hours = totalSeconds / 3600
         if hours > 0 {
             return String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, clampedFrames)

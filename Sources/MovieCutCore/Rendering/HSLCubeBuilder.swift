@@ -23,6 +23,9 @@ public enum HSLCubeBuilder {
 
     public static func cube(size: Int = 64, bands: [HSLBand]) -> [Float] {
         let size = max(size, 2)
+        // Filter once here instead of inside `apply` — the 64³ grid called
+        // it per cell, allocating a filtered array 262,144 times per build.
+        let activeBands = bands.filter { !$0.isIdentity }
         var data: [Float] = []
         data.reserveCapacity(size * size * size * 4)
 
@@ -34,7 +37,7 @@ public enum HSLCubeBuilder {
                         green: Double(greenIndex) / Double(size - 1),
                         blue: Double(blueIndex) / Double(size - 1)
                     )
-                    let adjusted = apply(rgb, bands: bands)
+                    let adjusted = applyActive(rgb, activeBands: activeBands)
                     data.append(Float(adjusted.red))
                     data.append(Float(adjusted.green))
                     data.append(Float(adjusted.blue))
@@ -47,6 +50,10 @@ public enum HSLCubeBuilder {
 
     public static func apply(_ rgb: RGB, bands: [HSLBand]) -> RGB {
         let activeBands = bands.filter { !$0.isIdentity }
+        return applyActive(rgb, activeBands: activeBands)
+    }
+
+    private static func applyActive(_ rgb: RGB, activeBands: [HSLBand]) -> RGB {
         guard !activeBands.isEmpty else { return rgb }
 
         var hsl = toHSL(rgb)

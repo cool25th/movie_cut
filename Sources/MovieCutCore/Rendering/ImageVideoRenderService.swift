@@ -82,24 +82,39 @@ public final class ImageVideoRenderService: Sendable {
         writer.startSession(atSourceTime: .zero)
 
         let totalFrames = max(Int(ceil(duration * Double(Self.frameRate))), 1)
+        // A static (non-Ken-Burns) clip rasterizes to the SAME pixels every
+        // frame: draw once, append the identical buffer for every timestamp.
+        // A 5-second clip previously paid 150 redundant CPU draws.
+        var cachedStaticPixelBuffer: CVPixelBuffer?
+
         for frameIndex in 0..<totalFrames {
             try Task.checkCancellation()
             try await Self.waitForWriterInput(writerInput, writer: writer)
-            guard let pool = adaptor.pixelBufferPool else {
-                throw ImageVideoRenderServiceError.pixelBufferPoolUnavailable
-            }
 
-            var pixelBuffer: CVPixelBuffer?
-            let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBuffer)
-            guard status == kCVReturnSuccess, let pixelBuffer else {
-                throw ImageVideoRenderServiceError.pixelBufferCreationFailed(status)
+            let pixelBuffer: CVPixelBuffer
+            if kenBurnsEffect == nil, let existing = cachedStaticPixelBuffer {
+                pixelBuffer = existing
+            } else {
+                guard let pool = adaptor.pixelBufferPool else {
+                    throw ImageVideoRenderServiceError.pixelBufferPoolUnavailable
+                }
+
+                var createdBuffer: CVPixelBuffer?
+                let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &createdBuffer)
+                guard status == kCVReturnSuccess, let createdBuffer else {
+                    throw ImageVideoRenderServiceError.pixelBufferCreationFailed(status)
+                }
+                // Resolve the clip-local progress (0 at first frame, 1 at last) so a
+                // Ken Burns motion can be sampled at this frame's point in time.
+                let progress = totalFrames > 1
+                    ? Double(frameIndex) / Double(totalFrames - 1)
+                    : 0
+                try Self.draw(image, into: createdBuffer, size: outputSize, kenBurnsEffect: kenBurnsEffect, progress: progress)
+                if kenBurnsEffect == nil {
+                    cachedStaticPixelBuffer = createdBuffer
+                }
+                pixelBuffer = createdBuffer
             }
-            // Resolve the clip-local progress (0 at first frame, 1 at last) so a
-            // Ken Burns motion can be sampled at this frame's point in time.
-            let progress = totalFrames > 1
-                ? Double(frameIndex) / Double(totalFrames - 1)
-                : 0
-            try Self.draw(image, into: pixelBuffer, size: outputSize, kenBurnsEffect: kenBurnsEffect, progress: progress)
 
             let presentationTime = CMTime(value: CMTimeValue(frameIndex), timescale: Self.frameRate)
             guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {

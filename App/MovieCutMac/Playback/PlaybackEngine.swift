@@ -74,7 +74,16 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// unique within a track and stable across the composition build.
     @ObservationIgnored private var karaokeClips: [KaraokePreviewClip] = []
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
-    @ObservationIgnored private var playbackTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var timeObserverToken: Any?
+    /// Chase-seek state: true while a player.seek issued by `seek(to:)` is
+    /// still in flight; a newer target arriving in that window parks in
+    /// `pendingSeekTime` and is chased by the in-flight seek's completion.
+    @ObservationIgnored private var isSeeking = false
+    @ObservationIgnored private var pendingSeekTime: CMTime?
+    /// Playback position/state captured before a thermal rebuild, restored
+    /// once the rebuilt composition installs, so a thermal transition cannot
+    /// silently reset the user to t=0 paused.
+    @ObservationIgnored private var playbackRestoreAfterRebuild: (time: TimeInterval, wasPlaying: Bool, volume: Float?)?
     @ObservationIgnored private var compositionBuildTask: Task<Void, Never>?
     @ObservationIgnored private var temporaryReverseRenderURLs: [URL] = []
     /// G-25 2C-2 (spec §0 v1.1): EQ clips' preview audio consumes DERIVED
@@ -85,6 +94,22 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// reverse-media precedent); cleaned on clear/loadProject.
     @ObservationIgnored private var equalizedPreviewAudio: [UUID: (preset: EqualizerPreset, url: URL)] = [:]
     @ObservationIgnored private var temporaryEqualizedPreviewURLs: [URL] = []
+    /// Rendered .mp4 segments for image clips, cached per clip while the
+    /// render inputs are unchanged (the `equalizedPreviewAudio` precedent):
+    /// a composition rebuild re-encodes unchanged still clips otherwise.
+    /// Cleaned together with the EQ URLs by
+    /// `cleanupTemporaryEqualizedPreviewURLs()`.
+    @ObservationIgnored private var cachedImagePreviewSegments: [UUID: (key: ImagePreviewCacheKey, url: URL)] = [:]
+
+    /// Identity of an image clip's rendered preview segment: every input the
+    /// render consumes, so a key match guarantees byte-equivalent reuse.
+    private struct ImagePreviewCacheKey: Equatable {
+        let sourceURL: URL
+        let durationMs: Int64
+        let width: Int
+        let height: Int
+        let kenBurns: KenBurnsEffect?
+    }
     /// Security scopes started for the assets in the currently loaded single
     /// asset or composition. Each entry pairs with a `stopAccessing` on clear
     /// or next load so the access pair never leaks across reloads. (S2)
@@ -156,8 +181,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         } else {
             AppLog.playback.info("thermal preview quality clamp: \(previousQuality.shortLabel, privacy: .public) -> \(nextQuality.shortLabel, privacy: .public)")
         }
-        // Rebuild at the new proxy/quality state. loadProject preserves
-        // playback state (it re-stamps the generation guard).
+        // Rebuild at the new proxy/quality state. The pre-rebuild position
+        // and playing state are captured here and restored once the rebuilt
+        // composition installs (loadProject itself resets to t=0 paused).
+        let priorTime = currentTime
+        let wasPlaying = isPlaying
+        if priorTime > 0 || wasPlaying {
+            schedulePlaybackRestore(time: priorTime, wasPlaying: wasPlaying)
+        }
         loadProject(project, audioProcessing: loadedAudioProcessing)
     }
 
@@ -193,6 +224,14 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
     /// overwrite a newer composition (Step 1 acceptance criterion).
     var currentCompositionGeneration: UInt64 {
         compositionGeneration
+    }
+
+    /// Registers playback state to restore once the NEXT composition build
+    /// installs. Callers use this instead of polling for the async install —
+    /// the restore runs inside `loadProject`'s completion (single path, no
+    /// race with a newer rebuild, which consumes the slot itself).
+    func schedulePlaybackRestore(time: TimeInterval, wasPlaying: Bool, volume: Float? = nil) {
+        playbackRestoreAfterRebuild = (time, wasPlaying, volume)
     }
 
     func loadProject(_ project: Project, audioProcessing: ClipAudioProcessingOptions = ClipAudioProcessingOptions()) {
@@ -249,6 +288,22 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 cleanupTemporaryReverseRenderURLs()
                 self.temporaryReverseRenderURLs = temporaryReverseRenderURLs
                 observeStatus(for: item)
+                // Restore the state registered via schedulePlaybackRestore
+                // (thermal rebuilds, editor rebuilds preserving playback) —
+                // ordinary loadProject calls keep the reset-to-zero behavior.
+                if let restore = playbackRestoreAfterRebuild {
+                    playbackRestoreAfterRebuild = nil
+                    if let volume = restore.volume {
+                        self.player.volume = volume
+                    }
+                    let clampedTarget = min(max(0, restore.time), self.duration)
+                    if clampedTarget > 0 {
+                        self.seek(to: clampedTarget)
+                    }
+                    if restore.wasPlaying {
+                        self.play()
+                    }
+                }
                 signposter.endInterval("playback.buildComposition", signpostState)
             } catch {
                 // Stale guard applies to the failure path too.
@@ -264,6 +319,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                 AppLog.playback.error("composition build failed: \(errorDetail, privacy: .public)")
                 installedCompositionGeneration = 0
                 lastCompositionError = errorDetail
+                playbackRestoreAfterRebuild = nil
                 clearPreviewVideoOutput()
                 player.replaceCurrentItem(with: nil)
                 cleanupTemporaryReverseRenderURLs()
@@ -370,17 +426,37 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
         func pollFrame(at time: CMTime, limit: TimeInterval) -> CGImage? {
             guard let output = previewVideoOutput else { return nil }
+            // BUG-CA12-03 (31st-cycle): right after a seek the output can
+            // report hasNewPixelBuffer(forItemTime:) as true while still
+            // holding the PRE-seek buffer — the parity dump then records the
+            // PREVIOUS position's frame (measured in run_20260923_225916:
+            // ab01 requests 1.0/3.5/6.0/8.5 matched source seconds 0/1/1/6 —
+            // one-step stale). No gap exists in ab01, so the BUG-ACC-05
+            // distrust never fired, and the poll did not starve, so
+            // away-and-back never ran. Discriminator: itemTimeForDisplay
+            // reports the time the buffer is actually FOR — reject any
+            // buffer that is not for the requested item time (within a
+            // frame's presentation window) and keep polling for the real
+            // post-seek frame.
+            let frameTolerance = 0.05
             let deadline = Date().addingTimeInterval(limit)
             while Date() < deadline {
+                var displayedTime = CMTime.invalid
                 if output.hasNewPixelBuffer(forItemTime: time),
                    let pixelBuffer = output.copyPixelBuffer(
                        forItemTime: time,
-                       itemTimeForDisplay: nil
+                       itemTimeForDisplay: &displayedTime
                    ),
                    let image = Self.cgImage(from: pixelBuffer) {
-                    return image
+                    if CMTIME_IS_NUMERIC(displayedTime),
+                       abs(CMTimeGetSeconds(displayedTime) - CMTimeGetSeconds(time)) <= frameTolerance {
+                        return image
+                    }
                 }
-                Thread.sleep(forTimeInterval: 0.03)
+                // Run the run loop briefly instead of parking the thread, so
+                // the main loop's dispatches (compositor callbacks, seek
+                // completions) keep flowing while the poll waits.
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.015))
             }
             return nil
         }
@@ -587,25 +663,60 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
 
         currentTime = targetTime
         let cmTime = CMTime(seconds: targetTime, preferredTimescale: 600)
-        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+
+        guard player.currentItem != nil else {
+            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            signposter.endInterval("playback.seek", state)
+            return
+        }
+
+        // Chase-seek: while an earlier seek is still in flight, only the
+        // LATEST target matters — park it and let the in-flight seek's
+        // completion handler pick it up immediately, instead of stacking
+        // competing seeks during fast scrubbing.
+        guard !isSeeking else {
+            pendingSeekTime = cmTime
+            signposter.endInterval("playback.seek", state)
+            return
+        }
+
+        performChaseSeek(to: cmTime)
         signposter.endInterval("playback.seek", state)
     }
 
-    func startPlaybackTimer() {
-        guard playbackTimerTask == nil else { return }
-
-        playbackTimerTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
+    /// Issues a zero-tolerance seek and chains any target that arrived while
+    /// it was in flight. The pending slot is consumed exactly once by the
+    /// completion handler, so scrubbing collapses to at most one queued seek.
+    private func performChaseSeek(to cmTime: CMTime) {
+        isSeeking = true
+        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.updateCurrentTimeFromPlayer()
-                try? await Task.sleep(nanoseconds: 33_333_333)
+                self.isSeeking = false
+                if let pending = self.pendingSeekTime {
+                    self.pendingSeekTime = nil
+                    self.performChaseSeek(to: pending)
+                }
+            }
+        }
+    }
+
+    func startPlaybackTimer() {
+        guard timeObserverToken == nil else { return }
+
+        let interval = CMTime(value: 1, timescale: 30)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateCurrentTimeFromPlayer()
             }
         }
     }
 
     func stopPlaybackTimer() {
-        playbackTimerTask?.cancel()
-        playbackTimerTask = nil
+        if let token = timeObserverToken {
+            player.removeTimeObserver(token)
+            timeObserverToken = nil
+        }
     }
 
     private func observeStatus(for item: AVPlayerItem) {
@@ -727,104 +838,38 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
             return accumulatedOutputDuration
         }
 
-        func applyAudioVolumeAndFades(
+        func applyGainEnvelope(
             for clip: Clip,
             audioParameters: AVMutableAudioMixInputParameters,
             destinationTime: CMTime,
             clipDuration: CMTime
         ) {
+            // Base level for any stretch the envelope doesn't cover (rounding
+            // gaps); the envelope's constant segments restate it anyway.
             let volume = Float(clip.volume)
             audioParameters.setVolume(volume, at: destinationTime)
 
             guard clipDuration.seconds.isFinite, clipDuration.seconds > 0 else { return }
 
-            if clip.fadeInDuration > 0 {
-                let fadeInDuration = min(clip.fadeInDuration, clipDuration.seconds)
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: 0,
-                    toEndVolume: volume,
-                    timeRange: CMTimeRange(
-                        start: destinationTime,
-                        duration: CMTime(seconds: fadeInDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-
-            if clip.fadeOutDuration > 0 {
-                let fadeOutDuration = min(clip.fadeOutDuration, clipDuration.seconds)
-                let fadeOutStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: clipDuration.seconds - fadeOutDuration, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: volume,
-                    toEndVolume: 0,
-                    timeRange: CMTimeRange(
-                        start: fadeOutStart,
-                        duration: CMTime(seconds: fadeOutDuration, preferredTimescale: 600)
-                    )
-                )
-            }
-            applyDuckingRamps(
+            // AI-03a M1: volume × fades × baked ducking compose into ONE
+            // ordered non-overlapping envelope (TrackGainEnvelope — the same
+            // semantics AudioGraphProjectBuilder feeds the export graph), so
+            // a track's single input-parameters object can never receive
+            // overlapping volume ramps. The former live global-ducking block
+            // that layered constant ramps on top of these was removed: the
+            // export graph never applied it, so it was a preview-only
+            // mismatch and the source of the montage E2E ramp exception.
+            for segment in TrackGainEnvelope.segments(
                 for: clip,
-                audioParameters: audioParameters,
-                destinationTime: destinationTime,
-                clipDuration: clipDuration,
-                baseVolume: volume
-            )
-        }
-
-        func applyDuckingRamps(
-            for clip: Clip,
-            audioParameters: AVMutableAudioMixInputParameters,
-            destinationTime: CMTime,
-            clipDuration: CMTime,
-            baseVolume: Float
-        ) {
-            guard let duckingLevel = clip.duckingLevel,
-                  duckingLevel < 1,
-                  !clip.duckingRanges.isEmpty,
-                  clipDuration.seconds.isFinite, clipDuration.seconds > 0
-            else { return }
-
-            let duckedVolume = baseVolume * Float(max(0, duckingLevel))
-            let attack = AudioDuckingPlanner.attackDuration
-            let release = AudioDuckingPlanner.releaseDuration
-            // Keep ducking ramps clear of the fade windows so AVFoundation
-            // never receives overlapping volume ramps on one clip.
-            let lowerBound = clip.fadeInDuration > 0 ? min(clip.fadeInDuration, clipDuration.seconds) : 0
-            let upperBound = clipDuration.seconds
-                - (clip.fadeOutDuration > 0 ? min(clip.fadeOutDuration, clipDuration.seconds) : 0)
-            guard upperBound > lowerBound else { return }
-
-            for range in AudioDuckingPlanner.mergeOverlapping(clip.duckingRanges) {
-                let start = max(range.start, lowerBound)
-                let end = min(range.end, upperBound)
-                guard end - start > attack + release else { continue }
-
-                let attackStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: start, preferredTimescale: 600)
-                )
+                timelineStart: destinationTime.seconds,
+                timelineDuration: clipDuration.seconds
+            ) {
                 audioParameters.setVolumeRamp(
-                    fromStartVolume: baseVolume,
-                    toEndVolume: duckedVolume,
+                    fromStartVolume: Float(segment.startGain),
+                    toEndVolume: Float(segment.endGain),
                     timeRange: CMTimeRange(
-                        start: attackStart,
-                        duration: CMTime(seconds: attack, preferredTimescale: 600)
-                    )
-                )
-
-                let releaseStart = CMTimeAdd(
-                    destinationTime,
-                    CMTime(seconds: end - release, preferredTimescale: 600)
-                )
-                audioParameters.setVolumeRamp(
-                    fromStartVolume: duckedVolume,
-                    toEndVolume: baseVolume,
-                    timeRange: CMTimeRange(
-                        start: releaseStart,
-                        duration: CMTime(seconds: release, preferredTimescale: 600)
+                        start: CMTime(seconds: segment.start, preferredTimescale: 600),
+                        duration: CMTime(seconds: segment.end - segment.start, preferredTimescale: 600)
                     )
                 )
             }
@@ -911,15 +956,30 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                     var sourceTrack: AVAssetTrack
                     if mediaAsset.kind == .image {
                         let renderDuration = max(clip.sourceRange.duration, clip.timelineRange.duration, 5)
-                        let imageVideoURL = temporaryImageRenderURL(for: clip)
-                        try await ImageVideoRenderService().render(
-                            imageURL: mediaAsset.originalURL,
-                            duration: renderDuration,
-                            renderSize: project.timeline.canvasSize,
-                            outputURL: imageVideoURL,
-                            kenBurnsEffect: clip.kenBurnsEffect
+                        let cacheKey = ImagePreviewCacheKey(
+                            sourceURL: mediaAsset.originalURL,
+                            durationMs: Int64((renderDuration * 1000).rounded()),
+                            width: Int(project.timeline.canvasSize.width.rounded()),
+                            height: Int(project.timeline.canvasSize.height.rounded()),
+                            kenBurns: clip.kenBurnsEffect
                         )
-                        temporaryReverseRenderURLs.append(imageVideoURL)
+                        let imageVideoURL: URL
+                        if let cached = cachedImagePreviewSegments[clip.id],
+                           cached.key == cacheKey,
+                           FileManager.default.fileExists(atPath: cached.url.path) {
+                            imageVideoURL = cached.url
+                        } else {
+                            let renderedURL = temporaryImageRenderURL(for: clip)
+                            try await ImageVideoRenderService().render(
+                                imageURL: mediaAsset.originalURL,
+                                duration: renderDuration,
+                                renderSize: project.timeline.canvasSize,
+                                outputURL: renderedURL,
+                                kenBurnsEffect: clip.kenBurnsEffect
+                            )
+                            cachedImagePreviewSegments[clip.id] = (cacheKey, renderedURL)
+                            imageVideoURL = renderedURL
+                        }
                         sourceAsset = AVURLAsset(url: imageVideoURL)
                         guard let renderedTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
                             continue
@@ -1114,7 +1174,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                             }
                         }
 
-                        applyAudioVolumeAndFades(
+                        applyGainEnvelope(
                             for: clip,
                             audioParameters: audioParameters,
                             destinationTime: destinationTime,
@@ -1185,7 +1245,7 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
                         }
                     }
 
-                    applyAudioVolumeAndFades(
+                    applyGainEnvelope(
                         for: clip,
                         audioParameters: audioParameters,
                         destinationTime: destinationTime,
@@ -1620,39 +1680,16 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         // identically (spec §0 v1.1).
 
         // MARK: - Audio Ducking
-        if audioProcessing.duckLevel > 0, !audioProcessing.voiceClipIds.isEmpty {
-            let duckMultiplier = 1.0 - audioProcessing.duckLevel
-            var voiceTimeRanges: [(start: Double, end: Double)] = []
-            let renderingTracks = renderingTracks(for: project)
-            for projTrack in renderingTracks where projTrack.kind == .video {
-                for clip in projTrack.clips where audioProcessing.voiceClipIds.contains(clip.id) {
-                    voiceTimeRanges.append((clip.timelineRange.start, clip.timelineRange.end))
-                }
-            }
-            // Lower volume of audio-track clips during voice ranges
-            for mutableParams in audioMixInputParameters {
-                for projTrack in renderingTracks where projTrack.kind == .audio {
-                    for clip in projTrack.clips {
-                        let clipRange = clip.timelineRange
-                        for voiceRange in voiceTimeRanges {
-                            if clipRange.start < voiceRange.end && voiceRange.start < clipRange.end {
-                                let duckedVolume = Float(clip.volume * duckMultiplier)
-                                let overlapStart = max(clipRange.start, voiceRange.start)
-                                let overlapEnd = min(clipRange.end, voiceRange.end)
-                                mutableParams.setVolumeRamp(
-                                    fromStartVolume: duckedVolume,
-                                    toEndVolume: duckedVolume,
-                                    timeRange: CMTimeRange(
-                                        start: CMTime(seconds: overlapStart, preferredTimescale: 600),
-                                        duration: CMTime(seconds: overlapEnd - overlapStart, preferredTimescale: 600)
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // AI-03a M1: the LIVE global-ducking block that ran here was removed.
+        // It added constant-volume ramps for voice×music overlaps onto track
+        // input-parameters WITHOUT consulting the clips' fade windows — the
+        // montage E2E's overlapping-ramp exception (task-511.log) — and it
+        // applied to every parameters object regardless of which composition
+        // track it belonged to. It also never ran in the export path
+        // (renderGraphAudio consumes eq presets only), so preview and export
+        // already disagreed. Ducking is the BAKED per-clip feature
+        // (SetAudioDuckingCommand → clip.duckingRanges), applied identically
+        // here (via TrackGainEnvelope) and by AudioGraphProjectBuilder.
 
         shouldKeepTemporaryReverseRenderURLs = true
         return (composition, videoComposition, audioMix, temporaryReverseRenderURLs)
@@ -1819,6 +1856,12 @@ final class PlaybackEngine: FlattenedTimelineConsumer {
         }
         temporaryEqualizedPreviewURLs = []
         equalizedPreviewAudio = [:]
+        // Cached image segments share the EQ URLs' lifecycle: removed on
+        // clear/single-asset load, retained across project rebuilds.
+        for entry in cachedImagePreviewSegments.values where fileManager.fileExists(atPath: entry.url.path) {
+            try? fileManager.removeItem(at: entry.url)
+        }
+        cachedImagePreviewSegments = [:]
     }
 
     private func removeTemporaryReverseRenderURLs(_ urls: [URL]) {

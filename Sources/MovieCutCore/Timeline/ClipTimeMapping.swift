@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 
 /// Single source of truth for converting between a clip's timeline time and
@@ -42,6 +43,21 @@ public struct ClipTimeMapping: Sendable, Equatable {
     /// The clip kind. Image clips have no temporal source: every timeline time
     /// maps to `sourceRange.start` (a held still).
     public let kind: ClipKind
+
+    /// Canonical high-precision timescale for building `CMTime` values on the
+    /// query paths. 60,000 keeps sub-microsecond precision while dividing
+    /// evenly by every common frame rate (23.976/24/25/29.97/30/50/59.94/60),
+    /// so repeated conversions never accumulate rounding drift.
+    public static let canonicalTimescale: CMTimeScale = 60000
+
+    /// Builds a `CMTime` on the canonical timescale (overridable for callers
+    /// that must match a media file's own timescale).
+    public static func cmTime(
+        seconds: Double,
+        preferredTimescale: CMTimeScale = ClipTimeMapping.canonicalTimescale
+    ) -> CMTime {
+        CMTime(seconds: seconds, preferredTimescale: preferredTimescale)
+    }
 
     /// Creates a mapping from a clip's stored fields. Prefer `Clip.makeTimeMapping()`
     /// which constructs this from a `Clip` directly. `timelineDuration` is the

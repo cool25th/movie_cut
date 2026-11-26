@@ -90,18 +90,82 @@ public enum AutoColorAnalyzer {
     /// One-tap auto enhance: composes white balance (per-channel color gain) with
     /// auto levels (uniform contrast lift/gain) into a single grade — color cast
     /// removed and contrast stretched at once.
+    ///
+    /// Single pass: the channel sums (white balance) and the 256-bin luma
+    /// histogram (levels) are accumulated over the SAME loop instead of
+    /// walking the buffer once per sub-analyzer. Every downstream formula,
+    /// guard, and fallback is byte-identical to composing the two standalone
+    /// reducers.
     public static func autoEnhanceGrade(rgba: [UInt8]) -> ColorGrade {
-        let whiteBalance = autoWhiteBalanceGrade(rgba: rgba)
-        let levels = autoLevelsGrade(rgba: rgba)
-        let levelsSlope = levels.gain.red
+        let count = rgba.count / 4
+        guard count > 0 else { return ColorGrade() }
+
+        var sumRed = 0.0
+        var sumGreen = 0.0
+        var sumBlue = 0.0
+        var histogram = [Int](repeating: 0, count: 256)
+        for index in 0..<count {
+            let offset = index * 4
+            let red = rgba[offset]
+            let green = rgba[offset + 1]
+            let blue = rgba[offset + 2]
+            sumRed += Double(red)
+            sumGreen += Double(green)
+            sumBlue += Double(blue)
+            let luma = ScopeAnalyzer.luma(red: red, green: green, blue: blue)
+            histogram[Swift.min(255, Swift.max(0, luma))] += 1
+        }
+
+        // White-balance stage — math identical to ``autoWhiteBalanceGrade``.
+        let averageRed = sumRed / Double(count)
+        let averageGreen = sumGreen / Double(count)
+        let averageBlue = sumBlue / Double(count)
+        var balanceGainRed = 1.0
+        var balanceGainGreen = 1.0
+        var balanceGainBlue = 1.0
+        if averageRed > 0, averageGreen > 0, averageBlue > 0 {
+            let averageGray = (averageRed + averageGreen + averageBlue) / 3
+            func gain(for channelAverage: Double) -> Double {
+                Swift.min(Swift.max(averageGray / channelAverage, 0.5), 2.0)
+            }
+            balanceGainRed = gain(for: averageRed)
+            balanceGainGreen = gain(for: averageGreen)
+            balanceGainBlue = gain(for: averageBlue)
+        }
+
+        // Levels stage — math identical to ``autoLevelsGrade`` at the default
+        // 0.02/0.98 percentiles.
+        let lowTarget = Swift.max(1, Int(Double(count) * 0.02))
+        let highTarget = Swift.max(1, Int(Double(count) * 0.98))
+        var cumulative = 0
+        var black = 0
+        for value in 0..<256 {
+            cumulative += histogram[value]
+            if cumulative >= lowTarget { black = value; break }
+        }
+        cumulative = 0
+        var white = 255
+        for value in 0..<256 {
+            cumulative += histogram[value]
+            if cumulative >= highTarget { white = value; break }
+        }
+
+        var levelsLift = 0.0
+        var levelsSlope = 1.0
+        if white > black + 5 {
+            let blackNormalized = Double(black) / 255.0
+            let whiteNormalized = Double(white) / 255.0
+            levelsSlope = 1.0 / (whiteNormalized - blackNormalized)
+            levelsLift = -blackNormalized * levelsSlope
+        }
 
         return ColorGrade(
-            lift: levels.lift,
+            lift: ColorGrade.RGB(red: levelsLift, green: levelsLift, blue: levelsLift),
             gamma: 1,
             gain: ColorGrade.RGB(
-                red: whiteBalance.gain.red * levelsSlope,
-                green: whiteBalance.gain.green * levelsSlope,
-                blue: whiteBalance.gain.blue * levelsSlope
+                red: balanceGainRed * levelsSlope,
+                green: balanceGainGreen * levelsSlope,
+                blue: balanceGainBlue * levelsSlope
             )
         )
     }

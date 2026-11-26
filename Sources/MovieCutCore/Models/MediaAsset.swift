@@ -102,16 +102,4 @@ public struct MediaAsset: Codable, Sendable, Equatable, Identifiable {
         managedImportPath = try container.decodeIfPresent(String.self, forKey: .managedImportPath)
     }
 
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(originalURL, forKey: .originalURL)
-        try container.encodeIfPresent(originalBookmark, forKey: .originalBookmark)
-        try container.encode(kind, forKey: .kind)
-        try container.encodeIfPresent(duration, forKey: .duration)
-        try container.encode(metadata, forKey: .metadata)
-        try container.encodeIfPresent(thumbnailData, forKey: .thumbnailData)
-        try container.encodeIfPresent(proxy, forKey: .proxy)
-        try container.encodeIfPresent(managedImportPath, forKey: .managedImportPath)
-    }
 }

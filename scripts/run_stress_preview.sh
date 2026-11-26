@@ -43,7 +43,7 @@ APP_BUNDLE="$PRODUCTS_DIR/MovieCutMac.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/MovieCutMac"
 [ -x "$APP_BIN" ] || { echo "app binary not found at $APP_BIN" >&2; exit 1; }
 
-APP_CONTAINER_TMP="$HOME/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-stress"
+APP_CONTAINER_TMP="$HOME/Library/Containers/${MOVIECUT_MAC_BUNDLE_ID:-com.moviecut.mac}/Data/tmp/moviecut-stress"
 STAGED="$APP_CONTAINER_TMP/fixtures-stress"
 mkdir -p "$STAGED"
 cp "$BARS" "$STAGED/bars.mp4"

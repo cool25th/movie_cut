@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import CoreMedia
 import Foundation
 import MovieCutCore
 import Testing
@@ -209,5 +210,91 @@ struct RenderProcessorGoldenTests {
             tolerance: 2,
             "chromaKey green on red"
         )
+    }
+
+    // MARK: - SharedVideoCompositorCore & FrameSSIMComparator Parity Gate
+
+    @Test("SharedCanvasGeometry orients cardinal rotations and aspect-fits into canvas")
+    func sharedCanvasGeometryOrientsAndFits() {
+        GoldenPixel.assertRendererFunctional()
+        let portrait = CIImage(color: CIColor(red: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 64, height: 32))
+        let rotated = SharedCanvasGeometry.orientedForDisplay(
+            portrait,
+            preferredTransform: CGAffineTransform(rotationAngle: .pi / 2)
+        )
+        #expect(abs(rotated.extent.width - 32) < 0.5)
+        #expect(abs(rotated.extent.height - 64) < 0.5)
+
+        let fitted = SharedCanvasGeometry.fittedToCanvas(rotated, canvasSize: CGSize(width: 128, height: 128))
+        #expect(abs(fitted.extent.width - 64) < 0.5)
+        #expect(abs(fitted.extent.height - 128) < 0.5)
+        #expect(abs(fitted.extent.origin.x - 32) < 0.5)
+        #expect(abs(fitted.extent.origin.y) < 0.5)
+    }
+
+    @Test("SharedTextOverlayResolver evaluates text animations consistently for Mac and iOS")
+    func sharedTextOverlayResolverEvaluatesAnimation() {
+        let animatedText = TextClipContent(
+            text: "HelloWorld",
+            fontSize: 48,
+            animation: TextAnimation(type: .typewriter, duration: 2.0)
+        )
+        let timeRange = CMTimeRange(
+            start: CMTime(seconds: 0, preferredTimescale: 600),
+            duration: CMTime(seconds: 4, preferredTimescale: 600)
+        )
+        let items = SharedTextOverlayResolver.renderItems(
+            clipEffects: [],
+            instructionTextContent: animatedText,
+            instructionTimeRange: timeRange,
+            at: CMTime(seconds: 1.0, preferredTimescale: 600),
+            renderSize: CGSize(width: 1920, height: 1080)
+        )
+        #expect(items.count == 1)
+        #expect(items[0].textContent.animation == nil)
+        #expect(items[0].textContent.text.count < animatedText.text.count)
+        #expect(!items[0].textContent.text.isEmpty)
+    }
+
+    @Test("SharedStickerOverlayRenderer caches emoji rasters and produces identical SSIM across repeated renders")
+    func sharedStickerRendererCachesAndPassesSSIMParity() throws {
+        GoldenPixel.assertRendererFunctional()
+        let renderer = SharedStickerOverlayRenderer()
+        let firstRaster = try #require(renderer.cachedStickerEmojiImage("🔥", fontSize: 48))
+        let secondRaster = try #require(renderer.cachedStickerEmojiImage("🔥", fontSize: 48))
+        #expect(firstRaster === secondRaster, "Second lookup must hit the bounded NSCache without re-rasterizing")
+
+        let size = CGSize(width: 128, height: 128)
+        let bounds = CGRect(origin: .zero, size: size)
+        let backdrop = CIImage(color: CIColor(red: 0.1, green: 0.2, blue: 0.4, alpha: 1)).cropped(to: bounds)
+        let timeRange = CMTimeRange(
+            start: .zero,
+            duration: CMTime(seconds: 2, preferredTimescale: 600)
+        )
+
+        let pass1 = renderer.renderOverlay(
+            clipEffects: [],
+            instructionEmoji: "🔥",
+            instructionImageURL: nil,
+            instructionTimeRange: timeRange,
+            onto: backdrop,
+            at: CMTime(seconds: 0.5, preferredTimescale: 600)
+        )
+        let pass2 = renderer.renderOverlay(
+            clipEffects: [],
+            instructionEmoji: "🔥",
+            instructionImageURL: nil,
+            instructionTimeRange: timeRange,
+            onto: backdrop,
+            at: CMTime(seconds: 0.5, preferredTimescale: 600)
+        )
+
+        let parity = try FrameSSIMComparator.compare(pass1, pass2, extent: bounds)
+        #expect(parity.ssim >= 0.9999)
+        #expect(parity.maxChannelDelta == 0)
+
+        let vsBackdrop = try FrameSSIMComparator.compare(backdrop, pass1, extent: bounds)
+        #expect(vsBackdrop.ssim < 0.99, "Sticker overlay must visibly alter the rendered frame")
     }
 }

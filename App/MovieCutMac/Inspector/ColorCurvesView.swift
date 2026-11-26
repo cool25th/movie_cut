@@ -142,12 +142,20 @@ struct ColorCurvesView: View {
                 .stroke(.quaternary, style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
 
                 // The curve, sampled through the SAME evaluator the renderer
-                // consumes — what you drag is what renders.
+                // consumes — what you drag is what renders. The curve is
+                // prepared ONCE outside the 65-sample loop; per-sample
+                // `evaluate` re-ran normalization + sorting + tangents 65
+                // times per drag frame.
                 Path { path in
                     let samples = 64
+                    let prepared = CurveEvaluator.prepare(channelPoints)
                     for index in 0...samples {
                         let x = Double(index) / Double(samples)
-                        let y = CurveEvaluator.evaluate(points: channelPoints, at: x)
+                        let y = CurveEvaluator.evaluatePrecomputed(
+                            normalized: prepared.normalized,
+                            tangents: prepared.tangents,
+                            at: x
+                        )
                         let point = CGPoint(x: size.width * x, y: size.height * (1 - y))
                         if index == 0 {
                             path.move(to: point)

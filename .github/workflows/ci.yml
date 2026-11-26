@@ -80,6 +80,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Build Mac app (Release, blocking)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutMac \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build iOS app (Release generic, blocking)
+        run: |
+          xcodebuild -project MovieCut.xcodeproj \
+            -scheme MovieCutiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
   # STAB-06: the single 30-min iOS job previously died mid-run (8 PASS at
   # 1,047.8s then cancelled). Split by measured runtime — the state suites
   # finish in under a second of test time (14 tests / 0.55s local), so they
@@ -181,18 +199,21 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: High-signal lint gate (blocking)
-        run: bash scripts/lint_gate.sh
+        run: bash scripts/lint_gate.sh --require-swiftlint
+      - name: Verify Xcode project sync (blocking)
+        run: python3 scripts/verify_project_sync.py
       - name: Verify doc/command file paths (blocking)
         run: bash scripts/verify_doc_paths.sh
       - name: Verify localization keys (blocking, both platforms)
         run: |
           python3 scripts/verify_localization_keys.py \
-            --catalog App/MovieCutMac/Localizable.xcstrings --source-root App/MovieCutMac
+            --catalog App/MovieCutMac/Localizable.xcstrings --source-root App/MovieCutMac \
+            --fail-on-korean --check-swiftui-literals
           python3 scripts/verify_localization_keys.py \
-            --catalog App/MovieCutiOS/Localizable.xcstrings --source-root App/MovieCutiOS
-          # L10N-01 (review 2026-08-26): no hardcoded Hangul string literals
-          # in the iOS app sources — they bypass the catalog and show Korean
-          # in every environment.
+            --catalog App/MovieCutiOS/Localizable.xcstrings --source-root App/MovieCutiOS \
+            --fail-on-korean --check-swiftui-literals
+          # L10N-01: no hardcoded Hangul string literals in Mac or iOS production
+          # app sources — they bypass the catalog and show Korean in every locale.
           python3 scripts/verify_no_hangul_literals.py
           # Every key in BOTH catalogs must carry an en AND ko translation —
           # a Mac-only fill once slipped through when the iOS catalog change

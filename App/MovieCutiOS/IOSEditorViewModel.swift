@@ -1,8 +1,16 @@
 import Foundation
 import AVFoundation
+import CoreTransferable
 import MovieCutCore
+import OSLog
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
+
+private let iosImportLog = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.moviecut.ios",
+    category: "import"
+)
 
 /// CA-17: subtitle sidecar export formats — the same pair the Mac offers.
 enum SubtitleExportFormat: String, CaseIterable, Identifiable {
@@ -16,6 +24,48 @@ enum SubtitleExportFormat: String, CaseIterable, Identifiable {
         case .srt: "SubRip (.srt)"
         case .vtt: "WebVTT (.vtt)"
         }
+    }
+}
+
+/// CODEX-04: `PhotosPickerItem` does not expose `URL` transferables for
+/// library assets and deletes `ReceivedTransferredFile.file` as soon as the
+/// `FileRepresentation` importing closure returns. Stream-copy the received
+/// file inside the closure into a per-pick staging file so 4K assets never
+/// buffer in RAM and survive until moved into the project's managed Imports
+/// directory. Declared at file scope so Swift 6 `@MainActor` isolation on
+/// `IOSEditorViewModel` does not bleed into `Transferable`'s nonisolated
+/// `transferRepresentation` requirement.
+private struct StagedPickerMedia: Transferable, Sendable {
+    let fileURL: URL
+    let fileExtension: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            try Self.stage(received: received, fallbackExtension: "mov")
+        }
+        FileRepresentation(importedContentType: .image) { received in
+            try Self.stage(received: received, fallbackExtension: "jpg")
+        }
+        FileRepresentation(importedContentType: .audiovisualContent) { received in
+            try Self.stage(received: received, fallbackExtension: "mov")
+        }
+    }
+
+    private static func stage(
+        received: ReceivedTransferredFile,
+        fallbackExtension: String
+    ) throws -> StagedPickerMedia {
+        let ext = received.file.pathExtension.isEmpty
+            ? fallbackExtension
+            : received.file.pathExtension
+        let stagingDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MovieCutPickerStaging", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+        let stagedURL = stagingDir
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(ext)
+        try IOSEditorViewModel.copyFileBuffered(from: received.file, to: stagedURL)
+        return StagedPickerMedia(fileURL: stagedURL, fileExtension: ext)
     }
 }
 
@@ -35,6 +85,22 @@ final class IOSEditorViewModel {
     var templateStore: TemplateStore
     // CA-17: subtitle export state — SRT/VTT written from timeline text clips.
     var lastSubtitleExportURL: URL? = nil
+    /// CA-30 Local Beta Diagnostics — funnel event log (JSONL, offline by
+    /// construction: the log type references no networking API). Nil
+    /// directory under the UI-test harness so harness runs never pollute it.
+    @ObservationIgnored
+    let betaDiagnostics: BetaDiagnosticsLog = {
+        let harness = ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1"
+        let directory: URL? = harness
+            ? nil
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/Diagnostics", isDirectory: true)
+        return BetaDiagnosticsLog(
+            directory: directory,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            deviceClass: "iOS"
+        )
+    }()
 
     private var session: EditorSession
     private let projectStore: ProjectStore
@@ -106,6 +172,7 @@ final class IOSEditorViewModel {
     }
 
     func importMedia(from url: URL, kind: MediaKind? = nil) async {
+        await betaDiagnostics.record(.importStart)
         // BUG-02: reject unknown extensions / signature-less content at
         // import with an explicit reason (was a silent `.video` default).
         var asset: MediaAsset
@@ -130,6 +197,7 @@ final class IOSEditorViewModel {
     }
 
     func addClipToTimeline(asset: MediaAsset) async {
+        await betaDiagnostics.recordOnce(.firstClipOnTimeline)
         do {
             var snapshot = await session.snapshot()
             if snapshot.mediaLibrary.assets[asset.id] == nil {
@@ -311,6 +379,24 @@ final class IOSEditorViewModel {
         await apply(SetClipSpeedCommand(clipId: selectedClipId, change: .constantRate(rate)))
     }
 
+    var canFreezeSelectedClipAtPlayhead: Bool {
+        guard let selectedClip, selectedClip.kind == .video else { return false }
+        let freezeTime = playheadTime - selectedClip.timelineRange.start
+        return freezeTime > 0 && freezeTime < selectedClip.timelineRange.duration
+    }
+
+    func toggleReverseSelectedClip() async {
+        guard let selectedClipId, let selectedClip, selectedClip.kind == .video else { return }
+        await apply(ReverseClipCommand(clipId: selectedClipId))
+    }
+
+    func freezeFrameSelectedClipAtPlayhead(freezeDuration: TimeInterval = 2.0) async {
+        guard let selectedClipId, let selectedClip, selectedClip.kind == .video else { return }
+        let freezeTime = playheadTime - selectedClip.timelineRange.start
+        guard freezeTime > 0, freezeTime < selectedClip.timelineRange.duration else { return }
+        await apply(FreezeFrameCommand(clipId: selectedClipId, freezeTime: freezeTime, freezeDuration: freezeDuration))
+    }
+
     func updateSelectedColorCorrection(_ correction: ColorCorrection) async {
         guard let selectedClipId else { return }
         await apply(SetColorCorrectionCommand(clipId: selectedClipId, colorCorrection: correction))
@@ -397,11 +483,32 @@ final class IOSEditorViewModel {
 
     @discardableResult
     func exportProject() async throws -> URL {
-        try await exportEngine.exportProject(currentProject)
+        await betaDiagnostics.record(.exportStart)
+        let diagnosticsExportStarted = Date()
+        do {
+            let url = try await exportEngine.exportProject(currentProject)
+            await betaDiagnostics.record(
+                .exportSuccess,
+                durationMs: Int(Date().timeIntervalSince(diagnosticsExportStarted) * 1000)
+            )
+            return url
+        } catch {
+            await betaDiagnostics.record(
+                .exportFail,
+                errorCode: String(describing: Swift.type(of: error))
+            )
+            throw error
+        }
     }
 
     func cancelExport() {
         exportEngine.cancelExport()
+    }
+
+    /// CA-30 2차: the diagnostics JSONL for the opt-in share surface
+    /// (TestFlight feedback attachment). Nil when the log is disabled.
+    func betaDiagnosticsExportURL() async -> URL? {
+        await betaDiagnostics.exportFileURL()
     }
 
     func clearError() { lastErrorMessage = nil }
@@ -429,6 +536,11 @@ final class IOSEditorViewModel {
     }
 
     private func apply(_ command: any EditorCommand) async {
+        // CA-30 funnel: the first user-invoked edit. Programmatic
+        // dispatches (import, automatic clip placement) are not edits.
+        if !(command is ImportMediaCommand || command is AddClipCommand) {
+            await betaDiagnostics.recordOnce(.firstEdit)
+        }
         do {
             try await session.dispatch(command)
             await refreshFromSession()
@@ -524,24 +636,34 @@ final class IOSEditorViewModel {
         await projectStore.clearAutosave()
     }
 
-    /// BUG-IOS-06: the ONE file-based photo/video import path. Both picker
-    /// surfaces (the top bar and the media browser) previously each had their
-    /// own copy — the browser's loaded the ENTIRE asset into memory
-    /// (`loadTransferable(Data.self)` — a 4K video could OOM) and swallowed
-    /// every failure. Requests a FILE URL, streams a 1 MiB-buffered copy into
-    /// the managed imports directory, imports through the validated probe,
-    /// and adds the clip to the timeline. Failures surface through
-    /// `lastErrorMessage`.
+    /// BUG-IOS-06 / CODEX-04: the ONE file-based photo/video import path.
+    /// Streams a 1 MiB-buffered copy via `FileRepresentation` inside the
+    /// `PhotosPickerItem` importing closure, then moves it into the managed
+    /// imports directory (`Application Support/MovieCut/Imports/<projectId>/`),
+    /// imports through the validated probe, and adds the clip to the timeline.
+    /// Failures are logged and surfaced through `lastErrorMessage`.
     func importFromPhotosPicker(_ item: PhotosPickerItem) async {
-        guard let stagedURL = try? await item.loadTransferable(type: URL.self) else {
-            lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+        let staged: StagedPickerMedia
+        do {
+            guard let loaded = try await item.loadTransferable(type: StagedPickerMedia.self) else {
+                lastErrorMessage = "The selected item couldn't be loaded. Try picking it again."
+                return
+            }
+            staged = loaded
+        } catch {
+            iosImportLog.error("PhotosPicker loadTransferable failed: \(error.localizedDescription, privacy: .public)")
+            lastErrorMessage = "Couldn't load the selected media: \(error.localizedDescription)"
             return
         }
 
+        defer {
+            try? FileManager.default.removeItem(at: staged.fileURL)
+        }
+
         let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
-            ?? (stagedURL.pathExtension.isEmpty ? "mov" : stagedURL.pathExtension)
+            ?? (staged.fileExtension.isEmpty ? "mov" : staged.fileExtension)
         // SURV-01 (리뷰 2026-08-26): 임시 디렉터리 대신 관리 Imports 영역
-        // (Application Support/MovieCut/Imports/<projectId>/)으로 복사 —
+        // (Application Support/MovieCut/Imports/<projectId>/)으로 이동/복사 —
         // OS가 임시 파일을 정리하면 복구 프로젝트만 남고 원본이 사라졌다.
         let fileURL = stagedImportDestination(fileExtension: fileExtension)
 
@@ -550,7 +672,11 @@ final class IOSEditorViewModel {
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Self.copyFileBuffered(from: stagedURL, to: fileURL)
+            do {
+                try FileManager.default.moveItem(at: staged.fileURL, to: fileURL)
+            } catch {
+                try Self.copyFileBuffered(from: staged.fileURL, to: fileURL)
+            }
             await importMedia(from: fileURL, kind: Self.mediaKind(for: fileExtension))
             if var importedAsset = mediaAssets.first(where: { $0.originalURL == fileURL }) {
                 // SURV-01 2차: stamp the imports-root-relative reference so a
@@ -565,6 +691,7 @@ final class IOSEditorViewModel {
                 await addClipToTimeline(asset: importedAsset)
             }
         } catch {
+            iosImportLog.error("PhotosPicker import failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = "Couldn't import the selected media: \(error.localizedDescription)"
         }
     }
@@ -625,8 +752,9 @@ final class IOSEditorViewModel {
     }
 
     /// Streams a file copy in bounded chunks so a large 4K video never has to
-    /// fit in memory.
-    private static func copyFileBuffered(from source: URL, to destination: URL) throws {
+    /// fit in memory. Marked `nonisolated` so `StagedPickerMedia`'s off-actor
+    /// `FileRepresentation` importing closure can call it directly under Swift 6.
+    nonisolated fileprivate static func copyFileBuffered(from source: URL, to destination: URL) throws {
         let chunkSize = 1024 * 1024
         FileManager.default.createFile(atPath: destination.path, contents: nil)
         let input = try FileHandle(forReadingFrom: source)
@@ -1241,6 +1369,146 @@ final class IOSEditorViewModel {
         ))
     }
 
+    // MARK: - CA-31 audio presets (Mac inspector parity)
+
+    /// CA-31(a): whether the "Duck Background" action can run for the
+    /// current selection (audio or video speech clip).
+    var canDuckBackground: Bool {
+        guard let clip = selectedClip else { return false }
+        return clip.kind == .audio || clip.kind == .video
+    }
+
+    /// CA-31(a): applies a built-in EQ preset to the selected clip through
+    /// the same `SetClipPropertyCommand` path the Mac inspector uses. Flat
+    /// clears the settings (nil). The identical-settings echo guard mirrors
+    /// BUG-ACC-07: a programmatic refresh re-firing the chip must not
+    /// dirty the project or the undo stack.
+    func applyAudioEQPreset(_ preset: EqualizerPresetID) async {
+        guard let clipId = selectedClipId, let clip = selectedClip else { return }
+        let settings: ClipEqualizerSettings?
+        switch preset {
+        case .flat:
+            settings = nil
+        case .custom:
+            settings = .custom(bands: clip.equalizer?.bands ?? EqualizerPreset.flat.bands)
+        case .voiceEnhance, .bassBoost, .trebleBoost:
+            settings = .settings(for: preset)
+        }
+        if clip.equalizer == settings { return }
+        await apply(SetClipPropertyCommand(clipId: clipId, property: .equalizer(settings)))
+    }
+
+    /// CA-31(a): "Duck Background" — Mac `autoDuckOtherAudio` parity. The
+    /// selected speech clip's voiced intervals (silence analysis) duck every
+    /// overlapping audio-track clip via `SetAudioDuckingCommand`; the iOS
+    /// render path already consumes `duckingRanges`/`duckingLevel`
+    /// (stage-4 placed-span ducking, preview and export alike).
+    func duckBackgroundUnderSelectedClip(
+        duckLevel: Double = AudioDuckingPlanner.defaultDuckingLevel,
+        thresholdDB: Float = SpeechDuckingService.defaultSilenceThresholdDB,
+        minimumSilenceDuration: TimeInterval = SpeechDuckingService.defaultMinimumSilenceDuration
+    ) async {
+        guard let speechClipId = selectedClipId, let speechClip = selectedClip else {
+            lastErrorMessage = "Select the speech clip (voiceover or video) to duck music under."
+            return
+        }
+        guard speechClip.kind == .audio || speechClip.kind == .video else {
+            lastErrorMessage = "Ducking needs an audio or video speech clip selection."
+            return
+        }
+        guard let assetId = speechClip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "The selected clip's media is missing; re-link it before ducking."
+            return
+        }
+        lastErrorMessage = nil
+        lastStatusMessage = "Analyzing speech for ducking..."
+        do {
+            // Platform-neutral plan (shared with Mac — SpeechDuckingService).
+            let outcome = try await SpeechDuckingService.plan(
+                project: currentProject,
+                speechClip: speechClip,
+                asset: asset,
+                duckLevel: duckLevel,
+                thresholdDB: thresholdDB,
+                minimumSilenceDuration: minimumSilenceDuration
+            )
+            switch outcome {
+            case .noVoicedIntervals:
+                lastStatusMessage = "No voiced intervals detected in the selected clip; nothing to duck."
+            case .noOverlappingAudio:
+                lastStatusMessage = "No overlapping audio clips found to duck under the selection."
+            case .ducked(let duckingByClip, let voiceIntervalCount):
+                try await session.dispatch(SetAudioDuckingCommand(
+                    duckingRangesByClip: duckingByClip,
+                    level: duckLevel
+                ))
+                await refreshFromSession()
+                lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervalCount) voiced interval(s) at \(Int(duckLevel * 100))% volume."
+            }
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// CA-31(a) 2차: Noise Reduce — Mac `applyNoiseReduction(for:)` parity.
+    /// The denoised audio derives through the shared Core service; audio
+    /// clips swap their source asset, video clips get a denoised audio twin
+    /// on the audio track with the original muted (the Mac detach-style
+    /// pattern). Like the Mac path, the derived file is referenced by URL.
+    func applyNoiseReductionToSelectedClip() async {
+        guard let clipId = selectedClipId, let clip = selectedClip,
+              clip.kind == .audio || clip.kind == .video else {
+            lastErrorMessage = "Select an audio or video clip for noise reduction."
+            return
+        }
+        guard let assetId = clip.assetId,
+              let asset = currentProject.mediaLibrary.assets[assetId] else {
+            lastErrorMessage = "The selected clip's media is missing; re-link it first."
+            return
+        }
+        lastErrorMessage = nil
+        lastStatusMessage = "Reducing noise..."
+        do {
+            let service = NoiseReductionService()
+            let denoisedURL = try await service.applyNoiseReduction(
+                to: AVAsset(url: asset.originalURL)
+            )
+            let denoisedAsset = MediaAsset(
+                originalURL: denoisedURL,
+                kind: .audio,
+                duration: asset.duration
+            )
+            try await session.dispatch(ImportMediaCommand(asset: denoisedAsset))
+
+            switch clip.kind {
+            case .audio:
+                try await session.dispatch(SetClipSourceAssetCommand(
+                    clipId: clipId,
+                    assetId: denoisedAsset.id,
+                    kind: .audio
+                ))
+            case .video:
+                let audioTrack = try await ensureTrack(for: .audio)
+                let denoisedClip = NoiseReductionService.denoisedTwin(of: clip, assetId: denoisedAsset.id)
+                try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: denoisedClip))
+                try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .volume(0)))
+                selectedClipId = denoisedClip.id
+            case .image, .text:
+                throw EditorCommandError.invalidCommand(
+                    "Select an audio or video clip for noise reduction."
+                )
+            }
+            await refreshFromSession()
+            lastStatusMessage = "Noise reduction applied."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+
     // MARK: - Phase-1 transport & library surfaces (review #3)
 
     /// Loop playback: session-level (ephemeral by design — it is a transport
@@ -1561,5 +1829,63 @@ final class IOSEditorViewModel {
             sourceRange: TimeRange(start: sourceStart, duration: sourceEnd - sourceStart),
             timelineRange: TimeRange(start: timelineStart, duration: timelineEnd - timelineStart)
         )
+    }
+
+    // MARK: - AI Photo Montage (iOS Parity — AI-03a)
+
+    /// Whether the current project can generate an AI photo montage from imported library photos.
+    var canApplyPhotoMontageFromLibrary: Bool {
+        let timelineEmpty = currentProject.timeline.tracks.allSatisfy { $0.clips.isEmpty }
+        let hasPhotos = currentProject.mediaLibrary.assets.values.contains { $0.kind == .image }
+        return timelineEmpty && hasPhotos
+    }
+
+    /// Plans, compiles, and atomically applies an AI photo montage on iOS using imported
+    /// image assets (and optional audio asset) from the project's media library.
+    func applyPhotoMontageFromLibrary(
+        targetDuration: TimeInterval = 15.0,
+        targetCanvas: CanvasPreset = .portrait9x16
+    ) async {
+        let photos = currentProject.mediaLibrary.assets.values
+            .filter { $0.kind == .image }
+            .sorted { $0.originalURL.lastPathComponent < $1.originalURL.lastPathComponent }
+        let music = currentProject.mediaLibrary.assets.values
+            .filter { $0.kind == .audio && ($0.duration ?? 0) >= PhotoMontagePlanner.Limits.minMusicDuration }
+            .sorted { $0.originalURL.lastPathComponent < $1.originalURL.lastPathComponent }
+            .first
+        let beatTimes = currentProject.markers
+            .filter { $0.kind == .beat }
+            .map(\.time)
+
+        do {
+            let snapshot = await session.snapshotWithRevision()
+            let productionPlan = try PhotoMontagePlanner.plan(
+                photos: photos,
+                music: music,
+                targetDuration: targetDuration,
+                targetCanvas: targetCanvas,
+                existingTracks: snapshot.project.timeline.tracks,
+                baseRevision: snapshot.revision,
+                beatTimestamps: beatTimes
+            )
+            let preparedPlan = try await EditingPlanCompiler.compile(
+                productionPlan.actions,
+                for: snapshot.project,
+                baseRevision: snapshot.revision,
+                planId: productionPlan.planId,
+                label: productionPlan.userIntent
+            )
+            try await session.dispatch(
+                preparedPlan.batchCommand,
+                planId: preparedPlan.planId,
+                expectedRevision: snapshot.revision
+            )
+            await refreshFromSession()
+            lastErrorMessage = nil
+            lastStatusMessage = "Created photo montage (\(photos.count) photos)."
+        } catch {
+            lastStatusMessage = nil
+            lastErrorMessage = error.localizedDescription
+        }
     }
 }

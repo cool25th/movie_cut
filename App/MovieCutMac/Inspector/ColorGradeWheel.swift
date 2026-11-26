@@ -13,12 +13,18 @@ struct ColorGradeWheel: View {
     let lumaRange: ClosedRange<Double>
     let onChange: (_ red: Double, _ green: Double, _ blue: Double) -> Void
 
+    @State private var draftRGB: (red: Double, green: Double, blue: Double)?
+
     private let diameter: CGFloat = 92
 
-    private var luma: Double { (red + green + blue) / 3 }
-    private var chromaRed: Double { red - luma }
-    private var chromaGreen: Double { green - luma }
-    private var chromaBlue: Double { blue - luma }
+    private var effectiveRed: Double { draftRGB?.red ?? red }
+    private var effectiveGreen: Double { draftRGB?.green ?? green }
+    private var effectiveBlue: Double { draftRGB?.blue ?? blue }
+
+    private var luma: Double { (effectiveRed + effectiveGreen + effectiveBlue) / 3 }
+    private var chromaRed: Double { effectiveRed - luma }
+    private var chromaGreen: Double { effectiveGreen - luma }
+    private var chromaBlue: Double { effectiveBlue - luma }
 
     private var puck: (x: Double, y: Double) {
         ColorWheelMath.position(red: chromaRed, green: chromaGreen, blue: chromaBlue, scale: chromaScale)
@@ -35,12 +41,17 @@ struct ColorGradeWheel: View {
                     value: Binding(
                         get: { luma },
                         set: { newLuma in
-                            onChange(chromaRed + newLuma, chromaGreen + newLuma, chromaBlue + newLuma)
+                            draftRGB = (chromaRed + newLuma, chromaGreen + newLuma, chromaBlue + newLuma)
                         }
                     ),
                     in: lumaRange,
                     step: 0.01
-                )
+                ) { isEditing in
+                    if !isEditing, let committed = draftRGB {
+                        draftRGB = nil
+                        onChange(committed.red, committed.green, committed.blue)
+                    }
+                }
             }
             .frame(width: diameter + 14)
             Text(title)
@@ -89,12 +100,21 @@ struct ColorGradeWheel: View {
                         let ny = Double(-(value.location.y - center.y) / radius)
                         let clamped = ColorWheelMath.clampedToDisk(x: nx, y: ny)
                         let chroma = ColorWheelMath.channelOffsets(x: clamped.x, y: clamped.y, scale: chromaScale)
-                        onChange(chroma.red + luma, chroma.green + luma, chroma.blue + luma)
+                        draftRGB = (chroma.red + luma, chroma.green + luma, chroma.blue + luma)
+                    }
+                    .onEnded { value in
+                        let nx = Double((value.location.x - center.x) / radius)
+                        let ny = Double(-(value.location.y - center.y) / radius)
+                        let clamped = ColorWheelMath.clampedToDisk(x: nx, y: ny)
+                        let chroma = ColorWheelMath.channelOffsets(x: clamped.x, y: clamped.y, scale: chromaScale)
+                        let committed = draftRGB ?? (chroma.red + luma, chroma.green + luma, chroma.blue + luma)
+                        draftRGB = nil
+                        onChange(committed.red, committed.green, committed.blue)
                     }
             )
             .accessibilityElement()
             .accessibilityLabel("\(title) color wheel")
-            .accessibilityValue(String(format: "red %.2f, green %.2f, blue %.2f", red, green, blue))
+            .accessibilityValue(String(format: "red %.2f, green %.2f, blue %.2f", effectiveRed, effectiveGreen, effectiveBlue))
         }
         .frame(width: diameter, height: diameter)
     }

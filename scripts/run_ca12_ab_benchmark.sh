@@ -31,6 +31,13 @@ command -v ffprobe >/dev/null || { echo "ffprobe required" >&2; exit 1; }
 command -v ffmpeg >/dev/null || { echo "ffmpeg required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 required" >&2; exit 1; }
 
+# Known-answer self-test of the metric primitives BEFORE any measurement:
+# a silently broken PSNR/SSIM/delta-E would corrupt every recorded number
+# with no failure signal (QAUTO-01, 2026-09-12). `self-test` is a
+# subcommand (verified: 15 checks PASS), not a flag.
+echo "metrics self-test (known-answer)…"
+python3 "$ROOT/scripts/ab_benchmark_metrics.py" self-test
+
 ART="$ROOT/artifacts/ab_benchmark"
 RUN_DIR="$ART/run_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$RUN_DIR"

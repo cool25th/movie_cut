@@ -85,3 +85,21 @@ public enum TimecodeParser {
         }
     }
 }
+
+public extension TimecodeParser {
+    /// OC-01 / CODEX-01: the frame number a wall-clock second maps to at a
+    /// frame rate, with ROUND-TO-NEAREST quantization. Truncating
+    /// (`Int(rem * fps)`) dropped a frame at exact frame boundaries —
+    /// `1 + 2/30` seconds at 30 fps computed 1.999…96 and displayed FF=01.
+    /// Rounding is the single derivation the transport display, the parser,
+    /// and the round-trip contract share; clamping keeps NTSC's last frame
+    /// (ceil(fps) − 1) reachable.
+    static func frameNumber(atSeconds seconds: TimeInterval, frameRate: Double) -> Int {
+        guard frameRate.isFinite, frameRate > 0, seconds.isFinite else { return 0 }
+        let t = max(0, seconds)
+        let remainder = t - Double(Int(t))
+        let frames = Int((remainder * frameRate).rounded())
+        let maxFrame = Int(ceil(frameRate)) - 1
+        return min(max(frames, 0), maxFrame)
+    }
+}

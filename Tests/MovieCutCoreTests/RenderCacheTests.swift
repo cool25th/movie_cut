@@ -42,6 +42,7 @@ struct RenderCacheTests {
     @Test("Content-hash keys are path-independent and auto-invalidating")
     func contentHashKeyContract() throws {
         let directory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let fileA = try writeFile("identical bytes", in: directory)
         let fileB = try writeFile("identical bytes", in: directory)
         let fileC = try writeFile("different bytes", in: directory)
@@ -59,6 +60,7 @@ struct RenderCacheTests {
     @Test("Fingerprint keys change when file content changes")
     func fingerprintKeyContract() throws {
         let directory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("media.bin")
         try Data("short".utf8).write(to: url)
         let key1 = try RenderContentHasher.key(fingerprintOfFileAt: url, parameters: ["thumb"])
@@ -73,7 +75,9 @@ struct RenderCacheTests {
 
     @Test("Store and fetch round-trips through the memory tier")
     func storeAndFetch() async throws {
-        let cache = RenderCache(directory: makeTempDirectory())
+        let cacheDirectory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+        let cache = RenderCache(directory: cacheDirectory)
         let key = RenderContentHasher.key("artifact")
         let payload = Data("thumbnail-bytes".utf8)
 
@@ -89,6 +93,7 @@ struct RenderCacheTests {
     @Test("Artifacts persist on disk across cache instances")
     func diskPersistence() async throws {
         let directory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let key = RenderContentHasher.key("persisted")
         let payload = Data("proxy-bytes".utf8)
 
@@ -104,7 +109,9 @@ struct RenderCacheTests {
 
     @Test("Memory tier evicts LRU entries while disk retains them")
     func memoryEvictionKeepsDisk() async throws {
-        let cache = RenderCache(directory: makeTempDirectory(), memoryLimit: 2)
+        let cacheDirectory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+        let cache = RenderCache(directory: cacheDirectory, memoryLimit: 2)
         let keys = (0..<3).map { RenderContentHasher.key("entry", "\($0)") }
         for (index, key) in keys.enumerated() {
             try await cache.store(Data("payload-\(index)".utf8), for: key)
@@ -118,7 +125,9 @@ struct RenderCacheTests {
 
     @Test("Cache-aside computes only on a miss")
     func cacheAsideComputesOnce() async throws {
-        let cache = RenderCache(directory: makeTempDirectory())
+        let cacheDirectory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+        let cache = RenderCache(directory: cacheDirectory)
         let key = RenderContentHasher.key("compute-once")
         let counter = CallCounter()
 
@@ -138,7 +147,9 @@ struct RenderCacheTests {
 
     @Test("Remove and clear drop artifacts from both tiers")
     func removeAndClear() async throws {
-        let cache = RenderCache(directory: makeTempDirectory())
+        let cacheDirectory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+        let cache = RenderCache(directory: cacheDirectory)
         let key = RenderContentHasher.key("removable")
         try await cache.store(Data("x".utf8), for: key)
 

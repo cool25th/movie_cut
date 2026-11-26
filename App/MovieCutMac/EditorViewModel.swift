@@ -8,6 +8,14 @@ import MovieCutCore
 import Observation
 import UniformTypeIdentifiers
 
+/// CA-35: staged destructive AI edit plan awaiting explicit user confirmation.
+struct PendingAssistantPlan: Equatable, Sendable {
+    let prepared: PreparedEditPlan
+    let expectedRevision: SessionRevision
+    let summary: String
+    let completionMessage: String
+}
+
 enum TimelineScrubPhase: Sendable {
     case began
     case changed
@@ -157,13 +165,50 @@ final class EditorViewModel {
     /// CA-25 onboarding instrumentation (first launch/import/export/quick tools).
     let onboardingMetrics = OnboardingMetrics()
 
+    /// N1: cached transcript-search corpus — the build is the expensive
+    /// part (per-card normalize + span math), so it rebuilds only when the
+    /// timeline changes, not per keystroke.
+    @ObservationIgnored
+    var transcriptCorpusCache: (timeline: Timeline, corpus: TranscriptSearchIndex.Corpus)?
+
+    /// CA-30 Local Beta Diagnostics — the funnel event log (JSONL, offline
+    /// by construction: the log type references no networking API). Nil
+    /// directory under the UI-test harness so harness runs never pollute it.
+    @ObservationIgnored
+    let betaDiagnostics: BetaDiagnosticsLog = {
+        #if DEBUG || MOVIECUT_HARNESS
+        let harness = ProcessInfo.processInfo.environment["MOVIECUT_UITEST"] == "1"
+            || ProcessInfo.processInfo.environment["MOVIECUT_BOOTSTRAP_PROJECT"] != nil
+        #else
+        let harness = false
+        #endif
+        let directory: URL? = harness
+            ? nil
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MovieCut/Diagnostics", isDirectory: true)
+        return BetaDiagnosticsLog(
+            directory: directory,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            deviceClass: "mac"
+        )
+    }()
+
     var lastExportURL: URL?
     var exportFormat: String = "mp4"
 
-    @ObservationIgnored @Published var lastAutoSaveDate: Date = .distantPast
+    /// CA-20 stage 2-A: timeline lane tint by dominant clip role. Off by
+    /// default — the lane wash is a management view the user opts into.
+    var showRoleLanes: Bool = false
+
+    /// CA-20 stage 2-B: the timeline index panel (searchable clips +
+    /// markers → playhead jump). Off by default — like role lanes, a
+    /// management surface the user opts into.
+    var showTimelineIndex: Bool = false
+
+    var lastAutoSaveDate: Date = .distantPast
 
     @ObservationIgnored var session: EditorSession
-    @ObservationIgnored private let projectStore: ProjectStore
+    @ObservationIgnored let projectStore: ProjectStore
     /// Single owner of compound flattening. Engines receive the same value
     /// snapshot and never compute or cache flattened timelines themselves.
     @ObservationIgnored private let flattenedTimelineCache = FlattenedTimelineCache()
@@ -226,105 +271,15 @@ final class EditorViewModel {
     // saves run serially (never interleaved temp-file replaces), and a save
     // requested while one is in flight re-fires with the LATEST snapshot
     // afterwards — last snapshot always wins.
-    @ObservationIgnored private var pendingAutosaveTask: Task<Void, Never>?
-    @ObservationIgnored private var autosaveSaveInFlight = false
-    @ObservationIgnored private var autosaveDirty = false
-    @ObservationIgnored private var lastAutosavedProject: Project?
-
-    private func scheduleAutosave() {
-        // A no-op re-publish of identical content skips the write entirely.
-        if let lastAutosavedProject, lastAutosavedProject == currentProject, !autosaveSaveInFlight {
-            return
-        }
-        pendingAutosaveTask?.cancel()
-        pendingAutosaveTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 750_000_000) // 0.75 s debounce
-            guard !Task.isCancelled else { return }
-            await self?.performAutosave()
-        }
-    }
-
-    /// Serial, latest-snapshot-wins autosave. Recommitted after an in-flight
-    /// save when an edit landed mid-save (autosaveDirty).
-    private func performAutosave() async {
-        if autosaveSaveInFlight {
-            autosaveDirty = true
-            return
-        }
-        let snapshot = currentProject
-        if let lastAutosavedProject, lastAutosavedProject == snapshot {
-            autosaveDirty = false
-            return
-        }
-        autosaveSaveInFlight = true
-        defer { autosaveSaveInFlight = false }
-        do {
-            try await projectStore.saveAutosave(snapshot)
-            lastAutosavedProject = snapshot
-            autosaveSaveSucceeded()
-        } catch {
-            autosaveSaveFailed(FileOperationError.classify(error))
-        }
-        if autosaveDirty {
-            autosaveDirty = false
-            await performAutosave()
-        }
-    }
-
-    /// Awaitable autosave flush (used by automation to deterministically persist
-    /// recovery state before quitting; same path as the edit-driven autosave).
-    /// Cancels any pending debounced save and writes the latest snapshot now.
-    func flushAutosave() async {
-        pendingAutosaveTask?.cancel()
-        pendingAutosaveTask = nil
-        await performAutosave()
-    }
+    @ObservationIgnored var pendingAutosaveTask: Task<Void, Never>?
+    @ObservationIgnored var autosaveSaveInFlight = false
+    @ObservationIgnored var autosaveDirty = false
+    @ObservationIgnored var lastAutosavedProject: Project?
 
     /// Non-blocking crash-recovery warning. nil while autosaves succeed;
     /// set when the latest autosave failed (shown in the status bar).
     var autosaveFailureMessage: String?
-    @ObservationIgnored private var consecutiveAutosaveFailures = 0
-
-    private func autosaveSaveSucceeded() {
-        guard autosaveFailureMessage != nil || consecutiveAutosaveFailures > 0 else { return }
-        consecutiveAutosaveFailures = 0
-        autosaveFailureMessage = nil
-    }
-
-    private func autosaveSaveFailed(_ failure: FileOperationError) {
-        consecutiveAutosaveFailures += 1
-        autosaveFailureMessage = String(
-            format: NSLocalizedString(
-                "Autosave failed: %@. Changes are not being backed up for crash recovery — check free disk space.",
-                comment: "Warning shown when the crash-recovery autosave cannot be written"
-            ),
-            failure.userMessage
-        )
-    }
-
-    /// A project recovered from a non-clean previous session, if any.
-    func recoverableProject() async -> Project? {
-        await projectStore.loadAutosaveIfAvailable()
-    }
-
-    /// The reason a recovery file existed but could not be loaded (corrupt),
-    /// if the last `recoverableProject()` call hit that case. The launch flow
-    /// surfaces this so the user is told their recovery file was damaged
-    /// instead of the previous silent `try?` swallow.
-    func autosaveLoadFailure() async -> FileOperationError? {
-        await projectStore.lastAutosaveLoadFailure
-    }
-
-    /// When the crash-recovery autosave was last written, for the launch
-    /// recovery prompt's identification line (project name + backup time).
-    func recoverableAutosaveDate() async -> Date? {
-        await projectStore.autosaveModificationDate()
-    }
-
-    /// Removes the crash-recovery autosave (clean quit or after a manual save).
-    func clearRecoveryAutosave() async {
-        await projectStore.clearAutosave()
-    }
+    @ObservationIgnored var consecutiveAutosaveFailures = 0
     private var currentProjectURL: URL?
     /// Whether the current project has unsaved changes. Observed so the UI can
     /// reflect the dirty state (e.g. window title dot) and guard destructive
@@ -335,7 +290,7 @@ final class EditorViewModel {
     /// dirty flag — a plain boolean set on every mutation would stay true even
     /// after undoing back to the on-disk bytes.
     @ObservationIgnored private var lastSavedProject: Project?
-    @ObservationIgnored private var isAutoSaveRunning = false
+    @ObservationIgnored var isAutoSaveRunning = false
     private var isSavingCurrentProject = false
     /// Waveform bins per clip, populated lazily off the main thread. Observed
     /// (not ignored) so that filling a cache miss after a background decode
@@ -682,187 +637,7 @@ final class EditorViewModel {
     /// scenarios/e2e G-18/G-19, which keep the surface exercised and tested).
     /// The Core CardNews models + commands stay for the later authoring
     /// feature; until an entry ships, this exists so those project files
-    /// still open into their editor.
-    var isCardEditorMode: Bool {
-        currentProject.cardDocument != nil
-    }
-
-    /// Applies a complete template set through one Core command. The gallery
-    /// and DEBUG actual-app harness share this entry point.
-    @discardableResult
-    func applyCardTemplate(_ template: CardTemplateSet) async -> Bool {
-        await applyCardTemplate(template, seed: UInt64.random(in: UInt64.min...UInt64.max))
-    }
-
-    /// Seeded overload used by deterministic actual-app evidence.
-    @discardableResult
-    func applyCardTemplate(_ template: CardTemplateSet, seed: UInt64) async -> Bool {
-        await dispatchCardMutation(
-            ApplyCardTemplateCommand(template: template, seed: seed),
-            successMessage: "Applied \(template.name)."
-        )
-    }
-
-    /// Applies one document-wide master style through one Core command while
-    /// retaining page-local overrides.
-    @discardableResult
-    func setCardMasterStyle(_ masterStyle: CardMasterStyle) async -> Bool {
-        await dispatchCardMutation(
-            SetCardMasterStyleCommand(masterStyle: masterStyle),
-            successMessage: "Updated the card master style."
-        )
-    }
-
-    /// Adds a blank body page after the selected page, or at the end when no
-    /// selection is supplied. The returned identifier is the persisted page ID.
-    @discardableResult
-    func addCardPage(after pageId: UUID?, pageID: UUID = UUID()) async -> UUID? {
-        let snapshot = await session.snapshot()
-        guard let document = snapshot.cardDocument else {
-            lastErrorMessage = "This project does not contain a card document."
-            return nil
-        }
-
-        let insertionIndex: Int
-        if let pageId {
-            guard let sourceIndex = document.pages.firstIndex(where: { $0.id == pageId }) else {
-                lastErrorMessage = "The selected card page no longer exists."
-                return nil
-            }
-            insertionIndex = sourceIndex + 1
-        } else {
-            insertionIndex = document.pages.endIndex
-        }
-
-        let page = CardPage(id: pageID, role: .body)
-        let didApply = await dispatchCardMutation(
-            AddCardPageCommand(page: page, insertionIndex: insertionIndex),
-            successMessage: "Added page \(insertionIndex + 1)."
-        )
-        return didApply ? page.id : nil
-    }
-
-    /// Duplicates a page through the Core command layer and returns the fresh,
-    /// stable identifier selected by the command.
-    @discardableResult
-    func duplicateCardPage(_ pageId: UUID, duplicatePageID: UUID = UUID()) async -> UUID? {
-        let didApply = await dispatchCardMutation(
-            DuplicateCardPageCommand(pageId: pageId, duplicatePageId: duplicatePageID),
-            successMessage: "Duplicated the selected page."
-        )
-        return didApply ? duplicatePageID : nil
-    }
-
-    /// Deletes a page and returns the adjacent surviving page that the UI should
-    /// select. The final page remains protected by the Core command invariant.
-    @discardableResult
-    func deleteCardPage(_ pageId: UUID) async -> UUID? {
-        let snapshot = await session.snapshot()
-        guard let pages = snapshot.cardDocument?.pages,
-              let deletedIndex = pages.firstIndex(where: { $0.id == pageId }) else {
-            lastErrorMessage = "The selected card page no longer exists."
-            return nil
-        }
-
-        let didApply = await dispatchCardMutation(
-            DeleteCardPageCommand(pageId: pageId),
-            successMessage: "Deleted page \(deletedIndex + 1)."
-        )
-        guard didApply, let remainingPages = currentProject.cardDocument?.pages, !remainingPages.isEmpty else {
-            return nil
-        }
-        return remainingPages[min(deletedIndex, remainingPages.count - 1)].id
-    }
-
-    /// Reorders a page to its final array index. Drag/drop and accessible move
-    /// controls intentionally share this single command-backed entry point.
-    @discardableResult
-    func moveCardPage(_ pageId: UUID, to destinationIndex: Int) async -> Bool {
-        let snapshot = await session.snapshot()
-        guard let pages = snapshot.cardDocument?.pages,
-              let sourceIndex = pages.firstIndex(where: { $0.id == pageId }) else {
-            lastErrorMessage = "The selected card page no longer exists."
-            return false
-        }
-        guard sourceIndex != destinationIndex else { return true }
-
-        return await dispatchCardMutation(
-            MoveCardPageCommand(pageId: pageId, destinationIndex: destinationIndex),
-            successMessage: "Moved page to position \(destinationIndex + 1)."
-        )
-    }
-
-    /// Changes the card aspect preset while leaving normalized element frames
-    /// and all stable page/element identifiers untouched.
-    @discardableResult
-    func setCardFormat(_ format: CardFormat) async -> Bool {
-        let snapshot = await session.snapshot()
-        guard let document = snapshot.cardDocument else {
-            lastErrorMessage = "This project does not contain a card document."
-            return false
-        }
-        guard document.format != format else { return true }
-
-        return await dispatchCardMutation(
-            SetCardFormatCommand(format: format),
-            successMessage: "Changed card format to \(format.accessibilityTitle)."
-        )
-    }
-
-    /// Commits one completed card-canvas interaction. Gesture ticks and inline
-    /// IME composition stay local to CardCanvasView; callers invoke this only at
-    /// move/resize/edit completion so the session records exactly one snapshot.
-    @discardableResult
-    func updateCardElement(pageId: UUID, element: CardElement) async -> Bool {
-        await dispatchCardMutation(
-            UpdateCardElementCommand(
-                pageId: pageId,
-                elementId: element.id,
-                element: element
-            ),
-            successMessage: "Updated card element \(element.id.uuidString)."
-        )
-    }
-
-    /// Imports or reuses an image and updates the selected image/logo element in
-    /// one Core command. Non-image inputs fail before any project mutation.
-    @discardableResult
-    func replaceCardElementImage(
-        pageId: UUID,
-        elementId: UUID,
-        with url: URL
-    ) async -> Bool {
-        let probedAsset: MediaAsset
-        do {
-            probedAsset = try await mediaAssetWithAppProbe(for: url)
-        } catch {
-            lastStatusMessage = nil
-            lastErrorMessage = error.localizedDescription
-            return false
-        }
-        guard probedAsset.kind == .image else {
-            lastStatusMessage = nil
-            lastErrorMessage = "Card image replacement requires an image file."
-            return false
-        }
-
-        let replacementAsset = currentProject.mediaLibrary.assets.values.first {
-            $0.kind == .image && $0.originalURL.standardizedFileURL == url.standardizedFileURL
-        } ?? probedAsset
-
-        let didApply = await dispatchCardMutation(
-            ReplaceCardElementImageCommand(
-                pageId: pageId,
-                elementId: elementId,
-                asset: replacementAsset
-            ),
-            successMessage: "Replaced the selected card image with \(url.lastPathComponent)."
-        )
-        if didApply {
-            selectedAssetId = replacementAsset.id
-        }
-        return didApply
-    }
+    // Card document methods live in EditorViewModel+CardDocument.swift.
 
     @discardableResult
     func newProject() async -> Bool {
@@ -1326,27 +1101,9 @@ final class EditorViewModel {
     }
 
     // MARK: - Periodic project autosave (named-file durability)
-    //
-    // This 30s timer writes the current project to a NAMED file
-    // (Application Support/MovieCut/Autosave/<name>-<uuid>.moviecut) every 30s
-    // so a long unsaved session is durable on disk. It is DISTINCT from the
-    // crash-recovery path in ProjectStore (recovery.moviecut, written on every
-    // edit via scheduleAutosave): that one is a single rolling recovery
-    // snapshot offered on next launch; this one is a per-project durable copy.
-    // Both paths go through ProjectStore.save, so both now surface classified
-    // FileOperationError messages (e.g. disk-full) instead of raw strings.
-    // The harness calls stopAutoSave() to make export/reload deterministic.
-
-    func startAutoSave() {
-        guard !isAutoSaveRunning else { return }
-
-        isAutoSaveRunning = true
-        scheduleNextAutoSave()
-    }
-
-    func stopAutoSave() {
-        isAutoSaveRunning = false
-    }
+    // Timer scheduling, crash-recovery autosave, and export reachability live
+    // in EditorViewModel+Autosave.swift; saveCurrentProject stays here because
+    // it touches `private var currentProjectURL` and `isSavingCurrentProject`.
 
     func saveCurrentProject() {
         guard !isSavingCurrentProject else { return }
@@ -1368,59 +1125,6 @@ final class EditorViewModel {
                 lastErrorMessage = FileOperationError.classify(error).userMessage
             }
         }
-    }
-
-    private func scheduleNextAutoSave() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
-            guard let self else { return }
-
-            self.saveCurrentProject()
-            if self.isAutoSaveRunning {
-                self.scheduleNextAutoSave()
-            }
-        }
-    }
-
-    private func defaultAutoSaveURL(for project: Project) -> URL {
-        let baseDirectory = (
-            try? FileManager.default.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-        ) ?? FileManager.default.temporaryDirectory
-
-        let sanitizedName = project.name
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
-        let fileName = sanitizedName.isEmpty ? "Untitled" : sanitizedName
-
-        return baseDirectory
-            .appendingPathComponent("MovieCut", isDirectory: true)
-            .appendingPathComponent("Autosave", isDirectory: true)
-            .appendingPathComponent("\(fileName)-\(project.id.uuidString).moviecut")
-    }
-
-    /// BUG-04 (CA-03 audit): export/package pre-flight. Missing-media
-    /// detection and the relink prompt only run at project OPEN — a disk
-    /// ejected mid-session used to fail the export minutes into the render.
-    /// Re-evaluate reachability NOW and refuse explicitly with relink
-    /// guidance before any render work starts.
-    func ensureAllMediaReachableForExport() -> Bool {
-        evaluateMissingMedia(in: currentProject)
-        guard !missingMediaAssets.isEmpty else { return true }
-        lastExportURL = nil
-        lastStatusMessage = nil
-        lastErrorMessage = String(
-            format: NSLocalizedString(
-                "Can't export: %d media file(s) can't be found. Use “Re-link Missing Media” to locate them, then export again.",
-                comment: "Export pre-flight refusal when source media is unreachable"
-            ),
-            missingMediaAssets.count
-        )
-        return false
     }
 
     func exportProject() async {
@@ -1453,7 +1157,11 @@ final class EditorViewModel {
     /// but without the save panel. Used by automation and the XCUITest harness so
     /// the real export pipeline is exercised end-to-end.
     func exportProject(to url: URL) async {
-        guard ensureAllMediaReachableForExport() else { return }
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
+        guard ensureAllMediaReachableForExport() else {
+            await betaDiagnostics.record(.exportFail, errorCode: "ExportPreflight.mediaUnreachable")
+            return
+        }
         let reconciledSettings = reconciledExportSettingsFromLegacyUI()
         if currentProject.exportSettings != reconciledSettings {
             await apply(SetProjectExportSettingsCommand(exportSettings: reconciledSettings))
@@ -1472,10 +1180,12 @@ final class EditorViewModel {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.export(project: snapshot, to: url, audioProcessing: buildAudioProcessingOptions())
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1498,6 +1208,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
@@ -1506,10 +1217,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1569,6 +1282,7 @@ final class EditorViewModel {
         guard ensureAllMediaReachableForExport() else { return }
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportVideoWithExplicitBitrate(
@@ -1578,10 +1292,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1600,6 +1316,7 @@ final class EditorViewModel {
     /// panel. Used by automation to verify audio-only outputs headlessly.
     func exportAudioOnly(to url: URL) async {
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportAudioOnly(
@@ -1608,10 +1325,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1625,6 +1344,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportAnimatedGIF(
@@ -1633,10 +1353,12 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
@@ -1650,6 +1372,7 @@ final class EditorViewModel {
 
         exportEngine.backgroundRemovedClipIds = backgroundRemovedClipIds
         lastExportURL = nil
+        let diagnosticsExportStarted = await beginDiagnosticsExport()
         do {
             let snapshot = await session.snapshot()
             lastExportURL = try await exportEngine.exportStillFrame(
@@ -1659,15 +1382,18 @@ final class EditorViewModel {
                 audioProcessing: buildAudioProcessingOptions()
             )
             onboardingMetrics.record(.firstExport)
+            await endDiagnosticsExport(started: diagnosticsExportStarted)
             lastErrorMessage = nil
         } catch {
             lastExportURL = nil
             lastErrorMessage = error.localizedDescription
+            await endDiagnosticsExport(started: diagnosticsExportStarted, error: error)
         }
     }
 
 
     func importMedia(_ urls: [URL]) async {
+        await betaDiagnostics.record(.importStart)
         guard !urls.isEmpty else {
             reportInvalidMediaLibraryDrop()
             return
@@ -1802,6 +1528,7 @@ final class EditorViewModel {
 
 
     func addClipToTimeline(_ asset: MediaAsset) async {
+        await betaDiagnostics.recordOnce(.firstClipOnTimeline)
         await addMediaAssetToTimeline(asset, preferredTrackId: nil, startTime: currentProject.timeline.duration)
     }
 
@@ -2473,8 +2200,8 @@ final class EditorViewModel {
     /// range-based ducking metadata that preview and export both consume.
     func autoDuckOtherAudio(
         duckLevel: Double = AudioDuckingPlanner.defaultDuckingLevel,
-        thresholdDB: Float = -40,
-        minimumSilenceDuration: TimeInterval = 0.35
+        thresholdDB: Float = SpeechDuckingService.defaultSilenceThresholdDB,
+        minimumSilenceDuration: TimeInterval = SpeechDuckingService.defaultMinimumSilenceDuration
     ) async {
         guard let speechClipId = selectedClipId else {
             lastErrorMessage = "Select the speech clip (voiceover or video) to duck music under."
@@ -2492,51 +2219,28 @@ final class EditorViewModel {
             lastErrorMessage = nil
             lastStatusMessage = "Analyzing speech for ducking..."
 
-            let provider = SilenceDetectionProvider(
-                silenceThresholdDB: thresholdDB,
+            // Platform-neutral plan (shared with iOS — SpeechDuckingService).
+            let outcome = try await SpeechDuckingService.plan(
+                project: snapshot,
+                speechClip: speechClip,
+                asset: asset,
+                duckLevel: duckLevel,
+                thresholdDB: thresholdDB,
                 minimumSilenceDuration: minimumSilenceDuration
             )
-            let analysis = try await provider.analyze(asset: asset, in: snapshot)
-            let silenceTimelineRanges: [TimeRange] = analysis.suggestions.flatMap { suggestion -> [TimeRange] in
-                guard case .silenceRemoval(let ranges) = suggestion else { return [] }
-                return ranges.compactMap { timelineMapping(for: $0, in: speechClip)?.timelineRange }
-            }
-
-            let voiceIntervals = AudioDuckingPlanner.voiceIntervals(
-                speechTimelineRange: speechClip.timelineRange,
-                silenceRangesInTimeline: silenceTimelineRanges
-            )
-            guard !voiceIntervals.isEmpty else {
+            switch outcome {
+            case .noVoicedIntervals:
                 lastStatusMessage = "No voiced intervals detected in the selected clip; nothing to duck."
-                return
-            }
-
-            var duckingByClip: [UUID: [TimeRange]] = [:]
-            for track in snapshot.timeline.tracks where track.kind == .audio {
-                for clip in track.clips
-                    where clip.id != speechClipId && clip.timelineRange.overlaps(speechClip.timelineRange)
-                {
-                    let ranges = AudioDuckingPlanner.duckingRanges(
-                        forTarget: clip.timelineRange,
-                        voiceIntervals: voiceIntervals
-                    )
-                    if !ranges.isEmpty {
-                        duckingByClip[clip.id] = ranges
-                    }
-                }
-            }
-
-            guard !duckingByClip.isEmpty else {
+            case .noOverlappingAudio:
                 lastStatusMessage = "No overlapping audio clips found to duck under the selection."
-                return
+            case .ducked(let duckingByClip, let voiceIntervalCount):
+                try await session.dispatch(SetAudioDuckingCommand(
+                    duckingRangesByClip: duckingByClip,
+                    level: duckLevel
+                ))
+                try await refreshFromSession()
+                lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervalCount) voiced interval(s) at \(Int(duckLevel * 100))% volume."
             }
-
-            try await session.dispatch(SetAudioDuckingCommand(
-                duckingRangesByClip: duckingByClip,
-                level: duckLevel
-            ))
-            try await refreshFromSession()
-            lastStatusMessage = "Ducked \(duckingByClip.count) audio clip(s) under \(voiceIntervals.count) voiced interval(s) at \(Int(duckLevel * 100))% volume."
         } catch {
             lastStatusMessage = nil
             lastErrorMessage = error.localizedDescription
@@ -2748,60 +2452,11 @@ final class EditorViewModel {
     }
 
 
-    // MARK: - Chroma key eyedropper (F-10)
+    // MARK: - Chroma key eyedropper & color scopes state
+    // Methods live in EditorViewModel+ColorScopes.swift.
 
     /// Whether the preview is in eyedropper mode for picking the key color.
     var isChromaKeyEyedropperActive = false
-
-    func toggleChromaKeyEyedropper() {
-        isChromaKeyEyedropperActive.toggle()
-        lastStatusMessage = isChromaKeyEyedropperActive
-            ? "Eyedropper on: click the preview to pick the key color."
-            : nil
-    }
-
-    /// Samples the selected video clip's frame at a normalized preview point and
-    /// sets it as the chroma key color (F-10 eyedropper).
-    func pickChromaKeyColor(atNormalizedPoint point: CGPoint) async {
-        defer { isChromaKeyEyedropperActive = false }
-
-        guard let selectedClipId, let clip = selectedClip, clip.kind == .video,
-              let assetId = clip.assetId,
-              let asset = currentProject.mediaLibrary.assets[assetId] else {
-            lastErrorMessage = "Select a video clip to pick a key color."
-            return
-        }
-        _ = selectedClipId
-
-        let localTime = max(0, playheadTime - clip.timelineRange.start)
-        let sourceTime = clip.sourceRange.start + localTime
-        let avAsset = AVAsset(url: asset.originalURL)
-        let generator = AVAssetImageGenerator(asset: avAsset)
-        generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
-
-        do {
-            let cmTime = CMTime(seconds: sourceTime, preferredTimescale: 600)
-            let cgImage = try generator.copyCGImage(at: cmTime, actualTime: nil)
-            guard let color = PixelSampler.color(in: cgImage, atNormalizedPoint: point) else {
-                lastErrorMessage = "Couldn't sample that point."
-                return
-            }
-
-            let hex = PixelSampler.hexString(from: color)
-            var settings = clip.chromaKey ?? ChromaKeySettings.greenScreen()
-            settings.keyColor = hex
-            await updateSelectedChromaKey(settings)
-            lastErrorMessage = nil
-            lastStatusMessage = "Key color set to \(hex)."
-        } catch {
-            lastErrorMessage = "Couldn't read the frame: \(error.localizedDescription)"
-        }
-    }
-
-
-    // MARK: - Color scopes (Phase 2A)
 
     /// Scopes of the selected clip's frame with its grade applied, shown in the
     /// grading panel. Computed from the cached thumbnail (cheap, grade-accurate)
@@ -2811,86 +2466,7 @@ final class EditorViewModel {
     var scopeVectorscope: ScopeAnalyzer.Vectorscope?
     var scopeRGBParade: ScopeAnalyzer.RGBParade?
 
-    @ObservationIgnored private let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
-
-    private func clearScopes() {
-        scopeHistogram = nil
-        scopeWaveform = nil
-        scopeVectorscope = nil
-        scopeRGBParade = nil
-    }
-
-
-    /// Recomputes ``scopeHistogram`` from the selected clip's graded thumbnail.
-    func refreshScopes() {
-        guard let clip = selectedClip,
-              let assetId = clip.assetId,
-              let asset = currentProject.mediaLibrary.assets[assetId],
-              let thumbnailData = asset.thumbnailData,
-              let source = CIImage(data: thumbnailData) else {
-            clearScopes()
-            return
-        }
-
-        var image = source
-        if let colorCorrection = clip.colorCorrection {
-            image = ColorCorrectionPixelProcessor.apply(colorCorrection, to: image)
-        }
-        if let colorGrade = clip.colorGrade {
-            image = ColorGradePixelProcessor.apply(colorGrade, to: image)
-        }
-
-        let width = 96
-        let height = 54
-        let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { clearScopes(); return }
-        let scaled = image.transformed(by: CGAffineTransform(
-            scaleX: CGFloat(width) / extent.width,
-            y: CGFloat(height) / extent.height
-        ))
-        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
-
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        bytes.withUnsafeMutableBytes { buffer in
-            guard let base = buffer.baseAddress else { return }
-            scopeContext.render(
-                scaled,
-                toBitmap: base,
-                rowBytes: width * 4,
-                bounds: bounds,
-                format: .RGBA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
-            )
-        }
-        scopeHistogram = ScopeAnalyzer.histogram(rgba: bytes, binCount: 64)
-        scopeWaveform = ScopeAnalyzer.lumaWaveform(rgba: bytes, width: width, height: height, columns: width, levels: 48)
-        scopeVectorscope = ScopeAnalyzer.vectorscope(rgba: bytes, size: 48)
-        scopeRGBParade = ScopeAnalyzer.rgbParade(rgba: bytes, width: width, height: height, columns: width, levels: 48)
-    }
-
-
-    func suggestCuts() async throws {
-        guard let clipId = selectedClipId else { return }
-        // Attempt BOTH tools (a silence-cut result is still useful when scene
-        // detection fails), but never swallow the failures — report which
-        // ones failed so the user knows what they got.
-        var failures: [String] = []
-        do {
-            _ = try await autoCutSilence(for: clipId)
-        } catch {
-            failures.append("silence cut")
-        }
-        do {
-            _ = try await detectAndSplitScenes(for: clipId)
-        } catch {
-            failures.append("scene detection")
-        }
-        if !failures.isEmpty {
-            lastStatusMessage = nil
-            lastErrorMessage = "Cut suggestion failed for: \(failures.joined(separator: ", "))."
-        }
-    }
-
+    @ObservationIgnored let scopeContext = CIContext(options: RenderColorConfiguration.contextOptions.merging([.useSoftwareRenderer: false]) { _, new in new })
 
     func applyNoiseReduction(for clipId: UUID) async throws {
         let snapshot = await session.snapshot()
@@ -2928,16 +2504,7 @@ final class EditorViewModel {
             selectedAssetId = denoisedAsset.id
         case .video:
             let audioTrack = try await ensureTrack(for: .audio)
-            let denoisedClip = Clip(
-                assetId: denoisedAsset.id,
-                kind: .audio,
-                sourceRange: clip.sourceRange,
-                timelineRange: clip.timelineRange,
-                volume: clip.volume,
-                fadeInDuration: clip.fadeInDuration,
-                fadeOutDuration: clip.fadeOutDuration,
-                playbackRate: clip.playbackRate
-            )
+            let denoisedClip = NoiseReductionService.denoisedTwin(of: clip, assetId: denoisedAsset.id)
 
             try await session.dispatch(AddClipCommand(trackId: audioTrack.id, clip: denoisedClip))
             try await session.dispatch(SetClipPropertyCommand(clipId: clipId, property: .volume(0)))
@@ -4037,6 +3604,8 @@ final class EditorViewModel {
     var assistantResultMessage: String?
     /// Suggestions shown when the last instruction was not understood.
     var assistantSuggestions: [String] = []
+    /// Staged destructive plan waiting for Apply/Cancel confirmation (CA-35).
+    var pendingAssistantPlan: PendingAssistantPlan?
 
     /// Parses a natural-language instruction and executes the mapped intent
     /// across the targeted clips using existing commands (F-21).
@@ -4091,7 +3660,7 @@ final class EditorViewModel {
         }
     }
 
-    private func assistantTargetClips(_ target: AssistantTarget, in project: Project) -> [Clip] {
+    func assistantTargetClips(_ target: AssistantTarget, in project: Project) -> [Clip] {
         let allClips = project.timeline.tracks.flatMap(\.clips)
         switch target {
         case .selection:
@@ -4174,7 +3743,7 @@ final class EditorViewModel {
         }
     }
 
-    private func assistantActionLabel(_ action: AssistantAction) -> String {
+    func assistantActionLabel(_ action: AssistantAction) -> String {
         switch action {
         case .applyFilter(let type): return "Filter (\(type.rawValue))"
         case .removeFilters: return "Remove filters"
@@ -4189,28 +3758,21 @@ final class EditorViewModel {
     }
 
     func apply(_ command: any EditorCommand) async {
-        do {
-            try await session.dispatch(command)
-            try await refreshFromSession()
-        } catch {
-            lastErrorMessage = error.localizedDescription
+        // CA-30 funnel: the first user-invoked edit. Programmatic
+        // dispatches — import, automatic clip placement, and the
+        // export-settings reconciliation inside exportProject(to:) — are
+        // not edits.
+        if !(command is ImportMediaCommand
+            || command is AddClipCommand
+            || command is SetProjectExportSettingsCommand) {
+            await betaDiagnostics.recordOnce(.firstEdit)
         }
-    }
-
-    private func dispatchCardMutation(
-        _ command: any EditorCommand,
-        successMessage: String
-    ) async -> Bool {
         do {
             try await session.dispatch(command)
             try await refreshFromSession()
-            lastErrorMessage = nil
-            lastStatusMessage = successMessage
-            return true
         } catch {
-            lastStatusMessage = nil
+            try? await refreshFromSession()
             lastErrorMessage = error.localizedDescription
-            return false
         }
     }
 
@@ -4563,52 +4125,26 @@ final class EditorViewModel {
         let wasPlaying = playbackEngine.isPlaying
         let snapshotVolume = Double(playbackEngine.player.volume)
 
+        if preserve {
+            // Single restore path: the engine applies time/play/volume inside
+            // the build's completion (no 20 ms polling task racing a newer
+            // rebuild; a stale build never consumes the slot).
+            playbackEngine.schedulePlaybackRestore(
+                time: snapshotTime,
+                wasPlaying: wasPlaying,
+                volume: Float(snapshotVolume)
+            )
+        }
+
         let project = currentProject
         let audio = buildAudioProcessingOptions()
         playbackEngine.loadProject(project, audioProcessing: audio)
-
-        if preserve {
-            // Composition install is async (Task inside loadProject). Restore
-            // playback state once the new item reports ready; if the rebuild
-            // fails, lastCompositionError is surfaced to the UI instead.
-            restorePlaybackAfterRebuild(targetTime: snapshotTime,
-                                        shouldPlay: wasPlaying,
-                                        volume: snapshotVolume)
-        }
-    }
-
-    private func restorePlaybackAfterRebuild(targetTime: TimeInterval, shouldPlay: Bool, volume: Double) {
-        // Capture the generation at request time so we can detect if a newer
-        // rebuild supersedes this one (in which case that newer request owns
-        // playback restoration and we should bail out instead of waiting
-        // forever on a generation that will never match again).
-        let requestedGeneration = playbackEngine.currentCompositionGeneration
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            // Wait for the composition to install. Bail if a newer rebuild
-            // supersedes us, or if the build failed, or after ~3s.
-            for _ in 0..<150 {
-                if self.playbackEngine.lastCompositionError != nil { return }
-                if self.playbackEngine.currentCompositionGeneration != requestedGeneration { return }
-                if self.playbackEngine.playerItem != nil { break }
-                try? await Task.sleep(nanoseconds: 20_000_000)
-            }
-            guard self.playbackEngine.playerItem != nil,
-                  self.playbackEngine.lastCompositionError == nil,
-                  self.playbackEngine.currentCompositionGeneration == requestedGeneration else { return }
-
-            self.playbackEngine.player.volume = Float(volume)
-            self.playbackEngine.seek(to: min(max(0, targetTime), self.playbackEngine.duration))
-            if shouldPlay {
-                self.playbackEngine.play()
-            }
-        }
     }
 
     /// BUG-02: the probe is VALIDATED — unknown extensions and content whose
     /// header bytes match no known media signature are rejected at import
     /// with an explicit reason instead of exploding at preview/export.
-    private func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
+    func mediaAssetWithAppProbe(for url: URL) async throws(MediaImportValidationError) -> MediaAsset {
         var asset = try MediaImporter.validatedProbe(url: url)
 
         // Capture a security-scoped bookmark at import time so the file stays
@@ -4770,12 +4306,6 @@ final class EditorViewModel {
 
     func buildAudioProcessingOptions() -> ClipAudioProcessingOptions {
         let snapshot = currentProject
-        var voiceClipIds: Set<UUID> = []
-        for track in snapshot.timeline.tracks where track.kind == .video {
-            for clip in track.clips where clip.volume > 0 {
-                voiceClipIds.insert(clip.id)
-            }
-        }
 
         var eqPresets: [UUID: EqualizerPreset] = [:]
         for track in snapshot.timeline.tracks {
@@ -4791,11 +4321,19 @@ final class EditorViewModel {
             }
         }
 
+        // AI-03a M1: live auto-ducking (the constant duckLevel 0.3 applied to
+        // every video-track clip as a "voice") is retired. The old preview
+        // block using these fields is gone (see PlaybackEngine), the export
+        // graph never applied it, and classifying image clips as voice
+        // ducked the montage's music its entire length. Ducking is the baked
+        // per-clip feature (SetAudioDuckingCommand). A future live-ducking
+        // revival should classify voice via an explicit dialogue role or
+        // speech analysis, never "every video track clip with volume > 0".
         return ClipAudioProcessingOptions(
             eqPresets: eqPresets,
             noiseReductionClipIds: noiseReductionClipIds,
-            duckLevel: 0.3,
-            voiceClipIds: voiceClipIds
+            duckLevel: 0.0,
+            voiceClipIds: []
         )
     }
 

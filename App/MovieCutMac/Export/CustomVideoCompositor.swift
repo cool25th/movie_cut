@@ -1,8 +1,7 @@
 import AVFoundation
 import CoreImage
-import CoreText
-import ImageIO
 import MovieCutCore
+import os
 import Vision
 
 struct CustomCompositionTransitionEffect {
@@ -244,6 +243,13 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
     ]
     private let renderQueue = DispatchQueue(label: "com.moviecut.compositor")
+    /// Fast-scrub cancellation: bumped by cancelAllPendingVideoCompositionRequests
+    /// so queued-but-not-started requests die at the head of the render queue
+    /// instead of rendering stale frames to completion.
+    private let cancellationGeneration = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+    /// Shared GPU sticker renderer with bounded `NSCache` for decoded sticker
+    /// images and tight-bounds rasterized emoji/fallback `CIImage`s.
+    private let stickerRenderer = SharedStickerOverlayRenderer()
     private let ciContext = CIContext(options: RenderColorConfiguration.contextOptions)
     private let personSegmentationHandler = VNSequenceRequestHandler()
     private var renderContext: AVVideoCompositionRenderContext?
@@ -290,6 +296,7 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         // Boxed for the @Sendable render-queue closure (the request is not
         // Sendable on the macOS 15 SDK; see CompositionRequestBox).
         let sendableRequest = CompositionRequestBox(request: request)
+        let generation = cancellationGeneration.withLock { $0 }
         let probeStart = DispatchTime.now()
         renderQueue.async {
             let probeEnd = {
@@ -299,6 +306,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
             }
             defer { probeEnd() }
             let request = sendableRequest.request
+            if self.cancellationGeneration.withLock({ $0 != generation }) {
+                request.finishCancelledRequest()
+                return
+            }
             if let instruction = request.videoCompositionInstruction as? CustomCompositionInstruction,
                let transition = instruction.activeTransition(at: request.compositionTime),
                let outgoingBuffer = request.sourceFrame(byTrackID: transition.outgoingTrackID),
@@ -554,7 +565,9 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         }
     }
     
-    func cancelAllPendingVideoCompositionRequests() {}
+    func cancelAllPendingVideoCompositionRequests() {
+        cancellationGeneration.withLock { $0 &+= 1 }
+    }
 
     private func applyClipEffects(
         to image: CIImage,
@@ -670,49 +683,18 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         return image
     }
 
-    /// Aspect-fits and centers a source frame into the render canvas.
-    /// Identity-transform clips previously rendered 1:1 at the corner; content
-    /// smaller than the canvas left the rest black (BUG-06 / CA-04).
+    /// Aspect-fits and centers a source frame into the render canvas (BUG-06 / CA-04).
     static func fittedToCanvas(_ image: CIImage, canvasSize: CGSize) -> CIImage {
-        let extent = image.extent
-        guard !extent.isEmpty,
-              extent.width > 0, extent.height > 0,
-              canvasSize.width > 0, canvasSize.height > 0 else { return image }
-        let scale = min(
-            canvasSize.width / extent.width,
-            canvasSize.height / extent.height
-        )
-        let scaledWidth = extent.width * scale
-        let scaledHeight = extent.height * scale
-        let dx = (canvasSize.width - scaledWidth) / 2 - extent.minX * scale
-        let dy = (canvasSize.height - scaledHeight) / 2 - extent.minY * scale
-        return image
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            .transformed(by: CGAffineTransform(translationX: dx, y: dy))
-            .cropped(to: CGRect(origin: .zero, size: canvasSize))
+        SharedCanvasGeometry.fittedToCanvas(image, canvasSize: canvasSize)
     }
 
     /// BUG-07: orients a storage-oriented source frame upright using the
-    /// track's rotation metadata. Cardinal rotations (the only kind cameras
-    /// write) map to CIImage orientations, which handle the Quartz y-up
-    /// bookkeeping; non-cardinal transforms are left untouched (v1 contract).
+    /// track's rotation metadata.
     static func orientedForDisplay(
         _ image: CIImage,
         preferredTransform: CGAffineTransform
     ) -> CIImage {
-        guard preferredTransform != .identity else { return image }
-        let angle = atan2(preferredTransform.b, preferredTransform.a)
-        let orientation: CGImagePropertyOrientation
-        if abs(angle - .pi / 2) < 0.01 {
-            orientation = .right
-        } else if abs(angle + .pi / 2) < 0.01 {
-            orientation = .left
-        } else if abs(abs(angle) - .pi) < 0.01 {
-            orientation = .down
-        } else {
-            return image
-        }
-        return image.oriented(orientation)
+        SharedCanvasGeometry.orientedForDisplay(image, preferredTransform: preferredTransform)
     }
 
     private func finishRequest(_ request: AVAsynchronousVideoCompositionRequest, with image: CIImage) {
@@ -745,8 +727,10 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         onto image: CIImage,
         at time: CMTime
     ) -> CIImage {
-        let items = textOverlayRenderItems(
-            in: instruction,
+        let items = SharedTextOverlayResolver.renderItems(
+            clipEffects: instruction.clipEffects,
+            instructionTextContent: instruction.textContent,
+            instructionTimeRange: instruction.timeRange,
             at: time,
             renderSize: image.extent.size
         )
@@ -757,118 +741,6 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         return TextOverlayPixelProcessor.apply(items, to: image, at: time.seconds)
     }
 
-    private func textOverlayRenderItems(
-        in instruction: CustomCompositionInstruction,
-        at time: CMTime,
-        renderSize: CGSize
-    ) -> [TextOverlayRenderItem] {
-        var items = instruction.clipEffects.compactMap { effect -> TextOverlayRenderItem? in
-            guard let textContent = effect.textContent,
-                  CMTimeRangeContainsTime(effect.timeRange, time: time)
-            else {
-                return nil
-            }
-
-            let animationState = effect.animationState(at: time)
-            let textAnimationState = resolvedTextAnimationState(
-                for: textContent,
-                timeRange: effect.timeRange,
-                at: time,
-                renderSize: renderSize
-            )
-            var resolvedTextContent = textContent
-            var resolvedTransform = animationState?.transform ?? effect.transform
-            var resolvedOpacity = animationState?.opacity ?? effect.opacity
-
-            if let textAnimationState {
-                resolvedTextContent.text = textAnimationState.visibleText
-                resolvedTextContent.animation = nil
-                resolvedTransform.offset.x += textAnimationState.translation.x
-                resolvedTransform.offset.y += textAnimationState.translation.y
-                resolvedTransform.scale.width *= textAnimationState.scale
-                resolvedTransform.scale.height *= textAnimationState.scale
-                resolvedTransform.rotation += textAnimationState.rotationDegrees
-                resolvedOpacity *= textAnimationState.opacity
-            }
-
-            return TextOverlayRenderItem(
-                textContent: resolvedTextContent,
-                transform: resolvedTransform,
-                opacity: resolvedOpacity,
-                timeRangeStart: effect.timeRange.start.seconds,
-                timeRangeDuration: effect.timeRange.duration.seconds,
-                clipProgress: nil
-            )
-        }
-
-        if let textContent = instruction.textContent,
-           CMTimeRangeContainsTime(instruction.timeRange, time: time) {
-            let textAnimationState = resolvedTextAnimationState(
-                for: textContent,
-                timeRange: instruction.timeRange,
-                at: time,
-                renderSize: renderSize
-            )
-            var resolvedTextContent = textContent
-            var resolvedTransform = ClipTransform()
-            var resolvedOpacity = 1.0
-            if let textAnimationState {
-                resolvedTextContent.text = textAnimationState.visibleText
-                resolvedTextContent.animation = nil
-                resolvedTransform.offset = textAnimationState.translation
-                resolvedTransform.scale.width *= textAnimationState.scale
-                resolvedTransform.scale.height *= textAnimationState.scale
-                resolvedTransform.rotation += textAnimationState.rotationDegrees
-                resolvedOpacity *= textAnimationState.opacity
-            }
-            items.append(TextOverlayRenderItem(
-                textContent: resolvedTextContent,
-                transform: resolvedTransform,
-                opacity: resolvedOpacity,
-                timeRangeStart: instruction.timeRange.start.seconds,
-                timeRangeDuration: instruction.timeRange.duration.seconds,
-                clipProgress: nil
-            ))
-        }
-
-        return items
-    }
-
-    private func resolvedTextAnimationState(
-        for textContent: TextClipContent,
-        timeRange: CMTimeRange,
-        at time: CMTime,
-        renderSize: CGSize
-    ) -> TextAnimationRenderState? {
-        guard let animation = textContent.animation else { return nil }
-
-        let duration = timeRange.duration.seconds
-        guard duration.isFinite, duration > 0 else { return nil }
-
-        let elapsed = CMTimeSubtract(time, timeRange.start).seconds
-        let localTime = elapsed.isFinite ? max(0, elapsed) : 0
-        return animation.renderState(
-            for: textContent.text,
-            localTime: localTime,
-            clipDuration: duration,
-            canvasSize: renderSize
-        )
-    }
-
-    private func clipProgress(in timeRange: CMTimeRange, at time: CMTime) -> Double {
-        let duration = timeRange.duration.seconds
-        guard duration.isFinite, duration > 0 else {
-            return 0
-        }
-
-        let elapsed = CMTimeSubtract(time, timeRange.start).seconds
-        guard elapsed.isFinite else {
-            return 0
-        }
-
-        return min(max(elapsed / duration, 0), 1)
-    }
-
     private func renderStickerOverlay(
         for clipEffect: CustomCompositionClipEffect?,
         instruction: CustomCompositionInstruction,
@@ -876,341 +748,14 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
         at time: CMTime
     ) -> CIImage {
         _ = clipEffect
-
-        let activeStickerEffects = instruction.clipEffects.filter { effect in
-            effect.hasStickerOverlay && CMTimeRangeContainsTime(effect.timeRange, time: time)
-        }
-        let hasInstructionSticker = (instruction.stickerEmoji != nil || instruction.stickerImageURL != nil)
-            && CMTimeRangeContainsTime(instruction.timeRange, time: time)
-
-        guard !activeStickerEffects.isEmpty || hasInstructionSticker else {
-            return image
-        }
-
-        let renderBounds = image.extent
-        let renderSize = renderBounds.size
-        guard renderSize.width > 0, renderSize.height > 0 else {
-            return image
-        }
-
-        let width = max(Int(ceil(renderSize.width)), 1)
-        let height = max(Int(ceil(renderSize.height)), 1)
-        let bytesPerPixel = 4
-        let bytesPerRow = width * bytesPerPixel
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else {
-            return image
-        }
-
-        context.clear(CGRect(x: 0, y: 0, width: renderSize.width, height: renderSize.height))
-
-        for stickerEffect in activeStickerEffects {
-            drawStickerEffect(stickerEffect, in: context, renderSize: renderSize, at: time)
-        }
-
-        if let stickerEmoji = instruction.stickerEmoji {
-            drawStickerEmoji(
-                stickerEmoji,
-                transform: ClipTransform(),
-                opacity: 1,
-                in: context,
-                renderSize: renderSize
-            )
-        }
-
-        if let stickerImageURL = instruction.stickerImageURL {
-            drawStickerImage(
-                stickerImageURL,
-                fallbackText: nil,
-                transform: ClipTransform(),
-                opacity: 1,
-                fontSize: 88,
-                in: context,
-                renderSize: renderSize
-            )
-        }
-
-        guard let cgImage = context.makeImage() else {
-            return image
-        }
-
-        var overlay = CIImage(cgImage: cgImage)
-        if !isZeroPoint(renderBounds.origin) {
-            overlay = overlay.transformed(
-                by: CGAffineTransform(
-                    translationX: renderBounds.origin.x,
-                    y: renderBounds.origin.y
-                )
-            )
-        }
-
-        return overlay
-            .composited(over: image)
-            .cropped(to: renderBounds)
-    }
-
-    private func drawStickerEffect(
-        _ stickerEffect: CustomCompositionClipEffect,
-        in context: CGContext,
-        renderSize: CGSize,
-        at time: CMTime
-    ) {
-        let animationState = stickerEffect.animationState(at: time)
-        let transform = animationState?.transform ?? stickerEffect.transform
-        let opacity = animationState?.opacity ?? stickerEffect.opacity
-        let fontSize = stickerEffect.stickerFontSize ?? 88
-
-        if let stickerImageURL = stickerEffect.stickerImageURL {
-            drawStickerImage(
-                stickerImageURL,
-                fallbackText: stickerEffect.stickerFallbackText ?? stickerEffect.stickerEmoji,
-                transform: transform,
-                opacity: opacity,
-                fontSize: fontSize,
-                in: context,
-                renderSize: renderSize
-            )
-            return
-        }
-
-        if let stickerEmoji = stickerEffect.stickerEmoji {
-            drawStickerEmoji(
-                stickerEmoji,
-                transform: transform,
-                opacity: opacity,
-                fontSize: fontSize,
-                in: context,
-                renderSize: renderSize
-            )
-        }
-    }
-
-    private func drawStickerImage(
-        _ imageURL: URL,
-        fallbackText: String?,
-        transform: ClipTransform,
-        opacity: Double,
-        fontSize: CGFloat,
-        in context: CGContext,
-        renderSize: CGSize
-    ) {
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
-
-        guard let cgImage = loadStickerImage(from: imageURL) else {
-            if let fallbackText, !fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                drawStickerFallbackText(
-                    fallbackText,
-                    transform: transform,
-                    opacity: opacity,
-                    fontSize: fontSize,
-                    in: context,
-                    renderSize: renderSize
-                )
-            }
-            return
-        }
-
-        let sourceSize = CGSize(width: cgImage.width, height: cgImage.height)
-        let displaySize = stickerDisplaySize(sourceSize: sourceSize, fontSize: fontSize, renderSize: renderSize)
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
+        return stickerRenderer.renderOverlay(
+            clipEffects: instruction.clipEffects,
+            instructionEmoji: instruction.stickerEmoji,
+            instructionImageURL: instruction.stickerImageURL,
+            instructionTimeRange: instruction.timeRange,
+            onto: image,
+            at: time
         )
-
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
-        context.draw(
-            cgImage,
-            in: CGRect(
-                x: -displaySize.width * 0.5,
-                y: -displaySize.height * 0.5,
-                width: displaySize.width,
-                height: displaySize.height
-            )
-        )
-        context.restoreGState()
-    }
-
-    private func loadStickerImage(from imageURL: URL) -> CGImage? {
-        guard
-            let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-            let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
-        else {
-            return nil
-        }
-
-        return cgImage
-    }
-
-    private func stickerDisplaySize(sourceSize: CGSize, fontSize: CGFloat, renderSize: CGSize) -> CGSize {
-        let aspectRatio: CGFloat
-        if sourceSize.width > 0, sourceSize.height > 0 {
-            aspectRatio = sourceSize.width / sourceSize.height
-        } else {
-            aspectRatio = 1
-        }
-
-        let shorterRenderEdge = max(min(renderSize.width, renderSize.height), 1)
-        let width = min(max(fontSize * 2.8, 96), shorterRenderEdge * 0.45)
-        let height = max(width / max(aspectRatio, 0.01), 1)
-        return CGSize(width: width, height: height)
-    }
-
-    private func drawStickerFallbackText(
-        _ text: String,
-        transform: ClipTransform,
-        opacity: Double,
-        fontSize: CGFloat,
-        in context: CGContext,
-        renderSize: CGSize
-    ) {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
-
-        let label = String(trimmedText.prefix(12)).uppercased()
-        let baseFontSize = max(fontSize * 0.54, 24)
-        let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, baseFontSize, nil)
-        let line = CTLineCreateWithAttributedString(NSAttributedString(
-            string: label,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-            ]
-        ))
-        var ascent = CGFloat(0)
-        var descent = CGFloat(0)
-        var leading = CGFloat(0)
-        let lineWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
-        let paddingX = max(baseFontSize * 0.55, 18)
-        let paddingY = max(baseFontSize * 0.35, 12)
-        let boxSize = CGSize(
-            width: min(max(lineWidth + paddingX * 2, baseFontSize * 3.0), renderSize.width * 0.7),
-            height: min(max(ascent + descent + paddingY * 2, baseFontSize * 1.7), renderSize.height * 0.35)
-        )
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
-        )
-
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
-
-        let box = CGRect(x: -boxSize.width * 0.5, y: -boxSize.height * 0.5, width: boxSize.width, height: boxSize.height)
-        let boxPath = CGPath(
-            roundedRect: box,
-            cornerWidth: boxSize.height * 0.24,
-            cornerHeight: boxSize.height * 0.24,
-            transform: nil
-        )
-        context.setFillColor(CGColor(red: 0.95, green: 0.18, blue: 0.28, alpha: 1))
-        context.addPath(boxPath)
-        context.fillPath()
-        context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.95))
-        context.setLineWidth(max(baseFontSize * 0.08, 3))
-        context.addPath(boxPath)
-        context.strokePath()
-
-        context.textMatrix = .identity
-        context.textPosition = CGPoint(
-            x: -lineWidth * 0.5,
-            y: -((ascent + descent) * 0.5) + descent
-        )
-        CTLineDraw(line, context)
-        context.restoreGState()
-    }
-
-    private func drawStickerEmoji(
-        _ stickerEmoji: String,
-        transform: ClipTransform,
-        opacity: Double,
-        fontSize: CGFloat = 88,
-        in context: CGContext,
-        renderSize: CGSize
-    ) {
-        let emoji = stickerEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !emoji.isEmpty else { return }
-
-        let effectiveOpacity = min(max(opacity, 0), 1)
-        guard effectiveOpacity > 0 else { return }
-
-        let fontSize = max(fontSize, 1)
-        let font = CTFontCreateWithName("Apple Color Emoji" as CFString, fontSize, nil)
-        let attributedString = NSAttributedString(
-            string: emoji,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(
-                    red: 1,
-                    green: 1,
-                    blue: 1,
-                    alpha: 1
-                )
-            ]
-        )
-        let line = CTLineCreateWithAttributedString(attributedString)
-        var ascent = CGFloat(0)
-        var descent = CGFloat(0)
-        var leading = CGFloat(0)
-        let lineWidth = max(
-            CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading)),
-            fontSize
-        )
-
-        let basePosition = stickerPosition(transform: transform, renderSize: renderSize)
-        let center = CGPoint(
-            x: basePosition.x + transform.offset.x,
-            y: renderSize.height - basePosition.y - transform.offset.y
-        )
-
-        context.saveGState()
-        context.setAlpha(CGFloat(effectiveOpacity))
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: CGFloat(transform.rotation * .pi / 180))
-        context.scaleBy(x: transform.scale.width, y: transform.scale.height)
-        context.textMatrix = .identity
-        context.textPosition = CGPoint(
-            x: -lineWidth * 0.5,
-            y: (descent - ascent) * 0.5
-        )
-        CTLineDraw(line, context)
-        context.restoreGState()
-    }
-
-    private func stickerPosition(
-        transform: ClipTransform,
-        renderSize: CGSize
-    ) -> CGPoint {
-        if !isZeroPoint(transform.position) {
-            return transform.position
-        }
-
-        return CGPoint(x: renderSize.width * 0.5, y: renderSize.height * 0.5)
-    }
-
-    private func isZeroPoint(_ point: CGPoint) -> Bool {
-        abs(point.x) <= 1.0e-9 && abs(point.y) <= 1.0e-9
     }
 
     // MARK: - Background Removal
@@ -1218,46 +763,15 @@ final class CustomVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
     private func applyPersonSegmentation(
         to image: CIImage,
         request: AVAsynchronousVideoCompositionRequest,
-        prefersFast: Bool
+        prefersFast: Bool = false
     ) -> CIImage {
-        let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { return image }
-        guard let sourceImage = ciContext.createCGImage(image, from: extent) else {
-            // Vision unavailable on this frame: leave it unchanged (F-08 AC④).
-            return image
-        }
-
-        let segmentationRequest = VNGeneratePersonSegmentationRequest()
-        // Preview favors speed (fast quality + cache); export favors accuracy.
-        segmentationRequest.qualityLevel = prefersFast ? .fast : .accurate
-        segmentationRequest.outputPixelFormat = kCVPixelFormatType_OneComponent8
-
-        do {
-            try personSegmentationHandler.perform([segmentationRequest], on: sourceImage)
-        } catch {
-            return image
-        }
-
-        guard let maskPixelBuffer = segmentationRequest.results?.first?.pixelBuffer else {
-            return image
-        }
-
-        let maskImage = CIImage(cvPixelBuffer: maskPixelBuffer)
-        guard !maskImage.extent.isEmpty else {
-            return image
-        }
-
-        let alignedMask = PersonSegmentationCompositor.align(maskImage, to: extent)
-        // No person detected → leave the frame unchanged (F-08 AC④).
-        guard maskContainsForeground(alignedMask, extent: extent) else {
-            return image
-        }
-
-        return PersonSegmentationCompositor.removeBackground(from: image, mask: alignedMask)
-    }
-
-    private func maskContainsForeground(_ maskImage: CIImage, extent: CGRect) -> Bool {
-        PersonSegmentationCompositor.maskContainsForeground(maskImage, extent: extent, in: ciContext)
+        _ = request
+        return SharedPersonSegmentationHelper.apply(
+            to: image,
+            prefersFast: prefersFast,
+            handler: personSegmentationHandler,
+            ciContext: ciContext
+        )
     }
 
     private func applyBackgroundRemoval(to image: CIImage) -> CIImage {

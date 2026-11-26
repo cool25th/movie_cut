@@ -75,48 +75,48 @@
   - Mac UI: ✅ `ChromaKeyView` + eyedropper
   - iOS UI: 🟡 `IOSChromaKeyView` exists
   - Mac preview/export: ✅ `ChromaKeyPixelProcessor.apply`
-  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export가 full `ChromaKeySettings`(softness/spill/edgeShrink)를 `ChromaKeyPixelProcessor`로 위임 — Mac과 동일 분기. **행동 검증은 iOS 테스트 인프라(kiro 9.2) 대기중.** iOS preview(`PreviewView`)는 여전히 크로마 미표시 — 별도 항목.
-  - 상태: 🟡 iOS export만 shared processor 위임 완료. iOS preview 크로마 렌더링과 행동 검증은 9.2 이후.
+  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export가 full `ChromaKeySettings`(softness/spill/edgeShrink)를 `ChromaKeyPixelProcessor`로 위임 — Mac과 동일 분기. **2026-09-21 정정: "iOS preview 크로마 미표시" 주장 철회** — RENDER-01(2026-08-25) 이후 preview가 export와 동일 렌더 플랜(`makeRenderPlan`)의 videoComposition을 소비하고 컴포지터가 `ChromaKeyPixelProcessor.apply`를 적용(`IOSCustomVideoCompositor.swift:418-420`)하므로 preview=export 구조적으로 동일. 행동 검증(시뮬/실기기)은 여전 대기.
+  - 상태: 🟡 export·preview 모두 shared processor 경로(정적 확인). 행동 검증은 G-27 실기기 잔여.
 
 - 전환 two-source
   - Core: ✅ `TransitionPixelProcessor`
   - Mac UI: ✅ transition controls
-  - iOS UI: ❌ 동등 transition editing surface 미확인
+  - iOS UI: 🟡 **존재(2026-09-21 확인)** — 인스펙터 전환 타입 선택기(`IOSInspectorSheet.swift:118-126` — `TransitionType.allCases` + 타이틀 매핑)
   - Mac preview/export: ✅ two-source compositor path
-  - iOS preview/export: ❌ `TransitionPixelProcessor.apply` 미배선
-  - 상태: 🟡 iOS defer — 사유: iOS compositor/export에 two-source instruction path가 없어 current frame 단일 소스 합성만 수행. **의도적 보류**: iOS 행동 검증 인프라(9.2) 없이 배선하면 빌드만 통과하는 미검증 코드가 됨(판정 규율 §6 rule 1).
+  - iOS preview/export: 🟡 **배선 완료(BUG-IOS-09, 2026-08-26)** — `IOSExportEngine.makeTransitionEffects`(796·909)·비디오/오디오 2슬롯 교차 배치·수신 클립 백타이밍·컴포지터가 shared `TransitionPixelProcessor.apply`로 렌더(`IOSCustomVideoCompositor.swift:239`). `IOSTransitionPipelineTests` 3종(2슬롯 구조·전환 없는 트랙 단일 유지·플랜 프레임 실측 red→혼합→blue) 시뮬 PASS.
+  - 상태: 🟡 구조·시뮬레이터 테스트 기반 — 실기기 행동 검증(G-27) 잔여. (구 "의도적 보류" 문구는 배선 완료로 무효 — 2026-09-21 갱신)
 
 - 배경제거 Vision
   - Core: ✅ `BackgroundRemovalProvider`, `PersonSegmentationCompositor`
   - Mac UI: ✅ Remove Background toggle
   - iOS UI: 🟡 flag metadata 소비 가능
   - Mac preview/export: ✅ `PersonSegmentationCompositor`
-  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export 컴포지터가 `PersonSegmentationCompositor.align`/`removeBackground` 사용, `needsCustomCompositor`가 `isBackgroundRemoved` 포함(이전엔 조용한 no-op), Vision 실패 시 프레임 유지(Mac F-08 AC④와 정렬). **행동 검증은 9.2 대기중.**
-  - 상태: 🟡 iOS export 경로 shared compositor 위임 + no-op 버그 수정 완료. 행동 검증은 9.2 이후.
+  - iOS preview/export: 🟡 **wired, build-verified** (ed449f8): export 컴포지터가 `PersonSegmentationCompositor.align`/`removeBackground` 사용(`IOSCustomVideoCompositor.swift:830-839`), `needsCustomCompositor`가 `isBackgroundRemoved` 포함(이전엔 조용한 no-op), Vision 실패 시 프레임 유지(Mac F-08 AC④와 정렬). preview도 동일 플랜 소비(RENDER-01 구조 — 크로마키 행과 동일 정정). **행동 검증은 실기기 대기중.**
+  - 상태: 🟡 iOS export·preview 경로 shared compositor 위임 + no-op 버그 수정 완료. 행동 검증은 G-27 이후.
 
 - 정지프레임
   - Core: ✅ `FreezeFrameCommand`
   - Mac UI: ✅ toolbar/inspector action
-  - iOS UI: ❌ action surface 미확인
+  - iOS UI: ❌ action surface 부재 — **2026-09-21 재확인**(`FreezeFrameCommand` iOS 뷰 레이어 0건)
   - Mac preview/export: ✅ E2E duration proof 있음
   - iOS preview/export: 🟡 Step 7 — `IOSExportEngine` freeze branch 구현됨(tiny source → scaleTimeRange), 시뮬레이터 E2E 미수행
-  - 상태: 🟡 구현/검증대기 — 사유: export 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
+  - 상태: 🟡 구현/검증대기 — 사유: export 경로는 구현됐으나 iOS UI 발동 표면과 실기기 검증 잔여
 
 - speed ramp
   - Core: ✅ `SpeedRampCurve` + `ClipTimeMapping` (Step 3)
   - Mac UI: ✅ speed curve editor
-  - iOS UI: ❌ 동등 editor 미확인
+  - iOS UI: 🟡 **constant-rate 배속 UI 승격(2026-09-21 갱신 — CODEX-21, 2026-09-01)**: 인스펙터 배속 슬라이더가 `SetClipSpeedCommand(.constantRate)` 경유(`IOSEditorViewModel.swift:311`·`IOSInspectorSheet.swift:61`) — 재타이밍·마그네틱 ripple·undo 원자. **램프 커브 에디터는 여전 Mac 전용.**
   - Mac preview/export: ✅ `insertSpeedRampSegments`
-  - iOS preview/export: 🟡 Step 7 — `IOSExportEngine.applySpeedRamp` segment walker 구현됨, 시뮬레이터 E2E 미수행
-  - 상태: 🟡 구현/검증대기 — 사유: export ramp 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
+  - iOS preview/export: 🟡 Step 7 — `IOSExportEngine.applySpeedRamp` segment walker 구현됨(재생·트림이 ramp 매핑을 소비 — CODEX-17 `ClipTrimMath`), 시뮬레이터 E2E 미수행
+  - 상태: 🟡 constant-rate는 UI+엔진 완결(시뮬 유닛 기반)·램프 편집은 Mac 전용 — 실기기 검증 잔여
 
 - 역재생
   - Core: ✅ clip `isReversed` 모델/command path
   - Mac UI: ✅ reverse controls
-  - iOS UI: ❌ action surface 미확인
+  - iOS UI: ❌ action surface 부재 — **2026-09-21 재확인**(reverse 토글 iOS 뷰 레이어 0건·엔진 `isReversed` 분기만 존재 `IOSExportEngine.swift:1272·1289`)
   - Mac preview/export: ✅ reverse handling 존재
   - iOS preview/export: 🟡 Step 7 — `IOSExportEngine.renderReversedAsset` + `ReverseRenderService` 구현됨, 시뮬레이터 E2E 미수행
-  - 상태: 🟡 구현/검증대기 — 사유: export reverse 경로는 구현됐으나 iOS actual-app E2E 인프라가 없어 런타임 검증 대기
+  - 상태: 🟡 구현/검증대기 — 사유: export reverse 경로는 구현됐으나 iOS UI 발동 표면과 실기기 검증 잔여
 
 - 오디오 덕킹
   - Core: ✅ `AudioDuckingPlanner`, clip ducking ranges
@@ -145,16 +145,16 @@
 - 자동저장/크래시 복구
   - Core: ✅ `ProjectStore` autosave primitives
   - Mac UI/lifecycle: ✅ autosave status + recovery harness
-  - iOS UI/lifecycle: ❌ autosave/recovery UX 미확인
+  - iOS UI/lifecycle: 🟡 **구현 완료(2026-09-21 갱신 — BUG-IOS-02 2026-08-24 + AUTOSAVE-02 2026-08-25)**: 커밋마다 직렬 coordinator autosave(세대 번호·150ms 디바운스·최신 스냅샷만 기록·오래된 결과 덮어쓰기 차단)·실패 배너 `autosaveFailureMessage`·background 진입 즉시 flush·복구 시 유지/버림 알림(UX-REC-02)
   - Mac proof: ✅ E2E autosave file proof 있음
-  - iOS proof: ❌
-  - 상태: 🟡 iOS defer — 사유: iOS app lifecycle에서 ProjectStore autosave/recovery를 호출하는 경로가 없음
+  - iOS proof: 🟡 `IOSPersistenceTests`(재시작 복원·읽기전용 실패 표면화) — 실앱 E2E·실기기 라이프사이클 검증 잔여
+  - 상태: 🟡 iOS 구현+시뮬 유닛 완료 — 실기기 백그라운드/크래시 라이프사이클 검증은 G-27 이후
 
 - export formats/platform presets
   - Core: ✅ `ExportSettings`, `PlatformExportPreset`
   - Mac UI/export: ✅ format controls + platform preset ffprobe proof
-  - iOS UI/export: 🟡 basic export sheet/progress, `.mov` HighestQuality 중심
-  - 상태: 🟡 iOS defer — 사유: iOS `IOSExportEngine`은 `.mov` output 중심이며 mp4/platform preset/ProRes/GIF/still parity가 없음
+  - iOS UI/export: 🟡 **2026-09-21 갱신**: 라이터가 `.mp4/.m4v → .mp4` 지원(`IOSExportEngine.swift:175`)·캔버스/fps 프리셋 UI가 단일 원자 undo로 동작(CODEX-18 `SetProjectCanvasAndExportSettingsCommand` — 9:16 캔버스 포함). **iOS delivery는 MP4/H.264 계약**(컴포지터·엔진 주석 명시 — ProRes는 Mac 전용), GIF/still export·소셜 export preset(해상도·비트레이트 번들) 파리티 없음
+  - 상태: 🟡 mp4·fps/캔버스 프리셋은 iOS 도달 — ProRes/GIF/still/platform export preset은 Mac 우선 범위 유지
 
 - markers / quick tools
   - Core: ✅ markers and several command surfaces
@@ -175,18 +175,18 @@
 
 - Mac-only 또는 iOS defer 항목: 3-way color grade advanced UI — 사유: iOS render는 shared이나 wheel/scope editing surface가 Mac 대비 얕음.
 - Mac-only 또는 iOS defer 항목: LUT/필터 full processor-only path — 사유: iOS compositor에 legacy CIFilter switch가 병존.
-- Mac-only 또는 iOS defer 항목: 크로마키 preview/행동검증 — 사유: iOS **export는 full settings로 `ChromaKeyPixelProcessor` 위임 완료**(ed449f8, build-verified)·iOS preview 크로마 렌더링과 행동 검증(9.2) 잔여.
-- Mac-only 또는 iOS defer 항목: 전환 two-source — 사유: iOS compositor/export에 `TransitionPixelProcessor` 및 two-source instruction path 미배선(2026-09-03 확인 — 여전).
-- Mac-only 또는 iOS defer 항목: 배경제거 행동검증 — 사유: iOS **export가 `PersonSegmentationCompositor` 사용 완료**(ed449f8, build-verified)·행동 검증(9.2) 잔여.
-- Mac-only 또는 iOS defer 항목: 정지프레임 — 사유: iOS export freeze branch는 구현(§6 Step 7)·UI action 표면과 시뮬레이터 E2E 미수행.
-- Mac-only 또는 iOS defer 항목: speed ramp — 사유: iOS export `applySpeedRamp`는 구현(§6 Step 7)·동등 에디터 UI와 시뮬레이터 E2E 미수행.
-- Mac-only 또는 iOS defer 항목: 역재생 — 사유: iOS export `renderReversedAsset`은 구현(§6 Step 7)·action 표면과 시뮬레이터 E2E 미수행.
+- Mac-only 또는 iOS defer 항목: 크로마키 행동검증 — 사유: export·preview 모두 shared processor 경로(2026-09-21 정적 확인 — "preview 미표시" 주장 철회)·**행동 검증(시뮬/실기기) 잔여(G-27)**.
+- Mac-only 또는 iOS defer 항목: 전환 two-source 행동검증 — 사유: **엔진 배선+인스펙터 UI+시뮬 테스트 완료**(BUG-IOS-09·`IOSTransitionPipelineTests` — 2026-09-21 확인)·실기기 행동 검증 잔여.
+- Mac-only 또는 iOS defer 항목: 배경제거 행동검증 — 사유: iOS **export·preview가 `PersonSegmentationCompositor` 경로**(ed449f8·RENDER-01 구조 — 2026-09-21 확인)·행동 검증 잔여.
+- Mac-only 또는 iOS defer 항목: 정지프레임 — 사유: iOS export freeze branch는 구현(§6 Step 7)·**UI action 표면 부재 재확인(2026-09-21)**과 실기기 검증 잔여.
+- Mac-only 또는 iOS defer 항목: speed ramp 편집 — 사유: **constant-rate 배속은 iOS UI+엔진 완결(CODEX-21 — 2026-09-21 승격)**·램프 커브 에디터는 Mac 전용·실기기 검증 잔여.
+- Mac-only 또는 iOS defer 항목: 역재생 — 사유: iOS export `renderReversedAsset`은 구현(§6 Step 7)·**action 표면 부재 재확인(2026-09-21)**과 실기기 검증 잔여.
 - Mac-only 또는 iOS defer 항목: 오디오 덕킹 — 사유: iOS duck/clear UI 표면 없음(렌더 placed-span parity는 2026-09-02 stage-4 완료 — 위 행 참조).
 - Mac-only 또는 iOS defer 항목: 프록시 재생 + 타임라인 배지 — 사유: 프리뷰 소비 정책은 stage-4-1 배선(`IOSSourcePolicy`)·프록시 **생성 경로와 배지 표면** 없음. Core `ProxyBadgeState.resolve`는 플랫폼 중립이라 iOS 배선 시 재사용 가능.
 - Mac-only 또는 iOS defer 항목: EQ — 사유: iOS EQ UI 표면 없음(렌더 파생·캐시는 2026-09-02 stage-4 완료 — 위 행 참조).
 - Mac-only 또는 iOS defer 항목: 노이즈감소 apply — 사유: iOS destructive denoise/source replacement action 없음.
-- Mac-only 또는 iOS defer 항목: 자동저장/크래시 복구 — 사유: iOS lifecycle autosave/recovery UX 미배선.
-- Mac-only 또는 iOS defer 항목: ProRes/GIF/스틸 export — 사유: iOS export는 `.mov` HighestQuality 중심, Pro 출력은 Mac 우선 범위로 defer.
+- Mac-only 또는 iOS defer 항목: 자동저장/크래시 복구 실기기 검증 — 사유: **iOS lifecycle 구현 완료(BUG-IOS-02·AUTOSAVE-02 — 2026-09-21 갱신)**·시뮬 유닛은 통과·실기기 백그라운드/크래시 라이프사이클 검증 잔여.
+- Mac-only 또는 iOS defer 항목: ProRes/GIF/스틸 export — 사유: iOS delivery는 **MP4/H.264 계약**(2026-09-21 확인 — `.mp4` 라이터 지원 포함), Pro 출력은 Mac 우선 범위로 defer.
 - Mac-only 또는 iOS defer 항목: platform preset export — 사유: Mac은 ffprobe proof가 있으나 iOS export preset sheet/engine parity 없음.
 - Mac-only 또는 iOS defer 항목: marker/quick tools — 사유: iOS touch sheet IA로 재설계 필요.
 
@@ -236,4 +236,10 @@
 ## 8. capcut-surpass 통합 재감사 (2026-09-03, 문서 갱신)
 
 > `codex/integrate-capcut-surpass` stage-4 완료(2026-09-02) 이후 문서 재감사 — 덕킹·EQ·프록시 행과 §3 사유를 현재 코드 상태로 갱신했다. 근거: `IOSExportEngine` placed-span 덕킹/EQ 파생 + `eqDerivations` 캐시 · `IOSSourcePolicy` · 테스트 `IOSAudioDuckingEQTests`/`IOSSourcePolicyTests`(iOS 시뮬 전체 83/20 PASS — 2026-09-03 BUG-ACC-09 종료 시점).
-> 유의: 이번에 렌더 경로로 표시된 iOS 항목은 시뮬레이터 유닛/구조 테스트 기반이다. 실기기 행동 검증은 G-27 잔여(1/3 완료 — iPhone 13 Pro 2026-08-22), two-source transition은 여전 미배선. 상세 경위: `CAPCUT_SURPASS_INTEGRATION_PROGRESS.md` 4단계.
+> 유의: 이번에 렌더 경로로 표시된 iOS 항목은 시뮬레이터 유닛/구조 테스트 기반이다. 실기기 행동 검증은 G-27 잔여(1/3 완료 — iPhone 13 Pro 2026-08-22), ~~two-source transition은 여전 미배선~~(**2026-09-21 §9 정정: 배선+UI 완료로 승격**). 상세 경위: `CAPCUT_SURPASS_INTEGRATION_PROGRESS.md` 4단계.
+
+## 9. 정적 재감사 (2026-09-21, 메인 세션)
+
+> 배경: §8(2026-09-03) 갱신 이후 BUG-IOS-09(전환 배선 08-26)·CODEX-21(배속 UI 09-01)·CODEX-18(프리셋 원자 undo 09-01) 등 코드가 앞서가며 §2·§3의 ❌/defer 행 다수가 낡았다. 이번 절은 해당 행을 현재 코드 상태(file:line 근거)로 갱신한 **정적 실사**다.
+> 갱신 내용: ①전환 two-source — 엔진 배선+인스펙터 UI+시뮬 테스트 완료로 승격(구 "미배선·의도적 보류" 무효) ②크로마키·배경제거 — "iOS preview 미표시" 주장 철회(RENDER-01 이후 preview=export 동일 플랜 소비) ③자동저장/복구 — iOS lifecycle 구현 완료로 갱신(BUG-IOS-02·AUTOSAVE-02) ④speed — constant-rate 배속 UI+엔진 완결 승격(CODEX-21)·램프 에디터는 Mac 전용 유지 ⑤export formats — `.mp4` 라이터·fps/캔버스 프리셋 UI 도달(CODEX-18)·ProRes/GIF/still은 계속 Mac 우선 ⑥정지프레임·역재생 — UI action 표면 부재 재확인.
+> **한계(과장 금지)**: 본 절은 정적 코드 실사(file:line) 기반이며 완료 증거가 아니다. 시뮬레이터 행동 테스트·실기기 검증(G-27 — 사용자 대기)은 각 행에 명시된 대로 잔여다. EQ/덕킹·노이즈감소의 iOS UI 표면 부재도 이번에 재확인했다(뷰 레이어 grep 0건 — §8 기술 유지).

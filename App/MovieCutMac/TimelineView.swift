@@ -14,6 +14,11 @@ struct TimelineView: View {
         case slide
     }
 
+    private struct ClipDragPreview: Equatable {
+        var sourceRange: TimeRange?
+        var timelineRange: TimeRange
+    }
+
     var viewModel: EditorViewModel
 
     @State private var dragOffset: CGFloat = 0
@@ -22,12 +27,19 @@ struct TimelineView: View {
     @State private var clipBodyDragMode: ClipBodyDragMode?
     @State private var dragInitialTimelineRange: TimeRange?
     @State private var dragInitialSourceRange: TimeRange?
+    @State private var dragPreviewRanges: [UUID: ClipDragPreview] = [:]
     @State private var timelineViewportWidth: CGFloat = 900
     @State private var timelineScrollViewportWidth: CGFloat = 900
+    /// Horizontal scroll offset of the timeline content, quantized to 64 pt
+    /// (see `timelineScrollOffsetReader`) — drives `clipsForDisplay` viewport
+    /// culling on long timelines.
+    @State private var timelineScrollOffsetX: CGFloat = 0
+    /// Snap points frozen once at drag start (`beginClipDrag`): every drag
+    /// tick previously rebuilt this array via allClips + flatMap + map at
+    /// gesture frequency.
+    @State private var cachedDragSnapPoints: [TimeInterval] = []
     @State private var filmstripStore = TimelineFilmstripStore()
     @State private var isRulerScrubbing = false
-    @State private var isPlayheadScrubbing = false
-    @State private var playheadDragStartTime: TimeInterval = 0
     /// CA-19: the snap target the dragged clip is currently aligned to
     /// (nil when the drag has no active snap). Drives the alignment guide.
     @State private var snapGuideTime: TimeInterval? = nil
@@ -60,7 +72,7 @@ struct TimelineView: View {
     }
 
     private var timelineContentWidth: CGFloat {
-        let markerEnd = sortedMarkers.map(\.time).max() ?? 0
+        let markerEnd = viewModel.currentProject.markers.lazy.map(\.time).max() ?? 0
         let visibleSeconds = max(viewModel.visibleTimelineDuration, markerEnd + 2)
         return max(minimumTimelineContentWidth, CGFloat(visibleSeconds) * CGFloat(pixelsPerSecond) + markerLabelWidth)
     }
@@ -100,6 +112,18 @@ struct TimelineView: View {
                     .frame(height: 22)
                     .overlay(MovieCutTheme.divider)
 
+                roleLaneToggle
+
+                Divider()
+                    .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
+
+                timelineIndexToggle
+
+                Divider()
+                    .frame(height: 22)
+                    .overlay(MovieCutTheme.divider)
+
                 Spacer(minLength: MovieCutSpacing.small)
 
                 zoomControls
@@ -110,6 +134,10 @@ struct TimelineView: View {
 
             if !viewModel.timelineContext.isRoot {
                 timelineBreadcrumbBar
+            }
+
+            if viewModel.showTimelineIndex {
+                TimelineIndexPanel(viewModel: viewModel)
             }
 
             Divider()
@@ -212,6 +240,20 @@ struct TimelineView: View {
         }
     }
 
+    /// Tracks the timeline's horizontal scroll offset, quantized to 64 pt so
+    /// ordinary scrolling does not re-render the clip lanes on every pixel.
+    private var timelineScrollOffsetReader: some View {
+        GeometryReader { proxy in
+            let rawOffset = max(0, -proxy.frame(in: .named(TimelineFilmstripCoordinateSpace.viewport)).minX)
+            let quantized = (rawOffset / 64).rounded(.down) * 64
+            Color.clear
+                .onAppear { timelineScrollOffsetX = quantized }
+                .onChange(of: quantized) { _, newValue in
+                    timelineScrollOffsetX = newValue
+                }
+        }
+    }
+
     @ViewBuilder
     private func timelineToolbarIconButton(
         systemImage: String,
@@ -262,6 +304,36 @@ struct TimelineView: View {
         .foregroundStyle(MovieCutTheme.mutedText)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityHidden(true)
+    }
+
+    /// CA-20 stage 2-B: toggles the Timeline Index panel (searchable
+    /// clips + markers, rows jump the playhead).
+    private var timelineIndexToggle: some View {
+        timelineToolbarIconButton(
+            systemImage: "list.bullet.rectangle",
+            title: "Timeline Index",
+            hint: "Searches clips and markers; a result moves the playhead.",
+            accessibilityValue: viewModel.showTimelineIndex
+                ? NSLocalizedString("On", comment: "") : NSLocalizedString("Off", comment: "")
+        ) {
+            viewModel.showTimelineIndex.toggle()
+        }
+        .foregroundStyle(viewModel.showTimelineIndex ? MovieCutTheme.accent : Color.primary)
+    }
+
+    /// CA-20 stage 2-A: toggles the role-lane management view (lane tint
+    /// by dominant clip role).
+    private var roleLaneToggle: some View {
+        timelineToolbarIconButton(
+            systemImage: "paintpalette",
+            title: "Show Role Lanes",
+            hint: "Tints each track lane with its dominant clip role.",
+            accessibilityValue: viewModel.showRoleLanes
+                ? NSLocalizedString("On", comment: "") : NSLocalizedString("Off", comment: "")
+        ) {
+            viewModel.showRoleLanes.toggle()
+        }
+        .foregroundStyle(viewModel.showRoleLanes ? MovieCutTheme.accent : Color.primary)
     }
 
     private var timelineToolControls: some View {
@@ -626,39 +698,13 @@ struct TimelineView: View {
             }
     }
 
-    private func playheadScrubGesture() -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isPlayheadScrubbing {
-                    isPlayheadScrubbing = true
-                    playheadDragStartTime = viewModel.playheadTime
-                    viewModel.scrubPlayhead(to: playheadDragStartTime, phase: .began)
-                }
-                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
-                scrubTimeline(atLocalX: targetX, phase: .changed)
-            }
-            .onEnded { value in
-                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
-                scrubTimeline(atLocalX: targetX, phase: .ended)
-                isPlayheadScrubbing = false
-            }
-    }
-
     private var playheadOverlay: some View {
-        ZStack {
-            Color.clear
-            Rectangle()
-                .fill(MovieCutTheme.accentCyan)
-                .frame(width: 2)
-        }
-        .frame(width: 14, height: trackHeight)
-        .contentShape(Rectangle())
-        .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
-        .highPriorityGesture(playheadScrubGesture())
-        .accessibilityElement()
-        .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
-        .accessibilityValue(timelineSecondsString(viewModel.playheadTime))
-        .accessibilityHint(NSLocalizedString("Drag to scrub the timeline frame by frame.", comment: ""))
+        TimelinePlayheadOverlay(
+            viewModel: viewModel,
+            pixelsPerSecond: pixelsPerSecond,
+            trackHeight: trackHeight,
+            onScrub: scrubTimeline(atLocalX:phase:)
+        )
     }
 
     private var timeRuler: some View {
@@ -677,7 +723,7 @@ struct TimelineView: View {
                 Canvas { context, size in
                     var x: CGFloat = 0
                     var time: TimeInterval = 0
-                    let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+                    let interval = rulerStepInterval(contentWidth: timelineContentWidth)
 
                     while x < size.width {
                         let isMajor = Int(time) % 10 == 0
@@ -747,6 +793,7 @@ struct TimelineView: View {
                 #endif
             }
             .frame(width: timelineContentWidth, height: rulerHeight, alignment: .leading)
+            .background(timelineScrollOffsetReader)
             .background(MovieCutTheme.rulerBackground)
             .contentShape(Rectangle())
             .simultaneousGesture(rulerScrubGesture())
@@ -760,7 +807,7 @@ struct TimelineView: View {
         Canvas { context, size in
             var x: CGFloat = 0
             var time: TimeInterval = 0
-            let interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+            let interval = rulerStepInterval(contentWidth: timelineContentWidth)
 
             while x < size.width {
                 let isMajor = Int(time) % 10 == 0
@@ -779,6 +826,21 @@ struct TimelineView: View {
         }
         .frame(width: timelineContentWidth, height: height)
         .allowsHitTesting(false)
+    }
+
+    /// Ruler/grid step in seconds: the zoom-based base interval, doubled
+    /// until the projected tick count fits under 250 so extreme zoom-out
+    /// cannot flood the canvas with thousands of strokes per frame.
+    private func rulerStepInterval(contentWidth: CGFloat) -> TimeInterval {
+        var interval: TimeInterval = pixelsPerSecond >= 100 ? 1 : (pixelsPerSecond >= 50 ? 5 : 10)
+        guard pixelsPerSecond > 0, contentWidth.isFinite, contentWidth > 0 else {
+            return interval
+        }
+        let maxTicks: CGFloat = 250
+        while contentWidth / (CGFloat(interval) * CGFloat(pixelsPerSecond)) > maxTicks {
+            interval *= 2
+        }
+        return interval
     }
 
     private var mainVideoTrackBadge: some View {
@@ -831,6 +893,31 @@ struct TimelineView: View {
         }
     }
 
+    /// CA-20 stage 2-A: the role management view — when `showRoleLanes` is
+    /// on, lanes whose clips carry a dominant role get that role's color as
+    /// a subtle wash + left edge marker (the main-video highlight's visual
+    /// language, recolored). Untagged lanes stay untouched so "which clips
+    /// are unclassified" stays readable at a glance.
+    @ViewBuilder
+    private func roleLaneHighlight(for track: Track) -> some View {
+        if viewModel.showRoleLanes,
+           let role = viewModel.dominantRole(for: track) {
+            let color = EditorViewModel.roleColor(fromHex: role.colorHex)
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(color.opacity(0.10))
+                Rectangle()
+                    .strokeBorder(color.opacity(0.16), lineWidth: 1)
+                Rectangle()
+                    .fill(color.opacity(0.30))
+                    .frame(width: 2)
+            }
+            .frame(width: timelineContentWidth, height: trackHeight, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
     private func trackLane(_ track: Track) -> some View {
         let isMainVideo = isMainVideoTrack(track)
 
@@ -867,6 +954,7 @@ struct TimelineView: View {
                 Rectangle()
                     .fill(MovieCutTheme.trackBackground)
                 mainVideoTrackLaneHighlight(isMainVideo: isMainVideo)
+                roleLaneHighlight(for: track)
                 timelineGridLines(height: trackHeight)
 
                 ForEach(clipsForDisplay(track)) { clip in
@@ -972,6 +1060,7 @@ struct TimelineView: View {
 
     @MainActor
     private func clipView(_ clip: Clip, trackKind: TrackKind) -> some View {
+        let clip = effectiveClip(clip)
         let x = CGFloat(clip.timelineRange.start) * CGFloat(pixelsPerSecond)
         let width = CGFloat(clip.timelineRange.duration) * CGFloat(pixelsPerSecond)
         let isSelected = viewModel.selectedClipIds.contains(clip.id)
@@ -1418,6 +1507,16 @@ struct TimelineView: View {
     }
     #endif
 
+    /// Decoded clip thumbnails — every view re-render re-decoded the same
+    /// PNG bytes via NSImage(data:). The data-count suffix keys the cache
+    /// tightly enough that a regenerated (different-length) thumbnail
+    /// decodes fresh while unchanged ones are reused.
+    private nonisolated(unsafe) static let decodedThumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 128
+        return cache
+    }()
+
     private func thumbnailImage(for clip: Clip) -> NSImage? {
         guard
             clip.kind == .video || clip.kind == .image,
@@ -1426,7 +1525,15 @@ struct TimelineView: View {
             return nil
         }
 
-        return NSImage(data: thumbnailData)
+        let key = "\((clip.assetId ?? clip.id).uuidString):\(thumbnailData.count)" as NSString
+        if let cached = Self.decodedThumbnailCache.object(forKey: key) {
+            return cached
+        }
+        guard let decoded = NSImage(data: thumbnailData) else {
+            return nil
+        }
+        Self.decodedThumbnailCache.setObject(decoded, forKey: key)
+        return decoded
     }
 
     private func thumbnailStrip(_ image: NSImage) -> some View {
@@ -1479,17 +1586,20 @@ struct TimelineView: View {
             let barWidth = max(1, size.width / CGFloat(sampleCount))
             let midY = size.height / 2
 
+            // One batched fill for all ~200 bars instead of a context.fill
+            // call per bar — same rects, same color, one draw submission.
+            var batchPath = Path()
             for index in 0..<sampleCount {
                 let sample = samples.isEmpty ? fallbackWaveformLevel(index: index) : samples[index]
                 let barHeight = CGFloat(sample) * size.height * 0.8
-                let rect = CGRect(
+                batchPath.addRect(CGRect(
                     x: CGFloat(index) * barWidth,
                     y: midY - barHeight / 2,
                     width: max(1, barWidth - 0.5),
                     height: barHeight
-                )
-                context.fill(Path(rect), with: .color(.white.opacity(selected ? 0.36 : 0.24)))
+                ))
             }
+            context.fill(batchPath, with: .color(.white.opacity(selected ? 0.36 : 0.24)))
         }
         .task(id: requestKey) {
             // Trigger the decode only when the sample array is empty AND a
@@ -1574,7 +1684,7 @@ struct TimelineView: View {
                 guard clipBodyDragMode == .move,
                       let initialRange = dragInitialTimelineRange else { return }
                 let rawStart = max(0, initialRange.start + Double(value.translation.width) / pixelsPerSecond)
-                let newStart = max(0, snappedTimeWithGuide(rawStart, allClips: allClips(excluding: clip.id)))
+                let newStart = max(0, snappedTimeWithGuide(rawStart))
 
                 updateClip(
                     clip.id,
@@ -1628,7 +1738,7 @@ struct TimelineView: View {
                 // matches the committed value (Step 5 of the core-editing
                 // repair). Previously this assumed timeline 1s == source 1s.
                 let rawStart = initialTimelineRange.start + Double(value.translation.width) / pixelsPerSecond
-                let snappedStart = snappedTime(rawStart, allClips: allClips(excluding: clip.id))
+                let snappedStart = snappedTime(rawStart)
                 // Build a working clip from the initial ranges so ClipTrimMath
                 // sees the pre-drag state on every tick (the live mutation
                 // below would otherwise feed it already-mutated ranges).
@@ -1667,7 +1777,7 @@ struct TimelineView: View {
                 guard let initialTimelineRange = dragInitialTimelineRange else { return }
 
                 let rawEnd = initialTimelineRange.end + Double(value.translation.width) / pixelsPerSecond
-                let snappedEnd = snappedTime(rawEnd, allClips: allClips(excluding: clip.id))
+                let snappedEnd = snappedTime(rawEnd)
 
                 var workingClip = clip
                 workingClip.timelineRange = initialTimelineRange
@@ -1699,6 +1809,19 @@ struct TimelineView: View {
         if draggedClipId != clip.id {
             dragInitialTimelineRange = clip.timelineRange
             dragInitialSourceRange = clip.sourceRange
+            // Freeze the drag's snap targets ONCE: other clips' boundaries,
+            // markers, the playhead, and zero. Rebuilt per drag, not per tick.
+            var points: [TimeInterval] = [viewModel.playheadTime, 0.0]
+            for track in viewModel.currentProject.timeline.tracks {
+                for other in track.clips where other.id != clip.id {
+                    points.append(other.timelineRange.start)
+                    points.append(other.timelineRange.start + other.timelineRange.duration)
+                }
+            }
+            for marker in sortedMarkers {
+                points.append(marker.time)
+            }
+            cachedDragSnapPoints = points
         }
         isDragging = true
         draggedClipId = clip.id
@@ -1712,11 +1835,15 @@ struct TimelineView: View {
         clipBodyDragMode = nil
         dragInitialTimelineRange = nil
         dragInitialSourceRange = nil
+        dragPreviewRanges.removeAll()
         snapGuideTime = nil
+        cachedDragSnapPoints.removeAll(keepingCapacity: true)
     }
 
     private func commitMove(for clipId: UUID) {
-        guard let clip = clip(for: clipId) else { return }
+        guard let rawClip = clip(for: clipId) else { return }
+        let clip = effectiveClip(rawClip)
+        let targetTimelineRange = clip.timelineRange
         let trackId = trackId(containing: clipId)
 
         Task {
@@ -1724,37 +1851,44 @@ struct TimelineView: View {
                 clipId: clipId,
                 sourceTrackId: trackId,
                 targetTrackId: trackId,
-                timelineRange: clip.timelineRange
+                timelineRange: targetTimelineRange
             )
         }
     }
 
     private func commitTrim(for clipId: UUID) {
-        guard let clip = clip(for: clipId) else { return }
+        guard let rawClip = clip(for: clipId) else { return }
+        let clip = effectiveClip(rawClip)
+        let targetSourceRange = clip.sourceRange
+        let targetTimelineRange = clip.timelineRange
         let trackId = trackId(containing: clipId)
 
         Task {
             await viewModel.trimClip(
                 clipId: clipId,
                 trackId: trackId,
-                sourceRange: clip.sourceRange,
-                timelineRange: clip.timelineRange
+                sourceRange: targetSourceRange,
+                timelineRange: targetTimelineRange
             )
         }
     }
 
-    private func updateClip(_ clipId: UUID, sourceRange: TimeRange? = nil, timelineRange: TimeRange) {
-        for trackIndex in viewModel.currentProject.timeline.tracks.indices {
-            guard let clipIndex = viewModel.currentProject.timeline.tracks[trackIndex].clips.firstIndex(where: { $0.id == clipId }) else {
-                continue
-            }
-
-            if let sourceRange {
-                viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].sourceRange = sourceRange
-            }
-            viewModel.currentProject.timeline.tracks[trackIndex].clips[clipIndex].timelineRange = timelineRange
-            return
+    private func effectiveClip(_ clip: Clip) -> Clip {
+        guard let preview = dragPreviewRanges[clip.id] else { return clip }
+        var copy = clip
+        if let sourceRange = preview.sourceRange {
+            copy.sourceRange = sourceRange
         }
+        copy.timelineRange = preview.timelineRange
+        return copy
+    }
+
+    private func updateClip(_ clipId: UUID, sourceRange: TimeRange? = nil, timelineRange: TimeRange) {
+        let existingSource = dragPreviewRanges[clipId]?.sourceRange
+        dragPreviewRanges[clipId] = ClipDragPreview(
+            sourceRange: sourceRange ?? existingSource,
+            timelineRange: timelineRange
+        )
     }
 
     private func clip(for clipId: UUID) -> Clip? {
@@ -1776,16 +1910,45 @@ struct TimelineView: View {
     }
 
     private func clipsForDisplay(_ track: Track) -> [Clip] {
-        track.clipsForLayerDisplay
+        let all = track.clipsForLayerDisplay
+        // Viewport culling: past 32 clips the lane's SwiftUI view-graph cost
+        // grows linearly while the visible window stays constant. At or below
+        // 32 the full list keeps exact legacy behavior (UI/accessibility
+        // test compatibility).
+        guard all.count > 32, pixelsPerSecond > 0 else {
+            return all
+        }
+        let marginPt: CGFloat = 600
+        let minX = max(0, timelineScrollOffsetX - marginPt)
+        let maxX = timelineScrollOffsetX + max(timelineScrollViewportWidth, 900) + marginPt
+        let minTime = Double(minX) / pixelsPerSecond
+        let maxTime = Double(maxX) / pixelsPerSecond
+        let selectedId = viewModel.selectedClipId
+        let activeDraggedId = draggedClipId
+
+        return all.filter { clip in
+            if clip.id == selectedId || clip.id == activeDraggedId {
+                return true
+            }
+            return clip.timelineRange.end >= minTime && clip.timelineRange.start <= maxTime
+        }
     }
 
     /// Snaps a raw time to the nearest clip boundary, marker, playhead, or
     /// zero — CA-19: also records the snap target for the alignment guide.
+    /// During a clip drag the frozen `cachedDragSnapPoints` array is walked
+    /// directly (no per-tick rebuild); `allClips` is the fallback outside a
+    /// drag.
     @discardableResult
-    private func snappedTimeWithGuide(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
-        let snapPoints = allClips.flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
-            + sortedMarkers.map(\.time)
-            + [viewModel.playheadTime, 0.0]
+    private func snappedTimeWithGuide(_ rawTime: Double, allClips: [Clip]? = nil, threshold: Double = 5.0) -> Double {
+        let snapPoints: [TimeInterval]
+        if !cachedDragSnapPoints.isEmpty {
+            snapPoints = cachedDragSnapPoints
+        } else {
+            snapPoints = (allClips ?? []).flatMap { [$0.timelineRange.start, $0.timelineRange.start + $0.timelineRange.duration] }
+                + sortedMarkers.map(\.time)
+                + [viewModel.playheadTime, 0.0]
+        }
         let thresholdTime = threshold / pixelsPerSecond
         var nearest: (point: Double, distance: Double)?
         for point in snapPoints {
@@ -1822,7 +1985,7 @@ struct TimelineView: View {
     /// Snap without guide tracking — trim gestures snap to the same targets
     /// but don't drive the alignment guide (they manage their own visual
     /// feedback through the clip's own edges).
-    private func snappedTime(_ rawTime: Double, allClips: [Clip], threshold: Double = 5.0) -> Double {
+    private func snappedTime(_ rawTime: Double, allClips: [Clip]? = nil, threshold: Double = 5.0) -> Double {
         let savedGuide = snapGuideTime
         let result = snappedTimeWithGuide(rawTime, allClips: allClips, threshold: threshold)
         snapGuideTime = savedGuide
@@ -2017,6 +2180,58 @@ private final class OrderedDropPayloadAccumulator<Value>: @unchecked Sendable {
         if let finishedValues {
             completion(finishedValues)
         }
+    }
+}
+
+/// Dedicated lightweight subview that alone observes `viewModel.playheadTime`,
+/// isolating 30–60fps playback ticks from invalidating the entire `TimelineView` body.
+private struct TimelinePlayheadOverlay: View {
+    let viewModel: EditorViewModel
+    let pixelsPerSecond: Double
+    let trackHeight: CGFloat
+    let onScrub: (CGFloat, TimelineScrubPhase) -> Void
+
+    @State private var isPlayheadScrubbing = false
+    @State private var playheadDragStartTime: TimeInterval = 0
+
+    var body: some View {
+        ZStack {
+            Color.clear
+            Rectangle()
+                .fill(MovieCutTheme.accentCyan)
+                .frame(width: 2)
+        }
+        .frame(width: 14, height: trackHeight)
+        .contentShape(Rectangle())
+        .offset(x: CGFloat(viewModel.playheadTime) * CGFloat(pixelsPerSecond) - 7)
+        .highPriorityGesture(playheadScrubGesture())
+        .accessibilityElement()
+        .accessibilityLabel(NSLocalizedString("Playhead", comment: ""))
+        .accessibilityValue(formattedPlayheadSeconds(viewModel.playheadTime))
+        .accessibilityHint(NSLocalizedString("Drag to scrub the timeline frame by frame.", comment: ""))
+    }
+
+    private func playheadScrubGesture() -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isPlayheadScrubbing {
+                    isPlayheadScrubbing = true
+                    playheadDragStartTime = viewModel.playheadTime
+                    viewModel.scrubPlayhead(to: playheadDragStartTime, phase: .began)
+                }
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                onScrub(targetX, .changed)
+            }
+            .onEnded { value in
+                let targetX = CGFloat(playheadDragStartTime) * CGFloat(pixelsPerSecond) + value.translation.width
+                onScrub(targetX, .ended)
+                isPlayheadScrubbing = false
+            }
+    }
+
+    private func formattedPlayheadSeconds(_ seconds: TimeInterval) -> String {
+        let clamped = max(0, seconds.isFinite ? seconds : 0)
+        return String(format: NSLocalizedString("%.2fs", comment: ""), clamped)
     }
 }
 

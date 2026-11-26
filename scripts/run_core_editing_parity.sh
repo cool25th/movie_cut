@@ -52,7 +52,7 @@ APP_BIN="$APP_BUNDLE/Contents/MacOS/MovieCutMac"
 # The app is sandboxed, so direct paths under the repository or /tmp are not
 # readable/writable after LaunchServices starts it. Stage fixtures and all
 # per-scenario evidence inside the app container without weakening entitlements.
-APP_CONTAINER_TMP="$HOME/Library/Containers/com.moviecut.mac/Data/tmp/moviecut-parity"
+APP_CONTAINER_TMP="$HOME/Library/Containers/${MOVIECUT_MAC_BUNDLE_ID:-com.moviecut.mac}/Data/tmp/moviecut-parity"
 STAGED_FIXTURES="$APP_CONTAINER_TMP/fixtures-$$"
 mkdir -p "$STAGED_FIXTURES"
 cp "$VIDEO_A" "$STAGED_FIXTURES/video-a.mp4"

@@ -4,6 +4,9 @@ import Foundation
 /// delay line with exponential decay, plus a short comb-filter tail for
 /// density. This is the v1 "공간감" — not a convolution reverb.
 public enum AudioGraphReverb {
+    /// Prime-ish reflection tap ratios — static so apply() doesn't reallocate
+    /// the ratio array on every call.
+    private static let reflectionTapRatios: [Double] = [1.0, 1.3, 1.7, 2.3, 3.1, 4.7]
     public struct Parameters: Sendable, Equatable, Codable {
         /// Wet/dry mix (0…1). Default 0.3.
         public var mix: Double
@@ -38,7 +41,7 @@ public enum AudioGraphReverb {
         // Early reflection delays: a sparse set of taps spaced by the
         // room size (larger room = longer delays).
         let baseDelayMs = 5.0 + parameters.roomSize * 45.0  // 5–50ms
-        let reflectionDelays = [1.0, 1.3, 1.7, 2.3, 3.1, 4.7]  // prime-ish ratios
+        let reflectionDelays = reflectionTapRatios
             .map { Int(($0 * baseDelayMs / 1000.0 * sampleRate).rounded()) }
 
         var interleaved = [Float](repeating: 0, count: audio.interleaved.count)

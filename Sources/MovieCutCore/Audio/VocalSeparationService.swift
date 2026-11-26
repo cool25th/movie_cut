@@ -100,13 +100,28 @@ public extension CenterChannelVocalSeparator {
 
         let leftPointer = channels[0]
         let rightPointer = channels[1]
-        let left = Array(UnsafeBufferPointer(start: leftPointer, count: frameLength))
-        let right = Array(UnsafeBufferPointer(start: rightPointer, count: frameLength))
+        let wet = wetMix
+        let dry = 1 - wet
 
-        let processed = process(StereoFrames(left: left, right: right), mode: mode)
-        for index in 0..<frameLength {
-            leftPointer[index] = processed.left[index]
-            rightPointer[index] = processed.right[index]
+        // In-place: same per-sample arithmetic as process(_:mode:) without the
+        // intermediate Array/StereoFrames heap round-trip per 4,096-frame block.
+        switch mode {
+        case .removeVocals:
+            for index in 0..<frameLength {
+                let left = leftPointer[index]
+                let right = rightPointer[index]
+                let mid = (left + right) * 0.5
+                leftPointer[index] = left - wet * mid
+                rightPointer[index] = right - wet * mid
+            }
+        case .isolateCenter:
+            for index in 0..<frameLength {
+                let left = leftPointer[index]
+                let right = rightPointer[index]
+                let mid = (left + right) * 0.5
+                leftPointer[index] = dry * left + wet * mid
+                rightPointer[index] = dry * right + wet * mid
+            }
         }
         return buffer
     }

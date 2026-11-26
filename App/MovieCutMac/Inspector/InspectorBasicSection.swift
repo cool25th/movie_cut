@@ -14,6 +14,14 @@ struct InspectorBasicSection: View {
     let clip: Clip
     let mode: InspectorBasicMode
 
+    @State private var draftOpacity: Double?
+    @State private var draftVolume: Double?
+    @State private var draftPlaybackRate: Double?
+    @State private var draftEQBandGains: [Float: Double] = [:]
+    @State private var draftShadowBlur: Double?
+    @State private var draftFontSize: Double?
+    @State private var draftTransformValues: [String: Double] = [:]
+
     private let speedPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
     private let minimumSpeedCurvePointCount = 2
 
@@ -82,6 +90,15 @@ struct InspectorBasicSection: View {
             case .text:
                 textSections
             }
+        }
+        .onChange(of: clip.id) { _, _ in
+            draftOpacity = nil
+            draftVolume = nil
+            draftPlaybackRate = nil
+            draftEQBandGains.removeAll()
+            draftShadowBlur = nil
+            draftFontSize = nil
+            draftTransformValues.removeAll()
         }
     }
 
@@ -481,18 +498,28 @@ struct InspectorBasicSection: View {
     }
 
     private var opacitySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let displayedOpacity = draftOpacity ?? clip.opacity
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Opacity")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Slider(value: Binding(
-                    get: { clip.opacity },
-                    set: { newValue in
-                        Task { await viewModel.updateSelectedOpacity(newValue) }
+                Slider(
+                    value: Binding(
+                        get: { displayedOpacity },
+                        set: { newValue in
+                            draftOpacity = newValue
+                        }
+                    ),
+                    in: 0 ... 1,
+                    onEditingChanged: { isEditing in
+                        if !isEditing, let newValue = draftOpacity {
+                            draftOpacity = nil
+                            Task { await viewModel.updateSelectedOpacity(newValue) }
+                        }
                     }
-                ), in: 0 ... 1)
-                Text(String(format: "%.0f%%", clip.opacity * 100))
+                )
+                Text(String(format: "%.0f%%", displayedOpacity * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
@@ -637,18 +664,28 @@ struct InspectorBasicSection: View {
     }
 
     private var volumeSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let displayedVolume = draftVolume ?? clip.volume
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Volume")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             HStack {
-                Slider(value: Binding(
-                    get: { clip.volume },
-                    set: { newValue in
-                        Task { await viewModel.updateSelectedVolume(newValue) }
+                Slider(
+                    value: Binding(
+                        get: { displayedVolume },
+                        set: { newValue in
+                            draftVolume = newValue
+                        }
+                    ),
+                    in: 0 ... 2,
+                    onEditingChanged: { isEditing in
+                        if !isEditing, let newValue = draftVolume {
+                            draftVolume = nil
+                            Task { await viewModel.updateSelectedVolume(newValue) }
+                        }
                     }
-                ), in: 0 ... 2)
-                Text(String(format: "%.0f%%", clip.volume * 100))
+                )
+                Text(String(format: "%.0f%%", displayedVolume * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 44)
@@ -694,25 +731,33 @@ struct InspectorBasicSection: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(equalizerBands.enumerated()), id: \.element.frequency) { _, band in
+                    let displayedGain = draftEQBandGains[band.frequency] ?? Double(band.gain)
                     HStack(spacing: 6) {
                         Text(equalizerFrequencyLabel(band.frequency))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(width: 48, alignment: .leading)
-                        Slider(value: Binding(
-                            get: { Double(band.gain) },
-                            set: { newValue in
-                                Task {
-                                    await viewModel.updateSelectedEQBandGain(
-                                        frequency: band.frequency,
-                                        gain: Float(newValue)
-                                    )
+                        Slider(
+                            value: Binding(
+                                get: { displayedGain },
+                                set: { draftEQBandGains[band.frequency] = $0 }
+                            ),
+                            in: -12 ... 12,
+                            step: 0.5,
+                            onEditingChanged: { isEditing in
+                                if !isEditing, let newValue = draftEQBandGains.removeValue(forKey: band.frequency) {
+                                    Task {
+                                        await viewModel.updateSelectedEQBandGain(
+                                            frequency: band.frequency,
+                                            gain: Float(newValue)
+                                        )
+                                    }
                                 }
                             }
-                        ), in: -12 ... 12, step: 0.5)
+                        )
                         .accessibilityLabel("Equalizer \(equalizerFrequencyLabel(band.frequency)) gain")
-                        .accessibilityValue(String(format: "%.1f dB", band.gain))
-                        Text(String(format: "%+.1f dB", band.gain))
+                        .accessibilityValue(String(format: "%.1f dB", displayedGain))
+                        Text(String(format: "%+.1f dB", displayedGain))
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                             .frame(width: 58, alignment: .trailing)
@@ -750,19 +795,23 @@ struct InspectorBasicSection: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 Spacer()
-                Text(String(format: "%.0f%%", clip.playbackRate * 100))
+                Text(String(format: "%.0f%%", (draftPlaybackRate ?? clip.playbackRate) * 100))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
+            let displayedRate = draftPlaybackRate ?? clip.playbackRate
             Slider(value: Binding(
-                get: { clip.playbackRate },
-                set: { newValue in
+                get: { displayedRate },
+                set: { draftPlaybackRate = $0 }
+            ), in: 0.25 ... 4.0, onEditingChanged: { isEditing in
+                if !isEditing, let newValue = draftPlaybackRate {
+                    draftPlaybackRate = nil
                     Task { await viewModel.updateSelectedPlaybackRate(newValue) }
                 }
-            ), in: 0.25 ... 4.0)
+            })
             .accessibilityLabel("Constant speed")
-            .accessibilityValue(String(format: "%.0f%%", clip.playbackRate * 100))
+            .accessibilityValue(String(format: "%.0f%%", displayedRate * 100))
             .accessibilityHint("Adjusts the selected clip constant playback speed.")
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 6)], spacing: 6) {
@@ -1545,17 +1594,21 @@ struct InspectorBasicSection: View {
                 .accessibilityLabel("Text shadow")
 
                 if textContent.shadowColor != nil {
+                    let displayedShadowBlur = draftShadowBlur ?? (textContent.shadowBlur ?? 4)
                     Slider(value: Binding(
-                        get: { textContent.shadowBlur ?? 4 },
-                        set: { newValue in
+                        get: { displayedShadowBlur },
+                        set: { draftShadowBlur = $0 }
+                    ), in: 0 ... 20, onEditingChanged: { isEditing in
+                        if !isEditing, let newValue = draftShadowBlur {
+                            draftShadowBlur = nil
                             var updated = textContent
                             updated.shadowBlur = newValue
                             Task { await viewModel.updateSelectedTextContent(updated) }
                         }
-                    ), in: 0 ... 20)
+                    })
                     .accessibilityLabel("Shadow blur")
 
-                    Text(String(format: "%.0f", textContent.shadowBlur ?? 4))
+                    Text(String(format: "%.0f", displayedShadowBlur))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -1637,19 +1690,23 @@ struct InspectorBasicSection: View {
     }
 
     private func fontSizeControl(_ textContent: TextClipContent) -> some View {
-        HStack(spacing: 4) {
+        let displayedFontSize = draftFontSize ?? textContent.fontSize
+        return HStack(spacing: 4) {
             Text("Size")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Slider(value: Binding(
-                get: { textContent.fontSize },
-                set: { newValue in
+                get: { displayedFontSize },
+                set: { draftFontSize = $0 }
+            ), in: 8 ... 144, step: 1, onEditingChanged: { isEditing in
+                if !isEditing, let newValue = draftFontSize {
+                    draftFontSize = nil
                     var updated = textContent
                     updated.fontSize = newValue
                     Task { await viewModel.updateSelectedTextContent(updated) }
                 }
-            ), in: 8 ... 144, step: 1)
-            Text(String(format: "%.0f", textContent.fontSize))
+            })
+            Text(String(format: "%.0f", displayedFontSize))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 32, alignment: .trailing)
@@ -1817,19 +1874,25 @@ struct InspectorBasicSection: View {
         range: ClosedRange<Double>,
         onChange: @escaping (Double) -> Void
     ) -> some View {
-        HStack(spacing: 8) {
+        let displayedValue = draftTransformValues[title] ?? value
+        return HStack(spacing: 8) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 42, alignment: .leading)
             Slider(
                 value: Binding(
-                    get: { value },
-                    set: { onChange($0) }
+                    get: { displayedValue },
+                    set: { draftTransformValues[title] = $0 }
                 ),
-                in: range
+                in: range,
+                onEditingChanged: { isEditing in
+                    if !isEditing, let committed = draftTransformValues.removeValue(forKey: title) {
+                        onChange(committed)
+                    }
+                }
             )
-            Text(sliderValueLabel(title: title, value: value))
+            Text(sliderValueLabel(title: title, value: displayedValue))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)

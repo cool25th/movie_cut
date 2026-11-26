@@ -15,17 +15,32 @@ public struct SnapEngine: Sendable {
     }
 
     /// Returns the nearest clip boundary within the snap threshold.
+    ///
+    /// Allocation-free two-level loop: the previous implementation built
+    /// three temporary arrays per call (flatMap → map → filter → min) on
+    /// every drag tick. Same contract: nearest distance wins, ties pick
+    /// the smaller point.
     public func snap(time: TimeInterval, timeline: Timeline) -> TimeInterval? {
-        clipBoundaryPoints(from: timeline)
-            .map { point in (point: point, distance: abs(point - time)) }
-            .filter { $0.distance <= threshold }
-            .min { lhs, rhs in
-                if lhs.distance == rhs.distance {
-                    return lhs.point < rhs.point
-                }
-                return lhs.distance < rhs.distance
-            }?
-            .point
+        var bestPoint: TimeInterval?
+        var bestDistance = TimeInterval.greatestFiniteMagnitude
+
+        func consider(_ point: TimeInterval) {
+            let distance = abs(point - time)
+            guard distance <= threshold else { return }
+            if distance < bestDistance
+                || (distance == bestDistance && point < (bestPoint ?? .greatestFiniteMagnitude)) {
+                bestDistance = distance
+                bestPoint = point
+            }
+        }
+
+        for track in timeline.tracks {
+            for clip in track.clips {
+                consider(clip.timelineRange.start)
+                consider(clip.timelineRange.end)
+            }
+        }
+        return bestPoint
     }
 
     /// Returns sorted unique clip boundary and marker times.

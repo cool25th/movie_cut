@@ -32,22 +32,28 @@ public struct WaveformGenerator: Sendable {
     /// Asynchronously generates waveform sample data, decoding the asset audio
     /// track on a non-cooperative GCD thread so the cooperative pool and the UI
     /// thread are never blocked.
-    public static func generateAsync(for asset: MediaAsset) async -> WaveformData? {
+    ///
+    /// - Parameter timeRange: When non-nil, decodes only that source range
+    ///   (partial-region waveforms) instead of the whole track.
+    public static func generateAsync(for asset: MediaAsset, timeRange: TimeRange? = nil) async -> WaveformData? {
         // Capture only Sendable data (the URL); construct the non-Sendable
         // AVAsset/AVAssetReader inside the off-pool closure.
         let url = asset.originalURL
-        return await Self.decodeSamples { decodeWaveform(at: url) }
+        return await Self.decodeSamples { decodeWaveform(at: url, timeRange: timeRange) }
     }
 
     /// Generates waveform sample data for an imported media asset.
+    ///
+    /// - Parameter timeRange: When non-nil, decodes only that source range
+    ///   (partial-region waveforms) instead of the whole track.
     ///
     /// - Warning: This performs a synchronous, blocking `AVAssetReader` read.
     ///   Do **not** call from a `Task`/`async`/`@MainActor` context — it will
     ///   block the cooperative pool (deadlock risk) or the UI thread. Use
     ///   ``generateAsync(for:)`` instead.
-    public static func generate(for asset: MediaAsset) -> WaveformData? {
+    public static func generate(for asset: MediaAsset, timeRange: TimeRange? = nil) -> WaveformData? {
         #if canImport(AVFoundation)
-        return decodeWaveform(at: asset.originalURL)
+        return decodeWaveform(at: asset.originalURL, timeRange: timeRange)
         #else
         return nil
         #endif
@@ -69,7 +75,7 @@ public struct WaveformGenerator: Sendable {
 
     #if canImport(AVFoundation)
     /// Synchronously decodes the audio track at `url` into peak bins. Blocking.
-    private static func decodeWaveform(at url: URL) -> WaveformData? {
+    private static func decodeWaveform(at url: URL, timeRange: TimeRange? = nil) -> WaveformData? {
         let avAsset = AVAsset(url: url)
         guard let audioTrack = avAsset.tracks(withMediaType: .audio).first else {
             return nil
@@ -87,6 +93,12 @@ public struct WaveformGenerator: Sendable {
         guard let reader = try? AVAssetReader(asset: avAsset) else {
             return nil
         }
+        if let timeRange {
+            reader.timeRange = CMTimeRange(
+                start: CMTime(seconds: timeRange.start, preferredTimescale: 44_100),
+                duration: CMTime(seconds: timeRange.duration, preferredTimescale: 44_100)
+            )
+        }
 
         let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: outputSettings)
         output.alwaysCopiesSampleData = false
@@ -102,12 +114,30 @@ public struct WaveformGenerator: Sendable {
 
         let binCount = 200
         let sampleRate = 44_100.0
-        let duration = CMTimeGetSeconds(audioTrack.timeRange.duration)
+        let duration = timeRange.map { $0.duration } ?? CMTimeGetSeconds(audioTrack.timeRange.duration)
         let estimatedSampleCount = max(1, Int((duration.isFinite ? duration : 0) * sampleRate))
         let bytesPerSample = 2
         let maxSampleValue = Float(Int16.max)
         var bins = [Float](repeating: 0, count: binCount)
         var totalSamplesRead = 0
+        // Reused only when a block buffer turns out to be non-contiguous.
+        var scratchBytes: [UInt8] = []
+
+        // Folds one raw little-endian Int16 PCM byte window into the peak bins.
+        func absorbSamples(_ bytes: UnsafeRawBufferPointer) {
+            var offset = 0
+            while offset + bytesPerSample <= bytes.count {
+                let low = UInt16(bytes[offset])
+                let high = UInt16(bytes[offset + 1]) << 8
+                let sample = Int16(bitPattern: high | low)
+                let normalized = min(Float(abs(Int(sample))) / maxSampleValue, 1)
+                let binIndex = min(totalSamplesRead * binCount / estimatedSampleCount, binCount - 1)
+                bins[binIndex] = max(bins[binIndex], normalized)
+
+                totalSamplesRead += 1
+                offset += bytesPerSample
+            }
+        }
 
         while let sampleBuffer = output.copyNextSampleBuffer() {
             guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
@@ -119,27 +149,37 @@ public struct WaveformGenerator: Sendable {
                 continue
             }
 
-            var data = [UInt8](repeating: 0, count: length)
-            guard CMBlockBufferCopyDataBytes(
+            // Zero-copy: a contiguous block buffer is walked in place through
+            // its data pointer; only a non-contiguous one pays a copy, into a
+            // scratch buffer reused across every remaining sample buffer.
+            var dataPointer: UnsafeMutablePointer<Int8>?
+            var dataLength = 0
+            var totalLength = 0
+            if CMBlockBufferGetDataPointer(
                 blockBuffer,
                 atOffset: 0,
-                dataLength: length,
-                destination: &data
-            ) == noErr else {
-                continue
-            }
-
-            var offset = 0
-            while offset + bytesPerSample <= data.count {
-                let low = UInt16(data[offset])
-                let high = UInt16(data[offset + 1]) << 8
-                let sample = Int16(bitPattern: high | low)
-                let normalized = min(Float(abs(Int(sample))) / maxSampleValue, 1)
-                let binIndex = min(totalSamplesRead * binCount / estimatedSampleCount, binCount - 1)
-                bins[binIndex] = max(bins[binIndex], normalized)
-
-                totalSamplesRead += 1
-                offset += bytesPerSample
+                lengthAtOffsetOut: &dataLength,
+                totalLengthOut: &totalLength,
+                dataPointerOut: &dataPointer
+            ) == noErr,
+               let dataPointer,
+               dataLength >= length {
+                absorbSamples(UnsafeRawBufferPointer(start: dataPointer, count: length))
+            } else {
+                if scratchBytes.count < length {
+                    scratchBytes = [UInt8](repeating: 0, count: length)
+                }
+                guard CMBlockBufferCopyDataBytes(
+                    blockBuffer,
+                    atOffset: 0,
+                    dataLength: length,
+                    destination: &scratchBytes
+                ) == noErr else {
+                    continue
+                }
+                scratchBytes.withUnsafeBytes { bytes in
+                    absorbSamples(UnsafeRawBufferPointer(rebasing: bytes.prefix(length)))
+                }
             }
         }
 

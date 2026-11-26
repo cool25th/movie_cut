@@ -164,6 +164,7 @@ struct CompoundDefinitionTests {
         )
 
         let url = try await writeFixture("compound_nested.moviecut", project: project)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = ProjectStore(autosaveDirectory: nil)
 
         await #expect(throws: CompoundValidationError.self) {
@@ -211,6 +212,7 @@ struct CompoundDefinitionTests {
         )
 
         let url = try await writeFixture("compound_dangling.moviecut", project: project)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = ProjectStore(autosaveDirectory: nil)
 
         await #expect(throws: CompoundValidationError.self) {

@@ -179,25 +179,177 @@ public enum CompoundFlattener {
         }
     }
 
-    /// Stable content digest over the flattened clip layout, so two snapshots
-    /// can be compared for render-identity cheaply. Encodes track id/kind and
-    /// each clip's id, compoundId-absence, and timeline/source ranges.
+    /// Deterministic content digest over the flattened clip layout, so two
+    /// snapshots can be compared for render-identity cheaply. Encodes every
+    /// track (id, kind, mute/lock/hidden, z-order) and every clip's render
+    /// attributes — identity, asset/compound references, both ranges, speed
+    /// (rate, ramp, reverse), audio level, opacity/blend, transition to the
+    /// next clip, effects, color correction/grade, transform, crop, mask,
+    /// keyframes, and stabilization — through the fixed-seed FNV-1a hasher
+    /// below, so the digest is stable across processes and launches.
     static func digest(of tracks: [Track]) -> String {
-        var hasher = Hasher()
+        var hasher = DeterministicDigestHasher()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        // Codable sub-values (effects, color, transform, masks, keyframes,
+        // ramps, stabilization) are folded in as their canonical sorted-key
+        // JSON bytes: every stored field participates without enumerating
+        // each one here, and the encoding itself is deterministic.
+        func combineJSON<T: Encodable>(_ value: T) {
+            if let data = try? encoder.encode(value) {
+                hasher.combine(UInt64(data.count))
+                hasher.combine(data)
+            } else {
+                hasher.combine(UInt64(0))
+            }
+        }
+
         for track in tracks {
             hasher.combine(track.id)
-            hasher.combine(track.kind)
+            hasher.combine(String(describing: track.kind))
+            hasher.combine(track.isMuted)
+            hasher.combine(track.isLocked)
+            hasher.combine(track.isHidden)
+            hasher.combine(track.zIndex)
+            hasher.combine(UInt64(track.clips.count))
             for clip in track.clips {
                 hasher.combine(clip.id)
-                // A correctly flattened timeline has no containers; record this
-                // so any leak surfaces as a digest difference.
-                hasher.combine(clip.compoundId == nil)
+                // Presence-tagged optionals keep `nil` distinct from any value.
+                if let assetId = clip.assetId {
+                    hasher.combine(true)
+                    hasher.combine(assetId)
+                } else {
+                    hasher.combine(false)
+                }
+                if let compoundId = clip.compoundId {
+                    hasher.combine(true)
+                    hasher.combine(compoundId)
+                } else {
+                    hasher.combine(false)
+                }
                 hasher.combine(clip.timelineRange.start)
                 hasher.combine(clip.timelineRange.duration)
                 hasher.combine(clip.sourceRange.start)
                 hasher.combine(clip.sourceRange.duration)
+                hasher.combine(clip.playbackRate)
+                hasher.combine(clip.isReversed)
+                hasher.combine(clip.volume)
+                hasher.combine(clip.opacity)
+                hasher.combine(String(describing: clip.blendMode))
+                if let transition = clip.transition {
+                    hasher.combine(true)
+                    hasher.combine(transition.duration)
+                    hasher.combine(String(describing: transition.type))
+                } else {
+                    hasher.combine(false)
+                }
+                hasher.combine(UInt64(clip.effects.count))
+                for effect in clip.effects {
+                    combineJSON(effect)
+                }
+                if let colorCorrection = clip.colorCorrection {
+                    hasher.combine(true)
+                    combineJSON(colorCorrection)
+                } else {
+                    hasher.combine(false)
+                }
+                if let colorGrade = clip.colorGrade {
+                    hasher.combine(true)
+                    combineJSON(colorGrade)
+                } else {
+                    hasher.combine(false)
+                }
+                combineJSON(clip.transform)
+                if let cropRect = clip.cropRect {
+                    hasher.combine(true)
+                    combineJSON(cropRect)
+                } else {
+                    hasher.combine(false)
+                }
+                if let mask = clip.mask {
+                    hasher.combine(true)
+                    combineJSON(mask)
+                } else {
+                    hasher.combine(false)
+                }
+                hasher.combine(UInt64(clip.keyframes.count))
+                for keyframe in clip.keyframes {
+                    combineJSON(keyframe)
+                }
+                hasher.combine(UInt64(clip.speedRampPoints.count))
+                for point in clip.speedRampPoints {
+                    combineJSON(point)
+                }
+                if let stabilization = clip.stabilization {
+                    hasher.combine(true)
+                    combineJSON(stabilization)
+                } else {
+                    hasher.combine(false)
+                }
             }
         }
-        return String(hasher.finalize(), radix: 16)
+        return hasher.hexDigest
+    }
+}
+
+/// FNV-1a 64-bit digest hasher with a fixed seed. `Swift.Hasher` is randomly
+/// seeded per process, so a digest built on it changes every launch and
+/// cannot back a cross-launch identity such as
+/// `FlattenedTimeline.contentDigest`. The encoding below (fixed-width
+/// little-endian integers, length-prefixed UTF-8, raw UUID bytes) is stable
+/// across processes and launches on the same platform.
+struct DeterministicDigestHasher {
+    private var value: UInt64 = 0xcbf2_9ce4_8422_2325
+    private static let fnvPrime: UInt64 = 0x0000_0100_0000_01b3
+
+    private mutating func absorb(_ byte: UInt8) {
+        value = (value ^ UInt64(byte)) &* Self.fnvPrime
+    }
+
+    mutating func combine(_ raw: UInt64) {
+        absorb(UInt8(truncatingIfNeeded: raw))
+        absorb(UInt8(truncatingIfNeeded: raw >> 8))
+        absorb(UInt8(truncatingIfNeeded: raw >> 16))
+        absorb(UInt8(truncatingIfNeeded: raw >> 24))
+        absorb(UInt8(truncatingIfNeeded: raw >> 32))
+        absorb(UInt8(truncatingIfNeeded: raw >> 40))
+        absorb(UInt8(truncatingIfNeeded: raw >> 48))
+        absorb(UInt8(truncatingIfNeeded: raw >> 56))
+    }
+
+    mutating func combine(_ raw: Int) {
+        combine(UInt64(bitPattern: Int64(raw)))
+    }
+
+    mutating func combine(_ flag: Bool) {
+        absorb(flag ? 1 : 0)
+    }
+
+    mutating func combine(_ scalar: Double) {
+        combine(scalar.bitPattern)
+    }
+
+    mutating func combine(_ bytes: some Sequence<UInt8>) {
+        for byte in bytes {
+            absorb(byte)
+        }
+    }
+
+    mutating func combine(_ text: String) {
+        combine(UInt64(text.utf8.count))
+        combine(text.utf8)
+    }
+
+    mutating func combine(_ id: UUID) {
+        withUnsafeBytes(of: id.uuid) { bytes in
+            for byte in bytes {
+                absorb(byte)
+            }
+        }
+    }
+
+    var hexDigest: String {
+        String(value, radix: 16)
     }
 }
